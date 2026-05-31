@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chat2DB Dev Server"
+  short_description: "Manage Chat2DB dev servers."
+  default_prompt: "Start or restart the Chat2DB frontend and backend, verify ports and logs, and report the URLs."
