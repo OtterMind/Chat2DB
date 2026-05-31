@@ -5,6 +5,7 @@ import ai.chat2db.server.domain.api.model.IndexInfo;
 import ai.chat2db.server.domain.api.model.TableParameter;
 import ai.chat2db.server.domain.api.model.ForeignKeyInfo;
 import ai.chat2db.server.tools.common.config.GlobalDict;
+import ai.chat2db.server.tools.common.util.I18nUtils;
 import ai.chat2db.server.web.api.controller.rdb.doc.constant.CommonConstant;
 import com.deepoove.poi.XWPFTemplate;
 import com.deepoove.poi.data.Includes;
@@ -45,6 +46,16 @@ public class WordSchemaDocExportStrategy extends AbstractSchemaDocExportStrategy
         RowRenderData indexHeaderRow = Rows.of(CommonConstant.INDEX_HEAD_NAMES).center().textBold().textColor("000000").bgColor("bfbfbf").create();
         RowRenderData tableHeaderRow = Rows.of(CommonConstant.COLUMN_HEAD_NAMES).center().textBold().textColor("000000").bgColor("bfbfbf").create();
 
+        String[] fkHeaders = {
+                I18nUtils.getMessage("workspace.tableRelation.masterTable"),
+                I18nUtils.getMessage("workspace.tableRelation.uniqueColumn"),
+                I18nUtils.getMessage("workspace.tableRelation.childTable"),
+                I18nUtils.getMessage("workspace.tableRelation.relationColumn"),
+                I18nUtils.getMessage("editTable.label.sourceType"),
+                I18nUtils.getMessage("editTable.label.comment")
+        };
+        RowRenderData fkHeaderRow = Rows.of(fkHeaders).center().textBold().textColor("000000").bgColor("bfbfbf").create();
+
         for (Map.Entry<String, List<Map.Entry<String, List<TableParameter>>>> myMap : allMap.entrySet()) {
             String database = myMap.getKey();
             int i = 1;
@@ -69,6 +80,32 @@ public class WordSchemaDocExportStrategy extends AbstractSchemaDocExportStrategy
                 tableData.put("table", Tables.create(rowList.toArray(new RowRenderData[0])));
                 i++;
                 list.add(tableData);
+            }
+
+            List<ForeignKeyInfo> foreignKeyList = context.getForeignKeyList();
+            if (foreignKeyList != null && !foreignKeyList.isEmpty()) {
+                List<ForeignKeyInfo> dbForeignKeys = foreignKeyList.stream()
+                        .filter(fk -> database.equals(fk.getDatabaseName()))
+                        .collect(Collectors.toList());
+                if (!dbForeignKeys.isEmpty()) {
+                    List<RowRenderData> fkRowList = new ArrayList<>();
+                    fkRowList.add(fkHeaderRow);
+                    for (ForeignKeyInfo fk : dbForeignKeys) {
+                        String[] values = new String[]{
+                                dealWith(fk.getReferencedTable()),
+                                dealWith(fk.getReferencedColumnName()),
+                                dealWith(fk.getTableName()),
+                                dealWith(fk.getColumnName()),
+                                dealWith(fk.getSourceType()),
+                                dealWith(fk.getComment())
+                        };
+                        fkRowList.add(Rows.of(values).center().create());
+                    }
+                    Map<String, Object> relationData = new HashMap<>(2);
+                    relationData.put("relationTable", Tables.create(fkRowList.toArray(new RowRenderData[0])));
+                    relationData.put("relationTitle", I18nUtils.getMessage("workspace.tableRelation.title"));
+                    list.add(relationData);
+                }
             }
         }
         myDataMap.put("mydata", Includes.ofStream(subFile).setRenderModel(list).create());

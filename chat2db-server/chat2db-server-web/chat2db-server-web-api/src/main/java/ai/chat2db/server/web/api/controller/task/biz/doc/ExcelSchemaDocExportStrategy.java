@@ -2,6 +2,7 @@ package ai.chat2db.server.web.api.controller.task.biz.doc;
 
 import ai.chat2db.server.domain.api.enums.ExportTypeEnum;
 import ai.chat2db.server.domain.api.model.TableParameter;
+import ai.chat2db.server.domain.api.model.ForeignKeyInfo;
 import ai.chat2db.server.tools.common.util.I18nUtils;
 import ai.chat2db.server.web.api.controller.rdb.doc.adaptive.CustomCellWriteHeightConfig;
 import ai.chat2db.server.web.api.controller.rdb.doc.adaptive.CustomCellWriteWidthConfig;
@@ -36,12 +37,46 @@ public class ExcelSchemaDocExportStrategy extends AbstractSchemaDocExportStrateg
             export.addAll(item.getValue());
         }
 
-        EasyExcel.write(outputStream)
+        com.alibaba.excel.ExcelWriter excelWriter = EasyExcel.write(outputStream)
                 .registerWriteHandler(new HorizontalCellStyleStrategy(CustomExcelStyle.getHeadStyle(), CustomExcelStyle.getContentWriteCellStyle()))
                 .registerWriteHandler(new CustomCellWriteHeightConfig())
                 .registerWriteHandler(new CustomCellWriteWidthConfig())
                 .registerWriteHandler(new MyMergeExcel())
-                .sheet(I18nUtils.getMessage("main.sheetName"))
-                .doWrite(export);
+                .build();
+
+        com.alibaba.excel.write.metadata.WriteSheet writeSheet = EasyExcel.writerSheet(I18nUtils.getMessage("main.sheetName"))
+                .head(TableParameter.class)
+                .build();
+        excelWriter.write(export, writeSheet);
+
+        List<ForeignKeyInfo> foreignKeyList = context.getForeignKeyList();
+        if (foreignKeyList != null && !foreignKeyList.isEmpty()) {
+            List<List<String>> fkData = new ArrayList<>();
+            List<String> header = new ArrayList<>();
+            header.add(I18nUtils.getMessage("workspace.tableRelation.masterTable"));
+            header.add(I18nUtils.getMessage("workspace.tableRelation.uniqueColumn"));
+            header.add(I18nUtils.getMessage("workspace.tableRelation.childTable"));
+            header.add(I18nUtils.getMessage("workspace.tableRelation.relationColumn"));
+            header.add(I18nUtils.getMessage("editTable.label.sourceType"));
+            header.add(I18nUtils.getMessage("editTable.label.comment"));
+            fkData.add(header);
+
+            for (ForeignKeyInfo fk : foreignKeyList) {
+                List<String> row = new ArrayList<>();
+                row.add(fk.getReferencedTable());
+                row.add(fk.getReferencedColumnName());
+                row.add(fk.getTableName());
+                row.add(fk.getColumnName());
+                row.add(fk.getSourceType());
+                row.add(fk.getComment());
+                fkData.add(row);
+            }
+
+            com.alibaba.excel.write.metadata.WriteSheet fkSheet = EasyExcel.writerSheet(I18nUtils.getMessage("workspace.tableRelation.title"))
+                    .build();
+            excelWriter.write(fkData, fkSheet);
+        }
+
+        excelWriter.finish();
     }
 }
