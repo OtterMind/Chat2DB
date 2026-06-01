@@ -74,7 +74,7 @@ public class RdbDmlController {
         // Add Virtual FK suggestions using cached JSqlParser AST
         if (!resultList.isEmpty()) {
             ExecuteResult firstResult = resultList.get(0);
-            if (firstResult.getJsqlStatement() != null) {
+            if (canSuggestVirtualForeignKeys(firstResult)) {
                 List<VirtualForeignKey> existingFKs = foreignKeySyncService.listAllForeignKeys(
                         request.getDataSourceId(),
                         request.getDatabaseName(),
@@ -93,6 +93,13 @@ public class RdbDmlController {
         }
         List<ExecuteResultVO> resultVOS = rdbWebConverter.dto2vo(resultList);
         return ListResult.of(resultVOS);
+    }
+
+    private boolean canSuggestVirtualForeignKeys(ExecuteResult result) {
+        return result != null
+                && Boolean.TRUE.equals(result.getSuccess())
+                && result.getJsqlStatement() != null
+                && !CollectionUtils.isEmpty(result.getDataList());
     }
 
 
