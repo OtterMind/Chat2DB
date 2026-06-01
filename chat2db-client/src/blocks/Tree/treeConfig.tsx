@@ -704,7 +704,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
   },
   [TreeNodeType.KEY]: {
     icon: '\ue775',
-    operationColumn: [OperationColumn.CreateConsole, OperationColumn.CopyName],
+    operationColumn: [OperationColumn.ViewTableRelation, OperationColumn.CreateConsole, OperationColumn.CopyName],
   },
   [TreeNodeType.INDEXES]: {
     icon: '\ueac5',
@@ -740,6 +740,11 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
   },
   [TreeNodeType.V_KEY]: {
     icon: '\ue775',
-    operationColumn: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.DeleteVirtualKey],
+    operationColumn: [
+      OperationColumn.ViewTableRelation,
+      OperationColumn.CreateConsole,
+      OperationColumn.CopyName,
+      OperationColumn.DeleteVirtualKey,
+    ],
   },
 };

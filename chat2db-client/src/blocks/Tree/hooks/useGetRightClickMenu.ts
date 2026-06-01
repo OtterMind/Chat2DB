@@ -430,7 +430,10 @@ export const useGetRightClickMenu = (props: IProps) => {
       },
 
       [OperationColumn.ViewTableRelation]: {
-        text: i18n('workspace.menu.viewTableRelation'),
+        text:
+          treeNodeData.treeNodeType === TreeNodeType.KEY || treeNodeData.treeNodeType === TreeNodeType.V_KEY
+            ? i18n('workspace.menu.view')
+            : i18n('workspace.menu.viewTableRelation'),
         icon: '\ue611',
         handle: () => {
           openTableRelationModal(treeNodeData);
@@ -957,7 +960,10 @@ export const getRightClickMenu = (props: IProps) => {
     },
 
     [OperationColumn.ViewTableRelation]: {
-      text: i18n('workspace.menu.viewTableRelation'),
+      text:
+        treeNodeData.treeNodeType === TreeNodeType.KEY || treeNodeData.treeNodeType === TreeNodeType.V_KEY
+          ? i18n('workspace.menu.view')
+          : i18n('workspace.menu.viewTableRelation'),
       icon: '\ue611',
       handle: () => {
         openTableRelationModal(treeNodeData);

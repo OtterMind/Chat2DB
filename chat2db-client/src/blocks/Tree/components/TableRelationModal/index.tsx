@@ -22,7 +22,11 @@ interface IAddRelationForm {
 const TableRelationModal = memo((props: IProps) => {
   const { treeNodeData } = props;
   const { dataSourceId, databaseName, schemaName } = treeNodeData.extraParams || {};
-  const tableName = treeNodeData.treeNodeType === TreeNodeType.TABLE ? treeNodeData.name : undefined;
+  const isForeignKeyNode =
+    treeNodeData.treeNodeType === TreeNodeType.KEY || treeNodeData.treeNodeType === TreeNodeType.V_KEY;
+  const tableName =
+    treeNodeData.treeNodeType === TreeNodeType.TABLE ? treeNodeData.name : treeNodeData.extraParams?.tableName;
+  const keyName = isForeignKeyNode ? treeNodeData.name : undefined;
 
   const [form] = Form.useForm<IAddRelationForm>();
   const [loading, setLoading] = useState(false);
@@ -95,17 +99,16 @@ const TableRelationModal = memo((props: IProps) => {
         databaseName: databaseName!,
         schemaName,
       });
-      setForeignKeys(
-        tableName
-          ? (list || []).filter((item) => item.tableName === tableName || item.referencedTable === tableName)
-          : list || [],
-      );
+      const tableForeignKeys = tableName
+        ? (list || []).filter((item) => item.tableName === tableName || item.referencedTable === tableName)
+        : list || [];
+      setForeignKeys(keyName ? tableForeignKeys.filter((item) => item.name === keyName) : tableForeignKeys);
     } catch {
       message.error(i18n('workspace.tableRelation.loadError'));
     } finally {
       setLoading(false);
     }
-  }, [dataSourceId, databaseName, schemaName, tableName]);
+  }, [dataSourceId, databaseName, schemaName, tableName, keyName]);
 
   const fetchTables = useCallback(async () => {
     if (!dataSourceId || !databaseName) return;
