@@ -1,12 +1,13 @@
 import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Input, Spin, message, Tag, Alert } from 'antd';
-import { DownOutlined, RightOutlined, PlayCircleOutlined, SendOutlined } from '@ant-design/icons';
+import { Button, Input, Spin, message, Tag, Alert, Modal, Select } from 'antd';
+import { DownOutlined, RightOutlined, PlayCircleOutlined, SendOutlined, PlusOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { v4 as uuidv4 } from 'uuid';
 import { formatParams } from '@/utils/url';
-import connectToEventSource, { cancelChatSession } from '@/utils/eventSource';
+import connectToEventSource, { cancelChatSession, createChatPayload } from '@/utils/eventSource';
 import CascaderDB from '@/components/CascaderDB';
+import sqlService from '@/service/sql';
 import { IAiChatPromptType, ITableCommentResult, IBatchTableCommentResult, IFieldMappingResult, IDataExpressionResult } from '@/pages/main/workspace/store/common';
 import { useWorkspaceStore } from '@/pages/main/workspace/store';
 import { useAiChatStore, ChatStateType, IChatMessage } from '@/pages/main/workspace/store/aiChatStore';
@@ -181,6 +182,21 @@ function extractSqlFromContent(content: string): string | null {
   return null;
 }
 
+const MAX_DIRECT_SSE_URL_LENGTH = 1800;
+
+const getLastAssistantSql = (messages: IChatMessage[]): string | null => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const messageItem = messages[i];
+    if (messageItem.role === 'assistant') {
+      const sql = extractSqlFromContent(messageItem.content);
+      if (sql) {
+        return sql;
+      }
+    }
+  }
+  return null;
+};
+
 const SqlActionButtons = memo<{ sql: string; onExecute?: (sql: string) => void; onSendToEditor?: (sql: string) => void }>(({ sql, onExecute, onSendToEditor }) => {
   return (
     <div className={styles.sqlActionButtons}>
@@ -218,6 +234,10 @@ export default memo<IProps>((props) => {
   const expressionCallbackRef = useRef<(result: IDataExpressionResult) => void>();
   const sqlFixCallbackRef = useRef<(sql: string) => void>();
   const extractedSqlRef = useRef<string | null>(null);
+  const [tableSelectorOpen, setTableSelectorOpen] = useState(false);
+  const [tableSelectorLoading, setTableSelectorLoading] = useState(false);
+  const [databaseTables, setDatabaseTables] = useState<Array<{ name: string; comment?: string }>>([]);
+  const [selectedTableDraft, setSelectedTableDraft] = useState<string[]>([]);
 
   const {
     currentSessionId,
@@ -266,39 +286,8 @@ export default memo<IProps>((props) => {
   }, [activeConsoleId, consoleList]);
 
   useEffect(() => {
-    if (pendingAiChat && pendingAiChat.message) {
-      const overrideBoundInfo = {
-        dataSourceId: pendingAiChat.dataSourceId || boundInfo.dataSourceId,
-        databaseName: pendingAiChat.databaseName || boundInfo.databaseName,
-        schemaName: pendingAiChat.schemaName || boundInfo.schemaName,
-        tableNames: pendingAiChat.tableNames || boundInfo.tableNames || null,
-      };
-      if (pendingAiChat.dataSourceId && pendingAiChat.dataSourceId !== boundInfo.dataSourceId) {
-        setBoundInfo((prev) => ({
-          ...prev,
-          dataSourceId: pendingAiChat.dataSourceId,
-          tableNames: pendingAiChat.tableNames || prev.tableNames,
-        }));
-      }
-      if (pendingAiChat.onCommentGenerated) {
-        commentCallbackRef.current = pendingAiChat.onCommentGenerated;
-      }
-      if (pendingAiChat.onBatchCommentGenerated) {
-        batchCommentCallbackRef.current = pendingAiChat.onBatchCommentGenerated;
-      }
-      if (pendingAiChat.onMappingGenerated) {
-        mappingCallbackRef.current = pendingAiChat.onMappingGenerated;
-      }
-      if (pendingAiChat.onExpressionGenerated) {
-        expressionCallbackRef.current = pendingAiChat.onExpressionGenerated;
-      }
-      if (pendingAiChat.onSqlFixed) {
-        sqlFixCallbackRef.current = pendingAiChat.onSqlFixed;
-      }
-      sendAiChatInternal(pendingAiChat.message, pendingAiChat.promptType, overrideBoundInfo, pendingAiChat.ext);
-      useWorkspaceStore.setState({ pendingAiChat: null });
-    }
-  }, [pendingAiChat, boundInfo, sendAiChatInternal]);
+    setDatabaseTables([]);
+  }, [boundInfo.dataSourceId, boundInfo.databaseName, boundInfo.schemaName]);
 
   const sendAiChat = (messageText: string, promptType: IAiChatPromptType = 'NL_2_SQL', tableNames?: string[] | null, ext?: string) => {
     const infoWithTables = {
@@ -308,8 +297,66 @@ export default memo<IProps>((props) => {
     sendAiChatInternal(messageText, promptType, infoWithTables, ext);
   };
 
+  const syncSelectedTables = useCallback(
+    (tables: string[]) => {
+      const nextTables = Array.from(new Set(tables.filter(Boolean)));
+      setBoundInfo((prev) => ({
+        ...prev,
+        tableNames: nextTables.length ? nextTables : null,
+      }));
+      if (currentSessionId) {
+        setSelectedTables(currentSessionId, nextTables);
+      }
+    },
+    [currentSessionId, setSelectedTables],
+  );
+
+  const openTableSelector = useCallback(async () => {
+    if (!boundInfo.dataSourceId) {
+      message.warning('请先选择数据库连接');
+      return;
+    }
+
+    const currentTables = currentSession?.selectedTables || boundInfo.tableNames || [];
+    setSelectedTableDraft(currentTables);
+    setTableSelectorOpen(true);
+
+    if (databaseTables.length > 0) {
+      return;
+    }
+
+    setTableSelectorLoading(true);
+    try {
+      const tables = await sqlService.getAllTableList({
+        dataSourceId: boundInfo.dataSourceId,
+        databaseName: boundInfo.databaseName,
+        schemaName: boundInfo.schemaName,
+      });
+      setDatabaseTables(tables || []);
+    } catch (error) {
+      console.error('[AiChat] Failed to load tables:', error);
+      message.error('加载表列表失败');
+    } finally {
+      setTableSelectorLoading(false);
+    }
+  }, [boundInfo, currentSession?.selectedTables, databaseTables.length]);
+
+  const handleRemoveSelectedTable = useCallback(
+    (tableName: string) => {
+      const currentTables = currentSession?.selectedTables || boundInfo.tableNames || [];
+      syncSelectedTables(currentTables.filter((item) => item !== tableName));
+    },
+    [boundInfo.tableNames, currentSession?.selectedTables, syncSelectedTables],
+  );
+
+  const handleConfirmTableSelector = useCallback(() => {
+    syncSelectedTables(selectedTableDraft);
+    setTableSelectorOpen(false);
+    setInputValue((value) => (value.endsWith('@') ? value.slice(0, -1) : value));
+  }, [selectedTableDraft, syncSelectedTables]);
+
   const sendAiChatInternal = useCallback(
-    (messageText: string, promptType: IAiChatPromptType = 'NL_2_SQL', info: typeof boundInfo, ext?: string) => {
+    async (messageText: string, promptType: IAiChatPromptType = 'NL_2_SQL', info: typeof boundInfo, ext?: string) => {
       console.log('[AiChat] sendAiChat called with:', { messageText, promptType, info });
       if (!messageText.trim()) {
         message.warning('请输入问题');
@@ -321,10 +368,36 @@ export default memo<IProps>((props) => {
         return;
       }
 
-      const sessionId = uuidv4();
-      console.log('[AiChat] Created sessionId:', sessionId);
+      const storeState = useAiChatStore.getState();
+      const existingSessionId = storeState.currentSessionId;
+      const existingSession = existingSessionId ? storeState.sessions.get(existingSessionId) : null;
+      const previousRequest = storeState.lastRequest;
+      const isSameConnection =
+        !previousRequest ||
+        (previousRequest.dataSourceId === info.dataSourceId &&
+          previousRequest.databaseName === info.databaseName &&
+          previousRequest.schemaName === info.schemaName);
+      const canReuseNl2SqlConversation =
+        promptType === 'NL_2_SQL' &&
+        isSameConnection &&
+        !!existingSessionId &&
+        !!existingSession &&
+        existingSession.messages.length > 0 &&
+        !isActiveState(existingSession.state);
+      const previousSql = canReuseNl2SqlConversation ? getLastAssistantSql(existingSession.messages) : null;
+      const shouldContinueConversation = canReuseNl2SqlConversation && !!previousSql;
+      const isRevision = shouldContinueConversation;
+      const requestTableNames =
+        isRevision && (!info.tableNames || info.tableNames.length === 0) && existingSession.selectedTables?.length
+          ? existingSession.selectedTables
+          : info.tableNames;
+
+      const sessionId = shouldContinueConversation ? existingSessionId : uuidv4();
+      console.log('[AiChat] Using sessionId:', sessionId, 'continue:', shouldContinueConversation);
       sessionIdRef.current = sessionId;
-      createSession(sessionId);
+      if (!shouldContinueConversation) {
+        createSession(sessionId);
+      }
 
       const userMessage: IChatMessage = {
         id: uuidv4(),
@@ -339,21 +412,45 @@ export default memo<IProps>((props) => {
         dataSourceId: info.dataSourceId,
         databaseName: info.databaseName,
         schemaName: info.schemaName,
-        tableNames: info.tableNames,
+        tableNames: requestTableNames,
         ext,
+        conversationId: sessionId,
+        isRevision,
       });
 
       resetCurrentContent(sessionId);
 
-      const params = formatParams({
+      const requestParams = {
         message: messageText,
         promptType,
         dataSourceId: info.dataSourceId,
         databaseName: info.databaseName,
         schemaName: info.schemaName,
-        tableNames: info.tableNames,
+        tableNames: requestTableNames,
         ext,
-      });
+        conversationId: sessionId,
+        isRevision,
+      };
+
+      setInputValue('');
+
+      let params = formatParams(requestParams);
+      if (`/api/ai/chat?${params}`.length > MAX_DIRECT_SSE_URL_LENGTH) {
+        try {
+          const payloadId = await createChatPayload(requestParams);
+          params = formatParams({
+            payloadId,
+            dataSourceId: info.dataSourceId,
+            databaseName: info.databaseName,
+            schemaName: info.schemaName,
+          });
+        } catch (error: any) {
+          console.error('[AiChat] Failed to create chat payload:', error);
+          setError(sessionId, error?.message || '创建 AI 请求失败');
+          message.error('创建 AI 请求失败');
+          return;
+        }
+      }
 
       closeEventSource.current = connectToEventSource({
         url: `/api/ai/chat?${params}`,
@@ -373,6 +470,10 @@ export default memo<IProps>((props) => {
         onTablesSelected: (tables) => {
           console.log('[AiChat] Tables selected:', tables);
           setSelectedTables(sessionId, tables);
+          setBoundInfo((prev) => ({
+            ...prev,
+            tableNames: tables.length ? tables : null,
+          }));
         },
         onSchemaFetched: (ddl) => {
           console.log('[AiChat] Schema fetched, ddl length:', ddl?.length);
@@ -498,6 +599,41 @@ export default memo<IProps>((props) => {
     ],
   );
 
+  useEffect(() => {
+    if (pendingAiChat && pendingAiChat.message) {
+      const overrideBoundInfo = {
+        dataSourceId: pendingAiChat.dataSourceId || boundInfo.dataSourceId,
+        databaseName: pendingAiChat.databaseName || boundInfo.databaseName,
+        schemaName: pendingAiChat.schemaName || boundInfo.schemaName,
+        tableNames: pendingAiChat.tableNames || boundInfo.tableNames || null,
+      };
+      if (pendingAiChat.dataSourceId && pendingAiChat.dataSourceId !== boundInfo.dataSourceId) {
+        setBoundInfo((prev) => ({
+          ...prev,
+          dataSourceId: pendingAiChat.dataSourceId,
+          tableNames: pendingAiChat.tableNames || prev.tableNames,
+        }));
+      }
+      if (pendingAiChat.onCommentGenerated) {
+        commentCallbackRef.current = pendingAiChat.onCommentGenerated;
+      }
+      if (pendingAiChat.onBatchCommentGenerated) {
+        batchCommentCallbackRef.current = pendingAiChat.onBatchCommentGenerated;
+      }
+      if (pendingAiChat.onMappingGenerated) {
+        mappingCallbackRef.current = pendingAiChat.onMappingGenerated;
+      }
+      if (pendingAiChat.onExpressionGenerated) {
+        expressionCallbackRef.current = pendingAiChat.onExpressionGenerated;
+      }
+      if (pendingAiChat.onSqlFixed) {
+        sqlFixCallbackRef.current = pendingAiChat.onSqlFixed;
+      }
+      sendAiChatInternal(pendingAiChat.message, pendingAiChat.promptType, overrideBoundInfo, pendingAiChat.ext);
+      useWorkspaceStore.setState({ pendingAiChat: null });
+    }
+  }, [pendingAiChat, boundInfo, sendAiChatInternal]);
+
   const handleCancel = async () => {
     if (closeEventSource.current) {
       closeEventSource.current();
@@ -539,7 +675,7 @@ export default memo<IProps>((props) => {
 
   const handleRetry = () => {
     if (lastRequest) {
-      sendAiChat(lastRequest.message, lastRequest.promptType, lastRequest.tableNames);
+      sendAiChat(lastRequest.message, lastRequest.promptType as IAiChatPromptType, lastRequest.tableNames, lastRequest.ext);
     }
   };
 
@@ -550,33 +686,61 @@ export default memo<IProps>((props) => {
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = e.target.value;
+    setInputValue(nextValue);
+    if (nextValue.endsWith('@') && !tableSelectorOpen) {
+      openTableSelector();
+    }
+  };
+
   const handleBoundInfoChange = (value: { dataSourceId: number; databaseName: string; schemaName: string }) => {
     setBoundInfo({
       dataSourceId: value.dataSourceId,
       databaseName: value.databaseName,
       schemaName: value.schemaName,
+      tableNames: null,
     });
   };
 
   const stateInfo = currentSession ? STATE_LABELS[currentSession.state] : null;
   const isProcessing = isActiveState(currentSession?.state);
   const isInputDisabled = isProcessing || !boundInfo.dataSourceId;
+  const selectedTablesForDisplay = currentSession?.selectedTables || boundInfo.tableNames || [];
+  const tableOptions = databaseTables.map((table) => ({
+    label: table.comment ? `${table.name} - ${table.comment}` : table.name,
+    value: table.name,
+  }));
 
   return (
     <div className={styles.aiChatContainer}>
       {stateInfo && (
         <div className={styles.statusBar}>
           <Tag color={stateInfo.color}>{stateInfo.text}</Tag>
-          {currentSession?.selectedTables && currentSession.selectedTables.length > 0 && (
-            <div className={styles.selectedTables}>
-              <span>已选择表：</span>
-              {currentSession.selectedTables.map((t) => (
-                <Tag key={t} color="blue">
-                  {t}
-                </Tag>
-              ))}
-            </div>
-          )}
+          <div className={styles.selectedTables}>
+            <span>已选择表：</span>
+            {selectedTablesForDisplay.map((tableName) => (
+              <Tag
+                key={tableName}
+                color="blue"
+                closable={!isProcessing}
+                onClose={(event) => {
+                  event.preventDefault();
+                  handleRemoveSelectedTable(tableName);
+                }}
+              >
+                {tableName}
+              </Tag>
+            ))}
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={openTableSelector}
+              disabled={isProcessing || !boundInfo.dataSourceId}
+            >
+              @ 表
+            </Button>
+          </div>
           {isProcessing && (
             <Button size="small" danger onClick={handleCancel}>
               停止
@@ -644,7 +808,7 @@ export default memo<IProps>((props) => {
         />
         <Input.TextArea
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={handleInputChange}
           onKeyPress={handleKeyPress}
           placeholder="请输入您的问题..."
           autoSize={{ minRows: 3, maxRows: 6 }}
@@ -660,6 +824,27 @@ export default memo<IProps>((props) => {
           </Button>
         </div>
       </div>
+      <Modal
+        title="@ 当前库的表"
+        open={tableSelectorOpen}
+        onOk={handleConfirmTableSelector}
+        onCancel={() => setTableSelectorOpen(false)}
+        okText="添加引用"
+        cancelText="取消"
+      >
+        <Select
+          mode="multiple"
+          showSearch
+          allowClear
+          loading={tableSelectorLoading}
+          value={selectedTableDraft}
+          options={tableOptions}
+          placeholder="搜索并选择表"
+          optionFilterProp="label"
+          onChange={setSelectedTableDraft}
+          style={{ width: '100%' }}
+        />
+      </Modal>
     </div>
   );
 });

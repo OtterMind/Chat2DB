@@ -54,4 +54,24 @@ public class PromptContext {
      * 源文件字段列表（用于字段映射推荐）
      */
     private String sourceFields;
+
+    /**
+     * 前端会话 ID，用于同一 AI 面板内的连续对话
+     */
+    private String conversationId;
+
+    /**
+     * 最近几轮对话历史，JSON 字符串
+     */
+    private String history;
+
+    /**
+     * 上一次 AI 输出的 SQL
+     */
+    private String previousSql;
+
+    /**
+     * 是否为基于上一次 SQL 的修正请求
+     */
+    private Boolean isRevision;
 }

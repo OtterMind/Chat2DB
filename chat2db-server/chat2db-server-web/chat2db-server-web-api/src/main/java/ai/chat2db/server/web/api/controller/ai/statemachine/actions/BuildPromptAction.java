@@ -1,7 +1,5 @@
 package ai.chat2db.server.web.api.controller.ai.statemachine.actions;
 
-import java.util.concurrent.CompletableFuture;
-
 import ai.chat2db.server.domain.api.service.DataSourceService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +11,7 @@ import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptBuilder;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptContext;
 import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
+import ai.chat2db.server.web.api.controller.ai.service.AiConversationCache;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatState;
@@ -32,13 +31,14 @@ public class BuildPromptAction extends BaseChatAction {
     @Autowired
     private DataSourceService dataSourceService;
 
+    @Autowired
+    private AiConversationCache aiConversationCache;
+
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
-        log.info("[BuildPromptAction] execute called");
         ChatContext chatContext = getChatContext(context);
-        log.info("[BuildPromptAction] uid: {}, cancelled: {}", chatContext.getUid(), chatContext.isCancelled());
         if (chatContext.isCancelled()) {
-            log.info("[BuildPromptAction] cancelled, returning");
+            log.info("[BuildPromptAction] Skip cancelled request, uid: {}", chatContext.getUid());
             return;
         }
 
@@ -49,13 +49,24 @@ public class BuildPromptAction extends BaseChatAction {
         try {
             ChatQueryRequest request = chatContext.getRequest();
             String schemaDdl = chatContext.getSchemaDdl();
-            log.info("[BuildPromptAction] Building prompt for uid: {}, promptType: {}, message: {}",
-                    chatContext.getUid(), request.getPromptType(), request.getMessage());
 
             PromptType promptType = determinePromptType(request);
+            log.info("[BuildPromptAction] Building prompt, uid: {}, promptType: {}, isRevision: {}, messageLength: {}",
+                    chatContext.getUid(), promptType, request.getIsRevision(),
+                    StringUtils.length(request.getMessage()));
 
             // 解析 ext 中的 sourceFields（用于字段映射）
             String sourceFields = extractSourceFields(request.getExt());
+            String history = request.getHistory();
+            String previousSql = request.getPreviousSql();
+            if (PromptType.NL_2_SQL == promptType && Boolean.TRUE.equals(request.getIsRevision())) {
+                if (StringUtils.isBlank(history)) {
+                    history = aiConversationCache.getHistoryJson(request.getConversationId());
+                }
+                if (StringUtils.isBlank(previousSql)) {
+                    previousSql = aiConversationCache.getPreviousSql(request.getConversationId());
+                }
+            }
 
             PromptContext promptContext = PromptContext.builder()
                     .promptType(promptType)
@@ -66,13 +77,18 @@ public class BuildPromptAction extends BaseChatAction {
                     .dataSourceType(dataSourceService.queryDatabaseType(request.getDataSourceId()))
                     .targetSqlType(request.getDestSqlType())
                     .sourceFields(sourceFields)
+                    .conversationId(request.getConversationId())
+                    .history(history)
+                    .previousSql(previousSql)
+                    .isRevision(request.getIsRevision())
                     .build();
 
             String builtPrompt = promptBuilder.context(promptContext).build();
-            log.info("[BuildPromptAction] Built prompt content for uid: {}:\n{}", chatContext.getUid(), builtPrompt);
             chatContext.setBuiltPrompt(builtPrompt);
+            log.info("[BuildPromptAction] Prompt built, uid: {}, promptLength: {}",
+                    chatContext.getUid(), StringUtils.length(builtPrompt));
+            log.info("[BuildPromptAction] Prompt content, uid: {}:\n{}", chatContext.getUid(), builtPrompt);
 
-            log.info("[BuildPromptAction] Sending PROMPT_BUILT event for uid: {}", chatContext.getUid());
             context.getStateMachine().sendEvent(
                     Mono.just(MessageBuilder.withPayload(ChatEvent.PROMPT_BUILT).build())
             ).subscribe();

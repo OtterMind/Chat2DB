@@ -1,5 +1,5 @@
 import { ChatStateType } from '@/pages/main/workspace/store/aiChatStore';
-import { cancelSSESession, createSSEConnection, getSSEBaseUrl } from '@/utils/sse';
+import { cancelSSESession, createChatPayload, createSSEConnection, getSSEBaseUrl } from '@/utils/sse';
 
 interface EventSourceOptions {
   url: string;
@@ -107,5 +107,6 @@ const cancelChatSession = async (sessionId: string): Promise<void> => {
 };
 
 export { cancelChatSession };
+export { createChatPayload };
 
 export default connectToEventSource;

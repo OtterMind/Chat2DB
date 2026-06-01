@@ -37,6 +37,10 @@ interface ILastRequest {
   schemaName?: string | null;
   tableNames?: string[] | null;
   ext?: string;
+  conversationId?: string;
+  history?: string;
+  previousSql?: string | null;
+  isRevision?: boolean;
 }
 
 interface IAiChatStore {
@@ -178,7 +182,7 @@ export const useAiChatStore = create<IAiChatStore>((set, get) => ({
       const sessions = new Map(state.sessions);
       const session = sessions.get(sessionId);
       if (session) {
-        sessions.set(sessionId, { ...session, currentContent: '' });
+        sessions.set(sessionId, { ...session, currentContent: '', currentThinking: '' });
       }
       return { sessions };
     });

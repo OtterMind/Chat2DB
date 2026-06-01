@@ -1,6 +1,9 @@
 package ai.chat2db.server.web.api.controller.ai.prompt;
 
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -12,6 +15,10 @@ import java.util.Objects;
  */
 @Component
 public class PromptBuilderImpl implements PromptBuilder {
+
+    private static final int MAX_HISTORY_MESSAGES = 6;
+    private static final int MAX_HISTORY_CONTENT_LENGTH = 1200;
+    private static final int MAX_PREVIOUS_SQL_LENGTH = 6000;
 
     private final PromptTemplateRegistry templateRegistry;
     private final PromptValidator validator;
@@ -167,7 +174,69 @@ public class PromptBuilderImpl implements PromptBuilder {
             filledTemplate = filledTemplate.replace("{original_sql}", Objects.toString(originalSql, ""));
         }
 
-        return filledTemplate;
+        return appendRevisionContextIfNeeded(filledTemplate, context);
+    }
+
+    private String appendRevisionContextIfNeeded(String filledTemplate, PromptContext context) {
+        if (context.getPromptType() != PromptType.NL_2_SQL
+                || !Boolean.TRUE.equals(context.getIsRevision())
+                || StringUtils.isBlank(context.getPreviousSql())) {
+            return filledTemplate;
+        }
+
+        StringBuilder builder = new StringBuilder(filledTemplate);
+        builder.append("\n\n")
+                .append("### 连续对话修正要求\n")
+                .append("用户正在基于上一版 SQL 提出修正。请结合对话历史、上一版 SQL、当前表结构和当前 SQL input，")
+                .append("生成一条完整的新 SQL。\n")
+                .append("- 不要只描述变更点。\n")
+                .append("- 不要省略未变化的 SELECT、FROM、JOIN、WHERE、GROUP BY、ORDER BY 等部分。\n")
+                .append("- 优先使用 ```sql 代码块输出最终 SQL。\n");
+
+        String formattedHistory = formatConversationHistory(context.getHistory());
+        if (StringUtils.isNotBlank(formattedHistory)) {
+            builder.append("\n### 最近对话历史\n")
+                    .append(formattedHistory)
+                    .append("\n");
+        }
+
+        builder.append("\n### 上一版 SQL\n")
+                .append("```sql\n")
+                .append(truncate(context.getPreviousSql(), MAX_PREVIOUS_SQL_LENGTH))
+                .append("\n```\n");
+
+        return builder.toString();
+    }
+
+    private String formatConversationHistory(String history) {
+        if (StringUtils.isBlank(history)) {
+            return "";
+        }
+        try {
+            JSONArray messages = JSON.parseArray(history);
+            int start = Math.max(0, messages.size() - MAX_HISTORY_MESSAGES);
+            StringBuilder builder = new StringBuilder();
+            for (int i = start; i < messages.size(); i++) {
+                JSONObject message = messages.getJSONObject(i);
+                String role = Objects.toString(message.getString("role"), "unknown");
+                String content = truncate(
+                        Objects.toString(message.getString("content"), ""),
+                        MAX_HISTORY_CONTENT_LENGTH);
+                if (StringUtils.isNotBlank(content)) {
+                    builder.append(role).append(": ").append(content).append("\n");
+                }
+            }
+            return builder.toString().trim();
+        } catch (Exception e) {
+            return truncate(history, MAX_HISTORY_CONTENT_LENGTH * 2);
+        }
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (StringUtils.isBlank(text) || text.length() <= maxLength) {
+            return Objects.toString(text, "");
+        }
+        return text.substring(0, maxLength) + "\n...已截断...";
     }
 
     private String formatSourceFields(String sourceFieldsJson) {

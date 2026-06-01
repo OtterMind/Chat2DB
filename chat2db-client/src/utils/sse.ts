@@ -35,6 +35,25 @@ export const createSSEConnection = ({ url, uid }: ISSEConnectionOptions) => {
   });
 };
 
+export const createChatPayload = async (payload: Record<string, any>): Promise<string> => {
+  const DBHUB = localStorage.getItem('DBHUB');
+  const response = await fetch(`${getSSEBaseUrl()}/api/ai/chat/payload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      DBHUB: DBHUB || '',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create chat payload failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.payloadId;
+};
+
 export const cancelSSESession = async (sessionId: string): Promise<void> => {
   const DBHUB = localStorage.getItem('DBHUB');
   await fetch(`${getSSEBaseUrl()}/api/ai/chat/${sessionId}`, {

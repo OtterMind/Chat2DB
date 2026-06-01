@@ -43,4 +43,29 @@ public class ChatQueryRequest extends DataSourceBaseRequest {
      * 更多备注信息：如要求或限制条件等
      */
     private String ext;
+
+    /**
+     * 前端会话 ID，用于同一 AI 面板内的连续对话
+     */
+    private String conversationId;
+
+    /**
+     * 最近几轮对话历史，JSON 字符串
+     */
+    private String history;
+
+    /**
+     * 上一次 AI 输出的 SQL
+     */
+    private String previousSql;
+
+    /**
+     * 是否为基于上一次 SQL 的修正请求
+     */
+    private Boolean isRevision;
+
+    /**
+     * 大请求体临时缓存 ID，用于避免 SSE GET URL 过长
+     */
+    private String payloadId;
 }

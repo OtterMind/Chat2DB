@@ -15,6 +15,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.alibaba.fastjson2.JSONObject;
 
+import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
+import ai.chat2db.server.web.api.controller.ai.service.AiConversationCache;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptValidator;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
@@ -34,21 +36,22 @@ public class StreamAction extends BaseChatAction {
     @Autowired
     private PromptValidator promptValidator;
 
+    @Autowired
+    private AiConversationCache aiConversationCache;
+
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
-        log.info("[StreamAction] execute called");
         ChatContext ctx = getChatContext(context);
-        log.info("[StreamAction] uid: {}, cancelled: {}", ctx.getUid(), ctx.isCancelled());
         if (ctx.isCancelled()) {
-            log.info("[StreamAction] cancelled, returning");
+            log.info("[StreamAction] Skip cancelled request, uid: {}", ctx.getUid());
             return;
         }
 
         String prompt = ctx.getBuiltPrompt();
-        log.info("[StreamAction] Prompt content for uid: {}:\n{}", ctx.getUid(), prompt);
 
         if (!promptValidator.isValidLength(prompt)) {
-            log.warn("[StreamAction] Prompt exceeds max length for uid: {}", ctx.getUid());
+            log.warn("[StreamAction] Prompt exceeds max length, uid: {}, promptLength: {}",
+                    ctx.getUid(), prompt == null ? 0 : prompt.length());
             sendError(ctx.getSseEmitter(), "提示语超出最大长度");
             context.getStateMachine().sendEvent(
                     Mono.just(MessageBuilder.withPayload(ChatEvent.AI_CALL_FAILED).build())
@@ -58,7 +61,8 @@ public class StreamAction extends BaseChatAction {
 
         try {
             sendStateEvent(ctx.getSseEmitter(), ChatState.STREAMING, "AI 正在生成...");
-            log.info("[StreamAction] Starting AI stream for uid: {}", ctx.getUid());
+            log.info("[StreamAction] Starting AI stream, uid: {}, promptLength: {}",
+                    ctx.getUid(), prompt == null ? 0 : prompt.length());
 
             Flux<ChatResponse> flux = ctx.getChatClient().prompt()
                     .user(prompt)
@@ -175,6 +179,7 @@ public class StreamAction extends BaseChatAction {
     private void handleStreamComplete(ChatContext ctx, StateContext<ChatState, ChatEvent> context) {
         log.info("[StreamAction] Stream completed for uid: {}", ctx.getUid());
         try {
+            cacheConversationTurn(ctx);
             ctx.getSseEmitter().send(SseEmitter.event()
                     .id("[DONE]")
                     .data("[DONE]")
@@ -187,5 +192,16 @@ public class StreamAction extends BaseChatAction {
         context.getStateMachine().sendEvent(
                 MessageBuilder.withPayload(ChatEvent.STREAM_FINISHED).build()
         );
+    }
+
+    private void cacheConversationTurn(ChatContext ctx) {
+        if (ctx.getRequest() == null
+                || !PromptType.NL_2_SQL.getCode().equals(ctx.getRequest().getPromptType())) {
+            return;
+        }
+        aiConversationCache.appendTurn(
+                ctx.getRequest().getConversationId(),
+                ctx.getRequest().getMessage(),
+                ctx.getCurrentContent());
     }
 }

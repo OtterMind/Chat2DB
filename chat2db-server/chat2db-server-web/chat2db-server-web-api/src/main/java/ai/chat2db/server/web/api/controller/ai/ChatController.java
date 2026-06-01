@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.collections4.CollectionUtils;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,6 +59,19 @@ public class ChatController {
 
     private final ConcurrentHashMap<String, StateMachine<ChatState, ChatEvent>> activeSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ChatContext> activeContexts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PendingChatPayload> pendingPayloads = new ConcurrentHashMap<>();
+
+    private static final long PAYLOAD_TIMEOUT = Duration.ofMinutes(5).toMillis();
+
+    @PostMapping("/chat/payload")
+    @CrossOrigin
+    public ResponseEntity<Map<String, String>> createChatPayload(@RequestBody ChatQueryRequest queryRequest) {
+        cleanupExpiredPayloads();
+
+        String payloadId = UUID.randomUUID().toString();
+        pendingPayloads.put(payloadId, new PendingChatPayload(queryRequest, System.currentTimeMillis()));
+        return ResponseEntity.ok(Map.of("payloadId", payloadId));
+    }
 
     @GetMapping("/chat")
     @CrossOrigin
@@ -67,6 +83,7 @@ public class ChatController {
         }
 
         log.info("[ChatController] Received uid from client: {}", uid);
+        queryRequest = resolvePayload(queryRequest);
         SseEmitter sseEmitter = new SseEmitter(CHAT_TIMEOUT);
 
         // 根据提示类型选择是否使用快速模型
@@ -187,5 +204,26 @@ public class ChatController {
     private void cleanupSession(String uid) {
         activeSessions.remove(uid);
         activeContexts.remove(uid);
+    }
+
+    private ChatQueryRequest resolvePayload(ChatQueryRequest queryRequest) {
+        if (StrUtil.isBlank(queryRequest.getPayloadId())) {
+            return queryRequest;
+        }
+
+        PendingChatPayload pendingPayload = pendingPayloads.remove(queryRequest.getPayloadId());
+        if (pendingPayload == null) {
+            throw new ParamBusinessException("payloadId");
+        }
+
+        return pendingPayload.queryRequest();
+    }
+
+    private void cleanupExpiredPayloads() {
+        long now = System.currentTimeMillis();
+        pendingPayloads.entrySet().removeIf(entry -> now - entry.getValue().createdAt() > PAYLOAD_TIMEOUT);
+    }
+
+    private record PendingChatPayload(ChatQueryRequest queryRequest, long createdAt) {
     }
 }
