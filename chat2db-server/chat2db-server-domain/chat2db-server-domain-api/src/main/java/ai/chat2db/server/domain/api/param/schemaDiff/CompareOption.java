@@ -16,4 +16,7 @@ public class CompareOption {
     private boolean compareTableOption = true;
     private boolean caseSensitive = false;
     private boolean excludeDeprecated = true;
+    private boolean ignoreCharsetAlias = true;
+    private boolean ignoreIntegerDisplayWidth = true;
+    private boolean ignoreAutoIncrement = true;
 }

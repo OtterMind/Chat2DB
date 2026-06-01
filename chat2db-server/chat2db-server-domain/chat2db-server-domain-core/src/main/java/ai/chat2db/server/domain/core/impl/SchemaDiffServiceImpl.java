@@ -11,12 +11,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import ai.chat2db.spi.SqlBuilder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -58,6 +61,9 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @Slf4j
 public class SchemaDiffServiceImpl implements SchemaDiffService {
+
+    private static final Pattern MYSQL_INTEGER_COLUMN_TYPE_WITH_WIDTH = Pattern.compile(
+            "(?i)^(tinyint|smallint|mediumint|int|integer|bigint)\\s*\\(\\s*\\d+\\s*\\)(\\s+unsigned)?$");
 
     @Autowired
     private DataSourceService dataSourceService;
@@ -365,7 +371,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
 
         // 比较列、索引、外键
         List<ColumnDiff> columnDiffs = context.option.isCompareColumn()
-                ? compareColumns(sourceTable.getColumnList(), targetTable.getColumnList(), context.option.isCaseSensitive())
+                ? compareColumns(sourceTable.getColumnList(), targetTable.getColumnList(), context.option)
                 : Collections.emptyList();
         List<IndexDiff> indexDiffs = context.option.isCompareIndex()
                 ? compareIndexes(sourceTable.getIndexList(), targetTable.getIndexList(), context.option.isCaseSensitive())
@@ -377,10 +383,11 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         boolean hasChanges = !columnDiffs.isEmpty() || !indexDiffs.isEmpty() || !fkDiffs.isEmpty();
 
         if (context.option.isCompareTableOption()) {
-            hasChanges = hasChanges || !tableOptionsEqual(sourceTable, targetTable);
+            hasChanges = hasChanges || !tableOptionsEqual(sourceTable, targetTable, context.option);
         }
 
         if (hasChanges) {
+            logSchemaDiffDetails(sourceName, sourceTable, targetTable, columnDiffs, indexDiffs, fkDiffs, context);
             return buildModifiedTableDiff(sourceName, sourceTable, targetTable,
                     columnDiffs, indexDiffs, fkDiffs, context);
         } else {
@@ -393,6 +400,36 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         }
     }
 
+    private void logSchemaDiffDetails(String tableName, Table sourceTable, Table targetTable,
+                                      List<ColumnDiff> columnDiffs, List<IndexDiff> indexDiffs,
+                                      List<ForeignKeyDiff> fkDiffs, CompareContext context) {
+        if (context.option.isCompareColumn()) {
+            for (ColumnDiff diff : columnDiffs) {
+                String columnName = getColumnDiffName(diff);
+                log.info("Schema compare column diff, table: {}, column: {}, changeType: {}, changedFields: {}",
+                        tableName, columnName, diff.getChangeType(), describeColumnDiff(diff, context.option));
+            }
+        }
+        if (context.option.isCompareIndex()) {
+            for (IndexDiff diff : indexDiffs) {
+                String indexName = getIndexDiffName(diff);
+                log.info("Schema compare index diff, table: {}, index: {}, changeType: {}, changedFields: {}",
+                        tableName, indexName, diff.getChangeType(), describeIndexDiff(diff));
+            }
+        }
+        if (context.option.isCompareForeignKey()) {
+            for (ForeignKeyDiff diff : fkDiffs) {
+                String fkName = getForeignKeyDiffName(diff);
+                log.info("Schema compare foreign key diff, table: {}, foreignKey: {}, changeType: {}, changedFields: {}",
+                        tableName, fkName, diff.getChangeType(), describeForeignKeyDiff(diff));
+            }
+        }
+        if (context.option.isCompareTableOption() && !tableOptionsEqual(sourceTable, targetTable, context.option)) {
+            log.info("Schema compare table option diff, table: {}, changedFields: {}",
+                    tableName, describeTableOptionDiff(sourceTable, targetTable, context.option));
+        }
+    }
+
     /**
      * 构建有变更的表差异
      */
@@ -400,9 +437,9 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                                               List<ColumnDiff> columnDiffs, List<IndexDiff> indexDiffs,
                                               List<ForeignKeyDiff> fkDiffs, CompareContext context) {
         Table tableForDDL = buildTableWithEditStatus(sourceTable, targetTable,
-                columnDiffs, indexDiffs, fkDiffs, context.option.isCaseSensitive());
+                columnDiffs, indexDiffs, fkDiffs, context.option);
         SqlBuilder sqlBuilder = context.targetPlugin.getMetaData().getSqlBuilder();
-        String alterDdl = sqlBuilder.buildModifyTaleSql(sourceTable, tableForDDL);
+        String alterDdl = sqlBuilder.buildModifyTaleSql(targetTable, tableForDDL);
 
         return TableDiff.builder()
                 .tableName(sourceName)
@@ -512,17 +549,21 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
 
         Connection conn = null;
         boolean originalAutoCommit = true;
+        ConnectInfo previousInfo = Chat2DBContext.getConnectInfo();
         try {
-            conn = createConnection(param.getTargetDataSourceId(), param.getTargetDatabaseName(),
+            ConnectInfo connectInfo = createConnectInfo(param.getTargetDataSourceId(), param.getTargetDatabaseName(),
                     param.getTargetSchemaName());
+            Chat2DBContext.putContext(connectInfo);
+
+            Plugin plugin = Chat2DBContext.PLUGIN_MAP.get(connectInfo.getDbType());
+            conn = plugin.getDBManage().getConnection(connectInfo);
+            connectInfo.setConnection(conn);
 
             if (param.isExecuteInTransaction()) {
                 originalAutoCommit = conn.getAutoCommit();
                 conn.setAutoCommit(false);
             }
 
-            Plugin plugin = Chat2DBContext.PLUGIN_MAP.get(
-                    getDbType(param.getTargetDataSourceId()));
             ai.chat2db.spi.CommandExecutor executor = plugin.getMetaData().getCommandExecutor();
 
             List<MigrationStatementResult> results = new ArrayList<>();
@@ -613,6 +654,11 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 }
             }
             closeQuietly(conn);
+            if (previousInfo != null) {
+                Chat2DBContext.putContext(previousInfo);
+            } else {
+                Chat2DBContext.remove();
+            }
         }
     }
 
@@ -629,6 +675,23 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
      * Sets up Chat2DBContext for the plugin to access connection info.
      */
     private Connection createConnection(Long dataSourceId, String databaseName, String schemaName) {
+        ConnectInfo connectInfo = createConnectInfo(dataSourceId, databaseName, schemaName);
+        Plugin plugin = Chat2DBContext.PLUGIN_MAP.get(connectInfo.getDbType());
+
+        ConnectInfo previousInfo = Chat2DBContext.getConnectInfo();
+        try {
+            Chat2DBContext.putContext(connectInfo);
+            return plugin.getDBManage().getConnection(connectInfo);
+        } finally {
+            if (previousInfo != null) {
+                Chat2DBContext.putContext(previousInfo);
+            } else {
+                Chat2DBContext.remove();
+            }
+        }
+    }
+
+    private ConnectInfo createConnectInfo(Long dataSourceId, String databaseName, String schemaName) {
         DataSource dataSource = dataSourceService.queryById(dataSourceId);
         if (dataSource == null) {
             throw new RuntimeException("DataSource not found: " + dataSourceId);
@@ -658,20 +721,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         }
         connectInfo.setDriverConfig(driverConfig);
         connectInfo.setConsoleOwn(false);
-
-        Plugin plugin = Chat2DBContext.PLUGIN_MAP.get(dataSource.getType());
-        
-        ConnectInfo previousInfo = Chat2DBContext.getConnectInfo();
-        try {
-            Chat2DBContext.putContext(connectInfo);
-            return plugin.getDBManage().getConnection(connectInfo);
-        } finally {
-            if (previousInfo != null) {
-                Chat2DBContext.putContext(previousInfo);
-            } else {
-                Chat2DBContext.remove();
-            }
-        }
+        return connectInfo;
     }
 
     /**
@@ -885,11 +935,13 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
      * @param caseSensitive whether to use case-sensitive name matching
      * @return list of column differences with change types
      */
-    private List<ColumnDiff> compareColumns(List<TableColumn> sourceCols, List<TableColumn> targetCols, boolean caseSensitive) {
+    private List<ColumnDiff> compareColumns(List<TableColumn> sourceCols, List<TableColumn> targetCols,
+                                            CompareOption option) {
         List<ColumnDiff> diffs = new ArrayList<>();
         if (CollectionUtils.isEmpty(sourceCols) && CollectionUtils.isEmpty(targetCols)) {
             return diffs;
         }
+        boolean caseSensitive = option.isCaseSensitive();
         Map<String, TableColumn> sourceMap = CollectionUtils.isEmpty(sourceCols)
                 ? Collections.emptyMap()
                 : sourceCols.stream().filter(c -> c.getName() != null)
@@ -908,7 +960,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                         .changeType(EditStatus.ADD)
                         .targetColumn(targetCol)
                         .build());
-            } else if (!columnEquals(sourceCol, targetCol)) {
+            } else if (!columnEquals(sourceCol, targetCol, option)) {
                 diffs.add(ColumnDiff.builder()
                         .changeType(EditStatus.MODIFY)
                         .sourceColumn(sourceCol)
@@ -927,19 +979,119 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         return diffs;
     }
 
-    private boolean columnEquals(TableColumn a, TableColumn b) {
+    private boolean columnEquals(TableColumn a, TableColumn b, CompareOption option) {
         if (a == b) return true;
         if (a == null || b == null) return false;
         return Objects.equals(a.getDataType(), b.getDataType())
-                && Objects.equals(a.getColumnSize(), b.getColumnSize())
+                && columnSizeEquals(a, b, option)
                 && Objects.equals(a.getDecimalDigits(), b.getDecimalDigits())
                 && Objects.equals(a.getNullable(), b.getNullable())
                 && Objects.equals(a.getDefaultValue(), b.getDefaultValue())
                 && Objects.equals(a.getComment(), b.getComment())
                 && Objects.equals(a.getAutoIncrement(), b.getAutoIncrement())
-                && Objects.equals(a.getCharSetName(), b.getCharSetName())
-                && Objects.equals(a.getCollationName(), b.getCollationName())
-                && Objects.equals(a.getColumnType(), b.getColumnType());
+                && charsetEquals(a.getCharSetName(), b.getCharSetName(), option)
+                && collationEquals(a.getCollationName(), b.getCollationName(), option)
+                && columnTypeEquals(a.getColumnType(), b.getColumnType(), option);
+    }
+
+    private String describeColumnDiff(ColumnDiff diff, CompareOption option) {
+        if (diff.getChangeType() == EditStatus.ADD) {
+            return "targetOnly";
+        }
+        if (diff.getChangeType() == EditStatus.DELETE) {
+            return "sourceOnly";
+        }
+        TableColumn source = diff.getSourceColumn();
+        TableColumn target = diff.getTargetColumn();
+        List<String> changedFields = new ArrayList<>();
+        addChangedField(changedFields, "dataType", source.getDataType(), target.getDataType());
+        addChangedField(changedFields, "columnSize", source.getColumnSize(), target.getColumnSize(),
+                (sourceValue, targetValue) -> columnSizeEquals(source, target, option));
+        addChangedField(changedFields, "decimalDigits", source.getDecimalDigits(), target.getDecimalDigits());
+        addChangedField(changedFields, "nullable", source.getNullable(), target.getNullable());
+        addChangedField(changedFields, "defaultValue", source.getDefaultValue(), target.getDefaultValue());
+        addChangedField(changedFields, "comment", source.getComment(), target.getComment());
+        addChangedField(changedFields, "autoIncrement", source.getAutoIncrement(), target.getAutoIncrement());
+        addChangedField(changedFields, "charSetName", source.getCharSetName(), target.getCharSetName(),
+                (sourceValue, targetValue) -> charsetEquals(sourceValue, targetValue, option));
+        addChangedField(changedFields, "collationName", source.getCollationName(), target.getCollationName(),
+                (sourceValue, targetValue) -> collationEquals(sourceValue, targetValue, option));
+        addChangedField(changedFields, "columnType", source.getColumnType(), target.getColumnType(),
+                (sourceValue, targetValue) -> columnTypeEquals(sourceValue, targetValue, option));
+        return String.join(", ", changedFields);
+    }
+
+    private boolean columnSizeEquals(TableColumn source, TableColumn target, CompareOption option) {
+        if (option.isIgnoreIntegerDisplayWidth() && isMysqlIntegerType(source.getDataType(), source.getColumnType())
+                && isMysqlIntegerType(target.getDataType(), target.getColumnType())) {
+            return true;
+        }
+        return Objects.equals(source.getColumnSize(), target.getColumnSize());
+    }
+
+    private boolean columnTypeEquals(String sourceValue, String targetValue, CompareOption option) {
+        if (!option.isIgnoreIntegerDisplayWidth()) {
+            return Objects.equals(sourceValue, targetValue);
+        }
+        return Objects.equals(normalizeMysqlIntegerDisplayWidth(sourceValue),
+                normalizeMysqlIntegerDisplayWidth(targetValue));
+    }
+
+    private boolean isMysqlIntegerType(String dataType, String columnType) {
+        String type = StringUtils.defaultIfBlank(dataType, columnType);
+        if (StringUtils.isBlank(type)) {
+            return false;
+        }
+        String normalized = StringUtils.substringBefore(type, "(").trim();
+        normalized = StringUtils.substringBefore(normalized, " ").trim();
+        return StringUtils.equalsAnyIgnoreCase(normalized,
+                "tinyint", "smallint", "mediumint", "int", "integer", "bigint");
+    }
+
+    private String normalizeMysqlIntegerDisplayWidth(String value) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        java.util.regex.Matcher matcher = MYSQL_INTEGER_COLUMN_TYPE_WITH_WIDTH.matcher(value.trim());
+        if (!matcher.matches()) {
+            return value;
+        }
+        return matcher.group(1).toLowerCase() + StringUtils.defaultString(matcher.group(2)).toLowerCase();
+    }
+
+    private boolean charsetEquals(String sourceValue, String targetValue, CompareOption option) {
+        if (!option.isIgnoreCharsetAlias()) {
+            return Objects.equals(sourceValue, targetValue);
+        }
+        return Objects.equals(normalizeCharsetAlias(sourceValue), normalizeCharsetAlias(targetValue));
+    }
+
+    private boolean collationEquals(String sourceValue, String targetValue, CompareOption option) {
+        if (!option.isIgnoreCharsetAlias()) {
+            return Objects.equals(sourceValue, targetValue);
+        }
+        return Objects.equals(normalizeCollationAlias(sourceValue), normalizeCollationAlias(targetValue));
+    }
+
+    private String normalizeCharsetAlias(String value) {
+        if ("utf8".equalsIgnoreCase(value)) {
+            return "utf8mb3";
+        }
+        return value;
+    }
+
+    private String normalizeCollationAlias(String value) {
+        if (StringUtils.startsWithIgnoreCase(value, "utf8_")) {
+            return "utf8mb3_" + value.substring("utf8_".length());
+        }
+        return value;
+    }
+
+    private String getColumnDiffName(ColumnDiff diff) {
+        if (diff.getTargetColumn() != null) {
+            return diff.getTargetColumn().getName();
+        }
+        return diff.getSourceColumn() == null ? null : diff.getSourceColumn().getName();
     }
 
     /**
@@ -997,6 +1149,30 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && Objects.equals(a.getUnique(), b.getUnique())
                 && Objects.equals(a.getMethod(), b.getMethod())
                 && Objects.equals(a.getComment(), b.getComment());
+    }
+
+    private String describeIndexDiff(IndexDiff diff) {
+        if (diff.getChangeType() == EditStatus.ADD) {
+            return "targetOnly";
+        }
+        if (diff.getChangeType() == EditStatus.DELETE) {
+            return "sourceOnly";
+        }
+        TableIndex source = diff.getSourceIndex();
+        TableIndex target = diff.getTargetIndex();
+        List<String> changedFields = new ArrayList<>();
+        addChangedField(changedFields, "type", source.getType(), target.getType());
+        addChangedField(changedFields, "unique", source.getUnique(), target.getUnique());
+        addChangedField(changedFields, "method", source.getMethod(), target.getMethod());
+        addChangedField(changedFields, "comment", source.getComment(), target.getComment());
+        return String.join(", ", changedFields);
+    }
+
+    private String getIndexDiffName(IndexDiff diff) {
+        if (diff.getTargetIndex() != null) {
+            return diff.getTargetIndex().getName();
+        }
+        return diff.getSourceIndex() == null ? null : diff.getSourceIndex().getName();
     }
 
     /**
@@ -1057,14 +1233,66 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && Objects.equals(a.getDeleteRule(), b.getDeleteRule());
     }
 
-    private boolean tableOptionsEqual(Table a, Table b) {
+    private String describeForeignKeyDiff(ForeignKeyDiff diff) {
+        if (diff.getChangeType() == EditStatus.ADD) {
+            return "targetOnly";
+        }
+        if (diff.getChangeType() == EditStatus.DELETE) {
+            return "sourceOnly";
+        }
+        ForeignKey source = diff.getSourceForeignKey();
+        ForeignKey target = diff.getTargetForeignKey();
+        List<String> changedFields = new ArrayList<>();
+        addChangedField(changedFields, "column", source.getColumn(), target.getColumn());
+        addChangedField(changedFields, "referencedTable", source.getReferencedTable(), target.getReferencedTable());
+        addChangedField(changedFields, "referencedColumn", source.getReferencedColumn(), target.getReferencedColumn());
+        addChangedField(changedFields, "updateRule", source.getUpdateRule(), target.getUpdateRule());
+        addChangedField(changedFields, "deleteRule", source.getDeleteRule(), target.getDeleteRule());
+        return String.join(", ", changedFields);
+    }
+
+    private String getForeignKeyDiffName(ForeignKeyDiff diff) {
+        if (diff.getTargetForeignKey() != null) {
+            return diff.getTargetForeignKey().getName();
+        }
+        return diff.getSourceForeignKey() == null ? null : diff.getSourceForeignKey().getName();
+    }
+
+    private boolean tableOptionsEqual(Table a, Table b, CompareOption option) {
         if (a == b) return true;
         if (a == null || b == null) return false;
+        boolean autoIncrementEquals = option.isIgnoreAutoIncrement()
+                || Objects.equals(a.getIncrementValue(), b.getIncrementValue());
         return Objects.equals(a.getComment(), b.getComment())
                 && Objects.equals(a.getEngine(), b.getEngine())
                 && Objects.equals(a.getCharset(), b.getCharset())
                 && Objects.equals(a.getCollate(), b.getCollate())
-                && Objects.equals(a.getIncrementValue(), b.getIncrementValue());
+                && autoIncrementEquals;
+    }
+
+    private String describeTableOptionDiff(Table source, Table target, CompareOption option) {
+        List<String> changedFields = new ArrayList<>();
+        addChangedField(changedFields, "comment", source.getComment(), target.getComment());
+        addChangedField(changedFields, "engine", source.getEngine(), target.getEngine());
+        addChangedField(changedFields, "charset", source.getCharset(), target.getCharset());
+        addChangedField(changedFields, "collate", source.getCollate(), target.getCollate());
+        if (!option.isIgnoreAutoIncrement()) {
+            addChangedField(changedFields, "incrementValue", source.getIncrementValue(), target.getIncrementValue());
+        }
+        return String.join(", ", changedFields);
+    }
+
+    private void addChangedField(List<String> changedFields, String fieldName, Object sourceValue, Object targetValue) {
+        if (!Objects.equals(sourceValue, targetValue)) {
+            changedFields.add(fieldName + ": source=" + sourceValue + ", target=" + targetValue);
+        }
+    }
+
+    private <T> void addChangedField(List<String> changedFields, String fieldName, T sourceValue, T targetValue,
+                                     BiPredicate<T, T> equalsPredicate) {
+        if (!equalsPredicate.test(sourceValue, targetValue)) {
+            changedFields.add(fieldName + ": source=" + sourceValue + ", target=" + targetValue);
+        }
     }
 
     /**
@@ -1075,47 +1303,50 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
      */
     private Table buildTableWithEditStatus(Table sourceTable, Table targetTable,
                                             List<ColumnDiff> columnDiffs, List<IndexDiff> indexDiffs,
-                                            List<ForeignKeyDiff> fkDiffs, boolean caseSensitive) {
+                                            List<ForeignKeyDiff> fkDiffs, CompareOption option) {
+        boolean caseSensitive = option.isCaseSensitive();
         Table result = new Table();
-        result.setName(targetTable.getName());
-        result.setComment(targetTable.getComment());
+        result.setName(shouldPreserveTargetName(sourceTable, targetTable, caseSensitive)
+                ? targetTable.getName() : sourceTable.getName());
+        result.setComment(sourceTable.getComment());
         result.setDatabaseName(targetTable.getDatabaseName());
         result.setSchemaName(targetTable.getSchemaName());
-        result.setEngine(targetTable.getEngine());
-        result.setCharset(targetTable.getCharset());
-        result.setCollate(targetTable.getCollate());
-        result.setIncrementValue(targetTable.getIncrementValue());
-        result.setPartition(targetTable.getPartition());
+        result.setEngine(sourceTable.getEngine());
+        result.setCharset(sourceTable.getCharset());
+        result.setCollate(sourceTable.getCollate());
+        result.setIncrementValue(option.isIgnoreAutoIncrement()
+                ? targetTable.getIncrementValue() : sourceTable.getIncrementValue());
+        result.setPartition(sourceTable.getPartition());
 
         if (CollectionUtils.isEmpty(columnDiffs)) {
-            result.setColumnList(targetTable.getColumnList() != null
-                    ? new ArrayList<>(targetTable.getColumnList()) : new ArrayList<>());
+            result.setColumnList(copyColumns(sourceTable.getColumnList()));
         } else {
             List<TableColumn> columns = new ArrayList<>();
-            if (targetTable.getColumnList() != null) {
-                Map<String, ColumnDiff> addModifyMap = columnDiffs.stream()
-                        .filter(d -> d.getChangeType() == EditStatus.ADD || d.getChangeType() == EditStatus.MODIFY)
-                        .filter(d -> d.getTargetColumn() != null && d.getTargetColumn().getName() != null)
-                        .collect(Collectors.toMap(d -> caseSensitive ? d.getTargetColumn().getName() : d.getTargetColumn().getName().toLowerCase(), d -> d, (a, b) -> a));
+            if (sourceTable.getColumnList() != null) {
+                Map<String, ColumnDiff> sourceDiffMap = columnDiffs.stream()
+                        .filter(d -> d.getChangeType() == EditStatus.DELETE || d.getChangeType() == EditStatus.MODIFY)
+                        .filter(d -> d.getSourceColumn() != null && d.getSourceColumn().getName() != null)
+                        .collect(Collectors.toMap(d -> caseSensitive ? d.getSourceColumn().getName()
+                                : d.getSourceColumn().getName().toLowerCase(), d -> d, (a, b) -> a));
 
-                for (TableColumn col : targetTable.getColumnList()) {
+                for (TableColumn sourceCol : sourceTable.getColumnList()) {
+                    TableColumn col = copyColumn(sourceCol);
                     String key = caseSensitive ? col.getName() : col.getName().toLowerCase();
-                    ColumnDiff diff = addModifyMap.get(key);
+                    ColumnDiff diff = sourceDiffMap.get(key);
                     if (diff != null) {
-                        col.setEditStatus(diff.getChangeType().name());
-                        if (diff.getChangeType() == EditStatus.MODIFY && diff.getSourceColumn() != null
-                                && !Objects.equals(diff.getSourceColumn().getName(), col.getName())) {
-                            col.setOldName(diff.getSourceColumn().getName());
+                        col.setEditStatus(diff.getChangeType() == EditStatus.DELETE
+                                ? EditStatus.ADD.name() : EditStatus.MODIFY.name());
+                        if (diff.getChangeType() == EditStatus.MODIFY && diff.getTargetColumn() != null
+                                && !Objects.equals(diff.getTargetColumn().getName(), col.getName())) {
+                            col.setOldName(diff.getTargetColumn().getName());
                         }
                     }
                     columns.add(col);
                 }
             }
             for (ColumnDiff diff : columnDiffs) {
-                if (diff.getChangeType() == EditStatus.DELETE && diff.getSourceColumn() != null) {
-                    TableColumn deletedCol = new TableColumn();
-                    deletedCol.setName(diff.getSourceColumn().getName());
-                    deletedCol.setOldName(diff.getSourceColumn().getName());
+                if (diff.getChangeType() == EditStatus.ADD && diff.getTargetColumn() != null) {
+                    TableColumn deletedCol = copyColumn(diff.getTargetColumn());
                     deletedCol.setEditStatus(EditStatus.DELETE.name());
                     columns.add(deletedCol);
                 }
@@ -1124,32 +1355,33 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         }
 
         if (CollectionUtils.isEmpty(indexDiffs)) {
-            result.setIndexList(targetTable.getIndexList() != null
-                    ? new ArrayList<>(targetTable.getIndexList()) : new ArrayList<>());
+            result.setIndexList(copyIndexes(sourceTable.getIndexList()));
         } else {
             List<TableIndex> indexes = new ArrayList<>();
-            if (targetTable.getIndexList() != null) {
-                Map<String, IndexDiff> addModifyMap = indexDiffs.stream()
-                        .filter(d -> d.getChangeType() == EditStatus.ADD || d.getChangeType() == EditStatus.MODIFY)
-                        .filter(d -> d.getTargetIndex() != null && d.getTargetIndex().getName() != null)
-                        .collect(Collectors.toMap(d -> caseSensitive ? d.getTargetIndex().getName() : d.getTargetIndex().getName().toLowerCase(), d -> d, (a, b) -> a));
-                for (TableIndex idx : targetTable.getIndexList()) {
+            if (sourceTable.getIndexList() != null) {
+                Map<String, IndexDiff> sourceDiffMap = indexDiffs.stream()
+                        .filter(d -> d.getChangeType() == EditStatus.DELETE || d.getChangeType() == EditStatus.MODIFY)
+                        .filter(d -> d.getSourceIndex() != null && d.getSourceIndex().getName() != null)
+                        .collect(Collectors.toMap(d -> caseSensitive ? d.getSourceIndex().getName()
+                                : d.getSourceIndex().getName().toLowerCase(), d -> d, (a, b) -> a));
+                for (TableIndex sourceIdx : sourceTable.getIndexList()) {
+                    TableIndex idx = copyIndex(sourceIdx);
                     String key = caseSensitive ? idx.getName() : idx.getName().toLowerCase();
-                    IndexDiff diff = addModifyMap.get(key);
+                    IndexDiff diff = sourceDiffMap.get(key);
                     if (diff != null) {
-                        idx.setEditStatus(diff.getChangeType().name());
-                        if (diff.getChangeType() == EditStatus.MODIFY && diff.getSourceIndex() != null) {
-                            idx.setOldName(diff.getSourceIndex().getName());
+                        idx.setEditStatus(diff.getChangeType() == EditStatus.DELETE
+                                ? EditStatus.ADD.name() : EditStatus.MODIFY.name());
+                        if (diff.getChangeType() == EditStatus.MODIFY && diff.getTargetIndex() != null) {
+                            idx.setOldName(diff.getTargetIndex().getName());
                         }
                     }
                     indexes.add(idx);
                 }
             }
             for (IndexDiff diff : indexDiffs) {
-                if (diff.getChangeType() == EditStatus.DELETE && diff.getSourceIndex() != null) {
-                    TableIndex deletedIdx = new TableIndex();
-                    deletedIdx.setName(diff.getSourceIndex().getName());
-                    deletedIdx.setOldName(diff.getSourceIndex().getName());
+                if (diff.getChangeType() == EditStatus.ADD && diff.getTargetIndex() != null) {
+                    TableIndex deletedIdx = copyIndex(diff.getTargetIndex());
+                    deletedIdx.setOldName(diff.getTargetIndex().getName());
                     deletedIdx.setEditStatus(EditStatus.DELETE.name());
                     indexes.add(deletedIdx);
                 }
@@ -1157,37 +1389,52 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
             result.setIndexList(indexes);
         }
 
-        if (CollectionUtils.isEmpty(fkDiffs)) {
-            result.setForeignKeyList(targetTable.getForeignKeyList() != null
-                    ? new ArrayList<>(targetTable.getForeignKeyList()) : new ArrayList<>());
-        } else {
-            List<ForeignKey> fks = new ArrayList<>();
-            if (targetTable.getForeignKeyList() != null) {
-                Map<String, ForeignKeyDiff> addModifyMap = fkDiffs.stream()
-                        .filter(d -> d.getChangeType() == EditStatus.ADD || d.getChangeType() == EditStatus.MODIFY)
-                        .filter(d -> d.getTargetForeignKey() != null && d.getTargetForeignKey().getName() != null)
-                        .collect(Collectors.toMap(d -> caseSensitive ? d.getTargetForeignKey().getName() : d.getTargetForeignKey().getName().toLowerCase(), d -> d, (a, b) -> a));
-                for (ForeignKey fk : targetTable.getForeignKeyList()) {
-                    String key = caseSensitive ? fk.getName() : fk.getName().toLowerCase();
-                    ForeignKeyDiff diff = addModifyMap.get(key);
-                    if (diff != null) {
-                        fk.setEditStatus(diff.getChangeType().name());
-                    }
-                    fks.add(fk);
-                }
-            }
-            for (ForeignKeyDiff diff : fkDiffs) {
-                if (diff.getChangeType() == EditStatus.DELETE && diff.getSourceForeignKey() != null) {
-                    ForeignKey deletedFK = new ForeignKey();
-                    deletedFK.setName(diff.getSourceForeignKey().getName());
-                    deletedFK.setEditStatus(EditStatus.DELETE.name());
-                    fks.add(deletedFK);
-                }
-            }
-            result.setForeignKeyList(fks);
-        }
+        result.setForeignKeyList(copyForeignKeys(sourceTable.getForeignKeyList()));
 
         return result;
+    }
+
+    private boolean shouldPreserveTargetName(Table sourceTable, Table targetTable, boolean caseSensitive) {
+        return !caseSensitive && StringUtils.equalsIgnoreCase(sourceTable.getName(), targetTable.getName());
+    }
+
+    private List<TableColumn> copyColumns(List<TableColumn> source) {
+        if (source == null) {
+            return new ArrayList<>();
+        }
+        return source.stream().map(this::copyColumn).collect(Collectors.toList());
+    }
+
+    private TableColumn copyColumn(TableColumn source) {
+        TableColumn target = new TableColumn();
+        BeanUtils.copyProperties(source, target);
+        return target;
+    }
+
+    private List<TableIndex> copyIndexes(List<TableIndex> source) {
+        if (source == null) {
+            return new ArrayList<>();
+        }
+        return source.stream().map(this::copyIndex).collect(Collectors.toList());
+    }
+
+    private TableIndex copyIndex(TableIndex source) {
+        TableIndex target = new TableIndex();
+        BeanUtils.copyProperties(source, target);
+        return target;
+    }
+
+    private List<ForeignKey> copyForeignKeys(List<ForeignKey> source) {
+        if (source == null) {
+            return new ArrayList<>();
+        }
+        return source.stream().map(this::copyForeignKey).collect(Collectors.toList());
+    }
+
+    private ForeignKey copyForeignKey(ForeignKey source) {
+        ForeignKey target = new ForeignKey();
+        BeanUtils.copyProperties(source, target);
+        return target;
     }
 
     private void closeQuietly(Connection conn) {

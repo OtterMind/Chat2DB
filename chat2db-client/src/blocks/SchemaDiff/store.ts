@@ -39,6 +39,9 @@ const defaultCompareOption: ICompareOption = {
   compareTableOption: true,
   caseSensitive: false,
   excludeDeprecated: true,
+  ignoreCharsetAlias: true,
+  ignoreIntegerDisplayWidth: true,
+  ignoreAutoIncrement: true,
 };
 
 export const initSchemaDiffStore = {

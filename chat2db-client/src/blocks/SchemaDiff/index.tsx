@@ -275,6 +275,15 @@ const SchemaDiffPanel: React.FC = memo(() => {
         <Checkbox checked={compareOption.caseSensitive} onChange={(e) => setCompareOption({ ...compareOption, caseSensitive: e.target.checked })}>
           {i18n('schemaDiff.caseSensitive')}
         </Checkbox>
+        <Checkbox checked={compareOption.ignoreCharsetAlias} onChange={(e) => setCompareOption({ ...compareOption, ignoreCharsetAlias: e.target.checked })}>
+          {i18n('schemaDiff.ignoreCharsetAlias')}
+        </Checkbox>
+        <Checkbox checked={compareOption.ignoreIntegerDisplayWidth} onChange={(e) => setCompareOption({ ...compareOption, ignoreIntegerDisplayWidth: e.target.checked })}>
+          {i18n('schemaDiff.ignoreIntegerDisplayWidth')}
+        </Checkbox>
+        <Checkbox checked={compareOption.ignoreAutoIncrement} onChange={(e) => setCompareOption({ ...compareOption, ignoreAutoIncrement: e.target.checked })}>
+          {i18n('schemaDiff.ignoreAutoIncrement')}
+        </Checkbox>
       </div>
 
       {comparing && (

@@ -241,7 +241,8 @@ public class DefaultSqlBuilder implements SqlBuilder {
         if (!StringUtils.equalsIgnoreCase(oldTable.getComment(), newTable.getComment())) {
             script.append("\t").append("COMMENT=").append("'").append(newTable.getComment()).append("'").append(",\n");
         }
-        if (!Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
+        if (newTable.getIncrementValue() != null
+                && !Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
             script.append("\t").append("AUTO_INCREMENT=").append(newTable.getIncrementValue()).append(",\n");
         }
     }

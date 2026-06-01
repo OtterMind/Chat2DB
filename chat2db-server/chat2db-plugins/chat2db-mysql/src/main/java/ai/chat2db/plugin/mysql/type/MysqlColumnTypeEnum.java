@@ -10,6 +10,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public enum MysqlColumnTypeEnum implements ColumnBuilder {
 
@@ -115,8 +117,14 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
 
     private ColumnType columnType;
 
+    private static final Pattern COLUMN_TYPE_PATTERN = Pattern.compile("^([a-zA-Z]+)(?:\\s*\\([^)]*\\))?(?:\\s+(unsigned))?.*$",
+            Pattern.CASE_INSENSITIVE);
+
     public static MysqlColumnTypeEnum getByType(String dataType) {
-        return COLUMN_TYPE_MAP.get(dataType.toUpperCase());
+        if (StringUtils.isBlank(dataType)) {
+            return null;
+        }
+        return COLUMN_TYPE_MAP.get(normalizeTypeName(dataType));
     }
 
     public ColumnType getColumnType() {
@@ -139,11 +147,11 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
 
     @Override
     public String buildCreateColumnSql(TableColumn column) {
-        String colType = column.getDataType();
-        if (StringUtils.isBlank(colType)) {
-            colType = column.getColumnType();
-        }
-        MysqlColumnTypeEnum type = COLUMN_TYPE_MAP.get(colType.toUpperCase());
+        return buildCreateColumnSql(column, true);
+    }
+
+    private String buildCreateColumnSql(TableColumn column, boolean includePrimaryKey) {
+        MysqlColumnTypeEnum type = getColumnTypeEnum(column);
         if (type == null) {
             return "";
         }
@@ -167,7 +175,9 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
 
         script.append(buildComment(column,type)).append(" ");
 
-        script.append(buildPrimaryKey(column,type)).append(" ");
+        if (includePrimaryKey) {
+            script.append(buildPrimaryKey(column,type)).append(" ");
+        }
 
         return script.toString();
     }
@@ -197,9 +207,10 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
         }
         if (EditStatus.MODIFY.name().equals(tableColumn.getEditStatus())) {
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
-                return StringUtils.join("CHANGE COLUMN `", tableColumn.getOldName(), "` ", buildCreateColumnSql(tableColumn));
+                return StringUtils.join("CHANGE COLUMN `", tableColumn.getOldName(), "` ",
+                        buildCreateColumnSql(tableColumn, false));
             } else {
-                return StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn));
+                return StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn, false));
             }
         }
         return "";
@@ -342,11 +353,7 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
     }
 
     public String buildColumn(TableColumn column) {
-        String colType = column.getColumnType();
-        if (StringUtils.isBlank(colType)) {
-            colType = column.getDataType();
-        }
-        MysqlColumnTypeEnum type = COLUMN_TYPE_MAP.get(colType.toUpperCase());
+        MysqlColumnTypeEnum type = getColumnTypeEnum(column);
         if (type == null) {
             return "";
         }
@@ -355,6 +362,26 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
         script.append("`").append(column.getName()).append("`").append(" ");
         script.append(buildDataType(column, type)).append(" ");
         return script.toString();
+    }
+
+    public static MysqlColumnTypeEnum getColumnTypeEnum(TableColumn column) {
+        MysqlColumnTypeEnum type = getByType(column.getColumnType());
+        if (type != null) {
+            return type;
+        }
+        return getByType(column.getDataType());
+    }
+
+    private static String normalizeTypeName(String typeName) {
+        String normalized = StringUtils.trimToEmpty(typeName);
+        Matcher matcher = COLUMN_TYPE_PATTERN.matcher(normalized);
+        if (matcher.matches()) {
+            normalized = matcher.group(1);
+            if (StringUtils.isNotBlank(matcher.group(2))) {
+                normalized = normalized + " " + matcher.group(2);
+            }
+        }
+        return normalized.toUpperCase();
     }
 
     private String unsignedDataType(String dataTypeName, String middle) {

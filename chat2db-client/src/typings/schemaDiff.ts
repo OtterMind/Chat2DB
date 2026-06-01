@@ -5,6 +5,9 @@ export interface ICompareOption {
   compareTableOption?: boolean;
   caseSensitive?: boolean;
   excludeDeprecated?: boolean;
+  ignoreCharsetAlias?: boolean;
+  ignoreIntegerDisplayWidth?: boolean;
+  ignoreAutoIncrement?: boolean;
 }
 
 export interface IDiffSummary {

@@ -35,14 +35,10 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
                         && StringUtils.isNotBlank(column.getPrimaryKeyName()));
         boolean suppressInlinePrimaryKey = hasPrimaryKeyIndexMetadata || primaryKeyColumns.size() > 1;
         for (TableColumn column : columns) {
-            String columnType = column.getDataType();
-            if (StringUtils.isBlank(columnType)) {
-                columnType = column.getColumnType();
-            }
-            if (StringUtils.isBlank(column.getName()) || StringUtils.isBlank(columnType)) {
+            if (StringUtils.isBlank(column.getName())) {
                 continue;
             }
-            MysqlColumnTypeEnum typeEnum = MysqlColumnTypeEnum.getByType(columnType);
+            MysqlColumnTypeEnum typeEnum = MysqlColumnTypeEnum.getColumnTypeEnum(column);
             if (typeEnum == null) {
                 continue;
             }
@@ -109,14 +105,12 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
     // 修改列的方法
     protected void modifyColumns(StringBuilder script, Table oldTable, Table newTable) {
         for (TableColumn tableColumn : newTable.getColumnList()) {
-            String columnType = tableColumn.getDataType();
-            if (StringUtils.isBlank(columnType)) {
-                columnType = tableColumn.getColumnType();
-            }
             if (StringUtils.isNotBlank(tableColumn.getEditStatus())
-                    && StringUtils.isNotBlank(columnType)
                     && StringUtils.isNotBlank(tableColumn.getName())) {
-                MysqlColumnTypeEnum typeEnum = MysqlColumnTypeEnum.getByType(columnType);
+                MysqlColumnTypeEnum typeEnum = MysqlColumnTypeEnum.getColumnTypeEnum(tableColumn);
+                if (typeEnum == null) {
+                    continue;
+                }
                 script.append("\t").append(typeEnum.buildModifyColumn(tableColumn)).append(",\n");
             }
         }
@@ -253,11 +247,10 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
 
     // 辅助方法：构建列定义
     private String buildColumnDefinition(TableColumn column) {
-        String columnType = column.getDataType();
-        if (StringUtils.isBlank(columnType)) {
-            columnType = column.getColumnType();
+        MysqlColumnTypeEnum type = MysqlColumnTypeEnum.getColumnTypeEnum(column);
+        if (type == null) {
+            return "";
         }
-        MysqlColumnTypeEnum type = MysqlColumnTypeEnum.getByType(columnType);
         return type.buildColumn(column);
     }
 
