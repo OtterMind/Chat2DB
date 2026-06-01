@@ -86,7 +86,7 @@ public class ChatStateMachineConfig extends StateMachineConfigurerAdapter<ChatSt
                 .event(ChatEvent.AUTO_SELECT_FAILED)
             .and()
             .withExternal()
-                .source(ChatState.FETCHING_TABLE_SCHEMA).target(ChatState.EXECUTING_EXPLAIN)
+                .source(ChatState.FETCHING_TABLE_SCHEMA).target(ChatState.BUILDING_PROMPT)
                 .event(ChatEvent.SCHEMA_FETCHED)
             .and()
             .withExternal()
