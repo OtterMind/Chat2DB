@@ -602,20 +602,23 @@ public class SQLExecutor implements CommandExecutor {
         for (int i = 0; i < sqlList.size(); i++) {
             String originalSql = sqlList.get(i);
             ExecuteResult executeResult = executeSQL(originalSql, dbType, command);
-            applyStatementPosition(executeResult, statementPositions, i);
+            applyStatementPosition(executeResult, statementPositions, i, command.getScriptStartLine());
             result.add(executeResult);
         }
         return result;
     }
 
-    private void applyStatementPosition(ExecuteResult executeResult, List<StatementPosition> statementPositions, int index) {
+    private void applyStatementPosition(ExecuteResult executeResult, List<StatementPosition> statementPositions,
+                                        int index, Integer scriptStartLine) {
         executeResult.setStatementIndex(index + 1);
         if (CollectionUtils.isEmpty(statementPositions) || index < 0 || index >= statementPositions.size()) {
             return;
         }
         StatementPosition position = statementPositions.get(index);
-        executeResult.setStatementStartLine(position.startLine());
-        executeResult.setStatementEndLine(position.endLine());
+        int lineOffset = Math.max(Optional.ofNullable(scriptStartLine).orElse(1) - 1, 0);
+        int statementStartLine = position.startLine() + lineOffset;
+        executeResult.setStatementStartLine(statementStartLine);
+        executeResult.setStatementEndLine(position.endLine() + lineOffset);
         if (Boolean.TRUE.equals(executeResult.getSuccess()) || StringUtils.isBlank(executeResult.getMessage())) {
             return;
         }
@@ -625,7 +628,7 @@ public class SQLExecutor implements CommandExecutor {
         }
         Integer lineInStatement = Integer.valueOf(matcher.group(1));
         executeResult.setErrorLineInStatement(lineInStatement);
-        executeResult.setErrorLine(position.startLine() + Math.max(lineInStatement - 1, 0));
+        executeResult.setErrorLine(statementStartLine + Math.max(lineInStatement - 1, 0));
     }
 
     private List<StatementPosition> buildStatementPositions(String script, List<String> sqlList) {

@@ -19,6 +19,12 @@ export type IAppendValue = {
   range?: IRangeType;
 };
 
+export interface ISelectedContentInfo {
+  text: string;
+  startLine: number;
+  endLine: number;
+}
+
 const databaseTypeList = Object.keys(DatabaseTypeCode).map((d) => ({
   type: d,
   id: d,
@@ -229,6 +235,7 @@ interface IProps {
 
 export interface IExportRefFunction {
   getCurrentSelectContent: () => string;
+  getCurrentSelectInfo: () => ISelectedContentInfo | null;
   getAllContent: () => string;
   setValue: (text: any, range?: IRangeType) => void;
   locateStatement: (startLine: number, endLine?: number, errorLine?: number) => void;
@@ -403,6 +410,7 @@ function MonacoEditor(props: IProps, ref: ForwardedRef<IExportRefFunction>) {
 
   useImperativeHandle(ref, () => ({
     getCurrentSelectContent,
+    getCurrentSelectInfo,
     getAllContent,
     setValue,
     locateStatement,
@@ -462,13 +470,25 @@ function MonacoEditor(props: IProps, ref: ForwardedRef<IExportRefFunction>) {
    * @returns
    */
   const getCurrentSelectContent = () => {
+    return getCurrentSelectInfo()?.text || '';
+  };
+
+  const getCurrentSelectInfo = (): ISelectedContentInfo | null => {
     const selection = editorRef.current?.getSelection();
     if (!selection || selection.isEmpty()) {
-      return '';
-    } else {
-      const selectedText = editorRef.current?.getModel()?.getValueInRange(selection);
-      return selectedText || '';
+      return null;
     }
+
+    const selectedText = editorRef.current?.getModel()?.getValueInRange(selection);
+    if (!selectedText) {
+      return null;
+    }
+
+    return {
+      text: selectedText,
+      startLine: selection.getStartPosition().lineNumber,
+      endLine: selection.getEndPosition().lineNumber,
+    };
   };
 
   /** 获取文本所有内容 */

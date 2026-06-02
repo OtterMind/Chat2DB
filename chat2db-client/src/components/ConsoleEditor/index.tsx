@@ -20,6 +20,7 @@ import MonacoEditor, {
   IEditorOptions,
   IExportRefFunction,
   IRangeType,
+  ISelectedContentInfo,
   registerVinPasteTransform,
 } from '../MonacoEditor';
 import OperationLine from './components/OperationLine';
@@ -54,7 +55,7 @@ interface IProps {
   boundInfo: IBoundInfo;
   setBoundInfo: (params: IBoundInfo) => void;
   editorOptions?: IEditorOptions;
-  onExecuteSQL: (sql: string) => void;
+  onExecuteSQL: (sql: string, selectedInfo?: ISelectedContentInfo | null) => void;
 }
 
 export interface IConsoleRef {
@@ -258,12 +259,13 @@ function ConsoleEditor(props: IProps, ref: ForwardedRef<IConsoleRef>) {
   );
 
   const executeSQL = (sql?: string) => {
-    const sqlContent = sql || editorRef?.current?.getCurrentSelectContent() || editorRef?.current?.getAllContent();
+    const selectedInfo = editorRef?.current?.getCurrentSelectInfo();
+    const sqlContent = sql || selectedInfo?.text || editorRef?.current?.getAllContent();
 
     if (!sqlContent) {
       return;
     }
-    props.onExecuteSQL && props.onExecuteSQL(sqlContent);
+    props.onExecuteSQL && props.onExecuteSQL(sqlContent, selectedInfo);
   };
 
   const handleEditorDidMount = useCallback((editor: IEditorIns) => {

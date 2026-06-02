@@ -46,6 +46,7 @@ export interface IGetTableListParams extends IPageParams {
 
 export interface IExecuteSqlParams {
   sql?: string;
+  scriptStartLine?: number;
   consoleId?: number;
   dataSourceId?: number;
   databaseName?: string;

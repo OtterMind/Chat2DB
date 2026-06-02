@@ -65,8 +65,10 @@ const SQLExecute = memo<IProps>((props) => {
             setBoundInfo={setBoundInfo}
             hasAi2Lang={true}
             isActive={activeConsoleId === boundInfo.consoleId}
-            onExecuteSQL={(sql) => {
-              searchResultRef.current?.handleExecuteSQL(sql);
+            onExecuteSQL={(sql, selectedInfo) => {
+              searchResultRef.current?.handleExecuteSQL(sql, {
+                scriptStartLine: selectedInfo?.startLine || 1,
+              });
             }}
           />
         </div>

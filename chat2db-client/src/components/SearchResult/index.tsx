@@ -43,7 +43,7 @@ const defaultResultConfig: IResultConfig = {
 };
 
 export interface ISearchResultRef {
-  handleExecuteSQL: (sql: string) => void;
+  handleExecuteSQL: (sql: string, options?: { scriptStartLine?: number }) => void;
 }
 
 interface IContext {
@@ -106,12 +106,13 @@ export default forwardRef((props: IProps, ref: ForwardedRef<ISearchResultRef>) =
    * 执行SQL
    * @param sql
    */
-  const handleExecuteSQL = (_sql: string) => {
+  const handleExecuteSQL = (_sql: string, options?: { scriptStartLine?: number }) => {
     setTableLoading(true);
     const api = viewTable ? sqlServer.viewTable : sqlServer.executeSql;
 
     const executeSQLParams: IExecuteSqlParams = {
       sql: _sql,
+      scriptStartLine: options?.scriptStartLine || 1,
       tableName: executeSqlParams?.tableName,
       ...defaultResultConfig,
       ...executeSqlParams,

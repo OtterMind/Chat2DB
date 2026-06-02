@@ -13,6 +13,11 @@ public class Command {
     private String script;
 
     /**
+     * 原始编辑器中执行脚本的起始行（从1开始）
+     */
+    private Integer scriptStartLine;
+
+    /**
      * 控制台id
      */
     @NotNull
