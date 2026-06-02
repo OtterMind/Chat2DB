@@ -348,6 +348,7 @@ const TreeNode = memo((props: TreeNodeIProps) => {
   const indentArr = new Array(level).fill('indent');
   const { treeData, setTreeData, searchTreeData, setSearchTreeData } = useContext(Context);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   // 加载数据
   function loadData(_props?: {
@@ -368,6 +369,8 @@ const TreeNode = memo((props: TreeNodeIProps) => {
     }
 
     const signal = abortControllerRef.current?.signal;
+    const loadRequestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = loadRequestId;
 
     setIsLoading(true);
     if (_props?.pageNo === 1 || !_props?.pageNo) {
@@ -377,20 +380,23 @@ const TreeNode = memo((props: TreeNodeIProps) => {
       }
     }
 
-    treeNodeConfig
-      .getChildren?.({
-        ..._treeNodeData.extraParams,
-        extraParams: {
-          ..._treeNodeData.extraParams,
-        },
-        refresh: _props?.refresh || false,
-        pageNo: _props?.pageNo || 1,
-        lastDocId: _props?.lastDocId,
-      }, { signal })
+    Promise.resolve()
+      .then(
+        () =>
+          treeNodeConfig.getChildren?.({
+            ..._treeNodeData.extraParams,
+            extraParams: {
+              ..._treeNodeData.extraParams,
+            },
+            refresh: _props?.refresh || false,
+            pageNo: _props?.pageNo || 1,
+            lastDocId: _props?.lastDocId,
+          }, { signal }) || [],
+      )
       .then((res: any) => {
         if (signal?.aborted) return;
         const filteredRes = filterDeletedNode(res, _props?.deletedNodeName);
-        if (filteredRes.length || filteredRes.data) {
+        if (filteredRes?.length || filteredRes?.data) {
           if (filteredRes.data) {
             insertData(treeData!, _treeNodeData.uuid!, filteredRes.data, [treeData, setTreeData]);
             if(searchTreeData){
@@ -403,6 +409,7 @@ const TreeNode = memo((props: TreeNodeIProps) => {
                 lastDocId: filteredRes.lastDocId,
                 deletedNodeName: _props?.deletedNodeName,
               });
+              return;
             }
           } else {
             insertData(treeData!, _treeNodeData.uuid!, filteredRes,[treeData, setTreeData]);
@@ -410,26 +417,35 @@ const TreeNode = memo((props: TreeNodeIProps) => {
               insertData(searchTreeData!, _treeNodeData.uuid!, filteredRes,[searchTreeData, setSearchTreeData]);
             }
           }
-          setIsLoading(false);
         } else {
           if (signal?.aborted) return;
           if (treeNodeConfig.next) {
             _treeNodeData.pretendNodeType = treeNodeConfig.next;
             loadData();
+            return;
           } else {
             insertData(treeData!, _treeNodeData.uuid!, [],[treeData, setTreeData]);
             if(searchTreeData){
               insertData(searchTreeData!, _treeNodeData.uuid!, [],[searchTreeData, setSearchTreeData]);
             }
-            setIsLoading(false);
           }
         }
       })
       .catch((error) => {
         if (signal?.aborted || error?.name === 'AbortError') return;
+      })
+      .finally(() => {
+        if (loadRequestIdRef.current !== loadRequestId) return;
         setIsLoading(false);
       });
   }
+
+  useEffect(() => {
+    return () => {
+      loadRequestIdRef.current += 1;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const filterDeletedNode = (res: any, deletedNodeName?: string) => {
     if (!deletedNodeName) {
