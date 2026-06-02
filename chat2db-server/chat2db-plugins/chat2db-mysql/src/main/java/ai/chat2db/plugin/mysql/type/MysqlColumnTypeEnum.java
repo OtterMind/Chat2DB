@@ -4,6 +4,7 @@ import ai.chat2db.spi.ColumnBuilder;
 import ai.chat2db.spi.enums.EditStatus;
 import ai.chat2db.spi.model.ColumnType;
 import ai.chat2db.spi.model.TableColumn;
+import ai.chat2db.plugin.mysql.util.MysqlSqlUtils;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 
@@ -230,7 +231,7 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
         if(!type.columnType.isSupportComments() || StringUtils.isEmpty(column.getComment())){
             return "";
         }
-        return StringUtils.join("COMMENT '",column.getComment(),"'");
+        return StringUtils.join("COMMENT ", MysqlSqlUtils.quoteString(column.getComment()));
     }
 
     private String buildPrimaryKey(TableColumn column, MysqlColumnTypeEnum type) {
@@ -248,11 +249,12 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
     }
 
     private String buildDefaultValue(TableColumn column, MysqlColumnTypeEnum type) {
-        if(!type.getColumnType().isSupportDefaultValue() || StringUtils.isEmpty(column.getDefaultValue())){
+        if(!type.getColumnType().isSupportDefaultValue() || column.getDefaultValue() == null){
             return "";
         }
 
-        if("EMPTY_STRING".equalsIgnoreCase(column.getDefaultValue().trim())){
+        if (StringUtils.isEmpty(column.getDefaultValue())
+                || "EMPTY_STRING".equalsIgnoreCase(column.getDefaultValue().trim())) {
             return StringUtils.join("DEFAULT ''");
         }
 
@@ -261,18 +263,18 @@ public enum MysqlColumnTypeEnum implements ColumnBuilder {
         }
 
         if(Arrays.asList(CHAR,VARCHAR,BINARY,VARBINARY, SET,ENUM).contains(type)){
-            return StringUtils.join("DEFAULT '",column.getDefaultValue(),"'");
+            return StringUtils.join("DEFAULT ", MysqlSqlUtils.quoteString(column.getDefaultValue()));
         }
 
         if(Arrays.asList(DATE,TIME,YEAR).contains(type)){
-            return StringUtils.join("DEFAULT '",column.getDefaultValue(),"'");
+            return StringUtils.join("DEFAULT ", MysqlSqlUtils.quoteString(column.getDefaultValue()));
         }
 
         if(Arrays.asList(DATETIME,TIMESTAMP).contains(type)){
             if("CURRENT_TIMESTAMP".equalsIgnoreCase(column.getDefaultValue().trim())){
                 return StringUtils.join("DEFAULT ",column.getDefaultValue());
             }
-            return StringUtils.join("DEFAULT '",column.getDefaultValue(),"'");
+            return StringUtils.join("DEFAULT ", MysqlSqlUtils.quoteString(column.getDefaultValue()));
         }
 
         return StringUtils.join("DEFAULT ",column.getDefaultValue());

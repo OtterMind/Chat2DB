@@ -1,5 +1,6 @@
 package ai.chat2db.plugin.mysql.type;
 
+import ai.chat2db.plugin.mysql.util.MysqlSqlUtils;
 import ai.chat2db.spi.enums.EditStatus;
 import ai.chat2db.spi.model.IndexType;
 import ai.chat2db.spi.model.TableIndex;
@@ -78,7 +79,7 @@ public enum MysqlIndexTypeEnum {
         if(StringUtils.isBlank(tableIndex.getComment())){
             return "";
         }else {
-            return StringUtils.join("COMMENT '",tableIndex.getComment(),"'");
+            return StringUtils.join("COMMENT ", MysqlSqlUtils.quoteString(tableIndex.getComment()));
         }
 
     }

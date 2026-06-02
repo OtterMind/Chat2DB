@@ -1,12 +1,10 @@
 import React, { memo, useMemo, useState, useCallback } from 'react';
-import { Button, Checkbox, Modal, message, Timeline, Tag, Spin } from 'antd';
-import classnames from 'classnames';
+import { Button, Modal, message, Tag } from 'antd';
 
 import { i18n } from '@/i18n';
 import sqlService from '@/service/sql';
-import { IMigrationStatementResult } from '@/typings/schemaDiff';
 
-import { useSchemaDiffStore, setSelectedStatementIndexes, setMigrationExecuting, setMigrationResult, setSelectedTableDiffs } from '../store';
+import { useSchemaDiffStore, setMigrationExecuting, setMigrationResult, setSelectedTableDiffs } from '../store';
 import styles from './index.less';
 
 const MigrationPanel: React.FC = memo(() => {
@@ -20,9 +18,11 @@ const MigrationPanel: React.FC = memo(() => {
     const stmts: { tableName: string; sql: string }[] = [];
     for (const td of compareResult.tableDiffs) {
       if (selectedTableDiffs[td.tableName] && td.ddlStatement) {
-        const parts = td.ddlStatement.split(';').filter(s => s.trim().length > 0);
-        for (const part of parts) {
-          stmts.push({ tableName: td.tableName, sql: part.trim() + ';' });
+        const ddlStatements = td.ddlStatements?.length ? td.ddlStatements : [td.ddlStatement];
+        for (const ddlStatement of ddlStatements) {
+          if (ddlStatement.trim().length > 0) {
+            stmts.push({ tableName: td.tableName, sql: ddlStatement.trim() });
+          }
         }
       }
     }

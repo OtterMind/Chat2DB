@@ -19,11 +19,18 @@ export interface IDiffSummary {
   excludedDeprecatedTables: number;
 }
 
+export interface IFieldDiff {
+  fieldName: string;
+  sourceValue?: string;
+  targetValue?: string;
+}
+
 /** 列对比差异项 */
 export interface IColumnDiff {
   changeType: 'ADD' | 'MODIFY' | 'DELETE';
   sourceColumn?: ITableColumn;
   targetColumn?: ITableColumn;
+  changedFields?: IFieldDiff[];
 }
 
 /** 索引对比差异项 */
@@ -31,6 +38,7 @@ export interface IIndexDiff {
   changeType: 'ADD' | 'MODIFY' | 'DELETE';
   sourceIndex?: ITableIndex;
   targetIndex?: ITableIndex;
+  changedFields?: IFieldDiff[];
 }
 
 /** 外键对比差异项 */
@@ -38,6 +46,7 @@ export interface IForeignKeyDiff {
   changeType: 'ADD' | 'MODIFY' | 'DELETE';
   sourceForeignKey?: ITableForeignKey;
   targetForeignKey?: ITableForeignKey;
+  changedFields?: IFieldDiff[];
 }
 
 /** 表列信息 */
@@ -93,6 +102,7 @@ export interface ITableDiff {
   columnDiffs?: IColumnDiff[];
   indexDiffs?: IIndexDiff[];
   foreignKeyDiffs?: IForeignKeyDiff[];
+  tableOptionDiffs?: IFieldDiff[];
   ddlStatements?: string[];
   ddlStatement?: string;
 }

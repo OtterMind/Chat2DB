@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import ai.chat2db.server.domain.api.model.DataSource;
 import ai.chat2db.server.domain.api.model.schemaDiff.ColumnDiff;
 import ai.chat2db.server.domain.api.model.schemaDiff.DiffSummary;
+import ai.chat2db.server.domain.api.model.schemaDiff.FieldDiff;
 import ai.chat2db.server.domain.api.model.schemaDiff.ForeignKeyDiff;
 import ai.chat2db.server.domain.api.model.schemaDiff.IndexDiff;
 import ai.chat2db.server.domain.api.model.schemaDiff.SchemaDiffResult;
@@ -407,26 +408,26 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
             for (ColumnDiff diff : columnDiffs) {
                 String columnName = getColumnDiffName(diff);
                 log.info("Schema compare column diff, table: {}, column: {}, changeType: {}, changedFields: {}",
-                        tableName, columnName, diff.getChangeType(), describeColumnDiff(diff, context.option));
+                        tableName, columnName, diff.getChangeType(), formatChangedFields(diff.getChangedFields()));
             }
         }
         if (context.option.isCompareIndex()) {
             for (IndexDiff diff : indexDiffs) {
                 String indexName = getIndexDiffName(diff);
                 log.info("Schema compare index diff, table: {}, index: {}, changeType: {}, changedFields: {}",
-                        tableName, indexName, diff.getChangeType(), describeIndexDiff(diff));
+                        tableName, indexName, diff.getChangeType(), formatChangedFields(diff.getChangedFields()));
             }
         }
         if (context.option.isCompareForeignKey()) {
             for (ForeignKeyDiff diff : fkDiffs) {
                 String fkName = getForeignKeyDiffName(diff);
                 log.info("Schema compare foreign key diff, table: {}, foreignKey: {}, changeType: {}, changedFields: {}",
-                        tableName, fkName, diff.getChangeType(), describeForeignKeyDiff(diff));
+                        tableName, fkName, diff.getChangeType(), formatChangedFields(diff.getChangedFields()));
             }
         }
         if (context.option.isCompareTableOption() && !tableOptionsEqual(sourceTable, targetTable, context.option)) {
             log.info("Schema compare table option diff, table: {}, changedFields: {}",
-                    tableName, describeTableOptionDiff(sourceTable, targetTable, context.option));
+                    tableName, formatChangedFields(describeTableOptionDiff(sourceTable, targetTable, context.option)));
         }
     }
 
@@ -440,6 +441,9 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 columnDiffs, indexDiffs, fkDiffs, context.option);
         SqlBuilder sqlBuilder = context.targetPlugin.getMetaData().getSqlBuilder();
         String alterDdl = sqlBuilder.buildModifyTaleSql(targetTable, tableForDDL);
+        List<FieldDiff> tableOptionDiffs = context.option.isCompareTableOption()
+                ? describeTableOptionDiff(sourceTable, targetTable, context.option)
+                : Collections.emptyList();
 
         return TableDiff.builder()
                 .tableName(sourceName)
@@ -449,6 +453,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 .columnDiffs(columnDiffs)
                 .indexDiffs(indexDiffs)
                 .foreignKeyDiffs(fkDiffs)
+                .tableOptionDiffs(tableOptionDiffs)
                 .ddlStatement(alterDdl)
                 .ddlStatements(StringUtils.isNotBlank(alterDdl)
                         ? Collections.singletonList(alterDdl)
@@ -509,6 +514,9 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 .unchangedTables(stats.unchanged)
                 .excludedDeprecatedTables(excluded)
                 .build();
+        List<TableDiff> changedTableDiffs = tableDiffs.stream()
+                .filter(tableDiff -> tableDiff.getDiffType() != TableDiffType.UNCHANGED)
+                .collect(Collectors.toList());
 
         String sourceKey = param.getSourceDataSourceId() + "." + param.getSourceDatabaseName()
                 + (param.getSourceSchemaName() != null ? "." + param.getSourceSchemaName() : "");
@@ -516,15 +524,15 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 + (param.getTargetSchemaName() != null ? "." + param.getTargetSchemaName() : "");
 
         long totalTime = System.currentTimeMillis() - startTime;
-        log.info("Schema compare completed in {} ms. Total tables: {}, Added: {}, Removed: {}, Modified: {}, Unchanged: {}",
+        log.info("Schema compare completed in {} ms. Total tables: {}, Added: {}, Removed: {}, Modified: {}, Unchanged: {}, Returned: {}",
                 totalTime, summary.getTotalTables(), stats.onlyInSource, stats.onlyInTarget,
-                stats.modified, stats.unchanged);
+                stats.modified, stats.unchanged, changedTableDiffs.size());
 
         return SchemaDiffResult.builder()
                 .sourceKey(sourceKey)
                 .targetKey(targetKey)
                 .summary(summary)
-                .tableDiffs(tableDiffs)
+                .tableDiffs(changedTableDiffs)
                 .build();
     }
 
@@ -959,12 +967,14 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(ColumnDiff.builder()
                         .changeType(EditStatus.ADD)
                         .targetColumn(targetCol)
+                        .changedFields(Collections.singletonList(fieldDiff("targetOnly", null, targetCol.getName())))
                         .build());
             } else if (!columnEquals(sourceCol, targetCol, option)) {
                 diffs.add(ColumnDiff.builder()
                         .changeType(EditStatus.MODIFY)
                         .sourceColumn(sourceCol)
                         .targetColumn(targetCol)
+                        .changedFields(describeColumnDiff(sourceCol, targetCol, option))
                         .build());
             }
         }
@@ -973,6 +983,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(ColumnDiff.builder()
                         .changeType(EditStatus.DELETE)
                         .sourceColumn(entry.getValue())
+                        .changedFields(Collections.singletonList(fieldDiff("sourceOnly", entry.getValue().getName(), null)))
                         .build());
             }
         }
@@ -994,16 +1005,8 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && columnTypeEquals(a.getColumnType(), b.getColumnType(), option);
     }
 
-    private String describeColumnDiff(ColumnDiff diff, CompareOption option) {
-        if (diff.getChangeType() == EditStatus.ADD) {
-            return "targetOnly";
-        }
-        if (diff.getChangeType() == EditStatus.DELETE) {
-            return "sourceOnly";
-        }
-        TableColumn source = diff.getSourceColumn();
-        TableColumn target = diff.getTargetColumn();
-        List<String> changedFields = new ArrayList<>();
+    private List<FieldDiff> describeColumnDiff(TableColumn source, TableColumn target, CompareOption option) {
+        List<FieldDiff> changedFields = new ArrayList<>();
         addChangedField(changedFields, "dataType", source.getDataType(), target.getDataType());
         addChangedField(changedFields, "columnSize", source.getColumnSize(), target.getColumnSize(),
                 (sourceValue, targetValue) -> columnSizeEquals(source, target, option));
@@ -1018,7 +1021,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 (sourceValue, targetValue) -> collationEquals(sourceValue, targetValue, option));
         addChangedField(changedFields, "columnType", source.getColumnType(), target.getColumnType(),
                 (sourceValue, targetValue) -> columnTypeEquals(sourceValue, targetValue, option));
-        return String.join(", ", changedFields);
+        return changedFields;
     }
 
     private boolean columnSizeEquals(TableColumn source, TableColumn target, CompareOption option) {
@@ -1122,12 +1125,14 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(IndexDiff.builder()
                         .changeType(EditStatus.ADD)
                         .targetIndex(targetIdx)
+                        .changedFields(Collections.singletonList(fieldDiff("targetOnly", null, targetIdx.getName())))
                         .build());
             } else if (!indexEquals(sourceIdx, targetIdx)) {
                 diffs.add(IndexDiff.builder()
                         .changeType(EditStatus.MODIFY)
                         .sourceIndex(sourceIdx)
                         .targetIndex(targetIdx)
+                        .changedFields(describeIndexDiff(sourceIdx, targetIdx))
                         .build());
             }
         }
@@ -1136,6 +1141,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(IndexDiff.builder()
                         .changeType(EditStatus.DELETE)
                         .sourceIndex(entry.getValue())
+                        .changedFields(Collections.singletonList(fieldDiff("sourceOnly", entry.getValue().getName(), null)))
                         .build());
             }
         }
@@ -1151,21 +1157,13 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && Objects.equals(a.getComment(), b.getComment());
     }
 
-    private String describeIndexDiff(IndexDiff diff) {
-        if (diff.getChangeType() == EditStatus.ADD) {
-            return "targetOnly";
-        }
-        if (diff.getChangeType() == EditStatus.DELETE) {
-            return "sourceOnly";
-        }
-        TableIndex source = diff.getSourceIndex();
-        TableIndex target = diff.getTargetIndex();
-        List<String> changedFields = new ArrayList<>();
+    private List<FieldDiff> describeIndexDiff(TableIndex source, TableIndex target) {
+        List<FieldDiff> changedFields = new ArrayList<>();
         addChangedField(changedFields, "type", source.getType(), target.getType());
         addChangedField(changedFields, "unique", source.getUnique(), target.getUnique());
         addChangedField(changedFields, "method", source.getMethod(), target.getMethod());
         addChangedField(changedFields, "comment", source.getComment(), target.getComment());
-        return String.join(", ", changedFields);
+        return changedFields;
     }
 
     private String getIndexDiffName(IndexDiff diff) {
@@ -1203,12 +1201,14 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(ForeignKeyDiff.builder()
                         .changeType(EditStatus.ADD)
                         .targetForeignKey(targetFK)
+                        .changedFields(Collections.singletonList(fieldDiff("targetOnly", null, targetFK.getName())))
                         .build());
             } else if (!foreignKeyEquals(sourceFK, targetFK)) {
                 diffs.add(ForeignKeyDiff.builder()
                         .changeType(EditStatus.MODIFY)
                         .sourceForeignKey(sourceFK)
                         .targetForeignKey(targetFK)
+                        .changedFields(describeForeignKeyDiff(sourceFK, targetFK))
                         .build());
             }
         }
@@ -1217,6 +1217,7 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 diffs.add(ForeignKeyDiff.builder()
                         .changeType(EditStatus.DELETE)
                         .sourceForeignKey(entry.getValue())
+                        .changedFields(Collections.singletonList(fieldDiff("sourceOnly", entry.getValue().getName(), null)))
                         .build());
             }
         }
@@ -1233,22 +1234,14 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && Objects.equals(a.getDeleteRule(), b.getDeleteRule());
     }
 
-    private String describeForeignKeyDiff(ForeignKeyDiff diff) {
-        if (diff.getChangeType() == EditStatus.ADD) {
-            return "targetOnly";
-        }
-        if (diff.getChangeType() == EditStatus.DELETE) {
-            return "sourceOnly";
-        }
-        ForeignKey source = diff.getSourceForeignKey();
-        ForeignKey target = diff.getTargetForeignKey();
-        List<String> changedFields = new ArrayList<>();
+    private List<FieldDiff> describeForeignKeyDiff(ForeignKey source, ForeignKey target) {
+        List<FieldDiff> changedFields = new ArrayList<>();
         addChangedField(changedFields, "column", source.getColumn(), target.getColumn());
         addChangedField(changedFields, "referencedTable", source.getReferencedTable(), target.getReferencedTable());
         addChangedField(changedFields, "referencedColumn", source.getReferencedColumn(), target.getReferencedColumn());
         addChangedField(changedFields, "updateRule", source.getUpdateRule(), target.getUpdateRule());
         addChangedField(changedFields, "deleteRule", source.getDeleteRule(), target.getDeleteRule());
-        return String.join(", ", changedFields);
+        return changedFields;
     }
 
     private String getForeignKeyDiffName(ForeignKeyDiff diff) {
@@ -1270,8 +1263,8 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
                 && autoIncrementEquals;
     }
 
-    private String describeTableOptionDiff(Table source, Table target, CompareOption option) {
-        List<String> changedFields = new ArrayList<>();
+    private List<FieldDiff> describeTableOptionDiff(Table source, Table target, CompareOption option) {
+        List<FieldDiff> changedFields = new ArrayList<>();
         addChangedField(changedFields, "comment", source.getComment(), target.getComment());
         addChangedField(changedFields, "engine", source.getEngine(), target.getEngine());
         addChangedField(changedFields, "charset", source.getCharset(), target.getCharset());
@@ -1279,20 +1272,38 @@ public class SchemaDiffServiceImpl implements SchemaDiffService {
         if (!option.isIgnoreAutoIncrement()) {
             addChangedField(changedFields, "incrementValue", source.getIncrementValue(), target.getIncrementValue());
         }
-        return String.join(", ", changedFields);
+        return changedFields;
     }
 
-    private void addChangedField(List<String> changedFields, String fieldName, Object sourceValue, Object targetValue) {
+    private void addChangedField(List<FieldDiff> changedFields, String fieldName, Object sourceValue, Object targetValue) {
         if (!Objects.equals(sourceValue, targetValue)) {
-            changedFields.add(fieldName + ": source=" + sourceValue + ", target=" + targetValue);
+            changedFields.add(fieldDiff(fieldName, sourceValue, targetValue));
         }
     }
 
-    private <T> void addChangedField(List<String> changedFields, String fieldName, T sourceValue, T targetValue,
+    private <T> void addChangedField(List<FieldDiff> changedFields, String fieldName, T sourceValue, T targetValue,
                                      BiPredicate<T, T> equalsPredicate) {
         if (!equalsPredicate.test(sourceValue, targetValue)) {
-            changedFields.add(fieldName + ": source=" + sourceValue + ", target=" + targetValue);
+            changedFields.add(fieldDiff(fieldName, sourceValue, targetValue));
         }
+    }
+
+    private FieldDiff fieldDiff(String fieldName, Object sourceValue, Object targetValue) {
+        return FieldDiff.builder()
+                .fieldName(fieldName)
+                .sourceValue(sourceValue == null ? null : String.valueOf(sourceValue))
+                .targetValue(targetValue == null ? null : String.valueOf(targetValue))
+                .build();
+    }
+
+    private String formatChangedFields(List<FieldDiff> changedFields) {
+        if (CollectionUtils.isEmpty(changedFields)) {
+            return "";
+        }
+        return changedFields.stream()
+                .map(fieldDiff -> fieldDiff.getFieldName() + ": source=" + fieldDiff.getSourceValue()
+                        + ", target=" + fieldDiff.getTargetValue())
+                .collect(Collectors.joining(", "));
     }
 
     /**

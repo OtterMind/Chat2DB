@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -12,6 +13,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import ai.chat2db.plugin.mysql.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.type.MysqlIndexTypeEnum;
+import ai.chat2db.plugin.mysql.util.MysqlSqlUtils;
 import ai.chat2db.spi.SqlBuilder;
 import ai.chat2db.spi.enums.EditStatus;
 import ai.chat2db.spi.jdbc.DefaultSqlBuilder;
@@ -26,14 +28,45 @@ import cn.hutool.core.util.ArrayUtil;
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
 
+    @Override
+    public String buildCreateTableSql(Table table) {
+        StringBuilder script = new StringBuilder();
+        if (StringUtils.isNotBlank(table.getAiComment())) {
+            script.append(" -- ").append(table.getAiComment()).append("\n");
+        }
+        script.append("CREATE TABLE ");
+        if (StringUtils.isNotBlank(table.getDatabaseName())) {
+            script.append("`").append(table.getDatabaseName()).append("`").append(".");
+        }
+        script.append("`").append(table.getName()).append("`").append(" (").append("\n");
+
+        appendColumns(script, table.getColumnList(),
+                hasPrimaryKeyIndex(table.getIndexList()) || getPrimaryKeyColumns(table.getColumnList()).size() > 1);
+        appendIndexes(script, table.getIndexList());
+        appendForeignKeys(script, table.getForeignKeyList());
+        appendVirtualForeignKeys(script, table.getVirtualForeignKeyList());
+
+        if (script.length() > 2) {
+            script.setLength(script.length() - 2);
+        }
+        script.append("\n)");
+        appendTableAttributes(script, table);
+        script.append(";");
+
+        return script.toString();
+    }
+
     // 添加列的方法
     @Override
     protected void appendColumns(StringBuilder script, List<TableColumn> columns) {
+        appendColumns(script, columns, shouldSuppressInlinePrimaryKey(columns));
+    }
+
+    private void appendColumns(StringBuilder script, List<TableColumn> columns, boolean suppressInlinePrimaryKey) {
+        if (columns == null) {
+            return;
+        }
         Set<String> primaryKeyColumns = getPrimaryKeyColumns(columns);
-        boolean hasPrimaryKeyIndexMetadata = columns.stream()
-                .anyMatch(column -> Boolean.TRUE.equals(column.getPrimaryKey())
-                        && StringUtils.isNotBlank(column.getPrimaryKeyName()));
-        boolean suppressInlinePrimaryKey = hasPrimaryKeyIndexMetadata || primaryKeyColumns.size() > 1;
         for (TableColumn column : columns) {
             if (StringUtils.isBlank(column.getName())) {
                 continue;
@@ -53,8 +86,22 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
         }
     }
 
+    private boolean shouldSuppressInlinePrimaryKey(List<TableColumn> columns) {
+        if (columns == null) {
+            return false;
+        }
+        Set<String> primaryKeyColumns = getPrimaryKeyColumns(columns);
+        boolean hasPrimaryKeyIndexMetadata = columns.stream()
+                .anyMatch(column -> Boolean.TRUE.equals(column.getPrimaryKey())
+                        && StringUtils.isNotBlank(column.getPrimaryKeyName()));
+        return hasPrimaryKeyIndexMetadata || primaryKeyColumns.size() > 1;
+    }
+
     private Set<String> getPrimaryKeyColumns(List<TableColumn> columns) {
         Set<String> primaryKeyColumns = new HashSet<>();
+        if (columns == null) {
+            return primaryKeyColumns;
+        }
         for (TableColumn column : columns) {
             if (Boolean.TRUE.equals(column.getPrimaryKey()) && StringUtils.isNotBlank(column.getName())) {
                 primaryKeyColumns.add(column.getName());
@@ -66,6 +113,9 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
     // 添加索引的方法
     @Override
     protected void appendIndexes(StringBuilder script, List<TableIndex> indexes) {
+        if (indexes == null) {
+            return;
+        }
         for (TableIndex tableIndex : indexes) {
             if (StringUtils.isBlank(tableIndex.getName()) || StringUtils.isBlank(tableIndex.getType())) {
                 continue;
@@ -76,6 +126,14 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
             }
             script.append("\t").append(mysqlIndexTypeEnum.buildIndexScript(tableIndex)).append(",\n");
         }
+    }
+
+    private boolean hasPrimaryKeyIndex(List<TableIndex> indexes) {
+        if (indexes == null) {
+            return false;
+        }
+        return indexes.stream()
+                .anyMatch(index -> MysqlIndexTypeEnum.PRIMARY_KEY.getName().equalsIgnoreCase(index.getType()));
     }
 
     // 添加表的其他属性的方法
@@ -94,10 +152,24 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder implements SqlBuilder {
             script.append(" AUTO_INCREMENT=").append(table.getIncrementValue());
         }
         if (StringUtils.isNotBlank(table.getComment())) {
-            script.append(" COMMENT='").append(table.getComment()).append("'");
+            script.append(" COMMENT=").append(MysqlSqlUtils.quoteString(table.getComment()));
         }
         if (StringUtils.isNotBlank(table.getPartition())) {
             script.append(" \n").append(table.getPartition());
+        }
+    }
+
+    @Override
+    protected void modifyTableNameAndComment(StringBuilder script, Table oldTable, Table newTable) {
+        if (!StringUtils.equalsIgnoreCase(oldTable.getName(), newTable.getName())) {
+            script.append("\t").append("RENAME TO `").append(newTable.getName()).append("`,\n");
+        }
+        if (!StringUtils.equalsIgnoreCase(oldTable.getComment(), newTable.getComment())) {
+            script.append("\t").append("COMMENT=").append(MysqlSqlUtils.quoteString(newTable.getComment())).append(",\n");
+        }
+        if (newTable.getIncrementValue() != null
+                && !Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
+            script.append("\t").append("AUTO_INCREMENT=").append(newTable.getIncrementValue()).append(",\n");
         }
     }
 

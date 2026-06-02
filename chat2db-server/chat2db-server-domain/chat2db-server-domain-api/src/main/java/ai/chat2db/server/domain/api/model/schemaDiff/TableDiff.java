@@ -20,6 +20,7 @@ public class TableDiff {
     private List<ColumnDiff> columnDiffs;
     private List<IndexDiff> indexDiffs;
     private List<ForeignKeyDiff> foreignKeyDiffs;
+    private List<FieldDiff> tableOptionDiffs;
     private List<String> ddlStatements;
     private String ddlStatement;
 }

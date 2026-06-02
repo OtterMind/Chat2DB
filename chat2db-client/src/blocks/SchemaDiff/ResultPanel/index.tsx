@@ -2,7 +2,6 @@ import React, { memo, useMemo } from 'react';
 import classnames from 'classnames';
 
 import { i18n } from '@/i18n';
-import { ITableDiff, IColumnDiff, IIndexDiff, IForeignKeyDiff } from '@/typings/schemaDiff';
 
 
 import { useSchemaDiffStore, setSelectedTableDiffs, setDetailViewTableName } from '../store';
@@ -53,7 +52,7 @@ const ResultPanel: React.FC = memo(() => {
           <span className={styles.count}>({visibleDiffs.length})</span>
         </div>
         {visibleDiffs.map((td) => {
-          const ddlLength = td.ddlStatement ? td.ddlStatement.split(';').length : 0;
+          const ddlLength = td.ddlStatements?.length || (td.ddlStatement ? 1 : 0);
           return (
             <div
               key={td.tableName}
