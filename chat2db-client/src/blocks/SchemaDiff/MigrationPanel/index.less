@@ -1,25 +1,26 @@
 .migrationPanel {
   margin-top: 12px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--color-bg-container);
 
   .migrationHeader {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 12px;
-    border-bottom: 1px solid #f0f0f0;
-    background: #fafafa;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-subtle);
 
     .migrationTitle {
       font-weight: 600;
       font-size: 13px;
+      color: var(--color-text);
 
       .selectedInfo {
         font-weight: 400;
         font-size: 12px;
-        color: #999;
+        color: var(--color-text-tertiary);
         margin-left: 8px;
       }
     }
@@ -42,16 +43,16 @@
       padding: 4px 12px;
       font-size: 12px;
       font-family: 'SF Mono', 'Monaco', monospace;
-      border-bottom: 1px solid #f5f5f5;
+      border-bottom: 1px solid var(--color-border);
 
       .ddlSeq {
-        color: #999;
+        color: var(--color-text-tertiary);
         min-width: 24px;
         text-align: right;
       }
 
       .ddlTable {
-        color: #1890ff;
+        color: var(--color-info);
         min-width: 100px;
         max-width: 120px;
         overflow: hidden;
@@ -61,7 +62,7 @@
 
       .ddlSql {
         flex: 1;
-        color: #333;
+        color: var(--color-text);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -71,12 +72,12 @@
 
   .migrationResult {
     padding: 8px 12px;
-    border-top: 1px solid #f0f0f0;
-    background: #fafafa;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-subtle);
 
     .migrationResultHeader {
       font-size: 12px;
-      color: #666;
+      color: var(--color-text-secondary);
     }
 
     .errorList {
@@ -84,14 +85,14 @@
 
       .errorItem {
         padding: 4px 8px;
-        background: #fff2f0;
-        border: 1px solid #ffccc7;
+        background: var(--color-error-bg);
+        border: 1px solid var(--color-error-border);
         border-radius: 4px;
         margin-bottom: 4px;
         font-size: 12px;
 
         .errorMsg {
-          color: #ff4d4f;
+          color: var(--color-error);
           margin-top: 2px;
           font-family: monospace;
           font-size: 11px;

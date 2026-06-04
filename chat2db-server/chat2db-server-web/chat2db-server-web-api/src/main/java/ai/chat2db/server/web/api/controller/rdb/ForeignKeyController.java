@@ -16,6 +16,7 @@ import ai.chat2db.server.web.api.controller.rdb.request.UpdateVirtualFKRequest;
 import ai.chat2db.server.web.api.controller.rdb.vo.DeleteFKResult;
 import ai.chat2db.server.web.api.controller.rdb.vo.ForeignKeyVO;
 import ai.chat2db.server.web.api.controller.rdb.vo.SyncResult;
+import ai.chat2db.server.web.api.aspect.ConnectionInfoAspect;
 import ai.chat2db.spi.model.ForeignKey;
 import ai.chat2db.spi.model.VirtualForeignKey;
 import jakarta.validation.Valid;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
+@ConnectionInfoAspect
 @RequestMapping("/api/rdb/fk")
 @RestController
 public class ForeignKeyController {
@@ -95,6 +97,9 @@ public class ForeignKeyController {
     public DataResult<VirtualForeignKey> updateVirtual(@Valid @RequestBody UpdateVirtualFKRequest request) {
         UpdateVirtualFKParam param = UpdateVirtualFKParam.builder()
                 .id(request.getId())
+                .dataSourceId(request.getDataSourceId())
+                .databaseName(request.getDatabaseName())
+                .schemaName(request.getSchemaName())
                 .comment(request.getComment())
                 .tableName(request.getTableName())
                 .columnName(request.getColumnName())

@@ -16,6 +16,12 @@ public class UpdateVirtualFKParam {
     @NotNull
     private Long id;
 
+    private Long dataSourceId;
+
+    private String databaseName;
+
+    private String schemaName;
+
     private String comment;
 
     private String tableName;

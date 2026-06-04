@@ -2,7 +2,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: #fafafa;
+  background: var(--color-bg-base);
 }
 
 .loadingContainer {
@@ -21,22 +21,39 @@
 
 :global {
   .react-flow__background {
-    background: #fafafa !important;
+    background: var(--color-bg-base) !important;
   }
 
   .react-flow__controls {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
     border-radius: 6px !important;
     overflow: hidden !important;
-  }
+    background: var(--color-bg-elevated) !important;
 
-  .react-flow__controls-button {
-    border: none !important;
-    border-bottom: 1px solid #f0f0f0 !important;
+    .react-flow__controls-button {
+      background: var(--color-bg-elevated) !important;
+      color: var(--color-text) !important;
+      border: none !important;
+      border-bottom: 1px solid var(--color-border) !important;
+      fill: var(--color-text) !important;
+
+      &:hover {
+        background: var(--color-fill-tertiary) !important;
+      }
+
+      svg {
+        fill: var(--color-text) !important;
+      }
+    }
   }
 
   .react-flow__minimap {
     border-radius: 6px !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    background: var(--color-bg-elevated) !important;
+  }
+
+  .react-flow__attribution {
+    background: transparent !important;
   }
 }

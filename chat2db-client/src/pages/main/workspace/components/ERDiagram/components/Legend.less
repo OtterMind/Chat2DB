@@ -3,20 +3,21 @@
   bottom: 10px;
   left: 10px;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 8px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(8px);
   font-size: 11px;
-  color: #595959;
+  color: var(--color-text-secondary);
 }
 
 .legendTitle {
   font-weight: 600;
   margin-bottom: 4px;
   font-size: 11px;
-  color: #262626;
+  color: var(--color-text);
 }
 
 .legendItem {
@@ -33,15 +34,15 @@
 }
 
 .realLine {
-  background: #8c8c8c;
+  background: var(--color-text-tertiary);
 }
 
 .virtualLine {
-  background: #faad14;
+  background: var(--color-warning);
   background-image: repeating-linear-gradient(
     90deg,
-    #faad14 0px,
-    #faad14 5px,
+    var(--color-warning) 0px,
+    var(--color-warning) 5px,
     transparent 5px,
     transparent 8px
   );

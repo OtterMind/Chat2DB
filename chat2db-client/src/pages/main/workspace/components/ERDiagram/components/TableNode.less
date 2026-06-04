@@ -1,17 +1,18 @@
 .tableNode {
-  background: #fff;
-  border: 1px solid #d9d9d9;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   min-width: 120px;
   max-width: 220px;
   font-size: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   transition: all 0.2s ease;
   cursor: pointer;
+  color: var(--color-text);
 
   &:hover {
-    border-color: #1890ff;
-    box-shadow: 0 2px 12px rgba(24, 144, 255, 0.2);
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 12px rgba(24, 144, 255, 0.3);
   }
 }
 
@@ -46,7 +47,7 @@
 }
 
 .tableComment {
-  color: #8c8c8c;
+  color: var(--color-text-tertiary);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -55,7 +56,7 @@
 }
 
 .columnCount {
-  color: #bfbfbf;
+  color: var(--color-text-tertiary);
   font-size: 10px;
 }
 
@@ -69,7 +70,7 @@
   max-height: 180px;
   margin-top: 6px;
   overflow-y: auto;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--color-border);
 }
 
 .columnItem {
@@ -79,14 +80,14 @@
   gap: 4px;
   min-height: 22px;
   padding: 3px 10px;
-  color: #595959;
+  color: var(--color-text-secondary);
   cursor: default;
   user-select: none;
-  border-bottom: 1px solid #fafafa;
+  border-bottom: 1px solid var(--color-border-secondary);
 
   &:hover {
-    color: #1677ff;
-    background: #f5faff;
+    color: var(--color-primary-hover);
+    background: var(--color-fill-quaternary);
   }
 }
 
@@ -101,7 +102,7 @@
   flex-shrink: 0;
   max-width: 70px;
   overflow: hidden;
-  color: #bfbfbf;
+  color: var(--color-text-tertiary);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -110,43 +111,43 @@
 .primaryKey {
   flex-shrink: 0;
   padding: 0 3px;
-  color: #fa8c16;
+  color: var(--color-warning);
   font-size: 9px;
   line-height: 14px;
-  background: #fff7e6;
-  border: 1px solid #ffd591;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: 3px;
 }
 
 .primaryColumn {
-  color: #262626;
+  color: var(--color-text);
   font-weight: 500;
 }
 
 .virtualFkHint {
   margin-top: 4px;
   padding: 4px 6px;
-  color: #8c8c8c;
+  color: var(--color-text-tertiary);
   font-size: 10px;
   line-height: 16px;
-  background: #f6ffed;
-  border: 1px solid #d9f7be;
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
   border-radius: 4px;
 }
 
 .handle {
   width: 6px !important;
   height: 6px !important;
-  background: #1890ff !important;
-  border: 1px solid #fff !important;
+  background: var(--color-primary) !important;
+  border: 1px solid var(--color-bg-elevated) !important;
 }
 
 .fieldHandle {
   z-index: 10;
   width: 10px !important;
   height: 10px !important;
-  background: #52c41a !important;
-  border: 1px solid #fff !important;
+  background: var(--color-success) !important;
+  border: 1px solid var(--color-bg-elevated) !important;
   opacity: 0.65;
   cursor: crosshair;
 
@@ -165,7 +166,7 @@
 }
 
 .highlighted {
-  border-color: #1890ff;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.3);
 }
 

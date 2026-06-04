@@ -26,9 +26,91 @@
   }
 }
 
+:global {
+  .ant-modal.tableRelationModalRoot {
+    .ant-modal-content {
+      background-color: var(--color-bg-elevated) !important;
+    }
+
+    .ant-modal-header {
+      background-color: var(--color-bg-elevated) !important;
+    }
+
+    .ant-modal-title {
+      color: var(--color-text) !important;
+    }
+
+    .ant-modal-close-x {
+      color: var(--color-text-tertiary) !important;
+    }
+
+    .ant-table {
+      color: var(--color-text);
+      background-color: transparent;
+    }
+
+    .ant-table-thead > tr > th {
+      color: var(--color-text);
+      background-color: var(--color-bg-container);
+      border-bottom-color: var(--color-border);
+    }
+
+    .ant-table-tbody > tr > td {
+      color: var(--color-text);
+      border-bottom-color: var(--color-border);
+    }
+
+    .ant-table-tbody > tr:hover > td {
+      background-color: var(--color-fill-tertiary);
+    }
+
+    .ant-table-wrapper {
+      background-color: transparent;
+    }
+
+    .ant-table-cell {
+      color: var(--color-text);
+    }
+
+    .ant-btn-text:not(:disabled):not(.ant-btn-disabled) {
+      color: var(--color-text);
+    }
+
+    .ant-btn-text:not(:disabled):not(.ant-btn-disabled):hover {
+      color: var(--color-primary);
+      background-color: var(--color-fill-tertiary);
+    }
+
+    .ant-btn-dangerous.ant-btn-text:not(:disabled):not(.ant-btn-disabled) {
+      color: var(--color-error);
+    }
+
+    .ant-tag-blue {
+      background-color: var(--color-info-bg);
+      border-color: var(--color-info-border);
+      color: var(--color-info);
+    }
+
+    .ant-tag-green {
+      background-color: var(--color-success-bg);
+      border-color: var(--color-success-border);
+      color: var(--color-success);
+    }
+  }
+}
+
 .ddlPreview {
   max-height: 260px;
   padding: 12px;
+  overflow: auto;
+  background: var(--color-bg-layout);
+  border-radius: 6px;
+}
+
+.importInvalidPreview {
+  max-height: 220px;
+  padding: 12px;
+  margin-top: 12px;
   overflow: auto;
   background: var(--color-bg-layout);
   border-radius: 6px;

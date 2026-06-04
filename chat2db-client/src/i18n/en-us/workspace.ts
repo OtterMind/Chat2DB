@@ -97,6 +97,9 @@ export default {
   'workspace.tableRelation.importSuccess': 'Imported, created {1}, overwritten {2}',
   'workspace.tableRelation.importError': 'Failed to import virtual foreign keys. Check the JSON file.',
   'workspace.tableRelation.importEmpty': 'No importable virtual foreign keys found',
+  'workspace.tableRelation.importInvalidTitle': 'Import does not match the current schema',
+  'workspace.tableRelation.importInvalidContent':
+    '{1} relation(s) reference missing tables or fields. Import cancelled.',
   'workspace.tableRelation.exportSuccess': 'Virtual foreign keys exported',
   'workspace.tableRelation.exportEmpty': 'No virtual foreign keys to export',
   'workspace.tableRelation.noVirtualFk': 'No virtual foreign keys to delete',

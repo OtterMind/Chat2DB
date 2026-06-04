@@ -10,9 +10,9 @@ interface DetailViewProps {
 }
 
 const changeTypeColor: Record<string, string> = {
-  ADD: '#52c41a',
-  MODIFY: '#faad14',
-  DELETE: '#ff4d4f',
+  ADD: 'success',
+  MODIFY: 'warning',
+  DELETE: 'error',
 };
 
 const changeTypeLabel: Record<string, string> = {
@@ -238,7 +238,7 @@ const DetailView: React.FC<DetailViewProps> = memo(({ tableDiff }) => {
     <div className={styles.detailView}>
       <div className={styles.detailHeader}>
         <span className={styles.tableName}>{tableDiff.tableName}</span>
-        <Tag color={tableDiff.diffType === 'MODIFIED' ? '#faad14' : tableDiff.diffType === 'ADDED' ? '#52c41a' : '#ff4d4f'}>
+        <Tag color={tableDiff.diffType === 'MODIFIED' ? 'warning' : tableDiff.diffType === 'ADDED' ? 'success' : 'error'}>
           {i18n(tableDiff.diffType === 'MODIFIED' ? 'schemaDiff.modified' : tableDiff.diffType === 'ADDED' ? 'schemaDiff.added' : 'schemaDiff.removed')}
         </Tag>
       </div>

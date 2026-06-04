@@ -95,6 +95,8 @@ export default {
   'workspace.tableRelation.importSuccess': '导入成功，新增 {1} 个，覆盖 {2} 个',
   'workspace.tableRelation.importError': '导入虚拟外键失败，请检查 JSON 文件',
   'workspace.tableRelation.importEmpty': '未发现可导入的虚拟外键',
+  'workspace.tableRelation.importInvalidTitle': '导入数据与当前库表不匹配',
+  'workspace.tableRelation.importInvalidContent': '发现 {1} 条不存在的表或字段关系，已取消导入。',
   'workspace.tableRelation.exportSuccess': '虚拟外键导出成功',
   'workspace.tableRelation.exportEmpty': '没有可导出的虚拟外键',
   'workspace.tableRelation.noVirtualFk': '没有可删除的虚拟外键',

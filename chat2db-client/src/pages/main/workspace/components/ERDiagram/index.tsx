@@ -499,11 +499,11 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
       },
       markerEnd: {
         type: 'arrowclosed' as const,
-        color: e.virtual ? '#faad14' : '#8c8c8c',
+        color: e.virtual ? 'var(--color-warning)' : 'var(--color-text-tertiary)',
       },
       style: e.virtual
-        ? { stroke: '#faad14', strokeWidth: 1.5, strokeDasharray: '5 3' }
-        : { stroke: '#8c8c8c', strokeWidth: 2 },
+        ? { stroke: 'var(--color-warning)', strokeWidth: 1.5, strokeDasharray: '5 3' }
+        : { stroke: 'var(--color-text-tertiary)', strokeWidth: 2 },
     }));
 
     const laidOutNodes = applyLayout(rfNodes, rfEdges, layoutType);
@@ -577,7 +577,7 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
           <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
             {result.addedCount > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ color: '#52c41a', fontWeight: 'bold', marginBottom: 8 }}>
+                <div style={{ color: 'var(--color-success)', fontWeight: 'bold', marginBottom: 8 }}>
                   {i18n('workspace.erDiagram.inferResult.added', [result.addedCount])}
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -591,7 +591,7 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
             )}
             {result.deletedCount > 0 && (
               <div>
-                <div style={{ color: '#ff4d4f', fontWeight: 'bold', marginBottom: 8 }}>
+                <div style={{ color: 'var(--color-error)', fontWeight: 'bold', marginBottom: 8 }}>
                   {i18n('workspace.erDiagram.inferResult.deleted', [result.deletedCount])}
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -632,7 +632,7 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
   const handleExport = useCallback(() => {
     if (!chartRef.current) return;
     toPng(chartRef.current.querySelector('.react-flow') as HTMLElement, {
-      backgroundColor: '#fff',
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--color-bg-base') || '#fff',
       quality: 1,
     }).then((dataUrl) => {
       const link = document.createElement('a');
@@ -646,10 +646,10 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
     (node: Node) => {
       if (selectedTableId) {
         const data = node.data as any;
-        if (data?.isHighlighted) return '#1890ff';
-        if (data?.isDimmed) return '#f0f0f0';
+        if (data?.isHighlighted) return 'var(--color-primary)';
+        if (data?.isDimmed) return 'var(--color-fill-quaternary)';
       }
-      return '#91caff';
+      return 'var(--color-primary-bg, #91caff)';
     },
     [selectedTableId],
   );
@@ -697,12 +697,12 @@ const ERDiagramInner: React.FC<IERDiagramProps> = ({ uniqueData }) => {
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#f0f0f0" gap={16} />
+          <Background color="var(--color-border)" gap={16} />
           <Controls position="bottom-right" showInteractive={false} />
           <MiniMap
             nodeColor={miniMapNodeColor}
             maskColor="rgba(0, 0, 0, 0.1)"
-            style={{ background: '#fafafa' }}
+            style={{ background: 'var(--color-bg-elevated)' }}
             position="bottom-right"
           />
         </ReactFlow>

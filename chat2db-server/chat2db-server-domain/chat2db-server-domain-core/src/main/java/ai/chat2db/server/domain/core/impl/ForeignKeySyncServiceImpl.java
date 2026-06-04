@@ -16,6 +16,7 @@ import ai.chat2db.spi.MetaData;
 import ai.chat2db.spi.SqlBuilder;
 import ai.chat2db.spi.model.ForeignKey;
 import ai.chat2db.spi.model.Table;
+import ai.chat2db.spi.model.TableColumn;
 import ai.chat2db.spi.model.VirtualForeignKey;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -151,6 +152,14 @@ public class ForeignKeySyncServiceImpl implements ForeignKeySyncService {
      */
     @Override
     public VirtualForeignKey createVirtualFK(CreateVirtualFKParam param) {
+        validateVirtualForeignKeyRelation(
+                param.getDatabaseName(),
+                param.getSchemaName(),
+                param.getTableName(),
+                param.getColumnName(),
+                param.getReferencedTable(),
+                param.getReferencedColumnName());
+
         if (existsVirtualForeignKey(null,
                 param.getDataSourceId(),
                 param.getDatabaseName(),
@@ -160,32 +169,49 @@ public class ForeignKeySyncServiceImpl implements ForeignKeySyncService {
             throw new BusinessException("VIRTUAL_FK_EXISTS", new Object[]{});
         }
 
-        VirtualForeignKeyDO entity = new VirtualForeignKeyDO();
-        entity.setDataSourceId(param.getDataSourceId());
-        entity.setDatabaseName(param.getDatabaseName());
-        entity.setSchemaName(param.getSchemaName());
-        entity.setTableName(param.getTableName());
-        entity.setColumnName(param.getColumnName());
-        entity.setVkName("VFK_" + param.getTableName() + "_" + param.getColumnName());
-        entity.setReferencedTable(param.getReferencedTable());
-        entity.setReferencedColumnName(param.getReferencedColumnName());
-        entity.setComment(param.getComment());
-        entity.setSourceType(param.getSourceType());
-        entity.setUserId(ContextUtils.getUserId());
-
+        VirtualForeignKeyDO entity = buildVirtualForeignKeyDO(param);
         getVFKMapper().insert(entity);
+        return convertVirtualDOToModel(entity);
+    }
 
-        VirtualForeignKey vk = VirtualForeignKey.builder()
-                .name(entity.getVkName())
-                .tableName(entity.getTableName())
-                .column(entity.getColumnName())
-                .referencedTable(entity.getReferencedTable())
-                .referencedColumn(entity.getReferencedColumnName())
-                .comment(entity.getComment())
-                .virtualProperty("User-defined virtual foreign key")
-                .build();
+    @Override
+    public List<VirtualForeignKey> createInferredVirtualFKs(List<CreateVirtualFKParam> params) {
+        if (CollectionUtils.isEmpty(params)) {
+            return Collections.emptyList();
+        }
 
-        return vk;
+        CreateVirtualFKParam first = params.get(0);
+        List<VirtualForeignKeyDO> existingFKs = queryVirtualFKsFromH2(
+                first.getDataSourceId(),
+                first.getDatabaseName(),
+                first.getSchemaName(),
+                null);
+        Set<String> existingKeys = existingFKs.stream()
+                .map(vfk -> buildVirtualForeignKeyKey(
+                        vfk.getDataSourceId(),
+                        vfk.getDatabaseName(),
+                        vfk.getSchemaName(),
+                        vfk.getTableName(),
+                        vfk.getColumnName()))
+                .collect(Collectors.toSet());
+
+        List<VirtualForeignKey> created = new ArrayList<>();
+        for (CreateVirtualFKParam param : params) {
+            String key = buildVirtualForeignKeyKey(
+                    param.getDataSourceId(),
+                    param.getDatabaseName(),
+                    param.getSchemaName(),
+                    param.getTableName(),
+                    param.getColumnName());
+            if (!existingKeys.add(key)) {
+                continue;
+            }
+
+            VirtualForeignKeyDO entity = buildVirtualForeignKeyDO(param);
+            getVFKMapper().insert(entity);
+            created.add(convertVirtualDOToModel(entity));
+        }
+        return created;
     }
 
     /**
@@ -206,6 +232,17 @@ public class ForeignKeySyncServiceImpl implements ForeignKeySyncService {
         updateDO.setId(param.getId());
         String tableName = StringUtils.defaultIfBlank(param.getTableName(), existing.getTableName());
         String columnName = StringUtils.defaultIfBlank(param.getColumnName(), existing.getColumnName());
+        String referencedTable = StringUtils.defaultIfBlank(param.getReferencedTable(), existing.getReferencedTable());
+        String referencedColumnName = StringUtils.defaultIfBlank(
+                param.getReferencedColumnName(), existing.getReferencedColumnName());
+
+        validateVirtualForeignKeyRelation(
+                existing.getDatabaseName(),
+                existing.getSchemaName(),
+                tableName,
+                columnName,
+                referencedTable,
+                referencedColumnName);
 
         if (existsVirtualForeignKey(param.getId(),
                 existing.getDataSourceId(),
@@ -461,6 +498,61 @@ public class ForeignKeySyncServiceImpl implements ForeignKeySyncService {
         return getVFKMapper().selectList(wrapper);
     }
 
+    private void validateVirtualForeignKeyRelation(String databaseName,
+                                                   String schemaName,
+                                                   String tableName,
+                                                   String columnName,
+                                                   String referencedTable,
+                                                   String referencedColumnName) {
+        MetaData metaData = Chat2DBContext.getMetaData();
+        Connection connection = Chat2DBContext.getConnection();
+
+        String actualTableName = findActualTableName(metaData, connection, databaseName, schemaName, tableName);
+        String actualReferencedTable = findActualTableName(
+                metaData, connection, databaseName, schemaName, referencedTable);
+
+        if (StringUtils.isBlank(actualTableName) || StringUtils.isBlank(actualReferencedTable)) {
+            throw new BusinessException("VIRTUAL_FK_TABLE_NOT_FOUND", new Object[]{"虚拟外键关联表不存在"});
+        }
+
+        if (!existsColumnIgnoreCase(metaData, connection, databaseName, schemaName, actualTableName, columnName)
+                || !existsColumnIgnoreCase(
+                metaData, connection, databaseName, schemaName, actualReferencedTable, referencedColumnName)) {
+            throw new BusinessException("VIRTUAL_FK_COLUMN_NOT_FOUND", new Object[]{"虚拟外键关联字段不存在"});
+        }
+    }
+
+    private String findActualTableName(MetaData metaData,
+                                       Connection connection,
+                                       String databaseName,
+                                       String schemaName,
+                                       String tableName) {
+        if (StringUtils.isBlank(tableName)) {
+            return null;
+        }
+        List<Table> tables = metaData.tables(connection, databaseName, schemaName, null);
+        return Optional.ofNullable(tables).orElse(Collections.emptyList()).stream()
+                .map(Table::getName)
+                .filter(name -> StringUtils.equalsIgnoreCase(name, tableName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean existsColumnIgnoreCase(MetaData metaData,
+                                           Connection connection,
+                                           String databaseName,
+                                           String schemaName,
+                                           String tableName,
+                                           String columnName) {
+        if (StringUtils.isAnyBlank(tableName, columnName)) {
+            return false;
+        }
+        List<TableColumn> columns = metaData.columns(connection, databaseName, schemaName, tableName);
+        return Optional.ofNullable(columns).orElse(Collections.emptyList()).stream()
+                .map(TableColumn::getName)
+                .anyMatch(name -> StringUtils.equalsIgnoreCase(name, columnName));
+    }
+
     private boolean existsVirtualForeignKey(Long excludeId,
                                             Long dataSourceId,
                                             String databaseName,
@@ -483,6 +575,39 @@ public class ForeignKeySyncServiceImpl implements ForeignKeySyncService {
                 .eq(VirtualForeignKeyDO::getColumnName, columnName)
                 .ne(excludeId != null, VirtualForeignKeyDO::getId, excludeId);
         return getVFKMapper().selectCount(wrapper) > 0;
+    }
+
+    private VirtualForeignKeyDO buildVirtualForeignKeyDO(CreateVirtualFKParam param) {
+        VirtualForeignKeyDO entity = new VirtualForeignKeyDO();
+        entity.setDataSourceId(param.getDataSourceId());
+        entity.setDatabaseName(param.getDatabaseName());
+        entity.setSchemaName(param.getSchemaName());
+        entity.setTableName(param.getTableName());
+        entity.setColumnName(param.getColumnName());
+        entity.setVkName("VFK_" + param.getTableName() + "_" + param.getColumnName());
+        entity.setReferencedTable(param.getReferencedTable());
+        entity.setReferencedColumnName(param.getReferencedColumnName());
+        entity.setComment(param.getComment());
+        entity.setSourceType(param.getSourceType());
+        entity.setUserId(ContextUtils.getUserId());
+        return entity;
+    }
+
+    private String buildVirtualForeignKeyKey(Long dataSourceId,
+                                             String databaseName,
+                                             String schemaName,
+                                             String tableName,
+                                             String columnName) {
+        return String.join(":",
+                Objects.toString(dataSourceId, ""),
+                normalizeVirtualForeignKeyPart(databaseName),
+                normalizeVirtualForeignKeyPart(schemaName),
+                normalizeVirtualForeignKeyPart(tableName),
+                normalizeVirtualForeignKeyPart(columnName));
+    }
+
+    private String normalizeVirtualForeignKeyPart(String value) {
+        return StringUtils.defaultString(value).toLowerCase(Locale.ROOT);
     }
 
     /**

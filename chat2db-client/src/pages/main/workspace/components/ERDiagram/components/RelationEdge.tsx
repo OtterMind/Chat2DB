@@ -47,7 +47,7 @@ const RelationEdge = memo(({
         path={edgePath}
         style={{
           ...style,
-          stroke: isVirtual ? '#faad14' : '#8c8c8c',
+          stroke: isVirtual ? 'var(--color-warning)' : 'var(--color-text-tertiary)',
           strokeWidth: isVirtual ? 1.5 : 2,
           strokeDasharray: isVirtual ? '5 3' : undefined,
         }}

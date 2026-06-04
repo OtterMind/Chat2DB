@@ -535,6 +535,9 @@ export interface ICreateVirtualFKParams {
 /** 更新虚拟外键参数 */
 export interface IUpdateVirtualFKParams {
   id: number;
+  dataSourceId: number;
+  databaseName?: string;
+  schemaName?: string;
   vkName?: string;
   tableName?: string;
   columnName?: string;

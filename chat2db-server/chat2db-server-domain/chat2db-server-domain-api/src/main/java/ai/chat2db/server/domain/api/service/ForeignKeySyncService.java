@@ -16,6 +16,8 @@ public interface ForeignKeySyncService {
 
     VirtualForeignKey createVirtualFK(CreateVirtualFKParam param);
 
+    List<VirtualForeignKey> createInferredVirtualFKs(List<CreateVirtualFKParam> params);
+
     VirtualForeignKey updateVirtualFK(UpdateVirtualFKParam param);
 
     void deleteVirtualFK(Long id);

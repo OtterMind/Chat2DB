@@ -29,7 +29,9 @@ interface IVirtualFkImportItem {
 }
 
 const buildVirtualFkKey = (item: IVirtualFkImportItem) =>
-  [item.tableName, item.columnName].map((value) => `${value || ''}`.trim()).join('\u0001');
+  [item.tableName, item.columnName].map((value) => `${value || ''}`.trim().toLowerCase()).join('\u0001');
+
+const getNormalizedName = (value?: string) => `${value || ''}`.trim().toLowerCase();
 
 const TableRelationModal = memo((props: IProps) => {
   const { treeNodeData } = props;
@@ -262,6 +264,9 @@ const TableRelationModal = memo((props: IProps) => {
       if (editingRecord?.id) {
         await sqlService.updateVirtualForeignKey({
           id: editingRecord.id,
+          dataSourceId: dataSourceId!,
+          databaseName,
+          schemaName,
           ...values,
         });
         message.success(i18n('workspace.tableRelation.updateSuccess'));
@@ -302,6 +307,73 @@ const TableRelationModal = memo((props: IProps) => {
     return Array.from(itemMap.values());
   };
 
+  const validateAndNormalizeImportList = async (importList: IVirtualFkImportItem[]) => {
+    const tableList = await sqlService.getAllTableList({
+      dataSourceId: dataSourceId!,
+      databaseName,
+      schemaName,
+    });
+    const tableNameMap = new Map((tableList || []).map((item) => [getNormalizedName(item.name), item.name]));
+    const involvedTableNames = Array.from(
+      new Set(
+        importList
+          .flatMap((item) => [item.tableName, item.referencedTable])
+          .map(getNormalizedName)
+          .filter(Boolean),
+      ),
+    );
+    const columnNameMap: Record<string, Map<string, string>> = {};
+
+    await Promise.all(
+      involvedTableNames
+        .filter((normalizedTableName) => tableNameMap.has(normalizedTableName))
+        .map(async (normalizedTableName) => {
+          const actualTableName = tableNameMap.get(normalizedTableName)!;
+          const columns = await sqlService.getColumnList({
+            dataSourceId: dataSourceId!,
+            databaseName,
+            schemaName,
+            tableName: actualTableName,
+          });
+          columnNameMap[normalizedTableName] = new Map(
+            (columns || []).map((column) => [getNormalizedName(column.name), column.name]),
+          );
+        }),
+    );
+
+    const invalidItems: string[] = [];
+    const normalizedList: IVirtualFkImportItem[] = [];
+    importList.forEach((item) => {
+      const sourceTableKey = getNormalizedName(item.tableName);
+      const sourceColumnKey = getNormalizedName(item.columnName);
+      const referencedTableKey = getNormalizedName(item.referencedTable);
+      const referencedColumnKey = getNormalizedName(item.referencedColumnName);
+      const sourceTable = tableNameMap.get(sourceTableKey);
+      const referencedTable = tableNameMap.get(referencedTableKey);
+      const sourceColumn = columnNameMap[sourceTableKey]?.get(sourceColumnKey);
+      const referencedColumn = columnNameMap[referencedTableKey]?.get(referencedColumnKey);
+      const relationText = [
+        `${item.tableName}.${item.columnName}`,
+        `${item.referencedTable}.${item.referencedColumnName}`,
+      ].join(' -> ');
+
+      if (!sourceTable || !referencedTable || !sourceColumn || !referencedColumn) {
+        invalidItems.push(relationText);
+        return;
+      }
+
+      normalizedList.push({
+        tableName: sourceTable,
+        columnName: sourceColumn,
+        referencedTable,
+        referencedColumnName: referencedColumn,
+        comment: item.comment,
+      });
+    });
+
+    return { invalidItems, normalizedList };
+  };
+
   const handleImport = async (file: File) => {
     if (!dataSourceId || !databaseName) return false;
     setImporting(true);
@@ -310,6 +382,21 @@ const TableRelationModal = memo((props: IProps) => {
       const importList = normalizeImportData(data);
       if (!importList.length) {
         message.error(i18n('workspace.tableRelation.importEmpty'));
+        return false;
+      }
+
+      const { invalidItems, normalizedList } = await validateAndNormalizeImportList(importList);
+      if (invalidItems.length) {
+        Modal.error({
+          title: i18n('workspace.tableRelation.importInvalidTitle'),
+          content: (
+            <div>
+              <div>{i18n('workspace.tableRelation.importInvalidContent', invalidItems.length)}</div>
+              <pre className={styles.importInvalidPreview}>{invalidItems.slice(0, 10).join('\n')}</pre>
+            </div>
+          ),
+          width: 640,
+        });
         return false;
       }
 
@@ -326,11 +413,14 @@ const TableRelationModal = memo((props: IProps) => {
 
       let created = 0;
       let updated = 0;
-      for (const item of importList) {
+      for (const item of normalizedList) {
         const existing = currentMap.get(buildVirtualFkKey(item));
         if (existing?.id) {
           await sqlService.updateVirtualForeignKey({
             id: existing.id,
+            dataSourceId: dataSourceId!,
+            databaseName,
+            schemaName,
             tableName: item.tableName,
             columnName: item.columnName,
             referencedTable: item.referencedTable,
@@ -561,6 +651,7 @@ export const openTableRelationModal = (treeNodeData: ITreeNode) => {
     title: i18n('workspace.menu.viewTableRelation'),
     icon: null,
     width: 980,
+    className: 'tableRelationModalRoot',
     content: <TableRelationModal treeNodeData={treeNodeData} />,
     okText: i18n('common.button.close'),
     maskClosable: true,

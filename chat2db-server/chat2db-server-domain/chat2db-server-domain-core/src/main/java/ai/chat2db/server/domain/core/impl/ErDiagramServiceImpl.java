@@ -206,8 +206,8 @@ public class ErDiagramServiceImpl implements ErDiagramService {
                 .map(this::normalizeName)
                 .collect(Collectors.toSet());
 
-        // 11. 遍历所有表，对尚未有虚拟外键的表进行推断并创建
-        List<VirtualForeignKey> addedList = new ArrayList<>();
+        // 11. 遍历所有表，对尚未有虚拟外键的表进行推断
+        List<CreateVirtualFKParam> inferredCreateParams = new ArrayList<>();
         for (Table table : tables) {
             // 跳过已有虚拟外键的表
             if (table.getName() != null
@@ -221,30 +221,21 @@ public class ErDiagramServiceImpl implements ErDiagramService {
                     param,
                     virtualForeignKeysByTable.getOrDefault(normalizeName(table.getName()), Collections.emptyList())
             );
-            // 将推断出的虚拟外键持久化到存储中
             for (VirtualForeignKey vfk : inferredFKs) {
-                try {
-                    foreignKeySyncService.createVirtualFK(
-                            CreateVirtualFKParam.builder()
-                                    .dataSourceId(param.getDataSourceId())
-                                    .databaseName(param.getDatabaseName())
-                                    .schemaName(param.getSchemaName())
-                                    .tableName(table.getName())
-                                    .columnName(vfk.getColumn())
-                                    .referencedTable(vfk.getReferencedTable())
-                                    .referencedColumnName(vfk.getReferencedColumn())
-                                    .comment("Inferred from column naming convention")
-                                    .sourceType("INFERRED")
-                                    .build()
-                    );
-                    addedList.add(vfk);
-                } catch (Exception e) {
-                    log.warn("Failed to create inferred virtual FK for {}.{} -> {}.{}",
-                            table.getName(), vfk.getColumn(),
-                            vfk.getReferencedTable(), vfk.getReferencedColumn(), e);
-                }
+                inferredCreateParams.add(CreateVirtualFKParam.builder()
+                        .dataSourceId(param.getDataSourceId())
+                        .databaseName(param.getDatabaseName())
+                        .schemaName(param.getSchemaName())
+                        .tableName(table.getName())
+                        .columnName(vfk.getColumn())
+                        .referencedTable(vfk.getReferencedTable())
+                        .referencedColumnName(vfk.getReferencedColumn())
+                        .comment("Inferred from column naming convention")
+                        .sourceType("INFERRED")
+                        .build());
             }
         }
+        List<VirtualForeignKey> addedList = foreignKeySyncService.createInferredVirtualFKs(inferredCreateParams);
 
         // 12. 构建删除项结果列表（被清理的无效虚拟外键）
         List<InferVirtualFkResultVO.VirtualFkItem> deletedItems = invalidVirtualForeignKeys.stream()

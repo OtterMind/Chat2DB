@@ -7,23 +7,23 @@
   .tableList {
     width: 320px;
     min-width: 260px;
-    border: 1px solid #f0f0f0;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     overflow-y: auto;
-    background: #fafafa;
+    background: var(--color-bg-subtle);
 
     .listHeader {
       padding: 8px 12px;
       font-weight: 600;
       font-size: 13px;
-      border-bottom: 1px solid #f0f0f0;
-      background: #fff;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-container);
       position: sticky;
       top: 0;
       z-index: 1;
 
       .count {
-        color: #999;
+        color: var(--color-text-tertiary);
         font-weight: 400;
         margin-left: 4px;
       }
@@ -32,15 +32,15 @@
     .tableItem {
       padding: 8px 12px;
       cursor: pointer;
-      border-bottom: 1px solid #f5f5f5;
+      border-bottom: 1px solid var(--color-border);
       transition: background 0.2s;
 
       &:hover {
-        background: #e6f7ff;
+        background: var(--color-fill-tertiary);
       }
 
       &.active {
-        background: #bae7ff;
+        background: var(--color-fill-secondary);
       }
 
       .tableItemHeader {
@@ -58,10 +58,10 @@
           border-radius: 3px;
           font-weight: 500;
 
-          &.added { background: #f6ffed; color: #52c41a; }
-          &.removed { background: #fff2f0; color: #ff4d4f; }
-          &.modified { background: #fffbe6; color: #faad14; }
-          &.unchanged { background: #f5f5f5; color: #999; }
+          &.added { background: var(--color-success-bg); color: var(--color-success); }
+          &.removed { background: var(--color-error-bg); color: var(--color-error); }
+          &.modified { background: var(--color-warning-bg); color: var(--color-warning); }
+          &.unchanged { background: var(--color-fill-tertiary); color: var(--color-text-tertiary); }
         }
 
         .tableItemName {
@@ -70,6 +70,7 @@
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          color: var(--color-text);
         }
       }
 
@@ -77,7 +78,7 @@
         display: flex;
         gap: 8px;
         font-size: 11px;
-        color: #999;
+        color: var(--color-text-tertiary);
         margin-top: 2px;
         padding-left: 38px;
       }
@@ -86,23 +87,23 @@
     .noData {
       padding: 40px;
       text-align: center;
-      color: #999;
+      color: var(--color-text-tertiary);
     }
   }
 
   .detailArea {
     flex: 1;
-    border: 1px solid #f0f0f0;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     overflow-y: auto;
-    background: #fff;
+    background: var(--color-bg-container);
 
     .noSelection {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100%;
-      color: #ccc;
+      color: var(--color-text-tertiary);
       font-size: 14px;
     }
   }

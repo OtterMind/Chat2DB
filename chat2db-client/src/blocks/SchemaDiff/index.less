@@ -4,7 +4,7 @@
   height: 100%;
   padding: 16px;
   overflow-y: auto;
-  background: #fff;
+  background: var(--color-bg-container);
 
   .header {
     display: flex;
@@ -24,12 +24,13 @@
         font-size: 13px;
         white-space: nowrap;
         min-width: 32px;
+        color: var(--color-text);
       }
     }
 
     .selectorArrow {
       font-size: 20px;
-      color: #999;
+      color: var(--color-text-tertiary);
       line-height: 30px;
       padding-top: 20px;
     }
@@ -46,7 +47,7 @@
     gap: 16px;
     padding: 8px 0;
     margin-bottom: 8px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--color-border);
 
     .optionCheckbox {
       display: flex;
@@ -54,7 +55,7 @@
       gap: 4px;
       font-size: 12px;
       cursor: pointer;
-      color: #666;
+      color: var(--color-text-secondary);
 
       input {
         margin: 0;
@@ -73,18 +74,18 @@
     display: flex;
     gap: 20px;
     padding: 10px 14px;
-    background: #fafafa;
-    border: 1px solid #f0f0f0;
+    background: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     margin-bottom: 12px;
     font-size: 13px;
 
     .summaryItem {
-      &.added strong { color: #52c41a; }
-      &.removed strong { color: #ff4d4f; }
-      &.modified strong { color: #faad14; }
-      &.unchanged strong { color: #999; }
-      &.excluded strong { color: #999; }
+      &.added strong { color: var(--color-success); }
+      &.removed strong { color: var(--color-error); }
+      &.modified strong { color: var(--color-warning); }
+      &.unchanged strong { color: var(--color-text-tertiary); }
+      &.excluded strong { color: var(--color-text-tertiary); }
     }
   }
 }
