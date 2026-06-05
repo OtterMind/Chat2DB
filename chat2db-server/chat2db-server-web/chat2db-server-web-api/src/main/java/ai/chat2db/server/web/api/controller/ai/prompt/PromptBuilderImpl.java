@@ -178,12 +178,23 @@ public class PromptBuilderImpl implements PromptBuilder {
     }
 
     private String appendRevisionContextIfNeeded(String filledTemplate, PromptContext context) {
-        if (context.getPromptType() != PromptType.NL_2_SQL
-                || !Boolean.TRUE.equals(context.getIsRevision())
-                || StringUtils.isBlank(context.getPreviousSql())) {
+        if (StringUtils.isBlank(context.getPreviousSql())) {
             return filledTemplate;
         }
 
+        if (context.getPromptType() == PromptType.SELECT_TABLES) {
+            return appendSelectTablesRevisionContext(filledTemplate, context);
+        }
+
+        if (context.getPromptType() != PromptType.NL_2_SQL
+                || !Boolean.TRUE.equals(context.getIsRevision())) {
+            return filledTemplate;
+        }
+
+        return appendNl2SqlRevisionContext(filledTemplate, context);
+    }
+
+    private String appendNl2SqlRevisionContext(String filledTemplate, PromptContext context) {
         StringBuilder builder = new StringBuilder(filledTemplate);
         builder.append("\n\n")
                 .append("### 连续对话修正要求\n")
@@ -195,7 +206,7 @@ public class PromptBuilderImpl implements PromptBuilder {
 
         String formattedHistory = formatConversationHistory(context.getHistory());
         if (StringUtils.isNotBlank(formattedHistory)) {
-            builder.append("\n### 最近对话历史（不含上一版 SQL）\n")
+            builder.append("\n### 最近对话历史\n")
                     .append(formattedHistory)
                     .append("\n");
         }
@@ -205,6 +216,17 @@ public class PromptBuilderImpl implements PromptBuilder {
                 .append(truncate(context.getPreviousSql(), MAX_PREVIOUS_SQL_LENGTH))
                 .append("\n```\n");
 
+        return builder.toString();
+    }
+
+    private String appendSelectTablesRevisionContext(String filledTemplate, PromptContext context) {
+        StringBuilder builder = new StringBuilder(filledTemplate);
+        builder.append("\n\n")
+                .append("### 上一版 SQL\n")
+                .append("```sql\n")
+                .append(truncate(context.getPreviousSql(), MAX_PREVIOUS_SQL_LENGTH))
+                .append("\n```\n")
+                .append("上一版 SQL 仅用于理解用户当前修正意图和选择相关表，不要直接生成 SQL。\n");
         return builder.toString();
     }
 

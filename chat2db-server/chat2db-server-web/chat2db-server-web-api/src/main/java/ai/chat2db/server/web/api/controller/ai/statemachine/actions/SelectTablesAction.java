@@ -19,6 +19,7 @@ import ai.chat2db.server.domain.api.service.DatabaseService;
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptBuilder;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptContext;
+import ai.chat2db.server.web.api.controller.ai.prompt.PreviousSqlResolver;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatState;
@@ -41,6 +42,9 @@ public class SelectTablesAction extends BaseChatAction {
 
     @Autowired
     private AiChatConfig aiChatConfig;
+
+    @Autowired
+    private PreviousSqlResolver previousSqlResolver;
 
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
@@ -106,6 +110,7 @@ public class SelectTablesAction extends BaseChatAction {
                 .promptType(PromptType.SELECT_TABLES)
                 .message(ctx.getRequest().getMessage())
                 .schemaDdl(schemaDdl)
+                .previousSql(previousSqlResolver.resolve(ctx.getRequest()))
                 .build();
 
         return promptBuilder.context(promptContext).build();

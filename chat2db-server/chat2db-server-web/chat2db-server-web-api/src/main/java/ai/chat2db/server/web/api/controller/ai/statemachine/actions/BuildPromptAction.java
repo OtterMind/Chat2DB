@@ -18,6 +18,7 @@ import com.alibaba.fastjson2.JSONObject;
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptBuilder;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptContext;
+import ai.chat2db.server.web.api.controller.ai.prompt.PreviousSqlResolver;
 import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
@@ -42,6 +43,9 @@ public class BuildPromptAction extends BaseChatAction {
 
     @Autowired
     private AiConversationService aiConversationService;
+
+    @Autowired
+    private PreviousSqlResolver previousSqlResolver;
 
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
@@ -71,9 +75,7 @@ public class BuildPromptAction extends BaseChatAction {
                 if (StringUtils.isBlank(history) && StringUtils.isNotBlank(request.getConversationId())) {
                     history = loadHistoryFromDb(request.getConversationId());
                 }
-                if (StringUtils.isBlank(previousSql) && StringUtils.isNotBlank(request.getConversationId())) {
-                    previousSql = loadPreviousSqlFromDb(request.getConversationId());
-                }
+                previousSql = previousSqlResolver.resolve(request);
             }
 
             PromptContext promptContext = PromptContext.builder()
@@ -133,24 +135,6 @@ public class BuildPromptAction extends BaseChatAction {
             log.warn("[BuildPromptAction] Failed to load history for {}: {}", conversationId, e.getMessage());
             return null;
         }
-    }
-
-    private String loadPreviousSqlFromDb(String conversationId) {
-        try {
-            List<AiMessage> recent = aiConversationService.listRecentMessages(conversationId, 50);
-            if (recent == null) {
-                return null;
-            }
-            for (int i = recent.size() - 1; i >= 0; i--) {
-                AiMessage msg = recent.get(i);
-                if ("assistant".equals(msg.getRole()) && StringUtils.isNotBlank(msg.getSqlExtracted())) {
-                    return msg.getSqlExtracted();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("[BuildPromptAction] Failed to load previous sql for {}: {}", conversationId, e.getMessage());
-        }
-        return null;
     }
 
     private PromptType determinePromptType(ChatQueryRequest request) {
