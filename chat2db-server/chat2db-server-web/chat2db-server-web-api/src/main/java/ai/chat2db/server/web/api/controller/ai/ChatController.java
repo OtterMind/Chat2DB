@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import ai.chat2db.server.domain.api.service.AiConversationService;
 import ai.chat2db.server.domain.repository.Dbutils;
 import ai.chat2db.server.tools.common.exception.ParamBusinessException;
 import ai.chat2db.server.tools.common.model.Context;
@@ -37,6 +38,7 @@ import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatState;
+import ai.chat2db.server.web.api.controller.ai.task.AiConversationTitleTask;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectInfo;
 import cn.hutool.core.util.StrUtil;
@@ -54,6 +56,12 @@ public class ChatController {
 
     @Autowired
     private AiChatConfig aiChatConfig;
+
+    @Autowired
+    private AiConversationService aiConversationService;
+
+    @Autowired
+    private AiConversationTitleTask aiConversationTitleTask;
 
     private static final Long CHAT_TIMEOUT = Duration.ofMinutes(50).toMillis();
 
@@ -101,6 +109,8 @@ public class ChatController {
         LoginUser loginUser = ContextUtils.getLoginUser();
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo().copy();
 
+        boolean firstTurn = isFirstTurnOfConversation(queryRequest, loginUser);
+
         ChatContext ctx = ChatContext.builder()
                 .uid(uid)
                 .request(queryRequest)
@@ -109,6 +119,8 @@ public class ChatController {
                 .cancelled(false)
                 .loginUser(loginUser)
                 .connectInfo(connectInfo)
+                .userMessageId(queryRequest.getUserMessageId())
+                .firstTurnOfConversation(firstTurn)
                 .build();
 
         setupSseCallbacks(sseEmitter, uid, ctx);
@@ -132,7 +144,29 @@ public class ChatController {
         stateMachine.sendEvent(
                 Mono.just(MessageBuilder.withPayload(initialEvent).build())
         ).subscribe();
+
+        if (firstTurn && promptType == PromptType.NL_2_SQL) {
+            try {
+                aiConversationTitleTask.generateTitleAsync(uid, queryRequest.getMessage());
+            } catch (Exception e) {
+                log.warn("[ChatController] Failed to dispatch title task for {}: {}", uid, e.getMessage());
+            }
+        }
+
         return sseEmitter;
+    }
+
+    private boolean isFirstTurnOfConversation(ChatQueryRequest request, LoginUser loginUser) {
+        if (request == null || StrUtil.isBlank(request.getConversationId())) {
+            return false;
+        }
+        try {
+            return aiConversationService.findByConversationId(request.getConversationId()) == null;
+        } catch (Exception e) {
+            log.warn("[ChatController] Check first turn failed for {}: {}",
+                    request.getConversationId(), e.getMessage());
+            return false;
+        }
     }
 
     @DeleteMapping("/chat/{uid}")

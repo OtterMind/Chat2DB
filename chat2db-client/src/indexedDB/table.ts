@@ -1,11 +1,10 @@
 
 export interface IWorkspaceConsoleDDL {
-  consoleId: string; // 控制台的id 唯一
-  ddl: string; // 数据源ddl
-  userId?: string; // 用户的唯一id
+  consoleId: string;
+  ddl: string;
+  userId?: string;
 }
 
-// 工作区console表
 export const workspaceConsoleDDL = {
   name: 'workspaceConsoleDDL',
   primaryKey: {
@@ -41,8 +40,37 @@ export const workspaceConsoleDDL = {
   ],
 }
 
+export const aiChatStore = {
+  name: 'aiChatStore',
+  primaryKey: {
+    keyPath: 'id',
+    autoIncrement: false,
+  },
+  column: [
+    {
+      name: 'id',
+      isIndex: true,
+      keyPath: 'id',
+      options: {
+        unique: true,
+      },
+    },
+    {
+      name: 'state',
+      isIndex: false,
+      keyPath: 'state',
+      options: {
+        unique: false,
+      },
+    },
+  ],
+}
+
 export const tableList = [
   {
     tableDetails: workspaceConsoleDDL,
-  }
+  },
+  {
+    tableDetails: aiChatStore,
+  },
 ]

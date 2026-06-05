@@ -1,5 +1,9 @@
 package ai.chat2db.server.web.api.controller.ai.statemachine.actions;
 
+import java.util.List;
+
+import ai.chat2db.server.domain.api.model.AiMessage;
+import ai.chat2db.server.domain.api.service.AiConversationService;
 import ai.chat2db.server.domain.api.service.DataSourceService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,11 +11,14 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.statemachine.StateContext;
 import org.springframework.stereotype.Component;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptBuilder;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptContext;
 import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
-import ai.chat2db.server.web.api.controller.ai.service.AiConversationCache;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatState;
@@ -25,6 +32,8 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class BuildPromptAction extends BaseChatAction {
 
+    private static final int MAX_HISTORY_MESSAGES = 6;
+
     @Autowired
     private PromptBuilder promptBuilder;
 
@@ -32,7 +41,7 @@ public class BuildPromptAction extends BaseChatAction {
     private DataSourceService dataSourceService;
 
     @Autowired
-    private AiConversationCache aiConversationCache;
+    private AiConversationService aiConversationService;
 
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
@@ -55,16 +64,15 @@ public class BuildPromptAction extends BaseChatAction {
                     chatContext.getUid(), promptType, request.getIsRevision(),
                     StringUtils.length(request.getMessage()));
 
-            // 解析 ext 中的 sourceFields（用于字段映射）
             String sourceFields = extractSourceFields(request.getExt());
             String history = request.getHistory();
             String previousSql = request.getPreviousSql();
             if (PromptType.NL_2_SQL == promptType && Boolean.TRUE.equals(request.getIsRevision())) {
-                if (StringUtils.isBlank(history)) {
-                    history = aiConversationCache.getHistoryJson(request.getConversationId());
+                if (StringUtils.isBlank(history) && StringUtils.isNotBlank(request.getConversationId())) {
+                    history = loadHistoryFromDb(request.getConversationId());
                 }
-                if (StringUtils.isBlank(previousSql)) {
-                    previousSql = aiConversationCache.getPreviousSql(request.getConversationId());
+                if (StringUtils.isBlank(previousSql) && StringUtils.isNotBlank(request.getConversationId())) {
+                    previousSql = loadPreviousSqlFromDb(request.getConversationId());
                 }
             }
 
@@ -102,6 +110,44 @@ public class BuildPromptAction extends BaseChatAction {
         } finally {
             removeContext();
         }
+    }
+
+    private String loadHistoryFromDb(String conversationId) {
+        try {
+            List<AiMessage> recent = aiConversationService.listRecentMessages(conversationId, MAX_HISTORY_MESSAGES);
+            if (recent == null || recent.isEmpty()) {
+                return null;
+            }
+            JSONArray array = new JSONArray();
+            for (AiMessage msg : recent) {
+                JSONObject obj = new JSONObject();
+                obj.put("role", msg.getRole());
+                obj.put("content", msg.getContent());
+                array.add(obj);
+            }
+            return JSON.toJSONString(array);
+        } catch (Exception e) {
+            log.warn("[BuildPromptAction] Failed to load history for {}: {}", conversationId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String loadPreviousSqlFromDb(String conversationId) {
+        try {
+            List<AiMessage> recent = aiConversationService.listRecentMessages(conversationId, 50);
+            if (recent == null) {
+                return null;
+            }
+            for (int i = recent.size() - 1; i >= 0; i--) {
+                AiMessage msg = recent.get(i);
+                if ("assistant".equals(msg.getRole()) && StringUtils.isNotBlank(msg.getSqlExtracted())) {
+                    return msg.getSqlExtracted();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BuildPromptAction] Failed to load previous sql for {}: {}", conversationId, e.getMessage());
+        }
+        return null;
     }
 
     private PromptType determinePromptType(ChatQueryRequest request) {

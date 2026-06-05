@@ -2,8 +2,12 @@ package ai.chat2db.server.web.api.controller.ai.statemachine.actions;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import ai.chat2db.server.domain.api.service.AiConversationService;
+import ai.chat2db.server.tools.common.model.LoginUser;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -16,8 +20,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.alibaba.fastjson2.JSONObject;
 
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
-import ai.chat2db.server.web.api.controller.ai.service.AiConversationCache;
 import ai.chat2db.server.web.api.controller.ai.prompt.PromptValidator;
+import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatState;
@@ -33,11 +37,16 @@ import reactor.core.scheduler.Schedulers;
 @Slf4j
 public class StreamAction extends BaseChatAction {
 
+    private static final Pattern SQL_CODE_BLOCK = Pattern.compile("```sql\\s*([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    private static final Pattern GENERIC_CODE_BLOCK = Pattern.compile("```\\s*([\\s\\S]*?)```");
+    private static final Pattern SQL_KEYWORDS = Pattern.compile("\\b(select|insert|update|delete|create|alter|drop)\\b",
+            Pattern.CASE_INSENSITIVE);
+
     @Autowired
     private PromptValidator promptValidator;
 
     @Autowired
-    private AiConversationCache aiConversationCache;
+    private AiConversationService aiConversationService;
 
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
@@ -179,7 +188,7 @@ public class StreamAction extends BaseChatAction {
     private void handleStreamComplete(ChatContext ctx, StateContext<ChatState, ChatEvent> context) {
         log.info("[StreamAction] Stream completed for uid: {}", ctx.getUid());
         try {
-            cacheConversationTurn(ctx);
+            persistTurn(ctx);
             ctx.getSseEmitter().send(SseEmitter.event()
                     .id("[DONE]")
                     .data("[DONE]")
@@ -194,14 +203,58 @@ public class StreamAction extends BaseChatAction {
         );
     }
 
-    private void cacheConversationTurn(ChatContext ctx) {
-        if (ctx.getRequest() == null
-                || !PromptType.NL_2_SQL.getCode().equals(ctx.getRequest().getPromptType())) {
+    private void persistTurn(ChatContext ctx) {
+        ChatQueryRequest request = ctx.getRequest();
+        if (request == null) {
             return;
         }
-        aiConversationCache.appendTurn(
-                ctx.getRequest().getConversationId(),
-                ctx.getRequest().getMessage(),
-                ctx.getCurrentContent());
+        String conversationId = request.getConversationId();
+        String userContent = request.getMessage();
+        String assistantContent = ctx.getCurrentContent();
+        String thinking = ctx.getCurrentThinking();
+        if (conversationId == null || conversationId.isEmpty()
+                || userContent == null || userContent.isEmpty()
+                || assistantContent == null || assistantContent.isEmpty()) {
+            return;
+        }
+        Long userId = ctx.getLoginUser() != null ? ctx.getLoginUser().getId() : null;
+        String promptType = request.getPromptType();
+        String sqlExtracted = extractSql(assistantContent);
+        String userMessageId = ctx.getUserMessageId() != null ? ctx.getUserMessageId() : UUID.randomUUID().toString();
+        String assistantMessageId = UUID.randomUUID().toString();
+
+        try {
+            aiConversationService.appendMessageTurn(
+                    conversationId,
+                    userId,
+                    userMessageId,
+                    userContent,
+                    assistantMessageId,
+                    assistantContent,
+                    thinking,
+                    promptType,
+                    sqlExtracted
+            );
+        } catch (Exception e) {
+            log.error("[StreamAction] Failed to persist AI conversation turn for uid: {}", ctx.getUid(), e);
+        }
+    }
+
+    private String extractSql(String content) {
+        if (content == null) {
+            return null;
+        }
+        Matcher sqlMatcher = SQL_CODE_BLOCK.matcher(content);
+        if (sqlMatcher.find()) {
+            return sqlMatcher.group(1).trim();
+        }
+        Matcher codeMatcher = GENERIC_CODE_BLOCK.matcher(content);
+        if (codeMatcher.find()) {
+            String code = codeMatcher.group(1).trim();
+            if (SQL_KEYWORDS.matcher(code).find()) {
+                return code;
+            }
+        }
+        return null;
     }
 }

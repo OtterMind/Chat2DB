@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { v4 as uuidv4 } from 'uuid';
+import aiConversationService from '@/service/aiConversation';
+import { IAiConversation, IAiMessage } from '@/typings/aiConversation';
+import { createIndexedDbStorage } from '@/utils/indexedDbStorage';
 
 export type ChatStateType =
   | 'IDLE'
@@ -15,6 +20,9 @@ export interface IChatMessage {
   role: 'user' | 'assistant';
   content: string;
   thinking?: string;
+  promptType?: string;
+  sqlExtracted?: string | null;
+  sequenceNo?: number;
 }
 
 export interface AiChatSession {
@@ -27,6 +35,26 @@ export interface AiChatSession {
   schemaInfo?: string;
   explainResult?: { sql: string; plan: string[][]; formatted: string; success: boolean };
   error?: string;
+  dataSourceId?: number | null;
+  databaseName?: string | null;
+  schemaName?: string | null;
+  title?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface IConversationSummary {
+  conversationId: string;
+  title?: string | null;
+  dataSourceId?: number | null;
+  dataSourceName?: string | null;
+  databaseName?: string | null;
+  schemaName?: string | null;
+  messageCount: number;
+  lastMessagePreview?: string | null;
+  status: 'ACTIVE' | 'ARCHIVED' | 'DELETED';
+  gmtCreate?: string;
+  gmtModified?: string;
 }
 
 interface ILastRequest {
@@ -44,11 +72,15 @@ interface ILastRequest {
 }
 
 interface IAiChatStore {
-  sessions: Map<string, AiChatSession>;
+  sessions: Record<string, AiChatSession>;
   currentSessionId: string | null;
   lastRequest: ILastRequest | null;
+  conversationList: IConversationSummary[];
+  conversationListLoading: boolean;
+  conversationListHasMore: boolean;
+  conversationListPageNo: number;
 
-  createSession: (sessionId: string) => void;
+  createSession: (sessionId: string, initial?: Partial<AiChatSession>) => void;
   updateState: (sessionId: string, state: ChatStateType) => void;
   appendContent: (sessionId: string, content: string, thinking?: string) => void;
   addMessage: (sessionId: string, message: IChatMessage) => void;
@@ -59,132 +91,337 @@ interface IAiChatStore {
   setLastRequest: (req: ILastRequest) => void;
   clearSession: (sessionId: string) => void;
   resetCurrentContent: (sessionId: string) => void;
+  renameSession: (sessionId: string, title: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
+  switchToSession: (sessionId: string) => void;
+  startNewConversation: () => void;
+  loadConversationList: (reset?: boolean) => Promise<void>;
+  loadConversationDetail: (conversationId: string) => Promise<void>;
+  syncLocalSessionFromDetail: (conversationId: string, conversation: IAiConversation, messages: IAiMessage[]) => void;
 }
 
-export const useAiChatStore = create<IAiChatStore>((set, get) => ({
-  sessions: new Map(),
-  currentSessionId: null,
-  lastRequest: null,
+const generateTitleFromMessage = (message: string): string => {
+  if (!message) return '新对话';
+  const trimmed = message.trim().replace(/\s+/g, ' ');
+  return trimmed.length > 20 ? trimmed.substring(0, 20) + '...' : trimmed;
+};
 
-  createSession: (sessionId: string) => {
-    set((state) => {
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, {
-        sessionId,
-        state: 'IDLE',
-        messages: [],
-        currentContent: '',
-        currentThinking: '',
-      });
-      return { sessions: newSessions, currentSessionId: sessionId };
-    });
-  },
+const persistStorage = createJSONStorage(() => createIndexedDbStorage('aiChatStore', 'current'));
 
-  updateState: (sessionId: string, newState: ChatStateType) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, state: newState });
-      }
-      return { sessions };
-    });
-  },
+export const useAiChatStore = create<IAiChatStore>()(
+  persist(
+    (set, get) => ({
+      sessions: {},
+      currentSessionId: null,
+      lastRequest: null,
+      conversationList: [],
+      conversationListLoading: false,
+      conversationListHasMore: false,
+      conversationListPageNo: 0,
 
-  appendContent: (sessionId: string, content: string, thinking?: string) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, {
-          ...session,
-          currentContent: session.currentContent + (content || ''),
-          currentThinking: session.currentThinking + (thinking || ''),
+      createSession: (sessionId: string, initial?: Partial<AiChatSession>) => {
+        set((state) => {
+          const now = Date.now();
+          const newSession: AiChatSession = {
+            sessionId,
+            state: 'IDLE',
+            messages: [],
+            currentContent: '',
+            currentThinking: '',
+            createdAt: now,
+            updatedAt: now,
+            ...initial,
+          };
+          return {
+            sessions: { ...state.sessions, [sessionId]: newSession },
+            currentSessionId: sessionId,
+          };
         });
-      }
-      return { sessions };
-    });
-  },
+      },
 
-  addMessage: (sessionId: string, message: IChatMessage) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, {
-          ...session,
-          messages: [...session.messages, message],
+      updateState: (sessionId: string, newState: ChatStateType) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...session, state: newState, updatedAt: Date.now() },
+            },
+          };
         });
-      }
-      return { sessions };
-    });
-  },
+      },
 
-  setSelectedTables: (sessionId: string, tables: string[]) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, selectedTables: tables });
-      }
-      return { sessions };
-    });
-  },
+      appendContent: (sessionId: string, content: string, thinking?: string) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: {
+                ...session,
+                currentContent: session.currentContent + (content || ''),
+                currentThinking: session.currentThinking + (thinking || ''),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
 
-  setSchemaInfo: (sessionId: string, ddl: string) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, schemaInfo: ddl });
-      }
-      return { sessions };
-    });
-  },
+      addMessage: (sessionId: string, message: IChatMessage) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: {
+                ...session,
+                messages: [...session.messages, message],
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
 
-  setExplainResult: (sessionId: string, explain: AiChatSession['explainResult']) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, explainResult: explain });
-      }
-      return { sessions };
-    });
-  },
+      setSelectedTables: (sessionId: string, tables: string[]) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...session, selectedTables: tables, updatedAt: Date.now() },
+            },
+          };
+        });
+      },
 
-  setError: (sessionId: string, error: string) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, state: 'FAILED', error });
-      }
-      return { sessions };
-    });
-  },
+      setSchemaInfo: (sessionId: string, ddl: string) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...session, schemaInfo: ddl, updatedAt: Date.now() },
+            },
+          };
+        });
+      },
 
-  setLastRequest: (req: ILastRequest) => {
-    set({ lastRequest: req });
-  },
+      setExplainResult: (sessionId: string, explain: AiChatSession['explainResult']) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...session, explainResult: explain, updatedAt: Date.now() },
+            },
+          };
+        });
+      },
 
-  clearSession: (sessionId: string) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      sessions.delete(sessionId);
-      const newCurrentId = state.currentSessionId === sessionId ? null : state.currentSessionId;
-      return { sessions, currentSessionId: newCurrentId };
-    });
-  },
+      setError: (sessionId: string, error: string) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: { ...session, state: 'FAILED', error, updatedAt: Date.now() },
+            },
+          };
+        });
+      },
 
-  resetCurrentContent: (sessionId: string) => {
-    set((state) => {
-      const sessions = new Map(state.sessions);
-      const session = sessions.get(sessionId);
-      if (session) {
-        sessions.set(sessionId, { ...session, currentContent: '', currentThinking: '' });
-      }
-      return { sessions };
-    });
-  },
-}));
+      setLastRequest: (req: ILastRequest) => {
+        set({ lastRequest: req });
+      },
+
+      clearSession: (sessionId: string) => {
+        set((state) => {
+          const { [sessionId]: _omit, ...rest } = state.sessions;
+          void _omit;
+          return {
+            sessions: rest,
+            currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
+          };
+        });
+      },
+
+      resetCurrentContent: (sessionId: string) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (!session) {
+            return state;
+          }
+          return {
+            sessions: {
+              ...state.sessions,
+              [sessionId]: {
+                ...session,
+                currentContent: '',
+                currentThinking: '',
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
+
+      renameSession: async (sessionId: string, title: string) => {
+        set((state) => {
+          const session = state.sessions[sessionId];
+          if (session) {
+            return {
+              sessions: { ...state.sessions, [sessionId]: { ...session, title } },
+            };
+          }
+          return state;
+        });
+        try {
+          await aiConversationService.renameAiConversation({ conversationId: sessionId, title });
+        } catch (e) {
+          console.error('[AiChatStore] rename failed:', e);
+        }
+        set((state) => {
+          return {
+            conversationList: state.conversationList.map((item) =>
+              item.conversationId === sessionId ? { ...item, title } : item,
+            ),
+          };
+        });
+      },
+
+      deleteSession: async (sessionId: string) => {
+        const { [sessionId]: _omit, ...rest } = get().sessions;
+        void _omit;
+        set((state) => ({
+          sessions: rest,
+          currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
+          conversationList: state.conversationList.filter((item) => item.conversationId !== sessionId),
+        }));
+        try {
+          await aiConversationService.deleteAiConversation({ conversationId: sessionId });
+        } catch (e) {
+          console.error('[AiChatStore] delete failed:', e);
+        }
+      },
+
+      switchToSession: (sessionId: string) => {
+        set({ currentSessionId: sessionId });
+        const session = get().sessions[sessionId];
+        if (!session) {
+          get().loadConversationDetail(sessionId);
+        }
+      },
+
+      startNewConversation: () => {
+        set({ currentSessionId: null });
+      },
+
+      loadConversationList: async (reset = false) => {
+        const state = get();
+        if (state.conversationListLoading) {
+          return;
+        }
+        const nextPageNo = reset ? 1 : state.conversationListPageNo + 1;
+        set({ conversationListLoading: true });
+        try {
+          const res = await aiConversationService.queryAiConversations({
+            pageNo: nextPageNo,
+            pageSize: 20,
+          });
+          const list = res.data || [];
+          set((s) => ({
+            conversationList: reset ? list : [...s.conversationList, ...list],
+            conversationListPageNo: nextPageNo,
+            conversationListHasMore: list.length >= res.pageSize,
+            conversationListLoading: false,
+          }));
+        } catch (e) {
+          console.error('[AiChatStore] loadConversationList failed:', e);
+          set({ conversationListLoading: false });
+        }
+      },
+
+      loadConversationDetail: async (conversationId: string) => {
+        try {
+          const detail = await aiConversationService.getAiConversation({ conversationId });
+          get().syncLocalSessionFromDetail(conversationId, detail.conversation, detail.messages);
+        } catch (e) {
+          console.error('[AiChatStore] loadConversationDetail failed:', e);
+        }
+      },
+
+      syncLocalSessionFromDetail: (
+        conversationId: string,
+        conversation: IAiConversation,
+        messages: IAiMessage[],
+      ) => {
+        set((state) => {
+          const localMessages: IChatMessage[] = messages.map((m) => ({
+            id: m.messageId,
+            role: m.role,
+            content: m.content,
+            thinking: m.thinking || undefined,
+            sequenceNo: m.sequenceNo,
+            sqlExtracted: undefined,
+          }));
+          const existing = state.sessions[conversationId];
+          const now = Date.now();
+          const session: AiChatSession = {
+            sessionId: conversationId,
+            state: 'COMPLETED',
+            messages: localMessages,
+            currentContent: '',
+            currentThinking: '',
+            title: conversation.title,
+            dataSourceId: conversation.dataSourceId,
+            databaseName: conversation.databaseName,
+            schemaName: conversation.schemaName,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+          };
+          return {
+            sessions: { ...state.sessions, [conversationId]: session },
+            currentSessionId: state.currentSessionId ?? conversationId,
+          };
+        });
+      },
+    }),
+    {
+      name: 'ai-chat-store',
+      storage: persistStorage,
+      partialize: (state) => ({
+        sessions: state.sessions,
+        currentSessionId: state.currentSessionId,
+        conversationList: state.conversationList,
+        conversationListPageNo: state.conversationListPageNo,
+        conversationListHasMore: state.conversationListHasMore,
+      }),
+    },
+  ),
+);
+
+export const generateTitle = generateTitleFromMessage;
+export { uuidv4 };

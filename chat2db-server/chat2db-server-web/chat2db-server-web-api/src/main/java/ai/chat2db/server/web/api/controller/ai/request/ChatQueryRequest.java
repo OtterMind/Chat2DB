@@ -68,4 +68,9 @@ public class ChatQueryRequest extends DataSourceBaseRequest {
      * 大请求体临时缓存 ID，用于避免 SSE GET URL 过长
      */
     private String payloadId;
+
+    /**
+     * 用户消息的客户端 UUID(可选,用于落库)
+     */
+    private String userMessageId;
 }

@@ -11,6 +11,7 @@ import sqlService from '@/service/sql';
 import { IAiChatPromptType, ITableCommentResult, IBatchTableCommentResult, IFieldMappingResult, IDataExpressionResult } from '@/pages/main/workspace/store/common';
 import { useWorkspaceStore } from '@/pages/main/workspace/store';
 import { useAiChatStore, ChatStateType, IChatMessage } from '@/pages/main/workspace/store/aiChatStore';
+import ConversationSidebar from './ConversationSidebar';
 import styles from './index.less';
 
 const STATE_LABELS: Record<ChatStateType, { text: string; color: string }> = {
@@ -255,7 +256,7 @@ export default memo<IProps>((props) => {
     lastRequest,
   } = useAiChatStore();
 
-  const currentSession = currentSessionId ? sessions.get(currentSessionId) : null;
+  const currentSession = currentSessionId ? sessions[currentSessionId] : null;
 
   const { consoleList, activeConsoleId, currentConnectionDetails, pendingAiChat } = useWorkspaceStore((state) => ({
     consoleList: state.consoleList,
@@ -370,7 +371,7 @@ export default memo<IProps>((props) => {
 
       const storeState = useAiChatStore.getState();
       const existingSessionId = storeState.currentSessionId;
-      const existingSession = existingSessionId ? storeState.sessions.get(existingSessionId) : null;
+      const existingSession = existingSessionId ? storeState.sessions[existingSessionId] : null;
       const previousRequest = storeState.lastRequest;
       const isSameConnection =
         !previousRequest ||
@@ -488,7 +489,7 @@ export default memo<IProps>((props) => {
           updateState(sessionId, 'COMPLETED');
           const currentSessions = useAiChatStore.getState().sessions;
           console.log('[AiChat] sessions in onDone:', currentSessions);
-          const session = currentSessions.get(sessionId);
+          const session = currentSessions[sessionId];
           console.log('[AiChat] session in onDone:', session);
           if (session?.currentContent) {
             addMessage(sessionId, {
@@ -714,6 +715,17 @@ export default memo<IProps>((props) => {
 
   return (
     <div className={styles.aiChatContainer}>
+      <div className={styles.sidebarLayout}>
+        <ConversationSidebar />
+      </div>
+      <div className={styles.mainPanel}>
+      {currentSession && (
+        <div className={styles.chatHeader}>
+          <span className={styles.chatHeaderTitle}>
+            {currentSession.title || (currentSession.messages[0]?.content || '新对话').slice(0, 30)}
+          </span>
+        </div>
+      )}
       {stateInfo && (
         <div className={styles.statusBar}>
           <Tag color={stateInfo.color}>{stateInfo.text}</Tag>
@@ -845,6 +857,7 @@ export default memo<IProps>((props) => {
           style={{ width: '100%' }}
         />
       </Modal>
+      </div>
     </div>
   );
 });

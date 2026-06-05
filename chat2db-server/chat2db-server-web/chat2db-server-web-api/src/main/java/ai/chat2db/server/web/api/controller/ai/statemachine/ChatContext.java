@@ -26,7 +26,17 @@ public class ChatContext {
     private volatile boolean cancelled;
     private LoginUser loginUser;
     private ConnectInfo connectInfo;
-    
+
     private String currentContent;
     private String currentThinking;
+
+    /**
+     * 用户消息的客户端 UUID(落库用)
+     */
+    private String userMessageId;
+
+    /**
+     * 标记本轮是否为该会话的首条消息(用于触发标题生成)
+     */
+    private Boolean firstTurnOfConversation;
 }

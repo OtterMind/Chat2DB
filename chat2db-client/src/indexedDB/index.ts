@@ -26,7 +26,7 @@ export const createDB = (dbName: string, version: number) => {
   });
 };
 
-type TableType = 'workspaceConsoleDDL';
+type TableType = 'workspaceConsoleDDL' | 'aiChatStore';
 
 type DBType = 'chat2db';
 
