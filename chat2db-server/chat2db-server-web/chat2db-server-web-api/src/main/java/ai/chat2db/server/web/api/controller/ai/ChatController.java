@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import ai.chat2db.server.domain.api.model.AiConversation;
+import ai.chat2db.server.domain.api.param.ai.AiConversationCreateParam;
 import ai.chat2db.server.domain.api.service.AiConversationService;
 import ai.chat2db.server.domain.repository.Dbutils;
 import ai.chat2db.server.tools.common.exception.ParamBusinessException;
@@ -109,6 +111,7 @@ public class ChatController {
         LoginUser loginUser = ContextUtils.getLoginUser();
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo().copy();
 
+        ensureConversationExists(queryRequest, loginUser);
         boolean firstTurn = isFirstTurnOfConversation(queryRequest, loginUser);
 
         ChatContext ctx = ChatContext.builder()
@@ -161,11 +164,34 @@ public class ChatController {
             return false;
         }
         try {
-            return aiConversationService.findByConversationId(request.getConversationId()) == null;
+            AiConversation conversation = aiConversationService.findByConversationId(request.getConversationId());
+            return conversation == null || conversation.getMessageCount() == null || conversation.getMessageCount() == 0;
         } catch (Exception e) {
             log.warn("[ChatController] Check first turn failed for {}: {}",
                     request.getConversationId(), e.getMessage());
             return false;
+        }
+    }
+
+    private void ensureConversationExists(ChatQueryRequest request, LoginUser loginUser) {
+        if (request == null || StrUtil.isBlank(request.getConversationId())) {
+            return;
+        }
+        try {
+            if (aiConversationService.findByConversationId(request.getConversationId()) != null) {
+                return;
+            }
+            AiConversationCreateParam param = new AiConversationCreateParam();
+            param.setConversationId(request.getConversationId());
+            param.setUserId(loginUser == null ? null : loginUser.getId());
+            param.setDataSourceId(request.getDataSourceId());
+            param.setDatabaseName(request.getDatabaseName());
+            param.setSchemaName(request.getSchemaName());
+            param.setTitle("新对话");
+            aiConversationService.create(param);
+        } catch (Exception e) {
+            log.warn("[ChatController] Ensure conversation failed for {}: {}",
+                    request.getConversationId(), e.getMessage());
         }
     }
 

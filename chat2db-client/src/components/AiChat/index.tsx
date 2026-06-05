@@ -7,10 +7,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { formatParams } from '@/utils/url';
 import connectToEventSource, { cancelChatSession, createChatPayload } from '@/utils/eventSource';
 import CascaderDB from '@/components/CascaderDB';
+import aiConversationService from '@/service/aiConversation';
 import sqlService from '@/service/sql';
 import { IAiChatPromptType, ITableCommentResult, IBatchTableCommentResult, IFieldMappingResult, IDataExpressionResult } from '@/pages/main/workspace/store/common';
 import { useWorkspaceStore } from '@/pages/main/workspace/store';
-import { useAiChatStore, ChatStateType, IChatMessage } from '@/pages/main/workspace/store/aiChatStore';
+import { useAiChatStore, ChatStateType, IChatMessage, generateTitle } from '@/pages/main/workspace/store/aiChatStore';
 import ConversationSidebar from './ConversationSidebar';
 import styles from './index.less';
 
@@ -385,6 +386,13 @@ export default memo<IProps>((props) => {
         !!existingSession &&
         existingSession.messages.length > 0 &&
         !isActiveState(existingSession.state);
+      const canUseEmptyConversation =
+        promptType === 'NL_2_SQL' &&
+        isSameConnection &&
+        !!existingSessionId &&
+        !!existingSession &&
+        existingSession.messages.length === 0 &&
+        !isActiveState(existingSession.state);
       const previousSql = canReuseNl2SqlConversation ? getLastAssistantSql(existingSession.messages) : null;
       const shouldContinueConversation = canReuseNl2SqlConversation && !!previousSql;
       const isRevision = shouldContinueConversation;
@@ -393,11 +401,31 @@ export default memo<IProps>((props) => {
           ? existingSession.selectedTables
           : info.tableNames;
 
-      const sessionId = shouldContinueConversation ? existingSessionId : uuidv4();
+      const sessionId = shouldContinueConversation || canUseEmptyConversation ? existingSessionId! : uuidv4();
       console.log('[AiChat] Using sessionId:', sessionId, 'continue:', shouldContinueConversation);
       sessionIdRef.current = sessionId;
+      const sessionTitle = existingSession?.title || generateTitle(messageText);
+      if (!shouldContinueConversation && !canUseEmptyConversation) {
+        createSession(sessionId, {
+          dataSourceId: info.dataSourceId,
+          databaseName: info.databaseName,
+          schemaName: info.schemaName,
+          selectedTables: requestTableNames || undefined,
+          title: sessionTitle,
+        });
+      }
       if (!shouldContinueConversation) {
-        createSession(sessionId);
+        try {
+          await aiConversationService.createAiConversation({
+            conversationId: sessionId,
+            dataSourceId: info.dataSourceId,
+            databaseName: info.databaseName,
+            schemaName: info.schemaName,
+            title: sessionTitle,
+          });
+        } catch (error) {
+          console.warn('[AiChat] Create conversation before chat failed, backend will retry:', error);
+        }
       }
 
       const userMessage: IChatMessage = {
@@ -716,7 +744,13 @@ export default memo<IProps>((props) => {
   return (
     <div className={styles.aiChatContainer}>
       <div className={styles.sidebarLayout}>
-        <ConversationSidebar />
+        <ConversationSidebar
+          boundInfo={{
+            dataSourceId: boundInfo.dataSourceId,
+            databaseName: boundInfo.databaseName,
+            schemaName: boundInfo.schemaName,
+          }}
+        />
       </div>
       <div className={styles.mainPanel}>
       {currentSession && (

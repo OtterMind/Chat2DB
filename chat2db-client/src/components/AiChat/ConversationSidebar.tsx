@@ -100,7 +100,9 @@ const ConversationItem = memo<IConversationItemProps>(({ session, active, onClic
 });
 ConversationItem.displayName = 'ConversationItem';
 
-export default memo(() => {
+export default memo((props: {
+  boundInfo?: { dataSourceId?: number | null; databaseName?: string | null; schemaName?: string | null };
+}) => {
   const {
     conversationList,
     conversationListLoading,
@@ -119,7 +121,7 @@ export default memo(() => {
   }, [loadConversationList]);
 
   const handleNew = () => {
-    startNewConversation();
+    startNewConversation(props.boundInfo);
   };
 
   const handleDelete = (conversationId: string) => {

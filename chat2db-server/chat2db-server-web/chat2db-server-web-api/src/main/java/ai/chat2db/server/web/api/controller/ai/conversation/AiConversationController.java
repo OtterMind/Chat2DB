@@ -38,14 +38,25 @@ public class AiConversationController {
     private AiConversationWebConverter webConverter;
 
     @PostMapping("/create")
-    public DataResult<String> create(@RequestBody AiConversationCreateRequest request) {
+    public DataResult<AiConversationVO> create(@RequestBody AiConversationCreateRequest request) {
         AiConversationCreateParam param = webConverter.req2param(request);
         param.setUserId(ContextUtils.getUserId());
-        return DataResult.of(aiConversationService.create(param));
+        String conversationId = aiConversationService.create(param);
+        AiConversation conversation = aiConversationService.findByConversationId(conversationId);
+        return DataResult.of(webConverter.dto2vo(conversation));
     }
 
     @GetMapping("/list")
     public WebPageResult<AiConversationVO> list(AiConversationQueryRequest request) {
+        return queryPage(request);
+    }
+
+    @GetMapping("/page")
+    public WebPageResult<AiConversationVO> page(AiConversationQueryRequest request) {
+        return queryPage(request);
+    }
+
+    private WebPageResult<AiConversationVO> queryPage(AiConversationQueryRequest request) {
         AiConversationQueryParam param = webConverter.queryReq2param(request);
         param.setUserId(ContextUtils.getUserId());
         if (param.getPageNo() == null) {

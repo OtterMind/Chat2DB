@@ -195,7 +195,7 @@ public class PromptBuilderImpl implements PromptBuilder {
 
         String formattedHistory = formatConversationHistory(context.getHistory());
         if (StringUtils.isNotBlank(formattedHistory)) {
-            builder.append("\n### 最近对话历史\n")
+            builder.append("\n### 最近对话历史（不含上一版 SQL）\n")
                     .append(formattedHistory)
                     .append("\n");
         }

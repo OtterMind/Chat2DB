@@ -94,7 +94,11 @@ interface IAiChatStore {
   renameSession: (sessionId: string, title: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   switchToSession: (sessionId: string) => void;
-  startNewConversation: () => void;
+  startNewConversation: (boundInfo?: {
+    dataSourceId?: number | null;
+    databaseName?: string | null;
+    schemaName?: string | null;
+  }) => string;
   loadConversationList: (reset?: boolean) => Promise<void>;
   loadConversationDetail: (conversationId: string) => Promise<void>;
   syncLocalSessionFromDetail: (conversationId: string, conversation: IAiConversation, messages: IAiMessage[]) => void;
@@ -132,8 +136,26 @@ export const useAiChatStore = create<IAiChatStore>()(
             updatedAt: now,
             ...initial,
           };
+          const existsInList = state.conversationList.some((item) => item.conversationId === sessionId);
+          const conversationList = existsInList
+            ? state.conversationList
+            : [
+                {
+                  conversationId: sessionId,
+                  title: newSession.title ?? '新对话',
+                  dataSourceId: newSession.dataSourceId ?? null,
+                  dataSourceName: null,
+                  databaseName: newSession.databaseName ?? null,
+                  schemaName: newSession.schemaName ?? null,
+                  messageCount: newSession.messages.length,
+                  lastMessagePreview: null,
+                  status: 'ACTIVE' as const,
+                },
+                ...state.conversationList,
+              ];
           return {
             sessions: { ...state.sessions, [sessionId]: newSession },
+            conversationList,
             currentSessionId: sessionId,
           };
         });
@@ -189,6 +211,15 @@ export const useAiChatStore = create<IAiChatStore>()(
                 updatedAt: Date.now(),
               },
             },
+            conversationList: state.conversationList.map((item) =>
+              item.conversationId === sessionId
+                ? {
+                    ...item,
+                    messageCount: item.messageCount + 1,
+                    lastMessagePreview: message.content,
+                  }
+                : item,
+            ),
           };
         });
       },
@@ -335,8 +366,54 @@ export const useAiChatStore = create<IAiChatStore>()(
         }
       },
 
-      startNewConversation: () => {
-        set({ currentSessionId: null });
+      startNewConversation: (boundInfo) => {
+        const newSessionId = uuidv4();
+        get().createSession(newSessionId, {
+          dataSourceId: boundInfo?.dataSourceId ?? null,
+          databaseName: boundInfo?.databaseName ?? null,
+          schemaName: boundInfo?.schemaName ?? null,
+          title: '新对话',
+        });
+        aiConversationService
+          .createAiConversation({
+            conversationId: newSessionId,
+            dataSourceId: boundInfo?.dataSourceId ?? undefined,
+            databaseName: boundInfo?.databaseName ?? undefined,
+            schemaName: boundInfo?.schemaName ?? undefined,
+            title: '新对话',
+          })
+          .then((created) => {
+            if (created) {
+              set((s) => {
+                const exists = s.conversationList.some(
+                  (item) => item.conversationId === created.conversationId,
+                );
+                if (exists) {
+                  return s;
+                }
+                const summary: IConversationSummary = {
+                  conversationId: created.conversationId,
+                  title: created.title ?? '新对话',
+                  dataSourceId: created.dataSourceId ?? null,
+                  dataSourceName: created.dataSourceName ?? null,
+                  databaseName: created.databaseName ?? null,
+                  schemaName: created.schemaName ?? null,
+                  messageCount: created.messageCount ?? 0,
+                  lastMessagePreview: created.lastMessagePreview ?? null,
+                  status: created.status,
+                  gmtCreate: created.gmtCreate,
+                  gmtModified: created.gmtModified,
+                };
+                return {
+                  conversationList: [summary, ...s.conversationList],
+                };
+              });
+            }
+          })
+          .catch((e) => {
+            console.warn('[AiChatStore] startNewConversation create failed (offline?):', e);
+          });
+        return newSessionId;
       },
 
       loadConversationList: async (reset = false) => {

@@ -35,26 +35,40 @@ public class AiConversationTitleTask {
         if (StringUtils.isBlank(conversationId) || StringUtils.isBlank(firstUserMessage)) {
             return;
         }
-        String title;
+
+        String title = generateTitle(conversationId, firstUserMessage);
+        persistTitle(conversationId, title);
+    }
+
+    /**
+     * 调用 AI 生成标题，失败或结果为空时降级为截取首条消息
+     */
+    private String generateTitle(String conversationId, String firstUserMessage) {
         try {
-            title = aiChatConfig.createChatClient(PromptType.TITLE_GENERATION)
-                .prompt()
-                .user(firstUserMessage)
-                .call()
-                .content();
+            String title = aiChatConfig.createChatClient(PromptType.TITLE_GENERATION)
+                    .prompt()
+                    .user(firstUserMessage)
+                    .call()
+                    .content();
             title = normalize(title);
             if (StringUtils.isBlank(title)) {
                 title = fallbackTitle(firstUserMessage);
             }
             log.info("[AiConversationTitleTask] Generated title for {}: {}", conversationId, title);
+            return title;
         } catch (Exception e) {
             log.warn("[AiConversationTitleTask] Failed to generate AI title for {}: {}",
-                conversationId, e.getMessage());
-            title = fallbackTitle(firstUserMessage);
+                    conversationId, e.getMessage());
+            return fallbackTitle(firstUserMessage);
         }
+    }
 
-        Dbutils.setSession();
+    /**
+     * 持久化标题到数据库
+     */
+    private void persistTitle(String conversationId, String title) {
         try {
+            Dbutils.setSession();
             aiConversationService.updateTitle(conversationId, title);
         } catch (Exception e) {
             log.error("[AiConversationTitleTask] Failed to persist title for {}", conversationId, e);
@@ -84,7 +98,7 @@ public class AiConversationTitleTask {
         }
         String compact = message.replaceAll("\\s+", " ").trim();
         return compact.length() > FALLBACK_TITLE_LENGTH
-            ? compact.substring(0, FALLBACK_TITLE_LENGTH) + "..."
-            : compact;
+                ? compact.substring(0, FALLBACK_TITLE_LENGTH) + "..."
+                : compact;
     }
 }

@@ -8,6 +8,7 @@ import lombok.Data;
 @Data
 public class AiConversationCreateParam {
 
+    private String conversationId;
     private Long dataSourceId;
     private String databaseName;
     private String schemaName;

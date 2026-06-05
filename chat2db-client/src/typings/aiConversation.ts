@@ -27,9 +27,11 @@ export interface IAiConversationDetail {
 }
 
 export interface IAiConversationCreateRequest {
+  conversationId?: string | null;
   dataSourceId?: number | null;
   databaseName?: string | null;
   schemaName?: string | null;
+  title?: string | null;
   initialMessage?: string | null;
 }
 

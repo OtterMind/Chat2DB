@@ -62,10 +62,19 @@ public class AiConversationServiceImpl implements AiConversationService {
     @Override
     public String create(AiConversationCreateParam param) {
         Long userId = param.getUserId() != null ? param.getUserId() : ContextUtils.getUserId();
+        if (StringUtils.isNotBlank(param.getConversationId())) {
+            AiConversation existing = findByConversationId(param.getConversationId());
+            if (existing != null) {
+                PermissionUtils.checkOperationPermission(existing.getUserId());
+                return existing.getConversationId();
+            }
+        }
         enforceQuota(userId);
 
         AiConversationDO conversationDO = converter.createParam2do(param);
-        String conversationId = UUID.randomUUID().toString();
+        String conversationId = StringUtils.isNotBlank(param.getConversationId())
+            ? param.getConversationId()
+            : UUID.randomUUID().toString();
         conversationDO.setConversationId(conversationId);
         conversationDO.setUserId(userId);
         conversationDO.setStatus(STATUS_ACTIVE);

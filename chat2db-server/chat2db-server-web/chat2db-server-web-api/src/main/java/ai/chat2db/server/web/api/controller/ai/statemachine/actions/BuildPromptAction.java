@@ -120,6 +120,9 @@ public class BuildPromptAction extends BaseChatAction {
             }
             JSONArray array = new JSONArray();
             for (AiMessage msg : recent) {
+                if ("assistant".equals(msg.getRole())) {
+                    continue;
+                }
                 JSONObject obj = new JSONObject();
                 obj.put("role", msg.getRole());
                 obj.put("content", msg.getContent());
