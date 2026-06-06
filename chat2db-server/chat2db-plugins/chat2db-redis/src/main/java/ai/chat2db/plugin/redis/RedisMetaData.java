@@ -94,7 +94,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             RedisAsyncCommands<String, String> commands = context.connection().async();
             selectDatabase(commands, databaseName).join();
             String pattern = StringUtils.isBlank(searchKey) ? null : "*" + searchKey + "*";
-            scanKeyInfo(commands, pattern, count <= 0 ? SCAN_COUNT : count,
+            scanKeyInfo(commands, pattern, count < 0 ? Long.MAX_VALUE : count == 0 ? SCAN_COUNT : count,
                     batchSize <= 0 ? 200 : batchSize, batchConsumer);
         }
     }
@@ -106,6 +106,26 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             RedisCommands<String, String> commands = context.connection().sync();
             selectDatabase(commands, databaseName);
             return buildFullKeyInfo(commands, keyName);
+        }
+    }
+
+    @Override
+    public void createKey(String databaseName, String keyName, String keyType, Object value, Long ttl) {
+        try (RedisConnectionProvider.RedisConnectionContext context =
+                     RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
+            RedisCommands<String, String> commands = context.connection().sync();
+            selectDatabase(commands, databaseName);
+            if (StringUtils.isBlank(keyName)) {
+                throw new IllegalArgumentException("Redis key 不能为空");
+            }
+            if (commands.exists(keyName) > 0) {
+                throw new IllegalArgumentException("Redis key 已存在: " + keyName);
+            }
+            writeValue(commands, keyName, keyType, value);
+            if (commands.exists(keyName) == 0) {
+                throw new IllegalArgumentException("Redis key value 不能为空");
+            }
+            applyTtl(commands, keyName, ttl);
         }
     }
 
@@ -123,6 +143,18 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             commands.del(targetKey);
             writeValue(commands, targetKey, keyType, value);
             applyTtl(commands, targetKey, ttl);
+        }
+    }
+
+    @Override
+    public void deleteKey(String databaseName, String keyName) {
+        try (RedisConnectionProvider.RedisConnectionContext context =
+                     RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
+            RedisCommands<String, String> commands = context.connection().sync();
+            selectDatabase(commands, databaseName);
+            if (StringUtils.isNotBlank(keyName)) {
+                commands.del(keyName);
+            }
         }
     }
 
@@ -200,17 +232,6 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         if (!batch.isEmpty()) {
             batchConsumer.accept(resolveBatch(batch));
         }
-    }
-
-    private RedisKeyInfo buildKeyInfo(RedisCommands<String, String> commands, String key) {
-        String type = getType(commands, key);
-        return RedisKeyInfo.builder()
-                .name(key)
-                .type(type)
-                .value(previewValue(commands, key, type))
-                .ttl(getTtl(commands, key))
-                .size(getSize(commands, key))
-                .build();
     }
 
     private RedisKeyInfo buildFullKeyInfo(RedisCommands<String, String> commands, String key) {

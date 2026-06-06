@@ -29,6 +29,37 @@
   min-height: 0;
 }
 
+.bottomBar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+}
+
+.bottomActions,
+.bottomMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottomActions {
+  button {
+    min-width: 28px;
+    padding: 0 6px;
+    font-size: 20px;
+    line-height: 1;
+  }
+}
+
+.bottomMeta {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
 .selectedRow {
   :global {
     td {
@@ -113,6 +144,10 @@
 }
 
 .ttlInput {
+  width: 160px;
+}
+
+.typeSelect {
   width: 160px;
 }
 

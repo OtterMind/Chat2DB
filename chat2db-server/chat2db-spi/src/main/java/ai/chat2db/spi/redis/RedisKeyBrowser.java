@@ -10,5 +10,9 @@ public interface RedisKeyBrowser {
 
     RedisKeyInfo queryKey(String databaseName, String keyName);
 
+    void createKey(String databaseName, String keyName, String keyType, Object value, Long ttl);
+
     void updateKey(String databaseName, String originalKey, String updateKey, String keyType, Object value, Long ttl);
+
+    void deleteKey(String databaseName, String keyName);
 }

@@ -33,6 +33,21 @@ export interface IRedisKeyUpdateParams {
   updateTtl?: number;
 }
 
+export interface IRedisKeyCreateParams {
+  dataSourceId: number;
+  databaseName?: string;
+  name: string;
+  keyType: string;
+  value: any;
+  ttl?: number;
+}
+
+export interface IRedisKeyDeleteParams {
+  dataSourceId: number;
+  databaseName?: string;
+  keyName: string;
+}
+
 export interface IRedisMonitorStreamOptions {
   dataSourceId: number;
   databaseName?: string;
@@ -60,6 +75,14 @@ const queryKey = createRequest<IRedisKeyQueryParams, IRedisKeyItem>('/api/redis/
 });
 
 const updateKey = createRequest<IRedisKeyUpdateParams, void>('/api/redis/key/update', {
+  method: 'post',
+});
+
+const createKey = createRequest<IRedisKeyCreateParams, void>('/api/redis/key/create', {
+  method: 'post',
+});
+
+const deleteKey = createRequest<IRedisKeyDeleteParams, void>('/api/redis/key/delete', {
   method: 'post',
 });
 
@@ -152,6 +175,8 @@ const streamKeyList = (options: IRedisKeyStreamOptions) => {
 };
 
 export default {
+  createKey,
+  deleteKey,
   getKeyList,
   queryKey,
   streamKeyList,

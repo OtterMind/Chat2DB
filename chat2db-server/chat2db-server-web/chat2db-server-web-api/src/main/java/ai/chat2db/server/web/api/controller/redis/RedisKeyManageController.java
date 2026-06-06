@@ -18,7 +18,6 @@ import ai.chat2db.spi.sql.ConnectInfo;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -111,7 +110,9 @@ public class RedisKeyManageController {
      */
     @PostMapping("/create")
     public ActionResult create(@RequestBody KeyCreateRequest request) {
-        return null;
+        getRedisKeyBrowser().createKey(request.getDatabaseName(), request.getName(), request.getKeyType(),
+                request.getValue(), request.getTtl());
+        return ActionResult.isSuccess();
     }
 
     /**
@@ -136,9 +137,10 @@ public class RedisKeyManageController {
      * @param request
      * @return
      */
-    @DeleteMapping("/delete")
+    @RequestMapping(value = "/delete", method = {RequestMethod.POST, RequestMethod.DELETE})
     public ActionResult delete(@RequestBody KeyDeleteRequest request) {
-        return null;
+        getRedisKeyBrowser().deleteKey(request.getDatabaseName(), request.getKeyName());
+        return ActionResult.isSuccess();
     }
 
     private RedisKeyBrowser getRedisKeyBrowser() {

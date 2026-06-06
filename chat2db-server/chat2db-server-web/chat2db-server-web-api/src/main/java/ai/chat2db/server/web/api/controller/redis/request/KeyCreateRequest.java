@@ -21,6 +21,12 @@ public class KeyCreateRequest extends DataSourceBaseRequest {
     private String name;
 
     /**
+     * key类型
+     */
+    @NotNull
+    private String keyType;
+
+    /**
      * key值
      */
     private Object value;

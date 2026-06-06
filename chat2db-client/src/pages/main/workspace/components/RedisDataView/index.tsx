@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Empty, Input, InputNumber, Table, Tag, Tooltip, message } from 'antd';
+import { Button, Empty, Input, InputNumber, Modal, Select, Table, Tag, Tooltip, message } from 'antd';
 import {
   CloseOutlined,
   DeleteOutlined,
@@ -7,6 +7,7 @@ import {
   ReloadOutlined,
   SaveOutlined,
   SearchOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { v4 as uuid } from 'uuid';
@@ -33,6 +34,7 @@ interface IRedisKeyRow extends IRedisKeyItem {
 const DEFAULT_LIMIT = 5000;
 const STREAM_BATCH_SIZE = 200;
 const NO_TTL = -1;
+const KEY_TYPES = ['string', 'hash', 'list', 'set', 'zset'];
 
 interface IHashFieldRow {
   id: string;
@@ -50,10 +52,13 @@ const RedisDataView = memo((props: IProps) => {
   const [selectedKey, setSelectedKey] = useState('');
   const [detail, setDetail] = useState<IRedisKeyItem | null>(null);
   const [editorKey, setEditorKey] = useState('');
+  const [editorType, setEditorType] = useState('string');
   const [editorTtl, setEditorTtl] = useState<number | null>(NO_TTL);
   const [textValue, setTextValue] = useState('');
   const [hashFields, setHashFields] = useState<IHashFieldRow[]>([]);
   const [lastRefreshTime, setLastRefreshTime] = useState<string>('');
+  const [keyLimit, setKeyLimit] = useState(DEFAULT_LIMIT);
+  const [creating, setCreating] = useState(false);
   const closeStreamRef = useRef<(() => void) | null>(null);
   const streamIdRef = useRef('');
   const detailRequestRef = useRef('');
@@ -63,6 +68,7 @@ const RedisDataView = memo((props: IProps) => {
     const value = keyDetail.value;
     const ttl = keyDetail.ttl === undefined || keyDetail.ttl === null ? NO_TTL : keyDetail.ttl;
     setEditorKey(keyDetail.name);
+    setEditorType(type || 'string');
     setEditorTtl(ttl);
     if (type === 'hash' && value && typeof value === 'object' && !Array.isArray(value)) {
       setHashFields(
@@ -83,7 +89,7 @@ const RedisDataView = memo((props: IProps) => {
     setTextValue(value === undefined || value === null ? '' : String(value));
   };
 
-  const loadData = (keyword = searchKey) => {
+  const loadData = (keyword = searchKey, count = keyLimit) => {
     if (!uniqueData?.dataSourceId) {
       return;
     }
@@ -97,7 +103,7 @@ const RedisDataView = memo((props: IProps) => {
       dataSourceId: uniqueData.dataSourceId,
       databaseName: uniqueData.databaseName,
       searchKey: keyword,
-      count: DEFAULT_LIMIT,
+      count,
       batchSize: STREAM_BATCH_SIZE,
       onBatch: (items) => {
         if (streamIdRef.current !== streamId) {
@@ -131,6 +137,7 @@ const RedisDataView = memo((props: IProps) => {
     const requestId = uuid();
     detailRequestRef.current = requestId;
     setSelectedKey(keyName);
+    setCreating(false);
     setDetail(null);
     setDetailLoading(true);
     redisService
@@ -157,7 +164,7 @@ const RedisDataView = memo((props: IProps) => {
   };
 
   const saveKey = () => {
-    if (!detail || !uniqueData?.dataSourceId) {
+    if (!uniqueData?.dataSourceId || (!detail && !creating)) {
       return;
     }
     const nextKey = editorKey.trim();
@@ -165,23 +172,34 @@ const RedisDataView = memo((props: IProps) => {
       message.warning('键名不能为空');
       return;
     }
-    const type = normalizeType(detail.type);
+    const type = normalizeType(creating ? editorType : detail?.type);
     setSaving(true);
-    redisService
-      .updateKey({
-        dataSourceId: uniqueData.dataSourceId,
-        databaseName: uniqueData.databaseName,
-        originalKey: detail.name,
-        updateKey: nextKey,
-        keyType: type,
-        value: buildEditorValue(type, textValue, hashFields),
-        updateTtl: editorTtl ?? NO_TTL,
-      })
+    const value = buildEditorValue(type, textValue, hashFields);
+    const saveRequest = creating
+      ? redisService.createKey({
+          dataSourceId: uniqueData.dataSourceId,
+          databaseName: uniqueData.databaseName,
+          name: nextKey,
+          keyType: type,
+          value,
+          ttl: editorTtl ?? NO_TTL,
+        })
+      : redisService.updateKey({
+          dataSourceId: uniqueData.dataSourceId,
+          databaseName: uniqueData.databaseName,
+          originalKey: detail!.name,
+          updateKey: nextKey,
+          keyType: type,
+          value,
+          updateTtl: editorTtl ?? NO_TTL,
+        });
+    saveRequest
       .then(() => {
-        message.success('Redis key 已保存');
+        message.success(creating ? 'Redis key 已新增' : 'Redis key 已保存');
+        setCreating(false);
         setSelectedKey(nextKey);
         loadKeyDetail(nextKey);
-        loadData();
+        loadData(searchKey, keyLimit);
       })
       .catch((error) => {
         message.error(String(error || 'Redis key 保存失败'));
@@ -199,6 +217,64 @@ const RedisDataView = memo((props: IProps) => {
 
   const removeHashField = (id: string) => {
     setHashFields((current) => current.filter((item) => item.id !== id));
+  };
+
+  const openCreateKey = () => {
+    detailRequestRef.current = '';
+    setCreating(true);
+    setSelectedKey('');
+    setDetail({ name: '', type: 'string', value: '', ttl: NO_TTL });
+    setEditorKey('');
+    setEditorType('string');
+    setEditorTtl(NO_TTL);
+    setTextValue('');
+    setHashFields([{ id: uuid(), field: '', value: '' }]);
+  };
+
+  const deleteSelectedKey = () => {
+    const keyName = detail?.name || selectedKey;
+    if (!uniqueData?.dataSourceId || !keyName || creating) {
+      message.warning('请选择要删除的 key');
+      return;
+    }
+    Modal.confirm({
+      title: '删除 Redis key',
+      content: keyName,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: () =>
+        redisService
+          .deleteKey({
+            dataSourceId: uniqueData.dataSourceId,
+            databaseName: uniqueData.databaseName,
+            keyName,
+          })
+          .then(() => {
+            message.success('Redis key 已删除');
+            setSelectedKey('');
+            setDetail(null);
+            loadData(searchKey, keyLimit);
+          })
+          .catch((error) => {
+            message.error(String(error || 'Redis key 删除失败'));
+          }),
+    });
+  };
+
+  const refreshData = () => {
+    loadData(searchKey, keyLimit);
+  };
+
+  const getMoreData = () => {
+    const nextLimit = Math.max(data.length + DEFAULT_LIMIT, keyLimit + DEFAULT_LIMIT);
+    setKeyLimit(nextLimit);
+    loadData(searchKey, nextLimit);
+  };
+
+  const getAllData = () => {
+    setKeyLimit(-1);
+    loadData(searchKey, -1);
   };
 
   useEffect(() => {
@@ -308,9 +384,11 @@ const RedisDataView = memo((props: IProps) => {
           placeholder="键包含"
           value={searchKey}
           onChange={(event) => setSearchKey(event.target.value)}
-          onSearch={(value) => loadData(value)}
+          onSearch={(value) => {
+            setKeyLimit(DEFAULT_LIMIT);
+            loadData(value, DEFAULT_LIMIT);
+          }}
         />
-        <Button icon={<ReloadOutlined />} onClick={() => loadData()} />
         <div className={styles.meta}>
           {data.length} keys{lastRefreshTime ? ` · 上次刷新 ${lastRefreshTime}` : ''}
         </div>
@@ -325,7 +403,7 @@ const RedisDataView = memo((props: IProps) => {
           rowClassName={(record) => (record.name === selectedKey && !record.isGroup ? styles.selectedRow : '')}
           rowKey="rowKey"
           size="small"
-          scroll={{ y: detail || detailLoading ? 'calc(100vh - 500px)' : 'calc(100vh - 170px)' }}
+          scroll={{ y: detail || detailLoading ? 'calc(100vh - 532px)' : 'calc(100vh - 210px)' }}
           onRow={(record) => ({
             onClick: () => {
               if (!record.isGroup) {
@@ -335,11 +413,38 @@ const RedisDataView = memo((props: IProps) => {
           })}
         />
       </div>
+      <div className={styles.bottomBar}>
+        <div className={styles.bottomActions}>
+          <Tooltip title="添加 key">
+            <Button size="small" type="text" onClick={openCreateKey}>
+              +
+            </Button>
+          </Tooltip>
+          <Tooltip title="删除 key">
+            <Button disabled={!selectedKey || creating} size="small" type="text" onClick={deleteSelectedKey}>
+              -
+            </Button>
+          </Tooltip>
+        </div>
+        <div className={styles.bottomMeta}>
+          <span>上次刷新时间: {lastRefreshTime || '-'}</span>
+          <Button icon={<ReloadOutlined />} loading={loading} size="small" type="text" onClick={refreshData}>
+            刷新
+          </Button>
+          <Button loading={loading} size="small" type="text" onClick={getMoreData}>
+            获取更多
+          </Button>
+          <Button loading={loading} size="small" type="text" onClick={getAllData}>
+            获取全部
+          </Button>
+          <Button icon={<SettingOutlined />} size="small" type="text" />
+        </div>
+      </div>
       <div className={styles.editorPane}>
         {detail || detailLoading ? (
           <>
             <div className={styles.editorHeader}>
-              <span>编辑器</span>
+              <span>{creating ? '新增 Key' : '编辑器'}</span>
               <div className={styles.editorActions}>
                 <Button
                   icon={<CloseOutlined />}
@@ -347,6 +452,7 @@ const RedisDataView = memo((props: IProps) => {
                   onClick={() => {
                     setDetail(null);
                     setSelectedKey('');
+                    setCreating(false);
                   }}
                 />
                 <Button
@@ -355,7 +461,7 @@ const RedisDataView = memo((props: IProps) => {
                   size="small"
                   type="primary"
                   onClick={saveKey}
-                  disabled={!detail || !isEditableType(detail.type)}
+                  disabled={(!detail && !creating) || !isEditableType(creating ? editorType : detail?.type)}
                 >
                   应用
                 </Button>
@@ -368,7 +474,20 @@ const RedisDataView = memo((props: IProps) => {
               </div>
               <div className={styles.formRow}>
                 <span className={styles.label}>键类型:</span>
-                <Tag color={getTypeColor(detail?.type || '')}>{detail?.type || '-'}</Tag>
+                {creating ? (
+                  <Select
+                    className={styles.typeSelect}
+                    value={editorType}
+                    options={KEY_TYPES.map((type) => ({ label: type, value: type }))}
+                    onChange={(value) => {
+                      setEditorType(value);
+                      setTextValue('');
+                      setHashFields(value === 'hash' ? [{ id: uuid(), field: '', value: '' }] : []);
+                    }}
+                  />
+                ) : (
+                  <Tag color={getTypeColor(detail?.type || '')}>{detail?.type || '-'}</Tag>
+                )}
               </div>
               <div className={styles.formRow}>
                 <span className={styles.label}>值:</span>
@@ -399,7 +518,7 @@ const RedisDataView = memo((props: IProps) => {
   );
 
   function renderValueEditor() {
-    const type = normalizeType(detail?.type);
+    const type = normalizeType(creating ? editorType : detail?.type);
     if (detailLoading) {
       return <div className={styles.editorLoading}>加载中...</div>;
     }
