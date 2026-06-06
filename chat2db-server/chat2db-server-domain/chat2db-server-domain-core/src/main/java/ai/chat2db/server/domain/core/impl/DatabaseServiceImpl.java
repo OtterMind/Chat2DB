@@ -18,14 +18,7 @@ import ai.chat2db.server.domain.api.service.TableService;
 import ai.chat2db.server.domain.core.cache.CacheManage;
 import ai.chat2db.server.domain.core.cache.LuceneIndexManager;
 import ai.chat2db.server.domain.core.cache.LuceneIndexManagerFactory;
-import ai.chat2db.server.domain.repository.Dbutils;
-import ai.chat2db.server.domain.repository.entity.DataSourceDO;
-import ai.chat2db.server.domain.repository.mapper.DataSourceMapper;
 import ai.chat2db.server.tools.base.enums.DataSourceTypeEnum;
-import ai.chat2db.server.tools.base.wrapper.ServicePage;
-import ai.chat2db.server.tools.base.wrapper.result.ActionResult;
-import ai.chat2db.server.tools.base.wrapper.result.DataResult;
-import ai.chat2db.server.tools.base.wrapper.result.ListResult;
 import ai.chat2db.spi.MetaData;
 import ai.chat2db.spi.SqlBuilder;
 import ai.chat2db.spi.model.*;
@@ -165,6 +158,10 @@ public class DatabaseServiceImpl implements DatabaseService {
                 });
 
         return ms;
+    }
+
+    private boolean isRedis() {
+        return DataSourceTypeEnum.REDIS.getCode().equals(Chat2DBContext.getConnectInfo().getDbType());
     }
 
     @Override

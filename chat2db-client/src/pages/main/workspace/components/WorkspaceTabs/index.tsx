@@ -14,6 +14,7 @@ import SearchResult from '@/components/SearchResult';
 import DatabaseTableEditor from '@/blocks/DatabaseTableEditor';
 import SQLExecute from '../SQLExecute';
 import ViewAllTable from '../ViewAllTable';
+import RedisDataView from '../RedisDataView';
 import ERDiagram from '../ERDiagram';
 import SchemaDiffPanel from '@/blocks/SchemaDiff';
 import Iconfont from '@/components/Iconfont';
@@ -460,6 +461,8 @@ const WorkspaceTabs = memo(() => {
         return renderSearchResult(item);
       case WorkspaceTabType.ViewAllTable:
         return renderViewAllTable(item);
+      case WorkspaceTabType.RedisData:
+        return <RedisDataView uniqueData={item.uniqueData} />;
       case WorkspaceTabType.ViewERDiagram:
         return renderViewERDiagram(item);
       case WorkspaceTabType.SchemaDiff:
@@ -503,11 +506,17 @@ const WorkspaceTabs = memo(() => {
       const isGeneratingTitle = generatingTitleKey === item.id;
       const isActive = activeConsoleId === item.id;
       return {
-        prefixIcon: isGeneratingTitle ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : workspaceTabConfig[item.type]?.icon,
+        prefixIcon: isGeneratingTitle
+          ? <Spin indicator={<LoadingOutlined spin />} size="small" />
+          : workspaceTabConfig[item.type]?.icon,
         label: (
           <div className={styles.tabLabel}>
-            {environment && <span className={styles.envTag} style={{ background: environment.color?.toLocaleLowerCase() }} />}
-            <span className={styles.tabTitle} style={getEnvLabelStyle(environment, isActive)}>{isGeneratingTitle ? i18n('common.text.generatingTitle') : item.title}</span>
+            {environment && (
+              <span className={styles.envTag} style={{ background: environment.color?.toLocaleLowerCase() }} />
+            )}
+            <span className={styles.tabTitle} style={getEnvLabelStyle(environment, isActive)}>
+              {isGeneratingTitle ? i18n('common.text.generatingTitle') : item.title}
+            </span>
           </div>
         ),
         name: isGeneratingTitle ? i18n('common.text.generatingTitle') : item.title,

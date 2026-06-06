@@ -4,6 +4,8 @@ import {
   PlusOutlined,
   DeleteOutlined,
   EditOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   MessageOutlined,
   MoreOutlined,
 } from '@ant-design/icons';
@@ -102,6 +104,8 @@ ConversationItem.displayName = 'ConversationItem';
 
 export default memo((props: {
   boundInfo?: { dataSourceId?: number | null; databaseName?: string | null; schemaName?: string | null };
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
   onNewConversation?: () => void;
 }) => {
   const {
@@ -140,10 +144,16 @@ export default memo((props: {
     renameSession(conversationId, title).catch(() => message.error('重命名失败'));
   };
 
-  return (
-    <div className={styles.conversationSidebar}>
-      <div className={styles.sidebarHeader}>
-        <span className={styles.sidebarTitle}>{i18n('chat.sidebar.title')}</span>
+  if (props.collapsed) {
+    return (
+      <div className={`${styles.conversationSidebar} ${styles.conversationSidebarCollapsed}`}>
+        <Button
+          type="text"
+          size="small"
+          icon={<MenuUnfoldOutlined />}
+          onClick={() => props.onCollapsedChange?.(false)}
+          title={i18n('chat.sidebar.expand')}
+        />
         <Button
           type="text"
           size="small"
@@ -151,6 +161,30 @@ export default memo((props: {
           onClick={handleNew}
           title={i18n('chat.sidebar.new')}
         />
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.conversationSidebar}>
+      <div className={styles.sidebarHeader}>
+        <span className={styles.sidebarTitle}>{i18n('chat.sidebar.title')}</span>
+        <div className={styles.sidebarHeaderActions}>
+          <Button
+            type="text"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={handleNew}
+            title={i18n('chat.sidebar.new')}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<MenuFoldOutlined />}
+            onClick={() => props.onCollapsedChange?.(true)}
+            title={i18n('chat.sidebar.collapse')}
+          />
+        </div>
       </div>
       <div className={styles.sidebarList}>
         {conversationList.length === 0 && !conversationListLoading ? (

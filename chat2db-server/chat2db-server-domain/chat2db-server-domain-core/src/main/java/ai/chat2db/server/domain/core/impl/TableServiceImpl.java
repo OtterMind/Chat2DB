@@ -31,7 +31,6 @@ import ai.chat2db.server.domain.core.cache.LuceneIndexManager;
 import ai.chat2db.server.domain.core.cache.LuceneIndexManagerFactory;
 import ai.chat2db.server.domain.core.converter.PinTableConverter;
 import ai.chat2db.server.tools.base.enums.DataSourceTypeEnum;
-import ai.chat2db.server.tools.base.wrapper.ServicePage;
 import ai.chat2db.server.tools.common.util.ContextUtils;
 import ai.chat2db.spi.DBManage;
 import ai.chat2db.spi.MetaData;

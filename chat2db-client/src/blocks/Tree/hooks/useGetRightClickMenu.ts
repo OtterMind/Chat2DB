@@ -1,4 +1,4 @@
-import { OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
+import { DatabaseTypeCode, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import i18n from '@/i18n';
 import sqlServer from '@/service/sql';
 import { ITreeNode } from '@/typings';
@@ -29,7 +29,6 @@ import { openTableRelationModal } from '../components/TableRelationModal';
 
 // ----- utils -----
 import { compatibleDataBaseName } from '@/utils/database';
-import { assign } from 'lodash';
 
 interface IProps {
   treeNodeData: ITreeNode;
@@ -64,6 +63,29 @@ const DATA_OPS: (OperationColumn | string)[] = [
   OperationColumn.DataTransfer,
   OperationColumn.GenerateData,
 ];
+
+const REDIS_EXCLUDED_OPERATIONS = new Set<OperationColumn>([
+  OperationColumn.SchemaDiff,
+  OperationColumn.CreateSchema,
+  OperationColumn.CreateTable,
+  OperationColumn.ViewERDiagram,
+  OperationColumn.ViewTableRelation,
+  OperationColumn.ViewDDL,
+  OperationColumn.ViewAllTable,
+  OperationColumn.ExportSchemaDoc,
+  OperationColumn.ExecuteSqlStatement,
+  OperationColumn.DeleteDatabase,
+  OperationColumn.DeleteTable,
+  OperationColumn.EditTable,
+  OperationColumn.EditTableData,
+  OperationColumn.TruncateTable,
+  OperationColumn.ImportData,
+  OperationColumn.ExportData,
+  OperationColumn.DataTransfer,
+  OperationColumn.DeprecatedTable,
+  OperationColumn.RestoreTable,
+  OperationColumn.GenerateData,
+]);
 
 const groupDataOperations = (list: IRightClickMenu[]): IRightClickMenu[] => {
   const dataOps = list.filter((m) => DATA_OPS.includes(m.type));
@@ -133,6 +155,7 @@ export const useGetRightClickMenu = (props: IProps) => {
     function excludeSomeOperation() {
       const excludes = dataSourceFormConfig.baseInfo.excludes;
       const newOperationColumn: OperationColumn[] = [];
+      const isRedis = treeNodeData.extraParams?.databaseType === DatabaseTypeCode.REDIS;
       operationColumn?.map((item: OperationColumn) => {
         let flag = false;
         excludes?.map((t) => {
@@ -140,6 +163,9 @@ export const useGetRightClickMenu = (props: IProps) => {
             flag = true;
           }
         });
+        if (isRedis && REDIS_EXCLUDED_OPERATIONS.has(item)) {
+          flag = true;
+        }
         if (!flag) {
           newOperationColumn.push(item);
         }
@@ -163,19 +189,42 @@ export const useGetRightClickMenu = (props: IProps) => {
       [OperationColumn.CreateConsole]: {
         text: i18n('workspace.menu.queryConsole'),
         icon: '\ue619',
+        doubleClickTrigger: treeNodeData.treeNodeType === TreeNodeType.REDIS_QUERY,
         handle: () => {
-          const tableName = compatibleDataBaseName(
-            treeNodeData.name!,
-            treeNodeData.extraParams!.databaseType,
-            treeNodeData.extraParams?.schemaName,
-          );
+          const isRedis = treeNodeData.extraParams?.databaseType === DatabaseTypeCode.REDIS;
+          const tableName = isRedis
+            ? ''
+            : compatibleDataBaseName(
+                treeNodeData.name!,
+                treeNodeData.extraParams!.databaseType,
+                treeNodeData.extraParams?.schemaName,
+              );
           createConsole({
             dataSourceId: treeNodeData.extraParams!.dataSourceId!,
             dataSourceName: treeNodeData.extraParams!.dataSourceName!,
             databaseType: treeNodeData.extraParams!.databaseType!,
             databaseName: treeNodeData.extraParams?.databaseName,
             schemaName: treeNodeData.extraParams?.schemaName,
-            ddl: `select * from ${tableName}`,
+            ddl: isRedis ? '' : `select * from ${tableName}`,
+          });
+        },
+      },
+
+      [OperationColumn.OpenRedisData]: {
+        text: '打开数据',
+        icon: '\ue618',
+        doubleClickTrigger: true,
+        handle: () => {
+          addWorkspaceTab({
+            id: `${OperationColumn.OpenRedisData}-${treeNodeData.uuid}`,
+            title: `${treeNodeData.extraParams?.databaseName || '0'}-数据`,
+            type: WorkspaceTabType.RedisData,
+            uniqueData: {
+              dataSourceId: treeNodeData.extraParams!.dataSourceId!,
+              dataSourceName: treeNodeData.extraParams!.dataSourceName!,
+              databaseType: treeNodeData.extraParams!.databaseType!,
+              databaseName: treeNodeData.extraParams?.databaseName,
+            },
           });
         },
       },
@@ -679,19 +728,42 @@ export const getRightClickMenu = (props: IProps) => {
     [OperationColumn.CreateConsole]: {
       text: i18n('workspace.menu.queryConsole'),
       icon: '\ue619',
+      doubleClickTrigger: treeNodeData.treeNodeType === TreeNodeType.REDIS_QUERY,
       handle: () => {
-        const tableName = compatibleDataBaseName(
-          treeNodeData.name!,
-          treeNodeData.extraParams!.databaseType,
-          treeNodeData.extraParams?.schemaName,
-        );
+        const isRedis = treeNodeData.extraParams?.databaseType === DatabaseTypeCode.REDIS;
+        const tableName = isRedis
+          ? ''
+          : compatibleDataBaseName(
+              treeNodeData.name!,
+              treeNodeData.extraParams!.databaseType,
+              treeNodeData.extraParams?.schemaName,
+            );
         createConsole({
           dataSourceId: treeNodeData.extraParams!.dataSourceId!,
           dataSourceName: treeNodeData.extraParams!.dataSourceName!,
           databaseType: treeNodeData.extraParams!.databaseType!,
           databaseName: treeNodeData.extraParams?.databaseName,
           schemaName: treeNodeData.extraParams?.schemaName,
-          ddl: `select * from ${tableName}`,
+          ddl: isRedis ? '' : `select * from ${tableName}`,
+        });
+      },
+    },
+
+    [OperationColumn.OpenRedisData]: {
+      text: '打开数据',
+      icon: '\ue618',
+      doubleClickTrigger: true,
+      handle: () => {
+        addWorkspaceTab({
+          id: `${OperationColumn.OpenRedisData}-${treeNodeData.uuid}`,
+          title: `${treeNodeData.extraParams?.databaseName || '0'}-数据`,
+          type: WorkspaceTabType.RedisData,
+          uniqueData: {
+            dataSourceId: treeNodeData.extraParams!.dataSourceId!,
+            dataSourceName: treeNodeData.extraParams!.dataSourceName!,
+            databaseType: treeNodeData.extraParams!.databaseType!,
+            databaseName: treeNodeData.extraParams?.databaseName,
+          },
         });
       },
     },

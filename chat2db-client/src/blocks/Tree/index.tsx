@@ -582,7 +582,9 @@ const TreeNode = memo((props: TreeNodeIProps) => {
       treeNodeData.treeNodeType === TreeNodeType.VIEW ||
       treeNodeData.treeNodeType === TreeNodeType.PROCEDURE ||
       treeNodeData.treeNodeType === TreeNodeType.FUNCTION ||
-      treeNodeData.treeNodeType === TreeNodeType.TRIGGER
+      treeNodeData.treeNodeType === TreeNodeType.TRIGGER ||
+      treeNodeData.treeNodeType === TreeNodeType.REDIS_DATA ||
+      treeNodeData.treeNodeType === TreeNodeType.REDIS_QUERY
     ) {
       rightClickMenu.find((item) => item.doubleClickTrigger)?.onClick(treeNodeData);
     } else {

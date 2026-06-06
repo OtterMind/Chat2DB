@@ -46,6 +46,7 @@ export default {
   'workspace.tree.trigger': 'Tetikleyici',
   'workspace.tree.function': 'Fonksiyon',
   'workspace.tree.procedure': 'Prosedür',
+  'workspace.tree.expandDataSourceTree': 'Veri kaynağı ağacını genişlet',
   'workspace.tree.search.placeholder': 'Genişletilmiş düğümde arama yapın',
   'workspace.tree.delete.tip': 'Bu işlemin kalıcı olarak silindiğini anlıyorum',
   'workspace.tree.delete.table.tip': '{1} tablosunu silmek istediğinizden emin misiniz?',

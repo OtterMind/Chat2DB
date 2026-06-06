@@ -11,6 +11,8 @@ export default {
   'chat.sidebar.empty': 'No conversations yet, click new to start',
   'chat.sidebar.delete': 'Delete',
   'chat.sidebar.rename': 'Rename',
+  'chat.sidebar.collapse': 'Collapse sidebar',
+  'chat.sidebar.expand': 'Expand sidebar',
   'chat.sidebar.delete.confirm': 'Delete this conversation?',
   'chat.sidebar.rename.placeholder': 'Enter a new title',
   'chat.header.newChat': 'New Chat',

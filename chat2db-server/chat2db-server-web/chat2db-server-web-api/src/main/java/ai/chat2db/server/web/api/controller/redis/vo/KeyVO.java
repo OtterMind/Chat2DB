@@ -29,4 +29,9 @@ public class KeyVO {
      * 过期时间
      */
     private Long ttl;
+
+    /**
+     * key 内存占用字节数
+     */
+    private Long size;
 }

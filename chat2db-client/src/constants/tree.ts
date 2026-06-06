@@ -25,6 +25,9 @@ export enum TreeNodeType {
   V_KEY = 'vKey',
   DEPRECATED_TABLES = 'deprecatedTables',
   DEPRECATED_TABLE = 'deprecatedTable',
+  REDIS_DATA = 'redisData',
+  REDIS_QUERY = 'redisQuery',
+  REDIS_BACKUP = 'redisBackup',
 }
 
 // 树右键支持的功能
@@ -63,4 +66,5 @@ export enum OperationColumn {
   GenerateData = 'generateData', // 生成数据
   SchemaDiff = 'schemaDiff', // 结构对比
   DeleteDatabase = 'deleteDatabase', // 删除数据库
+  OpenRedisData = 'openRedisData', // 打开 Redis 数据视图
 }

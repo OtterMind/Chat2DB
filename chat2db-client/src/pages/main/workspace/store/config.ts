@@ -1,4 +1,4 @@
-import {useWorkspaceStore} from './index'
+import { useWorkspaceStore } from './index';
 export interface IConfigStore {
   layout: {
     panelLeft: boolean;
@@ -15,7 +15,7 @@ export const initConfigStore: IConfigStore = {
     panelLeftWidth: 220,
     panelRightWidth: 300,
   },
-}
+};
 
 export const togglePanelRight = () => {
   return useWorkspaceStore.setState((state) => ({
@@ -23,8 +23,8 @@ export const togglePanelRight = () => {
       ...state.layout,
       panelRight: !state.layout.panelRight,
     },
-  }))
-}
+  }));
+};
 
 export const togglePanelLeft = () => {
   return useWorkspaceStore.setState((state) => ({
@@ -32,23 +32,32 @@ export const togglePanelLeft = () => {
       ...state.layout,
       panelLeft: !state.layout.panelLeft,
     },
-  }))
-}
+  }));
+};
 
-export const setPanelLeftWidth = (width: number) => { 
+export const setPanelLeft = (panelLeft: boolean) => {
+  return useWorkspaceStore.setState((state) => ({
+    layout: {
+      ...state.layout,
+      panelLeft,
+    },
+  }));
+};
+
+export const setPanelLeftWidth = (width: number) => {
   return useWorkspaceStore.setState((state) => ({
     layout: {
       ...state.layout,
       panelLeftWidth: width,
     },
-  }))
-}
+  }));
+};
 
-export const setPanelRightWidth = (width: number) => { 
+export const setPanelRightWidth = (width: number) => {
   return useWorkspaceStore.setState((state) => ({
     layout: {
       ...state.layout,
       panelRightWidth: width,
     },
-  }))
-}
+  }));
+};

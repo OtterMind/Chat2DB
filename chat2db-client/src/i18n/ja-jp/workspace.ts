@@ -39,6 +39,7 @@ export default {
   'workspace.tree.trigger': 'トリガー',
   'workspace.tree.function': '関数',
   'workspace.tree.procedure': 'ストアドプロシージャ',
+  'workspace.tree.expandDataSourceTree': 'データソースツリーを展開',
   'workspace.tree.search.placeholder': '展開されたノードで検索',
   'workspace.tree.delete.tip': 'この操作は永久的に削除されることを理解しています',
   'workspace.tree.delete.table.tip': 'テーブル{1}を削除してもよろしいですか？',

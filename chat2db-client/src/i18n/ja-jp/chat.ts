@@ -11,6 +11,8 @@ export default {
   'chat.sidebar.empty': '会話がありません、新規をクリックして開始',
   'chat.sidebar.delete': '削除',
   'chat.sidebar.rename': '名前変更',
+  'chat.sidebar.collapse': 'サイドバーを折りたたむ',
+  'chat.sidebar.expand': 'サイドバーを展開',
   'chat.sidebar.delete.confirm': 'この会話を削除しますか?',
   'chat.sidebar.rename.placeholder': '新しいタイトルを入力',
   'chat.header.newChat': '新しい会話',

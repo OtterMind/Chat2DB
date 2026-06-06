@@ -242,6 +242,7 @@ export default memo<IProps>((props) => {
   const [tableSelectorLoading, setTableSelectorLoading] = useState(false);
   const [databaseTables, setDatabaseTables] = useState<Array<{ name: string; comment?: string }>>([]);
   const [selectedTableDraft, setSelectedTableDraft] = useState<string[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const {
     currentSessionId,
@@ -757,13 +758,15 @@ export default memo<IProps>((props) => {
 
   return (
     <div className={styles.aiChatContainer}>
-      <div className={styles.sidebarLayout}>
+      <div className={`${styles.sidebarLayout} ${sidebarCollapsed ? styles.sidebarLayoutCollapsed : ''}`}>
         <ConversationSidebar
           boundInfo={{
             dataSourceId: boundInfo.dataSourceId,
             databaseName: boundInfo.databaseName,
             schemaName: boundInfo.schemaName,
           }}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
           onNewConversation={handleNewConversation}
         />
       </div>

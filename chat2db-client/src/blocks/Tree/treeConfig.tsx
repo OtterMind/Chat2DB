@@ -1,4 +1,4 @@
-import { OperationColumn, TreeNodeType } from '@/constants';
+import { DatabaseTypeCode, OperationColumn, TreeNodeType } from '@/constants';
 import connectionService from '@/service/connection';
 import { IConnectionDetails, ITreeNode } from '@/typings';
 import { v4 as uuid } from 'uuid';
@@ -91,6 +91,15 @@ export const switchIcon: Partial<{ [key in TreeNodeType]: { icon: string; unfold
     icon: '\ueabe',
     unfoldIcon: '\ueabf',
   },
+  [TreeNodeType.REDIS_DATA]: {
+    icon: '\ue618',
+  },
+  [TreeNodeType.REDIS_QUERY]: {
+    icon: '\ue619',
+  },
+  [TreeNodeType.REDIS_BACKUP]: {
+    icon: '\ue73c',
+  },
 };
 
 export interface ITreeConfigItem {
@@ -174,20 +183,61 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
     getChildren: (params, options) => {
       const _extraParams = params.extraParams;
       delete params.extraParams;
+      if (_extraParams?.databaseType === DatabaseTypeCode.REDIS) {
+        const databaseName = params.databaseName || _extraParams?.databaseName;
+        const preCode = [_extraParams?.dataSourceId, databaseName].join('-');
+        return Promise.resolve([
+          {
+            uuid: uuid(),
+            key: `${preCode}-redis-data`,
+            name: '数据',
+            treeNodeType: TreeNodeType.REDIS_DATA,
+            isLeaf: true,
+            extraParams: {
+              ..._extraParams,
+              databaseName,
+            },
+          },
+          {
+            uuid: uuid(),
+            key: `${preCode}-redis-query`,
+            name: '查询',
+            treeNodeType: TreeNodeType.REDIS_QUERY,
+            isLeaf: true,
+            extraParams: {
+              ..._extraParams,
+              databaseName,
+            },
+          },
+          {
+            uuid: uuid(),
+            key: `${preCode}-redis-backup`,
+            name: '备份',
+            treeNodeType: TreeNodeType.REDIS_BACKUP,
+            isLeaf: true,
+            extraParams: {
+              ..._extraParams,
+              databaseName,
+            },
+          },
+        ]);
+      }
       return new Promise((r: (value: ITreeNode[], b?: any) => void, j) => {
         connectionService
           .getSchemaList(params, options)
           .then((res) => {
             const data: ITreeNode[] = res.map((t: any) => {
+              const isRedis = _extraParams?.databaseType === DatabaseTypeCode.REDIS;
+              const schemaName = t.name || '';
               return {
                 uuid: uuid(),
-                key: t.name,
-                name: t.name,
+                key: isRedis && !schemaName ? 'keys' : schemaName,
+                name: isRedis && !schemaName ? 'keys' : schemaName,
                 treeNodeType: t.treeNodeType === 'tables' ? TreeNodeType.TABLES : TreeNodeType.SCHEMAS,
-                schemaName: t.name,
+                schemaName,
                 extraParams: {
                   ..._extraParams,
-                  schemaName: t.name,
+                  schemaName,
                 },
               };
             });
@@ -283,6 +333,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 name: t.name,
                 treeNodeType: TreeNodeType.TABLE,
                 key: t.name,
+                isLeaf: _extraParams?.databaseType === DatabaseTypeCode.REDIS,
                 pinned: t.pinned,
                 comment: t.comment,
                 extraParams: {
@@ -387,6 +438,10 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
     icon: '\ue63e',
     getChildren: (params) => {
       return new Promise((r: (value: ITreeNode[]) => void) => {
+        if (params.extraParams?.databaseType === DatabaseTypeCode.REDIS) {
+          r([]);
+          return;
+        }
         const { dataSourceId, databaseName, schemaName, tableName } = params.extraParams!;
         const preCode = [dataSourceId, databaseName, schemaName, tableName].join('-');
         const list = [
@@ -746,5 +801,17 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
       OperationColumn.CopyName,
       OperationColumn.DeleteVirtualKey,
     ],
+  },
+  [TreeNodeType.REDIS_DATA]: {
+    icon: '\ue618',
+    operationColumn: [OperationColumn.OpenRedisData, OperationColumn.Refresh, OperationColumn.CopyName],
+  },
+  [TreeNodeType.REDIS_QUERY]: {
+    icon: '\ue619',
+    operationColumn: [OperationColumn.CreateConsole, OperationColumn.CopyName],
+  },
+  [TreeNodeType.REDIS_BACKUP]: {
+    icon: '\ue73c',
+    operationColumn: [OperationColumn.CopyName],
   },
 };

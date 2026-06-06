@@ -187,6 +187,7 @@ export default {
   'workspace.tree.trigger': '触发器',
   'workspace.tree.function': '函数',
   'workspace.tree.procedure': '存储过程',
+  'workspace.tree.expandDataSourceTree': '展开数据源树',
   'workspace.tree.search.placeholder': '在展开节点中搜索',
   'workspace.tree.delete.tip': '我了解该操作是永久性删除',
   'workspace.tree.delete.table.tip': '确定要删除表{1}吗？',

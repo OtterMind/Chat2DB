@@ -14,6 +14,11 @@
     flex-direction: column;
     border-right: 1px solid var(--color-border-secondary);
     background-color: var(--color-bg-subtle);
+    transition: width 0.16s ease;
+  }
+
+  .sidebarLayoutCollapsed {
+    width: 44px;
   }
 
   .mainPanel {
@@ -31,18 +36,36 @@
     height: 100%;
     overflow: hidden;
 
+    &.conversationSidebarCollapsed {
+      align-items: center;
+      gap: 8px;
+      padding: 8px 6px;
+    }
+
     .sidebarHeader {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       padding: 12px 12px 8px;
       border-bottom: 1px solid var(--color-border-secondary);
       flex-shrink: 0;
 
       .sidebarTitle {
+        flex: 1;
+        min-width: 0;
         font-size: 14px;
         font-weight: 600;
         color: var(--color-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sidebarHeaderActions {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
       }
     }
 

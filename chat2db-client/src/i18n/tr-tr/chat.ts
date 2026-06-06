@@ -11,6 +11,8 @@ export default {
   'chat.sidebar.empty': 'Henüz konuşma yok, başlamak için yeniye tıklayın',
   'chat.sidebar.delete': 'Sil',
   'chat.sidebar.rename': 'Yeniden Adlandır',
+  'chat.sidebar.collapse': 'Kenar çubuğunu daralt',
+  'chat.sidebar.expand': 'Kenar çubuğunu genişlet',
   'chat.sidebar.delete.confirm': 'Bu konuşmayı silmek istediğinizden emin misiniz?',
   'chat.sidebar.rename.placeholder': 'Yeni başlık girin',
   'chat.header.newChat': 'Yeni Sohbet',

@@ -17,7 +17,7 @@ public enum PromptType implements BaseEnum<String> {
     /**
      * 自然语言转换成SQL
      */
-    NL_2_SQL("将自然语言转换成SQL查询"),
+    NL_2_SQL("将自然语言转换成SQL"),
 
     /**
      * 解释SQL

@@ -11,6 +11,8 @@ export default {
   'chat.sidebar.empty': '暂无会话,点击新建开始',
   'chat.sidebar.delete': '删除',
   'chat.sidebar.rename': '重命名',
+  'chat.sidebar.collapse': '折叠会话栏',
+  'chat.sidebar.expand': '展开会话栏',
   'chat.sidebar.delete.confirm': '确定删除该会话吗?',
   'chat.sidebar.rename.placeholder': '请输入新标题',
   'chat.header.newChat': '新对话',

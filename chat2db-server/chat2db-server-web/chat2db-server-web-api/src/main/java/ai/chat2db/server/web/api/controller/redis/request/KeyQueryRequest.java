@@ -1,7 +1,6 @@
 package ai.chat2db.server.web.api.controller.redis.request;
 
 import ai.chat2db.server.web.api.controller.data.source.request.DataSourceBaseRequest;
-import ai.chat2db.server.web.api.controller.data.source.request.DataSourceBaseRequest;
 
 import lombok.Data;
 
@@ -22,4 +21,9 @@ public class KeyQueryRequest extends DataSourceBaseRequest {
      * 搜索关键词
      */
     private String searchKey;
+
+    /**
+     * 返回数量
+     */
+    private Integer count;
 }
