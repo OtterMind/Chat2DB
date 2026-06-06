@@ -25,10 +25,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -144,8 +143,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         try (Socket socket = new Socket(host, port);
              BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(),
                      StandardCharsets.UTF_8));
-             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(),
-                     StandardCharsets.UTF_8))) {
+             OutputStream writer = socket.getOutputStream()) {
             socket.setSoTimeout(1000);
             authenticate(connectInfo, writer, reader);
             selectMonitorDatabase(databaseName, writer, reader);
@@ -370,7 +368,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         return List.of(String.valueOf(value));
     }
 
-    private void authenticate(ConnectInfo connectInfo, BufferedWriter writer, BufferedReader reader)
+    private void authenticate(ConnectInfo connectInfo, OutputStream writer, BufferedReader reader)
             throws IOException {
         if (StringUtils.isBlank(connectInfo.getPassword())) {
             return;
@@ -383,7 +381,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         expectStatus(reader, "OK");
     }
 
-    private void selectMonitorDatabase(String databaseName, BufferedWriter writer, BufferedReader reader)
+    private void selectMonitorDatabase(String databaseName, OutputStream writer, BufferedReader reader)
             throws IOException {
         if (StringUtils.isBlank(databaseName)) {
             return;
@@ -392,14 +390,14 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         expectStatus(reader, "OK");
     }
 
-    private void writeCommand(BufferedWriter writer, String... args) throws IOException {
-        writer.write("*" + args.length + "\r\n");
+    private void writeCommand(OutputStream writer, String... args) throws IOException {
+        writer.write(("*" + args.length + "\r\n").getBytes(StandardCharsets.UTF_8));
         for (String arg : args) {
             String value = StringUtils.defaultString(arg);
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-            writer.write("$" + bytes.length + "\r\n");
-            writer.write(value);
-            writer.write("\r\n");
+            writer.write(("$" + bytes.length + "\r\n").getBytes(StandardCharsets.UTF_8));
+            writer.write(bytes);
+            writer.write("\r\n".getBytes(StandardCharsets.UTF_8));
         }
         writer.flush();
     }

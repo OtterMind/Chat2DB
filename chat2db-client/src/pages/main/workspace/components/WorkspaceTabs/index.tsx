@@ -15,6 +15,7 @@ import DatabaseTableEditor from '@/blocks/DatabaseTableEditor';
 import SQLExecute from '../SQLExecute';
 import ViewAllTable from '../ViewAllTable';
 import RedisDataView from '../RedisDataView';
+import RedisMonitorView from '../RedisMonitorView';
 import ERDiagram from '../ERDiagram';
 import SchemaDiffPanel from '@/blocks/SchemaDiff';
 import Iconfont from '@/components/Iconfont';
@@ -463,6 +464,8 @@ const WorkspaceTabs = memo(() => {
         return renderViewAllTable(item);
       case WorkspaceTabType.RedisData:
         return <RedisDataView uniqueData={item.uniqueData} />;
+      case WorkspaceTabType.RedisMonitor:
+        return <RedisMonitorView uniqueData={item.uniqueData} />;
       case WorkspaceTabType.ViewERDiagram:
         return renderViewERDiagram(item);
       case WorkspaceTabType.SchemaDiff:

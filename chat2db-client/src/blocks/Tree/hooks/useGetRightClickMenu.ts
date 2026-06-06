@@ -229,6 +229,25 @@ export const useGetRightClickMenu = (props: IProps) => {
         },
       },
 
+      [OperationColumn.OpenRedisMonitor]: {
+        text: '打开监控',
+        icon: '\ue611',
+        doubleClickTrigger: true,
+        handle: () => {
+          addWorkspaceTab({
+            id: `${OperationColumn.OpenRedisMonitor}-${treeNodeData.uuid}`,
+            title: `${treeNodeData.extraParams?.databaseName || '0'}-监控`,
+            type: WorkspaceTabType.RedisMonitor,
+            uniqueData: {
+              dataSourceId: treeNodeData.extraParams!.dataSourceId!,
+              dataSourceName: treeNodeData.extraParams!.dataSourceName!,
+              databaseType: treeNodeData.extraParams!.databaseType!,
+              databaseName: treeNodeData.extraParams?.databaseName,
+            },
+          });
+        },
+      },
+
       // 查看所有表
       [OperationColumn.ViewAllTable]: {
         text: i18n('workspace.menu.viewAllTable'),
@@ -758,6 +777,25 @@ export const getRightClickMenu = (props: IProps) => {
           id: `${OperationColumn.OpenRedisData}-${treeNodeData.uuid}`,
           title: `${treeNodeData.extraParams?.databaseName || '0'}-数据`,
           type: WorkspaceTabType.RedisData,
+          uniqueData: {
+            dataSourceId: treeNodeData.extraParams!.dataSourceId!,
+            dataSourceName: treeNodeData.extraParams!.dataSourceName!,
+            databaseType: treeNodeData.extraParams!.databaseType!,
+            databaseName: treeNodeData.extraParams?.databaseName,
+          },
+        });
+      },
+    },
+
+    [OperationColumn.OpenRedisMonitor]: {
+      text: '打开监控',
+      icon: '\ue611',
+      doubleClickTrigger: true,
+      handle: () => {
+        addWorkspaceTab({
+          id: `${OperationColumn.OpenRedisMonitor}-${treeNodeData.uuid}`,
+          title: `${treeNodeData.extraParams?.databaseName || '0'}-监控`,
+          type: WorkspaceTabType.RedisMonitor,
           uniqueData: {
             dataSourceId: treeNodeData.extraParams!.dataSourceId!,
             dataSourceName: treeNodeData.extraParams!.dataSourceName!,

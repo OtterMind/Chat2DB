@@ -98,7 +98,7 @@ export const switchIcon: Partial<{ [key in TreeNodeType]: { icon: string; unfold
     icon: '\ue619',
   },
   [TreeNodeType.REDIS_MONITOR]: {
-    icon: '\ue78a',
+    icon: '\ue611',
   },
   [TreeNodeType.REDIS_BACKUP]: {
     icon: '\ue73c',
@@ -825,7 +825,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
     operationColumn: [OperationColumn.CreateConsole, OperationColumn.CopyName],
   },
   [TreeNodeType.REDIS_MONITOR]: {
-    icon: '\ue78a',
+    icon: '\ue611',
     operationColumn: [OperationColumn.OpenRedisMonitor, OperationColumn.CopyName],
   },
   [TreeNodeType.REDIS_BACKUP]: {

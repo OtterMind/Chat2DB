@@ -1,16 +1,8 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, Input, message } from 'antd';
-import {
-  ClearOutlined,
-  DownloadOutlined,
-  FullscreenOutlined,
-  OrderedListOutlined,
-  PlayOutlined,
-  SearchOutlined,
-  StopOutlined,
-} from '@ant-design/icons';
 import { v4 as uuid } from 'uuid';
 
+import Iconfont from '@/components/Iconfont';
 import redisService from '@/service/redis';
 
 import styles from './index.less';
@@ -121,33 +113,33 @@ const RedisMonitorView = memo((props: IProps) => {
   return (
     <div className={styles.redisMonitorView}>
       <div className={styles.toolbar}>
-        <Button disabled={running} icon={<PlayOutlined />} type="text" onClick={startMonitor}>
+        <Button disabled={running} icon={<Iconfont code="&#xe624;" />} type="text" onClick={startMonitor}>
           开始
         </Button>
-        <Button disabled={!running} icon={<StopOutlined />} type="text" onClick={stopMonitor}>
+        <Button disabled={!running} icon={<Iconfont code="&#xe625;" />} type="text" onClick={stopMonitor}>
           结束
         </Button>
         <Checkbox checked={autoWrap} onChange={(event) => setAutoWrap(event.target.checked)}>
           自动换行
         </Checkbox>
-        <Button icon={<DownloadOutlined />} type="text" onClick={exportLines}>
+        <Button icon={<Iconfont code="&#xe613;" />} type="text" onClick={exportLines}>
           导出
         </Button>
-        <Button icon={<ClearOutlined />} type="text" onClick={clearLines}>
+        <Button icon={<Iconfont code="&#xe6a7;" />} type="text" onClick={clearLines}>
           清除
         </Button>
         <div className={styles.spacer} />
         <Input
           allowClear
           className={styles.searchInput}
-          prefix={<SearchOutlined />}
+          prefix={<Iconfont code="&#xe62d;" />}
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
         />
-        <Button icon={<FullscreenOutlined />} type="text" />
+        <Button icon={<Iconfont code="&#xe62b;" />} type="text" />
       </div>
       <div className={styles.status}>
-        <OrderedListOutlined />
+        <Iconfont code="&#xe611;" />
         <span>{running ? `Monitoring since ${startTime}` : 'Monitor stopped'}</span>
         <span>{visibleLines.length} lines</span>
       </div>

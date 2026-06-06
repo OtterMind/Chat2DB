@@ -64,7 +64,7 @@ export const workspaceTabConfig: {
     icon: '\ue618'
   },
   [WorkspaceTabType.RedisMonitor]: {
-    icon: '\ue78a'
+    icon: '\ue611'
   },
 }
 
