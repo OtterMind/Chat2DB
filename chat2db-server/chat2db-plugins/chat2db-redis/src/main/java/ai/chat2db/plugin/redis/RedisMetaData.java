@@ -93,7 +93,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisAsyncCommands<String, String> commands = context.connection().async();
             selectDatabase(commands, databaseName).join();
-            String pattern = StringUtils.isBlank(searchKey) ? null : "*" + searchKey + "*";
+            String pattern = StringUtils.isBlank(searchKey) ? null : searchKey;
             // count < 0 means fetch all keys for the Redis data page.
             scanKeyInfo(commands, pattern, count < 0 ? Long.MAX_VALUE : count == 0 ? SCAN_COUNT : count,
                     batchSize <= 0 ? 200 : batchSize, batchConsumer);
