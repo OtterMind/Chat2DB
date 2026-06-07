@@ -9,6 +9,8 @@ import ai.chat2db.spi.model.Table;
 import ai.chat2db.spi.redis.RedisCommandMonitor;
 import ai.chat2db.spi.redis.RedisKeyBrowser;
 import ai.chat2db.spi.redis.RedisKeyInfo;
+import ai.chat2db.spi.redis.RedisKeyScanBatch;
+import ai.chat2db.spi.redis.RedisKeyScanResult;
 import ai.chat2db.spi.ssh.SSHManager;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectInfo;
@@ -97,8 +99,8 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
 
     @Override
-    public void streamKeys(String databaseName, String searchKey, int count, int batchSize,
-                           Consumer<List<RedisKeyInfo>> batchConsumer) {
+    public RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count, int batchSize,
+                                         Consumer<RedisKeyScanBatch> batchConsumer) {
         // 流式扫描 Redis 键并按批次返回，支持分页和模糊匹配。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
@@ -106,7 +108,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             selectDatabase(commands, databaseName).join();
             String pattern = StringUtils.isBlank(searchKey) ? null : searchKey;
             // count < 0 means fetch all keys for the Redis data page.
-            scanKeyInfo(commands, pattern, count < 0 ? Long.MAX_VALUE : count == 0 ? SCAN_COUNT : count,
+            return scanKeyInfo(commands, pattern, cursor, count < 0 ? Long.MAX_VALUE : count == 0 ? SCAN_COUNT : count,
                     batchSize <= 0 ? 200 : batchSize, batchConsumer);
         }
     }
@@ -219,37 +221,49 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     /**
      * 使用 SCAN 命令分批获取 Redis 键信息，并将结果按批次回传。
      */
-    private void scanKeyInfo(RedisAsyncCommands<String, String> commands, String pattern, long count, int batchSize,
-                             Consumer<List<RedisKeyInfo>> batchConsumer) {
-        List<CompletableFuture<RedisKeyInfo>> batch = new ArrayList<>(batchSize);
+    private RedisKeyScanResult scanKeyInfo(RedisAsyncCommands<String, String> commands, String pattern, String cursor,
+                                           long count, int batchSize,
+                                           Consumer<RedisKeyScanBatch> batchConsumer) {
         long emitted = 0;
         ScanArgs scanArgs = new ScanArgs().limit(SCAN_COUNT);
         if (StringUtils.isNotBlank(pattern)) {
             scanArgs.match(pattern);
         }
-        ScanCursor cursor = ScanCursor.INITIAL;
+        ScanCursor scanCursor = buildScanCursor(cursor);
         do {
-            KeyScanCursor<String> result = commands.scan(cursor, scanArgs).toCompletableFuture().join();
-            for (String key : result.getKeys()) {
-                batch.add(buildKeyInfo(commands, key));
-                emitted++;
-                if (batch.size() >= batchSize) {
-                    batchConsumer.accept(resolveBatch(batch));
-                    batch.clear();
-                }
-                if (emitted >= count) {
-                    if (!batch.isEmpty()) {
-                        batchConsumer.accept(resolveBatch(batch));
-                    }
-                    return;
-                }
+            KeyScanCursor<String> result = commands.scan(scanCursor, scanArgs).toCompletableFuture().join();
+            String nextCursor = result.getCursor();
+            boolean hasMore = !result.isFinished();
+            List<String> keys = result.getKeys();
+            for (int start = 0; start < keys.size(); start += batchSize) {
+                int end = Math.min(start + batchSize, keys.size());
+                List<CompletableFuture<RedisKeyInfo>> batch = new ArrayList<>(end - start);
+                keys.subList(start, end).forEach(key -> batch.add(buildKeyInfo(commands, key)));
+                List<RedisKeyInfo> items = resolveBatch(batch);
+                emitted += items.size();
+                batchConsumer.accept(RedisKeyScanBatch.builder()
+                        .items(items)
+                        .cursor(hasMore ? nextCursor : "0")
+                        .hasMore(hasMore)
+                        .total(Math.toIntExact(Math.min(emitted, Integer.MAX_VALUE)))
+                        .build());
             }
-            cursor = ScanCursor.of(result.getCursor());
-            cursor.setFinished(result.isFinished());
-        } while (!cursor.isFinished());
-        if (!batch.isEmpty()) {
-            batchConsumer.accept(resolveBatch(batch));
+            scanCursor = ScanCursor.of(nextCursor);
+            scanCursor.setFinished(result.isFinished());
+        } while (!scanCursor.isFinished() && emitted < count);
+        boolean hasMore = !scanCursor.isFinished();
+        return RedisKeyScanResult.builder()
+                .cursor(hasMore ? scanCursor.getCursor() : "0")
+                .hasMore(hasMore)
+                .total(Math.toIntExact(Math.min(emitted, Integer.MAX_VALUE)))
+                .build();
+    }
+
+    private ScanCursor buildScanCursor(String cursor) {
+        if (StringUtils.isBlank(cursor) || "0".equals(cursor)) {
+            return ScanCursor.INITIAL;
         }
+        return ScanCursor.of(cursor);
     }
 
     /**

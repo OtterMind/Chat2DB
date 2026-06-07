@@ -23,6 +23,11 @@ public class KeyQueryRequest extends DataSourceBaseRequest {
     private String searchKey;
 
     /**
+     * Redis SCAN 游标
+     */
+    private String cursor;
+
+    /**
      * 返回数量
      */
     private Integer count;

@@ -6,6 +6,7 @@ export interface IRedisKeyListParams {
   dataSourceId: number;
   databaseName?: string;
   searchKey?: string;
+  cursor?: string;
   count?: number;
 }
 
@@ -60,8 +61,8 @@ export interface IRedisMonitorStreamOptions {
 export interface IRedisKeyStreamOptions extends IRedisKeyListParams {
   batchSize?: number;
   uid: string;
-  onBatch: (items: IRedisKeyItem[], total: number) => void;
-  onDone: (total: number) => void;
+  onBatch: (items: IRedisKeyItem[], total: number, cursor: string, hasMore: boolean) => void;
+  onDone: (total: number, cursor: string, hasMore: boolean) => void;
   onError: (message: string) => void;
 }
 
@@ -135,7 +136,7 @@ const streamKeyList = (options: IRedisKeyStreamOptions) => {
   eventSource.addEventListener('keys', (event: any) => {
     try {
       const data = JSON.parse(event.data);
-      onBatch(data.items || [], data.total || 0);
+      onBatch(data.items || [], data.total || 0, data.cursor || '0', Boolean(data.hasMore));
     } catch {
       onError('Redis key 数据解析失败');
       eventSource.close();
@@ -145,9 +146,9 @@ const streamKeyList = (options: IRedisKeyStreamOptions) => {
   eventSource.addEventListener('done', (event: any) => {
     try {
       const data = JSON.parse(event.data);
-      onDone(data.total || 0);
+      onDone(data.total || 0, data.cursor || '0', Boolean(data.hasMore));
     } catch {
-      onDone(0);
+      onDone(0, '0', false);
     } finally {
       eventSource.close();
     }

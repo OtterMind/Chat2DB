@@ -58,6 +58,8 @@ const RedisDataView = memo((props: IProps) => {
   const [hashFields, setHashFields] = useState<IHashFieldRow[]>([]);
   const [lastRefreshTime, setLastRefreshTime] = useState<string>('');
   const [keyLimit, setKeyLimit] = useState(DEFAULT_LIMIT);
+  const [scanCursor, setScanCursor] = useState('0');
+  const [hasMore, setHasMore] = useState(false);
   const [creating, setCreating] = useState(false);
   const closeStreamRef = useRef<(() => void) | null>(null);
   const streamIdRef = useRef('');
@@ -89,20 +91,25 @@ const RedisDataView = memo((props: IProps) => {
     setTextValue(value === undefined || value === null ? '' : String(value));
   };
 
-  const loadData = (keyword = searchKey, count = keyLimit) => {
+  const loadData = (keyword = searchKey, count = keyLimit, cursor = '0', append = false) => {
     if (!uniqueData?.dataSourceId) {
       return;
     }
     closeStreamRef.current?.();
     const streamId = uuid();
     streamIdRef.current = streamId;
-    setData([]);
+    if (!append) {
+      setData([]);
+      setScanCursor('0');
+      setHasMore(false);
+    }
     setLoading(true);
     closeStreamRef.current = redisService.streamKeyList({
       uid: streamId,
       dataSourceId: uniqueData.dataSourceId,
       databaseName: uniqueData.databaseName,
       searchKey: keyword,
+      cursor,
       count,
       batchSize: STREAM_BATCH_SIZE,
       onBatch: (items) => {
@@ -111,10 +118,12 @@ const RedisDataView = memo((props: IProps) => {
         }
         setData((current) => current.concat(items || []));
       },
-      onDone: () => {
+      onDone: (_, nextCursor, nextHasMore) => {
         if (streamIdRef.current !== streamId) {
           return;
         }
+        setScanCursor(nextCursor);
+        setHasMore(nextHasMore);
         setLoading(false);
         setLastRefreshTime(new Date().toLocaleTimeString());
         closeStreamRef.current = null;
@@ -267,9 +276,12 @@ const RedisDataView = memo((props: IProps) => {
   };
 
   const getMoreData = () => {
-    const nextLimit = Math.max(data.length + DEFAULT_LIMIT, keyLimit + DEFAULT_LIMIT);
-    setKeyLimit(nextLimit);
-    loadData(searchKey, nextLimit);
+    if (!hasMore) {
+      message.info('没有更多 Redis key');
+      return;
+    }
+    setKeyLimit(DEFAULT_LIMIT);
+    loadData(searchKey, DEFAULT_LIMIT, scanCursor, true);
   };
 
   const getAllData = () => {
@@ -431,7 +443,7 @@ const RedisDataView = memo((props: IProps) => {
           <Button icon={<ReloadOutlined />} loading={loading} size="small" type="text" onClick={refreshData}>
             刷新
           </Button>
-          <Button loading={loading} size="small" type="text" onClick={getMoreData}>
+          <Button disabled={!hasMore} loading={loading} size="small" type="text" onClick={getMoreData}>
             获取更多
           </Button>
           <Button loading={loading} size="small" type="text" onClick={getAllData}>

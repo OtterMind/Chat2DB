@@ -13,6 +13,7 @@ import ai.chat2db.server.web.api.controller.redis.vo.KeyVO;
 import ai.chat2db.spi.MetaData;
 import ai.chat2db.spi.redis.RedisKeyBrowser;
 import ai.chat2db.spi.redis.RedisKeyInfo;
+import ai.chat2db.spi.redis.RedisKeyScanResult;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectInfo;
 
@@ -70,15 +71,20 @@ public class RedisKeyManageController {
                 RedisKeyBrowser browser = getRedisKeyBrowser();
                 int count = request.getCount() == null ? DEFAULT_KEY_COUNT : request.getCount();
                 int batchSize = request.getBatchSize() == null ? DEFAULT_BATCH_SIZE : request.getBatchSize();
-                int[] total = {0};
-                browser.streamKeys(request.getDatabaseName(), request.getSearchKey(), count, batchSize, batch -> {
-                    total[0] += batch.size();
+                RedisKeyScanResult result = browser.streamKeys(request.getDatabaseName(), request.getSearchKey(),
+                        request.getCursor(), count, batchSize, batch -> {
                     sendEvent(emitter, "keys", Map.of(
-                            "items", batch.stream().map(this::toVO).toList(),
-                            "total", total[0]
+                            "items", batch.getItems().stream().map(this::toVO).toList(),
+                            "total", batch.getTotal(),
+                            "cursor", batch.getCursor(),
+                            "hasMore", batch.getHasMore()
                     ));
                 });
-                sendEvent(emitter, "done", Map.of("total", total[0]));
+                sendEvent(emitter, "done", Map.of(
+                        "total", result.getTotal(),
+                        "cursor", result.getCursor(),
+                        "hasMore", result.getHasMore()
+                ));
                 emitter.complete();
             } catch (Exception e) {
                 sendEvent(emitter, "redis_error", Map.of("message", e.getMessage()));
