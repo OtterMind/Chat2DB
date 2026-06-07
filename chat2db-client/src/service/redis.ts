@@ -136,7 +136,8 @@ const streamKeyList = (options: IRedisKeyStreamOptions) => {
   eventSource.addEventListener('keys', (event: any) => {
     try {
       const data = JSON.parse(event.data);
-      onBatch(data.items || [], data.total || 0, data.cursor || '0', Boolean(data.hasMore));
+      const items = Array.isArray(data) ? data : data.items || [];
+      onBatch(items, 0, '0', false);
     } catch {
       onError('Redis key 数据解析失败');
       eventSource.close();

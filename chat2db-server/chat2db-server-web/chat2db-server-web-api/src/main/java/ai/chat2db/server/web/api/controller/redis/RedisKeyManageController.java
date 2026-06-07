@@ -73,12 +73,7 @@ public class RedisKeyManageController {
                 int batchSize = request.getBatchSize() == null ? DEFAULT_BATCH_SIZE : request.getBatchSize();
                 RedisKeyScanResult result = browser.streamKeys(request.getDatabaseName(), request.getSearchKey(),
                         request.getCursor(), count, batchSize, batch -> {
-                    sendEvent(emitter, "keys", Map.of(
-                            "items", batch.getItems().stream().map(this::toVO).toList(),
-                            "total", batch.getTotal(),
-                            "cursor", batch.getCursor(),
-                            "hasMore", batch.getHasMore()
-                    ));
+                    sendEvent(emitter, "keys", batch.stream().map(this::toVO).toList());
                 });
                 sendEvent(emitter, "done", Map.of(
                         "total", result.getTotal(),

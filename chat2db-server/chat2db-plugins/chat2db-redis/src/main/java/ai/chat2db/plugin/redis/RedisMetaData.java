@@ -9,7 +9,6 @@ import ai.chat2db.spi.model.Table;
 import ai.chat2db.spi.redis.RedisCommandMonitor;
 import ai.chat2db.spi.redis.RedisKeyBrowser;
 import ai.chat2db.spi.redis.RedisKeyInfo;
-import ai.chat2db.spi.redis.RedisKeyScanBatch;
 import ai.chat2db.spi.redis.RedisKeyScanResult;
 import ai.chat2db.spi.ssh.SSHManager;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -100,7 +99,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
     @Override
     public RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count, int batchSize,
-                                         Consumer<RedisKeyScanBatch> batchConsumer) {
+                                         Consumer<List<RedisKeyInfo>> batchConsumer) {
         // 流式扫描 Redis 键并按批次返回，支持分页和模糊匹配。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
@@ -223,7 +222,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
      */
     private RedisKeyScanResult scanKeyInfo(RedisAsyncCommands<String, String> commands, String pattern, String cursor,
                                            long count, int batchSize,
-                                           Consumer<RedisKeyScanBatch> batchConsumer) {
+                                           Consumer<List<RedisKeyInfo>> batchConsumer) {
         long emitted = 0;
         ScanArgs scanArgs = new ScanArgs().limit(SCAN_COUNT);
         if (StringUtils.isNotBlank(pattern)) {
@@ -233,7 +232,6 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         do {
             KeyScanCursor<String> result = commands.scan(scanCursor, scanArgs).toCompletableFuture().join();
             String nextCursor = result.getCursor();
-            boolean hasMore = !result.isFinished();
             List<String> keys = result.getKeys();
             for (int start = 0; start < keys.size(); start += batchSize) {
                 int end = Math.min(start + batchSize, keys.size());
@@ -241,12 +239,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                 keys.subList(start, end).forEach(key -> batch.add(buildKeyInfo(commands, key)));
                 List<RedisKeyInfo> items = resolveBatch(batch);
                 emitted += items.size();
-                batchConsumer.accept(RedisKeyScanBatch.builder()
-                        .items(items)
-                        .cursor(hasMore ? nextCursor : "0")
-                        .hasMore(hasMore)
-                        .total(Math.toIntExact(Math.min(emitted, Integer.MAX_VALUE)))
-                        .build());
+                batchConsumer.accept(items);
             }
             scanCursor = ScanCursor.of(nextCursor);
             scanCursor.setFinished(result.isFinished());
