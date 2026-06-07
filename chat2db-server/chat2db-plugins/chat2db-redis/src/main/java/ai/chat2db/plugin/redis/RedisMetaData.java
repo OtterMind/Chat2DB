@@ -103,6 +103,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             RedisAsyncCommands<String, String> commands = context.connection().async();
             selectDatabase(commands, databaseName).join();
             String pattern = StringUtils.isBlank(searchKey) ? null : searchKey;
+            if (isInitialCursor(cursor) && isExactKeyPattern(pattern)) {
+                return queryExactKey(commands, pattern, batchConsumer);
+            }
             // count < 0 means fetch all keys for the Redis data page.
             return scanKeyInfo(commands, pattern, cursor,
                     count < 0 ? Long.MAX_VALUE : count == 0 ? KEY_SCAN_BATCH_SIZE : count, batchConsumer);
@@ -263,11 +266,33 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                 .build();
     }
 
+    private RedisKeyScanResult queryExactKey(RedisAsyncCommands<String, String> commands, String key,
+                                             Consumer<List<RedisKeyInfo>> batchConsumer) {
+        long exists = commands.exists(key).toCompletableFuture().join();
+        if (exists > 0) {
+            batchConsumer.accept(List.of(buildKeyInfo(commands, key, false).join()));
+        }
+        return RedisKeyScanResult.builder()
+                .cursor("0")
+                .hasMore(false)
+                .total(exists > 0 ? 1 : 0)
+                .build();
+    }
+
     private ScanCursor buildScanCursor(String cursor) {
-        if (StringUtils.isBlank(cursor) || "0".equals(cursor)) {
+        if (isInitialCursor(cursor)) {
             return ScanCursor.INITIAL;
         }
         return ScanCursor.of(cursor);
+    }
+
+    private boolean isInitialCursor(String cursor) {
+        return StringUtils.isBlank(cursor) || "0".equals(cursor);
+    }
+
+    private boolean isExactKeyPattern(String pattern) {
+        return StringUtils.isNotBlank(pattern)
+                && !StringUtils.containsAny(pattern, '*', '?', '[', ']');
     }
 
     /**
