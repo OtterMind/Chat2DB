@@ -20,7 +20,6 @@ import io.lettuce.core.KeyScanCursor;
 import io.lettuce.core.ScanArgs;
 import io.lettuce.core.ScanCursor;
 import io.lettuce.core.api.async.RedisAsyncCommands;
-import io.lettuce.core.api.sync.RedisCommands;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -35,10 +34,8 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
@@ -65,8 +62,8 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     public List<Database> databases(Connection connection) {
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
-            RedisCommands<String, String> commands = context.connection().sync();
-            Map<String, String> config = commands.configGet("databases");
+            RedisAsyncCommands<String, String> commands = context.connection().async();
+            Map<String, String> config = commands.configGet("databases").toCompletableFuture().join();
             String count = config.get("databases");
             List<Database> databases = new ArrayList<>();
             if (StringUtils.isNotBlank(count)) {
@@ -116,9 +113,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     public RedisKeyInfo queryKey(String databaseName, String keyName) {
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
-            RedisCommands<String, String> commands = context.connection().sync();
-            selectDatabase(commands, databaseName);
-            return buildFullKeyInfo(commands, keyName);
+            RedisAsyncCommands<String, String> commands = context.connection().async();
+            selectDatabase(commands, databaseName).join();
+            return buildFullKeyInfo(commands, keyName).join();
         }
     }
 
@@ -127,19 +124,28 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         // 创建新的 Redis 键，如果键已存在则抛出异常。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
-            RedisCommands<String, String> commands = context.connection().sync();
-            selectDatabase(commands, databaseName);
+            RedisAsyncCommands<String, String> commands = context.connection().async();
             if (StringUtils.isBlank(keyName)) {
                 throw new IllegalArgumentException("Redis key 不能为空");
             }
-            if (commands.exists(keyName) > 0) {
-                throw new IllegalArgumentException("Redis key 已存在: " + keyName);
-            }
-            writeValue(commands, keyName, keyType, value);
-            if (commands.exists(keyName) == 0) {
-                throw new IllegalArgumentException("Redis key value 不能为空");
-            }
-            applyTtl(commands, keyName, ttl);
+            selectDatabase(commands, databaseName)
+                    .thenCompose(ignored -> commands.exists(keyName).toCompletableFuture())
+                    .thenApply(exists -> {
+                        if (exists > 0) {
+                            throw new IllegalArgumentException("Redis key 已存在: " + keyName);
+                        }
+                        return null;
+                    })
+                    .thenCompose(ignored -> writeValue(commands, keyName, keyType, value))
+                    .thenCompose(ignored -> commands.exists(keyName).toCompletableFuture())
+                    .thenApply(exists -> {
+                        if (exists == 0) {
+                            throw new IllegalArgumentException("Redis key value 不能为空");
+                        }
+                        return null;
+                    })
+                    .thenCompose(ignored -> applyTtl(commands, keyName, ttl))
+                    .join();
         }
     }
 
@@ -148,15 +154,19 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                           Long ttl) {
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
-            RedisCommands<String, String> commands = context.connection().sync();
-            selectDatabase(commands, databaseName);
+            RedisAsyncCommands<String, String> commands = context.connection().async();
             String targetKey = StringUtils.defaultIfBlank(updateKey, originalKey);
-            if (!StringUtils.equals(originalKey, targetKey)) {
-                commands.rename(originalKey, targetKey);
-            }
-            commands.del(targetKey);
-            writeValue(commands, targetKey, keyType, value);
-            applyTtl(commands, targetKey, ttl);
+            selectDatabase(commands, databaseName)
+                    .thenCompose(ignored -> {
+                        if (!StringUtils.equals(originalKey, targetKey)) {
+                            return commands.rename(originalKey, targetKey).toCompletableFuture();
+                        }
+                        return CompletableFuture.completedFuture(null);
+                    })
+                    .thenCompose(ignored -> commands.del(targetKey).toCompletableFuture())
+                    .thenCompose(ignored -> writeValue(commands, targetKey, keyType, value))
+                    .thenCompose(ignored -> applyTtl(commands, targetKey, ttl))
+                    .join();
         }
     }
 
@@ -165,11 +175,15 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         // 删除指定 Redis 键，空键名将被忽略。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
-            RedisCommands<String, String> commands = context.connection().sync();
-            selectDatabase(commands, databaseName);
-            if (StringUtils.isNotBlank(keyName)) {
-                commands.del(keyName);
-            }
+            RedisAsyncCommands<String, String> commands = context.connection().async();
+            selectDatabase(commands, databaseName)
+                    .thenCompose(ignored -> {
+                        if (StringUtils.isNotBlank(keyName)) {
+                            return commands.del(keyName).toCompletableFuture();
+                        }
+                        return CompletableFuture.completedFuture(null);
+                    })
+                    .join();
         }
     }
 
@@ -262,15 +276,20 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     /**
      * 构建完整键信息，包括类型、值、TTL 和内存大小。
      */
-    private RedisKeyInfo buildFullKeyInfo(RedisCommands<String, String> commands, String key) {
-        String type = getType(commands, key);
-        return RedisKeyInfo.builder()
-                .name(key)
-                .type(type)
-                .value(readValue(commands, key, type))
-                .ttl(getTtl(commands, key))
-                .size(getSize(commands, key))
-                .build();
+    private CompletableFuture<RedisKeyInfo> buildFullKeyInfo(RedisAsyncCommands<String, String> commands, String key) {
+        return getTypeAsync(commands, key).thenCompose(type -> {
+            CompletableFuture<Object> value = readValue(commands, key, type);
+            CompletableFuture<Long> ttl = getTtl(commands, key);
+            CompletableFuture<Long> size = getSize(commands, key);
+            return CompletableFuture.allOf(value, ttl, size)
+                    .thenApply(ignored -> RedisKeyInfo.builder()
+                            .name(key)
+                            .type(type)
+                            .value(value.join())
+                            .ttl(ttl.join())
+                            .size(size.join())
+                            .build());
+        });
     }
 
     /**
@@ -331,66 +350,86 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     }
 
     /**
-     * 根据键类型读取完整值。
+     * 根据键类型异步读取完整值。
      */
-    private Object readValue(RedisCommands<String, String> commands, String key, String type) {
+    private CompletableFuture<Object> readValue(RedisAsyncCommands<String, String> commands, String key, String type) {
         try {
             return switch (StringUtils.defaultString(type).toLowerCase()) {
-                case "string" -> commands.get(key);
-                case "hash" -> commands.hgetall(key);
-                case "list" -> commands.lrange(key, 0, -1);
-                case "set" -> commands.smembers(key);
-                case "zset" -> commands.zrange(key, 0, -1);
-                default -> "";
+                case "string" -> commands.get(key).toCompletableFuture().thenApply(v -> v);
+                case "hash" -> commands.hgetall(key).toCompletableFuture().thenApply(v -> v);
+                case "list" -> commands.lrange(key, 0, -1).toCompletableFuture().thenApply(v -> v);
+                case "set" -> commands.smembers(key).toCompletableFuture().thenApply(v -> v);
+                case "zset" -> commands.zrange(key, 0, -1).toCompletableFuture().thenApply(v -> v);
+                default -> CompletableFuture.completedFuture("");
             };
         } catch (Exception e) {
             log.warn("Redis key value read failed, key={}", key, e);
-            return "";
-        }
-    }
-
-    private void writeValue(RedisCommands<String, String> commands, String key, String keyType, Object value) {
-        switch (StringUtils.defaultString(keyType).toLowerCase()) {
-            case "string" -> commands.set(key, value == null ? "" : String.valueOf(value));
-            case "hash" -> {
-                Map<String, String> map = toStringMap(value);
-                if (!map.isEmpty()) {
-                    commands.hset(key, map);
-                }
-            }
-            case "list" -> {
-                List<String> values = toStringList(value);
-                if (!values.isEmpty()) {
-                    commands.rpush(key, values.toArray(new String[0]));
-                }
-            }
-            case "set" -> {
-                List<String> values = toStringList(value);
-                if (!values.isEmpty()) {
-                    commands.sadd(key, values.toArray(new String[0]));
-                }
-            }
-            case "zset" -> {
-                List<String> values = toStringList(value);
-                for (int i = 0; i < values.size(); i++) {
-                    commands.zadd(key, i, values.get(i));
-                }
-            }
-            default -> throw new IllegalArgumentException("暂不支持编辑 Redis 类型: " + keyType);
+            return CompletableFuture.completedFuture("");
         }
     }
 
     /**
-     * 将 TTL 应用到指定键，如 ttl 为 null 或负值则取消过期时间。
+     * 根据键类型异步写入值。
      */
-    private void applyTtl(RedisCommands<String, String> commands, String key, Long ttl) {
+    private CompletableFuture<Void> writeValue(RedisAsyncCommands<String, String> commands, String key, String keyType,
+                                               Object value) {
+        return switch (StringUtils.defaultString(keyType).toLowerCase()) {
+            case "string" -> commands.set(key, value == null ? "" : String.valueOf(value))
+                    .toCompletableFuture().thenApply(ignored -> null);
+            case "hash" -> {
+                Map<String, String> map = toStringMap(value);
+                if (!map.isEmpty()) {
+                    yield commands.hset(key, map).toCompletableFuture().thenApply(ignored -> null);
+                }
+                yield CompletableFuture.completedFuture(null);
+            }
+            case "list" -> {
+                List<String> values = toStringList(value);
+                if (!values.isEmpty()) {
+                    yield commands.rpush(key, values.toArray(new String[0]))
+                            .toCompletableFuture().thenApply(ignored -> null);
+                }
+                yield CompletableFuture.completedFuture(null);
+            }
+            case "set" -> {
+                List<String> values = toStringList(value);
+                if (!values.isEmpty()) {
+                    yield commands.sadd(key, values.toArray(new String[0]))
+                            .toCompletableFuture().thenApply(ignored -> null);
+                }
+                yield CompletableFuture.completedFuture(null);
+            }
+            case "zset" -> {
+                List<String> values = toStringList(value);
+                yield addZsetMembers(commands, key, values, 0);
+            }
+            default -> throw new IllegalArgumentException("暂不支持编辑 Redis 类型: " + keyType);
+        };
+    }
+
+    /**
+     * 按顺序异步添加有序集合成员，保证添加顺序。
+     */
+    private CompletableFuture<Void> addZsetMembers(RedisAsyncCommands<String, String> commands, String key,
+                                                   List<String> values, int index) {
+        if (index >= values.size()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return commands.zadd(key, index, values.get(index)).toCompletableFuture()
+                .thenCompose(ignored -> addZsetMembers(commands, key, values, index + 1));
+    }
+
+    /**
+     * 异步将 TTL 应用到指定键，如 ttl 为 null 或负值则取消过期时间。
+     */
+    private CompletableFuture<Void> applyTtl(RedisAsyncCommands<String, String> commands, String key, Long ttl) {
         if (ttl == null || ttl < 0) {
-            commands.persist(key);
-            return;
+            return commands.persist(key).toCompletableFuture().thenApply(ignored -> null);
         }
         if (ttl > 0) {
-            commands.expire(key, ttl);
+            return commands.expire(key, ttl).toCompletableFuture().thenApply(ignored -> null);
         }
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -499,21 +538,17 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         session.disconnect();
     }
 
-    private Long getTtl(RedisCommands<String, String> commands, String key) {
-        try {
-            return commands.ttl(key);
-        } catch (Exception e) {
-            log.warn("Redis key ttl failed, key={}", key, e);
-            return null;
-        }
+    private CompletableFuture<Long> getTtl(RedisAsyncCommands<String, String> commands, String key) {
+        return commands.ttl(key).toCompletableFuture()
+                .exceptionally(e -> {
+                    log.warn("Redis key ttl failed, key={}", key, e);
+                    return null;
+                });
     }
 
-    private Long getSize(RedisCommands<String, String> commands, String key) {
-        try {
-            return commands.memoryUsage(key);
-        } catch (Exception e) {
-            return null;
-        }
+    private CompletableFuture<Long> getSize(RedisAsyncCommands<String, String> commands, String key) {
+        return commands.memoryUsage(key).toCompletableFuture()
+                .exceptionally(e -> null);
     }
 
     private String previewMap(Map<String, String> values) {
@@ -544,12 +579,6 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         return value.substring(0, VALUE_TEXT_LIMIT) + "...";
     }
 
-    private void selectDatabase(RedisCommands<String, String> commands, String databaseName) {
-        if (StringUtils.isNotBlank(databaseName)) {
-            commands.select(Integer.parseInt(databaseName));
-        }
-    }
-
     private CompletableFuture<Void> selectDatabase(RedisAsyncCommands<String, String> commands, String databaseName) {
         if (StringUtils.isBlank(databaseName)) {
             return CompletableFuture.completedFuture(null);
@@ -557,15 +586,15 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         return commands.select(Integer.parseInt(databaseName)).toCompletableFuture().thenApply(ignored -> null);
     }
 
-    private String getType(RedisCommands<String, String> commands, String tableName) {
-        try {
-            String type = commands.type(tableName);
-            if (StringUtils.isNotBlank(type)) {
-                return type;
-            }
-        } catch (Exception e) {
-            log.error("type获取失败", e);
-        }
-        return "string";
+    /**
+     * 异步获取键类型，失败时默认返回 "string"。
+     */
+    private CompletableFuture<String> getTypeAsync(RedisAsyncCommands<String, String> commands, String key) {
+        return commands.type(key).toCompletableFuture()
+                .thenApply(type -> StringUtils.isNotBlank(type) ? type : "string")
+                .exceptionally(e -> {
+                    log.error("type获取失败", e);
+                    return "string";
+                });
     }
 }
