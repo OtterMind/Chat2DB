@@ -9,6 +9,8 @@ import org.springframework.statemachine.StateContext;
 import org.springframework.stereotype.Component;
 
 import ai.chat2db.server.domain.api.service.DatabaseService;
+import ai.chat2db.server.domain.api.service.DataSourceService;
+import ai.chat2db.server.tools.base.enums.DataSourceTypeEnum;
 import ai.chat2db.server.web.api.controller.ai.request.ChatQueryRequest;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatContext;
 import ai.chat2db.server.web.api.controller.ai.statemachine.ChatEvent;
@@ -25,6 +27,9 @@ public class FetchSchemaAction extends BaseChatAction {
 
     @Autowired
     private DatabaseService databaseService;
+
+    @Autowired
+    private DataSourceService dataSourceService;
 
     @Override
     public void execute(StateContext<ChatState, ChatEvent> context) {
@@ -69,10 +74,25 @@ public class FetchSchemaAction extends BaseChatAction {
     private String fetchSchemaDdl(ChatContext ctx) {
         ChatQueryRequest request = ctx.getRequest();
 
+        if (isRedis(request)) {
+            return "";
+        }
+
         if (hasTableNames(request)) {
             return queryTablesWithNames(request);
         } else {
             return queryAllTables(request);
+        }
+    }
+
+    private boolean isRedis(ChatQueryRequest request) {
+        try {
+            return DataSourceTypeEnum.REDIS.getCode().equalsIgnoreCase(
+                    dataSourceService.queryDatabaseType(request.getDataSourceId()));
+        } catch (Exception e) {
+            log.warn("[FetchSchemaAction] Query database type failed, dataSourceId: {}, error: {}",
+                    request.getDataSourceId(), e.getMessage());
+            return false;
         }
     }
 

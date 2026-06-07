@@ -28,7 +28,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import ai.chat2db.server.domain.api.model.AiConversation;
 import ai.chat2db.server.domain.api.param.ai.AiConversationCreateParam;
 import ai.chat2db.server.domain.api.service.AiConversationService;
+import ai.chat2db.server.domain.api.service.DataSourceService;
 import ai.chat2db.server.domain.repository.Dbutils;
+import ai.chat2db.server.tools.base.enums.DataSourceTypeEnum;
 import ai.chat2db.server.tools.common.exception.ParamBusinessException;
 import ai.chat2db.server.tools.common.model.Context;
 import ai.chat2db.server.tools.common.model.LoginUser;
@@ -64,6 +66,9 @@ public class ChatController {
 
     @Autowired
     private AiConversationTitleTask aiConversationTitleTask;
+
+    @Autowired
+    private DataSourceService dataSourceService;
 
     private static final Long CHAT_TIMEOUT = Duration.ofMinutes(50).toMillis();
 
@@ -235,11 +240,30 @@ public class ChatController {
             return ChatEvent.TABLES_NOT_NEEDED;
         }
 
+        if (isRedisNl2Sql(request, promptType)) {
+            return ChatEvent.TABLES_NOT_NEEDED;
+        }
+
         if (!hasTables && PromptType.SQL_OPTIMIZER.getCode().equals(promptType)) {
             return ChatEvent.EXPLAIN_TABLES_NOT_SELECTED;
         }
 
         return hasTables ? ChatEvent.TABLES_PROVIDED : ChatEvent.TABLES_NOT_PROVIDED;
+    }
+
+    private boolean isRedisNl2Sql(ChatQueryRequest request, String promptType) {
+        String effectivePromptType = StrUtil.isBlank(promptType) ? PromptType.NL_2_SQL.getCode() : promptType;
+        if (!PromptType.NL_2_SQL.getCode().equals(effectivePromptType)) {
+            return false;
+        }
+        try {
+            return DataSourceTypeEnum.REDIS.getCode().equalsIgnoreCase(
+                    dataSourceService.queryDatabaseType(request.getDataSourceId()));
+        } catch (Exception e) {
+            log.warn("[ChatController] Query database type failed, dataSourceId: {}, error: {}",
+                    request.getDataSourceId(), e.getMessage());
+            return false;
+        }
     }
 
     private void setupSseCallbacks(SseEmitter sseEmitter, String uid, ChatContext ctx) {

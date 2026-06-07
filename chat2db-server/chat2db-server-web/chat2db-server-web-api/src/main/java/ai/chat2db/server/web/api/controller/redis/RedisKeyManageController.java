@@ -46,7 +46,6 @@ import java.util.concurrent.CompletableFuture;
 public class RedisKeyManageController {
 
     private static final int DEFAULT_KEY_COUNT = 1000;
-    private static final int DEFAULT_BATCH_SIZE = 200;
     private static final long STREAM_TIMEOUT = 30 * 60 * 1000L;
 
     /**
@@ -70,9 +69,8 @@ public class RedisKeyManageController {
                 Chat2DBContext.putContext(connectInfo);
                 RedisKeyBrowser browser = getRedisKeyBrowser();
                 int count = request.getCount() == null ? DEFAULT_KEY_COUNT : request.getCount();
-                int batchSize = request.getBatchSize() == null ? DEFAULT_BATCH_SIZE : request.getBatchSize();
                 RedisKeyScanResult result = browser.streamKeys(request.getDatabaseName(), request.getSearchKey(),
-                        request.getCursor(), count, batchSize, batch -> {
+                        request.getCursor(), count, batch -> {
                     sendEvent(emitter, "keys", batch.stream().map(this::toVO).toList());
                 });
                 sendEvent(emitter, "done", Map.of(

@@ -53,7 +53,7 @@ import java.util.function.Consumer;
 @Slf4j
 public class RedisMetaData extends DefaultMetaService implements MetaData, RedisKeyBrowser, RedisCommandMonitor {
 
-    private static final long SCAN_COUNT = 1000L;
+    private static final int KEY_SCAN_BATCH_SIZE = 1000;
     private static final int VALUE_PREVIEW_LIMIT = 5;
     private static final int VALUE_TEXT_LIMIT = 200;
     private static final CommandExecutor COMMAND_EXECUTOR = new RedisCommandExecutor();
@@ -95,7 +95,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
 
     @Override
-    public RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count, int batchSize,
+    public RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count,
                                          Consumer<List<RedisKeyInfo>> batchConsumer) {
         // 流式扫描 Redis 键并按批次返回，支持分页和模糊匹配。
         try (RedisConnectionProvider.RedisConnectionContext context =
@@ -104,8 +104,8 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             selectDatabase(commands, databaseName).join();
             String pattern = StringUtils.isBlank(searchKey) ? null : searchKey;
             // count < 0 means fetch all keys for the Redis data page.
-            return scanKeyInfo(commands, pattern, cursor, count < 0 ? Long.MAX_VALUE : count == 0 ? SCAN_COUNT : count,
-                    batchSize <= 0 ? 200 : batchSize, batchConsumer);
+            return scanKeyInfo(commands, pattern, cursor,
+                    count < 0 ? Long.MAX_VALUE : count == 0 ? KEY_SCAN_BATCH_SIZE : count, batchConsumer);
         }
     }
 
@@ -235,10 +235,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
      * 使用 SCAN 命令分批获取 Redis 键信息，并将结果按批次回传。
      */
     private RedisKeyScanResult scanKeyInfo(RedisAsyncCommands<String, String> commands, String pattern, String cursor,
-                                           long count, int batchSize,
-                                           Consumer<List<RedisKeyInfo>> batchConsumer) {
+                                           long count, Consumer<List<RedisKeyInfo>> batchConsumer) {
         long emitted = 0;
-        ScanArgs scanArgs = new ScanArgs().limit(SCAN_COUNT);
+        ScanArgs scanArgs = new ScanArgs().limit(KEY_SCAN_BATCH_SIZE);
         if (StringUtils.isNotBlank(pattern)) {
             scanArgs.match(pattern);
         }
@@ -247,8 +246,8 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             KeyScanCursor<String> result = commands.scan(scanCursor, scanArgs).toCompletableFuture().join();
             String nextCursor = result.getCursor();
             List<String> keys = result.getKeys();
-            for (int start = 0; start < keys.size(); start += batchSize) {
-                int end = Math.min(start + batchSize, keys.size());
+            for (int start = 0; start < keys.size(); start += KEY_SCAN_BATCH_SIZE) {
+                int end = Math.min(start + KEY_SCAN_BATCH_SIZE, keys.size());
                 List<CompletableFuture<RedisKeyInfo>> batch = new ArrayList<>(end - start);
                 keys.subList(start, end).forEach(key -> batch.add(buildKeyInfo(commands, key)));
                 List<RedisKeyInfo> items = resolveBatch(batch);

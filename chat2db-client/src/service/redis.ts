@@ -59,7 +59,6 @@ export interface IRedisMonitorStreamOptions {
 }
 
 export interface IRedisKeyStreamOptions extends IRedisKeyListParams {
-  batchSize?: number;
   uid: string;
   onBatch: (items: IRedisKeyItem[], total: number, cursor: string, hasMore: boolean) => void;
   onDone: (total: number, cursor: string, hasMore: boolean) => void;

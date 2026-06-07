@@ -32,8 +32,4 @@ public class KeyQueryRequest extends DataSourceBaseRequest {
      */
     private Integer count;
 
-    /**
-     * 流式返回批大小
-     */
-    private Integer batchSize;
 }

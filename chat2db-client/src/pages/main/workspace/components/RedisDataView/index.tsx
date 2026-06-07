@@ -32,7 +32,6 @@ interface IRedisKeyRow extends IRedisKeyItem {
 }
 
 const DEFAULT_LIMIT = 5000;
-const STREAM_BATCH_SIZE = 200;
 const NO_TTL = -1;
 const KEY_TYPES = ['string', 'hash', 'list', 'set', 'zset'];
 
@@ -65,6 +64,8 @@ const RedisDataView = memo((props: IProps) => {
   const closeStreamRef = useRef<(() => void) | null>(null);
   const streamIdRef = useRef('');
   const detailRequestRef = useRef('');
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [tableScrollY, setTableScrollY] = useState(240);
 
   const hydrateEditor = (keyDetail: IRedisKeyItem) => {
     const type = normalizeType(keyDetail.type);
@@ -113,7 +114,6 @@ const RedisDataView = memo((props: IProps) => {
       searchKey: keyword,
       cursor,
       count,
-      batchSize: STREAM_BATCH_SIZE,
       onBatch: (items) => {
         if (streamIdRef.current !== streamId) {
           return;
@@ -300,6 +300,30 @@ const RedisDataView = memo((props: IProps) => {
     };
   }, [uniqueData?.dataSourceId, uniqueData?.databaseName]);
 
+  useEffect(() => {
+    const tableWrap = tableWrapRef.current;
+    if (!tableWrap) {
+      return;
+    }
+
+    const updateTableScrollY = () => {
+      const headerHeight = tableWrap.querySelector('.ant-table-thead')?.getBoundingClientRect().height || 39;
+      const wrapHeight = tableWrap.getBoundingClientRect().height;
+      setTableScrollY(Math.max(120, Math.floor(wrapHeight - headerHeight)));
+    };
+
+    updateTableScrollY();
+
+    if (!window.ResizeObserver) {
+      window.addEventListener('resize', updateTableScrollY);
+      return () => window.removeEventListener('resize', updateTableScrollY);
+    }
+
+    const resizeObserver = new ResizeObserver(updateTableScrollY);
+    resizeObserver.observe(tableWrap);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   const tableData = useMemo(() => {
     return buildRows(data);
   }, [data]);
@@ -418,7 +442,7 @@ const RedisDataView = memo((props: IProps) => {
           {data.length} keys{lastRefreshTime ? ` · 上次刷新 ${lastRefreshTime}` : ''}
         </div>
       </div>
-      <div className={styles.tableWrap}>
+      <div className={styles.tableWrap} ref={tableWrapRef}>
         <Table
           bordered={false}
           columns={columns}
@@ -428,7 +452,7 @@ const RedisDataView = memo((props: IProps) => {
           rowClassName={(record) => (record.name === selectedKey && !record.isGroup ? styles.selectedRow : '')}
           rowKey="rowKey"
           size="small"
-          scroll={{ y: detail || detailLoading ? 'calc(100vh - 532px)' : 'calc(100vh - 210px)' }}
+          scroll={{ y: tableScrollY }}
           onRow={(record) => ({
             onClick: () => {
               if (!record.isGroup) {

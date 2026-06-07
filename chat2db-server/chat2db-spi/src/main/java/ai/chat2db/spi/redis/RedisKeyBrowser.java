@@ -5,7 +5,7 @@ import java.util.function.Consumer;
 
 public interface RedisKeyBrowser {
 
-    RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count, int batchSize,
+    RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count,
                                   Consumer<List<RedisKeyInfo>> batchConsumer);
 
     RedisKeyInfo queryKey(String databaseName, String keyName);

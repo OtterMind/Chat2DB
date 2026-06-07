@@ -1,6 +1,7 @@
 package ai.chat2db.server.web.api.controller.ai.prompt;
 
 import ai.chat2db.server.web.api.controller.ai.enums.PromptType;
+import ai.chat2db.server.tools.base.enums.DataSourceTypeEnum;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -110,6 +111,9 @@ public class PromptBuilderImpl implements PromptBuilder {
         }
 
         PromptTemplate template = templateRegistry.getTemplate(type);
+        if (type == PromptType.NL_2_SQL && isRedisDataSource(context)) {
+            template = buildRedisCommandTemplate();
+        }
         String builtPrompt = fillTemplate(template, context);
 
         return validator.cleanPrompt(builtPrompt);
@@ -177,6 +181,30 @@ public class PromptBuilderImpl implements PromptBuilder {
         return appendRevisionContextIfNeeded(filledTemplate, context);
     }
 
+    private boolean isRedisDataSource(PromptContext context) {
+        return DataSourceTypeEnum.REDIS.getCode().equalsIgnoreCase(context.getDataSourceType());
+    }
+
+    private PromptTemplate buildRedisCommandTemplate() {
+        return PromptTemplate.builder()
+                .name("redis_nl_2_command")
+                .promptType(PromptType.NL_2_SQL)
+                .description("将自然语言转换成 Redis 命令")
+                .template("""
+                        ### 请根据 Redis command input 生成 Redis 命令。{ext}
+                        #
+                        ### 数据库类型: {db_type}
+                        #
+                        ### Redis command input: {message}
+                        #
+                        ### 输出要求
+                        1. 只输出可执行的 Redis 命令，不要输出 SQL。
+                        2. 不要输出 Markdown、代码块、解释、标题或多余文本。
+                        3. 如果需要多条命令，每行输出一条 Redis 命令。
+                        """)
+                .build();
+    }
+
     private String appendRevisionContextIfNeeded(String filledTemplate, PromptContext context) {
         if (StringUtils.isBlank(context.getPreviousSql())) {
             return filledTemplate;
@@ -195,6 +223,10 @@ public class PromptBuilderImpl implements PromptBuilder {
     }
 
     private String appendNl2SqlRevisionContext(String filledTemplate, PromptContext context) {
+        if (isRedisDataSource(context)) {
+            return appendRedisCommandRevisionContext(filledTemplate, context);
+        }
+
         StringBuilder builder = new StringBuilder(filledTemplate);
         builder.append("\n\n")
                 .append("### 连续对话修正要求\n")
@@ -215,6 +247,30 @@ public class PromptBuilderImpl implements PromptBuilder {
                 .append("```sql\n")
                 .append(truncate(context.getPreviousSql(), MAX_PREVIOUS_SQL_LENGTH))
                 .append("\n```\n");
+
+        return builder.toString();
+    }
+
+    private String appendRedisCommandRevisionContext(String filledTemplate, PromptContext context) {
+        StringBuilder builder = new StringBuilder(filledTemplate);
+        builder.append("\n\n")
+                .append("### 连续对话修正要求\n")
+                .append("用户正在基于上一版 Redis 命令提出修正。请结合对话历史、上一版 Redis 命令和当前 Redis command input，")
+                .append("生成完整的新 Redis 命令。\n")
+                .append("- 不要只描述变更点。\n")
+                .append("- 不要输出 SQL。\n")
+                .append("- 只输出可执行的 Redis 命令，不要输出 Markdown 或代码块。\n");
+
+        String formattedHistory = formatConversationHistory(context.getHistory());
+        if (StringUtils.isNotBlank(formattedHistory)) {
+            builder.append("\n### 最近对话历史\n")
+                    .append(formattedHistory)
+                    .append("\n");
+        }
+
+        builder.append("\n### 上一版 Redis 命令\n")
+                .append(truncate(context.getPreviousSql(), MAX_PREVIOUS_SQL_LENGTH))
+                .append("\n");
 
         return builder.toString();
     }
