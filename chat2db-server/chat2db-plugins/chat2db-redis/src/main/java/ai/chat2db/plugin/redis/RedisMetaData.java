@@ -115,7 +115,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisAsyncCommands<String, String> commands = context.connection().async();
             selectDatabase(commands, databaseName).join();
-            return buildFullKeyInfo(commands, keyName).join();
+            return buildKeyInfo(commands, keyName, true).join();
         }
     }
 
@@ -244,17 +244,15 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         ScanCursor scanCursor = buildScanCursor(cursor);
         do {
             KeyScanCursor<String> result = commands.scan(scanCursor, scanArgs).toCompletableFuture().join();
-            String nextCursor = result.getCursor();
             List<String> keys = result.getKeys();
-            for (int start = 0; start < keys.size(); start += KEY_SCAN_BATCH_SIZE) {
-                int end = Math.min(start + KEY_SCAN_BATCH_SIZE, keys.size());
-                List<CompletableFuture<RedisKeyInfo>> batch = new ArrayList<>(end - start);
-                keys.subList(start, end).forEach(key -> batch.add(buildKeyInfo(commands, key)));
-                List<RedisKeyInfo> items = resolveBatch(batch);
+            if (!keys.isEmpty()) {
+                List<CompletableFuture<RedisKeyInfo>> futures = new ArrayList<>(keys.size());
+                keys.forEach(key -> futures.add(buildKeyInfo(commands, key, false)));
+                List<RedisKeyInfo> items = resolveBatch(futures);
                 emitted += items.size();
                 batchConsumer.accept(items);
             }
-            scanCursor = ScanCursor.of(nextCursor);
+            scanCursor = ScanCursor.of(result.getCursor());
             scanCursor.setFinished(result.isFinished());
         } while (!scanCursor.isFinished() && emitted < count);
         boolean hasMore = !scanCursor.isFinished();
@@ -273,13 +271,19 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     }
 
     /**
-     * 构建完整键信息，包括类型、值、TTL 和内存大小。
+     * 构建键信息。
+     *
+     * @param fullValue true 读取完整值（详情场景），false 读取预览摘要（列表场景）
      */
-    private CompletableFuture<RedisKeyInfo> buildFullKeyInfo(RedisAsyncCommands<String, String> commands, String key) {
+    private CompletableFuture<RedisKeyInfo> buildKeyInfo(RedisAsyncCommands<String, String> commands, String key,
+                                                        boolean fullValue) {
         return getTypeAsync(commands, key).thenCompose(type -> {
-            CompletableFuture<Object> value = readValue(commands, key, type);
-            CompletableFuture<Long> ttl = getTtl(commands, key);
-            CompletableFuture<Long> size = getSize(commands, key);
+            CompletableFuture<Object> value = fullValue ? readValue(commands, key, type)
+                    : previewValue(commands, key, type);
+            CompletableFuture<Long> ttl = commands.ttl(key).toCompletableFuture()
+                    .exceptionally(e -> null);
+            CompletableFuture<Long> size = commands.memoryUsage(key).toCompletableFuture()
+                    .exceptionally(e -> null);
             return CompletableFuture.allOf(value, ttl, size)
                     .thenApply(ignored -> RedisKeyInfo.builder()
                             .name(key)
@@ -288,34 +292,11 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                             .ttl(ttl.join())
                             .size(size.join())
                             .build());
-        });
-    }
-
-    /**
-     * 构建键的简要信息，用于列表预览场景。
-     */
-    private CompletableFuture<RedisKeyInfo> buildKeyInfo(RedisAsyncCommands<String, String> commands, String key) {
-        return commands.type(key).toCompletableFuture()
-                .thenCompose(type -> {
-                    CompletableFuture<Object> value = previewValue(commands, key, type);
-                    CompletableFuture<Long> ttl = commands.ttl(key).toCompletableFuture()
-                            .exceptionally(e -> null);
-                    CompletableFuture<Long> size = commands.memoryUsage(key).toCompletableFuture()
-                            .exceptionally(e -> null);
-                    return CompletableFuture.allOf(value, ttl, size)
-                            .thenApply(ignored -> RedisKeyInfo.builder()
-                                    .name(key)
-                                    .type(type)
-                                    .value(value.join())
-                                    .ttl(ttl.join())
-                                    .size(size.join())
-                                    .build());
-                })
-                .exceptionally(e -> RedisKeyInfo.builder()
-                        .name(key)
-                        .type("unknown")
-                        .value("")
-                        .build());
+        }).exceptionally(e -> RedisKeyInfo.builder()
+                .name(key)
+                .type("unknown")
+                .value("")
+                .build());
     }
 
     /**
@@ -535,19 +516,6 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
             // ignore
         }
         session.disconnect();
-    }
-
-    private CompletableFuture<Long> getTtl(RedisAsyncCommands<String, String> commands, String key) {
-        return commands.ttl(key).toCompletableFuture()
-                .exceptionally(e -> {
-                    log.warn("Redis key ttl failed, key={}", key, e);
-                    return null;
-                });
-    }
-
-    private CompletableFuture<Long> getSize(RedisAsyncCommands<String, String> commands, String key) {
-        return commands.memoryUsage(key).toCompletableFuture()
-                .exceptionally(e -> null);
     }
 
     private String previewMap(Map<String, String> values) {
