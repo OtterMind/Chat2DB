@@ -39,4 +39,22 @@ class RedisNativeClientTest {
                 RedisCommandParser.tokenize(statements.get(0)));
         Assertions.assertEquals(List.of("get", "key"), RedisCommandParser.tokenize(statements.get(1)));
     }
+
+    @Test
+    void parseCommandPositionsKeepOriginalLineNumbers() {
+        List<RedisCommandParser.StatementPosition> positions = RedisCommandParser.splitStatementPositions("""
+                
+                set key "hello
+                world";
+                get key
+                """);
+
+        Assertions.assertEquals(2, positions.size());
+        Assertions.assertEquals("set key \"hello\nworld\"", positions.get(0).statement());
+        Assertions.assertEquals(2, positions.get(0).startLine());
+        Assertions.assertEquals(3, positions.get(0).endLine());
+        Assertions.assertEquals("get key", positions.get(1).statement());
+        Assertions.assertEquals(4, positions.get(1).startLine());
+        Assertions.assertEquals(4, positions.get(1).endLine());
+    }
 }

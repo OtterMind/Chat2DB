@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,7 +31,8 @@ public class RedisCommandExecutor implements CommandExecutor {
 
     @Override
     public List<ExecuteResult> execute(Command command) {
-        List<String> statements = RedisCommandParser.splitStatements(command.getScript());
+        List<RedisCommandParser.StatementPosition> statements =
+                RedisCommandParser.splitStatementPositions(command.getScript());
         List<ExecuteResult> results = new ArrayList<>();
         if (CollectionUtils.isEmpty(statements)) {
             return results;
@@ -39,9 +41,12 @@ public class RedisCommandExecutor implements CommandExecutor {
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisCommands<String, String> commands = context.connection().sync();
             for (int i = 0; i < statements.size(); i++) {
-                ExecuteResult result = executeStatement(commands, statements.get(i));
+                RedisCommandParser.StatementPosition statement = statements.get(i);
+                ExecuteResult result = executeStatement(commands, statement.statement());
                 result.setStatementIndex(i + 1);
-                result.setOriginalSql(statements.get(i));
+                result.setStatementStartLine(getStatementLine(command.getScriptStartLine(), statement.startLine()));
+                result.setStatementEndLine(getStatementLine(command.getScriptStartLine(), statement.endLine()));
+                result.setOriginalSql(statement.statement());
                 results.add(result);
             }
         }
@@ -96,7 +101,7 @@ public class RedisCommandExecutor implements CommandExecutor {
                         required(args, 2, "field")));
                 case "HGETALL" -> mapValues(result, "field", "value", commands.hgetall(required(args, 1, "key")));
                 case "HSET" -> oneValue(result, "added", commands.hset(required(args, 1, "key"),
-                        required(args, 2, "field"), required(args, 3, "value")));
+                        fieldValueMap(args, 2)));
                 case "LRANGE" -> listValues(result, "value", commands.lrange(required(args, 1, "key"),
                         parseLong(args, 2, "start"), parseLong(args, 3, "stop")));
                 case "LPUSH" -> oneValue(result, "length", commands.lpush(required(args, 1, "key"), tail(args, 2)));
@@ -116,6 +121,10 @@ public class RedisCommandExecutor implements CommandExecutor {
             result.setDuration(timer.interval());
         }
         return result;
+    }
+
+    private int getStatementLine(Integer scriptStartLine, int statementLine) {
+        return statementLine + Math.max((scriptStartLine == null ? 1 : scriptStartLine) - 1, 0);
     }
 
     private void executeConfig(RedisCommands<String, String> commands, List<String> args, ExecuteResult result) {
@@ -230,6 +239,21 @@ public class RedisCommandExecutor implements CommandExecutor {
             throw new IllegalArgumentException("Missing Redis command arguments");
         }
         return args.subList(start, args.size()).toArray(new String[0]);
+    }
+
+    private Map<String, String> fieldValueMap(List<String> args, int start) {
+        if (args.size() <= start) {
+            throw new IllegalArgumentException("Missing Redis command arguments");
+        }
+        int pairCount = args.size() - start;
+        if (pairCount % 2 != 0) {
+            throw new IllegalArgumentException("Redis HSET requires field/value pairs");
+        }
+        Map<String, String> values = new LinkedHashMap<>(pairCount / 2);
+        for (int i = start; i < args.size(); i += 2) {
+            values.put(args.get(i), args.get(i + 1));
+        }
+        return values;
     }
 
     private int parseInt(List<String> args, int index, String name) {

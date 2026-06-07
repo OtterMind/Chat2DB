@@ -11,13 +11,20 @@ public final class RedisCommandParser {
     }
 
     public static List<String> splitStatements(String script) {
-        List<String> statements = new ArrayList<>();
+        return splitStatementPositions(script).stream()
+                .map(StatementPosition::statement)
+                .toList();
+    }
+
+    public static List<StatementPosition> splitStatementPositions(String script) {
+        List<StatementPosition> positions = new ArrayList<>();
         if (StringUtils.isBlank(script)) {
-            return statements;
+            return positions;
         }
         StringBuilder current = new StringBuilder();
         Character quote = null;
         boolean escaped = false;
+        int statementStartIndex = 0;
         for (int i = 0; i < script.length(); i++) {
             char ch = script.charAt(i);
             if (quote != null) {
@@ -37,14 +44,15 @@ public final class RedisCommandParser {
                 continue;
             }
             if (ch == ';' || ch == '\n' || ch == '\r') {
-                addStatement(statements, current);
+                addStatementPosition(positions, script, current, statementStartIndex, i);
                 current.setLength(0);
+                statementStartIndex = i + 1;
                 continue;
             }
             current.append(ch);
         }
-        addStatement(statements, current);
-        return statements;
+        addStatementPosition(positions, script, current, statementStartIndex, script.length());
+        return positions;
     }
 
     public static List<String> tokenize(String statement) {
@@ -84,11 +92,42 @@ public final class RedisCommandParser {
         return tokens;
     }
 
-    private static void addStatement(List<String> statements, StringBuilder current) {
+    private static void addStatementPosition(List<StatementPosition> positions, String script, StringBuilder current,
+                                             int startIndex, int endExclusive) {
         String statement = current.toString().trim();
-        if (StringUtils.isNotBlank(statement)) {
-            statements.add(statement);
+        if (StringUtils.isBlank(statement)) {
+            return;
         }
+        int realStart = startIndex;
+        int realEndExclusive = Math.max(startIndex, endExclusive);
+        while (realStart < realEndExclusive && Character.isWhitespace(script.charAt(realStart))) {
+            realStart++;
+        }
+        while (realEndExclusive > realStart && Character.isWhitespace(script.charAt(realEndExclusive - 1))) {
+            realEndExclusive--;
+        }
+        positions.add(new StatementPosition(
+                statement,
+                getLineNumber(script, realStart),
+                getLineNumber(script, realEndExclusive - 1)
+        ));
+    }
+
+    private static int getLineNumber(String script, int indexInclusive) {
+        int line = 1;
+        int max = Math.min(Math.max(indexInclusive, 0), script.length());
+        for (int i = 0; i < max; i++) {
+            char ch = script.charAt(i);
+            if (ch == '\n') {
+                line++;
+            } else if (ch == '\r') {
+                line++;
+                if (i + 1 < max && script.charAt(i + 1) == '\n') {
+                    i++;
+                }
+            }
+        }
+        return line;
     }
 
     private static void addToken(List<String> tokens, StringBuilder current) {
@@ -96,5 +135,8 @@ public final class RedisCommandParser {
             tokens.add(current.toString());
             current.setLength(0);
         }
+    }
+
+    public record StatementPosition(String statement, int startLine, int endLine) {
     }
 }

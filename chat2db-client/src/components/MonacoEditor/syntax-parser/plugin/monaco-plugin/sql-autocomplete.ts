@@ -1,5 +1,7 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import { monacoSqlAutocomplete } from './index';
+import { DatabaseTypeCode } from '@/constants';
+import redisService from '@/service/redis';
 import sqlService, { IForeignKeyVO } from '@/service/sql';
 import { IBoundInfo } from '@/typings/workspace';
 import { ICompletionItem, ITableInfo, IJoinTableInfo, ICursorInfo } from '../sql-parser/base/define';
@@ -18,6 +20,105 @@ export interface ISqlAutocompleteDisposable {
 
 // 字段缓存
 const fieldCache = new Map<string, any[]>();
+const redisKeyCache = new Map<string, { expiresAt: number; data: any[] }>();
+const REDIS_KEY_CACHE_TTL = 30000;
+
+const redisCommandSnippets: Record<string, string> = {
+  APPEND: 'APPEND ${1:key} ${2:value}',
+  AUTH: 'AUTH ${1:password}',
+  BITCOUNT: 'BITCOUNT ${1:key}',
+  BLPOP: 'BLPOP ${1:key} ${2:timeout}',
+  BRPOP: 'BRPOP ${1:key} ${2:timeout}',
+  DEL: 'DEL ${1:key}',
+  DECR: 'DECR ${1:key}',
+  DECRBY: 'DECRBY ${1:key} ${2:decrement}',
+  EXISTS: 'EXISTS ${1:key}',
+  EXPIRE: 'EXPIRE ${1:key} ${2:seconds}',
+  GET: 'GET ${1:key}',
+  GETBIT: 'GETBIT ${1:key} ${2:offset}',
+  GETRANGE: 'GETRANGE ${1:key} ${2:start} ${3:end}',
+  HDEL: 'HDEL ${1:key} ${2:field}',
+  HEXISTS: 'HEXISTS ${1:key} ${2:field}',
+  HGET: 'HGET ${1:key} ${2:field}',
+  HGETALL: 'HGETALL ${1:key}',
+  HKEYS: 'HKEYS ${1:key}',
+  HLEN: 'HLEN ${1:key}',
+  HMGET: 'HMGET ${1:key} ${2:field}',
+  HSET: 'HSET ${1:key} ${2:field} ${3:value}',
+  HVALS: 'HVALS ${1:key}',
+  INCR: 'INCR ${1:key}',
+  INCRBY: 'INCRBY ${1:key} ${2:increment}',
+  KEYS: 'KEYS ${1:pattern}',
+  LINDEX: 'LINDEX ${1:key} ${2:index}',
+  LLEN: 'LLEN ${1:key}',
+  LPOP: 'LPOP ${1:key}',
+  LPUSH: 'LPUSH ${1:key} ${2:value}',
+  LRANGE: 'LRANGE ${1:key} ${2:start} ${3:stop}',
+  LREM: 'LREM ${1:key} ${2:count} ${3:value}',
+  LSET: 'LSET ${1:key} ${2:index} ${3:value}',
+  LTRIM: 'LTRIM ${1:key} ${2:start} ${3:stop}',
+  MGET: 'MGET ${1:key}',
+  MSET: 'MSET ${1:key} ${2:value}',
+  PERSIST: 'PERSIST ${1:key}',
+  PEXPIRE: 'PEXPIRE ${1:key} ${2:milliseconds}',
+  PUBLISH: 'PUBLISH ${1:channel} ${2:message}',
+  RENAME: 'RENAME ${1:key} ${2:newkey}',
+  RENAMENX: 'RENAMENX ${1:key} ${2:newkey}',
+  RPOP: 'RPOP ${1:key}',
+  RPUSH: 'RPUSH ${1:key} ${2:value}',
+  SADD: 'SADD ${1:key} ${2:member}',
+  SCARD: 'SCARD ${1:key}',
+  SDIFF: 'SDIFF ${1:key}',
+  SET: 'SET ${1:key} ${2:value}',
+  SETEX: 'SETEX ${1:key} ${2:seconds} ${3:value}',
+  SETNX: 'SETNX ${1:key} ${2:value}',
+  SINTER: 'SINTER ${1:key}',
+  SISMEMBER: 'SISMEMBER ${1:key} ${2:member}',
+  SMEMBERS: 'SMEMBERS ${1:key}',
+  SREM: 'SREM ${1:key} ${2:member}',
+  STRLEN: 'STRLEN ${1:key}',
+  SUBSCRIBE: 'SUBSCRIBE ${1:channel}',
+  SUNION: 'SUNION ${1:key}',
+  TTL: 'TTL ${1:key}',
+  TYPE: 'TYPE ${1:key}',
+  ZADD: 'ZADD ${1:key} ${2:score} ${3:member}',
+  ZCARD: 'ZCARD ${1:key}',
+  ZCOUNT: 'ZCOUNT ${1:key} ${2:min} ${3:max}',
+  ZRANGE: 'ZRANGE ${1:key} ${2:start} ${3:stop}',
+  ZRANK: 'ZRANK ${1:key} ${2:member}',
+  ZREM: 'ZREM ${1:key} ${2:member}',
+  ZSCORE: 'ZSCORE ${1:key} ${2:member}',
+};
+
+const redisSubcommands: Record<string, string[]> = {
+  CLIENT: ['GETNAME', 'ID', 'INFO', 'KILL', 'LIST', 'PAUSE', 'REPLY', 'SETNAME', 'UNBLOCK'],
+  CLUSTER: [
+    'ADDSLOTS',
+    'COUNT-FAILURE-REPORTS',
+    'COUNTKEYSINSLOT',
+    'DELSLOTS',
+    'FAILOVER',
+    'FORGET',
+    'GETKEYSINSLOT',
+    'INFO',
+    'KEYSLOT',
+    'MEET',
+    'NODES',
+    'REPLICATE',
+    'RESET',
+    'SAVECONFIG',
+    'SET-CONFIG-EPOCH',
+    'SETSLOT',
+    'SLAVES',
+    'SLOTS',
+  ],
+  COMMAND: ['COUNT', 'GETKEYS', 'INFO'],
+  CONFIG: ['GET', 'REWRITE', 'RESETSTAT', 'SET'],
+  DEBUG: ['OBJECT', 'SEGFAULT'],
+  PUBSUB: ['CHANNELS', 'NUMPAT', 'NUMSUB'],
+  SCRIPT: ['EXISTS', 'FLUSH', 'KILL', 'LOAD'],
+  SLOWLOG: ['GET', 'LEN', 'RESET'],
+};
 
 const mapDatabaseTypeToParser = (databaseType: string): ISqlAutocompleteOptions['parserType'] => {
   const typeMap: Record<string, ISqlAutocompleteOptions['parserType']> = {
@@ -94,8 +195,143 @@ const getFunctionInsertText = (functionName: string) => {
   return `${functionName}($0)`;
 };
 
+const isRedisDatabase = (databaseType?: DatabaseTypeCode | string) => {
+  return databaseType?.toUpperCase() === DatabaseTypeCode.REDIS;
+};
+
+const getRedisKeySearchText = (inputValue?: string) => {
+  const trimmedInputValue = inputValue?.trim();
+  return trimmedInputValue ? `${trimmedInputValue}*` : '*';
+};
+
+const getRedisLineContext = (model: monaco.editor.ITextModel, position: monaco.Position) => {
+  const lineBeforeCursor = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
+  const word = model.getWordUntilPosition(position);
+  const commandMatch = lineBeforeCursor.trimStart().match(/^(\S+)/);
+  const tokens = lineBeforeCursor
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return {
+    command: commandMatch?.[1]?.toUpperCase() || '',
+    isCommandPosition: tokens.length <= 1 && !/\s$/.test(lineBeforeCursor),
+    inputValue: word.word,
+    range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
+    tokenCount: tokens.length,
+  };
+};
+
+const getRedisKeySuggestions = async (
+  boundInfo: IBoundInfo,
+  inputValue: string,
+  range: monaco.Range,
+): Promise<monaco.languages.CompletionItem[]> => {
+  if (!boundInfo.dataSourceId) {
+    return [];
+  }
+
+  const cacheKey = [boundInfo.dataSourceId, boundInfo.databaseName || '', getRedisKeySearchText(inputValue)].join('_');
+  const cachedData = redisKeyCache.get(cacheKey);
+  if (cachedData && cachedData.expiresAt > Date.now()) {
+    return cachedData.data.map((item) => buildRedisKeySuggestion(item, range));
+  }
+
+  try {
+    const data = await redisService.getKeyList({
+      dataSourceId: boundInfo.dataSourceId,
+      databaseName: boundInfo.databaseName,
+      searchKey: getRedisKeySearchText(inputValue),
+      count: 50,
+    });
+    const filteredData = (data || []).filter((item) => matchesInputValue(item.name, inputValue));
+    redisKeyCache.set(cacheKey, {
+      data: filteredData,
+      expiresAt: Date.now() + REDIS_KEY_CACHE_TTL,
+    });
+    return filteredData.map((item) => buildRedisKeySuggestion(item, range));
+  } catch (error) {
+    console.error('[Redis 补全 - API] 获取 key 失败:', error);
+    return [];
+  }
+};
+
+const buildRedisKeySuggestion = (item: any, range: monaco.Range): monaco.languages.CompletionItem => {
+  const keyName = item.name || '';
+  return {
+    label: keyName,
+    insertText: keyName,
+    sortText: `B${keyName}`,
+    kind: monaco.languages.CompletionItemKind.Value,
+    detail: item.type ? `(Redis key) ${item.type}` : '(Redis key)',
+    documentation:
+      item.ttl === undefined || item.ttl === null ? `key: ${keyName}` : `key: ${keyName}, ttl: ${item.ttl}`,
+    range,
+  };
+};
+
+const initRedisAutocomplete = (options: ISqlAutocompleteOptions): ISqlAutocompleteDisposable => {
+  const { monaco: monacoIns, boundInfo } = options;
+  const redisCompletion = getDialectCompletion(DatabaseTypeCode.REDIS);
+
+  const provider = monacoIns.languages.registerCompletionItemProvider('sql', {
+    triggerCharacters: ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:*'.split(''),
+    provideCompletionItems: async (model, position) => {
+      const { command, isCommandPosition, inputValue, range, tokenCount } = getRedisLineContext(model, position);
+
+      if (isCommandPosition) {
+        return {
+          suggestions: redisCompletion.keywords
+            .filter((redisCommand) => matchesInputValue(redisCommand, inputValue))
+            .map((redisCommand) => ({
+              label: redisCommand,
+              insertText: redisCommandSnippets[redisCommand] || redisCommand,
+              insertTextRules: redisCommandSnippets[redisCommand]
+                ? monacoIns.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                : undefined,
+              sortText: `A${redisCommand}`,
+              kind: monacoIns.languages.CompletionItemKind.Keyword,
+              detail: '(Redis command)',
+              range,
+            })),
+        };
+      }
+
+      if (redisSubcommands[command] && tokenCount <= 2) {
+        return {
+          suggestions: redisSubcommands[command]
+            .filter((subcommand) => matchesInputValue(subcommand, inputValue))
+            .map((subcommand) => ({
+              label: subcommand,
+              insertText: subcommand,
+              sortText: `A${subcommand}`,
+              kind: monacoIns.languages.CompletionItemKind.Keyword,
+              detail: `(Redis ${command} subcommand)`,
+              range,
+            })),
+        };
+      }
+
+      const keySuggestions = await getRedisKeySuggestions(boundInfo, inputValue, range);
+      return {
+        suggestions: keySuggestions,
+      };
+    },
+  });
+
+  return {
+    dispose: () => {
+      provider.dispose();
+    },
+  };
+};
+
 export const initSqlAutocomplete = (options: ISqlAutocompleteOptions): ISqlAutocompleteDisposable => {
-  const { monaco, editor, boundInfo, parserType } = options;
+  const { editor, boundInfo, parserType } = options;
+
+  if (isRedisDatabase(boundInfo.databaseType)) {
+    return initRedisAutocomplete(options);
+  }
 
   const effectiveParserType = parserType || mapDatabaseTypeToParser(boundInfo.databaseType || 'MYSQL');
 
