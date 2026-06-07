@@ -43,6 +43,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
+/**
+ * Redis 元数据和键浏览服务实现。
+ *
+ * 该类负责：
+ * - 获取 Redis 数据库列表
+ * - 浏览和查询 Redis 键信息
+ * - 创建、更新、删除 Redis 键
+ * - 监控 Redis 命令流
+ */
 @Slf4j
 public class RedisMetaData extends DefaultMetaService implements MetaData, RedisKeyBrowser, RedisCommandMonitor {
 
@@ -82,6 +91,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
     @Override
     public CommandExecutor getCommandExecutor() {
+        // 提供 Redis 命令执行器，用于执行 Redis 相关 SQL 转换后的命令。
         return COMMAND_EXECUTOR;
     }
 
@@ -89,6 +99,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
     @Override
     public void streamKeys(String databaseName, String searchKey, int count, int batchSize,
                            Consumer<List<RedisKeyInfo>> batchConsumer) {
+        // 流式扫描 Redis 键并按批次返回，支持分页和模糊匹配。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisAsyncCommands<String, String> commands = context.connection().async();
@@ -112,6 +123,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
     @Override
     public void createKey(String databaseName, String keyName, String keyType, Object value, Long ttl) {
+        // 创建新的 Redis 键，如果键已存在则抛出异常。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisCommands<String, String> commands = context.connection().sync();
@@ -149,6 +161,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
     @Override
     public void deleteKey(String databaseName, String keyName) {
+        // 删除指定 Redis 键，空键名将被忽略。
         try (RedisConnectionProvider.RedisConnectionContext context =
                      RedisConnectionProvider.open(Chat2DBContext.getConnectInfo())) {
             RedisCommands<String, String> commands = context.connection().sync();
@@ -161,6 +174,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
 
     @Override
     public void monitor(String databaseName, Consumer<String> lineConsumer, BooleanSupplier running) {
+        // 使用原生 Redis MONITOR 命令，输出实时命令流。
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         RedisConnectionProvider.RedisConnectionInfo connectionInfo = RedisConnectionProvider.parse(connectInfo);
         Session session = null;
@@ -202,6 +216,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         }
     }
 
+    /**
+     * 使用 SCAN 命令分批获取 Redis 键信息，并将结果按批次回传。
+     */
     private void scanKeyInfo(RedisAsyncCommands<String, String> commands, String pattern, long count, int batchSize,
                              Consumer<List<RedisKeyInfo>> batchConsumer) {
         List<CompletableFuture<RedisKeyInfo>> batch = new ArrayList<>(batchSize);
@@ -235,6 +252,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         }
     }
 
+    /**
+     * 构建完整键信息，包括类型、值、TTL 和内存大小。
+     */
     private RedisKeyInfo buildFullKeyInfo(RedisCommands<String, String> commands, String key) {
         String type = getType(commands, key);
         return RedisKeyInfo.builder()
@@ -246,6 +266,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                 .build();
     }
 
+    /**
+     * 构建键的简要信息，用于列表预览场景。
+     */
     private CompletableFuture<RedisKeyInfo> buildKeyInfo(RedisAsyncCommands<String, String> commands, String key) {
         return commands.type(key).toCompletableFuture()
                 .thenCompose(type -> {
@@ -270,6 +293,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                         .build());
     }
 
+    /**
+     * 预览键值内容，仅返回简短摘要用于界面展示。
+     */
     private CompletableFuture<Object> previewValue(RedisAsyncCommands<String, String> commands, String key,
                                                    String type) {
         try {
@@ -289,27 +315,17 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         }
     }
 
+    /**
+     * 等待一批异步键信息构建完成，并返回完整结果。
+     */
     private List<RedisKeyInfo> resolveBatch(List<CompletableFuture<RedisKeyInfo>> batch) {
         CompletableFuture.allOf(batch.toArray(new CompletableFuture[0])).join();
         return batch.stream().map(CompletableFuture::join).toList();
     }
 
-    private Object previewValue(RedisCommands<String, String> commands, String key, String type) {
-        try {
-            return switch (StringUtils.defaultString(type).toLowerCase()) {
-                case "string" -> abbreviate(commands.get(key));
-                case "hash" -> previewMap(commands.hgetall(key));
-                case "list" -> previewList(commands.lrange(key, 0, VALUE_PREVIEW_LIMIT - 1));
-                case "set" -> previewList(commands.srandmember(key, VALUE_PREVIEW_LIMIT));
-                case "zset" -> previewList(commands.zrange(key, 0, VALUE_PREVIEW_LIMIT - 1));
-                default -> "";
-            };
-        } catch (Exception e) {
-            log.warn("Redis key value preview failed, key={}", key, e);
-            return "";
-        }
-    }
-
+    /**
+     * 根据键类型读取完整值。
+     */
     private Object readValue(RedisCommands<String, String> commands, String key, String type) {
         try {
             return switch (StringUtils.defaultString(type).toLowerCase()) {
@@ -357,6 +373,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         }
     }
 
+    /**
+     * 将 TTL 应用到指定键，如 ttl 为 null 或负值则取消过期时间。
+     */
     private void applyTtl(RedisCommands<String, String> commands, String key, Long ttl) {
         if (ttl == null || ttl < 0) {
             commands.persist(key);
@@ -367,6 +386,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         }
     }
 
+    /**
+     * 将任意对象转换为字符串键值映射，供 Hash 类型写入使用。
+     */
     private Map<String, String> toStringMap(Object value) {
         Map<String, String> result = new LinkedHashMap<>();
         if (!(value instanceof Map<?, ?> map)) {
@@ -390,6 +412,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         return List.of(String.valueOf(value));
     }
 
+    /**
+     * 通过原始 RESP 协议发送 AUTH 命令并验证返回结果。
+     */
     private void authenticate(ConnectInfo connectInfo, OutputStream writer, BufferedReader reader)
             throws IOException {
         if (StringUtils.isBlank(connectInfo.getPassword())) {
@@ -403,6 +428,9 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
         expectStatus(reader, "OK");
     }
 
+    /**
+     * 为监控连接选择指定数据库。
+     */
     private void selectMonitorDatabase(String databaseName, OutputStream writer, BufferedReader reader)
             throws IOException {
         if (StringUtils.isBlank(databaseName)) {
