@@ -109,11 +109,11 @@ public class PromptBuilderImpl implements PromptBuilder {
         if (type == null) {
             type = PromptType.NL_2_SQL;
         }
+        if (PromptType.NL_2_SQL.equals(type) && isRedisDataSource(context)) {
+            type = PromptType.REDIS_NL_2_COMMAND;
+        }
 
         PromptTemplate template = templateRegistry.getTemplate(type);
-        if (type == PromptType.NL_2_SQL && isRedisDataSource(context)) {
-            template = buildRedisCommandTemplate();
-        }
         String builtPrompt = fillTemplate(template, context);
 
         return validator.cleanPrompt(builtPrompt);
@@ -183,26 +183,6 @@ public class PromptBuilderImpl implements PromptBuilder {
 
     private boolean isRedisDataSource(PromptContext context) {
         return DataSourceTypeEnum.REDIS.getCode().equalsIgnoreCase(context.getDataSourceType());
-    }
-
-    private PromptTemplate buildRedisCommandTemplate() {
-        return PromptTemplate.builder()
-                .name("redis_nl_2_command")
-                .promptType(PromptType.NL_2_SQL)
-                .description("将自然语言转换成 Redis 命令")
-                .template("""
-                        ### 请根据 Redis command input 生成 Redis 命令。{ext}
-                        #
-                        ### 数据库类型: {db_type}
-                        #
-                        ### Redis command input: {message}
-                        #
-                        ### 输出要求
-                        1. 只输出可执行的 Redis 命令，不要输出 SQL。
-                        2. 不要输出 Markdown、代码块、解释、标题或多余文本。
-                        3. 如果需要多条命令，每行输出一条 Redis 命令。
-                        """)
-                .build();
     }
 
     private String appendRevisionContextIfNeeded(String filledTemplate, PromptContext context) {

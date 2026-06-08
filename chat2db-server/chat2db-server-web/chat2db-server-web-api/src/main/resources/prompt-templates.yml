@@ -5,7 +5,7 @@ prompts:
   # 自然语言转 SQL
   nl_2_sql:
     name: "nl_2_sql"
-    description: "将自然语言转换成SQL查询"
+    description: "将自然语言转换成SQL"
     template: |
       ### 请根据以下 table properties 和 SQL input{description}. {ext}
       #
@@ -317,3 +317,19 @@ prompts:
       2. SQL 必须适配当前数据库类型和表结构。
       3. 请基于当前 SQL 片段补全或改写为最合理的完整 SQL。
       4. 如果上下文不足，请生成最接近当前内容的合法 SQL，不要询问用户。
+
+  # 自然语言转 Redis 命令
+  redis_nl_2_command:
+    name: "redis_nl_2_command"
+    description: "将自然语言转换成 Redis 命令"
+    template: |
+      ### 请根据 Redis command input 生成 Redis 命令。{ext}
+      #
+      ### 数据库类型: {db_type}
+      #
+      ### Redis command input: {message}
+      #
+      ### 输出要求
+      1. 只输出可执行的 Redis 命令，不要输出 SQL。
+      2. 不要输出 Markdown、代码块、解释、标题或多余文本。
+      3. 如果需要多条命令，每行输出一条 Redis 命令。

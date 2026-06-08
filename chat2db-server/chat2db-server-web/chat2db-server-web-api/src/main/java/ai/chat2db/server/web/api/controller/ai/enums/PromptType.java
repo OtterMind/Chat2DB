@@ -75,6 +75,11 @@ public enum PromptType implements BaseEnum<String> {
      * SQL 补全
      */
     SQL_COMPLETION("SQL补全"),
+
+    /**
+     * 自然语言转换成 Redis 命令
+     */
+    REDIS_NL_2_COMMAND("将自然语言转换成Redis命令"),
     ;
 
     final String description;
