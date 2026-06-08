@@ -17,7 +17,7 @@ import { compareStrings } from '@/utils/sort';
 import { transformInputValue } from '../../utils';
 
 // 类型定义
-import { CRUD } from '@/constants';
+import { CRUD, DatabaseTypeCode } from '@/constants';
 import { TableDataType } from '@/constants/table';
 import { IManageResultData, IResultConfig } from '@/typings/database';
 import { ExportSizeEnum, ExportTypeEnum } from '@/typings/resultTable';
@@ -210,7 +210,7 @@ export default function TableBox(props: ITableProps) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     setTimeout(() => {
       setExportModalVisible(false);
     }, 1000);
@@ -456,6 +456,11 @@ export default function TableBox(props: ITableProps) {
   };
 
   const onClickTotalBtn = async () => {
+    if (props.executeSqlParams?.databaseType === DatabaseTypeCode.REDIS) {
+      const total = Number(queryResultData.fuzzyTotal || queryResultData.dataList?.length || 0);
+      setPaginationConfig({ ...paginationConfig, total });
+      return total;
+    }
     const res = await sqlService.getDMLCount({
       sql: queryResultData.originalSql,
       ...(props.executeSqlParams || {}),
