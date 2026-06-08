@@ -43,7 +43,7 @@ import java.util.function.Consumer;
 
 /**
  * Redis 元数据和键浏览服务实现。
- *
+ * <p>
  * 该类负责：
  * - 获取 Redis 数据库列表
  * - 浏览和查询 Redis 键信息
@@ -301,7 +301,7 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
      * @param fullValue true 读取完整值（详情场景），false 读取预览摘要（列表场景）
      */
     private CompletableFuture<RedisKeyInfo> buildKeyInfo(RedisAsyncCommands<String, String> commands, String key,
-                                                        boolean fullValue) {
+                                                         boolean fullValue) {
         return getTypeAsync(commands, key).thenCompose(type -> {
             CompletableFuture<Object> value = fullValue ? readValue(commands, key, type)
                     : previewValue(commands, key, type);
@@ -331,8 +331,11 @@ public class RedisMetaData extends DefaultMetaService implements MetaData, Redis
                                                    String type) {
         try {
             return switch (StringUtils.defaultString(type).toLowerCase()) {
-                case "string" -> commands.get(key).toCompletableFuture().thenApply(this::abbreviate);
-                case "hash" -> commands.hgetall(key).toCompletableFuture().thenApply(this::previewMap);
+                case "string" -> commands.getrange(key, 0, VALUE_TEXT_LIMIT).toCompletableFuture()
+                        .thenApply(this::abbreviate);
+                case "hash" -> commands.hscan(key, ScanCursor.INITIAL,
+                                new ScanArgs().limit(VALUE_PREVIEW_LIMIT + 1)).toCompletableFuture()
+                        .thenApply(cursor -> previewMap(cursor.getMap()));
                 case "list" -> commands.lrange(key, 0, VALUE_PREVIEW_LIMIT - 1).toCompletableFuture()
                         .thenApply(this::previewList);
                 case "set" -> commands.srandmember(key, VALUE_PREVIEW_LIMIT).toCompletableFuture()
