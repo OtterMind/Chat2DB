@@ -1,12 +1,13 @@
 package ai.chat2db.spi.redis;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 public interface RedisKeyBrowser {
 
-    RedisKeyScanResult streamKeys(String databaseName, String searchKey, String cursor, int count,
-                                  Consumer<List<RedisKeyInfo>> batchConsumer);
+    CompletableFuture<RedisKeyScanResult> streamKeys(String databaseName, String searchKey, String cursor, int count,
+                                                     Consumer<List<RedisKeyInfo>> batchConsumer);
 
     RedisKeyInfo queryKey(String databaseName, String keyName);
 

@@ -3,7 +3,6 @@ package ai.chat2db.server.web.api.controller.redis;
 import ai.chat2db.server.tools.base.excption.BusinessException;
 import ai.chat2db.server.tools.base.wrapper.result.ActionResult;
 import ai.chat2db.server.tools.base.wrapper.result.DataResult;
-import ai.chat2db.server.tools.base.wrapper.result.ListResult;
 import ai.chat2db.server.web.api.aspect.ConnectionInfoAspect;
 import ai.chat2db.server.web.api.controller.redis.request.KeyCreateRequest;
 import ai.chat2db.server.web.api.controller.redis.request.KeyDeleteRequest;
@@ -15,7 +14,6 @@ import ai.chat2db.spi.redis.RedisKeyBrowser;
 import ai.chat2db.spi.redis.RedisKeyInfo;
 import ai.chat2db.spi.redis.RedisKeyScanResult;
 import ai.chat2db.spi.sql.Chat2DBContext;
-import ai.chat2db.spi.sql.ConnectInfo;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.http.MediaType;
@@ -31,6 +29,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -58,34 +57,38 @@ public class RedisKeyManageController {
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(KeyQueryRequest request) throws IOException {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT);
-        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo().copy();
         emitter.send(SseEmitter.event()
                 .name("connect")
                 .data(LocalDateTime.now().toString())
                 .reconnectTime(3000));
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                Chat2DBContext.putContext(connectInfo);
-                RedisKeyBrowser browser = getRedisKeyBrowser();
-                int count = request.getCount() == null ? DEFAULT_KEY_COUNT : request.getCount();
-                RedisKeyScanResult result = browser.streamKeys(request.getDatabaseName(), request.getSearchKey(),
-                        request.getCursor(), count, batch -> {
-                    sendEvent(emitter, "keys", batch.stream().map(this::toVO).toList());
-                });
-                sendEvent(emitter, "done", Map.of(
-                        "total", result.getTotal(),
-                        "cursor", result.getCursor(),
-                        "hasMore", result.getHasMore()
-                ));
-                emitter.complete();
-            } catch (Exception e) {
-                sendEvent(emitter, "redis_error", Map.of("message", e.getMessage()));
-                emitter.completeWithError(e);
-            } finally {
-                Chat2DBContext.removeContext();
-            }
-        });
+        try {
+            RedisKeyBrowser browser = getRedisKeyBrowser();
+            int count = request.getCount() == null ? DEFAULT_KEY_COUNT : request.getCount();
+            CompletableFuture<RedisKeyScanResult> resultFuture = browser.streamKeys(request.getDatabaseName(),
+                    request.getSearchKey(), request.getCursor(), count, batch -> {
+                        sendEvent(emitter, "keys", batch.stream().map(this::toVO).toList());
+                    });
+            resultFuture.whenCompleteAsync((result, throwable) -> {
+                if (throwable != null) {
+                    Throwable cause = unwrapCompletionException(throwable);
+                    sendStreamError(emitter, cause);
+                    return;
+                }
+                try {
+                    sendEvent(emitter, "done", Map.of(
+                            "total", result.getTotal(),
+                            "cursor", result.getCursor(),
+                            "hasMore", result.getHasMore()
+                    ));
+                    emitter.complete();
+                } catch (Exception e) {
+                    sendStreamError(emitter, e);
+                }
+            });
+        } catch (Exception e) {
+            sendStreamError(emitter, e);
+        }
         return emitter;
     }
 
@@ -162,5 +165,21 @@ public class RedisKeyManageController {
         } catch (IOException e) {
             throw new BusinessException("Redis key stream send failed", null, e);
         }
+    }
+
+    private void sendStreamError(SseEmitter emitter, Throwable throwable) {
+        try {
+            sendEvent(emitter, "redis_error", Map.of("message", throwable.getMessage()));
+        } catch (Exception ignored) {
+            // ignore send failure and complete the emitter with the original error
+        }
+        emitter.completeWithError(throwable);
+    }
+
+    private Throwable unwrapCompletionException(Throwable throwable) {
+        if (throwable instanceof CompletionException && throwable.getCause() != null) {
+            return throwable.getCause();
+        }
+        return throwable;
     }
 }
