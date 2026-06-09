@@ -1,6 +1,7 @@
 package ai.chat2db.spi.redis;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -16,4 +17,7 @@ public interface RedisKeyBrowser {
     void updateKey(String databaseName, String originalKey, String updateKey, String keyType, Object value, Long ttl);
 
     void deleteKey(String databaseName, String keyName);
+
+    void partialUpdateKey(String databaseName, String keyName, String keyType,
+                          Map<String, String> addedFields, List<String> removedFields, Long ttl);
 }

@@ -90,6 +90,11 @@ const TableRelationModal = memo((props: IProps) => {
 
   const virtualForeignKeys = useMemo(() => foreignKeys.filter((item) => item.sourceType === 'VIRTUAL'), [foreignKeys]);
 
+  const filteredVirtualForeignKeys = useMemo(
+    () => filteredForeignKeys.filter((item) => item.sourceType === 'VIRTUAL'),
+    [filteredForeignKeys],
+  );
+
   const getFields = useCallback(
     async (selectedTableName?: string) => {
       if (!selectedTableName || fieldMap[selectedTableName]) {
@@ -454,7 +459,7 @@ const TableRelationModal = memo((props: IProps) => {
   };
 
   const handleExport = () => {
-    if (!virtualForeignKeys.length) {
+    if (!filteredVirtualForeignKeys.length) {
       message.warning(i18n('workspace.tableRelation.exportEmpty'));
       return;
     }
@@ -464,7 +469,7 @@ const TableRelationModal = memo((props: IProps) => {
         version: 1,
         databaseName,
         schemaName,
-        virtualForeignKeys: virtualForeignKeys.map((item) => ({
+        virtualForeignKeys: filteredVirtualForeignKeys.map((item) => ({
           tableName: item.tableName,
           columnName: item.columnName,
           referencedTable: item.referencedTable,
@@ -553,7 +558,7 @@ const TableRelationModal = memo((props: IProps) => {
               {i18n('workspace.tableRelation.importVirtualFk')}
             </Button>
           </Upload>
-          <Button icon={<DownloadOutlined />} onClick={handleExport}>
+          <Button icon={<DownloadOutlined />} disabled={!filteredVirtualForeignKeys.length} onClick={handleExport}>
             {i18n('workspace.tableRelation.exportVirtualFk')}
           </Button>
           <Button

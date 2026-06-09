@@ -6,6 +6,7 @@ import ai.chat2db.server.tools.base.wrapper.result.DataResult;
 import ai.chat2db.server.web.api.aspect.ConnectionInfoAspect;
 import ai.chat2db.server.web.api.controller.redis.request.KeyCreateRequest;
 import ai.chat2db.server.web.api.controller.redis.request.KeyDeleteRequest;
+import ai.chat2db.server.web.api.controller.redis.request.KeyPartialUpdateRequest;
 import ai.chat2db.server.web.api.controller.redis.request.KeyQueryRequest;
 import ai.chat2db.server.web.api.controller.redis.request.KeyUpdateRequest;
 import ai.chat2db.server.web.api.controller.redis.vo.KeyVO;
@@ -129,6 +130,21 @@ public class RedisKeyManageController {
         Long ttl = updateTtl == null ? null : Long.valueOf(String.valueOf(updateTtl));
         getRedisKeyBrowser().updateKey(request.getDatabaseName(), request.getOriginalKey(), request.getUpdateKey(),
                 request.getKeyType(), request.getValue(), ttl);
+        return ActionResult.isSuccess();
+    }
+
+    /**
+     * 部分更新key（仅修改hash的增量字段）
+     *
+     * @param request
+     * @return
+     */
+    @PostMapping("/partial-update")
+    public ActionResult partialUpdate(@RequestBody KeyPartialUpdateRequest request) {
+        Object updateTtl = request.getUpdateTtl();
+        Long ttl = updateTtl == null ? null : Long.valueOf(String.valueOf(updateTtl));
+        getRedisKeyBrowser().partialUpdateKey(request.getDatabaseName(), request.getKeyName(),
+                request.getKeyType(), request.getAddedFields(), request.getRemovedFields(), ttl);
         return ActionResult.isSuccess();
     }
 

@@ -55,6 +55,7 @@ const RedisDataView = memo((props: IProps) => {
   const [editorTtl, setEditorTtl] = useState<number | null>(NO_TTL);
   const [textValue, setTextValue] = useState('');
   const [hashFields, setHashFields] = useState<IHashFieldRow[]>([]);
+  const [originalHashFields, setOriginalHashFields] = useState<Record<string, string>>({});
   const [hashFieldFilter, setHashFieldFilter] = useState('');
   const [lastRefreshTime, setLastRefreshTime] = useState<string>('');
   const [keyLimit, setKeyLimit] = useState(DEFAULT_LIMIT);
@@ -77,6 +78,10 @@ const RedisDataView = memo((props: IProps) => {
     setEditorTtl(ttl);
     setHashFieldFilter('');
     if (type === 'hash' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const originalMap = Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, String(v ?? '')]),
+      );
+      setOriginalHashFields(originalMap);
       setHashFields(
         Object.entries(value).map(([field, fieldValue]) => ({
           id: uuid(),
@@ -87,6 +92,7 @@ const RedisDataView = memo((props: IProps) => {
       setTextValue('');
       return;
     }
+    setOriginalHashFields({});
     setHashFields([]);
     if (Array.isArray(value)) {
       setTextValue(value.map((item) => String(item ?? '')).join('\n'));
@@ -186,25 +192,51 @@ const RedisDataView = memo((props: IProps) => {
     }
     const type = normalizeType(creating ? editorType : detail?.type);
     setSaving(true);
-    const value = buildEditorValue(type, textValue, hashFields);
-    const saveRequest = creating
-      ? redisService.createKey({
+
+    let saveRequest: Promise<any>;
+
+    if (creating) {
+      const value = buildEditorValue(type, textValue, hashFields);
+      saveRequest = redisService.createKey({
+        dataSourceId: uniqueData.dataSourceId,
+        databaseName: uniqueData.databaseName,
+        name: nextKey,
+        keyType: type,
+        value,
+        ttl: editorTtl ?? NO_TTL,
+      });
+    } else if (type === 'hash' && nextKey === detail!.name) {
+      const { addedFields, removedFields } = computeHashDiff(originalHashFields, hashFields);
+      const hasFieldChanges = Object.keys(addedFields).length > 0 || removedFields.length > 0;
+      const hasTtlChange = editorTtl !== (detail!.ttl ?? NO_TTL);
+      if (hasFieldChanges || hasTtlChange) {
+        saveRequest = redisService.partialUpdateKey({
           dataSourceId: uniqueData.dataSourceId,
           databaseName: uniqueData.databaseName,
-          name: nextKey,
+          keyName: nextKey,
           keyType: type,
-          value,
-          ttl: editorTtl ?? NO_TTL,
-        })
-      : redisService.updateKey({
-          dataSourceId: uniqueData.dataSourceId,
-          databaseName: uniqueData.databaseName,
-          originalKey: detail!.name,
-          updateKey: nextKey,
-          keyType: type,
-          value,
+          addedFields,
+          removedFields,
           updateTtl: editorTtl ?? NO_TTL,
         });
+      } else {
+        message.info('没有修改内容');
+        setSaving(false);
+        return;
+      }
+    } else {
+      const value = buildEditorValue(type, textValue, hashFields);
+      saveRequest = redisService.updateKey({
+        dataSourceId: uniqueData.dataSourceId,
+        databaseName: uniqueData.databaseName,
+        originalKey: detail!.name,
+        updateKey: nextKey,
+        keyType: type,
+        value,
+        updateTtl: editorTtl ?? NO_TTL,
+      });
+    }
+
     saveRequest
       .then(() => {
         message.success(creating ? 'Redis key 已新增' : 'Redis key 已保存');
@@ -241,6 +273,7 @@ const RedisDataView = memo((props: IProps) => {
     setEditorTtl(NO_TTL);
     setTextValue('');
     setHashFields([{ id: uuid(), field: '', value: '' }]);
+    setOriginalHashFields({});
     setHashFieldFilter('');
   };
 
@@ -720,6 +753,36 @@ function formatSize(size?: number) {
     return `${(size / 1024).toFixed(1)} KB`;
   }
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function computeHashDiff(
+  original: Record<string, string>,
+  current: IHashFieldRow[],
+): { addedFields: Record<string, string>; removedFields: string[] } {
+  const currentMap: Record<string, string> = {};
+  current.forEach((row) => {
+    const field = row.field.trim();
+    if (field) {
+      currentMap[field] = row.value;
+    }
+  });
+
+  const addedFields: Record<string, string> = {};
+  const removedFields: string[] = [];
+
+  for (const [field, value] of Object.entries(currentMap)) {
+    if (!(field in original) || original[field] !== value) {
+      addedFields[field] = value;
+    }
+  }
+
+  for (const field of Object.keys(original)) {
+    if (!(field in currentMap)) {
+      removedFields.push(field);
+    }
+  }
+
+  return { addedFields, removedFields };
 }
 
 export default RedisDataView;

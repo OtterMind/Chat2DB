@@ -34,6 +34,16 @@ export interface IRedisKeyUpdateParams {
   updateTtl?: number;
 }
 
+export interface IRedisKeyPartialUpdateParams {
+  dataSourceId: number;
+  databaseName?: string;
+  keyName: string;
+  keyType: string;
+  addedFields?: Record<string, string>;
+  removedFields?: string[];
+  updateTtl?: number;
+}
+
 export interface IRedisKeyCreateParams {
   dataSourceId: number;
   databaseName?: string;
@@ -75,6 +85,10 @@ const queryKey = createRequest<IRedisKeyQueryParams, IRedisKeyItem>('/api/redis/
 });
 
 const updateKey = createRequest<IRedisKeyUpdateParams, void>('/api/redis/key/update', {
+  method: 'post',
+});
+
+const partialUpdateKey = createRequest<IRedisKeyPartialUpdateParams, void>('/api/redis/key/partial-update', {
   method: 'post',
 });
 
@@ -179,6 +193,7 @@ export default {
   createKey,
   deleteKey,
   getKeyList,
+  partialUpdateKey,
   queryKey,
   streamKeyList,
   streamMonitor,
