@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dropdown, Input, MenuProps, message, Modal, Space, Popover, Spin, Button } from 'antd';
+import { Dropdown, Input, MenuProps, message, Modal, Space, Popover, Spin, Button, DatePicker } from 'antd';
 import { BaseTable, ArtColumn, useTablePipeline, features, SortItem } from 'ali-react-table';
 import styled from 'styled-components';
 import classnames from 'classnames';
@@ -15,7 +15,7 @@ import styles from './index.less';
 // 工具函数
 import { compareStrings } from '@/utils/sort';
 import { downloadFile } from '@/utils/file';
-import { transformInputValue } from '../../utils';
+import { transformInputValue, transformDateTimeValue } from '../../utils';
 
 // 类型定义
 import { CRUD } from '@/constants';
@@ -70,6 +70,10 @@ export interface IUpdateData {
 
 export enum USER_FILLED_VALUE {
   DEFAULT = 'CHAT2DB_UPDATE_TABLE_DATA_USER_FILLED_DEFAULT',
+}
+
+export enum DATE_TIME {
+  DATEFORMAT = 'YYYY-MM-DD HH:mm:ss',
 }
 
 const SupportBaseTable: any = styled(BaseTable)`
@@ -605,6 +609,7 @@ export default function TableBox(props: ITableProps) {
       const isNumber = dataType === TableDataType.NUMERIC;
       const isNumericalOrder = dataType === TableDataType.CHAT2DB_ROW_NUMBER;
       const colId = `${preCode}${colIndex}${name}`;
+      const isDateTime = dataType === TableDataType.DATETIME;
 
       if (isNumericalOrder) {
         return {
@@ -652,6 +657,50 @@ export default function TableBox(props: ITableProps) {
         };
       }
 
+      if (isDateTime) {
+        return {
+          code: colId,
+          name: name,
+          key: name,
+          render: (value: any, rowData) => {
+            const rowId = rowData[colNoCode];
+            const content = renderTableCellValue(value);
+            return (
+              <div
+                data-chat2db-general-can-copy-element
+                data-chat2db-edit-table-data-can-paste
+                data-chat2db-edit-table-data-can-right-click
+                className={tableCellStyle(value, rowId, colId)}
+                onClick={handleClickTableItem.bind(null, colId, rowId, value, false)}
+                onDoubleClick={handleClickTableItem.bind(null, colId, rowId, value, true)}
+                onContextMenu={handleClickTableItem.bind(null, colId, rowId, value, false)}
+              >
+                {editingCell?.[0] === colId && editingCell?.[1] === rowId && editingCell?.[2] ?
+
+                  (
+                    <DatePicker
+                      showTime
+                      format={DATE_TIME.DATEFORMAT}
+                      value={transformDateTimeValue(editingData) as any}
+                      onChange={(_, dateString) => {
+                        setEditingData(String(dateString));
+                      }}
+                      onBlur={() => {
+                        setEditingCell([editingCell![0], editingCell![1], false]);
+                        updateTableData('setCell', editingData);
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <div className={styles.tableItemContent}>{content}</div>
+                      <div className={styles.previewTableItemContent}>{content}</div>
+                    </>
+                  )}
+              </div>
+            );
+          }
+        };
+      }
       return {
         code: colId,
         name: name,

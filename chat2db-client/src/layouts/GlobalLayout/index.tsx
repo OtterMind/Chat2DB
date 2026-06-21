@@ -1,9 +1,11 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import usePollRequestService, { ServiceStatus } from '@/hooks/usePollRequestService';
-import i18n, { isEn } from '@/i18n';
+import i18n, { isZH, isTR, isJA } from '@/i18n';
 import { Button, ConfigProvider, Spin, Tooltip } from 'antd';
 import antdEnUS from 'antd/locale/en_US';
 import antdZhCN from 'antd/locale/zh_CN';
+import antdJaJP from 'antd/locale/ja_JP';
+import antdTrTR from 'antd/locale/tr_TR';
 import service from '@/service/misc';
 import useCopyFocusData from '@/hooks/useFocusData';
 import { useTheme } from '@/hooks/useTheme';
@@ -93,8 +95,15 @@ const GlobalLayout = () => {
     );
   }
 
+  const activeLang = () => {
+    if (isZH) return antdZhCN;
+    if (isJA) return antdJaJP;
+    if (isTR) return antdTrTR;
+    return antdEnUS;
+  };
+
   return (
-    <ConfigProvider locale={isEn ? antdEnUS : antdZhCN} theme={antdTheme}>
+    <ConfigProvider locale={activeLang()} theme={antdTheme}>
       <div className={styles.app}>
         <div className={styles.appBody}>
           <Outlet />

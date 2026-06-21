@@ -1,4 +1,5 @@
-import { USER_FILLED_VALUE } from './components/TableBox/index';
+import { USER_FILLED_VALUE, DATE_TIME } from './components/TableBox/index';
+import dayjs from 'dayjs';
 
 // 在input中把USER_FILLED_VALUE转换为null
 export const transformInputValue = (value: string) => {
@@ -6,4 +7,8 @@ export const transformInputValue = (value: string) => {
     return null;
   }
   return value;
+};
+
+export const transformDateTimeValue = (value: string) => {
+  return dayjs(value, DATE_TIME.DATEFORMAT);
 };
