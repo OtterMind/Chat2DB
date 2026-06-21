@@ -19,6 +19,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * description：OpenAIEventSourceListener
@@ -52,26 +54,27 @@ public class TongyiChatAIEventSourceListener extends EventSourceListener {
     @Override
     public void onEvent(EventSource eventSource, String id, String type, String data) {
         log.info("Tongyi Chat AI response data：{}", data);
-        if (data.equals("[DONE]")) {
-            log.info("Tongyi Chat AI closed");
+        if (data.contains("\"finish_reason\":\"stop\"")) {
+            TongyiChatCompletions chatCompletions = mapper.readValue(data, TongyiChatCompletions.class);
+            String text = chatCompletions.getOutput().getText();
+            log.info("id: {}, text: {}", chatCompletions.getId(), text);
+            String sqlContent = "";
+            if (text.indexOf("```sql") == -1) {
+                sqlContent = text;
+            } else {
+                Pattern pattern = Pattern.compile("```sql(.*?)```", Pattern.DOTALL);
+                Matcher matcher = pattern.matcher(text);
+                if (matcher.find()) {
+                    sqlContent = matcher.group(1).trim();
+                }
+            }
+            Message message = new Message();
+            message.setContent(sqlContent);
             sseEmitter.send(SseEmitter.event()
-                .id("[DONE]")
-                .data("[DONE]")
-                .reconnectTime(3000));
-            sseEmitter.complete();
-            return;
+                    .id(null)
+                    .data(message)
+                    .reconnectTime(3000));
         }
-
-        TongyiChatCompletions chatCompletions = mapper.readValue(data, TongyiChatCompletions.class);
-        String text = chatCompletions.getOutput().getText();
-        log.info("id: {}, text: {}", chatCompletions.getId(), text);
-
-        Message message = new Message();
-        message.setContent(text);
-        sseEmitter.send(SseEmitter.event()
-            .id(null)
-            .data(message)
-            .reconnectTime(3000));
     }
 
     @Override
