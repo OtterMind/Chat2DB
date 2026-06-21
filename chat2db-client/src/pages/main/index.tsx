@@ -61,6 +61,14 @@ const initNavConfig: INavItem[] = [
     name: i18n('connection.title'),
   },
   {
+    key: 'team',
+    icon: '\ue64b',
+    iconFontSize: 24,
+    isLoad: false,
+    component: <Team />,
+    name: i18n('team.title'),
+  },
+  {
     key: 'github',
     icon: '\ue885',
     iconFontSize: 26,
@@ -100,7 +108,6 @@ function MainPage() {
   }, [mainPageActiveTab]);
 
   useEffect(() => {
-    handleInitPage();
     getConnectionList();
     getConnectionEnvList();
   }, []);
@@ -122,27 +129,6 @@ function MainPage() {
       }
     }
   }, [activeNavKey]);
-
-  const handleInitPage = async () => {
-    const cloneNavConfig = [...navConfig];
-    if (userInfo) {
-      const hasTeamIcon = cloneNavConfig.find((i) => i.key === 'team');
-      if (userInfo.admin && !hasTeamIcon) {
-        cloneNavConfig.splice(3, 0, {
-          key: 'team',
-          icon: '\ue64b',
-          iconFontSize: 24,
-          isLoad: activeNavKey === 'team', // 如果当前是team，直接加载
-          component: <Team />,
-          name: i18n('team.title'),
-        });
-      }
-      if (!userInfo.admin && hasTeamIcon) {
-        cloneNavConfig.splice(3, 1);
-      }
-    }
-    setNavConfig([...cloneNavConfig]);
-  };
 
   const switchingNav = (key: string) => {
     if (key === 'github') {
@@ -192,6 +178,12 @@ function MainPage() {
         {isMac === void 0 && <BrandLogo size={38} className={styles.brandLogo} />}
         <ul className={styles.navList}>
           {navConfig.map((item) => {
+            if (item.key === 'team') {
+              if (!userInfo || !userInfo.admin) {
+                return;
+              }
+            }
+
             return (
               <Tooltip key={item.key} placement="right" title={item.name}>
                 <li
