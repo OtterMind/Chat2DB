@@ -129,17 +129,13 @@ public class RdbDmlController {
 
     @RequestMapping(value = "/get_group_by_sql", method = {RequestMethod.POST, RequestMethod.PUT})
     public DataResult<String> getGroupBySql(@RequestBody GroupByRequest request) {
-
         GroupByParam param = rdbWebConverter.request2param(request);
-
         return dlTemplateService.getGroupBySql(param);
     }
 
     @RequestMapping(value = "/get_order_by_sql", method = {RequestMethod.POST, RequestMethod.PUT})
     public DataResult<String> getOrderBySql(@RequestBody OrderByRequest request) {
-
         OrderByParam param = rdbWebConverter.request2param(request);
-
         return dlTemplateService.getOrderBySql(param);
     }
 

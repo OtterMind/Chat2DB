@@ -58,6 +58,14 @@ public abstract class RdbWebConverter {
      * @param request
      * @return
      */
+    public abstract GroupByParam request2param(GroupByRequest request);
+
+    /**
+     * Parameter conversion
+     *
+     * @param request
+     * @return
+     */
     public abstract DlExecuteParam request2param(DmlTableRequest request);
 
     /**

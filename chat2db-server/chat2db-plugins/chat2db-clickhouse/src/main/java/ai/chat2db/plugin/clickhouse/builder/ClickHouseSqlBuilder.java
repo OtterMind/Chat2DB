@@ -2,7 +2,6 @@ package ai.chat2db.plugin.clickhouse.builder;
 
 import ai.chat2db.plugin.clickhouse.type.ClickHouseColumnTypeEnum;
 import ai.chat2db.plugin.clickhouse.type.ClickHouseIndexTypeEnum;
-import ai.chat2db.spi.SqlBuilder;
 import ai.chat2db.spi.jdbc.DefaultSqlBuilder;
 import ai.chat2db.spi.model.Database;
 import ai.chat2db.spi.model.Table;
