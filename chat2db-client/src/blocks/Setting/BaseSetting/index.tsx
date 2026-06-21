@@ -45,6 +45,7 @@ const languageOptions = [
   { value: LangType.EN_US, label: 'English' },
   { value: LangType.TR_TR, label: 'Turkish' },
   { value: LangType.JA_JP, label: '日本語' },
+  { value: LangType.ES_ES, label: 'Spanish' },
 ]
 
 const colorList = [
@@ -149,6 +150,7 @@ export default function BaseSetting() {
           <Radio value={LangType.ZH_CN}>简体中文</Radio>
           <Radio value={LangType.EN_US}>English</Radio>
           <Radio value={LangType.TR_TR}>Turkish</Radio>
+          <Radio value={LangType.ES_ES}>Spanish</Radio>
         </Radio.Group> */}
         <Select
           style={{ width: 120 }}

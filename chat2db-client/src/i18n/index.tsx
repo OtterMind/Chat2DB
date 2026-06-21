@@ -5,12 +5,14 @@ import zhCN from './zh-cn';
 import enUS from './en-us';
 import trTR from './tr-tr';
 import jaJp from './ja-jp';
+import esES from './es-es';
 
 const locale = {
   'en-us': enUS,
   'zh-cn': zhCN,
   'tr-tr': trTR,
   'ja-jp': jaJp,
+  'es-es': esES,
 };
 
 export const currentLang: LangType = getLang() || LangType.EN_US;
@@ -22,6 +24,8 @@ export const isZH = currentLang === LangType.ZH_CN;
 export const isTR = currentLang === LangType.TR_TR;
 
 export const isJA = currentLang === LangType.JA_JP;
+
+export const isES = currentLang === LangType.ES_ES;
 
 const langSet: Record<string, string> = locale[currentLang];
 

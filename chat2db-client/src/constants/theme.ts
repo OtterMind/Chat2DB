@@ -26,4 +26,5 @@ export enum LangType {
   ZH_CN = 'zh-cn',
   TR_TR = 'tr-tr',
   JA_JP = 'ja-jp',
+  ES_ES = 'es-es',
 }

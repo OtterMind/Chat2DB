@@ -1,0 +1,15 @@
+export default {
+    'editSequence.button.createSequence': 'Nueva Secuencia',
+    'editSequence.button.editSequence': 'Editar Secuencia',
+    'editSequence.label.comment': 'Comentario',
+    'editSequence.label.relname': 'Nombre de la Secuencia',
+    'editSequence.label.typname': 'Tipo de Dato',
+    'editSequence.label.seqcache': 'Caché',
+    'editSequence.label.rolname': 'Propietario',
+    'editSequence.label.seqstart': 'Valor Inicial',
+    'editSequence.label.seqincrement': 'Valor de Incremento',
+    'editSequence.label.seqmax': 'Valor Máximo',
+    'editSequence.label.seqmin': 'Valor Mínimo',
+    'editSequence.label.seqcycle': 'Ciclo',
+    'editSequence.title.sqlPreview': 'Vista Previa de SQL',
+};
