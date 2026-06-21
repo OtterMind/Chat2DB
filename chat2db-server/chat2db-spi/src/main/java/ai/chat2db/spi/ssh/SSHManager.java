@@ -4,6 +4,7 @@ package ai.chat2db.spi.ssh;
 import java.security.Security;
 
 import ai.chat2db.server.tools.common.exception.ConnectionException;
+import ai.chat2db.spi.enums.SSHAuthenticationTypeEnum;
 import ai.chat2db.spi.model.SSHInfo;
 import cn.hutool.core.net.NetUtil;
 import cn.hutool.extra.ssh.JschUtil;
@@ -33,7 +34,7 @@ public class SSHManager {
     public static Session getSSHSession(SSHInfo ssh) {
         Session session = null;
         try {
-            if (StringUtils.isNotBlank(ssh.getKeyFile())) {
+            if (SSHAuthenticationTypeEnum.KEYFILE.name().equals(ssh.getAuthenticationType())) {
                 byte[] passphrase = StringUtils.isNotBlank(ssh.getPassphrase()) ? StringUtils.getBytes(
                     ssh.getPassphrase(),
                     "UTF-8") : null;
