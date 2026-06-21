@@ -20,164 +20,166 @@
   <a href="./README.md"><img alt="README in English" src="https://img.shields.io/badge/English-d9d9d9"></a>
   <a href="./README_CN.md"><img alt="简体中文版自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
   <a href="./README_JA.md"><img alt="日本語のREADME" src="https://img.shields.io/badge/日本語-d9d9d9"></a>
-
 </div>
 
 
-https://github.com/user-attachments/assets/4ae824cf-7d14-4d5b-9ceb-66481bcefc19
+
+https://github.com/user-attachments/assets/bd5d5f64-540f-4793-a801-17fa96c4766e
 
 
-Chat2DB is an intelligent, universal SQL client and data reporting tool that integrates AI capabilities. Chat2DB helps you write SQL queries faster, manage databases, generate reports, explore data, and interact with multiple databases. Chat2DB is an open-source project, and we welcome your contributions.
 
-**1. Intelligent SQL Generation**:  
-Chat2DB Pro supports AI-driven intelligent SQL development to help you write SQL queries faster.
 
-**2. Database Management**:  
-Supports more than 10 databases, including MySQL, PostgreSQL, H2, Oracle, SQLServer, SQLite, MariaDB, ClickHouse, DM, Presto, DB2, OceanBase, Hive, KingBase, MongoDB, Redis, Snowflake, and more.
+Chat2DBはAI機能を統合したインテリジェントで汎用的なSQLクライアントおよびデータ報告ツールです。Chat2DBは、SQLクエリの作成を迅速化し、データベースの管理、レポートの生成、データの探索、および複数のデータベースとのインタラクションをサポートします。Chat2DBはオープンソースプロジェクトであり、皆様の貢献を歓迎します。
 
-**3. Intelligent Report Generation**:  
-Chat2DB Pro supports AI-driven intelligent data reporting to help you generate dashboards faster.
+**1. インテリジェントSQL生成**:  
+Chat2DB Proは、AI駆動によるインテリジェントなSQL開発をサポートし、SQLクエリをより速く作成する手助けをします。
 
-**4. Data Structure Synchronization**:  
-Chat2DB Pro supports database table structure synchronization to help you sync database table structures faster.
+**2. データベース管理**:  
+MySQL、PostgreSQL、H2、Oracle、SQLServer、SQLite、MariaDB、ClickHouse、DM、Presto、DB2、OceanBase、Hive、KingBase、MongoDB、Redis、Snowflakeなど、10種類以上のデータベースをサポートしています。
 
-## Feature Comparison
+**3. インテリジェントレポート生成**:  
+Chat2DB Proは、AI駆動によるインテリジェントなデータ報告をサポートし、ダッシュボードの作成を迅速に行う手助けをします。
+
+**4. データ構造の同期**:  
+Chat2DB Proは、データベーステーブル構造の同期をサポートし、データベーステーブルの構造を迅速に同期する手助けをします。
+
+## 機能比較
 
 <table style="width: 100%;">
   <tr>
-    <th align="center">Feature</th>
-    <th align="center">Community Open Source</th>
-    <th align="center">Local</th>
-    <th align="center">Pro </th>
+    <th align="center">機能</th>
+    <th align="center">コミュニティ オープンソース</th>
+    <th align="center">ローカル</th>
+    <th align="center">Pro</th>
   </tr>
   <tr>
-    <td align="center">Database Types</td>
-    <td align="center">16+</td>
-    <td align="center">Target 100+</td>
-    <td align="center">Target 100+</td>
+    <td align="center">データベースの種類</td>
+    <td align="center">16種類以上</td>
+    <td align="center">100種類以上を対象</td>
+    <td align="center">100種類以上を対象</td>
   </tr>
   <tr>
-    <td align="center">Supported AI</td>
-    <td align="center">Requires AI Configuration</td>
-    <td align="center">AI ready on installation</td>
-    <td align="center">AI ready on installation</td>
+    <td align="center">サポートされているAI</td>
+    <td align="center">AI設定が必要</td>
+    <td align="center">インストール時にAIが利用可能</td>
+    <td align="center">インストール時にAIが利用可能</td>
   </tr>
   <tr>
-    <td align="center">AI Capabilities</td>
-    <td align="center">Basic</td>
-    <td align="center">Varied</td>
-    <td align="center">Varied</td>
+    <td align="center">AI機能</td>
+    <td align="center">基本的</td>
+    <td align="center">多様</td>
+    <td align="center">多様</td>
   </tr>
   <tr>
-    <td align="center">Visual Table Editor</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-  </tr>
-  <tr>
-    <td align="center">SQL Console</td>
+    <td align="center">視覚的テーブルエディタ</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">SQL Formatting</td>
+    <td align="center">SQLコンソール</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Save Query Records</td>
+    <td align="center">SQLフォーマット</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Theme Color Settings</td>
+    <td align="center">クエリ記録の保存</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Data Structure Sync</td>
+    <td align="center">テーマカラー設定</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">データ構造の同期</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Database Grouping</td>
+    <td align="center">データベースのグループ化</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Database Structure Import/Export</td>
+    <td align="center">データベース構造のインポート/エクスポート</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Data Import/Export</td>
+    <td align="center">データのインポート/エクスポート</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Data Migration</td>
+    <td align="center">データ移行</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Copy/Clear Table</td>
+    <td align="center">テーブルのコピー/削除</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Open and Run SQL Files</td>
+    <td align="center">SQLファイルのオープンと実行</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">UML Diagram</td>
+    <td align="center">UMLダイアグラム</td>
     <td align="center">❌</td>
-    <td align="center">In Development</td>
-    <td align="center">In Development</td>
+    <td align="center">開発中</td>
+    <td align="center">開発中</td>
   </tr>
   <tr>
-    <td align="center">Generate Code</td>
-    <td align="center">❌</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-  </tr>
-  <tr>
-    <td align="center">Copy Results as Insert/Update</td>
+    <td align="center">コード生成</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Modify Query Results</td>
+    <td align="center">インサート/アップデートとして結果をコピー</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Intelligent SQL Editor</td>
+    <td align="center">クエリ結果の修正</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">AI Table Creation</td>
+    <td align="center">インテリジェントSQLエディタ</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">AI Data Sets</td>
+    <td align="center">AIによるテーブル作成</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">AIデータセット</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -189,45 +191,46 @@ Chat2DB Pro supports database table structure synchronization to help you sync d
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Intelligent Dashboard</td>
+    <td align="center">インテリジェントダッシュボード</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Editor Settings</td>
+    <td align="center">エディタ設定</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Custom Shortcuts</td>
+    <td align="center">カスタムショートカット</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
   </tr>
   <tr>
-    <td align="center">Cross-device Usage</td>
+    <td align="center">クロスデバイス使用</td>
     <td align="center">❌</td>
     <td align="center">❌</td>
     <td align="center">✅</td>
   </tr>
 </table>
 
-## Download and Installation
-Chat2DB is a cross-platform application that supports Windows, MacOS, and Linux. You can download Chat2DB from the following links:
-- [Download Pro Version](https://chat2db.ai/download)
-- [Download Local Version](https://chat2db.ai/download)
-- [Download Open Source Version](https://github.com/CodePhiliaX/Chat2DB/releases/tag/v0.3.6)
 
-## Community Edition Docker Installation
+## ダウンロードとインストール
+Chat2DBは、Windows、MacOS、Linuxをサポートするクロスプラットフォームアプリケーションです。以下のリンクからChat2DBをダウンロードできます：
+- [Proバージョンのダウンロード](https://chat2db.ai/download)
+- [ローカルバージョンのダウンロード](https://chat2db.ai/download)
+- [オープンソースバージョンのダウンロード](https://github.com/CodePhiliaX/Chat2DB/releases/tag/v0.3.6)
 
-### System Requirements
+## コミュニティエディションのDockerインストール
 
-Before installing Chat2DB, ensure your system meets the following requirements:
-- Docker 19.03.0 or later
-- Docker Compose 1.25.0 or later
-- CPU >= 2 Cores
+### システム要件
+
+Chat2DBをインストールする前に、システムが以下の要件を満たしていることを確認してください：
+- Docker 19.03.0以上
+- Docker Compose 1.25.0以上
+- CPU >= 2コア
 - RAM >= 4 GiB
 
 ```bash
@@ -236,25 +239,23 @@ Before installing Chat2DB, ensure your system meets the following requirements:
   docker run --name=chat2db -ti -p 10824:10824 -v ~/.chat2db-docker:/root/.chat2db  chat2db/chat2db:latest
 
   docker start chat2db
-  
 ```
-## Code Debugging
+## コードデバッグ
 
-## Runtime Environment
+## 実行環境
 
-Note:
-If local debugging is needed:
+注意： ローカルデバッグが必要な場合：
 
 - Java runtime: <a href="https://adoptopenjdk.net/" target="_blank">Open JDK 17</a>
 - Node.js runtime: Node 16 <a href="https://nodejs.org/" target="_blank">Node.js</a>.
 
-**Clone the repository locally**
+**リポジトリをローカルにクローン**
 
 ```bash
 $ git clone git@github.com:chat2db/Chat2DB.git
 ```
 
-**Frontend Debugging**
+**フロントエンドデバッグ**
 
 ```bash
 Node version must be 16 or higher  
@@ -264,7 +265,7 @@ $ yarn
 $ yarn run start:web
 ```
 
-**Backend Debugging**
+**バックエンドデバッグ**
 
 ```bash
 $ cd ../chat2db-server
@@ -272,7 +273,7 @@ $ mvn clean install # Maven version 3.8 or higher is required
 $ cd chat2db-server/chat2db-server-start/target/
 $ java -jar -Dloader.path=./lib -Dchatgpt.apiKey=xxxxx chat2db-server-start.jar  # 需要安装java 17以上版本，启动应用 chatgpt.apiKey 需要输入ChatGPT的key,如果不输入无法使用AIGC功能
 ```
-**Standalone Deployment**
+**スタンドアロンデプロイ**
 ```bash
 # chat2db-client
 $ npm run build:web:prod 
@@ -280,19 +281,18 @@ $ cp -r dist ../chat2db-server/chat2db-server-start/src/main/resources/static/fr
 $ cp -r dist/index.html ../chat2db-server/chat2db-server-start/src/main/resources/thymeleaf
 ```
 
-##  Contact Us
+## お問い合わせ
 
-- Email: Chat2DB@ch2db.com
-- Discord: [Join our Discord server](https://discord.gg/JDkwB6JS8A)
+- メール: Chat2DB@ch2db.com
+- Discord: [Discordサーバーに参加](https://discord.gg/JDkwB6JS8A)
 - Twitter: [@Chat2DB](https://x.com/Chat2DB_AI)
-- YouTube: [Chat2DB Channel](https://www.youtube.com/@chat2db.tutorial)
+- YouTube: [Chat2DB チャンネル](https://www.youtube.com/@chat2db.tutorial)
 - GitHub: [Chat2DB GitHub](https://github.com/codePhiliaX/chat2db)
 
+## 謝辞
 
-##  Acknowledgments
+Chat2DBに貢献してくださったすべての方々に感謝します~~
 
-
-Thanks to everyone who has contributed to Chat2DB~~
 
 
 <a href="https://github.com/chat2db/Chat2DB/graphs/contributors">
@@ -310,5 +310,6 @@ Thanks to everyone who has contributed to Chat2DB~~
 </a>
 
 ## License
-The primary license used by this software is the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), supplemented by the [Chat2DB License](./Chat2DB_LICENSE).
+このソフトウェアで使用されている主なライセンスは[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)であり、[Chat2DB License](./Chat2DB_LICENSE)が補完されています。
+
 

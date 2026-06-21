@@ -1,6 +1,6 @@
 ---
 name: "💌 Suggest"
 about: suggest template
-title: '建议: '
+title: 'suggest: '
 labels: 'suggest'
 ---

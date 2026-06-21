@@ -1,136 +1,312 @@
 
 
-<a><img src="https://github.com/user-attachments/assets/8d0b3575-d38f-43a2-9d43-11d6475da0c7" width="30%"/></a>
-<a><img src="https://github.com/chat2db/Chat2DB/assets/22975773/81d13eff-c615-49f5-aee3-4107089593e0" width="20%"/></a>
-
-加群前请先 Star 和 Fork，谢谢~关注微信公众号可加入微信、钉钉、QQ 群一起讨论，并可以获取 Chat2DB 最新动态和更新。
-
-
-# Chat2DB
-
-**中文** | [English](README.md)· [更新日志](CHANGELOG.md) · [文档](https://docs.chat2db-ai.com/) · [报告问题](https://github.com/chat2db/Chat2DB/issues) · [提交PR](https://github.com/chat2db/Chat2DB/pulls)
-
-[![License](https://img.shields.io/github/license/alibaba/fastjson2?color=4D7A97&logo=apache)](https://www.apache.org/licenses/LICENSE-2.0.html)
-[![Java support](https://img.shields.io/badge/Java-17+-green?logo=java&logoColor=white)](https://openjdk.java.net/)
-[![GitHub release](https://img.shields.io/github/release/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/fork)
-[![GitHub Contributors](https://img.shields.io/github/contributors/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/graphs/contributors)
-
-</div>
 
 <div align="center">
-<p align="center"><b>分享Chat2DB仓库</b></p>
+    <a href="https://trendshift.io/repositories/11808" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11808" alt="CodePhiliaX%2FChat2DB | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</div>
+<br/>
 <p align="center">
-<a href="https://twitter.com/intent/tweet?text=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities.&url=https://github.com/chat2db/Chat2DB&hashtags=ChatGPT,AGI,SQL%20Client,Reporting%20tool" target="blank" > <img src="https://img.shields.io/twitter/follow/_Chat2DB?label=Share on Twitter&style=social" alt=""/> </a> 
+ <a href="https://discord.com/invite/uNjb3n5JVN" target="_blank">
+    <img src="https://img.shields.io/badge/-Join%20us%20on%20Discord-%237289DA.svg?style=flat&logo=discord&logoColor=white"
+            alt="chat on Discord"></a>
+<a href="https://twitter.com/intent/tweet?text=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities.&url=https://github.com/chat2db/Chat2DB&hashtags=ChatGPT,AGI,SQL%20Client,Reporting%20tool" target="blank" > <img src="https://img.shields.io/twitter/follow/_Chat2DB?label=Twitter&style=social" alt=""/> </a> 
 <a href="https://t.me/share/url?text=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities.&url=https://github.com/chat2db/Chat2DB" target="_blank"><img src="https://img.shields.io/twitter/url?label=Telegram&logo=Telegram&style=social&url=https://github.com/chat2db/Chat2DB" alt="Share on Telegram"/></a>
 <a href="https://api.whatsapp.com/send?text=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities.%20https://github.com/chat2db/Chat2DB"><img src="https://img.shields.io/twitter/url?label=whatsapp&logo=whatsapp&style=social&url=https://github.com/chat2db/Chat2DB" /></a>
 <a href="https://www.reddit.com/submit?url=https://github.com/chat2db/Chat2DB&title=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities." target="blank"><img src="https://img.shields.io/twitter/url?label=Reddit&logo=Reddit&style=social&url=https://github.com/chat2db/Chat2DB" alt="Share on Reddit"/></a>
 <a href="mailto:?subject=Check%20this%20GitHub%20repository%20out.&body=Chat2DB-An%20intelligent%20and%20versatile%20general-purpose%20SQL%20client%20and%20reporting%20tool%20for%20databases%20which%20integrates%20ChatGPT%20capabilities.%3A%0Ahttps://github.com/chat2db/Chat2DB" target="_blank"><img src="https://img.shields.io/twitter/url?label=Gmail&logo=Gmail&style=social&url=https://github.com/chat2db/Chat2DB"/></a>
+
 </p>
-
-
-<div style="display: flex; align-items: center;">
-  如果你觉得Chat2DB有帮助，请点击右上角的⭐Star<a style="display: flex; align-items: center;margin:0px 6px" target="_blank" href='https://github.com/chat2db/Chat2db'><img src="https://img.shields.io/github/stars/chat2db/Chat2DB.svg?style=flat-square&label=Stars&logo=github" alt="github star"/></a>和Fork，你的支持是Chat2DB变得更好的最大动力
+<div align="center">
+  <a href="./README.md"><img alt="README in English" src="https://img.shields.io/badge/English-d9d9d9"></a>
+  <a href="./README_CN.md"><img alt="简体中文版自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
+  <a href="./README_JA.md"><img alt="日本語のREADME" src="https://img.shields.io/badge/日本語-d9d9d9"></a>
+ 
 </div>
 
-</div>
-
-## ⏬ 下载和安装Chat2DB(Pro)
-
-- 从[官网](https://chat2db-ai.com/download)下载安装包
-- 双击安装包进行安装
-
-# 最近更新
-
-### 期待已久的Chat2DB Pro版本终于来了，新增了以下几个核心亮点。
-#### AI驱动的智能SQL开发
-<a href="https://chat2db-ai.com/" target="_blank">
-    <img src="https://chat2db-cdn.oss-us-west-1.aliyuncs.com/website/img/9664f2fd-250b-478e-a2a1-4b96464ba718.gif" alt="Chat2DB" />
-</a>
-<a href="https://chat2db-ai.com/" target="_blank">
-    <img src="https://chat2db-cdn.oss-us-west-1.aliyuncs.com/website/img/fa9a01a4-7845-4893-93cc-c49a11f62569.gif" alt="Chat2DB" />
-</a>
-<a href="https://chat2db-ai.com/" target="_blank">
-<img src="https://chat2db-cdn.oss-us-west-1.aliyuncs.com/website/img/47a61ae7-2e21-45e7-a41e-e2559f51919d.gif" alt="Chat2DB" />
-</a>
-
-#### AI驱动的智能报告
-<a href="https://chat2db-ai.com/" target="_blank">
-    <img src="https://chat2db-cdn.oss-us-west-1.aliyuncs.com/website/img/d070ca11-8bdd-4ff4-a435-ecfc623103cb.gif" alt="Chat2DB" />
-</a>
-
-#### AI驱动的数据探索
-<a href="https://chat2db-ai.com/" target="_blank">
-<img src="https://chat2db-cdn.oss-us-west-1.aliyuncs.com/website/img/WechatIMG5138.jpg" alt="Chat2DB" />
-</a>
-
-### 我们还开源了我们的第一个GLM，[Chat2DB-SQL-7B](https://github.com/chat2db/Chat2DB-GLM)。你可以从下面的链接了解更多详情。
-
-- GitHub: [Chat2DB-SQL-7B](https://github.com/chat2db/Chat2DB-GLM)
-- huggingface🤗：[Chat2DB-SQL-7B](https://huggingface.co/Chat2DB/Chat2DB-SQL-7B)
-- modelscope：[Chat2DB-SQL-7B](https://modelscope.cn/models/Chat2DB/Chat2DB-SQL-7B/summary)
-
-### 在Chat2DB上即成InternLM模型
-
-感谢InternLM对本项目的大力支持，在本项目中的自定义模型中，可以集成InternLM的多个模型权重，具体请参考[chat2db-internlm-deploy](https://github.com/chat2db/chat2db-internlm-deploy)
-
-## 支持的数据库
-Chat2DB Pro支持以下所有数据库，包括备受期待的Redis功能。
-- MySQL
-- PostgreSQL
-- H2
-- Oracle
-- SQLServer
-- SQLite
-- MariaDB
-- ClickHouse
-- DM
-- Presto
-- DB2
-- OceanBase
-- Hive
-- KingBase
-- MongoDB
-- Redis
-- Snowflake
 
 
-## 使用Chat2DB
-参考[快速开始指南](https://docs.chat2db-ai.com/)，开始使用Chat2DB。
 
-## 常见问题
-
-### 1、无法获取数据源驱动:getJDBCDriver error: null
-
-问题原因：无法联网导致下载数据库驱动包失败。
-
-解决办法：手动下载相关驱动放入到 ~/.chat2db/jdbc-lib 目录下
-
-下载链接 参考：<a href="https://github.com/chat2db/Chat2DB/blob/main/chat2db-server/chat2db-server-start/src/main/resources/application.yml">Application jdbc-jar-downLoad-urls</a>
-
-- https://cdn.chat2db-ai.com/lib/mysql-connector-java-8.0.30.jar
-- https://cdn.chat2db-ai.com/lib/mysql-connector-java-5.1.47.jar
-- https://cdn.chat2db-ai.com/lib/clickhouse-jdbc-0.3.2-patch8-http.jar
-- https://cdn.chat2db-ai.com/lib/mariadb-java-client-3.0.8.jar
-- https://cdn.chat2db-ai.com/lib/mssql-jdbc-11.2.1.jre17.jar
-- https://cdn.chat2db-ai.com/lib/oceanbase-client-2.4.2.jar
-- https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar
-- https://cdn.chat2db-ai.com/lib/sqlite-jdbc-3.39.3.0.jar
-- https://cdn.chat2db-ai.com/lib/ojdbc11.jar
-
-## Stargazers
-
-[![Stargazers repo roster for @chat2db/Chat2DB](https://reporoster.com/stars/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/stargazers)
-
-## Forkers
-
-[![Forkers repo roster for @chat2db/Chat2DB](https://reporoster.com/forks/chat2db/Chat2DB)](https://github.com/chat2db/Chat2DB/network/members)
-
-## ☎️ 加入我们
+https://github.com/user-attachments/assets/3c857883-8153-4bda-92b8-d25c6adb5b13
 
 
-## ❤️ 致谢
+
+# 
+Chat2DB 是一个智能的通用SQL客户端和数据报表工具，它集成了AI的能力。Chat2DB可以帮助您更快地编写SQL查询、管理数据库、生成报告、探索数据、并且可以与多种数据库进行交互。Chat2DB是一个开源项目，我们欢迎您的贡献。
+
+**1. 智能生成SQL**:
+Chat2DB Pro支持AI驱动的智能SQL开发，可以帮助您更快地编写SQL查询。
+
+
+**2. 数据库管理**:
+ 支持多种10+数据库，包括MySQL、PostgreSQL、H2、Oracle、SQLServer、SQLite、MariaDB、ClickHouse、DM、Presto、DB2、OceanBase、Hive、KingBase、MongoDB、Redis、Snowflake等。
+
+
+
+**3. 智能生成报表**:
+    Chat2DB Pro支持AI驱动的智能数据报表，可以帮助您更快地生成看板。
+
+**4. 数据结构同步**:
+    Chat2DB Pro支持数据库表结构同步，可以帮助您更快地同步数据库表结构。
+
+## 功能比较
+
+<table style="width: 100%;">
+  <tr>
+    <th align="center">功能</th>
+    <th align="center">社区开源版</th>
+    <th align="center">Local版(收费)</th>
+    <th align="center">Pro版(收费)</th>
+  </tr>
+  <tr>
+    <td align="center">数据库类型</td>
+    <td align="center">16+</td>
+    <td align="center">目标100+</td>
+    <td align="center">目标100+</td>
+  </tr>
+  <tr>
+    <td align="center">支持的 AI</td>
+    <td align="center">需要配置AI</td>
+    <td align="center">安装即可使用AI</td>
+    <td align="center">安装即可使用AI</td>
+  </tr>
+  <tr>
+    <td align="center">AI 能力</td>
+    <td align="center">简单</td>
+    <td align="center">多样</td>
+    <td align="center">多样</td>
+  </tr>
+  <tr>
+    <td align="center">可视化编辑表</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">SQL控制台</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+ <tr>
+    <td align="center">SQL格式化</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+ <tr>
+    <td align="center">保存查询记录</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+ <tr>
+    <td align="center">主题颜色设置</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">数据结构同步</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">数据库分组</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">数据库结构导入导出</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">数据导入导出</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">数据迁移</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">复制/清空表</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">打开运行SQL文件</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">UML图</td>
+    <td align="center">❌</td>
+    <td align="center">开发中</td>
+    <td align="center">开发中</td>
+  </tr>
+  <tr>
+    <td align="center">生成代码</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">复制结果为
+Insert/update
+    </td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">修改查询结果</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">智能SQL编辑器</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">AI建表</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">AI数据集</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td align="center">Chat2Excel</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+<tr>
+    <td align="center">智能看板</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+<tr>
+    <td align="center">编辑器设置</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+<tr>
+    <td align="center">自定义快捷键</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+<tr>
+    <td align="center">跨多设备使用</td>
+    <td align="center">❌</td>
+    <td align="center">❌</td>
+    <td align="center">✅</td>
+  </tr>
+</table>
+
+## 下载安装
+Chat2DB 是一个跨平台的应用程序，支持Windows、MacOS和Linux。您可以从以下链接下载Chat2DB。
+- [下载 Pro 版](https://chat2db.ai/download)
+- [下载 Local 版](https://chat2db.ai/download)
+- [下载开源版](https://github.com/CodePhiliaX/Chat2DB/releases/tag/v0.3.6)
+
+## 社区版 Docker 安装
+
+### 系统要求
+
+在安装 Chat2DB 之前，请确保您的系统满足以下要求：
+- Docker 19.03.0 或更高版本
+- Docker Compose 1.25.0 或更高版本
+- CPU >= 2 Core
+- RAM >= 4 GiB
+
+
+```bash
+  // 拉取最新客户端,然后运行docker,名字是 `chat2db` , 并且将 `/root/.chat2db` 挂载到 `~/.chat2db-docker`
+  docker run --name=chat2db -ti -p 10824:10824 -v ~/.chat2db-docker:/root/.chat2db  chat2db/chat2db:latest
+  // 这里正常会提示`Tomcat started on port(s): 10824 (http) with context path` 就可以结束了
+
+  // 如果这里提示  `The container name "/chat2db" is already in use by container`, 代表已经存在容器了 运行
+  docker start chat2db
+  // 如果想更新chat2db 则需要先rm
+  docker rm chat2db
+```
+## 代码调试
+
+
+## 运行环境
+
+注意：
+如果需要本地调试
+
+- java 运行 <a href="https://adoptopenjdk.net/" target="_blank">Open JDK 17</a>
+- Node 运行环境 Node16 <a href="https://nodejs.org/" target="_blank">Node.js</a>.
+
+**git clone 到本地**
+
+```bash
+$ git clone git@github.com:chat2db/Chat2DB.git
+```
+
+**前端调试**
+
+```bash
+node版本必须为16及以上 
+一定要用yarn
+$ cd Chat2DB/chat2db-client
+$ yarn
+$ yarn run start:web
+```
+
+**后端调试**
+
+```bash
+$ cd ../chat2db-server
+$ mvn clean install # 需要安装maven 3.8以上版本
+$ cd chat2db-server/chat2db-server-start/target/
+$ java -jar -Dloader.path=./lib -Dchatgpt.apiKey=xxxxx chat2db-server-start.jar  # 需要安装java 17以上版本，启动应用 chatgpt.apiKey 需要输入ChatGPT的key,如果不输入无法使用AIGC功能
+```
+**独立部署**
+```bash
+# chat2db-client
+$ npm run build:web:prod 
+$ cp -r dist ../chat2db-server/chat2db-server-start/src/main/resources/static/front 
+$ cp -r dist/index.html ../chat2db-server/chat2db-server-start/src/main/resources/thymeleaf
+
+# 再打包后端服务
+```
+
+##  联系我们
+
+<a><img src="https://github.com/chat2db/Chat2DB/assets/22975773/81d13eff-c615-49f5-aee3-4107089593e0" width="25%"/></a>
+
+- Email: Chat2DB@ch2db.com
+- Discord: [Join our Discord server](https://discord.gg/JDkwB6JS8A)
+- Twitter: [@Chat2DB](https://x.com/Chat2DB_AI)
+- YouTube: [Chat2DB Channel](https://www.youtube.com/@chat2db.tutorial)
+- GitHub: [Chat2DB GitHub](https://github.com/codePhiliaX/chat2db)
+
+
+##  致谢
 
 感谢所有为 Chat2DB 贡献力量的同学们~~
 
@@ -140,18 +316,16 @@ Chat2DB Pro支持以下所有数据库，包括备受期待的Redis功能。
 
 ## Star History
 
-<a href="https://star-history.com/#chat2db/chat2db&Date">
+<a href="https://star-history.com/#CodePhiliaX/chat2db&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=chat2db/chat2db&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=chat2db/chat2db&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=chat2db/chat2db&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodePhiliaX/chat2db&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodePhiliaX/chat2db&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodePhiliaX/chat2db&type=Date" />
   </picture>
 </a>
 
-## 友情链接
-<p align="left">
-    <a href="https://sa-token.cc" target="_blank">
-        <img src="https://github.com/user-attachments/assets/d2182835-057a-47e6-80fc-e9efc4792a7f" alt="sa-token" width="15%"/>
-    </a>
-</p>
+## License
+The primary license used by this software is the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), supplemented by the [Chat2DB License](./Chat2DB_LICENSE).
+
+
 

@@ -6,6 +6,7 @@ import ai.chat2db.server.domain.api.service.ConfigService;
 import ai.chat2db.server.web.api.util.ApplicationContextUtil;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * @author moji
@@ -20,6 +21,11 @@ public class RestAIClient {
     public static final String AI_SQL_SOURCE = "ai.sql.source";
 
     /**
+     * Customized AI interface KEY
+     */
+    public static final String REST_AI_API_KEY = "rest.ai.apiKey";
+
+    /**
      * Customized AI interface address
      */
     public static final String REST_AI_URL = "rest.ai.url";
@@ -29,9 +35,16 @@ public class RestAIClient {
      */
     public static final String REST_AI_STREAM_OUT = "rest.ai.stream";
 
-    private static RestAiStreamClient REST_AI_STREAM_CLIENT;
+    /**
+     * Custom AI interface model
+     */
+    public static final String REST_AI_MODEL = "rest.ai.model";
 
-    public static RestAiStreamClient getInstance() {
+
+
+    private static RestAIStreamClient REST_AI_STREAM_CLIENT;
+
+    public static RestAIStreamClient getInstance() {
         if (REST_AI_STREAM_CLIENT != null) {
             return REST_AI_STREAM_CLIENT;
         } else {
@@ -39,7 +52,7 @@ public class RestAIClient {
         }
     }
 
-    private static RestAiStreamClient singleton() {
+    private static RestAIStreamClient singleton() {
         if (REST_AI_STREAM_CLIENT == null) {
             synchronized (RestAIClient.class) {
                 if (REST_AI_STREAM_CLIENT == null) {
@@ -55,17 +68,23 @@ public class RestAIClient {
      */
     public static void refresh() {
         String apiUrl = "";
-        Boolean stream = Boolean.TRUE;
+        String apiKey = "";
+        String model = "";
         ConfigService configService = ApplicationContextUtil.getBean(ConfigService.class);
         Config apiHostConfig = configService.find(REST_AI_URL).getData();
         if (apiHostConfig != null) {
             apiUrl = apiHostConfig.getContent();
         }
-        Config config = configService.find(REST_AI_STREAM_OUT).getData();
+        Config config = configService.find(REST_AI_API_KEY).getData();
         if (config != null) {
-            stream = Boolean.valueOf(config.getContent());
+            apiKey = config.getContent();
         }
-        REST_AI_STREAM_CLIENT = new RestAiStreamClient(apiUrl, stream);
+        Config deployConfig = configService.find(REST_AI_MODEL).getData();
+        if (deployConfig != null && StringUtils.isNotBlank(deployConfig.getContent())) {
+            model = deployConfig.getContent();
+        }
+        REST_AI_STREAM_CLIENT = RestAIStreamClient.builder().apiKey(apiKey).apiHost(apiUrl).model(model)
+                .build();
     }
 
 }

@@ -150,6 +150,8 @@ public class SqlSplitProcessor {
             for (List<OrderChar> item : lines) {
                 if (Objects.nonNull(this.dialectType) && DbType.mysql.equals(this.dialectType)) {
                     addLineMysql(offsetStrings, buffer, bufferOrder, item);
+                } else if (Objects.nonNull(this.dialectType) && DbType.mariadb.equals(this.dialectType)) {
+                    addLineMysql(offsetStrings, buffer, bufferOrder, item);
                 } else if (Objects.nonNull(this.dialectType) && DbType.oracle.equals(this.dialectType)) {
                     addLineOracle(offsetStrings, buffer, bufferOrder, item);
                 } else if (Objects.nonNull(this.dialectType) && DbType.oceanbase.equals(this.dialectType)) {

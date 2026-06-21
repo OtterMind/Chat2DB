@@ -1,7 +1,12 @@
 package ai.chat2db.server.web.api.controller.ai.rest.listener;
 
+import java.io.IOException;
 import java.util.Objects;
 
+import ai.chat2db.server.web.api.controller.ai.rest.model.RestAIChatCompletions;
+import ai.chat2db.server.web.api.controller.ai.zhipu.model.ZhipuChatCompletions;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unfbx.chatgpt.entity.chat.Message;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +32,7 @@ public class RestAIEventSourceListener extends EventSourceListener {
         this.sseEmitter = sseEmitter;
     }
 
+    private ObjectMapper mapper = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     /**
      * {@inheritDoc}
      */
@@ -54,9 +60,11 @@ public class RestAIEventSourceListener extends EventSourceListener {
         }
         Message message = new Message();
         if (StringUtils.isNotBlank(data)) {
-            data = data.replaceAll("^\"|\"$", "");
-            data = data.replaceAll("\\\\n", "\n");
-            message.setContent(data);
+            RestAIChatCompletions chatCompletions = mapper.readValue(data, RestAIChatCompletions.class);
+            String text = chatCompletions.getChoices().get(0).getDelta()==null?
+                    chatCompletions.getChoices().get(0).getText()
+                    :chatCompletions.getChoices().get(0).getDelta().getContent();
+            message.setContent(text);
             sseEmitter.send(SseEmitter.event()
                 .id(id)
                 .data(message)
@@ -68,10 +76,14 @@ public class RestAIEventSourceListener extends EventSourceListener {
     @Override
     public void onClosed(EventSource eventSource) {
         log.info("REST AI close sse connection...");
-        sseEmitter.send(SseEmitter.event()
-            .id("[DONE]")
-            .data("[DONE]")
-            .reconnectTime(3000));
+        try {
+            sseEmitter.send(SseEmitter.event()
+                    .id("[DONE]")
+                    .data("[DONE]")
+                    .reconnectTime(3000));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         sseEmitter.complete();
     }
 

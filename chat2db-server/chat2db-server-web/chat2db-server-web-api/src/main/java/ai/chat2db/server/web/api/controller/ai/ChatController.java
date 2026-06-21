@@ -235,7 +235,7 @@ public class ChatController {
             case CHAT2DBAI:
                 return chatWithChat2dbAi(queryRequest, sseEmitter, uid);
             case RESTAI :
-                return chatWithRestAi(queryRequest, sseEmitter);
+                return chatWithRestAi(queryRequest, sseEmitter, uid);
             case FASTCHATAI:
                 return chatWithFastChatAi(queryRequest, sseEmitter, uid);
             case AZUREAI :
@@ -261,9 +261,15 @@ public class ChatController {
      * @param sseEmitter
      * @return
      */
-    private SseEmitter chatWithRestAi(ChatQueryRequest prompt, SseEmitter sseEmitter) {
-        RestAIEventSourceListener eventSourceListener = new RestAIEventSourceListener(sseEmitter);
-        RestAIClient.getInstance().restCompletions(buildPrompt(prompt), eventSourceListener);
+    private SseEmitter chatWithRestAi(ChatQueryRequest queryRequest, SseEmitter sseEmitter, String uid) throws IOException {
+        String prompt = buildPrompt(queryRequest);
+        List<FastChatMessage> messages = getFastChatMessage(uid, prompt);
+
+        buildSseEmitter(sseEmitter, uid);
+
+        RestAIEventSourceListener restAIEventSourceListener = new RestAIEventSourceListener(sseEmitter);
+        RestAIClient.getInstance().streamCompletions(messages, restAIEventSourceListener);
+        LocalCache.CACHE.put(uid, JSONUtil.toJsonStr(messages), LocalCache.TIMEOUT);
         return sseEmitter;
     }
 
