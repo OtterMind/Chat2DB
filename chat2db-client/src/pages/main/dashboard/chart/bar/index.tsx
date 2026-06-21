@@ -29,6 +29,7 @@ const BarChart = (props: IProps, ref) => {
           type: 'bar',
         },
       ],
+        tooltip: {},
     }),
     [props.data],
   );
