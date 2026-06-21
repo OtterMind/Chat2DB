@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS `table_vector_mapping` (
-    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
     `api_key` varchar(128) DEFAULT NULL COMMENT 'api key',
-    `data_source_id` bigint(20) unsigned DEFAULT NULL COMMENT '数据源连接ID',
+    `data_source_id` bigint unsigned DEFAULT NULL COMMENT '数据源连接ID',
     `database` text DEFAULT NULL COMMENT '数据库名称',
     `schema` text DEFAULT NULL COMMENT 'schema名称',
     `status` varchar(4) DEFAULT NULL COMMENT '向量保存状态',

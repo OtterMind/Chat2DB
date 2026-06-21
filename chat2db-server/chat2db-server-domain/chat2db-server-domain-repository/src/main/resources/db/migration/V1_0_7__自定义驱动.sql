@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS `jdbc_driver` (
-    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
     `gmt_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `gmt_modified` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
     `db_type` varchar(32) NOT NULL COMMENT 'db类型',

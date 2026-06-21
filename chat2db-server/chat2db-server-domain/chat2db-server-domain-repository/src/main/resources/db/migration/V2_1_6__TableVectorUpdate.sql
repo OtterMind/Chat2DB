@@ -1,1 +1,1 @@
-ALTER TABLE table_vector_mapping ALTER COLUMN status VARCHAR(64);
+ALTER TABLE table_vector_mapping MODIFY COLUMN status VARCHAR(64);
