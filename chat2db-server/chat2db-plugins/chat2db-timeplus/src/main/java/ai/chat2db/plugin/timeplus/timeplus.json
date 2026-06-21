@@ -8,9 +8,9 @@
       "defaultDriver": true,
       "custom": false,
       "downloadJdbcDriverUrls": [
-        "https://timeplus.io/downloads/timeplus-native-jdbc-shaded-2.0.5.jar"
+        "https://timeplus.io/downloads/timeplus-native-jdbc-shaded-2.0.9.jar"
       ],
-      "jdbcDriver": "timeplus-native-jdbc-shaded-2.0.5.jar",
+      "jdbcDriver": "timeplus-native-jdbc-shaded-2.0.9.jar",
       "jdbcDriverClass": "com.timeplus.jdbc.TimeplusDriver"
     }
   ],
