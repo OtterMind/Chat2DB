@@ -33,6 +33,11 @@ public class GatewayClientService {
      * @return
      */
     public DataResult<QrCodeResponse> getLoginQrCode() {
+        if (chat2dbProperties == null || chat2dbProperties.getGateway() == null
+                || chat2dbProperties.getGateway().getBaseUrl() == null) {
+            throw new IllegalStateException("Gateway base URL is not configured properly.");
+        }
+
         DataResult<QrCodeResponse> result = Forest.get(chat2dbProperties.getGateway().getBaseUrl() + "/api/client/loginQrCode")
                 .connectTimeout(Duration.ofMillis(5000))
                 .readTimeout(Duration.ofMillis(10000))
