@@ -1,9 +1,6 @@
 package ai.chat2db.server.web.api.controller.ai.tongyi.listener;
 
-import ai.chat2db.server.web.api.controller.ai.fastchat.model.FastChatChoice;
-import ai.chat2db.server.web.api.controller.ai.fastchat.model.FastChatCompletions;
-import ai.chat2db.server.web.api.controller.ai.fastchat.model.FastChatCompletionsUsage;
-import ai.chat2db.server.web.api.controller.ai.fastchat.model.FastChatMessage;
+import ai.chat2db.server.web.api.controller.ai.tongyi.model.TongyiChatChoice;
 import ai.chat2db.server.web.api.controller.ai.tongyi.model.TongyiChatCompletions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -63,15 +61,18 @@ public class TongyiChatAIEventSourceListener extends EventSourceListener {
         }
 
         TongyiChatCompletions chatCompletions = mapper.readValue(data, TongyiChatCompletions.class);
-        String text = chatCompletions.getOutput().getText();
-        log.info("id: {}, text: {}", chatCompletions.getId(), text);
+        List<TongyiChatChoice> choices = chatCompletions.getChoices();
+        for (TongyiChatChoice choice : choices) {
+            String text = choice.getDelta().getContent();
+            log.info("id: {}, text: {}", chatCompletions.getId(), text);
 
-        Message message = new Message();
-        message.setContent(text);
-        sseEmitter.send(SseEmitter.event()
-            .id(null)
-            .data(message)
-            .reconnectTime(3000));
+            Message message = new Message();
+            message.setContent(text);
+            sseEmitter.send(SseEmitter.event()
+                .id(null)
+                .data(message)
+                .reconnectTime(3000));
+        }
     }
 
     @Override

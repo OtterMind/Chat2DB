@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.List;
+
 
 @Data
 public class TongyiChatCompletions {
@@ -11,7 +13,6 @@ public class TongyiChatCompletions {
     /*
      * A unique identifier associated with this chat completions response.
      */
-    @JsonProperty(value = "request_id")
     private String id;
 
     /*
@@ -19,7 +20,7 @@ public class TongyiChatCompletions {
      * Generally, `n` choices are generated per provided prompt with a default value of 1.
      * Token limits and other settings may limit the number of choices generated.
      */
-    private TongyiChatOutput output;
+    private List<TongyiChatChoice> choices;
 
     /*
      * Usage information for tokens processed and generated as part of this completions operation.
@@ -35,11 +36,11 @@ public class TongyiChatCompletions {
      */
     @JsonCreator
     private TongyiChatCompletions(
-        @JsonProperty(value = "request_id") String id,
-        @JsonProperty(value = "output") TongyiChatOutput choices,
+        @JsonProperty(value = "id") String id,
+        @JsonProperty(value = "choices") List<TongyiChatChoice> choices,
         @JsonProperty(value = "usage") TongyiChatCompletionsUsage usage) {
         this.id = id;
-        this.output = choices;
+        this.choices = choices;
         this.usage = usage;
     }
 

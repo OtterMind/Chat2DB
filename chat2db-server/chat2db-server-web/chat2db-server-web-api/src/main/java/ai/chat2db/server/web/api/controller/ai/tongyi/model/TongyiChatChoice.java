@@ -13,13 +13,17 @@ import lombok.Data;
  * choices generated.
  */
 @Data
-public final class TongyiChatOutput {
+public final class TongyiChatChoice {
 
     /*
      * The generated text for a given completions prompt.
      */
-    @JsonProperty(value = "text")
-    private String text;
+//    @JsonProperty(value = "text")
+//    private String text;
+
+    private TongyiDelta delta;
+
+//    private Integer index;
 
     /*
      * Reason for finishing
@@ -30,14 +34,14 @@ public final class TongyiChatOutput {
     /**
      * Creates an instance of Choice class.
      *
-     * @param text the text value to set.
+     * @param delta the text value to set.
      * @param finishReason the finishReason value to set.
      */
     @JsonCreator
-    private TongyiChatOutput(
-            @JsonProperty(value = "text") String text,
+    private TongyiChatChoice(
+            @JsonProperty(value = "delta") TongyiDelta delta,
             @JsonProperty(value = "finish_reason") String finishReason) {
-        this.text = text;
+        this.delta = delta;
         this.finishReason = finishReason;
     }
 }
