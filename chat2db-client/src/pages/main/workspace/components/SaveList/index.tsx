@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import i18n from '@/i18n';
-import { Input, Dropdown, Modal } from 'antd';
+import { Input, Dropdown, Modal, Form } from 'antd';
 import Iconfont from '@/components/Iconfont';
 import LoadingContent from '@/components/Loading/LoadingContent';
 import historyServer from '@/service/history';
@@ -20,6 +20,7 @@ const SaveList = () => {
   const saveBoxListRef = useRef<any>(null);
   const consoleList = useWorkspaceStore((state) => state.savedConsoleList);
   const [editData, setEditData] = useState<any>(null);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     getSavedConsoleList();
@@ -173,27 +174,28 @@ const SaveList = () => {
         title={i18n('common.text.rename')}
         open={!!editData}
         onOk={() => {
-          const params: any = {
-            id: editData.id,
-            name: editData.name,
-          };
-          historyServer.updateSavedConsole(params).then(() => {
-      
-            getSavedConsoleList();
-            setEditData(null);
+          form.validateFields().then((values) => {
+            const params: any = {
+              id: editData.id,
+              name: values.name,
+            };
+            historyServer.updateSavedConsole(params).then(() => {
+              getSavedConsoleList();
+              setEditData(null);
+              form.resetFields();
+            });
           });
         }}
-        onCancel={() => setEditData(null)}
+        onCancel={() => {
+          setEditData(null);
+          form.resetFields();
+        }}
       >
-        <Input
-          value={editData?.name}
-          onChange={(e) => {
-            setEditData({
-              ...editData,
-              name: e.target.value,
-            });
-          }}
-        />
+        <Form form={form} initialValues={{ name: editData?.name }}>
+          <Form.Item name="name" rules={[{ required: true, message: 'Please enter name' }]}>
+            <Input />
+          </Form.Item>
+        </Form>
       </Modal>
     </>
   );

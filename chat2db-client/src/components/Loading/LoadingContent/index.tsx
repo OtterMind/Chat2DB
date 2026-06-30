@@ -14,11 +14,11 @@ interface IProps<T> extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export default function LoadingContent<T>(props: IProps<T>) {
-  const { children, className, data = true, handleEmpty = false, empty, isLoading, coverLoading, ...args } = props;
+  const { children, className, data = true, handleEmpty = false, empty, isLoading, coverLoading } = props;
   const isEmpty = !isLoading && handleEmpty && !(data as any)?.length;
 
   const renderContent = () => {
-    if ((isLoading || !data) && !coverLoading) {
+    if ((isLoading || data === null || data === undefined) && !coverLoading) {
       return <StateIndicator state="loading" />;
     }
 
