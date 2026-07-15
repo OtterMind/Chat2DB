@@ -67,7 +67,7 @@
         <bouncycastle.version>1.71</bouncycastle.version>
         <jsqlparser.version>4.9</jsqlparser.version>
         <jts.version>1.19.0</jts.version>
-        <tika.version>2.7.0</tika.version>
+        <tika.version>3.2.2</tika.version>
         <calcite.version>1.38.0</calcite.version>
         <poi.version>4.1.2</poi.version>
         <chat2db.maven-antrun-plugin.version>3.0.0</chat2db.maven-antrun-plugin.version>
