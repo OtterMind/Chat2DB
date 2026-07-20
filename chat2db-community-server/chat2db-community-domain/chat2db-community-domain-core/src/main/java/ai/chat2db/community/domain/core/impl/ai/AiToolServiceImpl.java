@@ -312,19 +312,19 @@ public class AiToolServiceImpl implements IAiToolService {
     }
 
     private String emitToolResult(AiToolContextRequest toolContext, String toolName, String summary, List<?> data) {
-        return successToolResultJson(toolName, summary, data);
+        return successToolResultJson(summary, data);
     }
 
     private String emitToolFailure(AiToolContextRequest toolContext, String toolName, String summary, String errorCode) {
-        return failureToolResultJson(toolName, summary, errorCode);
+        return failureToolResultJson(summary, errorCode);
     }
 
-    static String successToolResultJson(String toolName, String summary, List<?> data) {
-        return JSON.toJSONString(AiToolResult.success(toolName, summary, data), JSONWriter.Feature.WriteNulls);
+    static String successToolResultJson(String summary, List<?> data) {
+        return JSON.toJSONString(AiToolResult.success(summary, data), JSONWriter.Feature.WriteNulls);
     }
 
-    static String failureToolResultJson(String toolName, String summary, String errorCode) {
-        return JSON.toJSONString(AiToolResult.failure(toolName, summary, errorCode), JSONWriter.Feature.WriteNulls);
+    static String failureToolResultJson(String summary, String errorCode) {
+        return JSON.toJSONString(AiToolResult.failure(summary, errorCode), JSONWriter.Feature.WriteNulls);
     }
 
     private <T> T invokeWithRequestContext(AiToolContextRequest toolContext, java.util.function.Supplier<T> supplier) {

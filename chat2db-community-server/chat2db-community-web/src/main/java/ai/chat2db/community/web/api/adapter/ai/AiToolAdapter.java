@@ -132,7 +132,7 @@ public class AiToolAdapter {
             log.error("AI tool call failed, tool={}", toolName, e);
             String message = "Tool call failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
             return emit(toolContext, toolName,
-                    JSON.toJSONString(AiToolResult.failure(toolName, message, "TOOL_CALL_FAILED"),
+                    JSON.toJSONString(AiToolResult.failure(message, "TOOL_CALL_FAILED"),
                             JSONWriter.Feature.WriteNulls));
         }
     }

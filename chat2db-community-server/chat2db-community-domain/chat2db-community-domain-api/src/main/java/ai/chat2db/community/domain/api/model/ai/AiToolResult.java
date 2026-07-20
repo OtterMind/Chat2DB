@@ -10,27 +10,23 @@ public class AiToolResult {
 
     private Boolean success;
 
-    private String tool;
-
     private String summary;
 
     private List<Object> data = new ArrayList<>();
 
     private String errorCode;
 
-    public static AiToolResult success(String tool, String summary, List<?> data) {
+    public static AiToolResult success(String summary, List<?> data) {
         AiToolResult result = new AiToolResult();
         result.setSuccess(Boolean.TRUE);
-        result.setTool(tool);
         result.setSummary(summary);
         result.setData(copyData(data));
         return result;
     }
 
-    public static AiToolResult failure(String tool, String summary, String errorCode) {
+    public static AiToolResult failure(String summary, String errorCode) {
         AiToolResult result = new AiToolResult();
         result.setSuccess(Boolean.FALSE);
-        result.setTool(tool);
         result.setSummary(summary);
         result.setErrorCode(errorCode);
         return result;

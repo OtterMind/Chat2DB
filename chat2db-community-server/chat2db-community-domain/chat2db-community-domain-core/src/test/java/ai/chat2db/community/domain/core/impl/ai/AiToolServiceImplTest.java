@@ -16,14 +16,13 @@ class AiToolServiceImplTest {
     @Test
     void shouldSerializeSuccessfulToolResultAsStandardJson() {
         String json = AiToolServiceImpl.successToolResultJson(
-                "execute_sql",
                 "SQL executed successfully with 1 result set(s).",
                 List.of(Map.of("rowCount", 2)));
 
         JSONObject result = JSON.parseObject(json);
 
         assertEquals(true, result.getBoolean("success"));
-        assertEquals("execute_sql", result.getString("tool"));
+        assertNull(result.get("tool"));
         assertEquals("SQL executed successfully with 1 result set(s).", result.getString("summary"));
         assertEquals(1, result.getJSONArray("data").size());
         assertNull(result.get("errorCode"));
@@ -33,14 +32,13 @@ class AiToolServiceImplTest {
     @Test
     void shouldSerializeFailedToolResultAsStandardJson() {
         String json = AiToolServiceImpl.failureToolResultJson(
-                "execute_sql",
                 "sql is empty.",
                 "INVALID_ARGUMENT");
 
         JSONObject result = JSON.parseObject(json);
 
         assertEquals(false, result.getBoolean("success"));
-        assertEquals("execute_sql", result.getString("tool"));
+        assertNull(result.get("tool"));
         assertEquals("sql is empty.", result.getString("summary"));
         assertEquals(0, result.getJSONArray("data").size());
         assertEquals("INVALID_ARGUMENT", result.getString("errorCode"));

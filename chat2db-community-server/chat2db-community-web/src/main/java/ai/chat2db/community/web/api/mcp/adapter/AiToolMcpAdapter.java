@@ -122,7 +122,7 @@ public class AiToolMcpAdapter {
 
     private String toolFailure(String toolName, Exception e) {
         String message = "MCP tool call failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
-        return JSON.toJSONString(AiToolResult.failure(toolName, message, "MCP_TOOL_CALL_FAILED"),
+        return JSON.toJSONString(AiToolResult.failure(message, "MCP_TOOL_CALL_FAILED"),
                 JSONWriter.Feature.WriteNulls);
     }
 
