@@ -2,12 +2,15 @@ package ai.chat2db.community.web.api.mcp.adapter;
 
 
 import ai.chat2db.community.tools.annotation.NotCliRuntime;
+import ai.chat2db.community.domain.api.model.ai.AiToolResult;
 import ai.chat2db.community.web.api.enums.ai.QuestionTypeEnum;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.web.api.adapter.ai.AiChatStreamAdapter;
 import ai.chat2db.community.web.api.adapter.ai.AiToolAdapter;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
@@ -103,7 +106,7 @@ public class AiToolMcpAdapter {
             return aiChatStreamAdapter.chatSync(chatRequest);
         } catch (Exception e) {
             log.error("MCP tool call failed, tool=text2sql", e);
-            return "MCP tool 'text2sql' failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
+            return toolFailure("text2sql", e);
         }
     }
 
@@ -113,9 +116,14 @@ public class AiToolMcpAdapter {
             return action.apply(toolContext);
         } catch (Exception e) {
             log.error("MCP tool call failed, tool={}", toolName, e);
-            String message = StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
-            return "MCP tool '" + toolName + "' failed: " + message;
+            return toolFailure(toolName, e);
         }
+    }
+
+    private String toolFailure(String toolName, Exception e) {
+        String message = "MCP tool call failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
+        return JSON.toJSONString(AiToolResult.failure(toolName, message, "MCP_TOOL_CALL_FAILED"),
+                JSONWriter.Feature.WriteNulls);
     }
 
     private ToolContext buildToolContext() {

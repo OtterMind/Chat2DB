@@ -1,10 +1,13 @@
 package ai.chat2db.community.web.api.adapter.ai;
 
+import ai.chat2db.community.domain.api.model.ai.AiToolResult;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
@@ -14,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 @Component
 @Slf4j
@@ -30,8 +34,8 @@ public class AiToolAdapter {
 
     @Tool(name = "list_all_datasources", description = "List available Chat2DB data sources. Use this first when no datasource is selected.")
     public String listAllDataSources(ToolContext toolContext) {
-        return emit(toolContext, "list_all_datasources",
-                aiToolService.listAllDataSources(aiToolContextConverter.toParam(toolContext)));
+        return invoke(toolContext, "list_all_datasources",
+                () -> aiToolService.listAllDataSources(aiToolContextConverter.toParam(toolContext)));
     }
 
     @Tool(name = "list_all_tables", description = "List all tables in the connected database with comments and type.")
@@ -40,8 +44,8 @@ public class AiToolAdapter {
             @ToolParam(description = "Optional target database name. If omitted, uses selected database context.", required = false) String databaseName,
             @ToolParam(description = "Optional target schema name. If omitted, uses selected schema context.", required = false) String schemaName,
             ToolContext toolContext) {
-        return emit(toolContext, "list_all_tables",
-                aiToolService.listAllTables(listTablesRequest(dataSourceId, databaseName, schemaName,
+        return invoke(toolContext, "list_all_tables",
+                () -> aiToolService.listAllTables(listTablesRequest(dataSourceId, databaseName, schemaName,
                         aiToolContextConverter.toParam(toolContext))));
     }
 
@@ -49,8 +53,8 @@ public class AiToolAdapter {
     public String listAllDatabases(
             @ToolParam(description = "Optional datasource id. Required when no datasource is selected in context.", required = false) Long dataSourceId,
             ToolContext toolContext) {
-        return emit(toolContext, "list_all_databases",
-                aiToolService.listAllDatabases(dataSourceId, aiToolContextConverter.toParam(toolContext)));
+        return invoke(toolContext, "list_all_databases",
+                () -> aiToolService.listAllDatabases(dataSourceId, aiToolContextConverter.toParam(toolContext)));
     }
 
     @Tool(name = "list_all_schemas", description = "List all schemas in the selected database. If databaseName is empty, uses current database context.")
@@ -58,8 +62,8 @@ public class AiToolAdapter {
             @ToolParam(description = "Optional target database name", required = false) String databaseName,
             @ToolParam(description = "Optional datasource id. Required when no datasource is selected in context.", required = false) Long dataSourceId,
             ToolContext toolContext) {
-        return emit(toolContext, "list_all_schemas",
-                aiToolService.listAllSchemas(databaseName, dataSourceId, aiToolContextConverter.toParam(toolContext)));
+        return invoke(toolContext, "list_all_schemas",
+                () -> aiToolService.listAllSchemas(databaseName, dataSourceId, aiToolContextConverter.toParam(toolContext)));
     }
 
     @Tool(name = "execute_sql", description = "Execute SQL in current database context and return concise result (rows for SELECT, update count for DML/DDL).")
@@ -70,8 +74,8 @@ public class AiToolAdapter {
             @ToolParam(description = "Optional target database name. If omitted, uses selected database context.", required = false) String databaseName,
             @ToolParam(description = "Optional target schema name. If omitted, uses selected schema context.", required = false) String schemaName,
             ToolContext toolContext) {
-        return emit(toolContext, "execute_sql",
-                aiToolService.executeSql(executeSqlRequest(sql, pageSize, dataSourceId, databaseName, schemaName,
+        return invoke(toolContext, "execute_sql",
+                () -> aiToolService.executeSql(executeSqlRequest(sql, pageSize, dataSourceId, databaseName, schemaName,
                         aiToolContextConverter.toParam(toolContext))));
     }
 
@@ -82,8 +86,8 @@ public class AiToolAdapter {
             @ToolParam(description = "Optional target database name. If omitted, uses selected database context.", required = false) String databaseName,
             @ToolParam(description = "Optional target schema name. If omitted, uses selected schema context.", required = false) String schemaName,
             ToolContext toolContext) {
-        return emit(toolContext, "get_tables_schema",
-                aiToolService.getTablesSchema(tablesSchemaRequest(tableNames, dataSourceId, databaseName, schemaName,
+        return invoke(toolContext, "get_tables_schema",
+                () -> aiToolService.getTablesSchema(tablesSchemaRequest(tableNames, dataSourceId, databaseName, schemaName,
                         aiToolContextConverter.toParam(toolContext))));
     }
 
@@ -119,6 +123,18 @@ public class AiToolAdapter {
         request.setSchemaName(schemaName);
         request.setAiToolContextRequest(toolContext);
         return request;
+    }
+
+    private String invoke(ToolContext toolContext, String toolName, Supplier<String> action) {
+        try {
+            return emit(toolContext, toolName, action.get());
+        } catch (Exception e) {
+            log.error("AI tool call failed, tool={}", toolName, e);
+            String message = "Tool call failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
+            return emit(toolContext, toolName,
+                    JSON.toJSONString(AiToolResult.failure(toolName, message, "TOOL_CALL_FAILED"),
+                            JSONWriter.Feature.WriteNulls));
+        }
     }
 
     private String emit(ToolContext toolContext, String toolName, String content) {

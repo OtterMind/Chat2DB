@@ -10,6 +10,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbTableShowCreateRequest
 import ai.chat2db.community.domain.api.model.request.datasource.DbDatabaseQueryAllRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.ai.AiToolResult;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.db.IDbDatabaseService;
@@ -40,6 +41,8 @@ import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,27 +90,26 @@ public class AiToolServiceImpl implements IAiToolService {
                 toolContext,
                 () -> workspaceStorageFacade.listDataSources(queryRequest));
         if (Objects.isNull(result)) {
-            return emitToolResult(toolContext, "list_all_datasources", "Failed to query datasources: unknown error");
+            return emitToolFailure(toolContext, "list_all_datasources",
+                    "Failed to query datasources: unknown error", "DATASOURCE_QUERY_FAILED");
         }
         if (CollectionUtils.isEmpty(result.getData())) {
-            return emitToolResult(toolContext, "list_all_datasources", "No datasources found.");
+            return emitToolResult(toolContext, "list_all_datasources", "No datasources found.", Collections.emptyList());
         }
 
-        return emitToolResult(toolContext, "list_all_datasources", result.getData().stream()
+        List<Map<String, Object>> data = result.getData().stream()
                 .filter(Objects::nonNull)
                 .map(dataSource -> {
-                    List<String> parts = new ArrayList<>();
-                    parts.add("id=" + dataSource.getId());
-                    parts.add("name=" + StringUtils.defaultIfBlank(dataSource.getAlias(), "(unnamed)"));
-                    if (StringUtils.isNotBlank(dataSource.getType())) {
-                        parts.add("type=" + dataSource.getType());
-                    }
-                    if (StringUtils.isNotBlank(dataSource.getEnvType())) {
-                        parts.add("env=" + dataSource.getEnvType());
-                    }
-                    return String.join("; ", parts);
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", dataSource.getId());
+                    item.put("name", StringUtils.defaultIfBlank(dataSource.getAlias(), "(unnamed)"));
+                    item.put("type", dataSource.getType());
+                    item.put("env", dataSource.getEnvType());
+                    return item;
                 })
-                .collect(Collectors.joining("\n")));
+                .collect(Collectors.toList());
+        return emitToolResult(toolContext, "list_all_datasources",
+                "Found " + data.size() + " datasource(s).", data);
     }
     public String listAllTables(AiListTablesRequest aiListTablesRequest) {
         Long dataSourceId = aiListTablesRequest == null ? null : aiListTablesRequest.getDataSourceId();
@@ -127,11 +129,14 @@ public class AiToolServiceImpl implements IAiToolService {
                     .build();
             List<SimpleTable> result = tableService.queryTables(queryParam);
             if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_tables", "No tables found.");
+                return emitToolResult(toolContext, "list_all_tables", "No tables found.", Collections.emptyList());
             }
-            return emitToolResult(toolContext, "list_all_tables", result.stream()
-                    .map(this::formatTableSummary)
-                    .collect(Collectors.joining("\n")));
+            List<Map<String, Object>> data = result.stream()
+                    .filter(Objects::nonNull)
+                    .map(this::tableSummaryData)
+                    .collect(Collectors.toList());
+            return emitToolResult(toolContext, "list_all_tables",
+                    "Found " + data.size() + " table(s).", data);
         } finally {
             connectionContextService.clear();
         }
@@ -147,15 +152,20 @@ public class AiToolServiceImpl implements IAiToolService {
                     .build();
             List<Database> result = databaseService.queryAll(queryParam);
             if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_databases", "No databases found.");
+                return emitToolResult(toolContext, "list_all_databases", "No databases found.", Collections.emptyList());
             }
-            return emitToolResult(toolContext, "list_all_databases", result.stream()
+            List<Map<String, Object>> data = result.stream()
+                    .filter(Objects::nonNull)
                     .map(database -> {
-                        String systemFlag = database.isSystem() ? " [SYSTEM]" : "";
-                        String comment = StringUtils.isBlank(database.getComment()) ? "" : " - " + database.getComment();
-                        return StringUtils.defaultString(database.getName(), "(unnamed)") + systemFlag + comment;
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("name", StringUtils.defaultString(database.getName(), "(unnamed)"));
+                        item.put("system", database.isSystem());
+                        item.put("comment", database.getComment());
+                        return item;
                     })
-                    .collect(Collectors.joining("\n")));
+                    .collect(Collectors.toList());
+            return emitToolResult(toolContext, "list_all_databases",
+                    "Found " + data.size() + " database(s).", data);
         } finally {
             connectionContextService.clear();
         }
@@ -165,7 +175,8 @@ public class AiToolServiceImpl implements IAiToolService {
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, null);
         String targetDatabase = StringUtils.defaultIfBlank(databaseName, profile.getDatabaseName());
         if (StringUtils.isBlank(targetDatabase)) {
-            return emitToolResult(toolContext, "list_all_schemas", "databaseName is required for listing schemas.");
+            return emitToolFailure(toolContext, "list_all_schemas",
+                    "databaseName is required for listing schemas.", "INVALID_ARGUMENT");
         }
         try {
             connectionContextService.bindProfile(profile);
@@ -176,15 +187,20 @@ public class AiToolServiceImpl implements IAiToolService {
                     .build();
             List<Schema> result = databaseService.querySchema(queryParam);
             if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_schemas", "No schemas found.");
+                return emitToolResult(toolContext, "list_all_schemas", "No schemas found.", Collections.emptyList());
             }
-            return emitToolResult(toolContext, "list_all_schemas", result.stream()
+            List<Map<String, Object>> data = result.stream()
+                    .filter(Objects::nonNull)
                     .map(schema -> {
-                        String systemFlag = schema.isSystem() ? " [SYSTEM]" : "";
-                        String comment = StringUtils.isBlank(schema.getComment()) ? "" : " - " + schema.getComment();
-                        return StringUtils.defaultString(schema.getName(), "(unnamed)") + systemFlag + comment;
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("name", StringUtils.defaultString(schema.getName(), "(unnamed)"));
+                        item.put("system", schema.isSystem());
+                        item.put("comment", schema.getComment());
+                        return item;
                     })
-                    .collect(Collectors.joining("\n")));
+                    .collect(Collectors.toList());
+            return emitToolResult(toolContext, "list_all_schemas",
+                    "Found " + data.size() + " schema(s).", data);
         } finally {
             connectionContextService.clear();
         }
@@ -198,14 +214,14 @@ public class AiToolServiceImpl implements IAiToolService {
         AiToolContextRequest toolContext = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getAiToolContextRequest();
 
         if (StringUtils.isBlank(sql)) {
-            return emitToolResult(toolContext, "execute_sql", "sql is empty.");
+            return emitToolFailure(toolContext, "execute_sql", "sql is empty.", "INVALID_ARGUMENT");
         }
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
         int resolvedPageSize = normalizePageSize(pageSize);
         String trimmedSql = sql.trim();
         String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
         if (StringUtils.isNotBlank(unsafeSqlMessage)) {
-            return emitToolResult(toolContext, "execute_sql", unsafeSqlMessage);
+            return emitToolFailure(toolContext, "execute_sql", unsafeSqlMessage, "SQL_REQUIRES_MANUAL_CONFIRMATION");
         }
 
         boolean operationLogged = false;
@@ -229,20 +245,22 @@ public class AiToolServiceImpl implements IAiToolService {
             sqlOperationLogRecorder.recordListResultAsync(sqlOperationLogListResultRequest);
             operationLogged = true;
             if (Objects.isNull(executeResult) || !executeResult.success()) {
-                return emitToolResult(toolContext, "execute_sql", "SQL execution failed: "
-                        + (Objects.isNull(executeResult) ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage())));
+                return emitToolFailure(toolContext, "execute_sql", "SQL execution failed: "
+                        + (Objects.isNull(executeResult) ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage())),
+                        "SQL_EXECUTION_FAILED");
             }
             if (CollectionUtils.isEmpty(executeResult.getData())) {
-                return emitToolResult(toolContext, "execute_sql", "SQL executed successfully with no result.");
+                return emitToolResult(toolContext, "execute_sql",
+                        "SQL executed successfully with no result.", Collections.emptyList());
             }
 
-            StringBuilder output = new StringBuilder(2048);
+            List<Map<String, Object>> data = new ArrayList<>();
             int index = 1;
             for (ExecuteResponse item : executeResult.getData()) {
-                output.append("## Result ").append(index++).append("\n");
-                output.append(formatExecuteResponse(item)).append("\n\n");
+                data.add(executeResponseData(index++, item));
             }
-            return emitToolResult(toolContext, "execute_sql", output.toString().trim());
+            return emitToolResult(toolContext, "execute_sql",
+                    "SQL executed successfully with " + data.size() + " result set(s).", data);
         } catch (RuntimeException e) {
             if (!operationLogged) {
                 sqlOperationLogRecorder.recordFailureAsync(trimmedSql, SqlOperationLogSourceEnum.AI_TOOL.name(), e.getMessage());
@@ -260,7 +278,7 @@ public class AiToolServiceImpl implements IAiToolService {
         AiToolContextRequest toolContext = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getAiToolContextRequest();
 
         if (CollectionUtils.isEmpty(tableNames)) {
-            return emitToolResult(toolContext, "get_tables_schema", "tableNames is empty.");
+            return emitToolFailure(toolContext, "get_tables_schema", "tableNames is empty.", "INVALID_ARGUMENT");
         }
 
         List<String> normalized = tableNames.stream()
@@ -270,27 +288,43 @@ public class AiToolServiceImpl implements IAiToolService {
                 .limit(20)
                 .collect(Collectors.toList());
         if (CollectionUtils.isEmpty(normalized)) {
-            return emitToolResult(toolContext, "get_tables_schema", "tableNames is empty.");
+            return emitToolFailure(toolContext, "get_tables_schema", "tableNames is empty.", "INVALID_ARGUMENT");
         }
 
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
         try {
             connectionContextService.bindProfile(profile);
-            StringBuilder ddlBuilder = new StringBuilder(4096);
+            List<Map<String, Object>> data = new ArrayList<>();
             for (String tableName : normalized) {
                 Table table = fetchDetailedTable(profile, tableName);
                 String ddl = fetchTableDdl(profile, tableName);
-                ddlBuilder.append(buildRichTableSchema(tableName, ddl, table))
-                        .append("\n\n");
+                String schemaText = buildRichTableSchema(tableName, ddl, table);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("tableName", tableName);
+                item.put("schema", schemaText);
+                data.add(item);
             }
-            return emitToolResult(toolContext, "get_tables_schema", ddlBuilder.toString());
+            return emitToolResult(toolContext, "get_tables_schema",
+                    "Fetched schema for " + data.size() + " table(s).", data);
         } finally {
             connectionContextService.clear();
         }
     }
 
-    private String emitToolResult(AiToolContextRequest toolContext, String toolName, String content) {
-        return content;
+    private String emitToolResult(AiToolContextRequest toolContext, String toolName, String summary, List<?> data) {
+        return successToolResultJson(toolName, summary, data);
+    }
+
+    private String emitToolFailure(AiToolContextRequest toolContext, String toolName, String summary, String errorCode) {
+        return failureToolResultJson(toolName, summary, errorCode);
+    }
+
+    static String successToolResultJson(String toolName, String summary, List<?> data) {
+        return JSON.toJSONString(AiToolResult.success(toolName, summary, data), JSONWriter.Feature.WriteNulls);
+    }
+
+    static String failureToolResultJson(String toolName, String summary, String errorCode) {
+        return JSON.toJSONString(AiToolResult.failure(toolName, summary, errorCode), JSONWriter.Feature.WriteNulls);
     }
 
     private <T> T invokeWithRequestContext(AiToolContextRequest toolContext, java.util.function.Supplier<T> supplier) {
@@ -386,14 +420,12 @@ public class AiToolServiceImpl implements IAiToolService {
         return table;
     }
 
-    private String formatTableSummary(SimpleTable table) {
-        StringBuilder builder = new StringBuilder(128);
-        builder.append(StringUtils.defaultString(table.getName(), "(unnamed)"));
-        builder.append(" [").append(StringUtils.defaultIfBlank(table.getTableType(), "TABLE")).append("]");
-        if (StringUtils.isNotBlank(table.getComment())) {
-            builder.append(" - ").append(table.getComment());
-        }
-        return builder.toString();
+    private Map<String, Object> tableSummaryData(SimpleTable table) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("name", StringUtils.defaultString(table.getName(), "(unnamed)"));
+        item.put("type", StringUtils.defaultIfBlank(table.getTableType(), "TABLE"));
+        item.put("comment", table.getComment());
+        return item;
     }
 
     private String buildRichTableSchema(String tableName, String ddl, Table table) {
@@ -548,6 +580,58 @@ public class AiToolServiceImpl implements IAiToolService {
             appendTabularPreview(builder, result.getHeaderList(), result.getDisplayDataList());
         }
         return builder.toString().trim();
+    }
+
+    private Map<String, Object> executeResponseData(int index, ExecuteResponse result) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("resultIndex", index);
+        if (Objects.isNull(result)) {
+            item.put("success", false);
+            item.put("message", "Empty result.");
+            item.put("text", "Empty result.");
+            return item;
+        }
+        item.put("success", Boolean.TRUE.equals(result.getSuccess()));
+        item.put("sqlType", result.getSqlType());
+        item.put("durationMs", result.getDuration());
+        item.put("updateCount", result.getUpdateCount());
+        item.put("message", result.getMessage());
+        item.put("description", result.getDescription());
+        item.put("hasNextPage", result.getHasNextPage());
+        item.put("rowCount", result.getDataList() == null ? 0 : result.getDataList().size());
+        item.put("columns", columnNames(result.getHeaderList()));
+        item.put("rows", rowPreview(result.getHeaderList(), result.getDisplayDataList()));
+        item.put("text", formatExecuteResponse(result));
+        return item;
+    }
+
+    private List<String> columnNames(List<Header> headers) {
+        if (CollectionUtils.isEmpty(headers)) {
+            return Collections.emptyList();
+        }
+        return headers.stream()
+                .map(header -> StringUtils.defaultIfBlank(header.getName(), header.getColumnName()))
+                .map(name -> StringUtils.defaultIfBlank(name, "col"))
+                .collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> rowPreview(List<Header> headers, List<List<String>> rows) {
+        if (CollectionUtils.isEmpty(headers) || CollectionUtils.isEmpty(rows)) {
+            return Collections.emptyList();
+        }
+        List<String> headerNames = columnNames(headers);
+        int rowCount = Math.min(rows.size(), MAX_SQL_RESULT_ROWS);
+        List<Map<String, Object>> result = new ArrayList<>(rowCount);
+        for (int i = 0; i < rowCount; i++) {
+            List<String> row = rows.get(i);
+            Map<String, Object> rowData = new LinkedHashMap<>();
+            for (int c = 0; c < headerNames.size(); c++) {
+                String value = row != null && c < row.size() ? row.get(c) : null;
+                rowData.put(headerNames.get(c), normalizeCell(value));
+            }
+            result.add(rowData);
+        }
+        return result;
     }
 
     private ListResult<ExecuteResponse> wrapExecuteResults(List<ExecuteResponse> results) {
