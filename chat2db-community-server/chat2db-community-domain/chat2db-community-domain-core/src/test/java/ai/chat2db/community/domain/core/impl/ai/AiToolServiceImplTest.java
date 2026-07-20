@@ -1,10 +1,13 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
 import ai.chat2db.community.domain.api.model.result.Header;
+import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.ResultCell;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -60,9 +63,29 @@ class AiToolServiceImplTest {
 
         assertEquals(List.of("id", "id", "note"), AiToolServiceImpl.columnNames(headers));
         assertEquals(1, rows.size());
-        assertEquals("first-id\\nwith tab", rows.get(0).get(0));
+        assertEquals("first-id\nwith\ttab", rows.get(0).get(0));
         assertNull(rows.get(0).get(1));
-        assertEquals(200, rows.get(0).get(2).toString().length());
-        assertTrue(rows.get(0).get(2).toString().endsWith("..."));
+        assertEquals(longText, rows.get(0).get(2));
+    }
+
+    @Test
+    void shouldExposeRowPreviewTruncationMetadata() {
+        Header header = Header.builder().name("id").build();
+        List<List<ResultCell>> rows = new ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            rows.add(List.of(ResultCell.of(String.valueOf(i))));
+        }
+        ExecuteResponse response = ExecuteResponse.builder()
+                .success(true)
+                .headerList(List.of(header))
+                .dataList(rows)
+                .build();
+
+        Map<String, Object> result = AiToolServiceImpl.executeResponseData(1, response);
+
+        assertEquals(51, result.get("rowCount"));
+        assertEquals(50, result.get("previewRowCount"));
+        assertEquals(true, result.get("rowsTruncated"));
+        assertEquals(50, ((List<?>) result.get("rows")).size());
     }
 }

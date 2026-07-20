@@ -550,7 +550,7 @@ public class AiToolServiceImpl implements IAiToolService {
         return null;
     }
 
-    private String formatExecuteResponse(ExecuteResponse result) {
+    private static String formatExecuteResponse(ExecuteResponse result) {
         if (Objects.isNull(result)) {
             return "Empty result.";
         }
@@ -582,7 +582,7 @@ public class AiToolServiceImpl implements IAiToolService {
         return builder.toString().trim();
     }
 
-    private Map<String, Object> executeResponseData(int index, ExecuteResponse result) {
+    static Map<String, Object> executeResponseData(int index, ExecuteResponse result) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("resultIndex", index);
         if (Objects.isNull(result)) {
@@ -598,7 +598,11 @@ public class AiToolServiceImpl implements IAiToolService {
         item.put("message", result.getMessage());
         item.put("description", result.getDescription());
         item.put("hasNextPage", result.getHasNextPage());
-        item.put("rowCount", result.getDataList() == null ? 0 : result.getDataList().size());
+        int rowCount = result.getDataList() == null ? 0 : result.getDataList().size();
+        int previewRowCount = Math.min(rowCount, MAX_SQL_RESULT_ROWS);
+        item.put("rowCount", rowCount);
+        item.put("previewRowCount", previewRowCount);
+        item.put("rowsTruncated", rowCount > previewRowCount);
         item.put("columns", columnNames(result.getHeaderList()));
         item.put("rows", rowPreviewRows(result.getHeaderList(), result.getDisplayDataList()));
         item.put("text", formatExecuteResponse(result));
@@ -627,7 +631,7 @@ public class AiToolServiceImpl implements IAiToolService {
             List<Object> rowData = new ArrayList<>(headerNames.size());
             for (int c = 0; c < headerNames.size(); c++) {
                 String value = row != null && c < row.size() ? row.get(c) : null;
-                rowData.add(normalizeStructuredCell(value));
+                rowData.add(value);
             }
             result.add(rowData);
         }
@@ -651,7 +655,7 @@ public class AiToolServiceImpl implements IAiToolService {
         return result;
     }
 
-    private void appendTabularPreview(StringBuilder builder, List<Header> headers, List<List<String>> rows) {
+    private static void appendTabularPreview(StringBuilder builder, List<Header> headers, List<List<String>> rows) {
         List<String> headerNames = headers.stream()
                 .map(header -> StringUtils.defaultIfBlank(header.getName(), header.getColumnName()))
                 .map(name -> StringUtils.defaultIfBlank(name, "col"))
@@ -681,13 +685,6 @@ public class AiToolServiceImpl implements IAiToolService {
             return normalized.substring(0, 197) + "...";
         }
         return normalized;
-    }
-
-    private static Object normalizeStructuredCell(String value) {
-        if (value == null) {
-            return null;
-        }
-        return normalizeCell(value);
     }
 
     private int normalizePageSize(Integer pageSize) {
