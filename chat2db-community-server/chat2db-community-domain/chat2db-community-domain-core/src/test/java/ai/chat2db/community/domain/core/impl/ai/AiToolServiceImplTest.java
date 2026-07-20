@@ -60,8 +60,9 @@ class AiToolServiceImplTest {
 
         assertEquals(List.of("id", "id", "note"), AiToolServiceImpl.columnNames(headers));
         assertEquals(1, rows.size());
-        assertEquals("first-id\nwith\ttab", rows.get(0).get(0));
+        assertEquals("first-id\\nwith tab", rows.get(0).get(0));
         assertNull(rows.get(0).get(1));
-        assertEquals(longText, rows.get(0).get(2));
+        assertEquals(200, rows.get(0).get(2).toString().length());
+        assertTrue(rows.get(0).get(2).toString().endsWith("..."));
     }
 }

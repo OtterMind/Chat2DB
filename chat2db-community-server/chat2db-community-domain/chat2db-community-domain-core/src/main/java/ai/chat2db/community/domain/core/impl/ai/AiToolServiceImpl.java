@@ -627,7 +627,7 @@ public class AiToolServiceImpl implements IAiToolService {
             List<Object> rowData = new ArrayList<>(headerNames.size());
             for (int c = 0; c < headerNames.size(); c++) {
                 String value = row != null && c < row.size() ? row.get(c) : null;
-                rowData.add(value);
+                rowData.add(normalizeStructuredCell(value));
             }
             result.add(rowData);
         }
@@ -681,6 +681,13 @@ public class AiToolServiceImpl implements IAiToolService {
             return normalized.substring(0, 197) + "...";
         }
         return normalized;
+    }
+
+    private static Object normalizeStructuredCell(String value) {
+        if (value == null) {
+            return null;
+        }
+        return normalizeCell(value);
     }
 
     private int normalizePageSize(Integer pageSize) {

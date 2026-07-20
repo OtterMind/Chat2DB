@@ -7,41 +7,43 @@ import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 
 /**
  * Provides AI tool operations over datasource metadata and SQL execution.
+ *
+ * <p>Methods return a serialized AiToolResult JSON string with success, summary, data, and errorCode fields.
  */
 public interface IAiToolService {
 
     /**
-     * Returns datasource context text for AI tools.
+     * Returns datasource metadata for AI tools.
      *
      * @param aiToolContextRequest AI tool context parameters.
-     * @return datasource context text.
+     * @return serialized AiToolResult JSON string.
      */
     String listAllDataSources(AiToolContextRequest aiToolContextRequest);
 
     /**
-     * Returns table context text for AI tools.
+     * Returns table metadata for AI tools.
      *
      * @param aiListTablesRequest AI table listing parameters.
-     * @return table context text.
+     * @return serialized AiToolResult JSON string.
      */
     String listAllTables(AiListTablesRequest aiListTablesRequest);
 
     /**
-     * Returns database context text for AI tools.
+     * Returns database metadata for AI tools.
      *
      * @param dataSourceId datasource identifier.
      * @param aiToolContextRequest AI tool context parameters.
-     * @return database context text.
+     * @return serialized AiToolResult JSON string.
      */
     String listAllDatabases(Long dataSourceId, AiToolContextRequest aiToolContextRequest);
 
     /**
-     * Returns schema context text for AI tools.
+     * Returns schema metadata for AI tools.
      *
      * @param databaseName database name that scopes the lookup.
      * @param dataSourceId datasource identifier.
      * @param aiToolContextRequest AI tool context parameters.
-     * @return schema context text.
+     * @return serialized AiToolResult JSON string.
      */
     String listAllSchemas(String databaseName, Long dataSourceId, AiToolContextRequest aiToolContextRequest);
 
@@ -49,15 +51,15 @@ public interface IAiToolService {
      * Executes SQL for an AI tool request.
      *
      * @param aiExecuteSqlRequest AI SQL execution parameters.
-     * @return SQL execution context text.
+     * @return serialized AiToolResult JSON string.
      */
     String executeSql(AiExecuteSqlRequest aiExecuteSqlRequest);
 
     /**
-     * Returns table schema context text for AI tools.
+     * Returns table schema metadata for AI tools.
      *
      * @param aiGetTablesSchemaRequest AI table schema lookup parameters.
-     * @return table schema context text.
+     * @return serialized AiToolResult JSON string.
      */
     String getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest);
 }
