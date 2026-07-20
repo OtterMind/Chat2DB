@@ -600,12 +600,12 @@ public class AiToolServiceImpl implements IAiToolService {
         item.put("hasNextPage", result.getHasNextPage());
         item.put("rowCount", result.getDataList() == null ? 0 : result.getDataList().size());
         item.put("columns", columnNames(result.getHeaderList()));
-        item.put("rows", rowPreview(result.getHeaderList(), result.getDisplayDataList()));
+        item.put("rows", rowPreviewRows(result.getHeaderList(), result.getDisplayDataList()));
         item.put("text", formatExecuteResponse(result));
         return item;
     }
 
-    private List<String> columnNames(List<Header> headers) {
+    static List<String> columnNames(List<Header> headers) {
         if (CollectionUtils.isEmpty(headers)) {
             return Collections.emptyList();
         }
@@ -615,19 +615,19 @@ public class AiToolServiceImpl implements IAiToolService {
                 .collect(Collectors.toList());
     }
 
-    private List<Map<String, Object>> rowPreview(List<Header> headers, List<List<String>> rows) {
+    static List<List<Object>> rowPreviewRows(List<Header> headers, List<List<String>> rows) {
         if (CollectionUtils.isEmpty(headers) || CollectionUtils.isEmpty(rows)) {
             return Collections.emptyList();
         }
         List<String> headerNames = columnNames(headers);
         int rowCount = Math.min(rows.size(), MAX_SQL_RESULT_ROWS);
-        List<Map<String, Object>> result = new ArrayList<>(rowCount);
+        List<List<Object>> result = new ArrayList<>(rowCount);
         for (int i = 0; i < rowCount; i++) {
             List<String> row = rows.get(i);
-            Map<String, Object> rowData = new LinkedHashMap<>();
+            List<Object> rowData = new ArrayList<>(headerNames.size());
             for (int c = 0; c < headerNames.size(); c++) {
                 String value = row != null && c < row.size() ? row.get(c) : null;
-                rowData.put(headerNames.get(c), normalizeCell(value));
+                rowData.add(value);
             }
             result.add(rowData);
         }
@@ -672,7 +672,7 @@ public class AiToolServiceImpl implements IAiToolService {
         }
     }
 
-    private String normalizeCell(String value) {
+    private static String normalizeCell(String value) {
         if (value == null) {
             return "NULL";
         }

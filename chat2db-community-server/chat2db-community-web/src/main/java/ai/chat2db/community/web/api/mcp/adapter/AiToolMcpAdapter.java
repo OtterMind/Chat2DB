@@ -103,7 +103,10 @@ public class AiToolMcpAdapter {
             chatRequest.setQuestionType(QuestionTypeEnum.NL_2_SQL.getCode());
             chatRequest.setEnableTools(Boolean.TRUE);
 
-            return aiChatStreamAdapter.chatSync(chatRequest);
+            String sql = aiChatStreamAdapter.chatSync(chatRequest);
+            return toolSuccess(
+                    "SQL generated successfully.",
+                    List.of(Map.of("sql", StringUtils.defaultString(sql))));
         } catch (Exception e) {
             log.error("MCP tool call failed, tool=text2sql", e);
             return toolFailure("text2sql", e);
@@ -123,6 +126,11 @@ public class AiToolMcpAdapter {
     private String toolFailure(String toolName, Exception e) {
         String message = "MCP tool call failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
         return JSON.toJSONString(AiToolResult.failure(message, "MCP_TOOL_CALL_FAILED"),
+                JSONWriter.Feature.WriteNulls);
+    }
+
+    static String toolSuccess(String summary, List<?> data) {
+        return JSON.toJSONString(AiToolResult.success(summary, data),
                 JSONWriter.Feature.WriteNulls);
     }
 

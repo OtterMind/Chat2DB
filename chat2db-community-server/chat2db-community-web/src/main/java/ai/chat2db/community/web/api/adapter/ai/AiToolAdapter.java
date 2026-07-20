@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -140,9 +141,22 @@ public class AiToolAdapter {
     private String emit(ToolContext toolContext, String toolName, String content) {
         Map<String, Object> payload = AiChatTraceSupport.payload(AiChatTraceSupport.TYPE_TOOL_RESULT);
         payload.put("name", toolName);
-        payload.put("content", StringUtils.defaultString(content));
+        payload.put("content", traceSummary(content));
         AiChatTraceSupport.emit(toolContext, payload);
         return content;
+    }
+
+    static String traceSummary(String content) {
+        if (StringUtils.isBlank(content)) {
+            return StringUtils.EMPTY;
+        }
+        try {
+            JSONObject result = JSON.parseObject(content);
+            String summary = result.getString("summary");
+            return StringUtils.defaultIfBlank(summary, content);
+        } catch (Exception ignored) {
+            return content;
+        }
     }
 
 }
