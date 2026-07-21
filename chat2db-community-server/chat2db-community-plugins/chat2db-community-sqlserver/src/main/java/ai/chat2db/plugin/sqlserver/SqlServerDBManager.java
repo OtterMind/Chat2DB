@@ -164,15 +164,66 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
         String sourceTable = buildFullTableName(databaseName, schemaName, tableName);
         String targetTable = buildFullTableName(databaseName, schemaName, newTableName);
-        String sql;
-        if (copyData) {
-            sql = String.format(SQL_COPY_TABLE_DATA, targetTable, sourceTable);
-        } else {
-            sql = String.format(SQL_COPY_TABLE_STRUCTURE, targetTable, sourceTable);
-        }
 
-        log.info(" copy table sql : {}", sql);
-        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+        // Build CREATE TABLE with explicit column definitions to preserve IDENTITY
+        StringBuilder createSql = new StringBuilder();
+        createSql.append("CREATE TABLE ").append(targetTable).append(" (\n");
+
+        boolean[] first = {true};
+        DefaultSQLExecutor.getInstance().preExecute(connection, SELECT_TABLE_COLUMNS,
+                new String[]{schemaName, tableName}, resultSet -> {
+                    while (resultSet.next()) {
+                        String colName = resultSet.getString("COLUMN_NAME");
+                        String dataType = resultSet.getString("DATA_TYPE");
+                        boolean isIdentity = resultSet.getBoolean("IS_IDENTITY");
+                        boolean isSparse = resultSet.getBoolean("IS_SPARSE");
+                        int isNullable = resultSet.getInt("IS_NULLABLE");
+                        String defaultValue = resultSet.getString("COLUMN_DEFAULT");
+                        String computedDef = resultSet.getString("COMPUTED_DEFINITION");
+                        boolean isPersisted = resultSet.getBoolean("IS_PERSISTED");
+
+                        if (!first[0]) {
+                            createSql.append(",\n");
+                        }
+                        first[0] = false;
+                        createSql.append("  [").append(colName).append("] ");
+
+                        if (StringUtils.isNotBlank(computedDef)) {
+                            createSql.append("AS ").append(computedDef);
+                            if (isPersisted) {
+                                createSql.append(" PERSISTED");
+                            }
+                        } else {
+                            createSql.append(dataType);
+                            if (isIdentity) {
+                                int seed = resultSet.getInt("SEED_VALUE");
+                                int increment = resultSet.getInt("INCREMENT_VALUE");
+                                createSql.append(" IDENTITY(").append(seed).append(",").append(increment).append(")");
+                            }
+                            if (isSparse) {
+                                createSql.append(" SPARSE");
+                            }
+                            if (isNullable == 1) {
+                                createSql.append(" NULL");
+                            } else {
+                                createSql.append(" NOT NULL");
+                            }
+                            if (StringUtils.isNotBlank(defaultValue)) {
+                                createSql.append(" DEFAULT ").append(defaultValue);
+                            }
+                        }
+                    }
+                });
+
+        createSql.append("\n)");
+        log.info("copy table DDL: {}", createSql);
+        DefaultSQLExecutor.getInstance().execute(connection, createSql.toString(), resultSet -> null);
+
+        if (copyData) {
+            String insertSql = "INSERT INTO " + targetTable + " SELECT * FROM " + sourceTable;
+            log.info("copy table data: {}", insertSql);
+            DefaultSQLExecutor.getInstance().execute(connection, insertSql, resultSet -> null);
+        }
     }
 
 
