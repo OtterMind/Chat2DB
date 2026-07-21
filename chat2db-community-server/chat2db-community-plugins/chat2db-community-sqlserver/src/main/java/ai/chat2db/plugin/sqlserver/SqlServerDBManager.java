@@ -17,6 +17,7 @@ import java.sql.PreparedStatement;
 import java.util.Date;
 
 import static ai.chat2db.plugin.sqlserver.constant.SQLConstant.*;
+import static ai.chat2db.plugin.sqlserver.constant.SqlServerDBManagerConstants.*;
 import static cn.hutool.core.date.DatePattern.NORM_DATETIME_PATTERN;
 
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerDBManagerConstants.*;
@@ -162,17 +163,82 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
-        String sourceTable = buildFullTableName(databaseName, schemaName, tableName);
-        String targetTable = buildFullTableName(databaseName, schemaName, newTableName);
-        String sql;
-        if (copyData) {
-            sql = String.format(SQL_COPY_TABLE_DATA, targetTable, sourceTable);
-        } else {
-            sql = String.format(SQL_COPY_TABLE_STRUCTURE, targetTable, sourceTable);
+        String ddl = Chat2DBContext.getDbMetaData().tableDDL(connection,
+                new TableMetadataRequest(databaseName, schemaName, tableName));
+        // Replace only the CREATE TABLE [tableName] line, not other references
+        String formatOldTable = "[" + tableName + "]";
+        String formatNewTable = "[" + newTableName + "]";
+        String createDdl = ddl.replaceFirst(
+                "(?i)CREATE\\s+TABLE\\s+" + java.util.regex.Pattern.quote(formatOldTable),
+                "CREATE TABLE " + formatNewTable);
+        log.info("copy table DDL: {}", createDdl);
+
+        // tableDDL() uses 'go' as batch separator which is not valid JDBC SQL.
+        // Split by 'go' on its own line and execute each batch separately.
+        String[] batches = createDdl.split("(?m)^\\s*go\\s*$");
+        for (String batch : batches) {
+            String trimmed = batch.trim();
+            if (!trimmed.isEmpty()) {
+                DefaultSQLExecutor.getInstance().execute(connection, trimmed, resultSet -> null);
+            }
         }
 
-        log.info(" copy table sql : {}", sql);
-        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+        if (copyData) {
+            // Query column metadata to determine which columns are copyable
+            java.util.List<String> copyableColumns = new java.util.ArrayList<>();
+            boolean hasIdentity = false;
+            try (PreparedStatement ps = connection.prepareStatement(SELECT_TABLE_COLUMNS)) {
+                ps.setString(1, schemaName);
+                ps.setString(2, tableName);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String computedDef = rs.getString("COMPUTED_DEFINITION");
+                        String dataType = rs.getString("DATA_TYPE");
+                        if (computedDef != null && !computedDef.isEmpty()) {
+                            continue; // skip computed columns
+                        }
+                        if ("timestamp".equalsIgnoreCase(dataType) || "rowversion".equalsIgnoreCase(dataType)) {
+                            continue; // skip timestamp/rowversion (auto-generated)
+                        }
+                        if (rs.getBoolean("IS_IDENTITY")) {
+                            hasIdentity = true;
+                        }
+                        copyableColumns.add("[" + rs.getString("COLUMN_NAME") + "]");
+                    }
+                }
+            }
+
+            if (copyableColumns.isEmpty()) {
+                log.warn("No copyable columns found for table {}", tableName);
+                return;
+            }
+
+            String columnList = String.join(", ", copyableColumns);
+            String sourceTable = buildFullTableName(databaseName, schemaName, tableName);
+            String targetTable = buildFullTableName(databaseName, schemaName, newTableName);
+            String insertSql = String.format(SQL_COPY_TABLE_DATA_WITH_COLUMNS, targetTable, columnList, sourceTable);
+            log.info("copy table data sql: {}", insertSql);
+
+            if (hasIdentity) {
+                String identityOn = String.format(SQL_SET_IDENTITY_INSERT, targetTable, "ON");
+                String identityOff = String.format(SQL_SET_IDENTITY_INSERT, targetTable, "OFF");
+                try {
+                    DefaultSQLExecutor.getInstance().execute(connection, identityOn, resultSet -> null);
+                    DefaultSQLExecutor.getInstance().execute(connection, insertSql, resultSet -> null);
+                } catch (Exception e) {
+                    log.error("Failed to copy data with identity insert", e);
+                    throw e;
+                } finally {
+                    try {
+                        DefaultSQLExecutor.getInstance().execute(connection, identityOff, resultSet -> null);
+                    } catch (Exception e) {
+                        log.warn("Failed to turn off identity insert", e);
+                    }
+                }
+            } else {
+                DefaultSQLExecutor.getInstance().execute(connection, insertSql, resultSet -> null);
+            }
+        }
     }
 
 
