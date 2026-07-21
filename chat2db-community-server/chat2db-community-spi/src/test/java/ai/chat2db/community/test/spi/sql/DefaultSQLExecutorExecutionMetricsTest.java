@@ -3,6 +3,7 @@ package ai.chat2db.community.test.spi.sql;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.ExecutionContext;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.model.sql.RefreshTarget;
@@ -12,10 +13,13 @@ import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.DefaultMetaService;
+import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import com.alibaba.druid.DbType;
@@ -31,15 +35,18 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultSQLExecutorExecutionMetricsTest {
@@ -48,6 +55,7 @@ class DefaultSQLExecutorExecutionMetricsTest {
     private static final DefaultSQLExecutor EXECUTOR = new TestSQLExecutor();
 
     private IPlugin previousPlugin;
+    private TestPlugin testPlugin;
 
     @BeforeAll
     static void setUpI18n() throws Exception {
@@ -74,7 +82,8 @@ class DefaultSQLExecutorExecutionMetricsTest {
 
     @BeforeEach
     void setUpPlugin() {
-        previousPlugin = Chat2DBContext.PLUGIN_MAP.put(TEST_DB_TYPE, new TestPlugin());
+        testPlugin = new TestPlugin();
+        previousPlugin = Chat2DBContext.PLUGIN_MAP.put(TEST_DB_TYPE, testPlugin);
     }
 
     @AfterEach
@@ -181,41 +190,131 @@ class DefaultSQLExecutorExecutionMetricsTest {
     }
 
     @Test
-    void successfulUseDatabaseSynchronizesJdbcCatalog() throws Exception {
-        String[] catalog = {"source_database"};
-        String[] schema = {"source_schema"};
-        Connection connection = contextConnection(catalog, schema);
-        SimpleSqlStatement statement = useDatabaseStatement("target_database");
+    void topLevelScriptShowsNewSchemaAfterSuccessfulSchemaSwitch() throws Exception {
+        try (Connection connection = openDatabase("top_level_schema_context")) {
+            putContext(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("CREATE SCHEMA target_schema");
+            }
 
-        ((TestSQLExecutor) EXECUTOR).synchronizeContext(statement, connection,
-                List.of(ExecuteResponse.builder().success(Boolean.TRUE).build()));
+            List<ExecuteResponse> results = EXECUTOR.execute(request(
+                    "SET SCHEMA target_schema; SELECT 1"));
 
-        assertEquals("target_database", connection.getCatalog());
-
-        catalog[0] = "source_database";
-        ((TestSQLExecutor) EXECUTOR).synchronizeContext(statement, connection,
-                List.of(ExecuteResponse.builder().success(Boolean.FALSE).build()));
-        assertEquals("source_database", connection.getCatalog());
+            assertEquals(2, results.size());
+            assertEquals("PUBLIC", results.get(0).getExecutionContext().getSchemaName());
+            assertEquals("TARGET_SCHEMA", results.get(1).getExecutionContext().getSchemaName());
+        }
     }
 
     @Test
-    void successfulSetSchemaSynchronizesOnlySingleSchemaTargets() throws Exception {
+    void movingAnObjectToAnotherSchemaDoesNotChangeExecutionContext() throws Exception {
+        try (Connection connection = openDatabase("alter_object_schema_context")) {
+            putContext(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("CREATE SCHEMA target_schema");
+            }
+
+            List<ExecuteResponse> results = EXECUTOR.execute(request(
+                    "ALTER TABLE sample SET SCHEMA target_schema; SELECT 1"));
+
+            assertEquals(2, results.size());
+            assertEquals("PUBLIC", results.get(0).getExecutionContext().getSchemaName());
+            assertEquals("PUBLIC", results.get(1).getExecutionContext().getSchemaName());
+        }
+    }
+
+    @Test
+    void successfulUseDatabaseAdvancesOutputContextWithoutMutatingConnection() throws Exception {
         String[] catalog = {"source_database"};
         String[] schema = {"source_schema"};
         Connection connection = contextConnection(catalog, schema);
+        JdbcExecutionContext.Cursor cursor = JdbcExecutionContext.cursor(connection);
+        SimpleSqlStatement statement = useDatabaseStatement("target_database");
 
-        ((TestSQLExecutor) EXECUTOR).synchronizeContext(setSchemaStatement("target_schema"), connection,
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection,
                 List.of(ExecuteResponse.builder().success(Boolean.TRUE).build()));
-        assertEquals("target_schema", connection.getSchema());
 
-        schema[0] = "source_schema";
-        SimpleSqlStatement searchPath = setSchemaStatement("target_schema");
-        RefreshTarget fallbackTarget = new RefreshTarget();
-        fallbackTarget.setSchemaName("public");
-        searchPath.setRefreshTargets(List.of(searchPath.getRefreshTargets().get(0), fallbackTarget));
-        ((TestSQLExecutor) EXECUTOR).synchronizeContext(searchPath, connection,
+        assertEquals("target_database", cursor.current().getDatabaseName());
+        assertEquals("source_database", connection.getCatalog());
+
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, new SimpleSqlStatement("SELECT 1"), connection,
                 List.of(ExecuteResponse.builder().success(Boolean.TRUE).build()));
-        assertEquals("source_schema", connection.getSchema());
+        assertEquals("target_database", cursor.current().getDatabaseName());
+
+        JdbcExecutionContext.Cursor failedCursor = JdbcExecutionContext.cursor(connection);
+        ((TestSQLExecutor) EXECUTOR).advanceContext(failedCursor, statement, connection,
+                List.of(ExecuteResponse.builder().success(Boolean.FALSE).build()));
+        assertEquals("source_database", failedCursor.current().getDatabaseName());
+    }
+
+    @Test
+    void schemaContextUsesReadOnlyJdbcStateForLocalDefaultAndMultipleSearchPathTargets() {
+        String[] catalog = {"source_database"};
+        String[] schema = {"source_schema"};
+        Connection connection = contextConnection(catalog, schema);
+        JdbcExecutionContext.Cursor cursor = JdbcExecutionContext.cursor(connection);
+        SimpleSqlStatement statement = setSchemaStatement("ignored_parser_target");
+        ExecuteResponse success = ExecuteResponse.builder().success(Boolean.TRUE).build();
+
+        schema[0] = "local_schema";
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection, List.of(success));
+        assertEquals("local_schema", cursor.current().getSchemaName());
+
+        schema[0] = "public";
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection, List.of(success));
+        assertEquals("public", cursor.current().getSchemaName());
+
+        schema[0] = "first_existing_schema";
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection, List.of(success));
+        assertEquals("first_existing_schema", cursor.current().getSchemaName());
+
+        schema[0] = "failed_schema";
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection,
+                List.of(ExecuteResponse.builder().success(Boolean.FALSE).build()));
+        assertEquals("failed_schema", cursor.current().getSchemaName());
+
+        schema[0] = "empty_result_schema";
+        ((TestSQLExecutor) EXECUTOR).advanceContext(cursor, statement, connection, List.of());
+        assertEquals("empty_result_schema", cursor.current().getSchemaName());
+    }
+
+    @Test
+    void topLevelExecutionsAlignTheSameConnectionToTheEditorDatabase() throws Exception {
+        try (Connection connection = openDatabase("editor_alignment")) {
+            putContext(connection);
+            SqlExecuteRequest request = request("SELECT 1");
+            request.setDatabaseName("editor_database");
+
+            List<ExecuteResponse> results = EXECUTOR.execute(request);
+
+            assertEquals("editor_database", testPlugin.dbManager.databaseName);
+            assertEquals(connection, testPlugin.dbManager.connection);
+            assertEquals("editor_database", results.get(0).getExecutionContext().getDatabaseName());
+
+            testPlugin.dbManager.clear();
+            CapturingConsumer consumer = new CapturingConsumer();
+            EXECUTOR.executeStreaming(request, consumer, new NoOpStatementListener(), () -> false);
+
+            assertEquals("editor_database", testPlugin.dbManager.databaseName);
+            assertEquals(connection, testPlugin.dbManager.connection);
+            assertEquals("editor_database",
+                    consumer.finishedResults.get(0).getExecutionContext().getDatabaseName());
+        }
+    }
+
+    @Test
+    void canceledStreamingExecutionDoesNotAlignTheConnection() throws Exception {
+        try (Connection connection = openDatabase("canceled_before_alignment")) {
+            putContext(connection);
+            SqlExecuteRequest request = request("SELECT 1");
+            request.setDatabaseName("editor_database");
+
+            assertThrows(SQLException.class, () -> EXECUTOR.executeStreaming(
+                    request, new CapturingConsumer(), new NoOpStatementListener(), () -> true));
+
+            assertNull(testPlugin.dbManager.connection);
+            assertNull(testPlugin.dbManager.databaseName);
+        }
     }
 
     @Test
@@ -245,6 +344,46 @@ class DefaultSQLExecutorExecutionMetricsTest {
             assertEquals(Boolean.FALSE, result.getSuccess());
             assertEquals(1, result.getStatementSequence());
             assertNotNull(result.getDuration());
+            assertEquals("PUBLIC", result.getExecutionContext().getSchemaName());
+            assertMetrics(result, 0);
+        }
+    }
+
+    @Test
+    void failedTimingIncludesPagingAttemptAndFallback() throws Exception {
+        try (Connection connection = openDatabase("failed_paging_metrics")) {
+            putContext(connection);
+            FailingPagingExecutor executor = new FailingPagingExecutor();
+            SqlExecuteRequest request = request("SELECT * FROM missing_table");
+
+            ExecuteResponse result = executor.execute(request).get(0);
+
+            assertEquals(2, executor.attempts);
+            assertEquals(Boolean.FALSE, result.getSuccess());
+            assertTrue(result.getDuration() >= 60L);
+            assertEquals("PUBLIC", result.getExecutionContext().getSchemaName());
+            assertMetrics(result, 0);
+        }
+    }
+
+    @Test
+    void canceledContextChangingStatementKeepsStatementStartContext() throws Exception {
+        try (Connection connection = openDatabase("canceled_context")) {
+            putContext(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("CREATE SCHEMA target_schema");
+            }
+            CapturingConsumer consumer = new CapturingConsumer();
+            AtomicInteger cancellationChecks = new AtomicInteger();
+
+            EXECUTOR.executeStreaming(request("SET SCHEMA target_schema"), consumer,
+                    new NoOpStatementListener(), () -> cancellationChecks.incrementAndGet() >= 4);
+
+            assertEquals(1, consumer.finishedResults.size());
+            ExecuteResponse result = consumer.finishedResults.get(0);
+            assertEquals(Boolean.FALSE, result.getSuccess());
+            assertEquals("PUBLIC", result.getExecutionContext().getSchemaName());
+            assertEquals("TARGET_SCHEMA", connection.getSchema());
             assertMetrics(result, 0);
         }
     }
@@ -375,21 +514,14 @@ class DefaultSQLExecutorExecutionMetricsTest {
         assertNotNull(metrics.getStartedAtEpochMs());
         assertNotNull(metrics.getFinishedAtEpochMs());
         assertTrue(metrics.getFinishedAtEpochMs() >= metrics.getStartedAtEpochMs());
-        if (Boolean.TRUE.equals(result.getSuccess())) {
-            assertEquals(expectedRowCount, metrics.getFetchedRowCount());
-            assertNotNull(metrics.getTotalDurationMs());
-            assertNotNull(metrics.getExecuteDurationMs());
-            assertNotNull(metrics.getFetchDurationMs());
-            assertEquals(metrics.getTotalDurationMs(),
-                    metrics.getExecuteDurationMs() + metrics.getFetchDurationMs());
-            assertTrue(metrics.getExecuteDurationMs() >= 0L);
-            assertTrue(metrics.getFetchDurationMs() >= 0L);
-        } else {
-            assertNull(metrics.getTotalDurationMs());
-            assertNull(metrics.getExecuteDurationMs());
-            assertNull(metrics.getFetchDurationMs());
-            assertNull(metrics.getFetchedRowCount());
-        }
+        assertEquals(expectedRowCount, metrics.getFetchedRowCount());
+        assertNotNull(metrics.getTotalDurationMs());
+        assertNotNull(metrics.getExecuteDurationMs());
+        assertNotNull(metrics.getFetchDurationMs());
+        assertEquals(metrics.getTotalDurationMs(),
+                metrics.getExecuteDurationMs() + metrics.getFetchDurationMs());
+        assertTrue(metrics.getExecuteDurationMs() >= 0L);
+        assertTrue(metrics.getFetchDurationMs() >= 0L);
     }
 
     private static void putContext(Connection connection) {
@@ -446,7 +578,7 @@ class DefaultSQLExecutorExecutionMetricsTest {
         }
     }
 
-    private static final class TestSQLExecutor extends DefaultSQLExecutor {
+    private static class TestSQLExecutor extends DefaultSQLExecutor {
 
         private static long statementDuration(List<ExecuteResponse> results) {
             return maximumStatementDuration(results);
@@ -457,9 +589,9 @@ class DefaultSQLExecutorExecutionMetricsTest {
                     null, null, null);
         }
 
-        private void synchronizeContext(SimpleSqlStatement statement, Connection connection,
-                                        List<ExecuteResponse> executeResults) {
-            synchronizeExecutionContext(statement, connection, executeResults);
+        private void advanceContext(JdbcExecutionContext.Cursor cursor, SimpleSqlStatement statement,
+                                    Connection connection, List<ExecuteResponse> executeResults) {
+            advanceExecutionContext(cursor, connection, statement, executeResults);
         }
 
         @Override
@@ -473,14 +605,36 @@ class DefaultSQLExecutorExecutionMetricsTest {
         }
     }
 
+    private static final class FailingPagingExecutor extends TestSQLExecutor {
+
+        private int attempts;
+
+        @Override
+        protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
+                                                     boolean limitRowSize, Integer offset, Integer count,
+                                                     Integer resultSetId, ExecutionContext executionContext)
+                throws SQLException {
+            attempts++;
+            try {
+                Thread.sleep(35L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("interrupted", exception);
+            }
+            throw new SQLException("controlled failure " + attempts);
+        }
+    }
+
     private static final class TestPlugin implements IPlugin {
 
         private final DBConfig dbConfig;
         private final IDbMetaData metaData = new DefaultMetaService();
+        private final TestDbManager dbManager = new TestDbManager();
 
         private TestPlugin() {
             dbConfig = new DBConfig();
             dbConfig.setDbType(TEST_DB_TYPE);
+            dbConfig.setSupportDatabase(true);
         }
 
         @Override
@@ -491,6 +645,28 @@ class DefaultSQLExecutorExecutionMetricsTest {
         @Override
         public IDbMetaData getDbMetaData() {
             return metaData;
+        }
+
+        @Override
+        public IDbManager getDbManager() {
+            return dbManager;
+        }
+    }
+
+    private static final class TestDbManager extends DefaultDBManager {
+
+        private Connection connection;
+        private String databaseName;
+
+        @Override
+        public void connectDatabase(Connection connection, String databaseName) {
+            this.connection = connection;
+            this.databaseName = databaseName;
+        }
+
+        private void clear() {
+            connection = null;
+            databaseName = null;
         }
     }
 }

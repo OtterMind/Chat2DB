@@ -164,8 +164,8 @@ export function sortExecutionResults(current: IManageResultData[]) {
     if (leftExecution !== rightExecution) {
       return leftExecution - rightExecution;
     }
-    const leftStatement = Number(left.extra?.statementSequence || 0);
-    const rightStatement = Number(right.extra?.statementSequence || 0);
+    const leftStatement = Number(left.extra?.statementSequence ?? left.statementSequence ?? 0);
+    const rightStatement = Number(right.extra?.statementSequence ?? right.statementSequence ?? 0);
     if (leftStatement !== rightStatement) {
       return leftStatement - rightStatement;
     }

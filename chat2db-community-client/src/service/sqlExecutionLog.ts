@@ -74,6 +74,9 @@ export interface FailWebSqlExecutionParams extends BeginWebSqlExecutionParams {
 }
 
 const MAX_RECORDS = 200;
+const MAX_OUTPUTS_PER_RECORD = 200;
+const MAX_MESSAGE_LENGTH = 8_192;
+const MESSAGE_TRUNCATION_MARKER = '\n...[truncated]...\n';
 
 export function createSqlExecutionLogState(): SqlExecutionLogState {
   return { records: [] };
@@ -133,12 +136,18 @@ export function completeWebSqlExecution(
       context: mergeExecutionContext(params.context, first.executionContext),
       startedAtEpochMs,
     });
-    results.forEach((result, resultIndex) => {
-      (result.extra?.messages || []).forEach((message, messageIndex) => {
-        record = addMessage(record, message, completedAt, resultIndex * 1000 + messageIndex);
-      });
-      record = addResult(record, result, completedAt, undefined, resultIndex);
-    });
+    let messageSequence = 0;
+    record = appendOutputs(
+      record,
+      results.flatMap((result, resultIndex) => [
+        ...(result.extra?.messages || []).flatMap((message) => {
+          const output = createMessageOutput(record, message, completedAt, 'web-result', messageSequence);
+          messageSequence += 1;
+          return output ? [output] : [];
+        }),
+        createResultOutput(record, result, completedAt, undefined, resultIndex),
+      ]),
+    );
     const finishedAtEpochMs = results.reduce(
       (latest, result) => Math.max(latest, result.executionMetrics?.finishedAtEpochMs || 0),
       completedAt,
@@ -162,7 +171,7 @@ export function failWebSqlExecution(
   params: FailWebSqlExecutionParams,
 ): SqlExecutionLogState {
   const finishedAtEpochMs = params.occurredAtEpochMs ?? Date.now();
-  const cancelled = isCancellationError(params.error);
+  const cancelled = isSqlExecutionCancellationError(params.error);
   const existing = latestRecord(state.records, params.executionId);
   if (!existing) {
     const record = createRecord({
@@ -253,21 +262,31 @@ export function reduceDesktopSqlExecutionEvent(
         };
       }
       case 'message':
-        return addMessage(record, event.message, occurredAt, event.eventSequence);
+        return appendMessage(record, event.message, occurredAt, 'desktop-event', event.eventSequence);
       case 'resultFinished':
       case 'updateCount': {
         const contextualRecord = {
           ...record,
           context: mergeExecutionContext(record.context, event.message?.executionContext),
         };
-        const messageSequenceBase =
-          typeof event.eventSequence === 'number' ? event.eventSequence * 1000 : contextualRecord.outputs.length;
-        const withMessages = (event.message?.extra?.messages || []).reduce(
-          (current, message, index) =>
-            addMessage(current, message, occurredAt, messageSequenceBase + index),
-          contextualRecord,
-        );
-        const next = addResult(withMessages, event.message, occurredAt, event);
+        const messageSequenceBase = event.eventSequence ?? nextMessageSequence(contextualRecord);
+        const messageOutputs = (event.message?.extra?.messages || []).flatMap((message, index) => {
+          const output = createMessageOutput(
+            contextualRecord,
+            message,
+            occurredAt,
+            'desktop-result',
+            `${messageSequenceBase}:${index}`,
+          );
+          return output ? [output] : [];
+        });
+        const resultOutput = createResultOutput(contextualRecord, event.message, occurredAt, event);
+        const duplicateFallbackEvent =
+          resultOutput.id.startsWith(`${contextualRecord.id}:result:event:`) &&
+          contextualRecord.outputs.some((output) => output.id === resultOutput.id);
+        const next = duplicateFallbackEvent
+          ? contextualRecord
+          : appendOutputs(contextualRecord, [...messageOutputs, resultOutput]);
         return event.message?.success === false ? { ...next, status: 'failed' as const } : next;
       }
       case 'statementFinished':
@@ -302,9 +321,19 @@ function mergeExecutionContext(
   if (!executionContext) return context;
   return {
     ...context,
-    databaseName: executionContext.databaseName ?? context.databaseName,
-    schemaName: executionContext.schemaName ?? context.schemaName,
+    databaseName: mergeContextName(context.databaseName, executionContext, 'databaseName'),
+    schemaName: mergeContextName(context.schemaName, executionContext, 'schemaName'),
   };
+}
+
+function mergeContextName(
+  currentValue: string | undefined,
+  executionContext: IExecutionContext,
+  key: keyof IExecutionContext,
+) {
+  if (!Object.prototype.hasOwnProperty.call(executionContext, key)) return currentValue;
+  const value = executionContext[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function createRecord(params: {
@@ -331,75 +360,144 @@ function createRecord(params: {
   };
 }
 
-function addMessage(
+function appendMessage(
   record: SqlExecutionLogRecord,
   message: SqlExecutionMessage,
   occurredAtEpochMs: number,
-  sequence = record.outputs.length,
+  source: 'desktop-event' | 'generated' = 'generated',
+  sequence = nextMessageSequence(record),
 ): SqlExecutionLogRecord {
-  const messageText = text(message?.message);
-  if (!messageText) return record;
+  const output = createMessageOutput(record, message, occurredAtEpochMs, source, sequence);
+  return output ? appendOutputs(record, [output]) : record;
+}
+
+function createMessageOutput(
+  record: SqlExecutionLogRecord,
+  message: SqlExecutionMessage,
+  occurredAtEpochMs: number,
+  source: 'web-result' | 'desktop-event' | 'desktop-result' | 'generated',
+  sequence: number | string,
+): SqlExecutionLogMessageOutput | undefined {
+  const messageText = truncateMessage(text(message?.message));
+  if (!messageText) return undefined;
   const level = levelOf(message?.level);
-  const outputId = `${record.id}:message:${sequence}`;
-  if (record.outputs.some((output) => output.id === outputId)) return record;
+  const outputId = `${record.id}:message:${source}:${sequence}`;
   return {
-    ...record,
-    outputs: [
-      ...record.outputs,
-      {
-        kind: 'message',
-        id: outputId,
-        occurredAtEpochMs,
-        level,
-        message: messageText,
-        errorCode: message?.errorCode,
-        sqlState: message?.sqlState,
-        source: message?.source,
-      },
-    ],
+    kind: 'message',
+    id: outputId,
+    occurredAtEpochMs,
+    level,
+    message: messageText,
+    errorCode: message?.errorCode,
+    sqlState: message?.sqlState,
+    source: message?.source,
   };
 }
 
-function addResult(
+function createResultOutput(
   record: SqlExecutionLogRecord,
   result: IManageResultData,
   occurredAtEpochMs: number,
   event?: SqlExecutionEvent,
-  fallbackSequence = record.outputs.length,
-): SqlExecutionLogRecord {
-  const resultSequence =
+  fallbackSequence?: number,
+): SqlExecutionLogResultOutput {
+  const explicitResultSequence =
     event?.resultSequence ??
     numeric(result.extra?.resultSequence) ??
     numeric(result.extra?.streamResultId) ??
-    result.resultSetId ??
-    fallbackSequence + 1;
+    result.resultSetId;
+  const resultSequence =
+    explicitResultSequence ??
+    (fallbackSequence === undefined ? nextResultSequence(record) : fallbackSequence + 1);
   const rawResultKey = event?.resultKey || text(result.extra?.resultKey) || undefined;
   const resultKey = (result.headerList?.length || 0) > 1 ? rawResultKey : undefined;
-  const outputId = `${record.id}:result:${rawResultKey || resultSequence}`;
-  if (record.outputs.some((output) => output.kind === 'result' && output.id === outputId)) return record;
+  const outputIdentity = rawResultKey
+    ? `key:${rawResultKey}`
+    : explicitResultSequence !== undefined
+      ? `sequence:${explicitResultSequence}`
+      : event?.eventSequence !== undefined
+        ? `event:${event.eventSequence}`
+        : `fallback:${resultSequence}`;
+  const outputId = `${record.id}:result:${outputIdentity}`;
   const rowCount =
     result.executionMetrics?.fetchedRowCount ??
     record.pendingRowCounts[String(resultSequence)] ??
     (result.dataList ? result.dataList.length : undefined);
   return {
-    ...record,
-    outputs: [
-      ...record.outputs,
-      {
-        kind: 'result',
-        id: outputId,
-        occurredAtEpochMs: result.executionMetrics?.finishedAtEpochMs ?? occurredAtEpochMs,
-        resultKey,
-        resultSequence,
-        success: result.success !== false,
-        rowCount,
-        updateCount: result.updateCount,
-        durationMs: result.duration,
-        executionMetrics: result.executionMetrics,
-        message: result.message,
-      },
-    ],
+    kind: 'result',
+    id: outputId,
+    occurredAtEpochMs: result.executionMetrics?.finishedAtEpochMs ?? occurredAtEpochMs,
+    resultKey,
+    resultSequence,
+    success: result.success !== false,
+    rowCount,
+    updateCount: result.updateCount,
+    durationMs: result.duration,
+    executionMetrics: result.executionMetrics,
+    message: truncateMessage(text(result.message)) || undefined,
   };
+}
+
+function appendOutputs(record: SqlExecutionLogRecord, additions: SqlExecutionLogOutput[]): SqlExecutionLogRecord {
+  if (!additions.length) return record;
+  const outputIds = new Set(record.outputs.map((output) => output.id));
+  const uniqueAdditions = additions.filter((output) => {
+    if (outputIds.has(output.id)) return false;
+    outputIds.add(output.id);
+    return true;
+  });
+  if (!uniqueAdditions.length) return record;
+  return {
+    ...record,
+    outputs: retainOutputs([...record.outputs, ...uniqueAdditions]),
+  };
+}
+
+function retainOutputs(outputs: SqlExecutionLogOutput[]) {
+  if (outputs.length <= MAX_OUTPUTS_PER_RECORD) return outputs;
+  const retainedIndexes = new Set<number>();
+  for (let index = outputs.length - 1; index >= 0 && retainedIndexes.size < MAX_OUTPUTS_PER_RECORD; index -= 1) {
+    if (isCriticalOutput(outputs[index])) retainedIndexes.add(index);
+  }
+  for (let index = outputs.length - 1; index >= 0 && retainedIndexes.size < MAX_OUTPUTS_PER_RECORD; index -= 1) {
+    if (!retainedIndexes.has(index)) retainedIndexes.add(index);
+  }
+  return outputs.filter((_, index) => retainedIndexes.has(index));
+}
+
+function isCriticalOutput(output: SqlExecutionLogOutput) {
+  return output.kind === 'message' ? output.level === 'ERROR' : !output.success;
+}
+
+function truncateMessage(value: string) {
+  if (value.length <= MAX_MESSAGE_LENGTH) return value;
+  const characters = Array.from(value);
+  if (characters.length <= MAX_MESSAGE_LENGTH) return value;
+  const retainedLength = MAX_MESSAGE_LENGTH - MESSAGE_TRUNCATION_MARKER.length;
+  const prefixLength = Math.ceil(retainedLength / 2);
+  const suffixLength = Math.floor(retainedLength / 2);
+  return `${characters.slice(0, prefixLength).join('')}${MESSAGE_TRUNCATION_MARKER}${characters
+    .slice(-suffixLength)
+    .join('')}`;
+}
+
+function nextMessageSequence(record: SqlExecutionLogRecord) {
+  const prefix = `${record.id}:message:`;
+  return record.outputs.reduce((next, output) => {
+    if (!output.id.startsWith(prefix)) return next;
+    const sequence = Number(output.id.slice(prefix.length).split(':')[1]);
+    return Number.isFinite(sequence) ? Math.max(next, sequence + 1) : next;
+  }, 0);
+}
+
+function nextResultSequence(record: SqlExecutionLogRecord) {
+  return record.outputs.reduce(
+    (next, output) =>
+      output.kind === 'result' && typeof output.resultSequence === 'number'
+        ? Math.max(next, output.resultSequence + 1)
+        : next,
+    1,
+  );
 }
 
 function finishTerminal(record: SqlExecutionLogRecord, event: SqlExecutionEvent, occurredAtEpochMs: number) {
@@ -431,7 +529,7 @@ function finishTerminal(record: SqlExecutionLogRecord, event: SqlExecutionEvent,
 
 function addError(record: SqlExecutionLogRecord, error: unknown, occurredAtEpochMs: number) {
   const message = errorText(error);
-  return message ? addMessage(record, { level: 'ERROR', message }, occurredAtEpochMs) : record;
+  return message ? appendMessage(record, { level: 'ERROR', message }, occurredAtEpochMs) : record;
 }
 
 function updateRecord(
@@ -500,13 +598,14 @@ function errorText(error: unknown): string {
   return text(value.message) || text(value.errorMessage);
 }
 
-function isCancellationError(error: unknown) {
-  if (!error || typeof error !== 'object') {
-    return typeof error === 'string' && isCancellationMessage(error);
-  }
-  const value = error as { name?: unknown; code?: unknown; message?: unknown };
-  if (value.name === 'AbortError' || value.code === 'ERR_CANCELED') return true;
-  return typeof value.message === 'string' && isCancellationMessage(value.message);
+export function isSqlExecutionCancellationError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { name?: unknown; code?: unknown };
+  return value.name === 'AbortError' || value.name === 'CanceledError' || value.code === 'ERR_CANCELED';
+}
+
+export function rethrowNonCancellationSqlExecutionError(error: unknown) {
+  if (!isSqlExecutionCancellationError(error)) throw error;
 }
 
 function isCancellationMessage(message?: string) {

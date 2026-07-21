@@ -329,7 +329,7 @@ export default {
   'setting.modelConfig.placeholder.apiKey': '편집할 때 현재 값을 유지하려면 비워 두세요',
   'setting.modelConfig.placeholder.baseUrl': '예: https://api.openai.com/v1',
   'setting.modelConfig.baseUrlTip':
-    'OpenAI 호환 모델은 기본 URL + /chat/completions를 호출합니다. https://api.openai.com/v1 또는 https://your-domain.com/v1처럼 /v1을 포함하세요.',
+    'OpenAI 호환 모델은 기본 URL + /v1/chat/completions를 호출합니다. 기본 URL 끝의 /v1은 생략할 수 있으며, 입력해도 중복되지 않습니다. 예: https://api.openai.com/v1 또는 https://your-domain.com.',
   'setting.modelConfig.placeholder.projectId': 'Gemini를 사용하는 경우 GCP 프로젝트 ID를 입력하세요',
   'setting.modelConfig.placeholder.location': '예: us-central1',
   'setting.modelConfig.placeholder.temperature': '예: 0.7',

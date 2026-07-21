@@ -30,6 +30,8 @@ jobs:
       publish_cdn: ${{ steps.metadata.outputs.publish_cdn }}
       update_latest: ${{ steps.metadata.outputs.update_latest }}
       publish: ${{ steps.metadata.outputs.publish }}
+      package_prefix: ${{ steps.metadata.outputs.package_prefix }}
+      update_prefix: ${{ steps.metadata.outputs.update_prefix }}
     steps:
       - name: Validate version
         id: metadata
@@ -38,6 +40,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -76,6 +79,14 @@ jobs:
             exit 1
           fi
 
+          if [ "${channel}" = "release" ]; then
+            package_prefix="community/${version}"
+            update_prefix="community/updates/${version}"
+          else
+            package_prefix="community/gray/${version}/${RUN_ID}"
+            update_prefix="${package_prefix}/updates"
+          fi
+
           {
             echo "version=${version}"
             echo "tag_name=v${version}"
@@ -83,6 +94,8 @@ jobs:
             echo "publish_cdn=${publish_cdn}"
             echo "update_latest=${update_latest}"
             echo "publish=${publish}"
+            echo "package_prefix=${package_prefix}"
+            echo "update_prefix=${update_prefix}"
           } >> "${GITHUB_OUTPUT}"
 
   notify_start:
@@ -111,11 +124,11 @@ jobs:
               raise SystemExit(0)
 
           lines = [
-              "Chat2DB Community 灰度构建已开始",
-              f"版本：{os.environ['VERSION']}",
-              f"上传 CDN：{os.environ['UPLOAD_CDN']}",
-              f"更新 latest_version.json：{os.environ['UPDATE_LATEST_VERSION_JSON']}",
-              f"运行链接：{os.environ['RUN_URL']}",
+              "Chat2DB Community gray build started",
+              f"Version: {os.environ['VERSION']}",
+              f"Publish to CDN: {os.environ['UPLOAD_CDN']}",
+              f"Update latest_version.json: {os.environ['UPDATE_LATEST_VERSION_JSON']}",
+              f"Workflow run: {os.environ['RUN_URL']}",
           ]
           payload = json.dumps(
               {"msg_type": "text", "content": {"text": "\n".join(lines)}},
@@ -307,6 +320,8 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           CHANNEL: ${{ needs.resolve.outputs.channel }}
+          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
+          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
           CDN_BASE_URL: https://cdn.chat2db-ai.com
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -366,7 +381,7 @@ jobs:
             sha256sum "${expected[@]}" > SHA256SUMS
           )
 
-          VERSION="${VERSION}" CHANNEL="${CHANNEL}" CDN_BASE_URL="${CDN_BASE_URL}" RUN_URL="${RUN_URL}" python3 - <<'PY'
+          VERSION="${VERSION}" CHANNEL="${CHANNEL}" PACKAGE_PREFIX="${PACKAGE_PREFIX}" UPDATE_PREFIX="${UPDATE_PREFIX}" CDN_BASE_URL="${CDN_BASE_URL}" RUN_URL="${RUN_URL}" python3 - <<'PY'
           import hashlib
           import json
           import os
@@ -382,9 +397,21 @@ jobs:
                       "name": path.name,
                       "size": path.stat().st_size,
                       "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                      "url": f"{os.environ['CDN_BASE_URL']}/community/{os.environ['VERSION']}/{path.name}",
+                      "url": f"{os.environ['CDN_BASE_URL']}/{os.environ['PACKAGE_PREFIX']}/{path.name}",
                   }
               )
+
+          update_metadata_path = Path("cdn-assets/updates/version.json")
+          update_metadata = json.loads(update_metadata_path.read_text(encoding="utf-8"))
+          for file in update_metadata.get("files", []):
+              file["url"] = (
+                  f"{os.environ['CDN_BASE_URL']}/{os.environ['UPDATE_PREFIX']}"
+                  f"/{file['serverFileName']}"
+              )
+          update_metadata_path.write_text(
+              json.dumps(update_metadata, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
 
           manifest = {
               "edition": "Chat2DB Community",
@@ -417,6 +444,8 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           CHANNEL: ${{ needs.resolve.outputs.channel }}
+          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
+          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
           OSS_BUCKET_NAME: chat2db-cdn
           CDN_BASE_URL: https://cdn.chat2db-ai.com
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
@@ -440,11 +469,11 @@ jobs:
 
           text = "\n".join(
               [
-                  "Chat2DB Community 安装包已上传 CDN",
-                  f"版本：{os.environ['VERSION']}",
-                  f"渠道：{os.environ['CHANNEL']}",
-                  f"包名：{os.environ['PACKAGE_NAME']}",
-                  f"下载链接：{os.environ['PACKAGE_URL']}",
+                  "Chat2DB Community package published to CDN",
+                  f"Version: {os.environ['VERSION']}",
+                  f"Channel: {os.environ['CHANNEL']}",
+                  f"Package: {os.environ['PACKAGE_NAME']}",
+                  f"Download URL: {os.environ['PACKAGE_URL']}",
               ]
           )
           payload = json.dumps(
@@ -468,30 +497,30 @@ jobs:
 
           for file in cdn-assets/release/*; do
             name="$(basename "${file}")"
-            destination="oss://${OSS_BUCKET_NAME}/community/${VERSION}/${name}"
+            destination="oss://${OSS_BUCKET_NAME}/${PACKAGE_PREFIX}/${name}"
             ossutil cp -f --meta "Cache-Control:no-cache" "${file}" "${destination}"
             ossutil stat "${destination}"
             if [ "${name}" != "SHA256SUMS" ]; then
-              send_package_notification "${name}" "${CDN_BASE_URL}/community/${VERSION}/${name}"
+              send_package_notification "${name}" "${CDN_BASE_URL}/${PACKAGE_PREFIX}/${name}"
             fi
           done
 
           for file in cdn-assets/updates/*; do
             name="$(basename "${file}")"
-            destination="oss://${OSS_BUCKET_NAME}/community/updates/${VERSION}/${name}"
+            destination="oss://${OSS_BUCKET_NAME}/${UPDATE_PREFIX}/${name}"
             ossutil cp -f --meta "Cache-Control:no-cache" "${file}" "${destination}"
             ossutil stat "${destination}"
           done
 
           if [ "${UPDATE_LATEST_VERSION_JSON}" = "true" ]; then
-            VERSION="${VERSION}" CDN_BASE_URL="${CDN_BASE_URL}" python3 - <<'PY'
+            VERSION="${VERSION}" UPDATE_PREFIX="${UPDATE_PREFIX}" CDN_BASE_URL="${CDN_BASE_URL}" python3 - <<'PY'
           import json
           import os
           from pathlib import Path
 
           payload = {
               "latestVersion": os.environ["VERSION"],
-              "metadataUrl": f"{os.environ['CDN_BASE_URL']}/community/updates/{os.environ['VERSION']}/version.json",
+              "metadataUrl": f"{os.environ['CDN_BASE_URL']}/{os.environ['UPDATE_PREFIX']}/version.json",
               "forceUpdate": False,
           }
           Path("cdn-assets/latest_version.json").write_text(
@@ -504,17 +533,19 @@ jobs:
             ossutil stat "${destination}"
           fi
 
-          manifest_destination="oss://${OSS_BUCKET_NAME}/community/${VERSION}/release-manifest.json"
+          manifest_destination="oss://${OSS_BUCKET_NAME}/${PACKAGE_PREFIX}/release-manifest.json"
           ossutil cp -f --meta "Cache-Control:no-cache" cdn-assets/release-manifest.json "${manifest_destination}"
           ossutil stat "${manifest_destination}"
 
       - name: Refresh Community CDN cache
+        if: ${{ needs.resolve.outputs.channel == 'release' }}
         shell: bash
         env:
           ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
           ALIBABA_CLOUD_REGION_ID: cn-hangzhou
-          VERSION: ${{ needs.resolve.outputs.version }}
+          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
+          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
           CDN_BASE_URL: https://cdn.chat2db-ai.com
           UPDATE_LATEST_VERSION_JSON: ${{ needs.resolve.outputs.update_latest }}
         run: |
@@ -578,11 +609,11 @@ jobs:
           }
 
           submit_refresh \
-            "${CDN_BASE_URL}/community/${VERSION}/" \
+            "${CDN_BASE_URL}/${PACKAGE_PREFIX}/" \
             Directory \
             true
           submit_refresh \
-            "${CDN_BASE_URL}/community/updates/${VERSION}/" \
+            "${CDN_BASE_URL}/${UPDATE_PREFIX}/" \
             Directory \
             true
 
@@ -628,6 +659,8 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           CDN_RESULT: ${{ needs.cdn_release.result }}
           UPLOAD_CDN: ${{ needs.resolve.outputs.publish_cdn }}
+          PACKAGE_URL: https://cdn.chat2db-ai.com/${{ needs.resolve.outputs.package_prefix }}/
+          UPDATE_METADATA_URL: https://cdn.chat2db-ai.com/${{ needs.resolve.outputs.update_prefix }}/version.json
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GITHUB_TOKEN: ${{ github.token }}
         shell: python
@@ -654,7 +687,7 @@ jobs:
                   with urllib.request.urlopen(request, timeout=15) as response:
                       jobs = json.loads(response.read().decode("utf-8")).get("jobs", [])
               except Exception as exc:
-                  return [f"- 无法读取 job 详情：{exc}"]
+                  return [f"- Failed to read job details: {exc}"]
 
               failed = []
               for job in jobs:
@@ -662,40 +695,47 @@ jobs:
                   conclusion = job.get("conclusion") or job.get("status") or "unknown"
                   if name.startswith("Build ") and conclusion != "success":
                       failed.append(f"- {name}: {conclusion}")
-              return failed or ["- 未获取到失败构建 job，请查看运行链接"]
+              return failed or [
+                  "- No failed build job details were returned; see the workflow run."
+              ]
 
           version = os.environ["VERSION"]
           build_result = os.environ["BUILD_RESULT"]
           cdn_result = os.environ["CDN_RESULT"]
           upload_cdn = os.environ["UPLOAD_CDN"]
+          package_url = os.environ["PACKAGE_URL"]
+          update_metadata_url = os.environ["UPDATE_METADATA_URL"]
           run_url = os.environ["RUN_URL"]
 
           if build_result == "success" and (upload_cdn != "true" or cdn_result == "success"):
               lines = [
-                  "Chat2DB Community 灰度构建完成",
-                  f"版本：{version}",
-                  f"构建结果：{build_result}",
+                  "Chat2DB Community gray build completed",
+                  f"Version: {version}",
+                  f"Build result: {build_result}",
               ]
               if upload_cdn == "true":
                   lines.extend(
                       [
-                          "CDN 上传：success",
-                          f"下载目录：https://cdn.chat2db-ai.com/community/{version}/",
-                          f"更新元数据：https://cdn.chat2db-ai.com/community/updates/{version}/version.json",
+                          "CDN publication: success",
+                          f"Package directory: {package_url}",
+                          f"Update metadata: {update_metadata_url}",
                       ]
                   )
               else:
-                  lines.append("CDN 上传：未请求，安装包仅保留在 GitHub Actions artifacts。")
-              lines.append(f"运行链接：{run_url}")
+                  lines.append(
+                      "CDN publication was not requested; packages are available "
+                      "only as GitHub Actions artifacts."
+                  )
+              lines.append(f"Workflow run: {run_url}")
           else:
               lines = [
-                  "Chat2DB Community 灰度构建未全部成功",
-                  f"版本：{version}",
-                  f"构建结果：{build_result}",
-                  f"CDN 结果：{cdn_result}",
-                  "失败构建 job：",
+                  "Chat2DB Community gray build did not complete successfully",
+                  f"Version: {version}",
+                  f"Build result: {build_result}",
+                  f"CDN result: {cdn_result}",
+                  "Failed build jobs:",
                   *failed_build_jobs(),
-                  f"运行链接：{run_url}",
+                  f"Workflow run: {run_url}",
               ]
 
           payload = json.dumps(

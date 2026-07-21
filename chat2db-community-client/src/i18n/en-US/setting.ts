@@ -332,7 +332,7 @@ export default {
   'setting.modelConfig.placeholder.apiKey': 'Leave blank to keep current value when editing',
   'setting.modelConfig.placeholder.baseUrl': 'e.g. https://api.openai.com/v1',
   'setting.modelConfig.baseUrlTip':
-    'OpenAI-compatible models call Base URL + /chat/completions. Include /v1, for example https://api.openai.com/v1 or https://your-domain.com/v1.',
+    'OpenAI-compatible models call Base URL + /v1/chat/completions. A trailing /v1 in the Base URL is optional and will not be duplicated, for example https://api.openai.com/v1 or https://your-domain.com.',
   'setting.modelConfig.placeholder.projectId': 'For Gemini, enter your GCP project ID',
   'setting.modelConfig.placeholder.location': 'e.g. us-central1',
   'setting.modelConfig.placeholder.temperature': 'e.g. 0.7',

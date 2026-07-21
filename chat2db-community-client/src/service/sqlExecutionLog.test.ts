@@ -8,7 +8,9 @@ import {
   completeWebSqlExecution,
   createSqlExecutionLogState,
   failWebSqlExecution,
+  isSqlExecutionCancellationError,
   reduceDesktopSqlExecutionEvent,
+  rethrowNonCancellationSqlExecutionError,
 } from './sqlExecutionLog';
 
 const context = {
@@ -34,6 +36,18 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     hasNextPage: false,
     ...overrides,
   };
+}
+
+function rawExecutionContext(value: Record<string, unknown>) {
+  return value as unknown as NonNullable<IManageResultData['executionContext']>;
+}
+
+function assertTruncatedMessage(message: string | undefined) {
+  const value = message || '';
+  assert.equal(Array.from(value).length, 8_192);
+  assert.ok(value.startsWith('prefix:'));
+  assert.ok(value.endsWith(':suffix'));
+  assert.doesNotThrow(() => encodeURIComponent(value));
 }
 
 function webExecution() {
@@ -141,6 +155,16 @@ function webExecution() {
   const output = state.records[0].outputs[0];
   assert.equal(output.kind === 'result' ? output.updateCount : undefined, 3);
   assert.equal(output.kind === 'result' ? output.resultKey : undefined, undefined);
+}
+
+{
+  assert.equal(isSqlExecutionCancellationError({ name: 'AbortError' }), true);
+  assert.equal(isSqlExecutionCancellationError({ name: 'CanceledError' }), true);
+  assert.equal(isSqlExecutionCancellationError({ code: 'ERR_CANCELED' }), true);
+  const databaseError = { message: 'current transaction is aborted' };
+  assert.equal(isSqlExecutionCancellationError(databaseError), false);
+  assert.doesNotThrow(() => rethrowNonCancellationSqlExecutionError({ name: 'AbortError' }));
+  assert.throws(() => rethrowNonCancellationSqlExecutionError(databaseError), (error) => error === databaseError);
 }
 
 {
@@ -343,6 +367,250 @@ function webExecution() {
   assert.equal(state.records[0].status, 'running');
   assert.equal(state.records[1].status, 'cancelled');
   assert.equal(state.records[1].outputs.length, 0);
+}
+
+{
+  const state = completeWebSqlExecution(
+    beginWebSqlExecution(createSqlExecutionLogState(), {
+      executionId: 'web-context-presence',
+      sql: 'select 1; select 2; select 3',
+      context: { ...context, schemaName: 'PUBLIC' },
+      occurredAtEpochMs: 100,
+    }),
+    {
+      executionId: 'web-context-presence',
+      sql: 'select 1; select 2; select 3',
+      context: { ...context, schemaName: 'PUBLIC' },
+      occurredAtEpochMs: 110,
+      results: [
+        result({ statementSequence: 1, executionContext: { databaseName: 'next_database' } }),
+        result({
+          statementSequence: 2,
+          executionContext: rawExecutionContext({ databaseName: null, schemaName: null }),
+        }),
+        result({ statementSequence: 3, executionContext: { schemaName: '' } }),
+      ],
+    },
+  );
+  assert.deepEqual(
+    state.records.map((record) => record.context.schemaName),
+    ['PUBLIC', undefined, undefined],
+  );
+  assert.deepEqual(
+    state.records.map((record) => record.context.databaseName),
+    ['next_database', undefined, 'app'],
+  );
+}
+
+{
+  let state = createSqlExecutionLogState();
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-context-presence',
+      eventType: 'statementStarted',
+      statementSequence: 1,
+      message: { originalSql: 'select 1' },
+    },
+    { ...context, schemaName: 'PUBLIC' },
+  );
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-context-presence',
+      eventType: 'resultStarted',
+      statementSequence: 1,
+      message: result({ executionContext: { databaseName: 'next_database' } }),
+    },
+    context,
+  );
+  assert.equal(state.records[0].context.schemaName, 'PUBLIC');
+  assert.equal(state.records[0].context.databaseName, 'next_database');
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-context-presence',
+      eventType: 'resultStarted',
+      statementSequence: 1,
+      message: result({ executionContext: rawExecutionContext({ databaseName: null, schemaName: null }) }),
+    },
+    context,
+  );
+  assert.equal(state.records[0].context.schemaName, undefined);
+  assert.equal(state.records[0].context.databaseName, undefined);
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-context-presence',
+      eventType: 'resultStarted',
+      statementSequence: 1,
+      message: result({ executionContext: { schemaName: 'TARGET_SCHEMA' } }),
+    },
+    context,
+  );
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-context-presence',
+      eventType: 'resultStarted',
+      statementSequence: 1,
+      message: result({ executionContext: { schemaName: '' } }),
+    },
+    context,
+  );
+  assert.equal(state.records[0].context.schemaName, undefined);
+}
+
+{
+  let state = createSqlExecutionLogState();
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-message-id',
+      eventSequence: 1,
+      eventType: 'statementStarted',
+      statementSequence: 1,
+      message: { originalSql: 'select 1' },
+    },
+    context,
+  );
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-message-id',
+      eventSequence: 6,
+      eventType: 'resultFinished',
+      statementSequence: 1,
+      resultSequence: 1,
+      message: result({ extra: { messages: [{ level: 'ERROR', message: 'result-attached' }] } }),
+    },
+    context,
+  );
+  state = reduceDesktopSqlExecutionEvent(
+    state,
+    {
+      executionId: 'desktop-message-id',
+      eventSequence: 6000,
+      eventType: 'message',
+      statementSequence: 1,
+      message: { level: 'ERROR', message: 'direct-event' },
+    },
+    context,
+  );
+  const messages = state.records[0].outputs.filter((output) => output.kind === 'message');
+  assert.deepEqual(
+    messages.map((output) => output.message),
+    ['result-attached', 'direct-event'],
+  );
+  assert.equal(new Set(messages.map((output) => output.id)).size, 2);
+}
+
+{
+  let state = reduceDesktopSqlExecutionEvent(
+    createSqlExecutionLogState(),
+    {
+      executionId: 'desktop-bounded-replay',
+      eventSequence: 1,
+      eventType: 'statementStarted',
+      statementSequence: 1,
+      message: { originalSql: 'select 1' },
+    },
+    context,
+  );
+  const resultEvent = {
+    executionId: 'desktop-bounded-replay',
+    eventSequence: 2,
+    eventType: 'resultFinished' as const,
+    statementSequence: 1,
+    message: result({
+      success: false,
+      message: 'failed result',
+      extra: {
+        messages: [
+          { level: 'ERROR', message: 'pinned desktop error' },
+          ...Array.from({ length: 220 }, (_, index) => ({
+            level: 'INFO' as const,
+            message: `desktop-notice-${index}`,
+          })),
+        ],
+      },
+    }),
+  };
+  state = reduceDesktopSqlExecutionEvent(state, resultEvent, context);
+  const retainedOutputs = state.records[0].outputs;
+  state = reduceDesktopSqlExecutionEvent(state, resultEvent, context);
+  const outputs = state.records[0].outputs;
+  assert.equal(state.records[0].status, 'failed');
+  assert.equal(outputs.length, 200);
+  assert.deepEqual(outputs, retainedOutputs);
+  assert.equal(outputs.filter((output) => output.kind === 'result').length, 1);
+  assert.ok(outputs.some((output) => output.kind === 'message' && output.message === 'pinned desktop error'));
+  assert.ok(outputs.some((output) => output.kind === 'result' && !output.success));
+  assert.ok(outputs.some((output) => output.kind === 'message' && output.message === 'desktop-notice-219'));
+  assert.ok(!outputs.some((output) => output.kind === 'message' && output.message === 'desktop-notice-0'));
+}
+
+{
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 140,
+    results: [
+      result({
+        success: false,
+        message: 'failed result',
+        extra: {
+          messages: [
+            { level: 'ERROR', message: 'pinned error' },
+            ...Array.from({ length: 220 }, (_, index) => ({
+              level: 'INFO' as const,
+              message: `notice-${index}`,
+            })),
+          ],
+        },
+      }),
+    ],
+  });
+  const outputs = state.records[0].outputs;
+  assert.equal(state.records[0].status, 'failed');
+  assert.equal(outputs.length, 200);
+  assert.ok(outputs.some((output) => output.kind === 'message' && output.message === 'pinned error'));
+  assert.ok(outputs.some((output) => output.kind === 'result' && !output.success));
+  assert.ok(outputs.some((output) => output.kind === 'message' && output.message === 'notice-219'));
+  assert.ok(!outputs.some((output) => output.kind === 'message' && output.message === 'notice-0'));
+}
+
+{
+  const longMessage = `prefix:${'\u{1F642}'.repeat(9_000)}:suffix`;
+  const state = failWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 120,
+    error: { message: longMessage },
+  });
+  const output = state.records[0].outputs[0];
+  assert.equal(output.kind, 'message');
+  if (output.kind === 'message') {
+    assertTruncatedMessage(output.message);
+  }
+}
+
+{
+  const longMessage = `prefix:${'\u{1F642}'.repeat(9_000)}:suffix`;
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 140,
+    results: [result({ success: false, message: longMessage })],
+  });
+  const output = state.records[0].outputs.find((item) => item.kind === 'result');
+  assert.equal(output?.kind, 'result');
+  if (output?.kind === 'result') {
+    assertTruncatedMessage(output.message);
+  }
 }
 
 {

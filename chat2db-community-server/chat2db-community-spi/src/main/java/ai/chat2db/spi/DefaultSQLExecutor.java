@@ -252,6 +252,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
             long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            executionContext = executionContextAfterExecute(
+                    new SimpleSqlStatement(sql), connection, executionContext);
             long fetchDurationNanos = 0L;
             executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
             if (query) {
@@ -555,6 +557,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         DBConfig dbConfig = Chat2DBContext.getDBConfig();
         DbType dbType = JdbcUtils.parse2DruidDbType(type);
         Connection connection = Chat2DBContext.getConnection();
+        alignConnectionContext(command, connection);
+        JdbcExecutionContext.Cursor executionContextCursor = JdbcExecutionContext.cursor(
+                connection, command.getDatabaseName());
         List<SimpleSqlStatement> simpleSqlStatements = buildSimpleSqlStatements(command, dbType, type, dbConfig);
 
         if (CollectionUtils.isEmpty(simpleSqlStatements)) {
@@ -571,8 +576,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         for (SimpleSqlStatement simpleSqlStatement : simpleSqlStatements) {
             statementSequence++;
             String sqlType = simpleSqlStatement.getSqlType();
-            List<ExecuteResponse> executeResults = executeSQL(simpleSqlStatement, dbType, command);
-            synchronizeExecutionContext(simpleSqlStatement, connection, executeResults);
+            List<ExecuteResponse> executeResults = executeSQL(simpleSqlStatement, dbType, command, connection,
+                    executionContextCursor.current());
+            advanceExecutionContext(executionContextCursor, connection, simpleSqlStatement, executeResults);
             boolean errorOccurred = false;
             for (ExecuteResponse executeResult : executeResults) {
                 executeResult.setStatementSequence(statementSequence);
@@ -630,11 +636,15 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         if (StringUtils.isBlank(command.getScript())) {
             return;
         }
+        checkCanceled(cancellation);
         String type = Chat2DBContext.getConnectInfo().getDbType();
         IDbMetaData metaData = Chat2DBContext.getDbMetaData();
         DBConfig dbConfig = Chat2DBContext.getDBConfig();
         DbType dbType = JdbcUtils.parse2DruidDbType(type);
         Connection connection = Chat2DBContext.getConnection();
+        alignConnectionContext(command, connection);
+        JdbcExecutionContext.Cursor executionContextCursor = JdbcExecutionContext.cursor(
+                connection, command.getDatabaseName());
         List<SimpleSqlStatement> simpleSqlStatements = buildSimpleSqlStatements(command, dbType, type, dbConfig);
 
         if (CollectionUtils.isEmpty(simpleSqlStatements)) {
@@ -652,9 +662,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             statementSequence++;
             checkCanceled(cancellation);
             String sqlType = simpleSqlStatement.getSqlType();
-            List<ExecuteResponse> executeResults = executeSQLStreaming(simpleSqlStatement, dbType, command, consumer,
-                    statementListener, cancellation, streamResultSequence, statementSequence);
-            synchronizeExecutionContext(simpleSqlStatement, connection, executeResults);
+            List<ExecuteResponse> executeResults = executeSQLStreaming(simpleSqlStatement, dbType, command, connection,
+                    consumer,
+                    statementListener, cancellation, streamResultSequence, statementSequence,
+                    executionContextCursor.current());
+            advanceExecutionContext(executionContextCursor, connection, simpleSqlStatement, executeResults);
             boolean errorOccurred = false;
             for (ExecuteResponse executeResult : executeResults) {
                 executeResult.setStatementSequence(statementSequence);
@@ -702,35 +714,43 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
-    protected void synchronizeExecutionContext(SimpleSqlStatement statement, Connection connection,
-                                               List<ExecuteResponse> executeResults) {
-        if (CollectionUtils.isEmpty(executeResults)
-                || executeResults.stream().anyMatch(result -> !Boolean.TRUE.equals(result.getSuccess()))) {
+    protected void alignConnectionContext(SqlExecuteRequest command, Connection connection) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null) {
             return;
         }
-        List<RefreshTarget> targets = Optional.ofNullable(statement.getRefreshTargets())
+        DBConfig dbConfig = Chat2DBContext.getDBConfig();
+        if (dbConfig == null || !dbConfig.isSupportDatabase()
+                || StringUtils.isBlank(command.getDatabaseName())) {
+            return;
+        }
+        Chat2DBContext.getDbManager().connectDatabase(connection, command.getDatabaseName());
+    }
+
+    protected ExecutionContext executionContextAfterExecute(SimpleSqlStatement statement, Connection connection,
+                                                             ExecutionContext statementStartContext) {
+        return statementStartContext;
+    }
+
+    protected void advanceExecutionContext(JdbcExecutionContext.Cursor cursor, Connection connection,
+                                           SimpleSqlStatement statement, List<ExecuteResponse> executeResults) {
+        boolean succeeded = CollectionUtils.isNotEmpty(executeResults) && executeResults.stream()
+                .allMatch(result -> Boolean.TRUE.equals(result.getSuccess()));
+        cursor.advance(connection, succeeded ? databaseContextFallback(statement) : null);
+    }
+
+    private String databaseContextFallback(SimpleSqlStatement statement) {
+        if (!ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.USE_DATABASE.name()
+                .equals(statement.getSqlType())) {
+            return null;
+        }
+        return Optional.ofNullable(statement.getRefreshTargets())
                 .orElseGet(Collections::emptyList)
                 .stream()
-                .toList();
-        if (ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.USE_DATABASE.name()
-                .equals(statement.getSqlType())) {
-            String databaseName = targets.stream()
                 .map(RefreshTarget::getDatabaseName)
                 .filter(StringUtils::isNotBlank)
                 .findFirst()
                 .orElse(null);
-            JdbcExecutionContext.synchronizeCatalog(connection, databaseName);
-        } else if (ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SET_SCHEMA.name()
-                .equals(statement.getSqlType())) {
-            List<String> schemaNames = targets.stream()
-                    .map(RefreshTarget::getSchemaName)
-                    .filter(StringUtils::isNotBlank)
-                    .distinct()
-                    .toList();
-            if (schemaNames.size() == 1) {
-                JdbcExecutionContext.synchronizeSchema(connection, schemaNames.get(0));
-            }
-        }
     }
 
     protected List<SimpleSqlStatement> buildSimpleSqlStatements(SqlExecuteRequest command, DbType dbType, String type,
@@ -743,6 +763,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             if (CollectionUtils.isNotEmpty(sqlStatements) && sqlStatements.size() == 1) {
                 simpleSqlStatement = sqlStatements.get(0);
                 simpleSqlStatement.setSql(sql);
+            } else if (shouldUsePreservedCompositeStatement(command, dbConfig, sqlStatements)) {
+                simpleSqlStatement = preservedCompositeStatement(sql);
             } else {
                 simpleSqlStatement = new SimpleSqlStatement(sql);
             }
@@ -753,7 +775,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         if (command.getScript().length() < 50000) {
             simpleSqlStatements = SqlUtils.parseStatements(command.getScript(), dbType, type);
             if (shouldPreserveScriptBatchExecution(command, dbConfig, simpleSqlStatements)) {
-                return Collections.singletonList(new SimpleSqlStatement(command.getScript()));
+                return Collections.singletonList(preservedCompositeStatement(command.getScript()));
             }
         } else {
             List<String> parse = SqlUtils.parse(command.getScript(), dbType, true);
@@ -762,13 +784,33 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         return simpleSqlStatements;
     }
 
-    private boolean shouldPreserveScriptBatchExecution(SqlExecuteRequest command, DBConfig dbConfig,
-                                                       List<SimpleSqlStatement> simpleSqlStatements) {
+    protected boolean shouldPreserveScriptBatchExecution(SqlExecuteRequest command, DBConfig dbConfig,
+                                                         List<SimpleSqlStatement> simpleSqlStatements) {
+        return !command.isSingle()
+                && shouldUsePreservedCompositeStatement(command, dbConfig, simpleSqlStatements);
+    }
+
+    protected boolean shouldUsePreservedCompositeStatement(SqlExecuteRequest command, DBConfig dbConfig,
+                                                            List<SimpleSqlStatement> simpleSqlStatements) {
         return dbConfig != null
                 && dbConfig.isPreserveScriptBatchExecution()
-                && !command.isSingle()
                 && !command.isExplain()
                 && CollectionUtils.size(simpleSqlStatements) > 1;
+    }
+
+    protected SimpleSqlStatement preservedCompositeStatement(String sql) {
+        return new PreservedCompositeStatement(sql);
+    }
+
+    protected boolean isPreservedCompositeStatement(SimpleSqlStatement statement) {
+        return statement instanceof PreservedCompositeStatement;
+    }
+
+    private static final class PreservedCompositeStatement extends SimpleSqlStatement {
+
+        private PreservedCompositeStatement(String sql) {
+            super(sql);
+        }
     }
 
     private void setExplain(List<SimpleSqlStatement> simpleSqlStatements) {
@@ -781,8 +823,12 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
-    private List<ExecuteResponse> executeSQL(SimpleSqlStatement simpleSqlStatement, DbType dbType, SqlExecuteRequest param) {
+    private List<ExecuteResponse> executeSQL(SimpleSqlStatement simpleSqlStatement, DbType dbType,
+                                              SqlExecuteRequest param, Connection connection,
+                                              ExecutionContext executionContext) {
         String originalSql = simpleSqlStatement.getSql();
+        long startedAtEpochMs = System.currentTimeMillis();
+        long startedAtNanos = System.nanoTime();
         int pageNo = Optional.ofNullable(param.getPageNo()).orElse(1);
         int pageSize = Optional.ofNullable(param.getPageSize()).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
         Integer offset = (pageNo - 1) * pageSize;
@@ -803,7 +849,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
                         simpleSqlStatement.setSql(buildPageLimit);
                     }
-                    executeResults = executeMulti(simpleSqlStatement, Chat2DBContext.getConnection(), true, 0, count, param.getResultSetId());
+                    executeResults = executeMulti(simpleSqlStatement, connection, true, 0, count,
+                            param.getResultSetId(), executionContext);
                     if (CollectionUtils.isNotEmpty(executeResults)) {
                         for (ExecuteResponse executeResult : executeResults) {
                             executeResult.setSqlType(sqlType.getCode());
@@ -817,7 +864,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             }
         }
         if (CollectionUtils.isEmpty(executeResults)) {
-            long startedAtEpochMs = System.currentTimeMillis();
             try {
                 simpleSqlStatement.setSql(originalSql);
                 if (type != null && StringUtils.equalsAnyIgnoreCase(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.MERGE.name(),
@@ -826,12 +872,14 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         simpleSqlStatement.setSql(originalSql + ";");
                     }
                 }
-                executeResults = executeMulti(simpleSqlStatement, Chat2DBContext.getConnection(), true, offset, count, param.getResultSetId());
+                executeResults = executeMulti(simpleSqlStatement, connection, true, offset, count,
+                        param.getResultSetId(), executionContext);
                 for (ExecuteResponse executeResult : executeResults) {
                     executeResult.setSql(originalSql);
                 }
             } catch (Exception ee) {
-                ExecuteResponse executeResult = failedExecuteResponse(originalSql, ee, startedAtEpochMs);
+                ExecuteResponse executeResult = failedExecuteResponse(
+                        originalSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
                 executeResults.add(executeResult);
             }
         }
@@ -847,13 +895,17 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         return executeResults;
     }
 
-    private List<ExecuteResponse> executeSQLStreaming(SimpleSqlStatement simpleSqlStatement, DbType dbType, SqlExecuteRequest param,
+    private List<ExecuteResponse> executeSQLStreaming(SimpleSqlStatement simpleSqlStatement, DbType dbType,
+                                                    SqlExecuteRequest param, Connection connection,
                                                     ISqlExecutionResultConsumer consumer,
                                                     ISqlExecutionStatementListener statementListener,
                                                     ISqlExecutionCancellation cancellation,
                                                     AtomicInteger streamResultSequence,
-                                                    int statementSequence) {
+                                                    int statementSequence,
+                                                    ExecutionContext executionContext) {
         String originalSql = simpleSqlStatement.getSql();
+        long startedAtEpochMs = System.currentTimeMillis();
+        long startedAtNanos = System.nanoTime();
         int pageNo = Optional.ofNullable(param.getPageNo()).orElse(1);
         int pageSize = Optional.ofNullable(param.getPageSize()).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
         Integer offset = (pageNo - 1) * pageSize;
@@ -875,9 +927,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
                         simpleSqlStatement.setSql(buildPageLimit);
                     }
-                    executeResults = executeMultiStreaming(simpleSqlStatement, Chat2DBContext.getConnection(), true,
+                    executeResults = executeMultiStreaming(simpleSqlStatement, connection, true,
                             0, count, param.getResultSetId(), consumer, statementListener, cancellation,
-                            sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence);
+                            sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence,
+                            executionContext);
                     if (CollectionUtils.isNotEmpty(executeResults)) {
                         for (ExecuteResponse executeResult : executeResults) {
                             executeResult.setSqlType(sqlType.getCode());
@@ -891,7 +944,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             }
         }
         if (CollectionUtils.isEmpty(executeResults)) {
-            long startedAtEpochMs = System.currentTimeMillis();
             try {
                 simpleSqlStatement.setSql(originalSql);
                 if (type != null && StringUtils.equalsAnyIgnoreCase(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.MERGE.name(),
@@ -900,14 +952,16 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         simpleSqlStatement.setSql(originalSql + ";");
                     }
                 }
-                executeResults = executeMultiStreaming(simpleSqlStatement, Chat2DBContext.getConnection(), true,
+                executeResults = executeMultiStreaming(simpleSqlStatement, connection, true,
                         offset, count, param.getResultSetId(), consumer, statementListener, cancellation,
-                        sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence);
+                        sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence,
+                        executionContext);
                 for (ExecuteResponse executeResult : executeResults) {
                     executeResult.setSql(originalSql);
                 }
             } catch (Exception ee) {
-                ExecuteResponse executeResult = failedExecuteResponse(originalSql, ee, startedAtEpochMs);
+                ExecuteResponse executeResult = failedExecuteResponse(
+                        originalSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
                 executeResults.add(executeResult);
             }
         }
@@ -922,7 +976,15 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
-                                             boolean limitRowSize, Integer offset, Integer count, Integer resultSetId) throws SQLException {
+                                             boolean limitRowSize, Integer offset, Integer count,
+                                             Integer resultSetId) throws SQLException {
+        return executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
+                JdbcExecutionContext.capture(connection));
+    }
+
+    protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
+                                             boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
+                                             ExecutionContext executionContext) throws SQLException {
         String sql = simpleSqlStatement.getSql();
         String type = simpleSqlStatement.getSqlType();
         Assert.notNull(sql, "SQL must not be null");
@@ -938,11 +1000,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 }
             }
             TimeInterval timeInterval = new TimeInterval();
-            ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
             long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            executionContext = executionContextAfterExecute(simpleSqlStatement, connection, executionContext);
             int resultCount = 0;
             while (true) {
                 ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
@@ -989,6 +1051,20 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                                                         String originalSql, int pageNo, int pageSize,
                                                         AtomicInteger streamResultSequence,
                                                         int statementSequence) throws SQLException {
+        return executeMultiStreaming(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
+                consumer, statementListener, cancellation, sqlType, originalSql, pageNo, pageSize,
+                streamResultSequence, statementSequence, JdbcExecutionContext.capture(connection));
+    }
+
+    protected List<ExecuteResponse> executeMultiStreaming(SimpleSqlStatement simpleSqlStatement, Connection connection,
+                                                        boolean limitRowSize, Integer offset, Integer count,
+                                                        Integer resultSetId, ISqlExecutionResultConsumer consumer,
+                                                        ISqlExecutionStatementListener statementListener,
+                                                        ISqlExecutionCancellation cancellation, SqlTypeEnum sqlType,
+                                                        String originalSql, int pageNo, int pageSize,
+                                                        AtomicInteger streamResultSequence,
+                                                        int statementSequence,
+                                                        ExecutionContext executionContext) throws SQLException {
         String sql = simpleSqlStatement.getSql();
         String type = simpleSqlStatement.getSqlType();
         Assert.notNull(sql, "SQL must not be null");
@@ -1007,11 +1083,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             }
             TimeInterval timeInterval = new TimeInterval();
             checkCanceled(cancellation);
-            ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
             long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            executionContext = executionContextAfterExecute(simpleSqlStatement, connection, executionContext);
             int resultCount = 0;
             while (true) {
                 checkCanceled(cancellation);
@@ -1221,14 +1297,17 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
-    private ExecuteResponse failedExecuteResponse(String sql, Exception exception, long startedAtEpochMs) {
-        ExecutionMetrics executionMetrics = ExecutionTiming.finished(ExecutionTiming.started(startedAtEpochMs));
+    private ExecuteResponse failedExecuteResponse(String sql, Exception exception, long startedAtEpochMs,
+                                                  long startedAtNanos, ExecutionContext executionContext) {
+        ExecutionMetrics executionMetrics = ExecutionTiming.complete(
+                ExecutionTiming.started(startedAtEpochMs), ExecutionTiming.elapsedNanos(startedAtNanos), 0L, 0);
         return ExecuteResponse.builder()
                 .sql(sql)
                 .success(Boolean.FALSE)
                 .message(exception.getMessage())
-                .duration(ExecutionTiming.elapsedEpochMillis(executionMetrics))
+                .duration(executionMetrics.getTotalDurationMs())
                 .executionMetrics(executionMetrics)
+                .executionContext(executionContext)
                 .build();
     }
 

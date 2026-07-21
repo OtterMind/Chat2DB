@@ -334,7 +334,7 @@ export default {
   'setting.modelConfig.placeholder.apiKey': '編集中に空欄のまま保存すると現在の値を保持します',
   'setting.modelConfig.placeholder.baseUrl': '例：https://api.openai.com/v1',
   'setting.modelConfig.baseUrlTip':
-    'OpenAI 互換モデルは Base URL + /chat/completions を呼び出します。https://api.openai.com/v1 や https://your-domain.com/v1 のように /v1 まで含めて入力してください。',
+    'OpenAI 互換モデルは Base URL + /v1/chat/completions を呼び出します。Base URL 末尾の /v1 は省略可能で、入力しても重複することはありません。例：https://api.openai.com/v1 または https://your-domain.com。',
   'setting.modelConfig.placeholder.projectId': 'Gemini の場合は GCP Project ID を入力',
   'setting.modelConfig.placeholder.location': '例：us-central1',
   'setting.modelConfig.placeholder.temperature': '例：0.7',

@@ -1,14 +1,20 @@
 package ai.chat2db.plugin.sqlserver;
 
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
+import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.model.result.ExecutionContext;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
+import ai.chat2db.community.domain.api.service.db.ISqlExecutionCancellation;
+import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
+import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.util.SqlUtils;
 import cn.hutool.core.date.TimeInterval;
+import com.alibaba.druid.DbType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -17,7 +23,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerExecutorConstants.*;
 public class SqlServerExecutor extends DefaultSQLExecutor {
@@ -28,6 +33,45 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
         prepareCommandScript(command);
         return super.execute(command);
+    }
+
+    @Override
+    public void executeStreaming(SqlExecuteRequest command, ISqlExecutionResultConsumer consumer,
+                                 ISqlExecutionStatementListener statementListener,
+                                 ISqlExecutionCancellation cancellation) throws SQLException {
+        prepareCommandScript(command);
+        super.executeStreaming(command, consumer, statementListener, cancellation);
+    }
+
+    @Override
+    protected List<SimpleSqlStatement> buildSimpleSqlStatements(SqlExecuteRequest command, DbType dbType,
+                                                                 String type, DBConfig dbConfig) {
+        List<String> sqlList = splitByGO(command.getScript());
+        if (GO_DELIMITER_PATTERN.matcher(command.getScript()).find()) {
+            List<SimpleSqlStatement> statements = new ArrayList<>(sqlList.size());
+            for (String sql : sqlList) {
+                List<SimpleSqlStatement> parsedStatements = SqlUtils.parseStatements(sql, dbType, type);
+                if (shouldUsePreservedCompositeStatement(command, dbConfig, parsedStatements)) {
+                    statements.add(preservedCompositeStatement(sql));
+                } else if (parsedStatements.size() == 1) {
+                    SimpleSqlStatement statement = parsedStatements.get(0);
+                    statement.setSql(sql);
+                    statements.add(statement);
+                } else {
+                    statements.add(new SimpleSqlStatement(sql));
+                }
+            }
+            return statements;
+        }
+        return super.buildSimpleSqlStatements(command, dbType, type, dbConfig);
+    }
+
+    @Override
+    protected ExecutionContext executionContextAfterExecute(SimpleSqlStatement statement, Connection connection,
+                                                             ExecutionContext statementStartContext) {
+        return isPreservedCompositeStatement(statement)
+                ? JdbcExecutionContext.capture(connection)
+                : statementStartContext;
     }
 
     void prepareCommandScript(SqlExecuteRequest command) {
@@ -95,10 +139,19 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
                                                boolean limitRowSize, Integer offset, Integer count, Integer resultSetId)
             throws SQLException {
+        return executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
+                JdbcExecutionContext.capture(connection));
+    }
+
+    @Override
+    protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
+                                               boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
+                                               ExecutionContext executionContext) throws SQLException {
         List<String> sqlList = splitByGO(simpleSqlStatement.getSql());
         if (sqlList.size() <= 1) {
             simpleSqlStatement.setSql(removeSpecialGO(simpleSqlStatement.getSql()));
-            return super.executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId);
+            return super.executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
+                    executionContext);
         }
         return executeSqlServerBatch(simpleSqlStatement.getSql(), sqlList, connection, limitRowSize, offset, count,
                 resultSetId);

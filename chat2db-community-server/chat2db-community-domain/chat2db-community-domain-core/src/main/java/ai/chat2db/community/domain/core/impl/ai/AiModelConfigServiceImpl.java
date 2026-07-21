@@ -276,8 +276,32 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         runtimeModel.setMaxTokens(defaultValue(request.getMaxTokens(), baseConfig.getMaxTokens()));
 
         fillRuntimeFallback(runtimeModel);
+        normalizeRuntimeBaseUrl(runtimeModel);
         validateRuntimeModel(runtimeModel);
         return runtimeModel;
+    }
+
+    /**
+     * Spring AI's OpenAiApi and AnthropicApi append version-prefixed request paths
+     * ("/v1/chat/completions", "/v1/messages") to the configured base URL, so a base
+     * URL that already ends with "/v1" would request ".../v1/v1/..." and fail with 404.
+     * Strip the trailing "/v1" so base URLs with and without it hit the same endpoint.
+     */
+    private void normalizeRuntimeBaseUrl(AiRuntimeModel runtimeModel) {
+        AiProviderEnum provider = AiProviderEnum.from(runtimeModel.getProvider());
+        if (provider != AiProviderEnum.OPENAI && provider != AiProviderEnum.CLAUDE) {
+            return;
+        }
+        runtimeModel.setBaseUrl(stripTrailingV1(runtimeModel.getBaseUrl()));
+    }
+
+    private String stripTrailingV1(String baseUrl) {
+        if (StringUtils.isBlank(baseUrl)) {
+            return baseUrl;
+        }
+        String normalized = StringUtils.removeEnd(baseUrl.trim(), "/");
+        normalized = StringUtils.removeEnd(normalized, "/v1");
+        return StringUtils.removeEnd(normalized, "/");
     }
 
     private void fillRuntimeFallback(AiRuntimeModel runtimeModel) {
@@ -436,7 +460,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request) {
         String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), DEFAULT_OPENAI_BASE_URL);
-        String endpoint = appendPath(baseUrl, "/chat/completions");
+        String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/chat/completions");
         String apiKey = resolveTestApiKey(request);
         if (StringUtils.isBlank(apiKey)) {
             return ModelConfigTestResponse.failure(endpoint, null, "API Key is required for the connection test.");

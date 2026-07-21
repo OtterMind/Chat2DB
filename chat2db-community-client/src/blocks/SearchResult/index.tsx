@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useState,
   forwardRef,
   ForwardedRef,
@@ -30,7 +31,7 @@ import {
   getResultIdentity,
   hasLegacyResultTab,
   hasTabularResult,
-  resolveAvailableActiveTabId,
+  reduceActiveTabSelection,
 } from './tabSelection';
 
 interface IProps {
@@ -39,6 +40,7 @@ interface IProps {
   historyResultDataList?: IManageResultData[];
   executionLogRecords?: SqlExecutionLogRecord[];
   resultBatchKey?: number;
+  forceOutputTab?: boolean;
   viewTable?: boolean;
   onClearExecutionLog?: () => void;
   onResultDataListChange?: (params: {
@@ -88,9 +90,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     props.historyResultDataList || [],
   );
   const [showHistory, setShowHistory] = useState(false);
-  const [activeTabId, setActiveTabId] = useState<string>(() =>
-    getPreferredActiveTabId(props.resultDataList[props.resultDataList.length - 1], consoleMode),
-  );
+  const [tabSelection, dispatchTabSelection] = useReducer(reduceActiveTabSelection, {
+    activeTabId: getPreferredActiveTabId(props.resultDataList[props.resultDataList.length - 1], consoleMode),
+  });
+  const activeTabId = tabSelection.activeTabId;
   const knownResultVersionMapRef = useRef<Map<string, string>>(new Map());
   const latestTerminalLogVersion = getLatestTerminalLogVersion(props.executionLogRecords);
   const visibleHistoryResultDataList = useMemo(
@@ -103,6 +106,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   }));
 
   useEffect(() => {
+    dispatchTabSelection({ type: 'resetPreference' });
     setShowHistory(false);
   }, [props.resultBatchKey]);
 
@@ -126,9 +130,12 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     setResultDataList(nextResultDataList);
 
     if (latestChangedResult) {
-      setActiveTabId(getPreferredActiveTabId(latestChangedResult, consoleMode));
+      dispatchTabSelection({
+        type: 'prefer',
+        tabId: getPreferredActiveTabId(latestChangedResult, consoleMode, props.forceOutputTab),
+      });
     }
-  }, [props.resultDataList, consoleMode]);
+  }, [props.resultDataList, consoleMode, props.forceOutputTab]);
 
   useEffect(() => {
     const nextHistoryResultDataList = props.historyResultDataList || [];
@@ -143,12 +150,18 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   useEffect(() => {
     if (consoleMode && latestTerminalLogVersion) {
-      setActiveTabId(CONSOLE_TAB_ID);
+      dispatchTabSelection({ type: 'activate', tabId: CONSOLE_TAB_ID });
     }
   }, [consoleMode, latestTerminalLogVersion]);
 
+  useEffect(() => {
+    if (consoleMode && props.forceOutputTab) {
+      dispatchTabSelection({ type: 'activate', tabId: CONSOLE_TAB_ID });
+    }
+  }, [consoleMode, props.forceOutputTab, props.resultBatchKey]);
+
   const onChange = useCallback((uuid) => {
-    setActiveTabId(uuid);
+    dispatchTabSelection({ type: 'activate', tabId: uuid });
   }, []);
 
   const tabsList = useMemo(() => {
@@ -270,7 +283,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         (item) => hasTabularResult(item) && item.extra?.resultKey === resultKey,
       );
       if (currentResult?.uuid) {
-        setActiveTabId(currentResult.uuid);
+        dispatchTabSelection({ type: 'activate', tabId: currentResult.uuid });
         return;
       }
       const historyResult = historyResultDataList.find(
@@ -278,7 +291,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       );
       if (historyResult?.uuid) {
         setShowHistory(true);
-        setActiveTabId(historyResult.uuid);
+        dispatchTabSelection({ type: 'activate', tabId: historyResult.uuid });
       }
     },
     [resultDataList, historyResultDataList],
@@ -353,7 +366,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   useEffect(() => {
     const availableTabIds = tabsItems.map((item) => String(item.key));
-    setActiveTabId((currentActiveTabId) => resolveAvailableActiveTabId(currentActiveTabId, availableTabIds));
+    dispatchTabSelection({ type: 'tabsChanged', availableTabIds });
   }, [tabsItems]);
 
   return (
@@ -365,7 +378,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
             onClick={() => {
               setShowHistory((value) => !value);
               if (showHistory && visibleHistoryResultDataList.some((item) => item.uuid === activeTabId)) {
-                setActiveTabId(consoleMode ? CONSOLE_TAB_ID : ABSTRACT_TAB_ID);
+                dispatchTabSelection({
+                  type: 'activate',
+                  tabId: consoleMode ? CONSOLE_TAB_ID : ABSTRACT_TAB_ID,
+                });
               }
             }}
           >

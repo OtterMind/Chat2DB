@@ -70,7 +70,7 @@ public class AiModelFactory {
 
     private AiChatClient openAiClient(AiRuntimeModel runtimeModel) {
         logUpstreamTarget("openai",
-                StringUtils.defaultIfBlank(runtimeModel.getBaseUrl(), OpenAiApiConstants.DEFAULT_BASE_URL) + "/chat/completions",
+                StringUtils.defaultIfBlank(runtimeModel.getBaseUrl(), OpenAiApiConstants.DEFAULT_BASE_URL) + "/v1/chat/completions",
                 buildOpenAiHeaderView(runtimeModel, null));
         OpenAiApi.Builder apiBuilder = OpenAiApi.builder().apiKey(runtimeModel.getApiKey());
         if (StringUtils.isNotBlank(runtimeModel.getBaseUrl())) {
@@ -231,7 +231,7 @@ public class AiModelFactory {
     }
 
     private static final class OpenAiApiConstants {
-        private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
+        private static final String DEFAULT_BASE_URL = "https://api.openai.com";
 
         private OpenAiApiConstants() {
         }
