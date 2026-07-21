@@ -45,9 +45,14 @@ public class ResultCell {
         return rawValue;
     }
 
+    /**
+     * Builds a string-only cell where value is the display/serialized value and rawValue is the same stable
+     * string for structured AI/tool consumers that need lossless positional rows.
+     */
     public static ResultCell of(String value) {
         return ResultCell.builder()
                 .value(value)
+                .rawValue(value)
                 .largeValue(false)
                 .truncated(false)
                 .valueType(LargeValueTypeEnum.UNKNOWN.code())

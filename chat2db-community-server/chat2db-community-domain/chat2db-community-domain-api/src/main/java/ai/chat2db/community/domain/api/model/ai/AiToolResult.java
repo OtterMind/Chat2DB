@@ -2,40 +2,30 @@ package ai.chat2db.community.domain.api.model.ai;
 
 import lombok.Data;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Data
-public class AiToolResult {
+public class AiToolResult<T> {
 
     private Boolean success;
 
     private String summary;
 
-    private List<Object> data = new ArrayList<>();
+    private T data;
 
     private String errorCode;
 
-    public static AiToolResult success(String summary, List<?> data) {
-        AiToolResult result = new AiToolResult();
+    public static <T> AiToolResult<T> success(String summary, T data) {
+        AiToolResult<T> result = new AiToolResult<>();
         result.setSuccess(Boolean.TRUE);
         result.setSummary(summary);
-        result.setData(copyData(data));
+        result.setData(data);
         return result;
     }
 
-    public static AiToolResult failure(String summary, String errorCode) {
-        AiToolResult result = new AiToolResult();
+    public static <T> AiToolResult<T> failureWithCode(String errorCode, String summary) {
+        AiToolResult<T> result = new AiToolResult<>();
         result.setSuccess(Boolean.FALSE);
         result.setSummary(summary);
         result.setErrorCode(errorCode);
         return result;
-    }
-
-    private static List<Object> copyData(List<?> data) {
-        if (data == null || data.isEmpty()) {
-            return new ArrayList<>();
-        }
-        return new ArrayList<>(data);
     }
 }

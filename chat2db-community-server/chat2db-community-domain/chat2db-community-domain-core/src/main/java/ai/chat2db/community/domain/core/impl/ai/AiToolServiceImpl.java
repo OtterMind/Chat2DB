@@ -1,6 +1,11 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
 import ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum;
+import ai.chat2db.community.domain.api.exception.ai.AiToolException;
+import ai.chat2db.community.domain.api.exception.ai.AiToolInvalidArgumentException;
+import ai.chat2db.community.domain.api.exception.ai.AiToolMetadataQueryException;
+import ai.chat2db.community.domain.api.exception.ai.AiToolSqlConfirmationRequiredException;
+import ai.chat2db.community.domain.api.exception.ai.AiToolSqlExecutionException;
 import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbTablePageQueryRequest;
@@ -10,7 +15,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbTableShowCreateRequest
 import ai.chat2db.community.domain.api.model.request.datasource.DbDatabaseQueryAllRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.PageResponse;
-import ai.chat2db.community.domain.api.model.ai.AiToolResult;
+import ai.chat2db.community.domain.api.model.ai.TableSchemaResult;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.db.IDbDatabaseService;
@@ -33,16 +38,11 @@ import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
-import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
-import ai.chat2db.community.domain.api.model.result.Header;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.metadata.SimpleTable;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.community.domain.api.model.metadata.TableIndex;
-import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONWriter;
+import ai.chat2db.community.tools.exception.BusinessException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,10 +51,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -77,208 +74,200 @@ public class AiToolServiceImpl implements IAiToolService {
     private IDbSqlService sqlService;
     @Autowired
     private IWorkspaceStorageFacade workspaceStorageFacade;
-    private static final int DEFAULT_SQL_PAGE_SIZE = 200;
-    private static final int MAX_SQL_PAGE_SIZE = 500;
-    private static final int MAX_SQL_RESULT_ROWS = 50;
+    // Execution page size bounds protect database work; AI preview truncation is handled by the web converter.
+    private static final int DEFAULT_SQL_EXECUTION_PAGE_SIZE = 200;
+    private static final int MAX_SQL_EXECUTION_PAGE_SIZE = 500;
     private static final int MAX_GLOBAL_DATASOURCES = 200;
-    public String listAllDataSources(AiToolContextRequest toolContext) {
+
+    public List<WorkspaceDataSource> listAllDataSources(AiToolContextRequest toolContext) {
         DbDataSourcePageQueryRequest queryRequest = new DbDataSourcePageQueryRequest();
         queryRequest.setPageNo(1);
         queryRequest.setPageSize(MAX_GLOBAL_DATASOURCES);
 
-        PageResponse<WorkspaceDataSource> result = invokeWithRequestContext(
-                toolContext,
-                () -> workspaceStorageFacade.listDataSources(queryRequest));
+        PageResponse<WorkspaceDataSource> result;
+        try {
+            result = invokeWithRequestContext(toolContext, () -> workspaceStorageFacade.listDataSources(queryRequest));
+        } catch (BusinessException e) {
+            throw new AiToolMetadataQueryException(
+                    "Failed to query datasources: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                    e);
+        }
         if (Objects.isNull(result)) {
-            return emitToolFailure(toolContext, "list_all_datasources",
-                    "Failed to query datasources: unknown error", "DATASOURCE_QUERY_FAILED");
+            throw new AiToolMetadataQueryException("Failed to query datasources: unknown error");
         }
-        if (CollectionUtils.isEmpty(result.getData())) {
-            return emitToolResult(toolContext, "list_all_datasources", "No datasources found.", Collections.emptyList());
-        }
-
-        List<Map<String, Object>> data = result.getData().stream()
+        return result.getData() == null ? Collections.emptyList() : result.getData().stream()
                 .filter(Objects::nonNull)
-                .map(dataSource -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", dataSource.getId());
-                    item.put("name", StringUtils.defaultIfBlank(dataSource.getAlias(), "(unnamed)"));
-                    item.put("type", dataSource.getType());
-                    item.put("env", dataSource.getEnvType());
-                    return item;
-                })
                 .collect(Collectors.toList());
-        return emitToolResult(toolContext, "list_all_datasources",
-                "Found " + data.size() + " datasource(s).", data);
     }
-    public String listAllTables(AiListTablesRequest aiListTablesRequest) {
-        Long dataSourceId = aiListTablesRequest == null ? null : aiListTablesRequest.getDataSourceId();
-        String databaseName = aiListTablesRequest == null ? null : aiListTablesRequest.getDatabaseName();
-        String schemaName = aiListTablesRequest == null ? null : aiListTablesRequest.getSchemaName();
-        AiToolContextRequest toolContext = aiListTablesRequest == null ? null : aiListTablesRequest.getAiToolContextRequest();
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
-        try {
-            connectionContextService.bindProfile(profile);
-            DbTablePageQueryRequest queryParam = DbTablePageQueryRequest.builder()
-                    .dataSourceId(profile.getDataSourceId())
-                    .databaseName(profile.getDatabaseName())
-                    .schemaName(profile.getSchemaName())
-                    .pageNo(1)
-                    .pageSize(500)
-                    .refresh(false)
-                    .build();
-            List<SimpleTable> result = tableService.queryTables(queryParam);
-            if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_tables", "No tables found.", Collections.emptyList());
+
+    public List<SimpleTable> listAllTables(AiListTablesRequest aiListTablesRequest) {
+        AiListTablesRequest request = requireRequest(aiListTablesRequest, "listAllTables request");
+        Long dataSourceId = request.getDataSourceId();
+        String databaseName = request.getDatabaseName();
+        String schemaName = request.getSchemaName();
+        AiToolContextRequest toolContext = request.getAiToolContextRequest();
+        return invokeWithRequestContext(toolContext, () -> {
+            ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+            try {
+                connectionContextService.bindProfile(profile);
+                DbTablePageQueryRequest queryParam = DbTablePageQueryRequest.builder()
+                        .dataSourceId(profile.getDataSourceId())
+                        .databaseName(profile.getDatabaseName())
+                        .schemaName(profile.getSchemaName())
+                        .pageNo(1)
+                        .pageSize(500)
+                        .refresh(false)
+                        .build();
+                List<SimpleTable> result = tableService.queryTables(queryParam);
+                return result == null ? Collections.emptyList() : result.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                throw new AiToolMetadataQueryException(
+                        "Failed to query tables: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            } finally {
+                connectionContextService.clear();
             }
-            List<Map<String, Object>> data = result.stream()
-                    .filter(Objects::nonNull)
-                    .map(this::tableSummaryData)
-                    .collect(Collectors.toList());
-            return emitToolResult(toolContext, "list_all_tables",
-                    "Found " + data.size() + " table(s).", data);
-        } finally {
-            connectionContextService.clear();
-        }
+        });
     }
-    public String listAllDatabases(Long dataSourceId,
+
+    public List<Database> listAllDatabases(Long dataSourceId,
             AiToolContextRequest toolContext) {
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, null, null);
-        try {
-            connectionContextService.bindProfile(profile);
-            DbDatabaseQueryAllRequest queryParam = DbDatabaseQueryAllRequest.builder()
-                    .dataSourceId(profile.getDataSourceId())
-                    .refresh(false)
-                    .build();
-            List<Database> result = databaseService.queryAll(queryParam);
-            if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_databases", "No databases found.", Collections.emptyList());
+        return invokeWithRequestContext(toolContext, () -> {
+            ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, null, null);
+            try {
+                connectionContextService.bindProfile(profile);
+                DbDatabaseQueryAllRequest queryParam = DbDatabaseQueryAllRequest.builder()
+                        .dataSourceId(profile.getDataSourceId())
+                        .refresh(false)
+                        .build();
+                List<Database> result = databaseService.queryAll(queryParam);
+                return result == null ? Collections.emptyList() : result.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                throw new AiToolMetadataQueryException(
+                        "Failed to query databases: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            } finally {
+                connectionContextService.clear();
             }
-            List<Map<String, Object>> data = result.stream()
-                    .filter(Objects::nonNull)
-                    .map(database -> {
-                        Map<String, Object> item = new LinkedHashMap<>();
-                        item.put("name", StringUtils.defaultString(database.getName(), "(unnamed)"));
-                        item.put("system", database.isSystem());
-                        item.put("comment", database.getComment());
-                        return item;
-                    })
-                    .collect(Collectors.toList());
-            return emitToolResult(toolContext, "list_all_databases",
-                    "Found " + data.size() + " database(s).", data);
-        } finally {
-            connectionContextService.clear();
-        }
+        });
     }
-    public String listAllSchemas(String databaseName,Long dataSourceId,
+
+    public List<Schema> listAllSchemas(String databaseName, Long dataSourceId,
             AiToolContextRequest toolContext) {
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, null);
-        String targetDatabase = StringUtils.defaultIfBlank(databaseName, profile.getDatabaseName());
-        if (StringUtils.isBlank(targetDatabase)) {
-            return emitToolFailure(toolContext, "list_all_schemas",
-                    "databaseName is required for listing schemas.", "INVALID_ARGUMENT");
-        }
-        try {
-            connectionContextService.bindProfile(profile);
-            DbSchemaQueryRequest queryParam = DbSchemaQueryRequest.builder()
-                    .dataSourceId(profile.getDataSourceId())
-                    .dataBaseName(targetDatabase)
-                    .refresh(false)
-                    .build();
-            List<Schema> result = databaseService.querySchema(queryParam);
-            if (CollectionUtils.isEmpty(result)) {
-                return emitToolResult(toolContext, "list_all_schemas", "No schemas found.", Collections.emptyList());
+        return invokeWithRequestContext(toolContext, () -> {
+            ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, null);
+            String targetDatabase = StringUtils.defaultIfBlank(databaseName, profile.getDatabaseName());
+            if (StringUtils.isBlank(targetDatabase)) {
+                throw new AiToolInvalidArgumentException("databaseName is required for listing schemas.");
             }
-            List<Map<String, Object>> data = result.stream()
-                    .filter(Objects::nonNull)
-                    .map(schema -> {
-                        Map<String, Object> item = new LinkedHashMap<>();
-                        item.put("name", StringUtils.defaultString(schema.getName(), "(unnamed)"));
-                        item.put("system", schema.isSystem());
-                        item.put("comment", schema.getComment());
-                        return item;
-                    })
-                    .collect(Collectors.toList());
-            return emitToolResult(toolContext, "list_all_schemas",
-                    "Found " + data.size() + " schema(s).", data);
-        } finally {
-            connectionContextService.clear();
-        }
+            try {
+                connectionContextService.bindProfile(profile);
+                DbSchemaQueryRequest queryParam = DbSchemaQueryRequest.builder()
+                        .dataSourceId(profile.getDataSourceId())
+                        .dataBaseName(targetDatabase)
+                        .refresh(false)
+                        .build();
+                List<Schema> result = databaseService.querySchema(queryParam);
+                return result == null ? Collections.emptyList() : result.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                throw new AiToolMetadataQueryException(
+                        "Failed to query schemas: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            } finally {
+                connectionContextService.clear();
+            }
+        });
     }
-    public String executeSql(AiExecuteSqlRequest aiExecuteSqlRequest) {
-        String sql = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getSql();
-        Integer pageSize = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getPageSize();
-        Long dataSourceId = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getDataSourceId();
-        String databaseName = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getDatabaseName();
-        String schemaName = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getSchemaName();
-        AiToolContextRequest toolContext = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getAiToolContextRequest();
+
+    public List<ExecuteResponse> executeSql(AiExecuteSqlRequest aiExecuteSqlRequest) {
+        AiExecuteSqlRequest request = requireRequest(aiExecuteSqlRequest, "executeSql request");
+        String sql = request.getSql();
+        Integer pageSize = request.getPageSize();
+        Long dataSourceId = request.getDataSourceId();
+        String databaseName = request.getDatabaseName();
+        String schemaName = request.getSchemaName();
+        AiToolContextRequest toolContext = request.getAiToolContextRequest();
 
         if (StringUtils.isBlank(sql)) {
-            return emitToolFailure(toolContext, "execute_sql", "sql is empty.", "INVALID_ARGUMENT");
+            throw new AiToolInvalidArgumentException("sql is empty.");
         }
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
-        int resolvedPageSize = normalizePageSize(pageSize);
         String trimmedSql = sql.trim();
-        String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
-        if (StringUtils.isNotBlank(unsafeSqlMessage)) {
-            return emitToolFailure(toolContext, "execute_sql", unsafeSqlMessage, "SQL_REQUIRES_MANUAL_CONFIRMATION");
-        }
-
-        boolean operationLogged = false;
-        try {
-            connectionContextService.bindProfile(profile);
-            DbDlExecuteRequest executeParam = new DbDlExecuteRequest();
-            executeParam.setSql(trimmedSql);
-            executeParam.setSingle(true);
-            executeParam.setDataSourceId(profile.getDataSourceId());
-            executeParam.setDatabaseName(profile.getDatabaseName());
-            executeParam.setSchemaName(profile.getSchemaName());
-            executeParam.setPageNo(1);
-            executeParam.setPageSize(resolvedPageSize);
-            executeParam.setPageSizeAll(false);
-            executeParam.setErrorContinue(false);
-
-            ListResult<ExecuteResponse> executeResult = wrapExecuteResults(dlTemplateService.execute(executeParam));
-            OpsSqlOperationLogListResultRequest sqlOperationLogListResultRequest = OpsSqlOperationLogListResultRequest.of(
-                    trimmedSql, executeResult.getSuccess(), executeResult.getErrorMessage(), executeResult.getData(),
-                    SqlOperationLogSourceEnum.AI_TOOL.name());
-            sqlOperationLogRecorder.recordListResultAsync(sqlOperationLogListResultRequest);
-            operationLogged = true;
-            if (Objects.isNull(executeResult) || !executeResult.success()) {
-                return emitToolFailure(toolContext, "execute_sql", "SQL execution failed: "
-                        + (Objects.isNull(executeResult) ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage())),
-                        "SQL_EXECUTION_FAILED");
-            }
-            if (CollectionUtils.isEmpty(executeResult.getData())) {
-                return emitToolResult(toolContext, "execute_sql",
-                        "SQL executed successfully with no result.", Collections.emptyList());
+        return invokeWithRequestContext(toolContext, () -> {
+            ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+            int resolvedPageSize = normalizePageSize(pageSize);
+            String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
+            if (StringUtils.isNotBlank(unsafeSqlMessage)) {
+                throw new AiToolSqlConfirmationRequiredException(unsafeSqlMessage);
             }
 
-            List<Map<String, Object>> data = new ArrayList<>();
-            int index = 1;
-            for (ExecuteResponse item : executeResult.getData()) {
-                data.add(executeResponseData(index++, item));
+            boolean operationLogged = false;
+            try {
+                connectionContextService.bindProfile(profile);
+                DbDlExecuteRequest executeParam = new DbDlExecuteRequest();
+                executeParam.setSql(trimmedSql);
+                executeParam.setSingle(true);
+                executeParam.setDataSourceId(profile.getDataSourceId());
+                executeParam.setDatabaseName(profile.getDatabaseName());
+                executeParam.setSchemaName(profile.getSchemaName());
+                executeParam.setPageNo(1);
+                executeParam.setPageSize(resolvedPageSize);
+                executeParam.setPageSizeAll(false);
+                executeParam.setErrorContinue(false);
+
+                ListResult<ExecuteResponse> executeResult = wrapExecuteResults(dlTemplateService.execute(executeParam));
+                OpsSqlOperationLogListResultRequest sqlOperationLogListResultRequest = OpsSqlOperationLogListResultRequest.of(
+                        trimmedSql, executeResult.getSuccess(), executeResult.getErrorMessage(), executeResult.getData(),
+                        SqlOperationLogSourceEnum.AI_TOOL.name());
+                sqlOperationLogRecorder.recordListResultAsync(sqlOperationLogListResultRequest);
+                operationLogged = true;
+                if (Objects.isNull(executeResult) || !executeResult.success()) {
+                    throw new AiToolSqlExecutionException("SQL execution failed: "
+                            + (Objects.isNull(executeResult) ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage())),
+                            null);
+                }
+                return executeResult.getData() == null ? Collections.emptyList() : executeResult.getData();
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                if (!operationLogged) {
+                    sqlOperationLogRecorder.recordFailureAsync(trimmedSql, SqlOperationLogSourceEnum.AI_TOOL.name(), e.getMessage());
+                }
+                throw new AiToolSqlExecutionException(
+                        "SQL execution failed: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            } catch (RuntimeException e) {
+                if (!operationLogged) {
+                    sqlOperationLogRecorder.recordFailureAsync(trimmedSql, SqlOperationLogSourceEnum.AI_TOOL.name(), e.getMessage());
+                }
+                throw e;
+            } finally {
+                connectionContextService.clear();
             }
-            return emitToolResult(toolContext, "execute_sql",
-                    "SQL executed successfully with " + data.size() + " result set(s).", data);
-        } catch (RuntimeException e) {
-            if (!operationLogged) {
-                sqlOperationLogRecorder.recordFailureAsync(trimmedSql, SqlOperationLogSourceEnum.AI_TOOL.name(), e.getMessage());
-            }
-            throw e;
-        } finally {
-            connectionContextService.clear();
-        }
+        });
     }
-    public String getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest) {
-        List<String> tableNames = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getTableNames();
-        Long dataSourceId = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getDataSourceId();
-        String databaseName = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getDatabaseName();
-        String schemaName = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getSchemaName();
-        AiToolContextRequest toolContext = aiGetTablesSchemaRequest == null ? null : aiGetTablesSchemaRequest.getAiToolContextRequest();
+
+    public List<TableSchemaResult> getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest) {
+        AiGetTablesSchemaRequest request = requireRequest(aiGetTablesSchemaRequest, "getTablesSchema request");
+        List<String> tableNames = request.getTableNames();
+        Long dataSourceId = request.getDataSourceId();
+        String databaseName = request.getDatabaseName();
+        String schemaName = request.getSchemaName();
+        AiToolContextRequest toolContext = request.getAiToolContextRequest();
 
         if (CollectionUtils.isEmpty(tableNames)) {
-            return emitToolFailure(toolContext, "get_tables_schema", "tableNames is empty.", "INVALID_ARGUMENT");
+            throw new AiToolInvalidArgumentException("tableNames is empty.");
         }
 
         List<String> normalized = tableNames.stream()
@@ -288,43 +277,30 @@ public class AiToolServiceImpl implements IAiToolService {
                 .limit(20)
                 .collect(Collectors.toList());
         if (CollectionUtils.isEmpty(normalized)) {
-            return emitToolFailure(toolContext, "get_tables_schema", "tableNames is empty.", "INVALID_ARGUMENT");
+            throw new AiToolInvalidArgumentException("tableNames is empty.");
         }
 
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
-        try {
-            connectionContextService.bindProfile(profile);
-            List<Map<String, Object>> data = new ArrayList<>();
-            for (String tableName : normalized) {
-                Table table = fetchDetailedTable(profile, tableName);
-                String ddl = fetchTableDdl(profile, tableName);
-                String schemaText = buildRichTableSchema(tableName, ddl, table);
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("tableName", tableName);
-                item.put("schema", schemaText);
-                data.add(item);
+        return invokeWithRequestContext(toolContext, () -> {
+            ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+            try {
+                connectionContextService.bindProfile(profile);
+                List<TableSchemaResult> data = new ArrayList<>();
+                for (String tableName : normalized) {
+                    Table table = fetchDetailedTable(profile, tableName);
+                    String ddl = fetchTableDdl(profile, tableName);
+                    data.add(new TableSchemaResult(tableName, ddl, table));
+                }
+                return data;
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                throw new AiToolMetadataQueryException(
+                        "Failed to query table schema: " + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            } finally {
+                connectionContextService.clear();
             }
-            return emitToolResult(toolContext, "get_tables_schema",
-                    "Fetched schema for " + data.size() + " table(s).", data);
-        } finally {
-            connectionContextService.clear();
-        }
-    }
-
-    private String emitToolResult(AiToolContextRequest toolContext, String toolName, String summary, List<?> data) {
-        return successToolResultJson(summary, data);
-    }
-
-    private String emitToolFailure(AiToolContextRequest toolContext, String toolName, String summary, String errorCode) {
-        return failureToolResultJson(summary, errorCode);
-    }
-
-    static String successToolResultJson(String summary, List<?> data) {
-        return JSON.toJSONString(AiToolResult.success(summary, data), JSONWriter.Feature.WriteNulls);
-    }
-
-    static String failureToolResultJson(String summary, String errorCode) {
-        return JSON.toJSONString(AiToolResult.failure(summary, errorCode), JSONWriter.Feature.WriteNulls);
+        });
     }
 
     private <T> T invokeWithRequestContext(AiToolContextRequest toolContext, java.util.function.Supplier<T> supplier) {
@@ -420,224 +396,6 @@ public class AiToolServiceImpl implements IAiToolService {
         return table;
     }
 
-    private Map<String, Object> tableSummaryData(SimpleTable table) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("name", StringUtils.defaultString(table.getName(), "(unnamed)"));
-        item.put("type", StringUtils.defaultIfBlank(table.getTableType(), "TABLE"));
-        item.put("comment", table.getComment());
-        return item;
-    }
-
-    private String buildRichTableSchema(String tableName, String ddl, Table table) {
-
-        StringBuilder builder = new StringBuilder(2048);
-        builder.append("-- TABLE: ").append(tableName).append("\n");
-        builder.append("/* physical schema */\n");
-        builder.append(StringUtils.defaultIfBlank(ddl, "-- schema unavailable"));
-
-        String primaryKeys = formatPrimaryKeys(table);
-        if (StringUtils.isNotBlank(primaryKeys)) {
-            builder.append("\n\n").append(primaryKeys);
-        }
-
-        String indexes = formatIndexes(table);
-        if (StringUtils.isNotBlank(indexes)) {
-            builder.append("\n\n").append(indexes);
-        }
-
-        String foreignKeys = formatForeignKeys(table);
-        if (StringUtils.isNotBlank(foreignKeys)) {
-            builder.append("\n\n").append(foreignKeys);
-        }
-
-        return builder.toString();
-    }
-
-    private String formatPrimaryKeys(Table table) {
-        if (table == null || CollectionUtils.isEmpty(table.getColumnList())) {
-            return null;
-        }
-        List<TableColumn> primaryKeys = table.getColumnList().stream()
-                .filter(column -> Boolean.TRUE.equals(column.getPrimaryKey()))
-                .sorted(Comparator.comparingInt(TableColumn::getPrimaryKeyOrder))
-                .toList();
-        if (CollectionUtils.isEmpty(primaryKeys)) {
-            return null;
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("/* primary keys */");
-        lines.add(primaryKeys.stream()
-                .map(TableColumn::getName)
-                .collect(Collectors.joining(", ")));
-        return String.join("\n", lines);
-    }
-
-    private String formatIndexes(Table table) {
-        if (table == null || CollectionUtils.isEmpty(table.getIndexList())) {
-            return null;
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("/* indexes */");
-        for (TableIndex index : table.getIndexList()) {
-            List<TableIndexColumn> columns = index.getColumnList();
-            String columnNames = CollectionUtils.isEmpty(columns)
-                    ? ""
-                    : columns.stream()
-                    .sorted(Comparator.comparing(column -> Objects.requireNonNullElse(column.getOrdinalPosition(), (short) 0)))
-                    .map(TableIndexColumn::getColumnName)
-                    .filter(StringUtils::isNotBlank)
-                    .collect(Collectors.joining(", "));
-            List<String> parts = new ArrayList<>();
-            parts.add("type=" + StringUtils.defaultIfBlank(index.getType(), "INDEX"));
-            parts.add("unique=" + Boolean.TRUE.equals(index.getUnique()));
-            if (StringUtils.isNotBlank(index.getMethod())) {
-                parts.add("method=" + index.getMethod());
-            }
-            if (StringUtils.isNotBlank(index.getComment())) {
-                parts.add("comment=" + index.getComment());
-            }
-            lines.add("- " + StringUtils.defaultIfBlank(index.getName(), "(unnamed)")
-                    + (StringUtils.isNotBlank(columnNames) ? " (" + columnNames + ")" : "")
-                    + " | " + String.join("; ", parts));
-        }
-        return lines.size() > 1 ? String.join("\n", lines) : null;
-    }
-
-    private String formatForeignKeys(Table table) {
-        if (table == null || CollectionUtils.isEmpty(table.getForeignKeyList())) {
-            return null;
-        }
-        Map<String, List<ForeignKeyInfo>> grouped = new LinkedHashMap<>();
-        for (ForeignKeyInfo foreignKey : table.getForeignKeyList()) {
-            String key = firstNonBlank(foreignKey.getFkName(),
-                    foreignKey.getFkTableName() + "->" + foreignKey.getPkTableName());
-            grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(foreignKey);
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add("/* foreign keys */");
-        for (Map.Entry<String, List<ForeignKeyInfo>> entry : grouped.entrySet()) {
-            List<ForeignKeyInfo> fkList = entry.getValue().stream()
-                    .sorted(Comparator.comparingInt(item -> item.getKeySeq()))
-                    .toList();
-            String fkColumns = fkList.stream()
-                    .map(ForeignKeyInfo::getFkColumnName)
-                    .filter(StringUtils::isNotBlank)
-                    .collect(Collectors.joining(", "));
-            String pkTable = fkList.stream()
-                    .map(ForeignKeyInfo::getPkTableName)
-                    .filter(StringUtils::isNotBlank)
-                    .findFirst()
-                    .orElse("(unknown)");
-            String pkColumns = fkList.stream()
-                    .map(ForeignKeyInfo::getPkColumnName)
-                    .filter(StringUtils::isNotBlank)
-                    .collect(Collectors.joining(", "));
-            lines.add("- " + entry.getKey() + ": (" + fkColumns + ") -> " + pkTable + "(" + pkColumns + ")");
-        }
-        return lines.size() > 1 ? String.join("\n", lines) : null;
-    }
-
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (StringUtils.isNotBlank(value)) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private static String formatExecuteResponse(ExecuteResponse result) {
-        if (Objects.isNull(result)) {
-            return "Empty result.";
-        }
-        StringBuilder builder = new StringBuilder(1024);
-        builder.append("success: ").append(Boolean.TRUE.equals(result.getSuccess())).append("\n");
-        if (StringUtils.isNotBlank(result.getSqlType())) {
-            builder.append("sqlType: ").append(result.getSqlType()).append("\n");
-        }
-        if (Objects.nonNull(result.getDuration())) {
-            builder.append("durationMs: ").append(result.getDuration()).append("\n");
-        }
-        if (Objects.nonNull(result.getUpdateCount())) {
-            builder.append("updateCount: ").append(result.getUpdateCount()).append("\n");
-        }
-        if (StringUtils.isNotBlank(result.getMessage())) {
-            builder.append("message: ").append(result.getMessage()).append("\n");
-        }
-        if (StringUtils.isNotBlank(result.getDescription())) {
-            builder.append("description: ").append(result.getDescription()).append("\n");
-        }
-        if (CollectionUtils.isNotEmpty(result.getHeaderList()) && CollectionUtils.isNotEmpty(result.getDataList())) {
-            builder.append("rows: ").append(result.getDataList().size());
-            if (Objects.nonNull(result.getHasNextPage())) {
-                builder.append(", hasNextPage: ").append(result.getHasNextPage());
-            }
-            builder.append("\n");
-            appendTabularPreview(builder, result.getHeaderList(), result.getDisplayDataList());
-        }
-        return builder.toString().trim();
-    }
-
-    static Map<String, Object> executeResponseData(int index, ExecuteResponse result) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("resultIndex", index);
-        if (Objects.isNull(result)) {
-            item.put("success", false);
-            item.put("message", "Empty result.");
-            item.put("text", "Empty result.");
-            return item;
-        }
-        item.put("success", Boolean.TRUE.equals(result.getSuccess()));
-        item.put("sqlType", result.getSqlType());
-        item.put("durationMs", result.getDuration());
-        item.put("updateCount", result.getUpdateCount());
-        item.put("message", result.getMessage());
-        item.put("description", result.getDescription());
-        item.put("hasNextPage", result.getHasNextPage());
-        int rowCount = result.getDataList() == null ? 0 : result.getDataList().size();
-        int previewRowCount = Math.min(rowCount, MAX_SQL_RESULT_ROWS);
-        item.put("rowCount", rowCount);
-        item.put("previewRowCount", previewRowCount);
-        item.put("rowsTruncated", rowCount > previewRowCount);
-        item.put("columns", columnNames(result.getHeaderList()));
-        item.put("rows", rowPreviewRows(result.getHeaderList(), result.getDisplayDataList()));
-        item.put("text", formatExecuteResponse(result));
-        return item;
-    }
-
-    static List<String> columnNames(List<Header> headers) {
-        if (CollectionUtils.isEmpty(headers)) {
-            return Collections.emptyList();
-        }
-        return headers.stream()
-                .map(header -> StringUtils.defaultIfBlank(header.getName(), header.getColumnName()))
-                .map(name -> StringUtils.defaultIfBlank(name, "col"))
-                .collect(Collectors.toList());
-    }
-
-    static List<List<Object>> rowPreviewRows(List<Header> headers, List<List<String>> rows) {
-        if (CollectionUtils.isEmpty(headers) || CollectionUtils.isEmpty(rows)) {
-            return Collections.emptyList();
-        }
-        List<String> headerNames = columnNames(headers);
-        int rowCount = Math.min(rows.size(), MAX_SQL_RESULT_ROWS);
-        List<List<Object>> result = new ArrayList<>(rowCount);
-        for (int i = 0; i < rowCount; i++) {
-            List<String> row = rows.get(i);
-            List<Object> rowData = new ArrayList<>(headerNames.size());
-            for (int c = 0; c < headerNames.size(); c++) {
-                String value = row != null && c < row.size() ? row.get(c) : null;
-                rowData.add(value);
-            }
-            result.add(rowData);
-        }
-        return result;
-    }
-
     private ListResult<ExecuteResponse> wrapExecuteResults(List<ExecuteResponse> results) {
         ListResult<ExecuteResponse> result = ListResult.of(results);
         if (CollectionUtils.isEmpty(results)) {
@@ -655,43 +413,18 @@ public class AiToolServiceImpl implements IAiToolService {
         return result;
     }
 
-    private static void appendTabularPreview(StringBuilder builder, List<Header> headers, List<List<String>> rows) {
-        List<String> headerNames = headers.stream()
-                .map(header -> StringUtils.defaultIfBlank(header.getName(), header.getColumnName()))
-                .map(name -> StringUtils.defaultIfBlank(name, "col"))
-                .collect(Collectors.toList());
-        builder.append(String.join("\t", headerNames)).append("\n");
-        int rowCount = Math.min(rows.size(), MAX_SQL_RESULT_ROWS);
-        for (int i = 0; i < rowCount; i++) {
-            List<String> row = rows.get(i);
-            List<String> normalized = new ArrayList<>(headerNames.size());
-            for (int c = 0; c < headerNames.size(); c++) {
-                String value = c < row.size() ? row.get(c) : "";
-                normalized.add(normalizeCell(value));
-            }
-            builder.append(String.join("\t", normalized)).append("\n");
-        }
-        if (rows.size() > rowCount) {
-            builder.append("... ").append(rows.size() - rowCount).append(" more rows not shown.");
-        }
-    }
-
-    private static String normalizeCell(String value) {
-        if (value == null) {
-            return "NULL";
-        }
-        String normalized = value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", " ");
-        if (normalized.length() > 200) {
-            return normalized.substring(0, 197) + "...";
-        }
-        return normalized;
-    }
-
     private int normalizePageSize(Integer pageSize) {
         if (Objects.isNull(pageSize) || pageSize <= 0) {
-            return DEFAULT_SQL_PAGE_SIZE;
+            return DEFAULT_SQL_EXECUTION_PAGE_SIZE;
         }
-        return Math.min(pageSize, MAX_SQL_PAGE_SIZE);
+        return Math.min(pageSize, MAX_SQL_EXECUTION_PAGE_SIZE);
+    }
+
+    private <T> T requireRequest(T request, String requestName) {
+        if (request == null) {
+            throw new AiToolInvalidArgumentException(requestName + " is required.");
+        }
+        return request;
     }
 
     private String buildNonQueryExecutionMessage(String sql, ConnectionProfile profile) {
@@ -782,7 +515,7 @@ public class AiToolServiceImpl implements IAiToolService {
             Long dataSourceId,
             String databaseName,
             String schemaName) {
-        ConnectionProfile contextProfile = resolveConnectionProfile(toolContext);
+        ConnectionProfile contextProfile = extractConnectionProfile(toolContext);
         Long resolvedDataSourceId = dataSourceId;
         String resolvedDatabaseName = databaseName;
         String resolvedSchemaName = schemaName;
@@ -796,39 +529,40 @@ public class AiToolServiceImpl implements IAiToolService {
         if (StringUtils.isBlank(resolvedSchemaName) && contextProfile != null) {
             resolvedSchemaName = contextProfile.getSchemaName();
         }
+        if (Objects.isNull(resolvedDataSourceId) && toolContext != null) {
+            resolvedDataSourceId = toolContext.getDataSourceId();
+        }
+        if (StringUtils.isBlank(resolvedDatabaseName) && toolContext != null) {
+            resolvedDatabaseName = toolContext.getDatabaseName();
+        }
+        if (StringUtils.isBlank(resolvedSchemaName) && toolContext != null) {
+            resolvedSchemaName = toolContext.getSchemaName();
+        }
         if (Objects.nonNull(resolvedDataSourceId)) {
             final Long scopedDataSourceId = resolvedDataSourceId;
             final String scopedDatabaseName = resolvedDatabaseName;
             final String scopedSchemaName = resolvedSchemaName;
-            return invokeWithRequestContext(toolContext,
-                    () -> buildProfile(scopedDataSourceId, scopedDatabaseName, scopedSchemaName));
+            try {
+                return invokeWithRequestContext(toolContext,
+                        () -> buildProfile(scopedDataSourceId, scopedDatabaseName, scopedSchemaName));
+            } catch (AiToolException e) {
+                throw e;
+            } catch (BusinessException e) {
+                throw new AiToolMetadataQueryException(
+                        "Failed to resolve database connection context: "
+                                + StringUtils.defaultString(e.getMessage(), "unknown error"),
+                        e);
+            }
         }
-        throw new IllegalArgumentException(
+        throw new AiToolInvalidArgumentException(
                 "No database connection context found. Call list_all_datasources first, then provide dataSourceId/databaseName.");
     }
 
-    private ConnectionProfile resolveConnectionProfile(AiToolContextRequest toolContext) {
+    private ConnectionProfile extractConnectionProfile(AiToolContextRequest toolContext) {
         if (Objects.isNull(toolContext)) {
             return null;
         }
-        if (toolContext.getConnectionProfile() != null) {
-            return toolContext.getConnectionProfile();
-        }
-        Long dataSourceId = toolContext.getDataSourceId();
-        if (Objects.isNull(dataSourceId)) {
-            return null;
-        }
-        String databaseName = toolContext.getDatabaseName();
-        String schemaName = toolContext.getSchemaName();
-        return buildProfile(dataSourceId, databaseName, schemaName);
-    }
-
-    private ConnectionProfile requireConnectInfo(AiToolContextRequest toolContext) {
-        ConnectionProfile profile = resolveConnectionProfile(toolContext);
-        if (Objects.nonNull(profile)) {
-            return profile;
-        }
-        throw new IllegalArgumentException("No database connection context found. Provide dataSourceId/databaseName.");
+        return toolContext.getConnectionProfile();
     }
 
     private ConnectionProfile buildProfile(Long dataSourceId, String databaseName, String schemaName) {
