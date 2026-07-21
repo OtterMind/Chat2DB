@@ -30,6 +30,7 @@
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:redis-explorer": "tsx src/blocks/RedisAllData/redisExplorer.test.ts",
+    "test:search-result-query-composer": "tsx src/blocks/SearchResult/components/ScreeningResult/queryComposer.test.ts",
     "test:search-result-tab-selection": "tsx src/blocks/SearchResult/tabSelection.test.ts",
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
     "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts",

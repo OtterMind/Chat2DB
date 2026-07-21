@@ -473,6 +473,7 @@ export default memo<IProps>(
                 originalSql={props.resultData.originalSql}
                 promptWord={resultData.headerList}
                 orderByText={orderByText}
+                databaseType={resultData.executeSqlParams?.databaseType}
               />
             )}
             {showFESearch && (
