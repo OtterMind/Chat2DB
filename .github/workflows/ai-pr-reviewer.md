@@ -97,11 +97,10 @@ stop.
    SHA. Use `REQUEST_CHANGES` only for merge-blocking correctness, security,
    data-loss, crash, or compatibility failures; use `COMMENT` for actionable
    non-blocking findings.
-7. If there are no actionable findings, submit one concise `COMMENT` review for
-   the current SHA stating that zero actionable findings were found and naming
-   any material coverage limit. This visible zero-finding result must never use
-   `APPROVE`. It also lets `supersede-older-reviews` retire a stale blocking
-   review after its findings are addressed.
+7. If there are no actionable findings and no older request-changes review from
+   this workflow to supersede, call `noop`. If all findings from an older
+   workflow review were addressed, submit one concise `COMMENT` for the current
+   SHA so `supersede-older-reviews` can retire the stale blocking review.
 
 ## Output Format
 
