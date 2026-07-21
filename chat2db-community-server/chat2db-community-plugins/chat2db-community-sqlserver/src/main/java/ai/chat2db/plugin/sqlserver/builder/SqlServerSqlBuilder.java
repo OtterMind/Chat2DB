@@ -243,19 +243,34 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         String version = Chat2DBContext.getDbVersion();
         if (StringUtils.isNotBlank(version)) {
             String[] versions = version.split(VALUE_BACKSLASH_DOT);
-            if (versions.length > 0 && Integer.parseInt(versions[0]) >= 11) {
-                StringBuilder sqlBuilder = new StringBuilder(sql.length() + 14);
-                sqlBuilder.append(sql);
-                if (!sql.toLowerCase().contains(ORDER_BY_KEYWORD_LOWER)) {
-                    sqlBuilder.append(SQL_ORDER_BY_OPEN_PAREN_SELECT_NULL_CLOSE_PAREN);
+            if (versions.length > 0) {
+                int majorVersion = Integer.parseInt(versions[0]);
+                if (majorVersion >= 11) {
+                    // SQL Server 2012+: use OFFSET/FETCH NEXT
+                    StringBuilder sqlBuilder = new StringBuilder(sql.length() + 14);
+                    sqlBuilder.append(sql);
+                    if (!sql.toLowerCase().contains(ORDER_BY_KEYWORD_LOWER)) {
+                        sqlBuilder.append(SQL_ORDER_BY_OPEN_PAREN_SELECT_NULL_CLOSE_PAREN);
+                    }
+                    sqlBuilder.append(SQLConstants.LINE_SEPARATOR_OFFSET_SQL);
+                    sqlBuilder.append(offset);
+                    sqlBuilder.append(SQLConstants.ROWS_SQL);
+                    sqlBuilder.append(SQLConstants.FETCH_NEXT_SQL);
+                    sqlBuilder.append(pageSize);
+                    sqlBuilder.append(SQLConstants.ROWS_ONLY_SQL);
+                    return sqlBuilder.toString();
+                } else if (majorVersion >= 9) {
+                    // SQL Server 2005-2008 R2: use ROW_NUMBER() OVER()
+                    if (offset == 0) {
+                        // First page: use TOP directly
+                        return "SELECT TOP (" + pageSize + ") * FROM (" + sql + ") AS _page_query";
+                    } else {
+                        // Subsequent pages: use ROW_NUMBER() for offset
+                        return "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS _row_num "
+                                + "FROM (" + sql + ") AS _inner_query) AS _outer_query "
+                                + "WHERE _row_num > " + offset + " AND _row_num <= " + (offset + pageSize);
+                    }
                 }
-                sqlBuilder.append(SQLConstants.LINE_SEPARATOR_OFFSET_SQL);
-                sqlBuilder.append(offset);
-                sqlBuilder.append(SQLConstants.ROWS_SQL);
-                sqlBuilder.append(SQLConstants.FETCH_NEXT_SQL);
-                sqlBuilder.append(pageSize);
-                sqlBuilder.append(SQLConstants.ROWS_ONLY_SQL);
-                return sqlBuilder.toString();
             }
         }
         return SQLConstants.EMPTY;
