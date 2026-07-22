@@ -322,6 +322,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
             createViewSqlBuilder.append(SQL_COMMENT_TABLE)
                     .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
+                    .append(SQLConstants.DOT)
                     .append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
                     .append(SQLConstants.SQL_IS_LOWER)
                     .append(comment).append(SQLConstants.SEMICOLON);
