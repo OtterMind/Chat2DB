@@ -70,7 +70,8 @@ public class CacheManage {
                 return JSON.parseArray(value, clazz);
             }
         }catch (Exception e){
-            log.error("getList error", e);
+            log.error("getList error, removing corrupted cache entry: {}", key, e);
+            remove(key);
         }
         return null;
     }
@@ -126,6 +127,9 @@ public class CacheManage {
     }
 
     public static void fuzzyDelete(String key) {
+        if (!init) {
+            return;
+        }
         Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
         try {
             Set<String> removes = new HashSet<>();
