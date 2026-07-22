@@ -21,7 +21,7 @@ public final class SqlServerColumnTypeEnumConstants {
     public static final String SQL_DROP_COLUMN = "DROP COLUMN ";
     public static final String SQL_DROP_CONSTRAINT = "DROP CONSTRAINT ";
 
-    public static final String RENAME_COLUMN_SCRIPT = "exec sp_rename '%s.%s','%s','COLUMN' \ngo";
+    public static final String RENAME_COLUMN_SCRIPT = "exec sp_rename '[%s].[%s]','%s','COLUMN' \ngo\n";
     public static final String COLUMN_MODIFY_COMMENT_SCRIPT = "IF ((SELECT COUNT(*) FROM ::fn_listextendedproperty('MS_Description',\n" +
             "'SCHEMA', N'%s',\n" +
             "'TABLE', N'%s',\n" +
@@ -36,7 +36,7 @@ public final class SqlServerColumnTypeEnumConstants {
             "'MS_Description', N'%s',\n" +
             "'SCHEMA', N'%s',\n" +
             "'TABLE', N'%s',\n" +
-            "'COLUMN', N'%s'\n go";
+            "'COLUMN', N'%s'\n go\n";
 
 
     private SqlServerColumnTypeEnumConstants() {
