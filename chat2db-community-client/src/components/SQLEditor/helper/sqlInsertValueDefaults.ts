@@ -74,9 +74,34 @@ export function rematerializeInsertValueHints(
   sql: string,
   editorHints: ISqlEditorHintVO[] | null | undefined,
 ): ISqlEditorHintVO[] {
-  const targetHint = (editorHints || []).find((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length);
+  return (editorHints || [])
+    .filter((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length)
+    .flatMap((hint) => rematerializeInsertValueHint(sql, hint));
+}
+
+export function mergeInsertValueHints(
+  sql: string,
+  existingHints: ISqlEditorHintVO[] | null | undefined,
+  incomingHints: ISqlEditorHintVO[] | null | undefined,
+): ISqlEditorHintVO[] {
+  const merged = rematerializeInsertValueHints(sql, existingHints);
+  (incomingHints || [])
+    .filter((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length)
+    .forEach((incomingHint) => {
+      const incomingOffset = hintRowStartOffset(sql, incomingHint);
+      const existingIndex = merged.findIndex((hint) => hintRowStartOffset(sql, hint) === incomingOffset);
+      if (existingIndex >= 0) {
+        merged[existingIndex] = incomingHint;
+      } else {
+        merged.push(incomingHint);
+      }
+    });
+  return merged.sort((left, right) => hintRowStartOffset(sql, left) - hintRowStartOffset(sql, right));
+}
+
+function rematerializeInsertValueHint(sql: string, targetHint: ISqlEditorHintVO): ISqlEditorHintVO[] {
   const orderedItems = [...(targetHint?.items || [])].sort((left, right) => left.columnIndex - right.columnIndex);
-  if (!targetHint || !orderedItems.length || orderedItems.some((item) => !item.defaultValue)) {
+  if (!orderedItems.length || orderedItems.some((item) => !item.defaultValue)) {
     return [];
   }
 
@@ -104,6 +129,13 @@ export function rematerializeInsertValueHints(
     valueRange: rangesByColumnIndex.get(orderedItems[0].columnIndex),
     items,
   }];
+}
+
+function hintRowStartOffset(sql: string, hint: ISqlEditorHintVO): number {
+  if (!hint.rowRange) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return offsetAtPosition(sql, hint.rowRange.startLineNumber, hint.rowRange.startColumn);
 }
 
 interface OffsetRange {

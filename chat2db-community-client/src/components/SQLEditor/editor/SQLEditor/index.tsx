@@ -49,6 +49,7 @@ import ParameterHintWidget from '../../components/ParameterHintWidget';
 import {
   getInsertValueAutoFill,
   materializeInsertValueAutoFillHints,
+  mergeInsertValueHints,
   rematerializeInsertValueHints,
 } from '../../helper/sqlInsertValueDefaults';
 import {
@@ -715,6 +716,11 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
               insertionOffset,
               editorHints,
             );
+            const accumulatedHints = mergeInsertValueHints(
+              filledSql,
+              sqlValueTypeHintsRef.current,
+              materializedHints,
+            );
             editor.setSelection(new monaco.Selection(
               position.lineNumber,
               position.column,
@@ -724,7 +730,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             editor.pushUndoStop();
             window.requestAnimationFrame(() => {
               if (getInstance()?.getModel() === model && model.getValue() === filledSql) {
-                showSqlValueTypeHints(editor, materializedHints);
+                showSqlValueTypeHints(editor, accumulatedHints);
               }
             });
             return;

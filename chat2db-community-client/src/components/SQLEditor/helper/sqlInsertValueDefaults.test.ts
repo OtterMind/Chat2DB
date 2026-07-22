@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   getInsertValueAutoFill,
   materializeInsertValueAutoFillHints,
+  mergeInsertValueHints,
   rematerializeInsertValueHints,
 } from './sqlInsertValueDefaults';
 
@@ -88,6 +89,31 @@ assert.deepEqual(
     .map((item) => item.range?.startLineNumber),
   [2, 2, 2],
   'edited values remain attached to the nearest INSERT row instead of jumping to the first statement',
+);
+
+const threeInsertSql = [1, 2, 3]
+  .map((id) => `INSERT INTO demo (id, enabled, name) VALUES (${id}, FALSE, 'name-${id}');`)
+  .join('\n');
+let accumulatedHints = materializeInsertValueAutoFillHints(
+  threeInsertSql,
+  threeInsertSql.indexOf('(1, FALSE') + 1,
+  hints,
+);
+[2, 3].forEach((id) => {
+  const insertionOffset = threeInsertSql.indexOf(`(${id}, FALSE`) + 1;
+  const incomingHints = materializeInsertValueAutoFillHints(threeInsertSql, insertionOffset, hints);
+  accumulatedHints = mergeInsertValueHints(threeInsertSql, accumulatedHints, incomingHints);
+});
+assert.deepEqual(
+  accumulatedHints.map((hint) => hint.rowRange?.startLineNumber),
+  [1, 2, 3],
+  'auto-filling later INSERT statements preserves labels for every earlier VALUES row',
+);
+assert.deepEqual(
+  rematerializeInsertValueHints(threeInsertSql.replace('(1, FALSE', '(10, TRUE'), accumulatedHints)
+    .map((hint) => hint.rowRange?.startLineNumber),
+  [1, 2, 3],
+  'editing an earlier INSERT keeps all accumulated label groups attached to their rows',
 );
 
 const escapedStringSql = "INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, 'it\\'s')";
