@@ -1477,6 +1477,12 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String sql = request.getSql();
         int batchSize = request.getBatchSize();
         IResultSetConsumer consumer = request.getConsumer();
+        boolean originalAutoCommit = true;
+        try {
+            originalAutoCommit = connection.getAutoCommit();
+        } catch (SQLException ex) {
+            log.warn("Failed to read original autoCommit", ex);
+        }
         try (PreparedStatement stmt = connection.prepareStatement(sql,
                 ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY
@@ -1497,7 +1503,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             throw new RuntimeException(e);
         } finally {
             try {
-                connection.setAutoCommit(true);
+                connection.setAutoCommit(originalAutoCommit);
             } catch (SQLException ex) {
                 log.warn("Failed to restore autoCommit", ex);
             }
