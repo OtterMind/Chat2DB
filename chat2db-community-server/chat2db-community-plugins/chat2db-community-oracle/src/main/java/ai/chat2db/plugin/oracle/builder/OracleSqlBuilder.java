@@ -213,23 +213,15 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         int startRow = offset;
         int endRow = offset + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
-        if (startRow > 0) {
-            sqlBuilder.append(SQL_SELECT);
-        }
-        if (endRow > 0) {
-            sqlBuilder.append(SQL_SELECT_TMP_PAGE_ROWNUM_CAHT2DB);
-        }
+        sqlBuilder.append(SQL_SELECT);
+        sqlBuilder.append(SQL_SELECT_TMP_PAGE_ROWNUM_CAHT2DB);
         sqlBuilder.append(SQLConstants.LINE_SEPARATOR);
         sqlBuilder.append(sql);
         sqlBuilder.append(SQLConstants.LINE_SEPARATOR);
-        if (endRow > 0) {
-            sqlBuilder.append(SQL_CLOSE_PAREN_TMP_PAGE_WHERE_ROWNUM_EQUAL);
-            sqlBuilder.append(endRow);
-        }
-        if (startRow > 0) {
-            sqlBuilder.append(SQL_CLOSE_PAREN_WHERE_CAHT2DB_AUTO_ROW_ID);
-            sqlBuilder.append(startRow);
-        }
+        sqlBuilder.append(SQL_CLOSE_PAREN_TMP_PAGE_WHERE_ROWNUM_EQUAL);
+        sqlBuilder.append(endRow);
+        sqlBuilder.append(SQL_CLOSE_PAREN_WHERE_CAHT2DB_AUTO_ROW_ID);
+        sqlBuilder.append(startRow);
         return sqlBuilder.toString();
     }
 
