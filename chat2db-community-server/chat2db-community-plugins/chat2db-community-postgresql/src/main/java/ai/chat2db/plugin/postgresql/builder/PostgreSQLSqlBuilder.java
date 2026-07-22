@@ -441,7 +441,7 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
         }
         String viewName = modifyView.getViewName();
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.BACK_QUOTE).append(viewName).append(SQLConstants.BACK_QUOTE);
+            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE);
         } else {
             createViewSqlBuilder.append(UNDEFINED_KEYWORD);
         }
@@ -460,6 +460,7 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
             createViewSqlBuilder.append(SQL_COMMENT_VIEW)
                     .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
+                    .append(SQLConstants.DOT)
                     .append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
                     .append(SQLConstants.SQL_IS_LOWER)
                     .append(comment).append(SQLConstants.SEMICOLON);
