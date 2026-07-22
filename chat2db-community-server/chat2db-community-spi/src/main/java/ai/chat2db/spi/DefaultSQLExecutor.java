@@ -280,9 +280,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             boolean query = stmt.execute();
             if (query) {
                 long n = 0;
-                ResultSet rs = stmt.getResultSet();
-                while (rs.next()) {
-                    n++;
+                try (ResultSet rs = stmt.getResultSet()) {
+                    while (rs.next()) {
+                        n++;
+                    }
                 }
                 return n;
             } else {
