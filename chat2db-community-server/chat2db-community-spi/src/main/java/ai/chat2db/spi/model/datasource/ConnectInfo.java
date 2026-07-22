@@ -213,7 +213,7 @@ public class ConnectInfo {
 
     @Override
     public int hashCode() {
-        return Objects.hash(dataSourceId, consoleId, databaseName);
+        return Objects.hash(dataSourceId, gmtModified);
     }
 
     public Long getDataSourceId() {
