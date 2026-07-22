@@ -126,12 +126,14 @@ public class DefaultDBManager implements IDbManager {
                 try {
                     connection.setCatalog(connectInfo.getDatabaseName());
                 } catch (SQLException e) {
+                    log.warn("Failed to set catalog to '{}': {}", connectInfo.getDatabaseName(), e.getMessage());
                 }
             }
             if (StringUtils.isNotBlank(connectInfo.getSchemaName())) {
                 try {
                     connection.setSchema(connectInfo.getSchemaName());
                 } catch (SQLException e) {
+                    log.warn("Failed to set schema to '{}': {}", connectInfo.getSchemaName(), e.getMessage());
                 }
             }
         }
