@@ -84,8 +84,7 @@ export function parameterHintContextFromEditorHints(
     return routineHint;
   }
   return hints
-    .map(insertValueHintContextFromEditorHint)
-    .map(parameterHintContextFromInsertValue)
+    .map((hint) => parameterHintContextFromInsertValue(insertValueHintContextFromEditorHint(hint)))
     .map((context) => markActiveParameterHintItem(context, position))
     .find((context): context is ParameterHintContext => !!context) || null;
 }

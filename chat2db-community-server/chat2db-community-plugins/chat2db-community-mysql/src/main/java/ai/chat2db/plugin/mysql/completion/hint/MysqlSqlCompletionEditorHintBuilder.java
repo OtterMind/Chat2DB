@@ -18,8 +18,17 @@ public final class MysqlSqlCompletionEditorHintBuilder {
             return List.of();
         }
         List<SqlCompletionEditorHint> hints = new ArrayList<>();
-        hints.addAll(insertValueHintBuilder.build(context));
+        hints.addAll(buildValueHints(context));
         hints.addAll(routineParameterHintBuilder.build(context));
+        return hints.isEmpty() ? List.of() : hints;
+    }
+
+    public List<SqlCompletionEditorHint> buildValueHints(MysqlSqlCompletionCandidateContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        List<SqlCompletionEditorHint> hints = new ArrayList<>();
+        hints.addAll(insertValueHintBuilder.build(context));
         return hints.isEmpty() ? List.of() : hints;
     }
 }

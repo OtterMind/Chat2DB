@@ -37,10 +37,12 @@ public final class MysqlSqlCompletionPresentationProcessor implements ISqlComple
     }
 
     private SqlCompletionResponse attachEditorHints(SqlCompletionResponse result, MysqlSqlCompletionCandidateContext context) {
-        if (result == null || StringUtils.isBlank(context.prefix())) {
+        if (result == null) {
             return result;
         }
-        List<SqlCompletionEditorHint> editorHints = editorHintBuilder.build(context);
+        List<SqlCompletionEditorHint> editorHints = StringUtils.isBlank(context.prefix())
+                ? editorHintBuilder.buildValueHints(context)
+                : editorHintBuilder.build(context);
         if (!editorHints.isEmpty()) {
             result.setEditorHints(editorHints);
         }

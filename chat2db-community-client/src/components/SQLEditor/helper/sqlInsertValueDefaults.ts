@@ -1,0 +1,245 @@
+import { ISqlEditorHintVO } from '@/typings/sqlParser';
+
+export interface InsertValueAutoFill {
+  text: string;
+  firstValueLength: number;
+  valuesTextLength: number;
+}
+
+export function getInsertValueAutoFill(
+  sql: string,
+  cursor: number,
+  editorHints: ISqlEditorHintVO[] | null | undefined,
+): InsertValueAutoFill | null {
+  const safeCursor = Math.max(0, Math.min(cursor, sql.length));
+  if (!/\bvalues?\s*\(\s*$/i.test(sql.substring(0, safeCursor))) {
+    return null;
+  }
+
+  const hint = (editorHints || []).find((candidate) =>
+    candidate.type === 'INSERT_VALUE'
+    && candidate.items?.some((item) => item.active)
+    && isEmptyRange(candidate.valueRange),
+  );
+  const items = [...(hint?.items || [])]
+    .sort((left, right) => left.columnIndex - right.columnIndex);
+  if (!items.length || items.some((item) => !item.defaultValue)) {
+    return null;
+  }
+
+  const values = items.map((item) => item.defaultValue!);
+  const valuesText = values.join(', ');
+  const hasClosingParenthesis = /^\s*\)/.test(sql.substring(safeCursor));
+  return {
+    text: `${valuesText}${hasClosingParenthesis ? '' : ')'}`,
+    firstValueLength: values[0].length,
+    valuesTextLength: valuesText.length,
+  };
+}
+
+export function materializeInsertValueAutoFillHints(
+  sql: string,
+  insertionOffset: number,
+  editorHints: ISqlEditorHintVO[] | null | undefined,
+): ISqlEditorHintVO[] {
+  const targetHint = (editorHints || []).find((hint) =>
+    hint.type === 'INSERT_VALUE' && hint.items?.some((item) => item.active),
+  );
+  const orderedItems = [...(targetHint?.items || [])].sort((left, right) => left.columnIndex - right.columnIndex);
+  if (!targetHint || !orderedItems.length || orderedItems.some((item) => !item.defaultValue)) {
+    return editorHints || [];
+  }
+
+  let valueOffset = Math.max(0, Math.min(insertionOffset, sql.length));
+  const rangesByColumnIndex = new Map<number, ISqlEditorHintVO['valueRange']>();
+  orderedItems.forEach((item, index) => {
+    const valueLength = item.defaultValue!.length;
+    rangesByColumnIndex.set(item.columnIndex, rangeAtOffsets(sql, valueOffset, valueOffset + valueLength));
+    valueOffset += valueLength + (index < orderedItems.length - 1 ? 2 : 0);
+  });
+
+  const items = (targetHint.items || []).map((item) => ({
+    ...item,
+    range: rangesByColumnIndex.get(item.columnIndex) || item.range,
+  }));
+  return (editorHints || []).map((hint) => hint === targetHint ? {
+    ...hint,
+    rowRange: rangeAtOffsets(sql, insertionOffset, valueOffset),
+    valueRange: rangesByColumnIndex.get(orderedItems[0].columnIndex),
+    items,
+  } : hint);
+}
+
+export function rematerializeInsertValueHints(
+  sql: string,
+  editorHints: ISqlEditorHintVO[] | null | undefined,
+): ISqlEditorHintVO[] {
+  const targetHint = (editorHints || []).find((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length);
+  const orderedItems = [...(targetHint?.items || [])].sort((left, right) => left.columnIndex - right.columnIndex);
+  if (!targetHint || !orderedItems.length || orderedItems.some((item) => !item.defaultValue)) {
+    return [];
+  }
+
+  const matchingRanges = findValuesRow(sql, orderedItems.map((item) => item.defaultValue!));
+  if (!matchingRanges) {
+    return [];
+  }
+  const rangesByColumnIndex = new Map<number, ISqlEditorHintVO['valueRange']>();
+  orderedItems.forEach((item, index) => {
+    const valueRange = matchingRanges[index];
+    if (valueRange && valueRange.start < valueRange.end) {
+      rangesByColumnIndex.set(item.columnIndex, rangeAtOffsets(sql, valueRange.start, valueRange.end));
+    }
+  });
+  const items = (targetHint.items || []).map((item) => ({
+    ...item,
+    range: rangesByColumnIndex.get(item.columnIndex),
+  }));
+  return [{
+    ...targetHint,
+    rowRange: rangeAtOffsets(sql, matchingRanges[0].start, matchingRanges[matchingRanges.length - 1].end),
+    valueRange: rangesByColumnIndex.get(orderedItems[0].columnIndex),
+    items,
+  }];
+}
+
+interface OffsetRange {
+  start: number;
+  end: number;
+}
+
+function findValuesRow(sql: string, expectedValues: string[]): OffsetRange[] | null {
+  const valuesPattern = /\bvalues?\s*\(/gi;
+  let fallbackRanges: OffsetRange[] | null = null;
+  let match = valuesPattern.exec(sql);
+  while (match) {
+    const ranges = scanValuesRow(sql, valuesPattern.lastIndex);
+    if (ranges && !fallbackRanges) {
+      fallbackRanges = ranges;
+    }
+    if (
+      ranges?.length === expectedValues.length
+      && ranges.every((range, index) =>
+        normalizeSqlValue(sql.substring(range.start, range.end)) === normalizeSqlValue(expectedValues[index]),
+      )
+    ) {
+      return ranges;
+    }
+    match = valuesPattern.exec(sql);
+  }
+  return fallbackRanges;
+}
+
+function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
+  const ranges: OffsetRange[] = [];
+  let valueStart = rowStart;
+  let depth = 0;
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  for (let index = rowStart; index < sql.length; index += 1) {
+    const current = sql[index];
+    const next = sql[index + 1];
+    if (!doubleQuoted && current === "'") {
+      if (singleQuoted && next === "'") {
+        index += 1;
+      } else {
+        singleQuoted = !singleQuoted;
+      }
+      continue;
+    }
+    if (!singleQuoted && current === '"') {
+      if (doubleQuoted && next === '"') {
+        index += 1;
+      } else {
+        doubleQuoted = !doubleQuoted;
+      }
+      continue;
+    }
+    if (singleQuoted || doubleQuoted) {
+      continue;
+    }
+    if (current === '(' || current === '[') {
+      depth += 1;
+    } else if ((current === ')' || current === ']') && depth > 0) {
+      depth -= 1;
+    } else if (current === ',' && depth === 0) {
+      ranges.push(trimOffsetRange(sql, valueStart, index));
+      valueStart = index + 1;
+    } else if (current === ')' && depth === 0) {
+      ranges.push(trimOffsetRange(sql, valueStart, index));
+      return ranges;
+    }
+  }
+  ranges.push(trimOffsetRange(sql, valueStart, sql.length));
+  return ranges;
+}
+
+function trimOffsetRange(sql: string, start: number, end: number): OffsetRange {
+  let trimmedStart = start;
+  let trimmedEnd = end;
+  while (trimmedStart < trimmedEnd && /\s/.test(sql[trimmedStart])) trimmedStart += 1;
+  while (trimmedEnd > trimmedStart && /\s/.test(sql[trimmedEnd - 1])) trimmedEnd -= 1;
+  return { start: trimmedStart, end: trimmedEnd };
+}
+
+function normalizeSqlValue(value: string): string {
+  let normalized = '';
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value[index];
+    const next = value[index + 1];
+    if (!doubleQuoted && current === "'") {
+      normalized += current;
+      if (singleQuoted && next === "'") {
+        normalized += next;
+        index += 1;
+      } else {
+        singleQuoted = !singleQuoted;
+      }
+    } else if (!singleQuoted && current === '"') {
+      normalized += current;
+      if (doubleQuoted && next === '"') {
+        normalized += next;
+        index += 1;
+      } else {
+        doubleQuoted = !doubleQuoted;
+      }
+    } else if ((singleQuoted || doubleQuoted) || !/\s/.test(current)) {
+      normalized += singleQuoted || doubleQuoted ? current : current.toLowerCase();
+    }
+  }
+  return normalized;
+}
+
+function rangeAtOffsets(sql: string, startOffset: number, endOffset: number) {
+  const start = positionAtOffset(sql, startOffset);
+  const end = positionAtOffset(sql, endOffset);
+  return {
+    startLineNumber: start.lineNumber,
+    startColumn: start.column,
+    endLineNumber: end.lineNumber,
+    endColumn: end.column,
+  };
+}
+
+function positionAtOffset(sql: string, offset: number) {
+  const safeOffset = Math.max(0, Math.min(offset, sql.length));
+  let lineNumber = 1;
+  let column = 1;
+  for (let index = 0; index < safeOffset; index += 1) {
+    if (sql[index] === '\n') {
+      lineNumber += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+  return { lineNumber, column };
+}
+
+function isEmptyRange(range: ISqlEditorHintVO['valueRange']): boolean {
+  return !!range
+    && range.startLineNumber === range.endLineNumber
+    && range.startColumn === range.endColumn;
+}

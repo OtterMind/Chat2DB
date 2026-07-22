@@ -11,6 +11,7 @@ import ai.chat2db.plugin.mysql.completion.provider.datatype.MysqlSqlCompletionDa
 import ai.chat2db.plugin.mysql.completion.provider.object.MysqlSqlCompletionObjectCandidateProvider;
 import ai.chat2db.plugin.mysql.completion.provider.routine.MysqlSqlCompletionRoutineLocalSymbolCandidateProvider;
 import ai.chat2db.plugin.mysql.completion.provider.table.MysqlSqlCompletionTableCandidateProvider;
+import ai.chat2db.plugin.mysql.completion.provider.value.MysqlSqlCompletionValueCandidateProvider;
 import ai.chat2db.plugin.mysql.completion.provider.function.MysqlSqlCompletionFunctionCandidateProvider;
 import ai.chat2db.plugin.mysql.completion.provider.snippet.MysqlSqlCompletionSnippetCandidateProvider;
 import ai.chat2db.plugin.mysql.completion.provider.syntax.MysqlSqlCompletionSyntaxCandidateCollector;
@@ -75,6 +76,7 @@ public final class MysqlSqlCompletionCandidatePlanExecutor {
         }
         boolean aliasMatched = hasAliasCandidate(buildPlan);
         List<SqlCompletionCandidate> candidates = buildPlan.candidates();
+        candidates.addAll(MysqlSqlCompletionValueCandidateProvider.build(context));
         if (!aliasMatched) {
             if (!blankPrefix) {
                 candidates.addAll(snippetCandidates(context, ruleSlot, c3Result));
@@ -427,7 +429,17 @@ public final class MysqlSqlCompletionCandidatePlanExecutor {
         if (!StringUtils.isBlank(context.prefix()) || context.cursorContext().dotScoped()) {
             return false;
         }
+        if (hasActiveInsertValueSlot(context)) {
+            return false;
+        }
         return !allowsBlankPrefix(ruleSlot);
+    }
+
+    private static boolean hasActiveInsertValueSlot(MysqlSqlCompletionCandidateContext context) {
+        return context != null
+                && context.insertStatementContext() != null
+                && context.insertStatementContext().valueRows().stream()
+                .anyMatch(row -> row.active() && row.activeColumnIndex() >= 0);
     }
 
     private static boolean isBlankPrefix(MysqlSqlCompletionCandidateContext context) {
@@ -441,7 +453,8 @@ public final class MysqlSqlCompletionCandidatePlanExecutor {
         return ruleSlot != null
                 && (ruleSlot.tableReference()
                 || ruleSlot.objectReference()
-                || ruleSlot.columnReference());
+                || ruleSlot.columnReference()
+                || ruleSlot.insertValueExpression());
     }
 
     private static boolean currentRulePathContains(MysqlSqlCompletionCandidateContext context, int rule) {

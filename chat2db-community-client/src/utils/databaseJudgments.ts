@@ -104,6 +104,10 @@ export const canUseBackendCompletion = (databaseType?: DatabaseTypeInput): boole
   return containsStrict(databaseCapabilities.backendCompletionSupported, databaseType);
 };
 
+export const canUseBackendEditorHints = (databaseType?: DatabaseTypeInput): boolean => {
+  return containsStrict(databaseCapabilities.backendEditorHintsSupported, databaseType);
+};
+
 export const getOpenTableIdentifierQuoteMode = (databaseType?: DatabaseTypeInput): IdentifierQuoteMode => {
   return getIdentifierQuoteModeFromConfig(databaseCapabilities.openTableIdentifierQuote, databaseType);
 };

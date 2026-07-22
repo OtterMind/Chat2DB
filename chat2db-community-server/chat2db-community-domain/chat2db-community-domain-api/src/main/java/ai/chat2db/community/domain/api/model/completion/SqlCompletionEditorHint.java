@@ -22,6 +22,7 @@ public class SqlCompletionEditorHint {
         private int columnIndex;
         private String fieldName;
         private String fieldType;
+        private String defaultValue;
         private String label;
         private Range range;
         private boolean active;
