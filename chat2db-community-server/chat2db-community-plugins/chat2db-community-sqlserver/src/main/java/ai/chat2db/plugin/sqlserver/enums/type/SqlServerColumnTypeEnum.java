@@ -291,7 +291,7 @@ public enum SqlServerColumnTypeEnum implements IColumnBuilder {
             return script.toString();
         }
 
-        if (Arrays.asList().contains(type)) {
+        if (Arrays.asList("TIMESTAMP").contains(type)) {
             StringBuilder script = new StringBuilder();
             if (column.getColumnSize() == null) {
                 script.append(columnType);
