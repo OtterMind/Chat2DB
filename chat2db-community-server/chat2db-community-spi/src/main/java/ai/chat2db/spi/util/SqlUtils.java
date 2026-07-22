@@ -399,7 +399,7 @@ public class SqlUtils {
         try {
             String countSql = SqlGenerateUtil.generateSelectCountSql(sql, dataBaseType);
             if (countSql.endsWith(";")) {
-                countSql = countSql.substring(0, s.length() - 1);
+                countSql = countSql.substring(0, countSql.length() - 1);
             }
             return countSql;
         } catch (Exception e) {
