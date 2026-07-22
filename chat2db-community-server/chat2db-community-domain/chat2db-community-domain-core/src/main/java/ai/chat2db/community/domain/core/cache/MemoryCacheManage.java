@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.cache;
 
 import java.io.Serializable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -20,6 +21,7 @@ public class MemoryCacheManage {
 
     private static final byte[] NULL_BYTES = SerializationUtils.serialize((NullValue)NullValue.INSTANCE);
     private static final String SYNCHRONIZED_PREFIX = "MemoryCache:";
+    private static final ConcurrentHashMap<String, Object> LOCK_MAP = new ConcurrentHashMap<>();
 
     private static final Cache<String, byte[]> CACHE = CacheBuilder.newBuilder()
         // 100M
@@ -46,7 +48,7 @@ public class MemoryCacheManage {
             return data;
         }
         String lockKey = SYNCHRONIZED_PREFIX + key;
-        synchronized (lockKey.intern()) {
+        synchronized (LOCK_MAP.computeIfAbsent(lockKey, k -> new Object())) {
             data = get(key);
             if (data != null) {
                 return data;
