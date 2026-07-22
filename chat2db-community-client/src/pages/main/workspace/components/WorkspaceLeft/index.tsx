@@ -232,8 +232,14 @@ const WorkspaceLeft = memo(() => {
         return 'miss';
       }
 
+      // Record the Data Browser panel as active regardless of whether the explorer
+      // panel is mounted yet. On desktop the Java bridge is injected slightly after
+      // load, so showExplorerPanel is briefly false while currentPanel is forced to
+      // 'database'; skipping this leaves activePanel on its 'explorer' default and the
+      // sidebar snaps to Files once the bridge initializes. Only the frame-wait (to let
+      // the panel switch render) needs the explorer panel to actually be shown.
+      setActivePanel('database');
       if (showExplorerPanel) {
-        setActivePanel('database');
         await waitNextFrame();
       }
 
