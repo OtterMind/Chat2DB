@@ -1482,13 +1482,24 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         )) {
             connection.setAutoCommit(false);
             stmt.setFetchSize(batchSize);
-            ResultSet rs = stmt.executeQuery();
-            consumer.accept(rs);
+            try (ResultSet rs = stmt.executeQuery()) {
+                consumer.accept(rs);
+            }
             connection.commit();
-            connection.setAutoCommit(true);
         } catch (Exception e) {
             log.error("Failed to fetch table records. Query: {}", sql, e);
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackEx) {
+                log.warn("Failed to rollback after error", rollbackEx);
+            }
             throw new RuntimeException(e);
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException ex) {
+                log.warn("Failed to restore autoCommit", ex);
+            }
         }
     }
 
