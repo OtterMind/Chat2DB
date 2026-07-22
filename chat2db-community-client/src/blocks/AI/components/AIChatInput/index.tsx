@@ -166,7 +166,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     if (props.contextInfo) {
       setCascaderData(mainPageActiveTab as PageType, props.contextInfo ?? null);
     }
-  }, [props.contextInfo]);
+  }, [props.contextInfo, mainPageActiveTab]);
 
   useEffect(() => {
     if (!prefillInputState?.token) {
