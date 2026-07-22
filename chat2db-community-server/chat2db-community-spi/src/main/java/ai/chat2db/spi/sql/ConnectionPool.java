@@ -54,8 +54,10 @@ public class ConnectionPool {
                                     try {
                                         if (connectInfo.getLastAccessTime().getTime() + 1000 * 60 * 30 < System.currentTimeMillis()) {
                                             closeQuietly(connectInfo);
+                                            iterator.remove();
                                         } else if (!checkConnectionIsActive(connectInfo)) {
                                             closeQuietly(connectInfo);
+                                            iterator.remove();
                                         }
                                     } finally {
                                         connectInfo.releaseInUse();
@@ -166,6 +168,9 @@ public class ConnectionPool {
                     return createNewConnection(connectInfo);
                 }
             } else {
+                if (c != null) {
+                    queue.offer(c);
+                }
                 return createNewConnection(connectInfo);
             }
         } else {
