@@ -198,14 +198,17 @@ const TitleRender = (props: IProps) => {
   };
 
   const renderContent = () => {
+    const escapeHtml = (str: string) =>
+      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     const regular: any = () => (
       <span
         dangerouslySetInnerHTML={{
           __html:
-            nodeData.originalTitle?.replace(
-              new RegExp(regularSearchBarValue, 'gi'),
+            escapeHtml(nodeData.originalTitle || '').replace(
+              new RegExp(escapeHtml(regularSearchBarValue), 'gi'),
               (matched) => `<span style='color:red;'>${matched}</span>`,
-            ) || '',
+            ),
         }}
       />
     );
