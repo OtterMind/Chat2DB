@@ -1,11 +1,10 @@
 package ai.chat2db.plugin.sqlite;
 
-import ai.chat2db.spi.ISqlSyntaxPlugin;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.spi.ISQLParser;
 import ai.chat2db.plugin.sqlite.parser.SqliteSqlParser;
 
-public class SqliteSyntaxPlugin implements ISqlSyntaxPlugin{
+public class SqliteSyntaxPlugin implements ai.chat2db.spi.IStandardSqlEditorHintPlugin {
 
     @Override
     public String getDatabaseType() {

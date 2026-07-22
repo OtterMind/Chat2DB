@@ -2,7 +2,6 @@ package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.completion.SqlCompletionEditorHint;
 import ai.chat2db.community.domain.api.model.completion.request.DbSqlCompletionRequest;
-import ai.chat2db.spi.completion.StandardSqlInsertEditorHintProvider;
 import java.util.List;
 
 /**
@@ -41,6 +40,6 @@ public interface ISqlSyntaxPlugin {
      * @return non-executable editor hints, or an empty list when unsupported.
      */
     default List<SqlCompletionEditorHint> getSqlEditorHints(DbSqlCompletionRequest request) {
-        return new StandardSqlInsertEditorHintProvider(getDatabaseType()).build(request);
+        return List.of();
     }
 }

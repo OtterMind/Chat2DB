@@ -32,6 +32,11 @@ assert.equal(
   false,
   'non-relational databases do not request SQL INSERT editor hints',
 );
+assert.equal(
+  isBackendEditorHintsDatabaseType(DatabaseTypeCode.GBASE8S),
+  false,
+  'databases without a SQL syntax plugin do not advertise backend editor hints',
+);
 
 assert.equal(isBackendCompletionModel(model), false, 'model is not marked by default');
 

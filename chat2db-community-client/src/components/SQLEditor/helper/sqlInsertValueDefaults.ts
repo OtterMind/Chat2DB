@@ -80,7 +80,10 @@ export function rematerializeInsertValueHints(
     return [];
   }
 
-  const matchingRanges = findValuesRow(sql, orderedItems.map((item) => item.defaultValue!));
+  const preferredOffset = targetHint.rowRange
+    ? offsetAtPosition(sql, targetHint.rowRange.startLineNumber, targetHint.rowRange.startColumn)
+    : undefined;
+  const matchingRanges = findValuesRow(sql, orderedItems.map((item) => item.defaultValue!), preferredOffset);
   if (!matchingRanges) {
     return [];
   }
@@ -108,14 +111,15 @@ interface OffsetRange {
   end: number;
 }
 
-function findValuesRow(sql: string, expectedValues: string[]): OffsetRange[] | null {
+function findValuesRow(sql: string, expectedValues: string[], preferredOffset?: number): OffsetRange[] | null {
   const valuesPattern = /\bvalues?\s*\(/gi;
-  let fallbackRanges: OffsetRange[] | null = null;
+  const matchingRows: OffsetRange[][] = [];
+  const fallbackRows: OffsetRange[][] = [];
   let match = valuesPattern.exec(sql);
   while (match) {
     const ranges = scanValuesRow(sql, valuesPattern.lastIndex);
-    if (ranges && !fallbackRanges) {
-      fallbackRanges = ranges;
+    if (ranges?.length) {
+      fallbackRows.push(ranges);
     }
     if (
       ranges?.length === expectedValues.length
@@ -123,11 +127,22 @@ function findValuesRow(sql: string, expectedValues: string[]): OffsetRange[] | n
         normalizeSqlValue(sql.substring(range.start, range.end)) === normalizeSqlValue(expectedValues[index]),
       )
     ) {
-      return ranges;
+      matchingRows.push(ranges);
     }
     match = valuesPattern.exec(sql);
   }
-  return fallbackRanges;
+  const candidates = preferredOffset === undefined && matchingRows.length ? matchingRows : fallbackRows;
+  if (!candidates.length) {
+    return null;
+  }
+  if (preferredOffset === undefined) {
+    return candidates[0];
+  }
+  return candidates.reduce((closest, candidate) =>
+    Math.abs(candidate[0].start - preferredOffset) < Math.abs(closest[0].start - preferredOffset)
+      ? candidate
+      : closest,
+  );
 }
 
 function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
@@ -139,6 +154,10 @@ function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
   for (let index = rowStart; index < sql.length; index += 1) {
     const current = sql[index];
     const next = sql[index + 1];
+    if (singleQuoted && current === '\\' && next !== undefined) {
+      index += 1;
+      continue;
+    }
     if (!doubleQuoted && current === "'") {
       if (singleQuoted && next === "'") {
         index += 1;
@@ -189,6 +208,11 @@ function normalizeSqlValue(value: string): string {
   for (let index = 0; index < value.length; index += 1) {
     const current = value[index];
     const next = value[index + 1];
+    if (singleQuoted && current === '\\' && next !== undefined) {
+      normalized += current + next;
+      index += 1;
+      continue;
+    }
     if (!doubleQuoted && current === "'") {
       normalized += current;
       if (singleQuoted && next === "'") {
@@ -236,6 +260,20 @@ function positionAtOffset(sql: string, offset: number) {
     }
   }
   return { lineNumber, column };
+}
+
+function offsetAtPosition(sql: string, lineNumber: number, column: number): number {
+  const targetLine = Math.max(1, lineNumber);
+  const targetColumn = Math.max(1, column);
+  let currentLine = 1;
+  let offset = 0;
+  while (offset < sql.length && currentLine < targetLine) {
+    if (sql[offset] === '\n') {
+      currentLine += 1;
+    }
+    offset += 1;
+  }
+  return Math.min(sql.length, offset + targetColumn - 1);
 }
 
 function isEmptyRange(range: ISqlEditorHintVO['valueRange']): boolean {

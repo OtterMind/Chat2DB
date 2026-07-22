@@ -30,9 +30,6 @@ public final class MysqlSqlCompletionPresentationProcessor implements ISqlComple
             return attachEditorHints(SqlCompletionResponse.empty(), context);
         }
         SqlCompletionResponse result = MysqlSqlCompletionCandidatePlanExecutor.execute(context, state.candidatePlan());
-        if (MysqlSqlCompletionCandidatePlanExecutor.isBlockedBlankPrefix(context)) {
-            return result;
-        }
         return attachEditorHints(result, context);
     }
 

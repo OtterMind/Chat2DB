@@ -1751,12 +1751,12 @@ class MysqlSqlCompletionProviderTest {
     }
 
     @Test
-    void emptyPrefixInsertValueReturnsTypeAwareIntegerCandidatesAndEditorHint() {
+    void emptyPrefixInsertValueReturnsEditorHintWithoutCompletionCandidates() {
         String sql = "INSERT INTO orders (id, status) VALUES (1, )";
 
         SqlCompletionResponse result = complete(sql, sql.length() - 1);
 
-        assertSuccessReplacement(result, sql.length() - 1, sql.length() - 1);
+        assertEmpty(result);
         SqlCompletionEditorHint hint = singleEditorHint(result, SqlCompletionEditorHintTypeEnum.INSERT_VALUE);
         SqlCompletionEditorHint.Item activeItem = hint.getItems().stream()
                 .filter(SqlCompletionEditorHint.Item::isActive)
@@ -1765,26 +1765,20 @@ class MysqlSqlCompletionProviderTest {
         Assertions.assertEquals("status", activeItem.getFieldName());
         Assertions.assertEquals("VARCHAR", activeItem.getFieldType());
         Assertions.assertEquals("''", activeItem.getDefaultValue());
-        SqlCompletionCandidate textValue = candidate(result, SqlCompletionCandidateTypeEnum.PARAMETER, "'value'");
-        Assertions.assertEquals("'${1:value}'$0", textValue.getInsertText());
-        Assertions.assertEquals(SqlCompletionInsertTypeEnum.SNIPPET, textValue.getInsertType());
-        candidate(result, SqlCompletionCandidateTypeEnum.PARAMETER, "NULL");
-        candidate(result, SqlCompletionCandidateTypeEnum.PARAMETER, "DEFAULT");
     }
 
     @Test
-    void completeReturnsAllInsertValueEditorHintsAndIntegerCandidatesForEmptyValuesRow() {
+    void completeReturnsAllInsertValueEditorHintsWithoutCompletionCandidatesForEmptyValuesRow() {
         String sql = "INSERT INTO orders (id, amount, status) VALUES ()";
 
         SqlCompletionResponse result = complete(sql, sql.lastIndexOf(")"));
 
-        assertSuccessReplacement(result, sql.lastIndexOf(")"), sql.lastIndexOf(")"));
+        assertEmpty(result);
         SqlCompletionEditorHint hint = singleEditorHint(result, SqlCompletionEditorHintTypeEnum.INSERT_VALUE);
         Assertions.assertEquals(3, hint.getItems().size());
         Assertions.assertEquals("id", hint.getItems().get(0).getFieldName());
         Assertions.assertEquals("BIGINT", hint.getItems().get(0).getFieldType());
         Assertions.assertEquals("0", hint.getItems().get(0).getDefaultValue());
-        candidate(result, SqlCompletionCandidateTypeEnum.PARAMETER, "0");
     }
 
     @Test
@@ -1792,21 +1786,17 @@ class MysqlSqlCompletionProviderTest {
         String booleanSql = "INSERT INTO typed_values (active) VALUES ()";
         SqlCompletionResponse booleanResult = complete(booleanSql, booleanSql.lastIndexOf(")"));
 
-        candidate(booleanResult, SqlCompletionCandidateTypeEnum.PARAMETER, "TRUE");
-        candidate(booleanResult, SqlCompletionCandidateTypeEnum.PARAMETER, "FALSE");
+        assertEmpty(booleanResult);
         Assertions.assertEquals("FALSE", singleEditorHint(booleanResult, SqlCompletionEditorHintTypeEnum.INSERT_VALUE)
                 .getItems().get(0).getDefaultValue());
 
         String dateSql = "INSERT INTO typed_values (created_at) VALUES ()";
         SqlCompletionResponse dateResult = complete(dateSql, dateSql.lastIndexOf(")"));
 
-        candidate(dateResult, SqlCompletionCandidateTypeEnum.PARAMETER, "CURRENT_TIMESTAMP");
+        assertEmpty(dateResult);
         Assertions.assertEquals("CURRENT_TIMESTAMP",
                 singleEditorHint(dateResult, SqlCompletionEditorHintTypeEnum.INSERT_VALUE)
                         .getItems().get(0).getDefaultValue());
-        SqlCompletionCandidate dateLiteral = candidate(dateResult, SqlCompletionCandidateTypeEnum.PARAMETER,
-                "'YYYY-MM-DD HH:MM:SS'");
-        Assertions.assertEquals(SqlCompletionInsertTypeEnum.SNIPPET, dateLiteral.getInsertType());
     }
 
     @Test

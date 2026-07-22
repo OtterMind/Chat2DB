@@ -68,7 +68,6 @@ export const databaseCapabilities = {
     DatabaseTypeCode.SUNDB,
     DatabaseTypeCode.XUGUDB,
     DatabaseTypeCode.INFORMIX,
-    DatabaseTypeCode.GBASE8S,
     DatabaseTypeCode.TDENGINE,
   ],
   tableEditorMysqlBaseInfoSupported: [DatabaseTypeCode.MYSQL],

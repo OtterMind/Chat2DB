@@ -430,7 +430,9 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             });
           }
           setHoverHelpInfo(hoverHelpDefaultConfig);
-          return;
+          if (isAutoFillChange) {
+            return;
+          }
         }
         refreshBackendParameterHints(
           editor,

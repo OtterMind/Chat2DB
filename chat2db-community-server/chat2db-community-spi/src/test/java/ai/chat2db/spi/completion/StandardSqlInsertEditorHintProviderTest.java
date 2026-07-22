@@ -11,6 +11,8 @@ import ai.chat2db.community.domain.api.model.completion.SqlCompletionEditorHint;
 import ai.chat2db.community.domain.api.model.completion.request.DbSqlCompletionMetadataRequest;
 import ai.chat2db.community.domain.api.model.completion.request.DbSqlCompletionRequest;
 import ai.chat2db.community.domain.api.model.completion.result.SqlCompletionMetadataResponse;
+import ai.chat2db.spi.ISQLParser;
+import ai.chat2db.spi.ISqlSyntaxPlugin;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -77,19 +79,91 @@ class StandardSqlInsertEditorHintProviderTest {
         assertTrue(provider.build(request(insertWithoutColumns, null)).isEmpty());
     }
 
+    @Test
+    void scopesHintsToTheCurrentStatementAndStopsAfterTheValuesRowCloses() {
+        String sql = "INSERT INTO old_table (id) VALUES (1);\nINSERT INTO demo (id, name) VALUES (";
+        AtomicReference<DbSqlCompletionMetadataRequest> metadataRequest = new AtomicReference<>();
+
+        List<SqlCompletionEditorHint> hints = new StandardSqlInsertEditorHintProvider("H2")
+                .build(request(sql, metadataRequest));
+
+        assertEquals(1, hints.size());
+        assertEquals("demo", metadataRequest.get().scope().table());
+        assertEquals(2, hints.get(0).getStatementRange().getStartLineNumber());
+        assertTrue(new StandardSqlInsertEditorHintProvider("H2")
+                .build(request(sql + "0, '')", null)).isEmpty());
+    }
+
+    @Test
+    void keepsMysqlFamilyBackslashEscapesInsideOneValue() {
+        String sql = "INSERT INTO demo (name, id) VALUES ('it\\'s', 0";
+
+        List<SqlCompletionEditorHint> hints = new StandardSqlInsertEditorHintProvider("MARIADB")
+                .build(request(sql, null));
+
+        assertEquals(2, hints.get(0).getItems().size());
+        assertEquals("'it\\'s'", sql.substring(
+                hints.get(0).getItems().get(0).getRange().getStartColumn() - 1,
+                hints.get(0).getItems().get(0).getRange().getEndColumn() - 1));
+    }
+
+    @Test
+    void usesDialectSpecificPostgresInformixAndTdengineDefaults() {
+        List<SqlCompletionCandidate> columns = List.of(
+                column("payload", "jsonb", 1),
+                column("tags", "text[]", 2),
+                column("binary_value", "bytea", 3),
+                column("created_at", "timestamp", 4));
+        String sql = "INSERT INTO demo (payload, tags, binary_value, created_at) VALUES (";
+
+        assertEquals(List.of("'{}'::jsonb", "'{}'", "'\\\\x'::bytea", "CURRENT_TIMESTAMP"),
+                new StandardSqlInsertEditorHintProvider("POSTGRESQL")
+                        .build(request(sql, null, columns)).get(0).getItems().stream()
+                        .map(SqlCompletionEditorHint.Item::getDefaultValue).toList());
+        assertEquals("CURRENT", new StandardSqlInsertEditorHintProvider("INFOMIX")
+                .build(request("INSERT INTO demo (created_at) VALUES (", null, columns))
+                .get(0).getItems().get(0).getDefaultValue());
+        assertEquals("NOW", new StandardSqlInsertEditorHintProvider("TDENGINE")
+                .build(request("INSERT INTO demo (created_at) VALUES (", null, columns))
+                .get(0).getItems().get(0).getDefaultValue());
+    }
+
+    @Test
+    void syntaxPluginsMustExplicitlyOptInToStandardEditorHints() {
+        ISqlSyntaxPlugin unsupported = new ISqlSyntaxPlugin() {
+            @Override
+            public String getDatabaseType() {
+                return "UNSUPPORTED";
+            }
+
+            @Override
+            public ISQLParser getSQLParser() {
+                return null;
+            }
+        };
+
+        assertTrue(unsupported.getSqlEditorHints(request("INSERT INTO demo (id) VALUES (", null)).isEmpty());
+    }
+
     private DbSqlCompletionRequest request(String sql,
                                            AtomicReference<DbSqlCompletionMetadataRequest> metadataRequest) {
+        return request(sql, metadataRequest, List.of(
+                column("id", "integer", 1),
+                column("enabled", "boolean", 2),
+                column("name", "varchar(100)", 3),
+                column("birthday", "date", 4),
+                column("created_at", "timestamp", 5),
+                column("payload", "blob", 6)));
+    }
+
+    private DbSqlCompletionRequest request(String sql,
+                                           AtomicReference<DbSqlCompletionMetadataRequest> metadataRequest,
+                                           List<SqlCompletionCandidate> columns) {
         return DbSqlCompletionRequest.of(sql, sql.length(), "H2", 0, request -> {
             if (metadataRequest != null) {
                 metadataRequest.set(request);
             }
-            return SqlCompletionMetadataResponse.of(List.of(
-                    column("id", "integer", 1),
-                    column("enabled", "boolean", 2),
-                    column("name", "varchar(100)", 3),
-                    column("birthday", "date", 4),
-                    column("created_at", "timestamp", 5),
-                    column("payload", "blob", 6)));
+            return SqlCompletionMetadataResponse.of(columns);
         });
     }
 

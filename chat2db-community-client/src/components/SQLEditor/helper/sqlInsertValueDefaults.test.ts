@@ -75,6 +75,30 @@ assert.equal(
   'returning to an empty VALUES row preserves the handled-row state and prevents a second auto-fill',
 );
 
+const twoInsertSql = `INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, '');
+INSERT INTO demo (id, enabled, name) VALUES (7, TRUE, 'second');`;
+const secondRowHints = [{
+  ...materializedHints[0],
+  rowRange: { startLineNumber: 2, startColumn: 46, endLineNumber: 2, endColumn: 63 },
+}];
+const rematerializedSecondRow = rematerializeInsertValueHints(twoInsertSql, secondRowHints);
+assert.deepEqual(
+  [...(rematerializedSecondRow[0].items || [])]
+    .sort((left, right) => left.columnIndex - right.columnIndex)
+    .map((item) => item.range?.startLineNumber),
+  [2, 2, 2],
+  'edited values remain attached to the nearest INSERT row instead of jumping to the first statement',
+);
+
+const escapedStringSql = "INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, 'it\\'s')";
+const escapedStringHints = rematerializeInsertValueHints(escapedStringSql, materializedHints);
+assert.equal(
+  [...(escapedStringHints[0].items || [])].sort((left, right) => left.columnIndex - right.columnIndex)[2]
+    .range?.endColumn,
+  escapedStringSql.lastIndexOf(')') + 1,
+  'backslash-escaped quotes do not shift later label ranges',
+);
+
 assert.deepEqual(
   getInsertValueAutoFill(
     insertWithEditorClosingParenthesis,
