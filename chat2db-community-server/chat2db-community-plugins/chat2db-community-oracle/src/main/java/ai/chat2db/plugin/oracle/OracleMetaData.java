@@ -137,7 +137,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     public List<Table> tables(Connection connection, String databaseName, String schemaName, String tableName) {
         String sql = String.format(SELECT_TABLE_SQL, schemaName);
         if (StringUtils.isNotBlank(tableName)) {
-            sql = sql + " and A.TABLE_NAME = '" + tableName + "'";
+            sql = sql + " and A.TABLE_NAME = '" + tableName.replace("'", "''") + "'";
         }
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             List<Table> tables = new ArrayList<>();
