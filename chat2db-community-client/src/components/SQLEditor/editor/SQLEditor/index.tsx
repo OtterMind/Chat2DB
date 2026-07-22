@@ -409,7 +409,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         autoFillEditInProgressRef.current = false;
         const preservedValueTypeHints = sqlValueTypeHintSnapshotRef.current === sql
           ? sqlValueTypeHintsRef.current
-          : rematerializeInsertValueHints(sql, sqlValueTypeHintsRef.current);
+          : rematerializeInsertValueHints(sql, sqlValueTypeHintsRef.current, sqlValueTypeHintSnapshotRef.current);
         if (!preservedValueTypeHints.length) {
           clearSqlValueTypeHints();
         }

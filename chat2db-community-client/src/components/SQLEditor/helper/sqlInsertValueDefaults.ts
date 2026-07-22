@@ -73,10 +73,21 @@ export function materializeInsertValueAutoFillHints(
 export function rematerializeInsertValueHints(
   sql: string,
   editorHints: ISqlEditorHintVO[] | null | undefined,
+  previousSql?: string | null,
 ): ISqlEditorHintVO[] {
-  return (editorHints || [])
-    .filter((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length)
-    .flatMap((hint) => rematerializeInsertValueHint(sql, hint));
+  const targetHints = (editorHints || [])
+    .filter((hint) => hint.type === 'INSERT_VALUE' && hint.items?.length);
+  if (!previousSql || previousSql === sql) {
+    return targetHints.flatMap((hint) => rematerializeInsertValueHint(sql, hint));
+  }
+
+  const previousRows = findValuesRows(previousSql);
+  const currentRows = findValuesRows(sql);
+  return targetHints.flatMap((hint) => {
+    const preferredOffset = hintRowStartOffset(previousSql, hint);
+    const previousRowIndex = nearestRowIndex(previousRows, preferredOffset);
+    return rematerializeInsertValueHint(sql, hint, currentRows[previousRowIndex]);
+  });
 }
 
 export function mergeInsertValueHints(
@@ -99,7 +110,11 @@ export function mergeInsertValueHints(
   return merged.sort((left, right) => hintRowStartOffset(sql, left) - hintRowStartOffset(sql, right));
 }
 
-function rematerializeInsertValueHint(sql: string, targetHint: ISqlEditorHintVO): ISqlEditorHintVO[] {
+function rematerializeInsertValueHint(
+  sql: string,
+  targetHint: ISqlEditorHintVO,
+  assignedRanges?: OffsetRange[],
+): ISqlEditorHintVO[] {
   const orderedItems = [...(targetHint?.items || [])].sort((left, right) => left.columnIndex - right.columnIndex);
   if (!orderedItems.length || orderedItems.some((item) => !item.defaultValue)) {
     return [];
@@ -108,7 +123,8 @@ function rematerializeInsertValueHint(sql: string, targetHint: ISqlEditorHintVO)
   const preferredOffset = targetHint.rowRange
     ? offsetAtPosition(sql, targetHint.rowRange.startLineNumber, targetHint.rowRange.startColumn)
     : undefined;
-  const matchingRanges = findValuesRow(sql, orderedItems.map((item) => item.defaultValue!), preferredOffset);
+  const matchingRanges = assignedRanges
+    || findValuesRow(sql, orderedItems.map((item) => item.defaultValue!), preferredOffset);
   if (!matchingRanges) {
     return [];
   }
@@ -144,37 +160,46 @@ interface OffsetRange {
 }
 
 function findValuesRow(sql: string, expectedValues: string[], preferredOffset?: number): OffsetRange[] | null {
-  const valuesPattern = /\bvalues?\s*\(/gi;
-  const matchingRows: OffsetRange[][] = [];
-  const fallbackRows: OffsetRange[][] = [];
-  let match = valuesPattern.exec(sql);
-  while (match) {
-    const ranges = scanValuesRow(sql, valuesPattern.lastIndex);
-    if (ranges?.length) {
-      fallbackRows.push(ranges);
-    }
-    if (
-      ranges?.length === expectedValues.length
-      && ranges.every((range, index) =>
-        normalizeSqlValue(sql.substring(range.start, range.end)) === normalizeSqlValue(expectedValues[index]),
-      )
-    ) {
-      matchingRows.push(ranges);
-    }
-    match = valuesPattern.exec(sql);
-  }
-  const candidates = preferredOffset === undefined && matchingRows.length ? matchingRows : fallbackRows;
+  const rows = findValuesRows(sql);
+  const matchingRows = rows.filter((ranges) =>
+    ranges.length === expectedValues.length
+    && ranges.every((range, index) =>
+      normalizeSqlValue(sql.substring(range.start, range.end)) === normalizeSqlValue(expectedValues[index]),
+    ),
+  );
+  const candidates = preferredOffset === undefined && matchingRows.length ? matchingRows : rows;
   if (!candidates.length) {
     return null;
   }
   if (preferredOffset === undefined) {
     return candidates[0];
   }
-  return candidates.reduce((closest, candidate) =>
-    Math.abs(candidate[0].start - preferredOffset) < Math.abs(closest[0].start - preferredOffset)
-      ? candidate
-      : closest,
-  );
+  return candidates[nearestRowIndex(candidates, preferredOffset)];
+}
+
+function findValuesRows(sql: string): OffsetRange[][] {
+  const valuesPattern = /\bvalues?\s*\(/gi;
+  const rows: OffsetRange[][] = [];
+  let match = valuesPattern.exec(sql);
+  while (match) {
+    const ranges = scanValuesRow(sql, valuesPattern.lastIndex);
+    if (ranges?.length) {
+      rows.push(ranges);
+    }
+    match = valuesPattern.exec(sql);
+  }
+  return rows;
+}
+
+function nearestRowIndex(rows: OffsetRange[][], preferredOffset: number): number {
+  if (!rows.length) {
+    return -1;
+  }
+  return rows.reduce((closestIndex, candidate, candidateIndex) =>
+    Math.abs(candidate[0].start - preferredOffset) < Math.abs(rows[closestIndex][0].start - preferredOffset)
+      ? candidateIndex
+      : closestIndex,
+  0);
 }
 
 function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {

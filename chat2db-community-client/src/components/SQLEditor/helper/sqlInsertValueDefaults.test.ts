@@ -116,6 +116,20 @@ assert.deepEqual(
   'editing an earlier INSERT keeps all accumulated label groups attached to their rows',
 );
 
+const formattedThreeInsertSql = [1, 2, 3]
+  .map((id) => `INSERT INTO demo (id, enabled, name)\nVALUES\n  (\n    ${id},\n    false,\n    'name-${id}'\n  );`)
+  .join('\n');
+const formattedThreeInsertHints = rematerializeInsertValueHints(
+  formattedThreeInsertSql,
+  accumulatedHints,
+  threeInsertSql,
+);
+assert.deepEqual(
+  formattedThreeInsertHints.map((hint) => hint.rowRange?.startLineNumber),
+  [4, 11, 18],
+  'formatting multiple INSERT statements maps each label group to the same VALUES row ordinal',
+);
+
 const escapedStringSql = "INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, 'it\\'s')";
 const escapedStringHints = rematerializeInsertValueHints(escapedStringSql, materializedHints);
 assert.equal(
