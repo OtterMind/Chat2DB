@@ -36,7 +36,7 @@ const SQLPreview = memo<SQLPreviewProps>((props) => {
     wrap = true,
     renderAddons,
   } = props;
-  const { styles, cx } = useStyles();
+  const { styles, cx } = useStyles({ wrap });
 
   const wrapperStyle = useMemo<CSSProperties>(
     () => ({
@@ -52,6 +52,7 @@ const SQLPreview = memo<SQLPreviewProps>((props) => {
       style={wrapperStyle}
       data-sql-preview="canonical"
       data-sql-preview-source={source}
+      data-sql-preview-wrap={wrap ? 'wrap' : 'scroll'}
     >
       <CodeHighlighter
         className={cx(styles.highlighter, surface === 'transparent' && styles.transparentHighlighter)}

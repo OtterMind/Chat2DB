@@ -259,6 +259,7 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
         language={lang}
         source="ai-markdown-sql-code-block"
         type="block"
+        wrap={false}
         renderAddons={
           onPinSql
             ? () => (
