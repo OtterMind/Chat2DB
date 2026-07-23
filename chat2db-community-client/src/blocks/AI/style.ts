@@ -9,6 +9,7 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       min-width: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
       background-color: ${token.colorBgLayout};
     `,
 
@@ -142,25 +143,35 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
 
     chatPanel: css`
       flex: 1;
+      width: 100%;
+      min-width: 0;
       min-height: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
       padding: 0 0 10px;
     `,
 
     chatPanelCenter: css`
       flex: 1;
+      width: 100%;
+      min-width: 0;
       min-height: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
+      overflow: hidden;
       padding: 0 0 14px;
     `,
 
     messageList: css`
       flex: 1;
+      width: 100%;
+      min-width: 0;
       min-height: 0;
-      overflow: auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      box-sizing: border-box;
       padding: 14px 0 10px;
     `,
 

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const previewSource = readFileSync('src/components/SQLPreview/index.tsx', 'utf8');
 const styleSource = readFileSync('src/components/SQLPreview/style.ts', 'utf8');
 const aiSource = readFileSync('src/blocks/AI/index.tsx', 'utf8');
+const aiStyleSource = readFileSync('src/blocks/AI/style.ts', 'utf8');
 
 assert.match(previewSource, /useStyles\(\{ wrap \}\)/, 'SQLPreview must apply its wrap mode to local styles');
 assert.match(
@@ -30,6 +31,16 @@ assert.match(
   aiSource,
   /source="ai-markdown-sql-code-block"[\s\S]*?type="block"[\s\S]*?wrap=\{false\}/,
   'AI SQL fences must use the contained horizontal-scroll layout',
+);
+assert.match(
+  aiStyleSource,
+  /messageList: css`[\s\S]*?overflow-x: hidden;[\s\S]*?overflow-y: auto;/,
+  'the message list must scroll vertically without shifting the whole conversation horizontally',
+);
+assert.match(
+  aiStyleSource,
+  /chatPanel: css`[\s\S]*?min-width: 0;[\s\S]*?overflow: hidden;/,
+  'the chat panel must contain descendant intrinsic widths',
 );
 
 console.log('SQLPreview layout contract tests passed');
