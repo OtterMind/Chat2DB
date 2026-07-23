@@ -123,12 +123,7 @@ const JsonAwareMonacoEditor = ({ id, value, readOnly, onChange, onJsonChange }: 
       id={id}
       language="plaintext"
       didMount={handleEditorDidMount}
-      options={{
-        lineNumbers: 'off',
-        readOnly,
-        wordWrap: 'off',
-        scrollbar: { horizontal: 'auto' },
-      }}
+      options={{ lineNumbers: 'off', readOnly }}
     />
   );
 };

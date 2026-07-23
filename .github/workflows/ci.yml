@@ -63,6 +63,9 @@ jobs:
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
 
+      - name: Run result inspector contract
+        run: yarn run test:result-inspector
+
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
 
