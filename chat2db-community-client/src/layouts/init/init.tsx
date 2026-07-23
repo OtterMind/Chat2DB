@@ -5,8 +5,12 @@ import useDocumentListener from '@/hooks/useDocumentListener';
 import useCopyFocusData from '@/hooks/useFocusData';
 import useJavaMessageReceiver from '@/jcef/useProcessJavaPush';
 import miscServices from '@/service/misc';
+import supportedDatabaseService from '@/service/supportedDatabase';
 import { useGlobalStore } from '@/store/global';
 import { clearOlderLocalStorage } from '@/utils';
+import { registerDynamicDatabases } from '@/utils/dynamicDatabaseRegistry';
+import { databaseMap, databaseTypeList } from '@/constants/database';
+import { dataSourceFormConfigs } from '@/components/ConnectionEdit/config/dataSource';
 import { isDesktop } from '@/utils/env';
 import { initGoogleAds } from '@/utils/googleAds';
 import { initializeDevEnvironmentIcon } from '@/utils/initLocalIcon';
@@ -93,6 +97,15 @@ const useInit = () => {
     registerMessage();
     registerNotification();
     initializeMonacoEditor();
+    // Surface backend configuration-only databases without a client rebuild.
+    supportedDatabaseService
+      .listSupported({})
+      .then((summaries) => {
+        registerDynamicDatabases(summaries, { databaseMap, databaseTypeList, dataSourceFormConfigs });
+      })
+      .catch(() => {
+        // Older backends without the endpoint keep the built-in list.
+      });
   }, [serviceStatus, reload, isDesktop]);
 };
 

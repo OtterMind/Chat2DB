@@ -31,6 +31,7 @@
     "test:ai-markdown-code": "tsx src/blocks/AI/markdownCode.test.tsx",
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
+    "test:dynamic-database-registry": "tsx src/utils/dynamicDatabaseRegistry.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
     "test:redis-explorer": "tsx src/blocks/RedisAllData/redisExplorer.test.ts",
     "test:search-result-query-composer": "tsx src/blocks/SearchResult/components/ScreeningResult/queryComposer.test.ts",
