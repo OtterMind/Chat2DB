@@ -1,8 +1,9 @@
 package ai.chat2db.community.web.api.controller;
 
+import ai.chat2db.community.domain.api.config.SupportedDatabaseSummary;
+import ai.chat2db.community.domain.api.service.db.IDbSupportedDatabaseService;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
-import ai.chat2db.spi.config.SupportedDatabaseRegistry;
-import ai.chat2db.spi.config.SupportedDatabaseSummary;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class DbSupportedDatabaseController {
 
+    @Autowired
+    private IDbSupportedDatabaseService supportedDatabaseService;
+
     /**
      * Lists all database types registered by plugins.
      * <p>
@@ -23,6 +27,6 @@ public class DbSupportedDatabaseController {
      */
     @GetMapping("/supported")
     public ListResult<SupportedDatabaseSummary> supported() {
-        return ListResult.of(SupportedDatabaseRegistry.listSupportedDatabases());
+        return ListResult.of(supportedDatabaseService.listSupportedDatabases());
     }
 }

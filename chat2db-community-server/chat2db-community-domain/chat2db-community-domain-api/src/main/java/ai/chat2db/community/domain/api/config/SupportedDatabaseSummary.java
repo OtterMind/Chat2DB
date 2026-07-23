@@ -1,4 +1,4 @@
-package ai.chat2db.spi.config;
+package ai.chat2db.community.domain.api.config;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

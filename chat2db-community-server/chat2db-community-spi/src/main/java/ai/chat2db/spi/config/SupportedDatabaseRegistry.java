@@ -1,6 +1,7 @@
 package ai.chat2db.spi.config;
 
 import ai.chat2db.community.domain.api.config.DBConfig;
+import ai.chat2db.community.domain.api.config.SupportedDatabaseSummary;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.sql.Chat2DBContext;
