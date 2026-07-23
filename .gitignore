@@ -80,3 +80,4 @@ package-lock.json
 /chat2db-community-server/.apifox-helper.properties
 /chat2db-community-server/.easy.api.config
 /chat2db-community-server/latest_version.json
+derby.log
