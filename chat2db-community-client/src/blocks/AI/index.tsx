@@ -38,6 +38,11 @@ import AIModelConfigModal from './components/AIModelConfigModal';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
 import { MarkdownPre, resolveMarkdownCode, useIsMarkdownCodeBlock } from './markdownCode';
+import {
+  resetMessageContainerHorizontalScroll,
+  scrollMessageContainerTo,
+  scrollMessageContainerToBottom,
+} from './messageListScroll';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -522,7 +527,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const chatInputRef = useRef<ChatInputPropsRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
-  const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const messageElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingViewportAnchorRef = useRef<string | null>(null);
   const currentRoundBlockRef = useRef<HTMLDivElement | null>(null);
@@ -562,7 +566,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
 
     lockScrollTracking('auto');
-    container.scrollTop += delta;
+    scrollMessageContainerTo(container, container.scrollTop + delta);
   }, [lockScrollTracking]);
 
   const scrollMessageToTop = useCallback((messageId: string, behavior: ScrollBehavior = 'auto') => {
@@ -573,10 +577,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     lockScrollTracking(behavior);
     const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
-    container.scrollTo({
-      top: nextScrollTop,
-      behavior,
-    });
+    scrollMessageContainerTo(container, nextScrollTop, behavior);
 
     if (topAlignmentTimerRef.current !== null) {
       window.clearTimeout(topAlignmentTimerRef.current);
@@ -603,17 +604,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       return;
     }
     lockScrollTracking(behavior);
-    if (bottomSentinelRef.current) {
-      bottomSentinelRef.current.scrollIntoView({
-        block: 'end',
-        behavior,
-      });
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior,
-    });
+    scrollMessageContainerToBottom(container, behavior);
   }, [lockScrollTracking]);
 
   const getMessageListContentHeight = useCallback(() => {
@@ -678,13 +669,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, []);
 
   const handleMessageListScroll = useCallback(() => {
-    if (suppressScrollTrackingRef.current) {
-      return;
-    }
     const container = messageListRef.current;
     if (!container) {
       return;
     }
+    if (suppressScrollTrackingRef.current) {
+      return;
+    }
+    resetMessageContainerHorizontalScroll(container);
     const isAtBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
@@ -1989,7 +1981,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
               <div className={styles.contentWidth} ref={messageContentRef}>
                 {renderMessages()}
-                <div ref={bottomSentinelRef} aria-hidden="true" />
               </div>
             </div>
           )}

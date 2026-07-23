@@ -10,6 +10,7 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      overflow: clip;
       background-color: ${token.colorBgLayout};
     `,
 
