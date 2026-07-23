@@ -455,10 +455,6 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
     // Code block.
     codeBlockWrap: css`
       margin: 10px 0;
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
       border-radius: 10px;
       overflow: hidden;
       border: 1px solid ${token.colorBorderSecondary};
@@ -520,9 +516,6 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
     codeBlockPre: css`
       margin: 0;
       padding: 14px 16px;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
       overflow-x: auto;
       background-color: ${token.colorBgContainer};
 

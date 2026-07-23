@@ -37,7 +37,6 @@ import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
-import { MarkdownPre, resolveMarkdownCode, useIsMarkdownCodeBlock } from './markdownCode';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -177,13 +176,13 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
   const [copied, setCopied] = useState(false);
   const onTableClick = React.useContext(TableClickContext);
   const onPinSql = React.useContext(PinSqlContext);
-  const codeKind = resolveMarkdownCode(className, useIsMarkdownCodeBlock());
+  const match = /language-(\w+)/.exec(className || '');
 
   const submitEditorChartCallback = (data: any) => {
     console.log('Chart updated:', data);
   };
 
-  if (codeKind.kind === 'inline') {
+  if (!match) {
     // checks whether it is a clickable table name prefixed by table::
     const text = String(children).replace(/\n$/, '');
     const tableMatch = text.match(/^table::(.+)$/);
@@ -214,7 +213,7 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
     return <code className={styles.inlineCode}>{children}</code>;
   }
 
-  const lang = codeKind.language;
+  const lang = match[1];
   const code = String(children).replace(/\n$/, '');
 
   // ── Chart rendering ──
@@ -1682,10 +1681,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       <PinSqlContext.Provider value={handlePinSql}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          components={{
-            pre: MarkdownPre,
-            code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>,
-          }}
+          components={{ code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>> }}
         >
           {normalizeAiMarkdown(preprocessTableRefs(content))}
         </ReactMarkdown>

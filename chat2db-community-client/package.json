@@ -28,7 +28,6 @@
     "lint:style": "stylelint \"src/**/*.{css,less}\" --max-warnings=0",
     "test:i18n": "node ./scripts/validate-i18n.cjs",
     "test:active-tab-locator": "tsx src/pages/main/workspace/utils/activeTabLocator.test.ts",
-    "test:ai-markdown-code": "tsx src/blocks/AI/markdownCode.test.tsx",
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
