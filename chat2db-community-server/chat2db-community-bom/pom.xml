@@ -64,7 +64,7 @@
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <vavr.version>0.10.4</vavr.version>
         <jsch.version>0.2.9</jsch.version>
-        <bouncycastle.version>1.71</bouncycastle.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
         <jsqlparser.version>4.9</jsqlparser.version>
         <jts.version>1.19.0</jts.version>
         <tika.version>2.7.0</tika.version>
