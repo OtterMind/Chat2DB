@@ -1,5 +1,5 @@
 import { AuthenticationType, InputType } from '@/components/ConnectionEdit/config/enum';
-import type { IConnectionConfig } from '@/components/ConnectionEdit/config/types';
+import type { IConnectionConfig, IFormItem } from '@/components/ConnectionEdit/config/types';
 import type { ISupportedDatabaseSummary } from '@/service/supportedDatabase';
 import type { IDatabase } from '@/typings';
 
@@ -10,7 +10,8 @@ import type { IDatabase } from '@/typings';
  * Built-in types stay hardcoded; only unknown types are added.
  */
 
-export const DYNAMIC_DATABASE_ICON = 'icon-database';
+/** Neutral colourful glyph from the shared sprite; has a -dark variant. */
+export const DYNAMIC_DATABASE_ICON = 'icon-colourful-table';
 
 const localized = (text: string) =>
   ({ 'en-US': text, 'zh-CN': text, 'ja-JP': text, 'es-ES': text, 'ko-KR': text }) as any;
@@ -20,66 +21,101 @@ export function buildDynamicDatabase(summary: ISupportedDatabaseSummary): IDatab
     name: summary.name || summary.dbType,
     code: summary.dbType as IDatabase['code'],
     icon: DYNAMIC_DATABASE_ICON,
+    iconExistDark: true,
     supportDatabase: !!summary.supportDatabase,
     supportSchema: !!summary.supportSchema,
   };
 }
 
+interface ParsedUrlSample {
+  scheme: string;
+  host: string;
+  port: string;
+  database: string;
+}
+
+/** Parses a host/port style JDBC sample like jdbc:foo://localhost:1234/db. */
+export function parseHostPortUrlSample(urlSample: string | null | undefined): ParsedUrlSample | null {
+  const match = /^(jdbc:[A-Za-z0-9._-]+):\/\/([^:/?]+):(\d+)(?:\/(.*))?$/.exec(urlSample || '');
+  if (!match) {
+    return null;
+  }
+  return { scheme: match[1], host: match[2], port: match[3], database: match[4] || '' };
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const textItem = (name: string, label: string, defaultValue: string, required: boolean, width?: string): IFormItem => ({
+  defaultValue,
+  inputType: InputType.INPUT,
+  labelName: localized(label),
+  name,
+  required,
+  ...(width ? { styles: { width } } : {}),
+});
+
+const authenticationItem = (): IFormItem => ({
+  defaultValue: AuthenticationType.USERANDPASSWORD,
+  inputType: InputType.SELECT,
+  labelName: localized('Authentication'),
+  name: 'authenticationType',
+  required: true,
+  selects: [
+    {
+      label: 'User&Password',
+      value: AuthenticationType.USERANDPASSWORD,
+      items: [
+        textItem('user', 'User', '', false),
+        {
+          defaultValue: '',
+          inputType: InputType.PASSWORD,
+          labelName: localized('Password'),
+          name: 'password',
+          required: false,
+        },
+      ],
+    },
+    { label: 'NONE', value: AuthenticationType.NONE, items: [] },
+  ],
+  styles: { width: '50%' },
+});
+
 export function buildDynamicFormConfig(summary: ISupportedDatabaseSummary): IConnectionConfig {
   const urlSample = summary.urlSample || 'jdbc:';
+  const parsed = parseHostPortUrlSample(urlSample);
+  const alias = textItem('alias', 'Name', `@${summary.name || summary.dbType}`, true);
+
+  if (!parsed) {
+    // File/embedded style URL: the URL field is the single source of truth.
+    return {
+      type: summary.dbType as IConnectionConfig['type'],
+      baseInfo: {
+        items: [alias, textItem('url', 'URL', urlSample, true), authenticationItem()],
+        pattern: /jdbc:\S+/,
+        template: urlSample,
+      },
+      ssh: { items: [] },
+    };
+  }
+
+  // Host/port style: mirror the built-in configs so ConnectionEdit's
+  // pattern/template machinery keeps host, port, database, and URL in sync.
+  // Group convention (same as built-ins): 1=host, 2=port, 4=database.
+  const pattern = new RegExp(`${escapeRegExp(parsed.scheme)}:\\/\\/(.*):(\\d+)(\\/(.*))?`);
+  const template = `${parsed.scheme}://{host}:{port}/{database}`;
   return {
     type: summary.dbType as IConnectionConfig['type'],
     baseInfo: {
       items: [
-        {
-          defaultValue: `@${summary.name || summary.dbType}`,
-          inputType: InputType.INPUT,
-          labelName: localized('Name'),
-          name: 'alias',
-          required: true,
-        },
-        {
-          defaultValue: urlSample,
-          inputType: InputType.INPUT,
-          labelName: localized('URL'),
-          name: 'url',
-          required: true,
-        },
-        {
-          defaultValue: AuthenticationType.USERANDPASSWORD,
-          inputType: InputType.SELECT,
-          labelName: localized('Authentication'),
-          name: 'authenticationType',
-          required: true,
-          selects: [
-            {
-              label: 'User&Password',
-              value: AuthenticationType.USERANDPASSWORD,
-              items: [
-                {
-                  defaultValue: '',
-                  inputType: InputType.INPUT,
-                  labelName: localized('User'),
-                  name: 'user',
-                  required: false,
-                },
-                {
-                  defaultValue: '',
-                  inputType: InputType.PASSWORD,
-                  labelName: localized('Password'),
-                  name: 'password',
-                  required: false,
-                },
-              ],
-            },
-            { label: 'NONE', value: AuthenticationType.NONE, items: [] },
-          ],
-          styles: { width: '50%' },
-        },
+        alias,
+        textItem('host', 'Host', parsed.host, true, '70%'),
+        textItem('port', 'Port', parsed.port, false, '30%'),
+        authenticationItem(),
+        textItem('database', 'Database', parsed.database, false),
+        textItem('url', 'URL', urlSample, true),
       ],
-      // The URL field is the source of truth for dynamic types; accept any JDBC URL.
-      pattern: /jdbc:\S+/,
-      template: urlSample,
+      pattern,
+      template,
     },
     ssh: { items: [] },
   };
