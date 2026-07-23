@@ -39,7 +39,7 @@
         <druid.version>1.2.18</druid.version>
         <sa-token.version>1.34.0</sa-token.version>
         <forest.version>1.5.32</forest.version>
-        <okhttp.version>3.14.9</okhttp.version>
+        <okhttp.version>4.9.2</okhttp.version>
         <flyway.version>9.19.4</flyway.version>
         <chatgpt-java.version>1.0.8</chatgpt-java.version>
         <openai-gpt3-java.version>0.12.0</openai-gpt3-java.version>
