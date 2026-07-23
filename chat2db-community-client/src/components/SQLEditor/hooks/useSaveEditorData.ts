@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ConsoleStatus, WorkspaceTabType } from '@/constants';
+import { ConsoleStatus, SAVED_CONSOLE_UPDATED_EVENT, WorkspaceTabType } from '@/constants';
 import historyServer from '@/service/history';
 import i18n from '@/i18n';
 import { useWorkspaceStore } from '@/store/workspace';
@@ -46,7 +46,7 @@ export const useSaveEditorData = (props: IProps) => {
         saveStatus === ConsoleStatus.RELEASE ||
         savedConsoleList?.some((item) => item.id === boundInfo?.consoleId)),
   );
-  
+
   const indexDB = useIndexDBStore((s) => ({
     getValue: s.getValue,
     setValue: s.setValue,
@@ -89,6 +89,18 @@ export const useSaveEditorData = (props: IProps) => {
 
     historyServer.updateSavedConsole(p).then(() => {
       getSavedConsoleList();
+      if (boundInfo.dataSourceId !== undefined && boundInfo.databaseType !== undefined) {
+        window.dispatchEvent(
+          new CustomEvent(SAVED_CONSOLE_UPDATED_EVENT, {
+            detail: {
+              dataSourceId: boundInfo.dataSourceId,
+              databaseType: boundInfo.databaseType,
+              databaseName: boundInfo.databaseName,
+              schemaName: boundInfo.schemaName,
+            },
+          }),
+        );
+      }
       indexDB.deleteValue(storageId);
       lastSyncConsole.current = value;
       setSaveStatus(ConsoleStatus.RELEASE);
