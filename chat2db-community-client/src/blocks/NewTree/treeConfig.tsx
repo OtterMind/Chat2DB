@@ -12,6 +12,7 @@ import { IConnectionDetails, TreeNodeData } from '@/typings';
 import { getDatabaseSupport } from '@/utils/database';
 import { canUseAccountManage, isMongodbTreeDataSource, isRedisTreeDataSource } from '@/utils/databaseJudgments';
 import { v4 as uuid } from 'uuid';
+import { createSavedConsoleTreeNodeKey } from '@/store/tree/backgroundRefresh';
 
 const fileIcon = 'icon-colourful-folder-close';
 const unfoldFileIcon = 'icon-colourful-folder-open';
@@ -169,9 +170,8 @@ export interface TreeNodeLoadResult {
   total?: number;
 }
 
-export const normalizeTreeNodeLoadResult = (
-  result: TreeNodeData[] | TreeNodeLoadResult,
-): TreeNodeLoadResult => (Array.isArray(result) ? { children: result } : result);
+export const normalizeTreeNodeLoadResult = (result: TreeNodeData[] | TreeNodeLoadResult): TreeNodeLoadResult =>
+  Array.isArray(result) ? { children: result } : result;
 
 // receives an object. When the value in the object contains '' or null, it is converted to undefined.
 export const formatObject = (obj: Record<string, any>): Record<string, string | any> => {
@@ -1505,14 +1505,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
       });
     },
     createTreeNodeKey: (params) => {
-      const { dataSourceId, databaseName, schemaName, consoleId } = formatObject(params);
-      return [
-        `dataSource_${dataSourceId}`,
-        `database_${databaseName}`,
-        `schema_${schemaName}`,
-        `console_${consoleId}`,
-        `uuid_${uuid()}`,
-      ].join('-');
+      return createSavedConsoleTreeNodeKey(formatObject(params));
     },
   },
 };

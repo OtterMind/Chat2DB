@@ -1,6 +1,6 @@
 import NewTree from '@/blocks/NewTree';
 import CreateDatabase from '@/components/CreateDatabase';
-import { TreeNodeType } from '@/constants';
+import { SAVED_CONSOLE_UPDATED_EVENT, TreeNodeType, type SavedConsoleUpdatedEventDetail } from '@/constants';
 import i18n from '@/i18n';
 import MainSecondaryPanel from '@/pages/main/components/MainSecondaryPanel';
 import { useTreeStore } from '@/store/tree';
@@ -179,8 +179,7 @@ const WorkspaceLeft = memo(() => {
     { label: i18n('workspace.explorer.databases'), value: 'database' },
   ];
   const locateDisabled =
-    !activeTabLocateTarget ||
-    (!showExplorerPanel && activeTabLocateTarget.surface === 'localFile');
+    !activeTabLocateTarget || (!showExplorerPanel && activeTabLocateTarget.surface === 'localFile');
 
   useEffect(() => {
     if (!shouldProbeDesktopBridge || desktopBridgeReady) {
@@ -206,6 +205,24 @@ const WorkspaceLeft = memo(() => {
       }
     };
   }, [desktopBridgeReady, shouldProbeDesktopBridge]);
+
+  useEffect(() => {
+    const handleSavedConsoleUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SavedConsoleUpdatedEventDetail>).detail;
+      if (!detail) {
+        return;
+      }
+      void useTreeStore.getState().refreshTreeNodeDataInBackground({
+        ...detail,
+        treeNodeType: TreeNodeType.SAVE_CONSOLES,
+      });
+    };
+
+    window.addEventListener(SAVED_CONSOLE_UPDATED_EVENT, handleSavedConsoleUpdated);
+    return () => {
+      window.removeEventListener(SAVED_CONSOLE_UPDATED_EVENT, handleSavedConsoleUpdated);
+    };
+  }, []);
 
   const selectDatabaseTreeNode = useCallback(
     (locatedTreeNode: LocatedTreeNode, options?: { clearSearch?: boolean }) => {
@@ -345,15 +362,14 @@ const WorkspaceLeft = memo(() => {
     [activeTabLocateTarget, locateActiveWorkspaceTab, setActivePanel, treeDataReady],
   );
 
-  // Manual panel selection remains authoritative until workspace-tab activation changes.
   useLayoutEffect(() => {
     if (explorerSessionActivationRef.current !== null && !isExplorerSessionActivation) {
       explorerSessionActivationRef.current = null;
     }
-    if (showExplorerPanel && autoFollowPanel) {
+    if (showExplorerPanel && autoFollowPanel && activePanel !== autoFollowPanel) {
       setActivePanel(autoFollowPanel);
     }
-  }, [activeConsoleId, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
+  }, [activePanel, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
 
   useEffect(() => {
     if (!pendingManualDatabaseLocateRef.current) {
