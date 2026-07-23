@@ -41,6 +41,10 @@ public class DBConfig {
     private String identifierQuotes;
 
 
+    /** Inline SVG icon for this database, served to clients for rendering. */
+    private String icon;
+
+
 
 
     private DriverConfig defaultDriverConfig;
@@ -146,6 +150,14 @@ public class DBConfig {
 
     public void setSqlDialect(String sqlDialect) {
         this.sqlDialect = sqlDialect;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
     }
 
     public String getIdentifierQuotes() {

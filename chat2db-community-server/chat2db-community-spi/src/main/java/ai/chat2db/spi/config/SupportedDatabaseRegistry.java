@@ -48,6 +48,7 @@ public final class SupportedDatabaseRegistry {
                     .sqlDialect(config.getSqlDialect())
                     .jdbcDriverClass(driver == null ? null : driver.getJdbcDriverClass())
                     .urlSample(driver == null ? null : driver.getUrl())
+                    .icon(config.getIcon())
                     .build());
         }
         result.sort(Comparator.comparing(SupportedDatabaseSummary::getName, String.CASE_INSENSITIVE_ORDER));

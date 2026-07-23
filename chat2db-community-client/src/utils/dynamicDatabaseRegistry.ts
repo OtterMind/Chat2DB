@@ -5,23 +5,58 @@ import type { IDatabase } from '@/typings';
 
 /**
  * Turns backend-registered database types that the frontend does not know about
- * into runtime entries for the database list and the connection form, so a
- * configuration-only database appears in the UI without a client rebuild.
- * Built-in types stay hardcoded; only unknown types are added.
+ * into runtime entries for the database list, the icon sprite, and the
+ * connection form, so a configuration-only database appears in the UI without
+ * a client rebuild. Built-in types stay hardcoded; only unknown types are
+ * added. The shared form items (env, storage, port, ssh) are injected by the
+ * caller so dynamic forms reuse exactly the objects the built-in forms use.
  */
 
-/** Neutral colourful glyph from the shared sprite; has a -dark variant. */
+/** Fallback glyph from the shared colourful sprite; has a -dark variant. */
 export const DYNAMIC_DATABASE_ICON = 'icon-colourful-table';
 
 const localized = (text: string) =>
   ({ 'en-US': text, 'zh-CN': text, 'ja-JP': text, 'es-ES': text, 'ko-KR': text }) as any;
 
+export interface SharedFormItems {
+  envItem: IFormItem;
+  storageItem: IFormItem;
+  portItem: IFormItem;
+  sshConfig: IConnectionConfig['ssh'];
+}
+
+/** Sprite symbol id for a dynamic database's own icon. */
+export const dynamicIconCode = (dbType: string) => `icon-colourful-dyn-${dbType.toLowerCase()}`;
+
+/**
+ * Builds one sprite <symbol> from a backend-provided inline SVG, or null when
+ * the summary has no usable icon.
+ */
+export function buildIconSymbol(summary: ISupportedDatabaseSummary): string | null {
+  const svg = summary.icon || '';
+  const match = /<svg[^>]*viewBox="([^"]+)"[^>]*>([\s\S]*)<\/svg>/.exec(svg);
+  if (!match) {
+    return null;
+  }
+  return `<symbol id="${dynamicIconCode(summary.dbType)}" viewBox="${match[1]}">${match[2]}</symbol>`;
+}
+
+/** Wraps symbols into one hidden sprite ready for DOM injection. */
+export function buildIconSprite(summaries: ISupportedDatabaseSummary[]): string {
+  const symbols = summaries
+    .map(buildIconSymbol)
+    .filter(Boolean)
+    .join('');
+  return symbols ? `<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">${symbols}</svg>` : '';
+}
+
 export function buildDynamicDatabase(summary: ISupportedDatabaseSummary): IDatabase {
+  const hasOwnIcon = !!buildIconSymbol(summary);
   return {
     name: summary.name || summary.dbType,
     code: summary.dbType as IDatabase['code'],
-    icon: DYNAMIC_DATABASE_ICON,
-    iconExistDark: true,
+    icon: hasOwnIcon ? dynamicIconCode(summary.dbType) : DYNAMIC_DATABASE_ICON,
+    ...(hasOwnIcon ? {} : { iconExistDark: true }),
     supportDatabase: !!summary.supportDatabase,
     supportSchema: !!summary.supportSchema,
   };
@@ -41,6 +76,15 @@ export function parseHostPortUrlSample(urlSample: string | null | undefined): Pa
     return null;
   }
   return { scheme: match[1], host: match[2], port: match[3], database: match[4] || '' };
+}
+
+/** Parses a file/embedded style sample like jdbc:hsqldb:file:demo. */
+export function parseFileUrlSample(urlSample: string | null | undefined): { prefix: string; file: string } | null {
+  const match = /^(jdbc:[A-Za-z0-9._-]+:(?:file:)?)([^/:][\s\S]*)?$/.exec(urlSample || '');
+  if (!match || (urlSample || '').includes('://')) {
+    return null;
+  }
+  return { prefix: match[1], file: match[2] || '' };
 }
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -80,44 +124,78 @@ const authenticationItem = (): IFormItem => ({
   styles: { width: '50%' },
 });
 
-export function buildDynamicFormConfig(summary: ISupportedDatabaseSummary): IConnectionConfig {
+export function buildDynamicFormConfig(
+  summary: ISupportedDatabaseSummary,
+  shared: SharedFormItems,
+): IConnectionConfig {
   const urlSample = summary.urlSample || 'jdbc:';
-  const parsed = parseHostPortUrlSample(urlSample);
   const alias = textItem('alias', 'Name', `@${summary.name || summary.dbType}`, true);
+  const ssh = shared.sshConfig || { items: [] };
+  const hostPort = parseHostPortUrlSample(urlSample);
 
-  if (!parsed) {
-    // File/embedded style URL: the URL field is the single source of truth.
+  if (hostPort) {
+    // Mirror the built-in configs so ConnectionEdit's pattern/template
+    // machinery keeps host, port, database, and URL in sync.
+    // Group convention (same as built-ins): 1=host, 2=port, 4=database.
+    const pattern = new RegExp(`${escapeRegExp(hostPort.scheme)}:\\/\\/(.*):(\\d+)(\\/(.*))?`);
+    const template = `${hostPort.scheme}://{host}:{port}/{database}`;
     return {
       type: summary.dbType as IConnectionConfig['type'],
       baseInfo: {
-        items: [alias, textItem('url', 'URL', urlSample, true), authenticationItem()],
-        pattern: /jdbc:\S+/,
-        template: urlSample,
+        items: [
+          alias,
+          shared.envItem,
+          shared.storageItem,
+          textItem('host', 'Host', hostPort.host, true, '70%'),
+          { ...shared.portItem, defaultValue: hostPort.port },
+          authenticationItem(),
+          textItem('database', 'Database', hostPort.database, false),
+          textItem('url', 'URL', urlSample, true),
+        ],
+        pattern,
+        template,
       },
-      ssh: { items: [] },
+      ssh,
     };
   }
 
-  // Host/port style: mirror the built-in configs so ConnectionEdit's
-  // pattern/template machinery keeps host, port, database, and URL in sync.
-  // Group convention (same as built-ins): 1=host, 2=port, 4=database.
-  const pattern = new RegExp(`${escapeRegExp(parsed.scheme)}:\\/\\/(.*):(\\d+)(\\/(.*))?`);
-  const template = `${parsed.scheme}://{host}:{port}/{database}`;
+  const file = parseFileUrlSample(urlSample);
+  if (file) {
+    // File/embedded style, mirroring the built-in SQLite shape with a real
+    // file picker; the file path and URL stay in sync via pattern/template.
+    return {
+      type: summary.dbType as IConnectionConfig['type'],
+      baseInfo: {
+        items: [
+          alias,
+          shared.envItem,
+          shared.storageItem,
+          {
+            defaultValue: file.file,
+            inputType: InputType.FILE,
+            labelName: localized('File'),
+            name: 'file',
+            required: true,
+          },
+          authenticationItem(),
+          textItem('url', 'URL', urlSample, true),
+        ],
+        pattern: new RegExp(`${escapeRegExp(file.prefix)}(.*)?`),
+        template: `${file.prefix}{file}`,
+      },
+      ssh,
+    };
+  }
+
+  // Last resort: the URL field is the single source of truth.
   return {
     type: summary.dbType as IConnectionConfig['type'],
     baseInfo: {
-      items: [
-        alias,
-        textItem('host', 'Host', parsed.host, true, '70%'),
-        textItem('port', 'Port', parsed.port, false, '30%'),
-        authenticationItem(),
-        textItem('database', 'Database', parsed.database, false),
-        textItem('url', 'URL', urlSample, true),
-      ],
-      pattern,
-      template,
+      items: [alias, shared.envItem, shared.storageItem, textItem('url', 'URL', urlSample, true), authenticationItem()],
+      pattern: /jdbc:\S+/,
+      template: urlSample,
     },
-    ssh: { items: [] },
+    ssh,
   };
 }
 
@@ -135,6 +213,7 @@ export interface DynamicDatabaseRegistries {
 export function registerDynamicDatabases(
   summaries: ISupportedDatabaseSummary[] | null | undefined,
   registries: DynamicDatabaseRegistries,
+  shared: SharedFormItems,
 ): string[] {
   const added: string[] = [];
   for (const summary of summaries || []) {
@@ -146,7 +225,7 @@ export function registerDynamicDatabases(
     registries.databaseMap[dbType] = database;
     registries.databaseTypeList.push(database);
     if (!registries.dataSourceFormConfigs.some((config) => config.type === (dbType as any))) {
-      registries.dataSourceFormConfigs.push(buildDynamicFormConfig(summary));
+      registries.dataSourceFormConfigs.push(buildDynamicFormConfig(summary, shared));
     }
     added.push(dbType);
   }

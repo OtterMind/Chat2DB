@@ -29,4 +29,6 @@ public class SupportedDatabaseSummary {
     private String jdbcDriverClass;
 
     private String urlSample;
+
+    private String icon;
 }
