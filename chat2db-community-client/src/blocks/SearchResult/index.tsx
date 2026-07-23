@@ -23,6 +23,8 @@ import SQLPreview from '@/components/SQLPreview';
 import ExecutionConsole from './components/ExecutionConsole';
 import ExecutionMessages, { IExecutionMessageItem } from './components/ExecutionMessages';
 import type { SqlExecutionLogRecord } from '@/service/sqlExecutionLog';
+import { useWorkspaceStore } from '@/store/workspace';
+import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import {
   ABSTRACT_TAB_ID,
   CONSOLE_TAB_ID,
@@ -161,6 +163,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   }, [consoleMode, props.forceOutputTab, props.resultBatchKey]);
 
   const onChange = useCallback((uuid) => {
+    const workspaceStore = useWorkspaceStore.getState();
+    if (isWorkspaceResultInspectorCode(workspaceStore.currentWorkspaceExtend)) {
+      workspaceStore.setCurrentWorkspaceExtend(null);
+    }
     dispatchTabSelection({ type: 'activate', tabId: uuid });
   }, []);
 
