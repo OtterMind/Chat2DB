@@ -35,6 +35,23 @@ class GenericPluginConfigLoadTest {
     }
 
     @Test
+    void identifierQuotesConfigDrivesTheMetadataQuotingBehavior() {
+        DBConfig tdengine = configs.stream()
+                .filter(config -> "TDENGINE".equals(config.getDbType())).findFirst().orElseThrow();
+        GenericMetaData quoted = new GenericMetaData(tdengine);
+        assertEquals("`my db`.`order table`", quoted.getMetaDataName("my db", "order table"),
+                "TDENGINE declares backtick quoting in generic.json");
+        assertEquals("db.orders", quoted.getMetaDataName("db", "orders"),
+                "plain identifiers stay unquoted");
+
+        DBConfig firebird = configs.stream()
+                .filter(config -> "FIREBIRD".equals(config.getDbType())).findFirst().orElseThrow();
+        assertEquals("\"order table\"", new GenericMetaData(firebird)
+                        .getSQLIdentifierProcessor().quoteIdentifier("order table"),
+                "dialects without identifierQuotes keep the ANSI default");
+    }
+
+    @Test
     void firebirdIsRegisteredThroughConfigurationOnly() {
         Optional<DBConfig> firebird = configs.stream()
                 .filter(config -> "FIREBIRD".equals(config.getDbType())).findFirst();

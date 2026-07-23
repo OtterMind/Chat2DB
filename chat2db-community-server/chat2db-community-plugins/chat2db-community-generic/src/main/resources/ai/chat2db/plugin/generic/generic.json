@@ -217,7 +217,8 @@
       "SQL_TABLE_DDL_RESULT": "Create Table",
       "SQL_CHANGE_DATABASE": "USE {database}"
     },
-    "name": "TDengine"
+    "name": "TDengine",
+    "identifierQuotes": "`"
   },
   {
     "dbType": "FIREBIRD",

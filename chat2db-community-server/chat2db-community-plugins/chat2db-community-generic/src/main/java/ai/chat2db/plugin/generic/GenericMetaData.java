@@ -23,6 +23,45 @@ import java.util.List;
 
 public class GenericMetaData extends DefaultMetaService implements IDbMetaData {
 
+    private final DBConfig injectedConfig;
+
+    public GenericMetaData() {
+        this(null);
+    }
+
+    public GenericMetaData(DBConfig dbConfig) {
+        this.injectedConfig = dbConfig;
+    }
+
+    private DBConfig currentConfig() {
+        if (injectedConfig != null) {
+            return injectedConfig;
+        }
+        try {
+            return Chat2DBContext.getDBConfig();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public ai.chat2db.spi.ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        DBConfig config = currentConfig();
+        ai.chat2db.spi.ConfigurableSQLIdentifierProcessor configured =
+                ai.chat2db.spi.ConfigurableSQLIdentifierProcessor.fromSpec(
+                        config == null ? null : config.getIdentifierQuotes());
+        return configured != null ? configured : super.getSQLIdentifierProcessor();
+    }
+
+    @Override
+    public String getMetaDataName(String... names) {
+        ai.chat2db.spi.ISQLIdentifierProcessor processor = getSQLIdentifierProcessor();
+        return java.util.Arrays.stream(names)
+                .filter(org.apache.commons.lang3.StringUtils::isNotBlank)
+                .map(processor::quoteIdentifier)
+                .collect(java.util.stream.Collectors.joining("."));
+    }
+
     @Override
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
         DBConfig dbConfig = Chat2DBContext.getDBConfig();

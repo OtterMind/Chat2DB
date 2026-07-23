@@ -23,7 +23,7 @@ public class GenericPlugin implements IPlugin {
 
     @Override
     public IDbMetaData getDbMetaData() {
-        return new GenericMetaData();
+        return new GenericMetaData(dbConfig);
     }
 
     @Override

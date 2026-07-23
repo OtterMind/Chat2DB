@@ -33,6 +33,14 @@ public class DBConfig {
     private String sqlDialect;
 
 
+    /**
+     * Identifier quote characters for this dialect: a single quote string used
+     * on both sides (for example {@code `}) or an {@code open:close} pair (for
+     * example {@code [:]}). When absent, the ANSI double quote applies.
+     */
+    private String identifierQuotes;
+
+
 
 
     private DriverConfig defaultDriverConfig;
@@ -138,6 +146,14 @@ public class DBConfig {
 
     public void setSqlDialect(String sqlDialect) {
         this.sqlDialect = sqlDialect;
+    }
+
+    public String getIdentifierQuotes() {
+        return identifierQuotes;
+    }
+
+    public void setIdentifierQuotes(String identifierQuotes) {
+        this.identifierQuotes = identifierQuotes;
     }
 
     public DriverConfig getDefaultDriverConfig() {
