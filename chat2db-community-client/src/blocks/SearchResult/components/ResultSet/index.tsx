@@ -640,5 +640,7 @@ export default memo<IProps>(
     );
   },
   (prevProps, nextProps) =>
-    prevProps.resultData === nextProps.resultData && prevProps.viewTable === nextProps.viewTable,
+    prevProps.active === nextProps.active &&
+    prevProps.resultData === nextProps.resultData &&
+    prevProps.viewTable === nextProps.viewTable,
 );
