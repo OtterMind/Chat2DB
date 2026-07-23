@@ -218,5 +218,23 @@
       "SQL_CHANGE_DATABASE": "USE {database}"
     },
     "name": "TDengine"
+  },
+  {
+    "dbType": "FIREBIRD",
+    "name": "Firebird",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "url": "jdbc:firebird://localhost:3050//var/lib/firebird/data/demo.fdb",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/firebirdsql/jdbc/jaybird/5.0.6.java11/jaybird-5.0.6.java11.jar"
+        ],
+        "jdbcDriver": "jaybird-5.0.6.java11.jar",
+        "jdbcDriverClass": "org.firebirdsql.jdbc.FBDriver"
+      }
+    ]
   }
 ]
