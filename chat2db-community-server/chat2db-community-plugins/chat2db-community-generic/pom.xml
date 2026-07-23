@@ -40,6 +40,14 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Same Jaybird build that generic.json pins for the FIREBIRD entry;
+             used only by the opt-in container integration test. -->
+        <dependency>
+            <groupId>org.firebirdsql.jdbc</groupId>
+            <artifactId>jaybird</artifactId>
+            <version>5.0.6.java11</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <resources>
