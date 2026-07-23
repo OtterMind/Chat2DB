@@ -236,5 +236,43 @@
         "jdbcDriverClass": "org.firebirdsql.jdbc.FBDriver"
       }
     ]
+  },
+  {
+    "dbType": "HSQLDB",
+    "name": "HSQLDB",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "url": "jdbc:hsqldb:file:demo",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/hsqldb/hsqldb/2.7.3/hsqldb-2.7.3.jar"
+        ],
+        "jdbcDriver": "hsqldb-2.7.3.jar",
+        "jdbcDriverClass": "org.hsqldb.jdbc.JDBCDriver"
+      }
+    ]
+  },
+  {
+    "dbType": "DERBY",
+    "name": "Apache Derby",
+    "supportDatabase": false,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "url": "jdbc:derby:demo;create=true",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/apache/derby/derbytools/10.16.1.1/derbytools-10.16.1.1.jar",
+          "https://repo1.maven.org/maven2/org/apache/derby/derby/10.16.1.1/derby-10.16.1.1.jar",
+          "https://repo1.maven.org/maven2/org/apache/derby/derbyshared/10.16.1.1/derbyshared-10.16.1.1.jar"
+        ],
+        "jdbcDriver": "derbytools-10.16.1.1.jar",
+        "jdbcDriverClass": "org.apache.derby.jdbc.EmbeddedDriver"
+      }
+    ]
   }
 ]
