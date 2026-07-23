@@ -24,6 +24,15 @@ public class DBConfig {
     private String name;
 
 
+    /**
+     * Database type whose SQL dialect this database is compatible with. Used as
+     * the fallback routing key for syntax plugins when no plugin is registered
+     * for {@link #dbType} itself, so configuration-only databases can reuse an
+     * existing dialect (for example a PostgreSQL-compatible engine).
+     */
+    private String sqlDialect;
+
+
 
 
     private DriverConfig defaultDriverConfig;
@@ -121,6 +130,14 @@ public class DBConfig {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getSqlDialect() {
+        return sqlDialect;
+    }
+
+    public void setSqlDialect(String sqlDialect) {
+        this.sqlDialect = sqlDialect;
     }
 
     public DriverConfig getDefaultDriverConfig() {
