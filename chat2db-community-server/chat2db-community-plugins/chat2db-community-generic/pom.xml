@@ -66,6 +66,18 @@
             <version>10.16.1.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- Proves the sqlDialect fallback resolves the PostgreSQL syntax plugin. -->
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.5.1</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Same Jaybird build that generic.json pins for the FIREBIRD entry;
              used only by the opt-in container integration test. -->
         <dependency>

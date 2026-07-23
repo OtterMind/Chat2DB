@@ -29,7 +29,15 @@ class GenericPluginSyntaxRoutingTest {
     @Test
     void fallsBackToConfiguredSqlDialectForUnknownDbType() {
         assertTrue(resolve("SOME_NEW_DB", "DUCKDB") instanceof DuckDBSyntaxPlugin);
-        assertTrue(resolve("QUESTDB", "tdengine") instanceof TDengineSyntaxPlugin);
+        assertTrue(resolve("SOME_TSDB", "tdengine") instanceof TDengineSyntaxPlugin);
+    }
+
+    @Test
+    void pgWireFamilyReusesThePostgresqlDialect() {
+        assertTrue(resolve("QUESTDB", "POSTGRESQL")
+                instanceof ai.chat2db.plugin.postgresql.PgsqlSyntaxPlugin);
+        assertTrue(resolve("CRATEDB", "POSTGRESQL")
+                instanceof ai.chat2db.plugin.postgresql.PgsqlSyntaxPlugin);
     }
 
     @Test

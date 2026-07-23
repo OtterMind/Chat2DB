@@ -274,5 +274,99 @@
         "jdbcDriverClass": "org.apache.derby.jdbc.EmbeddedDriver"
       }
     ]
+  },
+  {
+    "dbType": "QUESTDB",
+    "name": "QuestDB",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:8812/qdb"
+      }
+    ]
+  },
+  {
+    "dbType": "CRATEDB",
+    "name": "CrateDB",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5432/doc"
+      }
+    ]
+  },
+  {
+    "dbType": "YUGABYTEDB",
+    "name": "YugabyteDB",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5433/yugabyte"
+      }
+    ]
+  },
+  {
+    "dbType": "GREENPLUM",
+    "name": "Greenplum",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5432/gpadmin"
+      }
+    ]
+  },
+  {
+    "dbType": "TRINO",
+    "name": "Trino",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "url": "jdbc:trino://localhost:8080",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/io/trino/trino-jdbc/436/trino-jdbc-436.jar"
+        ],
+        "jdbcDriver": "trino-jdbc-436.jar",
+        "jdbcDriverClass": "io.trino.jdbc.TrinoDriver"
+      }
+    ]
   }
 ]
