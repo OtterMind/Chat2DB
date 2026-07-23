@@ -8,7 +8,7 @@ import {
 import type { TreeNodeData } from '@/typings';
 import { SAVED_CONSOLE_UPDATED_EVENT } from '@/constants/workspace';
 import { DatabaseTypeCode } from '@/constants/common';
-import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
+import { emitSavedConsoleRecordUpdated, emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 
 const savedConsoleKey = 'dataSource_1-database_chat2db-schema_undefined-consoles_chat2dbCatalogue';
 
@@ -235,6 +235,37 @@ function testSavedConsoleUpdateEventScope() {
   }
 }
 
+function testRenamedSavedConsoleEmitsScopedUpdate() {
+  const events: Event[] = [];
+  const target = {
+    dispatchEvent(event: Event) {
+      events.push(event);
+      return true;
+    },
+  } as EventTarget;
+
+  const emitted = emitSavedConsoleRecordUpdated(
+    {
+      dataSourceId: 1,
+      type: DatabaseTypeCode.MYSQL,
+      databaseName: 'chat2db',
+      schemaName: 'public',
+    },
+    target,
+  );
+  const detail = (events[0] as CustomEvent | undefined)?.detail;
+  if (
+    !emitted ||
+    events.length !== 1 ||
+    detail?.dataSourceId !== 1 ||
+    detail?.databaseType !== DatabaseTypeCode.MYSQL ||
+    detail?.databaseName !== 'chat2db' ||
+    detail?.schemaName !== 'public'
+  ) {
+    throw new Error(`renamed saved console emitted an unexpected update: ${JSON.stringify(detail)}`);
+  }
+}
+
 Promise.all([
   testRefreshPreservesTreeInteractionState(),
   testRefreshClearsDeletedSavedConsoleSelection(),
@@ -245,6 +276,7 @@ Promise.all([
     testSavedConsoleKeysAreStable();
     testLatestRefreshSequenceWins();
     testSavedConsoleUpdateEventScope();
+    testRenamedSavedConsoleEmitsScopedUpdate();
   })
   .then(() => {
     console.log('Saved console tree refresh tests passed');

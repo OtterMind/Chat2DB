@@ -1,4 +1,5 @@
 import { SAVED_CONSOLE_UPDATED_EVENT, type SavedConsoleUpdatedEventDetail } from '@/constants/workspace';
+import type { IConsole } from '@/typings';
 
 type SavedConsoleUpdateScope = Partial<SavedConsoleUpdatedEventDetail>;
 
@@ -15,4 +16,18 @@ export function emitSavedConsoleUpdated(scope: SavedConsoleUpdateScope, target: 
   };
   target.dispatchEvent(new CustomEvent(SAVED_CONSOLE_UPDATED_EVENT, { detail }));
   return true;
+}
+
+type SavedConsoleRecordScope = Pick<IConsole, 'dataSourceId' | 'type' | 'databaseName' | 'schemaName'>;
+
+export function emitSavedConsoleRecordUpdated(record: SavedConsoleRecordScope, target: EventTarget = window): boolean {
+  return emitSavedConsoleUpdated(
+    {
+      dataSourceId: record.dataSourceId,
+      databaseType: record.type,
+      databaseName: record.databaseName,
+      schemaName: record.schemaName,
+    },
+    target,
+  );
 }

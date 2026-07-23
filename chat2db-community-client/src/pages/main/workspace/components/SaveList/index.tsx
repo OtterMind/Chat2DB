@@ -12,7 +12,7 @@ import { IConsole } from '@/typings';
 import { useStyles } from './style';
 import { useWorkspaceStore } from '@/store/workspace';
 import MenuLabel from '@/components/MenuLabel';
-import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
+import { emitSavedConsoleRecordUpdated } from '@/utils/savedConsoleEvents';
 
 type SavedConsoleTreeNodeType = 'dataSource' | 'database' | 'schema' | 'console';
 
@@ -244,12 +244,7 @@ const SaveList = () => {
 
   function deleteSaved(data: IConsole) {
     removeSavedConsole(data.id).then(() => {
-      emitSavedConsoleUpdated({
-        dataSourceId: data.dataSourceId,
-        databaseType: data.type,
-        databaseName: data.databaseName,
-        schemaName: data.schemaName,
-      });
+      emitSavedConsoleRecordUpdated(data);
     });
   }
 
@@ -462,12 +457,17 @@ const SaveList = () => {
         title={i18n('common.text.rename')}
         open={!!editData}
         onOk={() => {
+          const renamedConsole = editData;
+          if (!renamedConsole) {
+            return;
+          }
           const params: any = {
-            id: editData!.id,
-            name: editData!.name,
+            id: renamedConsole.id,
+            name: renamedConsole.name,
           };
           historyServer.updateSavedConsole(params).then(() => {
             getSavedConsoleList();
+            emitSavedConsoleRecordUpdated(renamedConsole);
             setEditData(null);
           });
         }}
