@@ -138,8 +138,6 @@ const WorkspaceLeft = memo(() => {
   const explorerRef = useRef<WorkspaceExplorerRef>(null);
   const locateRequestSeqRef = useRef(0);
   const explorerSessionActivationRef = useRef<string | number | null>(null);
-  const lastAutoFollowTabIdRef = useRef<string | number | null>(null);
-  const manualPanelOverrideRef = useRef(false);
   const pendingManualDatabaseLocateRef = useRef(false);
   const shouldProbeDesktopBridge = !isWebEnv && (isDesktopEnv || isCommunityEnv || isDesktop);
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
@@ -149,10 +147,18 @@ const WorkspaceLeft = memo(() => {
     activeConsoleId: state.activeConsoleId,
     workspaceTabList: state.workspaceTabList,
   }));
-  const { changeUserConfigTree, treeDataReady, userConfigTree } = useTreeStore((state) => ({
+  const {
+    changeUserConfigTree,
+    setWorkspaceLeftPanelManualOverrideTabId,
+    treeDataReady,
+    userConfigTree,
+    workspaceLeftPanelManualOverrideTabId,
+  } = useTreeStore((state) => ({
     changeUserConfigTree: state.changeUserConfigTree,
+    setWorkspaceLeftPanelManualOverrideTabId: state.setWorkspaceLeftPanelManualOverrideTabId,
     treeDataReady: !!state.treeData,
     userConfigTree: state.userConfigTree,
+    workspaceLeftPanelManualOverrideTabId: state.workspaceLeftPanelManualOverrideTabId,
   }));
   const activePanel = resolveWorkspaceLeftPanel(userConfigTree.workspaceLeftPanel);
   const currentPanel = showExplorerPanel ? activePanel : 'database';
@@ -355,7 +361,7 @@ const WorkspaceLeft = memo(() => {
 
   const handlePanelSelection = useCallback(
     (panel: WorkspaceLeftPanel) => {
-      manualPanelOverrideRef.current = true;
+      setWorkspaceLeftPanelManualOverrideTabId(activeConsoleId ?? null);
       setActivePanel(panel);
       const shouldLocate = shouldLocateActiveTabOnPanelSelection(panel, activeTabLocateTarget);
       pendingManualDatabaseLocateRef.current = shouldLocate && !treeDataReady;
@@ -363,7 +369,14 @@ const WorkspaceLeft = memo(() => {
         void locateActiveWorkspaceTab({ clearSearch: true });
       }
     },
-    [activeTabLocateTarget, locateActiveWorkspaceTab, setActivePanel, treeDataReady],
+    [
+      activeConsoleId,
+      activeTabLocateTarget,
+      locateActiveWorkspaceTab,
+      setActivePanel,
+      setWorkspaceLeftPanelManualOverrideTabId,
+      treeDataReady,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -373,16 +386,24 @@ const WorkspaceLeft = memo(() => {
     const autoFollowState = resolveWorkspaceLeftAutoFollowState({
       activeWorkspaceTabId: activeConsoleId,
       autoFollowPanel,
-      lastAutoFollowTabId: lastAutoFollowTabIdRef.current,
-      manualOverride: manualPanelOverrideRef.current,
+      manualOverrideTabId: workspaceLeftPanelManualOverrideTabId,
       showExplorerPanel,
     });
-    lastAutoFollowTabIdRef.current = autoFollowState.activeWorkspaceTabId;
-    manualPanelOverrideRef.current = autoFollowState.manualOverride;
+    if (autoFollowState.manualOverrideTabId !== workspaceLeftPanelManualOverrideTabId) {
+      setWorkspaceLeftPanelManualOverrideTabId(autoFollowState.manualOverrideTabId);
+    }
     if (autoFollowState.shouldApplyAutoFollow && autoFollowPanel) {
       setActivePanel(autoFollowPanel);
     }
-  }, [activeConsoleId, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
+  }, [
+    activeConsoleId,
+    autoFollowPanel,
+    isExplorerSessionActivation,
+    setActivePanel,
+    setWorkspaceLeftPanelManualOverrideTabId,
+    showExplorerPanel,
+    workspaceLeftPanelManualOverrideTabId,
+  ]);
 
   useEffect(() => {
     if (!pendingManualDatabaseLocateRef.current) {

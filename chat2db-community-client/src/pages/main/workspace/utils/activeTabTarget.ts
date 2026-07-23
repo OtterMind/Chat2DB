@@ -39,24 +39,23 @@ export function shouldLocateActiveTabOnPanelSelection(
 export function resolveWorkspaceLeftAutoFollowState({
   activeWorkspaceTabId,
   autoFollowPanel,
-  lastAutoFollowTabId,
-  manualOverride,
+  manualOverrideTabId,
   showExplorerPanel,
 }: {
   activeWorkspaceTabId: WorkspaceTabActivationId;
   autoFollowPanel?: WorkspaceLeftPanel;
-  lastAutoFollowTabId: WorkspaceTabActivationId;
-  manualOverride: boolean;
+  manualOverrideTabId: WorkspaceTabActivationId;
   showExplorerPanel: boolean;
 }) {
   const normalizedActiveTabId = activeWorkspaceTabId ?? null;
-  const normalizedLastTabId = lastAutoFollowTabId ?? null;
-  const nextManualOverride = normalizedActiveTabId === normalizedLastTabId ? manualOverride : false;
+  const normalizedManualOverrideTabId = manualOverrideTabId ?? null;
+  const nextManualOverrideTabId =
+    normalizedActiveTabId === normalizedManualOverrideTabId ? normalizedManualOverrideTabId : null;
 
   return {
     activeWorkspaceTabId: normalizedActiveTabId,
-    manualOverride: nextManualOverride,
-    shouldApplyAutoFollow: showExplorerPanel && !!autoFollowPanel && !nextManualOverride,
+    manualOverrideTabId: nextManualOverrideTabId,
+    shouldApplyAutoFollow: showExplorerPanel && !!autoFollowPanel && nextManualOverrideTabId === null,
   };
 }
 

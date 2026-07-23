@@ -55,13 +55,12 @@ assert.deepEqual(
   resolveWorkspaceLeftAutoFollowState({
     activeWorkspaceTabId: 101,
     autoFollowPanel: 'database',
-    lastAutoFollowTabId: null,
-    manualOverride: false,
+    manualOverrideTabId: null,
     showExplorerPanel: true,
   }),
   {
     activeWorkspaceTabId: 101,
-    manualOverride: false,
+    manualOverrideTabId: null,
     shouldApplyAutoFollow: true,
   },
 );
@@ -69,13 +68,12 @@ assert.deepEqual(
   resolveWorkspaceLeftAutoFollowState({
     activeWorkspaceTabId: 101,
     autoFollowPanel: 'database',
-    lastAutoFollowTabId: 101,
-    manualOverride: true,
+    manualOverrideTabId: 101,
     showExplorerPanel: true,
   }),
   {
     activeWorkspaceTabId: 101,
-    manualOverride: true,
+    manualOverrideTabId: 101,
     shouldApplyAutoFollow: false,
   },
 );
@@ -83,13 +81,12 @@ assert.deepEqual(
   resolveWorkspaceLeftAutoFollowState({
     activeWorkspaceTabId: 102,
     autoFollowPanel: 'database',
-    lastAutoFollowTabId: 101,
-    manualOverride: true,
+    manualOverrideTabId: 101,
     showExplorerPanel: true,
   }),
   {
     activeWorkspaceTabId: 102,
-    manualOverride: false,
+    manualOverrideTabId: null,
     shouldApplyAutoFollow: true,
   },
 );
@@ -97,13 +94,12 @@ assert.deepEqual(
   resolveWorkspaceLeftAutoFollowState({
     activeWorkspaceTabId: 102,
     autoFollowPanel: 'database',
-    lastAutoFollowTabId: 102,
-    manualOverride: false,
+    manualOverrideTabId: null,
     showExplorerPanel: false,
   }),
   {
     activeWorkspaceTabId: 102,
-    manualOverride: false,
+    manualOverrideTabId: null,
     shouldApplyAutoFollow: false,
   },
 );
