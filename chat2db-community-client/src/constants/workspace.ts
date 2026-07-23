@@ -1,4 +1,4 @@
-import type { DatabaseTypeCode } from './database';
+import type { DatabaseTypeCode } from './common';
 
 export enum CreateTabIntroType {
   EditorTable = 'editorTable',

@@ -109,7 +109,7 @@ export interface IHistoryRecord {
 
 const createConsole = createRequest<ICreateConsole, number>('/api/operation/saved/create', { method: 'post' });
 
-const getWindowTab = createRequest<{ id: number; orderByDesc: boolean }, number>('/api/operation/saved', {
+const getSavedConsole = createRequest<{ id: number }, IConsole | null>('/api/operation/saved', {
   method: 'get',
 });
 
@@ -144,5 +144,5 @@ export default {
   createConsole,
   deleteSavedConsole,
   createHistory,
-  getWindowTab,
+  getSavedConsole,
 };

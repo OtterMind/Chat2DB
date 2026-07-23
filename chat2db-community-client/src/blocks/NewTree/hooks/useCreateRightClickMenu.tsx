@@ -55,6 +55,7 @@ import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 
 // Some operations are not supported by the database and need to be excluded.
 interface IOperationColumnConfigItem {
@@ -150,11 +151,12 @@ export const useCreateRightClickMenu = () => {
     };
   });
 
-  const { openCreateDatabaseModal, addWorkspaceTab, createConsole } = useWorkspaceStore((state) => {
+  const { openCreateDatabaseModal, addWorkspaceTab, createConsole, removeSavedConsole } = useWorkspaceStore((state) => {
     return {
       openCreateDatabaseModal: state.openCreateDatabaseModal,
       addWorkspaceTab: state.addWorkspaceTab,
       createConsole: state.createConsole,
+      removeSavedConsole: state.removeSavedConsole,
     };
   });
 
@@ -1070,11 +1072,8 @@ export const useCreateRightClickMenu = () => {
         text: i18n('workspace.menu.removeConsole'),
         icon: 'icon-trash',
         handle: () => {
-          historyServer.deleteSavedConsole({ id: treeNodeData.id! }).then(() => {
-            const parentNode = getParentNode(treeNodeData.key, treeData!);
-            handleLoadData(parentNode, {
-              refresh: true,
-            });
+          removeSavedConsole(treeNodeData.id!).then(() => {
+            emitSavedConsoleUpdated(extraParams);
           });
         },
       },

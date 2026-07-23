@@ -34,6 +34,8 @@
     "test:redis-explorer": "tsx src/blocks/RedisAllData/redisExplorer.test.ts",
     "test:search-result-query-composer": "tsx src/blocks/SearchResult/components/ScreeningResult/queryComposer.test.ts",
     "test:search-result-tab-selection": "tsx src/blocks/SearchResult/tabSelection.test.ts",
+    "test:saved-console-tree-refresh": "tsx src/store/tree/savedConsoleTreeRefresh.test.ts",
+    "test:saved-console-lifecycle": "tsx src/store/workspace/utils/savedConsoleLifecycle.test.ts",
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
     "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts",
     "modify:package:name": "node ./scripts/modify-package-name.js",

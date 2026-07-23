@@ -12,6 +12,7 @@ import { IConsole } from '@/typings';
 import { useStyles } from './style';
 import { useWorkspaceStore } from '@/store/workspace';
 import MenuLabel from '@/components/MenuLabel';
+import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 
 type SavedConsoleTreeNodeType = 'dataSource' | 'database' | 'schema' | 'console';
 
@@ -152,6 +153,7 @@ const SaveList = () => {
   const consoleList = useWorkspaceStore((state) => state.savedConsoleList);
   const addWorkspaceTab = useWorkspaceStore((state) => state.addWorkspaceTab);
   const getSavedConsoleList = useWorkspaceStore((state) => state.getSavedConsoleList);
+  const removeSavedConsole = useWorkspaceStore((state) => state.removeSavedConsole);
   const [editData, setEditData] = useState<IConsole | null>(null);
   const [contextMenu, setContextMenu] = useState<SavedConsoleContextIntent | null>(null);
 
@@ -241,9 +243,13 @@ const SaveList = () => {
   }
 
   function deleteSaved(data: IConsole) {
-    const params: any = { id: data.id };
-    historyServer.deleteSavedConsole(params).then(() => {
-      getSavedConsoleList();
+    removeSavedConsole(data.id).then(() => {
+      emitSavedConsoleUpdated({
+        dataSourceId: data.dataSourceId,
+        databaseType: data.type,
+        databaseName: data.databaseName,
+        schemaName: data.schemaName,
+      });
     });
   }
 
@@ -432,11 +438,7 @@ const SaveList = () => {
         <div className={styles.header}>
           <div className={cx(styles.headerContent, searching && styles.headerContentHidden)}>
             <div>{i18n('workspace.title.savedConsole')}</div>
-            <IconButton
-              size={{ boxSize: 24, iconSize: 14 }}
-              onClick={() => setSearching(true)}
-              icon={Search}
-            />
+            <IconButton size={{ boxSize: 24, iconSize: 14 }} onClick={() => setSearching(true)} icon={Search} />
           </div>
           <div className={cx(styles.headerSearch, !searching && styles.headerSearchHidden)}>
             <Input
@@ -475,7 +477,7 @@ const SaveList = () => {
         <Input
           value={editData?.name}
           onChange={(e) => {
-            setEditData({ ...editData, name: e.target.value });
+            setEditData((current) => (current ? { ...current, name: e.target.value } : current));
           }}
         />
       </Modal>

@@ -212,7 +212,7 @@ const WorkspaceLeft = memo(() => {
       if (!detail) {
         return;
       }
-      useTreeStore.getState().updateTreeNodeDataByDetail({
+      void useTreeStore.getState().refreshTreeNodeDataInBackground({
         ...detail,
         treeNodeType: TreeNodeType.SAVE_CONSOLES,
       });
@@ -362,15 +362,14 @@ const WorkspaceLeft = memo(() => {
     [activeTabLocateTarget, locateActiveWorkspaceTab, setActivePanel, treeDataReady],
   );
 
-  // Manual panel selection remains authoritative until workspace-tab activation changes.
   useLayoutEffect(() => {
     if (explorerSessionActivationRef.current !== null && !isExplorerSessionActivation) {
       explorerSessionActivationRef.current = null;
     }
-    if (showExplorerPanel && autoFollowPanel) {
+    if (showExplorerPanel && autoFollowPanel && activePanel !== autoFollowPanel) {
       setActivePanel(autoFollowPanel);
     }
-  }, [activeConsoleId, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
+  }, [activePanel, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
 
   useEffect(() => {
     if (!pendingManualDatabaseLocateRef.current) {

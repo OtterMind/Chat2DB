@@ -1,21 +1,9 @@
-import React, {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useCallback,
-  useState,
-  useEffect,
-  CSSProperties,
-} from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect, CSSProperties } from 'react';
 import { useStyles } from './style';
 import { OperationLine, MonacoEditorErrorTips } from '../../components';
 import SQLEditor, { SQLEditorRef } from '../SQLEditor';
 import RoutineOperationModals from './RoutineOperationModals';
-import {
-  EditorSetValueType,
-  EditorType,
-  SQLOptType,
-} from '../../type';
+import { EditorSetValueType, EditorType, SQLOptType } from '../../type';
 import { staticMessage } from '@chat2db/ui';
 import { IConsoleReturnExecuteSql, IBoundInfo, TreeNodeData } from '@/typings';
 import { saveFileToDesktop, updateFileContent } from '@/utils/file';
@@ -141,8 +129,8 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   } = props;
   const isReadOnly = !!dbInfo.readOnly;
   const isSupportedRoutineEditor =
-    isRoutineOperationSupportedDatabaseType(dbInfo.databaseType)
-    && [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type as WorkspaceTabType);
+    isRoutineOperationSupportedDatabaseType(dbInfo.databaseType) &&
+    [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type as WorkspaceTabType);
   const { styles } = useStyles();
   const [contextMenuInfo, setContextMenuInfo] = useState<IContextMenuInfo>(contextMenuDefaultConfig);
   const [contextTableIdentifier, setContextTableIdentifier] = useState<EditorTableIdentifier | null>(null);
@@ -289,6 +277,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     source: 'workspace',
     // defaultValue:  getValue(),
     defaultValue: defaultSQL,
+    name: workspaceTabsTitle,
     type,
   });
 
@@ -978,19 +967,18 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
 
   return (
     <div className={styles.wrapper}>
-      {(!isReadOnly || isSupportedRoutineEditor) &&
-        sqlActionEnabled && (
-          <OperationLine
-            active={active}
-            type={type}
-            dbInfo={dbInfo}
-            hasEditorContent={hasEditorContent}
-            isConsole={isConsole}
-            setDBInfo={setDBInfo}
-            contentDiffEnabled={enableContentDiffHints}
-            action={handleAction}
-          />
-        )}
+      {(!isReadOnly || isSupportedRoutineEditor) && sqlActionEnabled && (
+        <OperationLine
+          active={active}
+          type={type}
+          dbInfo={dbInfo}
+          hasEditorContent={hasEditorContent}
+          isConsole={isConsole}
+          setDBInfo={setDBInfo}
+          contentDiffEnabled={enableContentDiffHints}
+          action={handleAction}
+        />
+      )}
       <div style={{ position: 'relative', flex: 1, height: '0px', width: '100%' }}>
         <SQLEditor
           className={styles.sqlEditor}
