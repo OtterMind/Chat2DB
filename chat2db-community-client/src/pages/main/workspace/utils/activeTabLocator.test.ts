@@ -4,6 +4,7 @@ import type { IWorkspaceTab } from '@/typings';
 import {
   getAutoFollowWorkspaceLeftPanel,
   getDirectActiveTabLocateTarget,
+  resolveWorkspaceLeftAutoFollowState,
   resolveWorkspaceLeftPanel,
   shouldLocateActiveTabOnPanelSelection,
 } from './activeTabTarget';
@@ -49,5 +50,62 @@ assert.equal(getAutoFollowWorkspaceLeftPanel(false, { surface: 'databaseTree' })
 assert.equal(shouldLocateActiveTabOnPanelSelection('database', { surface: 'databaseTree' }), true);
 assert.equal(shouldLocateActiveTabOnPanelSelection('explorer', { surface: 'databaseTree' }), false);
 assert.equal(shouldLocateActiveTabOnPanelSelection('database', { surface: 'localFile' }), false);
+
+assert.deepEqual(
+  resolveWorkspaceLeftAutoFollowState({
+    activeWorkspaceTabId: 101,
+    autoFollowPanel: 'database',
+    lastAutoFollowTabId: null,
+    manualOverride: false,
+    showExplorerPanel: true,
+  }),
+  {
+    activeWorkspaceTabId: 101,
+    manualOverride: false,
+    shouldApplyAutoFollow: true,
+  },
+);
+assert.deepEqual(
+  resolveWorkspaceLeftAutoFollowState({
+    activeWorkspaceTabId: 101,
+    autoFollowPanel: 'database',
+    lastAutoFollowTabId: 101,
+    manualOverride: true,
+    showExplorerPanel: true,
+  }),
+  {
+    activeWorkspaceTabId: 101,
+    manualOverride: true,
+    shouldApplyAutoFollow: false,
+  },
+);
+assert.deepEqual(
+  resolveWorkspaceLeftAutoFollowState({
+    activeWorkspaceTabId: 102,
+    autoFollowPanel: 'database',
+    lastAutoFollowTabId: 101,
+    manualOverride: true,
+    showExplorerPanel: true,
+  }),
+  {
+    activeWorkspaceTabId: 102,
+    manualOverride: false,
+    shouldApplyAutoFollow: true,
+  },
+);
+assert.deepEqual(
+  resolveWorkspaceLeftAutoFollowState({
+    activeWorkspaceTabId: 102,
+    autoFollowPanel: 'database',
+    lastAutoFollowTabId: 102,
+    manualOverride: false,
+    showExplorerPanel: false,
+  }),
+  {
+    activeWorkspaceTabId: 102,
+    manualOverride: false,
+    shouldApplyAutoFollow: false,
+  },
+);
 
 console.log('Active workspace tab locator tests passed');

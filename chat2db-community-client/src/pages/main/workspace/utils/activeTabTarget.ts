@@ -3,6 +3,7 @@ import type { IWorkspaceTab } from '@/typings/workspace';
 
 export type WorkspaceLeftPanel = 'explorer' | 'database';
 export type WorkspaceTabActivationSource = 'workspaceTab' | 'explorerSession';
+export type WorkspaceTabActivationId = string | number | null | undefined;
 
 export type DirectActiveTabLocateTarget =
   | {
@@ -33,6 +34,30 @@ export function shouldLocateActiveTabOnPanelSelection(
   target?: Pick<DirectActiveTabLocateTarget, 'surface'> | null,
 ): boolean {
   return panel === 'database' && target?.surface === 'databaseTree';
+}
+
+export function resolveWorkspaceLeftAutoFollowState({
+  activeWorkspaceTabId,
+  autoFollowPanel,
+  lastAutoFollowTabId,
+  manualOverride,
+  showExplorerPanel,
+}: {
+  activeWorkspaceTabId: WorkspaceTabActivationId;
+  autoFollowPanel?: WorkspaceLeftPanel;
+  lastAutoFollowTabId: WorkspaceTabActivationId;
+  manualOverride: boolean;
+  showExplorerPanel: boolean;
+}) {
+  const normalizedActiveTabId = activeWorkspaceTabId ?? null;
+  const normalizedLastTabId = lastAutoFollowTabId ?? null;
+  const nextManualOverride = normalizedActiveTabId === normalizedLastTabId ? manualOverride : false;
+
+  return {
+    activeWorkspaceTabId: normalizedActiveTabId,
+    manualOverride: nextManualOverride,
+    shouldApplyAutoFollow: showExplorerPanel && !!autoFollowPanel && !nextManualOverride,
+  };
 }
 
 export function getDirectActiveTabLocateTarget(

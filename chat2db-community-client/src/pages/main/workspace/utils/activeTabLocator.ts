@@ -5,6 +5,7 @@ import { getDirectActiveTabLocateTarget } from './activeTabTarget';
 
 export {
   getAutoFollowWorkspaceLeftPanel,
+  resolveWorkspaceLeftAutoFollowState,
   resolveWorkspaceLeftPanel,
   shouldLocateActiveTabOnPanelSelection,
   type WorkspaceTabActivationSource,

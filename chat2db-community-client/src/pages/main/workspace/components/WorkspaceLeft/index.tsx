@@ -14,6 +14,7 @@ import {
   getAutoFollowWorkspaceLeftPanel,
   getActiveTabLocateTarget,
   resolveWorkspaceLeftPanel,
+  resolveWorkspaceLeftAutoFollowState,
   shouldLocateActiveTabOnPanelSelection,
   type ActiveTabDatabaseCandidate,
   type ActiveTabLocateTarget,
@@ -137,6 +138,8 @@ const WorkspaceLeft = memo(() => {
   const explorerRef = useRef<WorkspaceExplorerRef>(null);
   const locateRequestSeqRef = useRef(0);
   const explorerSessionActivationRef = useRef<string | number | null>(null);
+  const lastAutoFollowTabIdRef = useRef<string | number | null>(null);
+  const manualPanelOverrideRef = useRef(false);
   const pendingManualDatabaseLocateRef = useRef(false);
   const shouldProbeDesktopBridge = !isWebEnv && (isDesktopEnv || isCommunityEnv || isDesktop);
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
@@ -335,6 +338,7 @@ const WorkspaceLeft = memo(() => {
 
   const handlePanelSelection = useCallback(
     (panel: WorkspaceLeftPanel) => {
+      manualPanelOverrideRef.current = true;
       setActivePanel(panel);
       const shouldLocate = shouldLocateActiveTabOnPanelSelection(panel, activeTabLocateTarget);
       pendingManualDatabaseLocateRef.current = shouldLocate && !treeDataReady;
@@ -350,7 +354,16 @@ const WorkspaceLeft = memo(() => {
     if (explorerSessionActivationRef.current !== null && !isExplorerSessionActivation) {
       explorerSessionActivationRef.current = null;
     }
-    if (showExplorerPanel && autoFollowPanel) {
+    const autoFollowState = resolveWorkspaceLeftAutoFollowState({
+      activeWorkspaceTabId: activeConsoleId,
+      autoFollowPanel,
+      lastAutoFollowTabId: lastAutoFollowTabIdRef.current,
+      manualOverride: manualPanelOverrideRef.current,
+      showExplorerPanel,
+    });
+    lastAutoFollowTabIdRef.current = autoFollowState.activeWorkspaceTabId;
+    manualPanelOverrideRef.current = autoFollowState.manualOverride;
+    if (autoFollowState.shouldApplyAutoFollow && autoFollowPanel) {
       setActivePanel(autoFollowPanel);
     }
   }, [activeConsoleId, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
