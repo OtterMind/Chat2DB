@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
 import java.util.List;
+import java.util.Objects;
 
 public class DBStructUtils {
 
@@ -57,18 +58,17 @@ public class DBStructUtils {
             }
             String columnName = column.getName();
             String dataType = column.getColumnType();
-            boolean isNullable = column.getNullable() != null && column.getNullable() == 1;
-            String nullable = isNullable ? "" : " NOT NULL";
-            int columnSize = column.getColumnSize();
-            int decimalDigits = column.getDecimalDigits();
+            String nullable = Objects.equals(column.getNullable(), 0) ? " NOT NULL" : "";
+            Integer columnSize = column.getColumnSize();
+            Integer decimalDigits = column.getDecimalDigits();
             String columnComment = column.getComment();
             String commentClause = (columnComment != null && !columnComment.isEmpty()) ? " COMMENT '" + columnComment + "'" : "";
             String columnDefinition = columnName + " " + dataType;
 
-            if (dataType.equalsIgnoreCase("VARCHAR") || dataType.equalsIgnoreCase("CHAR")) {
+            if ((dataType.equalsIgnoreCase("VARCHAR") || dataType.equalsIgnoreCase("CHAR")) && columnSize != null) {
                 columnDefinition += "(" + columnSize + ")";
-            } else if (dataType.equalsIgnoreCase("DECIMAL") || dataType.equalsIgnoreCase("NUMERIC")) {
-                columnDefinition += "(" + columnSize + "," + decimalDigits + ")";
+            } else if ((dataType.equalsIgnoreCase("DECIMAL") || dataType.equalsIgnoreCase("NUMERIC")) && columnSize != null) {
+                columnDefinition += decimalDigits == null ? "(" + columnSize + ")" : "(" + columnSize + "," + decimalDigits + ")";
             }
             columnDefinition += nullable + commentClause;
             createTableSQL.append("\t" + columnDefinition);
