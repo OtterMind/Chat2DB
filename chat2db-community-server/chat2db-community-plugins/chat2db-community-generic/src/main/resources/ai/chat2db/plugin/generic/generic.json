@@ -273,7 +273,7 @@
           "https://repo1.maven.org/maven2/org/apache/derby/derby/10.16.1.1/derby-10.16.1.1.jar",
           "https://repo1.maven.org/maven2/org/apache/derby/derbyshared/10.16.1.1/derbyshared-10.16.1.1.jar"
         ],
-        "jdbcDriver": "derbytools-10.16.1.1.jar",
+        "jdbcDriver": "derbytools-10.16.1.1.jar,derby-10.16.1.1.jar,derbyshared-10.16.1.1.jar",
         "jdbcDriverClass": "org.apache.derby.jdbc.EmbeddedDriver"
       }
     ],
