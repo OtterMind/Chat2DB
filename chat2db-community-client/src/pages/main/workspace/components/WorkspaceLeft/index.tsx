@@ -345,14 +345,15 @@ const WorkspaceLeft = memo(() => {
     [activeTabLocateTarget, locateActiveWorkspaceTab, setActivePanel, treeDataReady],
   );
 
+  // Manual panel selection remains authoritative until workspace-tab activation changes.
   useLayoutEffect(() => {
     if (explorerSessionActivationRef.current !== null && !isExplorerSessionActivation) {
       explorerSessionActivationRef.current = null;
     }
-    if (showExplorerPanel && autoFollowPanel && activePanel !== autoFollowPanel) {
+    if (showExplorerPanel && autoFollowPanel) {
       setActivePanel(autoFollowPanel);
     }
-  }, [activePanel, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
+  }, [activeConsoleId, autoFollowPanel, isExplorerSessionActivation, setActivePanel, showExplorerPanel]);
 
   useEffect(() => {
     if (!pendingManualDatabaseLocateRef.current) {
