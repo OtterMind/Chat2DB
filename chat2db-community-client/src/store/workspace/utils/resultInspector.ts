@@ -9,3 +9,11 @@ export function getWorkspaceResultInspectorCode(ownerId: string) {
 export function isWorkspaceResultInspectorCode(code?: string | null) {
   return !!code?.startsWith(WORKSPACE_RESULT_INSPECTOR_PREFIX);
 }
+
+export function shouldClearInactiveResultInspector(
+  currentWorkspaceExtend: string | null | undefined,
+  inspectorExtendCode: string,
+  active: boolean,
+) {
+  return !active && currentWorkspaceExtend === inspectorExtendCode;
+}

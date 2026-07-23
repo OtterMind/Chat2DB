@@ -31,6 +31,7 @@ import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
 import {
   getWorkspaceResultInspectorCode,
+  shouldClearInactiveResultInspector,
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
 import { staticMessage } from '@chat2db/ui';
@@ -38,6 +39,7 @@ import { X } from 'lucide-react';
 
 interface IProps {
   resultData: IManageResultData;
+  active: boolean;
   viewTable?: boolean;
 }
 
@@ -100,6 +102,19 @@ export default memo<IProps>(
         workspaceStore.setCurrentWorkspaceExtend(null);
       }
     }, [inspectorExtendCode]);
+
+    useEffect(() => {
+      const workspaceStore = useWorkspaceStore.getState();
+      if (
+        shouldClearInactiveResultInspector(
+          workspaceStore.currentWorkspaceExtend,
+          inspectorExtendCode,
+          props.active,
+        )
+      ) {
+        workspaceStore.setCurrentWorkspaceExtend(null);
+      }
+    }, [inspectorExtendCode, props.active]);
 
     const activateInspector = useCallback(
       (tab: InspectorTab) => {
