@@ -47,6 +47,7 @@ safe-outputs:
     allowed-events: [COMMENT, REQUEST_CHANGES]
     supersede-older-reviews: true
   noop:
+    report-as-issue: false
 timeout-minutes: 15
 max-ai-credits: 600
 ---

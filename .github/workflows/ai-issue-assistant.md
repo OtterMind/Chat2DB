@@ -50,6 +50,7 @@ safe-outputs:
       - needs/info
       - needs/reproduction
   noop:
+    report-as-issue: false
 timeout-minutes: 10
 max-ai-credits: 300
 ---
