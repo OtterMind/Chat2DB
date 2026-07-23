@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: community-project-sync-${{ github.repository }}
+  group: community-project-sync-${{ github.repository }}-${{ github.event.issue && format('issue-{0}', github.event.issue.number) || github.event.pull_request && format('pull-request-{0}', github.event.pull_request.number) || 'reconcile' }}
   cancel-in-progress: false
 
 jobs:

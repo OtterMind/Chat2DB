@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
@@ -8,6 +10,18 @@ const {
   issueEventStatus,
   pullRequestStatus,
 } = require('./sync-community-project');
+
+test('isolates workflow concurrency by content type and number', () => {
+  const workflow = fs.readFileSync(
+    path.resolve(__dirname, '../../.github/workflows/community-project-sync.yml'),
+    'utf8',
+  );
+  assert.match(
+    workflow,
+    /group: community-project-sync-\$\{\{ github\.repository \}\}-\$\{\{ github\.event\.issue && format\('issue-\{0\}', github\.event\.issue\.number\) \|\| github\.event\.pull_request && format\('pull-request-\{0\}', github\.event\.pull_request\.number\) \|\| 'reconcile' \}\}/,
+  );
+  assert.match(workflow, /cancel-in-progress: false/);
+});
 
 test('extracts unique same-repository closing references', () => {
   assert.deepEqual(closingIssueNumbers('Closes #12\nfixes #12\nResolves #34'), [12, 34]);
