@@ -59,7 +59,7 @@
         <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.14</jcef.version>
         <classgraph.version>4.8.168</classgraph.version>
         <flatlaf.version>3.6</flatlaf.version>
-        <jackson.version>2.15.3</jackson.version>
+        <jackson.version>2.18.9</jackson.version>
         <jackson-afterburner.version>2.15.0</jackson-afterburner.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <vavr.version>0.10.4</vavr.version>
