@@ -66,6 +66,12 @@
             <version>10.16.1.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.iotdb</groupId>
+            <artifactId>iotdb-jdbc</artifactId>
+            <version>1.3.2</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Proves the sqlDialect fallback resolves the PostgreSQL syntax plugin. -->
         <dependency>
             <groupId>ai.chat2db</groupId>

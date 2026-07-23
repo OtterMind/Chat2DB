@@ -368,5 +368,42 @@
         "jdbcDriverClass": "io.trino.jdbc.TrinoDriver"
       }
     ]
+  },
+  {
+    "dbType": "TIMESCALEDB",
+    "name": "TimescaleDB",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "url": "jdbc:postgresql://localhost:5432/postgres",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver"
+      }
+    ]
+  },
+  {
+    "dbType": "IOTDB",
+    "name": "Apache IoTDB",
+    "supportDatabase": false,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "url": "jdbc:iotdb://localhost:6667/",
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/apache/iotdb/iotdb-jdbc/1.3.2/iotdb-jdbc-1.3.2-jar-with-dependencies.jar"
+        ],
+        "jdbcDriver": "iotdb-jdbc-1.3.2-jar-with-dependencies.jar",
+        "jdbcDriverClass": "org.apache.iotdb.jdbc.IoTDBDriver"
+      }
+    ]
   }
 ]
