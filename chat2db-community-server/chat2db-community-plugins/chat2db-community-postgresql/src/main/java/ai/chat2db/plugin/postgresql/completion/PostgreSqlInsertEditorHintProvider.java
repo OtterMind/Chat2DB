@@ -50,7 +50,7 @@ public final class PostgreSqlInsertEditorHintProvider {
             return List.of();
         }
         Relation relation = relation(matcher.group(1));
-        List<String> columns = splitIdentifiers(matcher.group(2));
+        List<Identifier> columns = splitIdentifiers(matcher.group(2));
         if (relation == null || columns.isEmpty()) {
             return List.of();
         }
@@ -62,8 +62,9 @@ public final class PostgreSqlInsertEditorHintProvider {
         List<ValueRange> values = valueRanges(matcher.group(3), valuesOffset);
         List<SqlCompletionEditorHint.Item> items = new ArrayList<>();
         for (int index = 0; index < columns.size(); index++) {
-            String fieldName = columns.get(index);
-            SqlCompletionCandidate column = metadata.get(normalize(fieldName));
+            Identifier field = columns.get(index);
+            String fieldName = field.value();
+            SqlCompletionCandidate column = metadata.get(field.metadataKey());
             if (column == null) {
                 return List.of();
             }
@@ -110,29 +111,29 @@ public final class PostgreSqlInsertEditorHintProvider {
                 .forEach(candidate -> {
                     String name = StringUtils.defaultIfBlank(candidate.getColumnName(), candidate.getLabel());
                     if (StringUtils.isNotBlank(name)) {
-                        result.putIfAbsent(normalize(name), candidate);
+                        result.putIfAbsent(name, candidate);
                     }
                 });
         return result;
     }
 
     private Relation relation(String value) {
-        List<String> parts = split(value, '.');
+        List<Identifier> parts = split(value, '.');
         if (parts.size() == 1) {
-            return new Relation(null, null, parts.get(0));
+            return new Relation(null, null, parts.get(0).metadataKey());
         }
         if (parts.size() == 2) {
-            return new Relation(null, parts.get(0), parts.get(1));
+            return new Relation(null, parts.get(0).metadataKey(), parts.get(1).metadataKey());
         }
         return null;
     }
 
-    private List<String> splitIdentifiers(String value) {
+    private List<Identifier> splitIdentifiers(String value) {
         return split(value, ',');
     }
 
-    private List<String> split(String value, char separator) {
-        List<String> result = new ArrayList<>();
+    private List<Identifier> split(String value, char separator) {
+        List<Identifier> result = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         char quoteEnd = '\0';
         for (int index = 0; index < Objects.toString(value, "").length(); index++) {
@@ -157,10 +158,13 @@ public final class PostgreSqlInsertEditorHintProvider {
         return result;
     }
 
-    private void addIdentifier(List<String> result, StringBuilder value) {
-        String identifier = stripQuotes(value.toString().trim());
+    private void addIdentifier(List<Identifier> result, StringBuilder value) {
+        String identifier = value.toString().trim();
         if (StringUtils.isNotBlank(identifier)) {
-            result.add(identifier);
+            boolean quoted = identifier.length() >= 2
+                    && identifier.charAt(0) == '"'
+                    && identifier.charAt(identifier.length() - 1) == '"';
+            result.add(new Identifier(stripQuotes(identifier), quoted));
         }
         value.setLength(0);
     }
@@ -179,10 +183,6 @@ public final class PostgreSqlInsertEditorHintProvider {
         return trimmed;
     }
 
-    private String normalize(String value) {
-        return stripQuotes(value).toLowerCase(Locale.ROOT);
-    }
-
     private String columnType(SqlCompletionCandidate candidate) {
         return StringUtils.defaultIfBlank(candidate.getDataType(), candidate.getDetail());
     }
@@ -195,35 +195,114 @@ public final class PostgreSqlInsertEditorHintProvider {
         if (normalized.contains("jsonb")) {
             return "'{}'::jsonb";
         }
-        if (normalized.matches(".*\\bjson\\b.*")) {
+        if (containsTypeToken(normalized, "json")) {
             return "'{}'::json";
         }
         if (normalized.contains("bytea")) {
-            return "'\\\\x'::bytea";
+            return "'\\x'::bytea";
         }
         if (normalized.contains("bool") || normalized.equals("bit")) {
             return "FALSE";
         }
-        if (normalized.matches(".*\\bnumber\\s*\\(\\s*\\d+\\s*(?:,\\s*0\\s*)?\\).*")
-                || normalized.matches(".*\\b(tinyint|smallint|integer|bigint|int|int2|int4|int8)\\b.*")) {
+        if (isZeroScaleNumber(normalized)
+                || containsAnyTypeToken(normalized,
+                "tinyint", "smallint", "integer", "bigint", "int", "int2", "int4", "int8")) {
             return "0";
         }
-        if (normalized.matches(".*\\b(numeric|decimal|number|real|double|float|money|decfloat)\\b.*")) {
+        if (containsAnyTypeToken(normalized,
+                "numeric", "decimal", "number", "real", "double", "float", "money", "decfloat")) {
             return "0.0";
         }
         if (normalized.contains("timestamp") || normalized.contains("datetime")) {
             return "CURRENT_TIMESTAMP";
         }
-        if (normalized.matches(".*\\bdate\\b.*")) {
+        if (containsTypeToken(normalized, "date")) {
             return "CURRENT_DATE";
         }
-        if (normalized.matches(".*\\btime\\b.*")) {
+        if (containsTypeToken(normalized, "time")) {
             return "CURRENT_TIME";
         }
-        if (normalized.matches(".*\\b(char|varchar|varchar2|nvarchar|nvarchar2|text|clob|string|enum|set)\\b.*")) {
+        if (containsAnyTypeToken(normalized,
+                "char", "varchar", "varchar2", "nvarchar", "nvarchar2", "text", "clob", "string", "enum", "set")) {
             return "''";
         }
         return "NULL";
+    }
+
+    private boolean containsAnyTypeToken(String value, String... tokens) {
+        for (String token : tokens) {
+            if (containsTypeToken(value, token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsTypeToken(String value, String token) {
+        int offset = 0;
+        while ((offset = value.indexOf(token, offset)) >= 0) {
+            int end = offset + token.length();
+            if ((offset == 0 || !isIdentifierCharacter(value.charAt(offset - 1)))
+                    && (end == value.length() || !isIdentifierCharacter(value.charAt(end)))) {
+                return true;
+            }
+            offset = end;
+        }
+        return false;
+    }
+
+    private boolean isZeroScaleNumber(String value) {
+        int offset = 0;
+        while ((offset = value.indexOf("number", offset)) >= 0) {
+            int end = offset + "number".length();
+            if ((offset == 0 || !isIdentifierCharacter(value.charAt(offset - 1)))
+                    && (end == value.length() || !isIdentifierCharacter(value.charAt(end)))
+                    && hasZeroScaleNumberArguments(value, end)) {
+                return true;
+            }
+            offset = end;
+        }
+        return false;
+    }
+
+    private boolean hasZeroScaleNumberArguments(String value, int offset) {
+        int index = skipWhitespace(value, offset);
+        if (index >= value.length() || value.charAt(index) != '(') {
+            return false;
+        }
+        index = skipWhitespace(value, index + 1);
+        int precisionStart = index;
+        while (index < value.length() && Character.isDigit(value.charAt(index))) {
+            index++;
+        }
+        if (index == precisionStart) {
+            return false;
+        }
+        index = skipWhitespace(value, index);
+        if (index < value.length() && value.charAt(index) == ')') {
+            return true;
+        }
+        if (index >= value.length() || value.charAt(index) != ',') {
+            return false;
+        }
+        index = skipWhitespace(value, index + 1);
+        if (index >= value.length() || value.charAt(index) != '0') {
+            return false;
+        }
+        index = skipWhitespace(value, index + 1);
+        return index < value.length() && value.charAt(index) == ')';
+    }
+
+    private int skipWhitespace(String value, int offset) {
+        int index = offset;
+        while (index < value.length() && Character.isWhitespace(value.charAt(index))) {
+            index++;
+        }
+        return index;
+    }
+
+    private boolean isIdentifierCharacter(char value) {
+        return Character.isLetterOrDigit(value) || value == '_';
     }
 
     private List<ValueRange> valueRanges(String value, int sourceOffset) {
@@ -232,10 +311,22 @@ public final class PostgreSqlInsertEditorHintProvider {
         int depth = 0;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        String dollarQuote = null;
         for (int index = 0; index < value.length(); index++) {
+            if (dollarQuote != null) {
+                if (value.startsWith(dollarQuote, index)) {
+                    index += dollarQuote.length() - 1;
+                    dollarQuote = null;
+                }
+                continue;
+            }
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
-            if (!doubleQuoted && current == '\'' && !(singleQuoted && next == '\'')) {
+            String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(value, index) : null;
+            if (delimiter != null) {
+                dollarQuote = delimiter;
+                index += delimiter.length() - 1;
+            } else if (!doubleQuoted && current == '\'' && !(singleQuoted && next == '\'')) {
                 singleQuoted = !singleQuoted;
             } else if (singleQuoted && current == '\'' && next == '\'') {
                 index++;
@@ -273,10 +364,22 @@ public final class PostgreSqlInsertEditorHintProvider {
     private boolean insideLiteralOrComment(String sql) {
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        String dollarQuote = null;
         for (int index = 0; index < sql.length(); index++) {
+            if (dollarQuote != null) {
+                if (sql.startsWith(dollarQuote, index)) {
+                    index += dollarQuote.length() - 1;
+                    dollarQuote = null;
+                }
+                continue;
+            }
             char current = sql.charAt(index);
             char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
-            if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+            String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(sql, index) : null;
+            if (delimiter != null) {
+                dollarQuote = delimiter;
+                index += delimiter.length() - 1;
+            } else if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
                 int newline = sql.indexOf('\n', index + 2);
                 if (newline < 0) {
                     return true;
@@ -302,7 +405,7 @@ public final class PostgreSqlInsertEditorHintProvider {
                 index++;
             }
         }
-        return singleQuoted || doubleQuoted;
+        return singleQuoted || doubleQuoted || dollarQuote != null;
     }
 
     private int statementStartOffset(String sql) {
@@ -310,8 +413,16 @@ public final class PostgreSqlInsertEditorHintProvider {
         boolean doubleQuoted = false;
         boolean lineComment = false;
         boolean blockComment = false;
+        String dollarQuote = null;
         int statementStart = 0;
         for (int index = 0; index < sql.length(); index++) {
+            if (dollarQuote != null) {
+                if (sql.startsWith(dollarQuote, index)) {
+                    index += dollarQuote.length() - 1;
+                    dollarQuote = null;
+                }
+                continue;
+            }
             char current = sql.charAt(index);
             char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
             if (lineComment) {
@@ -327,7 +438,11 @@ public final class PostgreSqlInsertEditorHintProvider {
                 }
                 continue;
             }
-            if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+            String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(sql, index) : null;
+            if (delimiter != null) {
+                dollarQuote = delimiter;
+                index += delimiter.length() - 1;
+            } else if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
                 lineComment = true;
                 index++;
             } else if (!singleQuoted && !doubleQuoted && current == '/' && next == '*') {
@@ -356,10 +471,22 @@ public final class PostgreSqlInsertEditorHintProvider {
         int depth = 0;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        String dollarQuote = null;
         for (int index = 0; index < value.length(); index++) {
+            if (dollarQuote != null) {
+                if (value.startsWith(dollarQuote, index)) {
+                    index += dollarQuote.length() - 1;
+                    dollarQuote = null;
+                }
+                continue;
+            }
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
-            if (!doubleQuoted && current == '\'') {
+            String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(value, index) : null;
+            if (delimiter != null) {
+                dollarQuote = delimiter;
+                index += delimiter.length() - 1;
+            } else if (!doubleQuoted && current == '\'') {
                 if (singleQuoted && next == '\'') {
                     index++;
                 } else {
@@ -381,6 +508,55 @@ public final class PostgreSqlInsertEditorHintProvider {
             }
         }
         return false;
+    }
+
+    private String dollarQuoteDelimiterAt(String value, int offset) {
+        if (offset < 0 || offset >= value.length() || value.charAt(offset) != '$') {
+            return null;
+        }
+        if (offset > 0) {
+            char previous = value.charAt(offset - 1);
+            if (Character.isLetterOrDigit(previous) || previous == '_' || previous == '$') {
+                return null;
+            }
+        }
+        int end = value.indexOf('$', offset + 1);
+        if (end < 0) {
+            return null;
+        }
+        String tag = value.substring(offset + 1, end);
+        if (!isDollarQuoteTag(tag)) {
+            return null;
+        }
+        return value.substring(offset, end + 1);
+    }
+
+    private boolean isDollarQuoteTag(String tag) {
+        if (tag.isEmpty()) {
+            return true;
+        }
+        char first = tag.charAt(0);
+        if (!(isAsciiLetter(first) || first == '_')) {
+            return false;
+        }
+        for (int index = 1; index < tag.length(); index++) {
+            char current = tag.charAt(index);
+            if (!(isAsciiLetter(current) || Character.isDigit(current) || current == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isAsciiLetter(char value) {
+        return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z';
+    }
+
+    private record Identifier(String value, boolean quoted) {
+
+        private String metadataKey() {
+            return quoted ? value : value.toLowerCase(Locale.ROOT);
+        }
     }
 
     private record Relation(String catalog, String schema, String table) {

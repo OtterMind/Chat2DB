@@ -40,7 +40,7 @@ class PostgreSqlInsertEditorHintProviderTest {
         assertEquals(SqlCompletionEditorHintTypeEnum.INSERT_VALUE, hints.get(0).getType());
         assertEquals(List.of(
                         "0", "FALSE", "''", "CURRENT_DATE", "CURRENT_TIMESTAMP",
-                        "'{}'::jsonb", "'{}'::json", "'{}'", "'\\\\x'::bytea"),
+                        "'{}'::jsonb", "'{}'::json", "'{}'", "'\\x'::bytea"),
                 hints.get(0).getItems().stream().map(SqlCompletionEditorHint.Item::getDefaultValue).toList());
         assertEquals("enabled:boolean", hints.get(0).getItems().get(1).getLabel());
     }
@@ -57,6 +57,48 @@ class PostgreSqlInsertEditorHintProviderTest {
         assertEquals("App", metadataRequest.get().scope().schema());
         assertEquals("Demo", metadataRequest.get().scope().table());
         assertEquals("id", hints.get(0).getItems().get(0).getFieldName());
+    }
+
+    @Test
+    void keepsQuotedAndUnquotedColumnNamesDistinct() {
+        String sql = "INSERT INTO demo (\"ID\", id) VALUES (";
+        List<SqlCompletionCandidate> columns = List.of(
+                column("ID", "boolean", 1),
+                column("id", "integer", 2));
+
+        List<SqlCompletionEditorHint> hints = provider.build(request(sql, null, columns));
+
+        assertEquals(List.of("FALSE", "0"),
+                hints.get(0).getItems().stream().map(SqlCompletionEditorHint.Item::getDefaultValue).toList());
+    }
+
+    @Test
+    void matchesTypeTokensWithoutRegexBacktrackingOrPartialWords() {
+        String sql = "INSERT INTO demo (amount, ratio, jsonish, update_time) VALUES (";
+        List<SqlCompletionCandidate> columns = List.of(
+                column("amount", "number ( 12, 0 )", 1),
+                column("ratio", "number(12, 2)", 2),
+                column("jsonish", "notjsonvalue", 3),
+                column("update_time", "time without time zone", 4));
+
+        List<SqlCompletionEditorHint> hints = provider.build(request(sql, null, columns));
+
+        assertEquals(List.of("0", "0.0", "NULL", "CURRENT_TIME"),
+                hints.get(0).getItems().stream().map(SqlCompletionEditorHint.Item::getDefaultValue).toList());
+    }
+
+    @Test
+    void keepsDollarQuotedValueDelimitersInsideOneValue() {
+        String sql = "INSERT INTO demo (id, note, enabled) VALUES (0, $tag$a,b);($tag$, FALSE";
+        List<SqlCompletionCandidate> columns = List.of(
+                column("id", "integer", 1),
+                column("note", "text", 2),
+                column("enabled", "boolean", 3));
+
+        List<SqlCompletionEditorHint> hints = provider.build(request(sql, null, columns));
+
+        assertEquals(List.of("0", "$tag$a,b);($tag$", "FALSE"),
+                hints.get(0).getItems().stream().map(item -> valueAt(sql, item)).toList());
     }
 
     @Test
@@ -117,5 +159,9 @@ class PostgreSqlInsertEditorHintProviderTest {
         candidate.setDataType(type);
         candidate.setSortRank(rank);
         return candidate;
+    }
+
+    private String valueAt(String sql, SqlCompletionEditorHint.Item item) {
+        return sql.substring(item.getRange().getStartColumn() - 1, item.getRange().getEndColumn() - 1);
     }
 }

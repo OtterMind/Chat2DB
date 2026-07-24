@@ -139,6 +139,18 @@ assert.equal(
   'backslash-escaped quotes do not shift later label ranges',
 );
 
+const dollarQuotedSql = 'INSERT INTO demo (id, enabled, name) VALUES (0, $tag$a,b);($tag$, FALSE)';
+const dollarQuotedItems = [...(
+  rematerializeInsertValueHints(dollarQuotedSql, materializedHints)[0]?.items || []
+)].sort((left, right) => left.columnIndex - right.columnIndex);
+assert.deepEqual(
+  dollarQuotedItems.map((item) => item.range
+    ? dollarQuotedSql.substring(item.range.startColumn - 1, item.range.endColumn - 1)
+    : null),
+  ['0', '$tag$a,b);($tag$', 'FALSE'],
+  'PostgreSQL dollar-quoted delimiters do not shift later label ranges',
+);
+
 assert.deepEqual(
   getInsertValueAutoFill(
     insertWithEditorClosingParenthesis,

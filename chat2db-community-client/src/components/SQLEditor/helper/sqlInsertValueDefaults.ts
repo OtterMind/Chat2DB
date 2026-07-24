@@ -208,9 +208,23 @@ function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
   let depth = 0;
   let singleQuoted = false;
   let doubleQuoted = false;
+  let dollarQuote: string | null = null;
   for (let index = rowStart; index < sql.length; index += 1) {
+    if (dollarQuote) {
+      if (sql.startsWith(dollarQuote, index)) {
+        index += dollarQuote.length - 1;
+        dollarQuote = null;
+      }
+      continue;
+    }
     const current = sql[index];
     const next = sql[index + 1];
+    const delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(sql, index) : null;
+    if (delimiter) {
+      dollarQuote = delimiter;
+      index += delimiter.length - 1;
+      continue;
+    }
     if (singleQuoted && current === '\\' && next !== undefined) {
       index += 1;
       continue;
@@ -262,9 +276,27 @@ function normalizeSqlValue(value: string): string {
   let normalized = '';
   let singleQuoted = false;
   let doubleQuoted = false;
+  let dollarQuote: string | null = null;
   for (let index = 0; index < value.length; index += 1) {
+    if (dollarQuote) {
+      if (value.startsWith(dollarQuote, index)) {
+        normalized += dollarQuote;
+        index += dollarQuote.length - 1;
+        dollarQuote = null;
+      } else {
+        normalized += value[index];
+      }
+      continue;
+    }
     const current = value[index];
     const next = value[index + 1];
+    const delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(value, index) : null;
+    if (delimiter) {
+      normalized += delimiter;
+      dollarQuote = delimiter;
+      index += delimiter.length - 1;
+      continue;
+    }
     if (singleQuoted && current === '\\' && next !== undefined) {
       normalized += current + next;
       index += 1;
@@ -291,6 +323,16 @@ function normalizeSqlValue(value: string): string {
     }
   }
   return normalized;
+}
+
+function dollarQuoteDelimiterAt(value: string, offset: number): string | null {
+  if (value[offset] !== '$') {
+    return null;
+  }
+  if (offset > 0 && /[A-Za-z0-9_$]/.test(value[offset - 1])) {
+    return null;
+  }
+  return value.substring(offset).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/)?.[0] || null;
 }
 
 function rangeAtOffsets(sql: string, startOffset: number, endOffset: number) {
