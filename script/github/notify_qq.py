@@ -18,6 +18,11 @@ from urllib.request import Request, urlopen
 
 TRANSIENT_HTTP_STATUSES = {429, 500, 502, 503, 504}
 URL_PATTERN = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+COLLECTED_EVENT_NAMES = {
+    "issue_comment",
+    "pull_request_review",
+    "pull_request_review_comment",
+}
 
 ISSUE_ACTIONS = {
     "opened": "已打开",
@@ -103,6 +108,26 @@ DISCUSSION_STATES = {
     "closed": "已关闭",
 }
 
+COMMENT_ACTIONS = {
+    "created": "已评论",
+    "edited": "已编辑评论",
+    "deleted": "已删除评论",
+}
+
+REVIEW_COMMENT_ACTIONS = {
+    "created": "新增代码评审评论",
+    "edited": "已编辑代码评审评论",
+    "deleted": "已删除代码评审评论",
+}
+
+REVIEW_STATES = {
+    "approved": "已批准",
+    "changes_requested": "要求修改",
+    "commented": "已评论",
+    "dismissed": "已撤销",
+    "pending": "待提交",
+}
+
 
 class ConfigurationError(RuntimeError):
     """Raised when required GitHub Actions configuration is invalid."""
@@ -120,6 +145,7 @@ class RelayAPIError(RuntimeError):
 def _clean_text(value: Any, max_length: int) -> str:
     text = str(value or "")
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    text = re.sub(r"(?i)\[CQ:", "[CQ :", text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) <= max_length:
         return text
@@ -176,6 +202,70 @@ def _discussion_status(discussion: Mapping[str, Any], action: str) -> str:
     return DISCUSSION_STATES.get(state, state or "开放")
 
 
+def _comment_excerpt(comment: Mapping[str, Any], action: str) -> str:
+    if action in {"deleted", "dismissed"}:
+        return ""
+    return _clean_text(comment.get("body"), 180)
+
+
+def _review_action_label(action: str, state: str) -> str:
+    if action == "dismissed":
+        return "评审已撤销"
+    if action == "edited":
+        return "评审已编辑"
+    if state == "approved":
+        return "评审已批准"
+    if state == "changes_requested":
+        return "评审要求修改"
+    if state == "commented":
+        return "收到评审评论"
+    return "已提交评审"
+
+
+def _write_prepared_message(
+    path: Path, event_name: str, repository: str, message: str
+) -> None:
+    if event_name not in COLLECTED_EVENT_NAMES:
+        raise ConfigurationError(f"Cannot collect unsupported event: {event_name}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "event_name": event_name,
+                "repository": repository,
+                "message": message,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _read_prepared_message(path: Path, repository: str) -> tuple[str, str]:
+    if not path.is_file() or path.stat().st_size > 4096:
+        raise ConfigurationError("Prepared QQ notification is missing or too large")
+    try:
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ConfigurationError("Prepared QQ notification is not valid JSON") from error
+    if not isinstance(envelope, Mapping) or envelope.get("version") != 1:
+        raise ConfigurationError("Prepared QQ notification has an invalid format")
+    if envelope.get("repository") != repository:
+        raise ConfigurationError("Prepared QQ notification repository does not match")
+    event_name = str(envelope.get("event_name") or "")
+    if event_name not in COLLECTED_EVENT_NAMES:
+        raise ConfigurationError("Prepared QQ notification event is not allowed")
+    message = envelope.get("message")
+    if not isinstance(message, str) or not message or len(message) > 900:
+        raise ConfigurationError("Prepared QQ notification message is invalid")
+    if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", message):
+        raise ConfigurationError("Prepared QQ notification contains control characters")
+    if re.search(r"(?i)\[CQ:", message):
+        raise ConfigurationError("Prepared QQ notification contains a OneBot CQ code")
+    return event_name, message
+
+
 def _event_detail(event_name: str, action: str, payload: Mapping[str, Any]) -> str:
     if action in {"labeled", "unlabeled"}:
         label = payload.get("label") or {}
@@ -225,6 +315,81 @@ def build_notification(
         return message if include_url else _remove_urls(message)
 
     sender = _login(payload.get("sender")) or _clean_text(actor, 80)
+
+    if event_name == "issue_comment":
+        item = payload.get("issue") or {}
+        comment = payload.get("comment") or {}
+        item_name = "PR" if "pull_request" in item else "Issue"
+        number = item.get("number") or "?"
+        action_label = COMMENT_ACTIONS.get(action, f"评论状态已变更（{action}）")
+        commenter = _login(comment.get("user")) or sender
+        lines = [
+            f"{prefix} {item_name} #{number} {action_label}",
+            f"标题：{_clean_text(item.get('title'), 220)}",
+            f"评论者：{commenter}",
+        ]
+        excerpt = _comment_excerpt(comment, action)
+        if excerpt:
+            lines.append(f"摘要：{excerpt}")
+        html_url = _clean_text(
+            comment.get("html_url") if action != "deleted" else item.get("html_url"),
+            500,
+        )
+        if include_url and html_url:
+            lines.append(f"链接：{html_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
+
+    if event_name == "pull_request_review":
+        item = payload.get("pull_request") or {}
+        review = payload.get("review") or {}
+        number = item.get("number") or "?"
+        state = _clean_text(review.get("state"), 40).lower()
+        reviewer = _login(review.get("user")) or sender
+        lines = [
+            f"{prefix} PR #{number} {_review_action_label(action, state)}",
+            f"标题：{_clean_text(item.get('title'), 220)}",
+            f"结果：{REVIEW_STATES.get(state, state or '未知')}",
+            f"评审人：{reviewer}",
+        ]
+        excerpt = _comment_excerpt(review, action)
+        if excerpt:
+            lines.append(f"摘要：{excerpt}")
+        html_url = _clean_text(review.get("html_url") or item.get("html_url"), 500)
+        if include_url and html_url:
+            lines.append(f"链接：{html_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
+
+    if event_name == "pull_request_review_comment":
+        item = payload.get("pull_request") or {}
+        comment = payload.get("comment") or {}
+        number = item.get("number") or "?"
+        action_label = REVIEW_COMMENT_ACTIONS.get(
+            action, f"代码评审评论状态已变更（{action}）"
+        )
+        reviewer = _login(comment.get("user")) or sender
+        path = _clean_text(comment.get("path"), 180)
+        line_number = comment.get("line") or comment.get("original_line")
+        location = f"{path}:{line_number}" if path and line_number else path
+        lines = [
+            f"{prefix} PR #{number} {action_label}",
+            f"标题：{_clean_text(item.get('title'), 220)}",
+            f"评审人：{reviewer}",
+        ]
+        if location:
+            lines.append(f"位置：{location}")
+        excerpt = _comment_excerpt(comment, action)
+        if excerpt:
+            lines.append(f"摘要：{excerpt}")
+        html_url = _clean_text(
+            comment.get("html_url") if action != "deleted" else item.get("html_url"),
+            500,
+        )
+        if include_url and html_url:
+            lines.append(f"链接：{html_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
 
     if event_name == "release":
         release = payload.get("release") or {}
@@ -431,19 +596,33 @@ def main() -> int:
     run_url = f"{server_url}/{repository}/actions/runs/{run_id}" if run_id else ""
     include_url = _is_true(os.environ.get("QQ_INCLUDE_URL", "true"))
 
-    message = build_notification(
-        event_name, payload, repository, actor, run_url, include_url=include_url
-    )
+    prepared_path = os.environ.get("QQ_PREPARED_MESSAGE_PATH")
+    if prepared_path:
+        event_name, message = _read_prepared_message(Path(prepared_path), repository)
+        action = "prepared"
+    else:
+        message = build_notification(
+            event_name, payload, repository, actor, run_url, include_url=include_url
+        )
+        action = _clean_text(payload.get("action") or "manual", 60)
 
-    action = _clean_text(payload.get("action") or "manual", 60)
+        output_path = os.environ.get("QQ_MESSAGE_OUTPUT_PATH")
+        if output_path:
+            _write_prepared_message(Path(output_path), event_name, repository, message)
+            print(f"QQ notification collected: event={event_name}, action={action}")
+            return 0
+
     if _is_true(os.environ.get("QQ_DRY_RUN")):
         print(f"QQ notification dry run passed: event={event_name}, action={action}")
         return 0
 
-    if not run_id:
-        raise ConfigurationError("GITHUB_RUN_ID is required for relay deduplication")
+    delivery_id = _clean_text(os.environ.get("QQ_DELIVERY_ID") or run_id, 160)
+    if not delivery_id:
+        raise ConfigurationError("A delivery ID is required for relay deduplication")
     relay_url, relay_token = _required_environment()
-    response = send_relay_message(relay_url, relay_token, repository, run_id, message)
+    response = send_relay_message(
+        relay_url, relay_token, repository, delivery_id, message
+    )
     message_id = _clean_text(response.get("message_id"), 160)
     duplicate = bool(response.get("duplicate"))
     url_removed = bool(response.get("url_removed"))
