@@ -124,7 +124,7 @@
     "eslint": "^8.49.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-prettier": "^9.0.0",
-    "eslint-import-resolver-webpack": "^0.13.7",
+    "eslint-import-resolver-webpack": "^0.13.11",
     "eslint-plugin-babel": "^5.3.1",
     "eslint-plugin-import": "^2.28.1",
     "eslint-plugin-prettier": "^5.0.0",
