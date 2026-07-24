@@ -195,6 +195,12 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
 ./docker/docker-build.sh 5.3.0 chat2db/chat2db:5.3.0
 ```
 
+## Database guides
+
+Step-by-step guides for connecting Chat2DB Community to specific databases:
+
+- [BigQuery](./docs/guides/bigquery.md) — Google BigQuery via a Google Cloud service account.
+
 ## Community vs Commercial Editions
 
 The Community edition contains the full local database client described above, including custom AI model support. The commercial Pro and Enterprise editions build on the same core and add hosted AI services, user accounts, cloud storage and multi-device sync, and team collaboration and governance features. See [chat2db.ai](https://chat2db.ai) for details.
