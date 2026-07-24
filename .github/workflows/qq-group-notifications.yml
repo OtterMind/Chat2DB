@@ -42,6 +42,32 @@ on:
       - review_request_removed
       - auto_merge_enabled
       - auto_merge_disabled
+  release:
+    types:
+      - published
+      - unpublished
+      - created
+      - edited
+      - deleted
+      - prereleased
+      - released
+  deployment:
+  deployment_status:
+  discussion:
+    types:
+      - created
+      - edited
+      - deleted
+      - transferred
+      - pinned
+      - unpinned
+      - labeled
+      - unlabeled
+      - locked
+      - unlocked
+      - category_changed
+      - answered
+      - unanswered
   workflow_dispatch:
     inputs:
       message:
@@ -59,7 +85,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: qq-group-notification-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}-${{ github.event.action || 'manual' }}
+  group: qq-group-notification-${{ github.event.issue.number || github.event.pull_request.number || github.event.discussion.number || github.event.release.id || github.event.deployment.id || github.run_id }}-${{ github.event.action || 'manual' }}
   cancel-in-progress: false
 
 jobs:

@@ -82,6 +82,123 @@ class NotificationFormattingTest(unittest.TestCase):
         self.assertIn("提交已更新", message)
         self.assertIn("提交：1111111 -> 2222222", message)
 
+    def test_release_published_includes_metadata_but_not_body(self):
+        payload = {
+            "action": "published",
+            "release": {
+                "tag_name": "v5.4.0",
+                "name": "Chat2DB 5.4.0",
+                "draft": False,
+                "prerelease": False,
+                "body": "release body must stay private",
+                "html_url": "https://github.com/OtterMind/Chat2DB/releases/tag/v5.4.0",
+            },
+            "sender": {"login": "release-manager"},
+        }
+
+        message = notify_qq.build_notification(
+            "release",
+            payload,
+            "OtterMind/Chat2DB",
+            "release-manager",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("Release v5.4.0 已发布", message)
+        self.assertIn("名称：Chat2DB 5.4.0", message)
+        self.assertIn("状态：正式发布", message)
+        self.assertIn("操作者：release-manager", message)
+        self.assertIn("/releases/tag/v5.4.0", message)
+        self.assertNotIn("release body must stay private", message)
+
+    def test_deployment_created_includes_environment_and_ref(self):
+        payload = {
+            "action": "created",
+            "deployment": {
+                "environment": "staging",
+                "ref": "main",
+                "payload": {"secret": "must-not-leak"},
+            },
+            "sender": {"login": "deploy-bot"},
+        }
+
+        message = notify_qq.build_notification(
+            "deployment",
+            payload,
+            "OtterMind/Chat2DB",
+            "deploy-bot",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("Deployment 已创建", message)
+        self.assertIn("环境：staging", message)
+        self.assertIn("Ref：main", message)
+        self.assertIn("状态：已创建", message)
+        self.assertNotIn("must-not-leak", message)
+
+    def test_deployment_status_uses_environment_url_without_query_credentials(self):
+        payload = {
+            "action": "created",
+            "deployment": {"environment": "production", "ref": "v5.4.0"},
+            "deployment_status": {
+                "state": "success",
+                "environment_url": "https://chat2db.example.com/app?token=must-not-leak",
+                "log_url": "https://logs.example.com/deploy/42?key=must-not-leak",
+            },
+            "sender": {"login": "github-actions"},
+        }
+
+        message = notify_qq.build_notification(
+            "deployment_status",
+            payload,
+            "OtterMind/Chat2DB",
+            "github-actions",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("Deployment 状态已更新", message)
+        self.assertIn("环境：production", message)
+        self.assertIn("Ref：v5.4.0", message)
+        self.assertIn("状态：成功", message)
+        self.assertIn("环境链接：https://chat2db.example.com/app", message)
+        self.assertNotIn("must-not-leak", message)
+        self.assertNotIn("logs.example.com", message)
+
+    def test_discussion_includes_category_and_status_but_not_body(self):
+        payload = {
+            "action": "created",
+            "discussion": {
+                "number": 12,
+                "title": "How should migrations work?",
+                "body": "discussion body must stay private",
+                "state": "open",
+                "locked": False,
+                "category": {"name": "Q&A"},
+                "html_url": "https://github.com/OtterMind/Chat2DB/discussions/12",
+            },
+            "sender": {"login": "community-member"},
+        }
+
+        message = notify_qq.build_notification(
+            "discussion",
+            payload,
+            "OtterMind/Chat2DB",
+            "community-member",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("Discussion #12 已创建", message)
+        self.assertIn("标题：How should migrations work?", message)
+        self.assertIn("分类：Q&A", message)
+        self.assertIn("状态：开放", message)
+        self.assertIn("操作者：community-member", message)
+        self.assertIn("/discussions/12", message)
+        self.assertNotIn("discussion body must stay private", message)
+
     def test_untrusted_title_is_bounded_and_control_characters_are_removed(self):
         payload = {
             "action": "edited",

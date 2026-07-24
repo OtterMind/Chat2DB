@@ -1,9 +1,9 @@
 # QQ Group Notifications
 
-The `QQ group notifications` workflow sends Issue and pull-request state changes
-to QQ group `1080856850` through a dedicated NapCat/OneBot account. GitHub
-Actions can reach the private Mac Studio deployment only through an
-authenticated Cloudflare Tunnel endpoint.
+The `QQ group notifications` workflow sends Issue, pull-request, Release,
+Deployment, and Discussion state changes to QQ group `1080856850` through a
+dedicated NapCat/OneBot account. GitHub Actions can reach the private Mac Studio
+deployment only through an authenticated Cloudflare Tunnel endpoint.
 
 ```text
 GitHub Actions -> HTTPS relay -> OneBot HTTP -> NapCat -> QQ group 1080856850
@@ -23,8 +23,9 @@ protocol changes, or account risk controls.
   rate-limited to 30 per minute.
 - NapCat WebUI binds only to host loopback. OneBot HTTP and WebSocket ports are
   not published on the host or Internet.
-- Only the item title and event metadata are sent. Bodies, comments, source
-  code, credentials, and other event payload fields are excluded.
+- Only Issue, pull-request, and Discussion titles plus selected Release and
+  Deployment metadata are sent. Bodies, comments, source code, Deployment
+  payloads, credentials, and other event payload fields are excluded.
 - `pull_request_target` checks out the notifier from the trusted default branch
   and never executes pull-request code. A manually dispatched test may use the
   explicitly selected maintainer branch.
@@ -99,6 +100,27 @@ The old `QQ_BOT_APP_ID`, `QQ_BOT_CLIENT_SECRET`, and `QQ_GROUP_OPENID` secrets
 are not used by this implementation and may be removed after the relay path is
 verified.
 
+## Notification coverage
+
+The workflow sends these repository events:
+
+- Issue and pull-request lifecycle and state changes listed in the workflow.
+- Release `published`, `unpublished`, `created`, `edited`, `deleted`,
+  `prereleased`, and `released` events. Messages include the tag, release name,
+  release state, actor, and release URL.
+- Deployment creation and every Deployment status update. Messages include the
+  environment, ref, mapped status, actor, and an environment or log URL when
+  GitHub provides one. URL query strings and fragments are removed.
+- Discussion `created`, `edited`, `deleted`, `transferred`, `pinned`,
+  `unpinned`, `labeled`, `unlabeled`, `locked`, `unlocked`, `category_changed`,
+  `answered`, and `unanswered` events. Messages include the number, title,
+  category, current state, actor, and Discussion URL.
+
+Discussion comments are intentionally not subscribed to and do not generate QQ
+messages. GitHub does not run the `created`, `edited`, or `deleted` Release
+activity types for draft releases; `published` is the reliable event for both
+stable releases and prereleases when they become public.
+
 ## Verification
 
 Run automated checks:
@@ -118,6 +140,9 @@ Verify the live path in this order:
 4. Dispatch it again with `dry_run` disabled and confirm one QQ message.
 5. Open and close a test Issue, then open and close a test pull request. Confirm
    action, number, title, actor, URL, and merged/closed distinction.
+6. Publish or edit a test Release, create a test Deployment status, and change a
+   test Discussion state. Confirm their selected metadata and links, and confirm
+   that bodies, comments, Deployment payloads, and URL query strings are absent.
 
 The relay intentionally returns a generic `QQ delivery failed` response when
 OneBot is offline or rejects a message, so internal details are not exposed on

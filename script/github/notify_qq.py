@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send GitHub Issue and pull request changes through the Chat2DB QQ relay."""
+"""Send selected GitHub repository changes through the Chat2DB QQ relay."""
 
 from __future__ import annotations
 
@@ -62,6 +62,47 @@ PULL_REQUEST_ACTIONS = {
     "auto_merge_disabled": "已禁用自动合并",
 }
 
+RELEASE_ACTIONS = {
+    "published": "已发布",
+    "unpublished": "已取消发布",
+    "created": "已创建",
+    "edited": "已编辑",
+    "deleted": "已删除",
+    "prereleased": "已设为预发布",
+    "released": "已设为正式发布",
+}
+
+DISCUSSION_ACTIONS = {
+    "created": "已创建",
+    "edited": "已编辑",
+    "deleted": "已删除",
+    "transferred": "已转移",
+    "pinned": "已置顶",
+    "unpinned": "已取消置顶",
+    "labeled": "已添加标签",
+    "unlabeled": "已移除标签",
+    "locked": "已锁定",
+    "unlocked": "已解锁",
+    "category_changed": "已更改分类",
+    "answered": "已标记回答",
+    "unanswered": "已取消回答",
+}
+
+DEPLOYMENT_STATES = {
+    "error": "错误",
+    "failure": "失败",
+    "inactive": "已停用",
+    "in_progress": "进行中",
+    "queued": "排队中",
+    "pending": "等待中",
+    "success": "成功",
+}
+
+DISCUSSION_STATES = {
+    "open": "开放",
+    "closed": "已关闭",
+}
+
 
 class ConfigurationError(RuntimeError):
     """Raised when required GitHub Actions configuration is invalid."""
@@ -100,6 +141,39 @@ def _join_message_lines(lines: list[str], max_length: int = 900) -> str:
 
 def _remove_urls(value: str) -> str:
     return URL_PATTERN.sub("[链接已省略]", value)
+
+
+def _safe_deployment_url(value: Any) -> str:
+    url = _clean_text(value, 500)
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return ""
+    if parsed.username or parsed.password:
+        return ""
+    return parsed._replace(query="", fragment="").geturl()
+
+
+def _release_status(release: Mapping[str, Any]) -> str:
+    if release.get("draft"):
+        return "草稿"
+    if release.get("prerelease"):
+        return "预发布"
+    return "正式发布"
+
+
+def _discussion_status(discussion: Mapping[str, Any], action: str) -> str:
+    if action == "deleted":
+        return "已删除"
+    if discussion.get("locked") or action == "locked":
+        return "已锁定"
+    if action == "unlocked":
+        return "已解锁"
+    if action == "answered" or discussion.get("answer_html_url"):
+        return "已回答"
+    if action == "unanswered":
+        return "未回答"
+    state = _clean_text(discussion.get("state"), 40).lower()
+    return DISCUSSION_STATES.get(state, state or "开放")
 
 
 def _event_detail(event_name: str, action: str, payload: Mapping[str, Any]) -> str:
@@ -150,6 +224,81 @@ def build_notification(
         message = _join_message_lines(lines)
         return message if include_url else _remove_urls(message)
 
+    sender = _login(payload.get("sender")) or _clean_text(actor, 80)
+
+    if event_name == "release":
+        release = payload.get("release") or {}
+        tag = _clean_text(release.get("tag_name"), 120) or "未命名"
+        name = _clean_text(release.get("name"), 220) or tag
+        action_label = RELEASE_ACTIONS.get(action, f"状态已变更（{action}）")
+        lines = [
+            f"{prefix} Release {tag} {action_label}",
+            f"名称：{name}",
+            f"状态：{_release_status(release)}",
+            f"操作者：{sender}",
+        ]
+        html_url = _clean_text(release.get("html_url"), 500)
+        if include_url and html_url:
+            lines.append(f"链接：{html_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
+
+    if event_name in {"deployment", "deployment_status"}:
+        deployment = payload.get("deployment") or {}
+        environment = _clean_text(deployment.get("environment"), 120) or "未指定"
+        ref = _clean_text(deployment.get("ref"), 120)
+        if not ref:
+            ref = _clean_text(deployment.get("sha"), 12)[:7] or "未指定"
+
+        if event_name == "deployment":
+            action_label = "已创建"
+            status_label = "已创建"
+            status = {}
+        else:
+            action_label = "状态已更新"
+            status = payload.get("deployment_status") or {}
+            state = _clean_text(status.get("state"), 40).lower()
+            status_label = DEPLOYMENT_STATES.get(state, state or "未知")
+
+        lines = [
+            f"{prefix} Deployment {action_label}",
+            f"环境：{environment}",
+            f"Ref：{ref}",
+            f"状态：{status_label}",
+            f"操作者：{sender}",
+        ]
+        environment_url = _safe_deployment_url(status.get("environment_url"))
+        log_url = _safe_deployment_url(status.get("log_url"))
+        if include_url and environment_url:
+            lines.append(f"环境链接：{environment_url}")
+        elif include_url and log_url:
+            lines.append(f"日志：{log_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
+
+    if event_name == "discussion":
+        discussion = payload.get("discussion") or {}
+        number = discussion.get("number") or "?"
+        title = _clean_text(discussion.get("title"), 220)
+        category = discussion.get("category") or {}
+        category_name = _clean_text(category.get("name"), 100) or "未分类"
+        action_label = DISCUSSION_ACTIONS.get(action, f"状态已变更（{action}）")
+        lines = [
+            f"{prefix} Discussion #{number} {action_label}",
+            f"标题：{title}",
+            f"分类：{category_name}",
+            f"状态：{_discussion_status(discussion, action)}",
+            f"操作者：{sender}",
+        ]
+        detail = _event_detail(event_name, action, payload)
+        if detail and not detail.endswith("："):
+            lines.append(detail)
+        html_url = _clean_text(discussion.get("html_url"), 500)
+        if include_url and html_url:
+            lines.append(f"链接：{html_url}")
+        message = _join_message_lines(lines)
+        return message if include_url else _remove_urls(message)
+
     if event_name == "issues":
         item = payload.get("issue") or {}
         item_name = "Issue"
@@ -166,7 +315,6 @@ def build_notification(
 
     number = item.get("number") or payload.get("number") or "?"
     title = _clean_text(item.get("title"), 220)
-    sender = _login(payload.get("sender")) or _clean_text(actor, 80)
     detail = _event_detail(event_name, action, payload)
     html_url = _clean_text(item.get("html_url"), 500)
 
