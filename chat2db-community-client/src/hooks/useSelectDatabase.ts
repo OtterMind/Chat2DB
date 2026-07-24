@@ -146,6 +146,9 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
         });
 
         setSchemaList(_schemaList);
+      })
+      .catch(() => {
+        setSchemaList([]);
       });
   };
 
