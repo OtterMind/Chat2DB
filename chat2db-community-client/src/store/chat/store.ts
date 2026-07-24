@@ -25,6 +25,7 @@ export const useChatStore = createWithEqualityFn<ChatStore>()(
   devtools(createStore, {
     name: 'Chat2DB_Chat_Store',
   }),
+  shallow,
 );
 
 export { shallow };
