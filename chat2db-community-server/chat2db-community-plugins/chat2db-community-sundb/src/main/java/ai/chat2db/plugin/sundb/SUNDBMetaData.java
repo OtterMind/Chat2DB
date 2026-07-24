@@ -71,7 +71,7 @@ public class SUNDBMetaData extends DefaultMetaService implements IDbMetaData {
                     Scale = rsMetaData.getScale(colCount);
                     if (Precision != null && Precision != 0) {
                         ddlBuilder.append("(").append(Precision);
-                        if (rsMetaData.getColumnTypeName(colCount) == "NUMBER") {
+                        if ("NUMBER".equals(rsMetaData.getColumnTypeName(colCount))) {
                             ddlBuilder.append(",").append(Scale).append(")");
                         } else {
                             ddlBuilder.append(" )");
@@ -120,7 +120,7 @@ public class SUNDBMetaData extends DefaultMetaService implements IDbMetaData {
                 Scale = rsMetaData.getScale(i);
                 if (Scale1 != null && Scale1 != 0) {
                     ddlBuilder.append("(").append(Scale1);
-                    if (rsMetaData.getColumnTypeName(i) == "NUMBER") {
+                    if ("NUMBER".equals(rsMetaData.getColumnTypeName(i))) {
                         ddlBuilder.append(",").append(Scale).append(") ,");
                     } else {
                         ddlBuilder.append(")").append(" ,");
