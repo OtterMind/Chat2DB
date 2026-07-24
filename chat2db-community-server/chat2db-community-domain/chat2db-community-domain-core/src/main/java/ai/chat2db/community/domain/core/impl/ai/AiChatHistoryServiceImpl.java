@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -38,6 +39,7 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     private final ObjectMapper objectMapper;
     private final Path baseDir;
 
+    @Autowired
     public AiChatHistoryServiceImpl(ObjectMapper objectMapper) {
         this(objectMapper, Paths.get(ConfigUtils.getBasePath(), "ai-chat-history"));
     }

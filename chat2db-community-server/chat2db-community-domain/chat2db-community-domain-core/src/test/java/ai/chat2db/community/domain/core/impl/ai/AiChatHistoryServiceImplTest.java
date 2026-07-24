@@ -5,12 +5,15 @@ import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiChatHistoryServiceImplTest {
@@ -20,6 +23,17 @@ class AiChatHistoryServiceImplTest {
 
     @TempDir
     Path tempDirectory;
+
+    @Test
+    void springSelectsTheProductionConstructor() {
+        DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
+        AutowiredAnnotationBeanPostProcessor postProcessor = new AutowiredAnnotationBeanPostProcessor();
+        postProcessor.setBeanFactory(beanFactory);
+        beanFactory.addBeanPostProcessor(postProcessor);
+        beanFactory.registerSingleton("objectMapper", new ObjectMapper());
+
+        assertNotNull(beanFactory.createBean(AiChatHistoryServiceImpl.class));
+    }
 
     @Test
     void deleteSessionDoesNotDeleteAnotherUsersMessages() {
