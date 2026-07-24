@@ -87,7 +87,7 @@
     "lodash": "^4.17.21",
     "lottie-react": "^2.4.0",
     "lucide-react": "^0.356.0",
-    "monaco-editor": "^0.52.0",
+    "monaco-editor": "^0.56.0",
     "node-schedule": "^2.1.1",
     "pako": "^2.1.0",
     "qrcode": "^1.5.3",
