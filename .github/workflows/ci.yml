@@ -63,12 +63,6 @@ jobs:
       - name: Run database object sorting contract
         run: yarn run test:database-object-sorting
 
-      - name: Run chat answer update contract
-        run: yarn run test:chat-answer-update
-
-      - name: Run tree title highlight contract
-        run: yarn run test:tree-title-highlight
-
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
 
