@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.excel;
 
 import ai.chat2db.community.domain.api.model.excel.ExcelCheckResponse;
 import ai.chat2db.community.domain.api.service.db.IDbExcelTableService;
+import ai.chat2db.community.tools.util.EasyStringUtils;
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.metadata.data.ReadCellData;
@@ -158,7 +159,7 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
                 valueList.add("null");
             } else {
                 allNull = false;
-                valueList.add("'" + v + "'");
+                valueList.add(EasyStringUtils.escapeAndQuoteString(v.toString()));
             }
         }
         if (allNull) {
