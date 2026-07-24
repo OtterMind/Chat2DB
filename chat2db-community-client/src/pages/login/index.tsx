@@ -13,7 +13,7 @@ import { isDesktop } from '@/utils/env';
 import { getAllUrlParams, getUrlParam, openWebPage } from '@/utils/url';
 import { Icon } from '@chat2db/ui';
 import { Button, Divider, Form, Input } from 'antd';
-import { memo, useEffect, useLayoutEffect, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { history } from 'umi';
 import { v4 as uuidv4 } from 'uuid';
 import { useStyles } from './style';
@@ -37,6 +37,7 @@ export default memo<IProps>(() => {
   const [submitLoading, setSubmitLoading] = useState<boolean>(false);
   const [isWechatLogin, setIsWechatLogin] = useState<boolean>(isCN);
   const [form] = Form.useForm();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [loginUrls, setLoginUrls] = useState<{
     githubLoginUrl: string;
     googleLoginUrl: string;
@@ -109,6 +110,15 @@ export default memo<IProps>(() => {
       });
   }, [appConfig.curCountry]);
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
   if (!runtimeEditionConfig.commercialAccount) {
     return null;
   }
@@ -123,11 +133,15 @@ export default memo<IProps>(() => {
         .then(() => {
           let countdown = 60;
           setCodeCountDown(countdown);
-          const timer = setInterval(() => {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          timerRef.current = setInterval(() => {
             countdown -= 1;
             setCodeCountDown(countdown);
             if (countdown === 0) {
-              clearInterval(timer);
+              clearInterval(timerRef.current!);
+              timerRef.current = null;
               setCodeCountDown(null);
             }
           }, 1000);

@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { Input, Button, Form } from 'antd';
 import userServices from '@/service/enterprise/user';
 import { createStyles } from 'antd-style';
@@ -34,6 +34,15 @@ export default memo<IProps>((props) => {
   const [sendCodeCount, setSendCodeCount] = useState<number>(0); // Number of verification-code sends.
   const [submitLoading, setSubmitLoading] = useState<boolean>(false);
   const [form] = Form.useForm();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
   const onFinish = (formValue: any) => {
     setSubmitLoading(true);
@@ -61,11 +70,15 @@ export default memo<IProps>((props) => {
         .then(() => {
           let countdown = 60;
           setCodeCountDown(countdown);
-          const timer = setInterval(() => {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          timerRef.current = setInterval(() => {
             countdown -= 1;
             setCodeCountDown(countdown);
             if (countdown === 0) {
-              clearInterval(timer);
+              clearInterval(timerRef.current!);
+              timerRef.current = null;
               setCodeCountDown(null);
             }
           }, 1000);
