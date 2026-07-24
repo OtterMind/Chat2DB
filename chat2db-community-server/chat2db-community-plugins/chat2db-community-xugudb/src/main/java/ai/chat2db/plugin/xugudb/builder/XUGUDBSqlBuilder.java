@@ -55,6 +55,9 @@ public class XUGUDBSqlBuilder extends DefaultSqlBuilder {
                 continue;
             }
             XUGUDBIndexTypeEnum indexTypeEnum = XUGUDBIndexTypeEnum.getByType(tableIndex.getType());
+            if (indexTypeEnum == null) {
+                continue;
+            }
             script.append(SQLConstants.LINE_SEPARATOR).append(SQLConstants.EMPTY).append(indexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.SEMICOLON);
         }
 
