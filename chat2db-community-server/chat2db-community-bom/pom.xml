@@ -74,7 +74,7 @@
         <chat2db.maven-clean-plugin.version>3.2.0</chat2db.maven-clean-plugin.version>
         <chat2db.maven-compiler-plugin.version>3.11.0</chat2db.maven-compiler-plugin.version>
         <chat2db.maven-dependency-plugin.version>3.6.1</chat2db.maven-dependency-plugin.version>
-        <chat2db.maven-source-plugin.version>3.2.1</chat2db.maven-source-plugin.version>
+        <chat2db.maven-source-plugin.version>3.4.0</chat2db.maven-source-plugin.version>
         <chat2db.maven-surefire-plugin.version>3.1.2</chat2db.maven-surefire-plugin.version>
         <flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
         <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
@@ -85,7 +85,7 @@
         <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
         <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
         <spring-boot-maven-plugin.version>${spring-boot.version}</spring-boot-maven-plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
