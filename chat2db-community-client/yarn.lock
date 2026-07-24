@@ -11024,9 +11024,9 @@ pirates@^4.0.1, pirates@^4.0.4:
   integrity sha512-saLsH7WeYYPiD25LDuLRRY/i+6HaPYr6G1OUlN39otzkSTxKnubR9RTxS3/Kk50s1g2JTgFwWQDQyplC5/SHZg==
 
 piscina@^4.5.1:
-  version "4.8.0"
-  resolved "https://registry.npmmirror.com/piscina/-/piscina-4.8.0.tgz#5f5c5b1f4f3f50f8de894239c98b7b10d41ba4a6"
-  integrity sha512-EZJb+ZxDrQf3dihsUL7p42pjNyrNIFJCrRHPMgxu/svsj+P3xS3fuEWp7k2+rfsavfl1N0G29b1HGs7J0m8rZA==
+  version "4.9.3"
+  resolved "https://registry.npmmirror.com/piscina/-/piscina-4.9.3.tgz#a8df8f699f1f3721c01720d0e7dcc49e7de1fea8"
+  integrity sha512-3e3ka9QCE8RJ5I9uszdAADZnkcYi21cqmF3gxox3u884N72qpFHCsIVhHt8cEQ9t3Auq/NqoiCEuhxlxxQuDWA==
   optionalDependencies:
     "@napi-rs/nice" "^1.0.1"
 
