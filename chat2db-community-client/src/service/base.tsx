@@ -103,7 +103,13 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           method,
           message: params,
         },
-        { errorLevel: effectiveErrorLevel, permissionError, timeout, fullResponse, restParams: restParams as DesktopRequestOptions },
+        {
+          errorLevel: effectiveErrorLevel,
+          permissionError,
+          timeout,
+          fullResponse,
+          restParams: restParams as DesktopRequestOptions,
+        },
       );
     } else {
       return new Promise<R>((resolve, reject) => {
