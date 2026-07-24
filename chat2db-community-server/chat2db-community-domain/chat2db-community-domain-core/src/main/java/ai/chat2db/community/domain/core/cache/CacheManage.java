@@ -28,127 +28,186 @@ public class CacheManage {
 
     private static final String CACHE = "meta_cache";
 
-    private static boolean init = false;
+    private static final CacheStore CACHE_STORE = new CacheStore(CacheManage::createCacheManager);
 
-    private static CacheManager cacheManager;
-
-    static {
-        try {
-            init();
-        } catch (Exception e) {
-            log.error("init error", e);
-        }
-    }
-
-    private static void init() {
-        cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
+    private static CacheManager createCacheManager() {
+        return CacheManagerBuilder.newCacheManagerBuilder()
                 .with(CacheManagerBuilder.persistence(PATH))
                 .withCache(CACHE, CacheConfigurationBuilder.newCacheConfigurationBuilder(String.class, String.class,
                         ResourcePoolsBuilder.newResourcePoolsBuilder()
                                 .heap(10000, EntryUnit.ENTRIES)
                                 .disk(2, MemoryUnit.GB, true)).withExpiry(ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofHours(4))))
                 .build(true);
-        init = true;
-    }
-
-
-    private static <T> T get(String key, Class<T> clazz) {
-        Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
-        String value = myCache.get(key);
-        if (!StringUtils.isEmpty(value)) {
-            return JSON.parseObject(value, clazz);
-        }
-        return null;
-    }
-
-
-    private static <T> List<T> getList(String key, Class<T> clazz) {
-        Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
-        String value = myCache.get(key);
-        try {
-            if (StringUtils.isNotBlank(value)) {
-                return JSON.parseArray(value, clazz);
-            }
-        }catch (Exception e){
-            log.error("getList error", e);
-        }
-        return null;
     }
 
     public static <T> T get(String key, Class<T> clazz, Function<Object, Boolean> refresh,
                             Function<Object, T> function) {
-        if (!init) {
-            return function.apply(key);
-        }
-        T t;
-        if (refresh.apply(key)) {
-            remove(key);
-            t = function.apply(key);
-            put(key, t);
-        } else {
-            t = get(key, clazz);
-            if (t == null) {
-                t = function.apply(key);
-                put(key, t);
-            }
-        }
-        return t;
+        return CACHE_STORE.get(key, clazz, refresh, function);
     }
 
     public static <T> List<T> getList(String key, Class<T> clazz, Function<Object, Boolean> refresh,
                                       Function<Object, List<T>> function) {
-        if (!init) {
-            return function.apply(key);
-        }
-        List<T> t;
-        if (refresh.apply(key)) {
-            remove(key);
-            t = function.apply(key);
-            put(key, t);
-        } else {
-            t = getList(key, clazz);
-            if (t == null) {
-                t = function.apply(key);
-                put(key, t);
-            }
-        }
-        return t;
-    }
-
-    private static void put(String s, Object value) {
-        Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
-        myCache.put(s, JSON.toJSONString(value));
-    }
-
-    private static void remove(String key) {
-        Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
-        myCache.remove(key);
+        return CACHE_STORE.getList(key, clazz, refresh, function);
     }
 
     public static void fuzzyDelete(String key) {
-        Cache<String, String> myCache = cacheManager.getCache(CACHE, String.class, String.class);
-        try {
-            Set<String> removes = new HashSet<>();
-            myCache.forEach(entry -> {
-                if (entry.getKey() != null && entry.getKey().startsWith(key) && !entry.getKey().equals(key)) {
-                    removes.add(entry.getKey());
-                }
-            });
-            myCache.removeAll(removes);
-        } catch (Exception e) {
-            FileUtil.del(PATH);
-            init();
-        }
+        CACHE_STORE.fuzzyDelete(key);
     }
 
 
     public static void close() {
-        log.info("close cache");
-        try {
-            cacheManager.close();
-        } catch (Exception e) {
-            log.error("", e);
+        CACHE_STORE.close();
+    }
+
+    @FunctionalInterface
+    interface CacheManagerFactory {
+        CacheManager create();
+    }
+
+    static final class CacheStore {
+        private final CacheManagerFactory cacheManagerFactory;
+        private volatile CacheState state;
+
+        CacheStore(CacheManagerFactory cacheManagerFactory) {
+            this.cacheManagerFactory = cacheManagerFactory;
+            this.state = initialize();
+        }
+
+        boolean isAvailable() {
+            return state instanceof AvailableCache;
+        }
+
+        <T> T get(String key, Class<T> clazz, Function<Object, Boolean> refresh,
+                  Function<Object, T> function) {
+            Optional<Cache<String, String>> cache = currentCache();
+            if (cache.isEmpty()) {
+                return function.apply(key);
+            }
+            Cache<String, String> currentCache = cache.get();
+            T value;
+            if (refresh.apply(key)) {
+                remove(currentCache, key);
+                value = function.apply(key);
+                put(currentCache, key, value);
+            } else {
+                value = get(currentCache, key, clazz);
+                if (value == null) {
+                    value = function.apply(key);
+                    put(currentCache, key, value);
+                }
+            }
+            return value;
+        }
+
+        <T> List<T> getList(String key, Class<T> clazz, Function<Object, Boolean> refresh,
+                            Function<Object, List<T>> function) {
+            Optional<Cache<String, String>> cache = currentCache();
+            if (cache.isEmpty()) {
+                return function.apply(key);
+            }
+            Cache<String, String> currentCache = cache.get();
+            List<T> value;
+            if (refresh.apply(key)) {
+                remove(currentCache, key);
+                value = function.apply(key);
+                put(currentCache, key, value);
+            } else {
+                value = getList(currentCache, key, clazz);
+                if (value == null) {
+                    value = function.apply(key);
+                    put(currentCache, key, value);
+                }
+            }
+            return value;
+        }
+
+        void fuzzyDelete(String key) {
+            Optional<Cache<String, String>> cache = currentCache();
+            if (cache.isEmpty()) {
+                return;
+            }
+            Cache<String, String> currentCache = cache.get();
+            try {
+                Set<String> removes = new HashSet<>();
+                currentCache.forEach(entry -> {
+                    if (entry.getKey() != null && entry.getKey().startsWith(key) && !entry.getKey().equals(key)) {
+                        removes.add(entry.getKey());
+                    }
+                });
+                currentCache.removeAll(removes);
+            } catch (Exception e) {
+                FileUtil.del(PATH);
+                state = initialize();
+            }
+        }
+
+        void close() {
+            log.info("close cache");
+            CacheState currentState = state;
+            state = UnavailableCache.INSTANCE;
+            if (currentState instanceof AvailableCache availableCache) {
+                try {
+                    availableCache.cacheManager().close();
+                } catch (Exception e) {
+                    log.error("", e);
+                }
+            }
+        }
+
+        private CacheState initialize() {
+            try {
+                return new AvailableCache(Objects.requireNonNull(cacheManagerFactory.create()));
+            } catch (Exception | LinkageError e) {
+                log.error("init error", e);
+                return UnavailableCache.INSTANCE;
+            }
+        }
+
+        private Optional<Cache<String, String>> currentCache() {
+            CacheState currentState = state;
+            if (currentState instanceof AvailableCache availableCache) {
+                return Optional.ofNullable(availableCache.cacheManager()
+                        .getCache(CACHE, String.class, String.class));
+            }
+            return Optional.empty();
+        }
+
+        private <T> T get(Cache<String, String> cache, String key, Class<T> clazz) {
+            String value = cache.get(key);
+            if (!StringUtils.isEmpty(value)) {
+                return JSON.parseObject(value, clazz);
+            }
+            return null;
+        }
+
+        private <T> List<T> getList(Cache<String, String> cache, String key, Class<T> clazz) {
+            String value = cache.get(key);
+            try {
+                if (StringUtils.isNotBlank(value)) {
+                    return JSON.parseArray(value, clazz);
+                }
+            } catch (Exception e) {
+                log.error("getList error", e);
+            }
+            return null;
+        }
+
+        private void put(Cache<String, String> cache, String key, Object value) {
+            cache.put(key, JSON.toJSONString(value));
+        }
+
+        private void remove(Cache<String, String> cache, String key) {
+            cache.remove(key);
         }
     }
 
+    private sealed interface CacheState permits AvailableCache, UnavailableCache {
+    }
+
+    private record AvailableCache(CacheManager cacheManager) implements CacheState {
+    }
+
+    private enum UnavailableCache implements CacheState {
+        INSTANCE
+    }
 }

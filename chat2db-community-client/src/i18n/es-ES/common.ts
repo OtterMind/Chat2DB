@@ -150,6 +150,7 @@ export default {
   'common.button.tabularSeparatedValues': 'Delimitado por tabuladores (datos)',
   'common.button.tabularSeparatedValuesFieldName': 'Delimitado por tabuladores (nombre de campo)',
   'common.button.tabularSeparatedValuesFieldNameAndData': 'Separado por tabuladores (nombres de campo y datos)',
+  'common.button.markdownTable': 'Tabla Markdown',
   'common.button.cloneRow': 'Clonar fila',
   'common.button.deleteRow': 'Eliminar fila',
   'common.button.setNull': 'Establecer NULL',
