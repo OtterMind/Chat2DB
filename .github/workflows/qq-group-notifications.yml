@@ -1,0 +1,113 @@
+name: QQ group notifications
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - deleted
+      - transferred
+      - pinned
+      - unpinned
+      - closed
+      - reopened
+      - assigned
+      - unassigned
+      - labeled
+      - unlabeled
+      - locked
+      - unlocked
+      - milestoned
+      - demilestoned
+  pull_request_target:
+    types:
+      - assigned
+      - unassigned
+      - labeled
+      - unlabeled
+      - opened
+      - edited
+      - closed
+      - reopened
+      - synchronize
+      - converted_to_draft
+      - locked
+      - unlocked
+      - enqueued
+      - dequeued
+      - milestoned
+      - demilestoned
+      - ready_for_review
+      - review_requested
+      - review_request_removed
+      - auto_merge_enabled
+      - auto_merge_disabled
+  release:
+    types:
+      - published
+      - unpublished
+      - created
+      - edited
+      - deleted
+      - prereleased
+      - released
+  deployment:
+  deployment_status:
+  discussion:
+    types:
+      - created
+      - edited
+      - deleted
+      - transferred
+      - pinned
+      - unpinned
+      - labeled
+      - unlabeled
+      - locked
+      - unlocked
+      - category_changed
+      - answered
+      - unanswered
+  workflow_dispatch:
+    inputs:
+      message:
+        description: Text included in the manual test notification
+        required: true
+        default: Chat2DB QQ notification test
+        type: string
+      dry_run:
+        description: Format the notification without sending it to QQ
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qq-group-notification-${{ github.event.issue.number || github.event.pull_request.number || github.event.discussion.number || github.event.release.id || github.event.deployment.id || github.run_id }}-${{ github.event.action || 'manual' }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Send QQ group notification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # pull_request_target exposes repository secrets, so always execute the
+      # notifier from the trusted default branch and never check out PR code.
+      - name: Check out the trusted notifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: script/github/notify_qq.py
+          sparse-checkout-cone-mode: false
+
+      - name: Send notification
+        env:
+          QQ_RELAY_URL: ${{ secrets.QQ_RELAY_URL }}
+          QQ_RELAY_TOKEN: ${{ secrets.QQ_RELAY_TOKEN }}
+          QQ_INCLUDE_URL: ${{ vars.QQ_NOTIFICATION_INCLUDE_URL || 'true' }}
+          QQ_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: python3 script/github/notify_qq.py
