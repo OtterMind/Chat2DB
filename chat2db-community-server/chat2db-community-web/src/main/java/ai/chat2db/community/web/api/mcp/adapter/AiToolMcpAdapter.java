@@ -2,14 +2,24 @@ package ai.chat2db.community.web.api.mcp.adapter;
 
 
 import ai.chat2db.community.tools.annotation.NotCliRuntime;
+import ai.chat2db.community.domain.api.exception.ai.AiToolException;
+import ai.chat2db.community.domain.api.model.ai.AiToolResult;
+import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.service.ai.IAiToolService;
 import ai.chat2db.community.web.api.enums.ai.QuestionTypeEnum;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.web.api.adapter.ai.AiChatStreamAdapter;
-import ai.chat2db.community.web.api.adapter.ai.AiToolAdapter;
+import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
+import ai.chat2db.community.web.api.converter.ai.AiToolErrorCodeMapper;
+import ai.chat2db.community.web.api.converter.ai.AiToolOutput;
+import ai.chat2db.community.web.api.converter.ai.AiToolResultConverter;
+import ai.chat2db.community.web.api.converter.ai.AiToolResultSerializer;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -18,25 +28,43 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Component
 @Slf4j
 @NotCliRuntime
 public class AiToolMcpAdapter {
 
-    private final AiToolAdapter aiToolAdapter;
+    private final IAiToolService aiToolService;
+
+    private final AiToolContextConverter aiToolContextConverter;
+
+    private final AiToolResultConverter aiToolResultConverter;
 
     private final AiChatStreamAdapter aiChatStreamAdapter;
 
-    public AiToolMcpAdapter(AiToolAdapter aiToolAdapter, AiChatStreamAdapter aiChatStreamAdapter) {
-        this.aiToolAdapter = aiToolAdapter;
+    private final AiToolResultSerializer aiToolResultSerializer;
+
+    private final AiToolErrorCodeMapper aiToolErrorCodeMapper;
+
+    public AiToolMcpAdapter(IAiToolService aiToolService,
+            AiToolContextConverter aiToolContextConverter,
+            AiToolResultConverter aiToolResultConverter,
+            AiChatStreamAdapter aiChatStreamAdapter,
+            AiToolResultSerializer aiToolResultSerializer,
+            AiToolErrorCodeMapper aiToolErrorCodeMapper) {
+        this.aiToolService = aiToolService;
+        this.aiToolContextConverter = aiToolContextConverter;
+        this.aiToolResultConverter = aiToolResultConverter;
         this.aiChatStreamAdapter = aiChatStreamAdapter;
+        this.aiToolResultSerializer = aiToolResultSerializer;
+        this.aiToolErrorCodeMapper = aiToolErrorCodeMapper;
     }
 
     @Tool(name = "list_all_datasources", description = "List available Chat2DB datasources. Use this first, then pass the returned dataSourceId to datasource-scoped tools.")
     public String listAllDataSources() {
-        return invoke("list_all_datasources", aiToolAdapter::listAllDataSources);
+        return invoke("list_all_datasources",
+                () -> aiToolResultConverter.fromDataSources(aiToolService.listAllDataSources(contextRequest())));
     }
 
     @Tool(name = "list_all_tables", description = "List all tables in a target database. Call list_all_datasources and list_all_databases first, then pass dataSourceId and databaseName explicitly.")
@@ -44,13 +72,16 @@ public class AiToolMcpAdapter {
             @ToolParam(description = "Datasource id returned by list_all_datasources.", required = true) Long dataSourceId,
             @ToolParam(description = "Target database name returned by list_all_databases.", required = true) String databaseName,
             @ToolParam(description = "Optional target schema name returned by list_all_schemas.", required = false) String schemaName) {
-        return invoke("list_all_tables", toolContext -> aiToolAdapter.listAllTables(dataSourceId, databaseName, schemaName, toolContext));
+        return invoke("list_all_tables",
+                () -> aiToolResultConverter.fromTables(
+                        aiToolService.listAllTables(listTablesRequest(dataSourceId, databaseName, schemaName))));
     }
 
     @Tool(name = "list_all_databases", description = "List all databases available on a target Chat2DB datasource. Call list_all_datasources first, then pass dataSourceId explicitly.")
     public String listAllDatabases(
             @ToolParam(description = "Datasource id returned by list_all_datasources.", required = true) Long dataSourceId) {
-        return invoke("list_all_databases", toolContext -> aiToolAdapter.listAllDatabases(dataSourceId, toolContext));
+        return invoke("list_all_databases",
+                () -> aiToolResultConverter.fromDatabases(aiToolService.listAllDatabases(dataSourceId, contextRequest())));
     }
 
     @Tool(name = "list_all_schemas", description = "List all schemas in a target database. Call list_all_datasources and list_all_databases first, then pass targetDatabaseName and dataSourceId explicitly.")
@@ -59,7 +90,8 @@ public class AiToolMcpAdapter {
             @ToolParam(description = "Datasource id returned by list_all_datasources.", required = true) Long dataSourceId) {
         return invoke(
                 "list_all_schemas",
-                toolContext -> aiToolAdapter.listAllSchemas(targetDatabaseName, dataSourceId, toolContext));
+                () -> aiToolResultConverter.fromSchemas(
+                        aiToolService.listAllSchemas(targetDatabaseName, dataSourceId, contextRequest())));
     }
 
     @Tool(name = "execute_sql", description = "Execute SQL against the target database and return a concise result. Pass dataSourceId and databaseName explicitly.")
@@ -71,7 +103,8 @@ public class AiToolMcpAdapter {
             @ToolParam(description = "Optional target schema name returned by list_all_schemas.", required = false) String schemaName) {
         return invoke(
                 "execute_sql",
-                toolContext -> aiToolAdapter.executeSql(sql, pageSize, dataSourceId, databaseName, schemaName, toolContext));
+                () -> aiToolResultConverter.fromExecuteResult(
+                        aiToolService.executeSql(executeSqlRequest(sql, pageSize, dataSourceId, databaseName, schemaName))));
     }
 
     @Tool(name = "get_tables_schema", description = "Get CREATE TABLE DDL or structured schema for specific tables. Pass dataSourceId and databaseName explicitly.")
@@ -82,7 +115,8 @@ public class AiToolMcpAdapter {
             @ToolParam(description = "Optional target schema name returned by list_all_schemas.", required = false) String schemaName) {
         return invoke(
                 "get_tables_schema",
-                toolContext -> aiToolAdapter.getTablesSchema(tableNames, dataSourceId, databaseName, schemaName, toolContext));
+                () -> aiToolResultConverter.fromTableSchemas(
+                        aiToolService.getTablesSchema(tablesSchemaRequest(tableNames, dataSourceId, databaseName, schemaName))));
     }
 
     @Tool(name = "text2sql", description = "Convert a natural language question into SQL using Chat2DB's internal AI. Pass datasource context explicitly when targeting a specific database.")
@@ -100,22 +134,74 @@ public class AiToolMcpAdapter {
             chatRequest.setQuestionType(QuestionTypeEnum.NL_2_SQL.getCode());
             chatRequest.setEnableTools(Boolean.TRUE);
 
-            return aiChatStreamAdapter.chatSync(chatRequest);
+            String sql = aiChatStreamAdapter.chatSync(chatRequest);
+            return toolSuccess(aiToolResultConverter.fromText2Sql(sql));
         } catch (Exception e) {
             log.error("MCP tool call failed, tool=text2sql", e);
-            return "MCP tool 'text2sql' failed: " + StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
+            return toolFailure("text2sql", e);
         }
     }
 
-    private String invoke(String toolName, Function<ToolContext, String> action) {
+    private String invoke(String toolName, Supplier<AiToolOutput<?>> action) {
         try {
-            ToolContext toolContext = buildToolContext();
-            return action.apply(toolContext);
+            return toolSuccess(action.get());
+        } catch (AiToolException e) {
+            return toolFailure(toolName, e);
         } catch (Exception e) {
             log.error("MCP tool call failed, tool={}", toolName, e);
-            String message = StringUtils.defaultIfBlank(e.getMessage(), "Unknown error");
-            return "MCP tool '" + toolName + "' failed: " + message;
+            return toolFailure(toolName, e);
         }
+    }
+
+    private String toolFailure(String toolName, Exception e) {
+        if (e instanceof AiToolException toolException) {
+            return aiToolResultSerializer.toJson(AiToolResult.failureWithCode(
+                    aiToolErrorCodeMapper.errorCodeFor(toolException),
+                    toolException.getMessage()));
+        }
+        return aiToolResultSerializer.toJson(AiToolResult.failureWithCode(
+                "TOOL_CALL_FAILED",
+                "Tool execution failed."));
+    }
+
+    private String toolSuccess(AiToolOutput<?> output) {
+        return aiToolResultSerializer.toJson(AiToolResult.success(output.summary(), output.data()));
+    }
+
+    private AiToolContextRequest contextRequest() {
+        return aiToolContextConverter.toParam(buildToolContext());
+    }
+
+    private AiListTablesRequest listTablesRequest(Long dataSourceId, String databaseName, String schemaName) {
+        AiListTablesRequest request = new AiListTablesRequest();
+        request.setDataSourceId(dataSourceId);
+        request.setDatabaseName(databaseName);
+        request.setSchemaName(schemaName);
+        request.setAiToolContextRequest(contextRequest());
+        return request;
+    }
+
+    private AiExecuteSqlRequest executeSqlRequest(String sql, Integer pageSize, Long dataSourceId, String databaseName,
+            String schemaName) {
+        AiExecuteSqlRequest request = new AiExecuteSqlRequest();
+        request.setSql(sql);
+        request.setPageSize(pageSize);
+        request.setDataSourceId(dataSourceId);
+        request.setDatabaseName(databaseName);
+        request.setSchemaName(schemaName);
+        request.setAiToolContextRequest(contextRequest());
+        return request;
+    }
+
+    private AiGetTablesSchemaRequest tablesSchemaRequest(List<String> tableNames, Long dataSourceId,
+            String databaseName, String schemaName) {
+        AiGetTablesSchemaRequest request = new AiGetTablesSchemaRequest();
+        request.setTableNames(tableNames);
+        request.setDataSourceId(dataSourceId);
+        request.setDatabaseName(databaseName);
+        request.setSchemaName(schemaName);
+        request.setAiToolContextRequest(contextRequest());
+        return request;
     }
 
     private ToolContext buildToolContext() {
