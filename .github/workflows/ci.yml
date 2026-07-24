@@ -45,6 +45,9 @@ jobs:
       - name: Run SQL clipboard test
         run: yarn run test:sql-in-clipboard
 
+      - name: Run result Markdown formatter test
+        run: yarn run test:result-markdown
+
       - name: Run active workspace tab locator contract
         run: yarn run test:active-tab-locator
 

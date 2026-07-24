@@ -38,4 +38,6 @@ export enum ContextmenuType {
   tabSplitField = 'tabSplitField',
   // Tab-separated value field
   tabSplitFieldAndValue = 'tabSplitFieldAndValue',
+  // Markdown table
+  markdownTable = 'markdownTable',
 }
