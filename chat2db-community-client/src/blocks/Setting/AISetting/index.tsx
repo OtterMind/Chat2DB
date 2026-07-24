@@ -21,7 +21,7 @@ function capitalizeFirstLetter(string) {
 // openAI
 export default function SettingAI(props: IProps) {
   const { styles } = useStyles();
-  const { curOrg } = useOrgStore();
+  const curOrg = useOrgStore((s) => s.curOrg);
   const [aiConfig, setAiConfig] = useState<IAiConfig>();
 
   // have modification permission?
