@@ -53,7 +53,7 @@
         <pdfbox.version>2.0.24</pdfbox.version>
         <java-jwt.version>4.4.0</java-jwt.version>
         <sql-formatter.version>2.0.4</sql-formatter.version>
-        <commons-lang3.version>3.17.0</commons-lang3.version>
+        <commons-lang3.version>3.20.0</commons-lang3.version>
         <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
         <mongodb-bson.version>4.10.1</mongodb-bson.version>
         <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.14</jcef.version>
