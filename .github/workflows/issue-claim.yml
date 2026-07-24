@@ -24,7 +24,6 @@ jobs:
     concurrency:
       group: issue-claim-${{ github.repository }}
       cancel-in-progress: false
-      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,9 +42,8 @@ jobs:
     name: Reconcile unpublished claims
     if: github.event_name == 'issues'
     concurrency:
-      group: issue-claim-${{ github.repository }}
+      group: issue-claim-${{ github.repository }}-cleanup-${{ github.event.issue.number }}
       cancel-in-progress: false
-      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -66,7 +64,6 @@ jobs:
     concurrency:
       group: issue-claim-${{ github.repository }}
       cancel-in-progress: false
-      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

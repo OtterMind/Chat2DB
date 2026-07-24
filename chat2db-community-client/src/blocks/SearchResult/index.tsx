@@ -192,12 +192,18 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
           label:
             queryResultData.displayName || queryResultData.comment || i18n('common.text.executionResult', index + 1),
           key: queryResultData.uuid!,
-          children: <SearchResultItem viewTable={viewTable || queryResultData.canEdit} resultData={queryResultData} />,
+          children: (
+            <SearchResultItem
+              active={activeTabId === queryResultData.uuid}
+              viewTable={viewTable || queryResultData.canEdit}
+              resultData={queryResultData}
+            />
+          ),
         };
       }) || [];
 
     return tabsListRes;
-  }, [resultDataList, visibleHistoryResultDataList, showHistory, consoleMode]);
+  }, [activeTabId, resultDataList, visibleHistoryResultDataList, showHistory, consoleMode]);
 
   const executionMessages = useMemo<IExecutionMessageItem[]>(() => {
     if (consoleMode || !resultDataList?.length) {

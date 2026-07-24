@@ -264,6 +264,8 @@ export interface IUserConfigTree {
   showComment: boolean;
   // Whether to follow the currently open workspace tab
   followActiveWorkspaceTab?: boolean;
+  // The selected workspace sidebar surface
+  workspaceLeftPanel?: 'explorer' | 'database';
   // Whether to sort database object nodes by name without changing datasource order
   sortDatabaseObjects?: boolean;
 }

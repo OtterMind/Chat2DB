@@ -30,10 +30,10 @@ export const useStyles = createStyles(({ css, token }) => {
       position: relative;
     `,
     inspector: css`
-      width: clamp(340px, 36%, 460px);
-      max-width: 50%;
+      width: 100%;
+      height: 100%;
       min-width: 0;
-      flex-shrink: 0;
+      min-height: 0;
       overflow: hidden;
       background: ${token.colorBgContainer};
       border-left: 1px solid ${token.colorBorderSecondary};

@@ -17,6 +17,9 @@ export const useStyles = createStyles(({ css, token }) => ({
     font-size: 12px;
     line-height: 1.65;
   `,
+  scrollContent: css`
+    min-width: 0;
+  `,
   record: css`
     min-width: 0;
     margin-bottom: 10px;

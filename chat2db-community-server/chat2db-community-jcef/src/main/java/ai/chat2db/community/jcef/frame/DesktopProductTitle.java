@@ -5,8 +5,8 @@ final class DesktopProductTitle {
     private DesktopProductTitle() {
     }
 
-    static String resolve(boolean community, boolean localEdition) {
-        if (community) {
+    static String resolve(boolean windows, boolean community, boolean localEdition) {
+        if (windows && community) {
             return "Chat2DB Community";
         }
         if (localEdition) {

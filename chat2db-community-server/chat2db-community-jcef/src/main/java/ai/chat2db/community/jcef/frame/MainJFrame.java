@@ -130,7 +130,7 @@ public class MainJFrame extends JFrame {
         return instance;
     }
     static {
-        appName = DesktopProductTitle.resolve(ConfigUtils.isCommunity(), ConfigUtils.isLocalEdition());
+        appName = DesktopProductTitle.resolve(OS.isWindows(), ConfigUtils.isCommunity(), ConfigUtils.isLocalEdition());
         if (!OS.isMacintosh()) {
             JFrame.setDefaultLookAndFeelDecorated(true);
             JDialog.setDefaultLookAndFeelDecorated(true);
@@ -246,7 +246,6 @@ public class MainJFrame extends JFrame {
         setupSystemProperties();
         setupDesktopIntegration();
         Image appIcon = buildAppLogoImage();
-        this.setTitle(appName);
         if (OS.isMacintosh()) {
             setupMacSpecifics(appIcon);
         } else {
@@ -354,6 +353,7 @@ public class MainJFrame extends JFrame {
         return currentJarPath;
     }
     private void setupGenericPlatformSpecifics(Image appIcon) {
+        this.setTitle(appName);
         this.setIconImage(appIcon);
         applyTheme(ThemeEnum.DARK);
     }

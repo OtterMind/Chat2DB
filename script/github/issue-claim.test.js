@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const test = require('node:test');
 const path = require('node:path');
 
@@ -64,6 +65,19 @@ test('parses only supported standalone commands', () => {
 test('loads and validates the repository policy used in production', () => {
   const policy = loadPolicy(path.resolve(__dirname, '../../.github/claim-policy.json'));
   assert.deepEqual(policy, POLICY);
+});
+
+test('uses supported workflow concurrency configuration', () => {
+  const workflow = fs.readFileSync(
+    path.resolve(__dirname, '../../.github/workflows/issue-claim.yml'),
+    'utf8',
+  );
+
+  assert.doesNotMatch(workflow, /^\s*queue:/m);
+  assert.match(
+    workflow,
+    /group: issue-claim-\$\{\{ github\.repository \}\}-cleanup-\$\{\{ github\.event\.issue\.number \}\}/,
+  );
 });
 
 test('requires an open issue with an eligible contribution label', () => {

@@ -279,39 +279,37 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
 
 
     public ExecuteResponse update(RedisKey oldKey, RedisKey newKey) {
+        if (oldKey == null && newKey == null) {
+            return new ExecuteResponse();
+        }
         List<String> scripts = new ArrayList<>();
-        if (oldKey != null && newKey != null) {
-            if (!oldKey.getType().equals(newKey.getType())) {
-                ITypeScript typeScript = RedisDataType.fromCode(oldKey.getType()).getScript();
-                List<String> script = typeScript.updateKey(oldKey, null);
-                if (CollectionUtils.isNotEmpty(script)) {
-                    scripts.addAll(script);
-                }
-                typeScript = RedisDataType.fromCode(newKey.getType()).getScript();
-                List<String> addScript = typeScript.createKey(newKey);
-                if (CollectionUtils.isNotEmpty(addScript)) {
-                    scripts.addAll(addScript);
-                }
-                ExecuteResponse executeResult = new ExecuteResponse();
-                for (String s : scripts) {
-                    if (StringUtils.isNotBlank(s)) {
-                        executeResult = executeUpdate(s);
-                    }
-                }
-                return executeResult;
+        boolean typeChanged = oldKey != null && newKey != null && !oldKey.getType().equals(newKey.getType());
+        if (typeChanged) {
+            List<String> addScript = RedisDataType.fromCode(newKey.getType()).getScript().createKey(newKey);
+            if (CollectionUtils.isEmpty(addScript)) {
+                // Nothing to write for the new type; abort instead of deleting the old key.
+                return new ExecuteResponse();
             }
-            if (!oldKey.getName().equals(newKey.getName())) {
+            ITypeScript typeScript = RedisDataType.fromCode(oldKey.getType()).getScript();
+            List<String> script = typeScript.updateKey(oldKey, null);
+            if (CollectionUtils.isNotEmpty(script)) {
+                scripts.addAll(script);
+            }
+            scripts.addAll(addScript);
+        } else {
+            if (oldKey != null && newKey != null && !oldKey.getName().equals(newKey.getName())) {
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append(RedisConstants.SQL_RENAME_KEY_PREFIX).append(getRedisValue(oldKey.getName()))
                         .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(getRedisValue(newKey.getName()))
                         .append(RedisConstants.COMMAND_LINE_SEPARATOR);
                 scripts.add(stringBuilder.toString());
             }
-        }
-        ITypeScript typeScript = RedisDataType.fromCode(oldKey.getType()).getScript();
-        List<String> script = typeScript.updateKey(oldKey, newKey);
-        if (CollectionUtils.isNotEmpty(script)) {
-            scripts.addAll(script);
+            RedisKey typeSource = oldKey != null ? oldKey : newKey;
+            ITypeScript typeScript = RedisDataType.fromCode(typeSource.getType()).getScript();
+            List<String> script = typeScript.updateKey(oldKey, newKey);
+            if (CollectionUtils.isNotEmpty(script)) {
+                scripts.addAll(script);
+            }
         }
         if (newKey != null && newKey.getTtl() != null && newKey.getTtl() > 0) {
             StringBuilder stringBuilder = new StringBuilder();
