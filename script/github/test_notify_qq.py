@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
@@ -199,6 +200,171 @@ class NotificationFormattingTest(unittest.TestCase):
         self.assertIn("/discussions/12", message)
         self.assertNotIn("discussion body must stay private", message)
 
+    def test_issue_comment_includes_bounded_excerpt(self):
+        payload = {
+            "action": "created",
+            "issue": {
+                "number": 21,
+                "title": "Cannot save datasource",
+                "html_url": "https://github.com/OtterMind/Chat2DB/issues/21",
+            },
+            "comment": {
+                "body": "[CQ:at,qq=all] first line\nsecond line "
+                + "x" * 220
+                + "TAIL_SECRET",
+                "html_url": "https://github.com/OtterMind/Chat2DB/issues/21#issuecomment-1",
+                "user": {"login": "reporter"},
+            },
+            "sender": {"login": "reporter"},
+        }
+
+        message = notify_qq.build_notification(
+            "issue_comment",
+            payload,
+            "OtterMind/Chat2DB",
+            "reporter",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("Issue #21 已评论", message)
+        self.assertIn("标题：Cannot save datasource", message)
+        self.assertIn("评论者：reporter", message)
+        self.assertIn("摘要：[CQ :at,qq=all] first line second line", message)
+        self.assertNotIn("[CQ:", message)
+        self.assertIn("#issuecomment-1", message)
+        self.assertNotIn("TAIL_SECRET", message)
+
+    def test_deleted_pull_request_comment_does_not_echo_body(self):
+        payload = {
+            "action": "deleted",
+            "issue": {
+                "number": 22,
+                "title": "Fix metadata loading",
+                "html_url": "https://github.com/OtterMind/Chat2DB/pull/22",
+                "pull_request": {"url": "https://api.github.com/pulls/22"},
+            },
+            "comment": {
+                "body": "deleted content must not be sent",
+                "html_url": "https://github.com/OtterMind/Chat2DB/pull/22#issuecomment-2",
+                "user": {"login": "reviewer"},
+            },
+            "sender": {"login": "reviewer"},
+        }
+
+        message = notify_qq.build_notification(
+            "issue_comment",
+            payload,
+            "OtterMind/Chat2DB",
+            "reviewer",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("PR #22 已删除评论", message)
+        self.assertIn("链接：https://github.com/OtterMind/Chat2DB/pull/22", message)
+        self.assertNotIn("摘要：", message)
+        self.assertNotIn("deleted content", message)
+
+    def test_submitted_pull_request_review_states_are_distinct(self):
+        expectations = {
+            "approved": ("评审已批准", "结果：已批准"),
+            "changes_requested": ("评审要求修改", "结果：要求修改"),
+            "commented": ("收到评审评论", "结果：已评论"),
+        }
+
+        for state, expected in expectations.items():
+            with self.subTest(state=state):
+                payload = {
+                    "action": "submitted",
+                    "pull_request": {
+                        "number": 23,
+                        "title": "Improve SQL editor",
+                        "html_url": "https://github.com/OtterMind/Chat2DB/pull/23",
+                    },
+                    "review": {
+                        "state": state,
+                        "body": "Review summary",
+                        "html_url": "https://github.com/OtterMind/Chat2DB/pull/23#pullrequestreview-3",
+                        "user": {"login": "maintainer"},
+                    },
+                    "sender": {"login": "maintainer"},
+                }
+
+                message = notify_qq.build_notification(
+                    "pull_request_review",
+                    payload,
+                    "OtterMind/Chat2DB",
+                    "maintainer",
+                    "",
+                    include_url=True,
+                )
+
+                self.assertIn(f"PR #23 {expected[0]}", message)
+                self.assertIn(expected[1], message)
+                self.assertIn("评审人：maintainer", message)
+                self.assertIn("摘要：Review summary", message)
+
+    def test_dismissed_review_does_not_echo_body(self):
+        payload = {
+            "action": "dismissed",
+            "pull_request": {"number": 24, "title": "Update parser", "html_url": ""},
+            "review": {
+                "state": "dismissed",
+                "body": "obsolete review must not be sent",
+                "user": {"login": "maintainer"},
+            },
+            "sender": {"login": "maintainer"},
+        }
+
+        message = notify_qq.build_notification(
+            "pull_request_review",
+            payload,
+            "OtterMind/Chat2DB",
+            "maintainer",
+            "",
+            include_url=False,
+        )
+
+        self.assertIn("PR #24 评审已撤销", message)
+        self.assertIn("结果：已撤销", message)
+        self.assertNotIn("摘要：", message)
+        self.assertNotIn("obsolete review", message)
+
+    def test_line_review_comment_includes_location_but_not_diff(self):
+        payload = {
+            "action": "created",
+            "pull_request": {
+                "number": 25,
+                "title": "Fix transaction handling",
+                "html_url": "https://github.com/OtterMind/Chat2DB/pull/25",
+            },
+            "comment": {
+                "body": "Please cover the rollback path.",
+                "diff_hunk": "@@ secret source code must not be sent @@",
+                "path": "script/github/notify_qq.py",
+                "line": 120,
+                "html_url": "https://github.com/OtterMind/Chat2DB/pull/25#discussion_r4",
+                "user": {"login": "reviewer"},
+            },
+            "sender": {"login": "reviewer"},
+        }
+
+        message = notify_qq.build_notification(
+            "pull_request_review_comment",
+            payload,
+            "OtterMind/Chat2DB",
+            "reviewer",
+            "",
+            include_url=True,
+        )
+
+        self.assertIn("PR #25 新增代码评审评论", message)
+        self.assertIn("位置：script/github/notify_qq.py:120", message)
+        self.assertIn("摘要：Please cover the rollback path.", message)
+        self.assertIn("#discussion_r4", message)
+        self.assertNotIn("secret source code", message)
+
     def test_untrusted_title_is_bounded_and_control_characters_are_removed(self):
         payload = {
             "action": "edited",
@@ -338,6 +504,149 @@ class RelayClientTest(unittest.TestCase):
 
             with patch.dict(os.environ, environment, clear=True):
                 self.assertEqual(0, notify_qq.main())
+
+    def test_comment_collector_writes_message_without_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event_path = os.path.join(directory, "event.json")
+            output_path = os.path.join(directory, "artifact", "message.json")
+            with open(event_path, "w", encoding="utf-8") as event_file:
+                json.dump(
+                    {
+                        "action": "created",
+                        "issue": {"number": 31, "title": "Question", "html_url": ""},
+                        "comment": {
+                            "body": "Collected comment",
+                            "html_url": "",
+                            "user": {"login": "contributor"},
+                        },
+                        "sender": {"login": "contributor"},
+                    },
+                    event_file,
+                )
+            environment = {
+                "GITHUB_EVENT_PATH": event_path,
+                "GITHUB_EVENT_NAME": "issue_comment",
+                "GITHUB_REPOSITORY": "OtterMind/Chat2DB",
+                "GITHUB_ACTOR": "contributor",
+                "GITHUB_RUN_ID": "301",
+                "QQ_MESSAGE_OUTPUT_PATH": output_path,
+            }
+
+            with patch.dict(os.environ, environment, clear=True):
+                self.assertEqual(0, notify_qq.main())
+
+            with open(output_path, encoding="utf-8") as artifact_file:
+                envelope = json.load(artifact_file)
+            self.assertEqual(1, envelope["version"])
+            self.assertEqual("issue_comment", envelope["event_name"])
+            self.assertEqual("OtterMind/Chat2DB", envelope["repository"])
+            self.assertIn("Issue #31 已评论", envelope["message"])
+
+    @patch("notify_qq.send_relay_message")
+    def test_prepared_sender_uses_original_run_as_delivery_id(self, send_message):
+        send_message.return_value = {"message_id": "55"}
+        with tempfile.TemporaryDirectory() as directory:
+            event_path = os.path.join(directory, "workflow-run.json")
+            message_path = os.path.join(directory, "message.json")
+            with open(event_path, "w", encoding="utf-8") as event_file:
+                json.dump({"action": "completed"}, event_file)
+            with open(message_path, "w", encoding="utf-8") as message_file:
+                json.dump(
+                    {
+                        "version": 1,
+                        "event_name": "pull_request_review",
+                        "repository": "OtterMind/Chat2DB",
+                        "message": "[Chat2DB GitHub] PR #32 评审已批准",
+                    },
+                    message_file,
+                )
+            environment = {
+                "GITHUB_EVENT_PATH": event_path,
+                "GITHUB_EVENT_NAME": "workflow_run",
+                "GITHUB_REPOSITORY": "OtterMind/Chat2DB",
+                "GITHUB_ACTOR": "github-actions",
+                "GITHUB_RUN_ID": "sender-run",
+                "QQ_PREPARED_MESSAGE_PATH": message_path,
+                "QQ_DELIVERY_ID": "collector-run",
+                "QQ_RELAY_URL": "https://qq-relay.example.com/v1/qq/github",
+                "QQ_RELAY_TOKEN": "relay-secret",
+            }
+
+            with patch.dict(os.environ, environment, clear=True):
+                self.assertEqual(0, notify_qq.main())
+
+        send_message.assert_called_once_with(
+            "https://qq-relay.example.com/v1/qq/github",
+            "relay-secret",
+            "OtterMind/Chat2DB",
+            "collector-run",
+            "[Chat2DB GitHub] PR #32 评审已批准",
+        )
+
+    def test_prepared_sender_rejects_wrong_repository(self):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as message_file:
+            json.dump(
+                {
+                    "version": 1,
+                    "event_name": "issue_comment",
+                    "repository": "attacker/repository",
+                    "message": "untrusted",
+                },
+                message_file,
+            )
+            message_file.flush()
+
+            with self.assertRaises(notify_qq.ConfigurationError):
+                notify_qq._read_prepared_message(
+                    Path(message_file.name), "OtterMind/Chat2DB"
+                )
+
+    def test_prepared_sender_rejects_onebot_cq_code(self):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as message_file:
+            json.dump(
+                {
+                    "version": 1,
+                    "event_name": "issue_comment",
+                    "repository": "OtterMind/Chat2DB",
+                    "message": "[Chat2DB GitHub] [CQ:at,qq=all]",
+                },
+                message_file,
+            )
+            message_file.flush()
+
+            with self.assertRaises(notify_qq.ConfigurationError):
+                notify_qq._read_prepared_message(
+                    Path(message_file.name), "OtterMind/Chat2DB"
+                )
+
+    def test_prepared_sender_rejects_unallowed_event_and_oversized_message(self):
+        invalid_envelopes = (
+            {
+                "version": 1,
+                "event_name": "workflow_dispatch",
+                "repository": "OtterMind/Chat2DB",
+                "message": "not a collected event",
+            },
+            {
+                "version": 1,
+                "event_name": "issue_comment",
+                "repository": "OtterMind/Chat2DB",
+                "message": "x" * 901,
+            },
+        )
+
+        for envelope in invalid_envelopes:
+            with self.subTest(event_name=envelope["event_name"]):
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8"
+                ) as message_file:
+                    json.dump(envelope, message_file)
+                    message_file.flush()
+
+                    with self.assertRaises(notify_qq.ConfigurationError):
+                        notify_qq._read_prepared_message(
+                            Path(message_file.name), "OtterMind/Chat2DB"
+                        )
 
 
 if __name__ == "__main__":
