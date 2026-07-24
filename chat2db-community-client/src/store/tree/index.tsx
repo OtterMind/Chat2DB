@@ -54,7 +54,6 @@ export interface TreeState {
   searchResultKeys: string[] | null;
   searchResult: TreeNodeData[] | null;
   userConfigTree: IUserConfigTree;
-  workspaceLeftPanelManualOverrideTabId: string | number | null;
   // Hidden node id
   hiddenTreeNodeIds: {
     [key: string]: string[];
@@ -82,7 +81,6 @@ export const initTreeState = {
   searchResult: null,
   currentLoadingTreeNode: null,
   userConfigTree: initUserConfigTree,
-  workspaceLeftPanelManualOverrideTabId: null,
   // Hidden node id
   hiddenTreeNodeIds: null,
 };
@@ -121,7 +119,6 @@ export interface TreeAction {
   deleteAiDataCollectionElement: (treeNodeData: TreeNodeData, handleLoadData: any) => Promise<void>;
   refreshAiDataCollection: (dataSourceId: number) => void;
   changeUserConfigTree: (type: string, value: any) => void;
-  setWorkspaceLeftPanelManualOverrideTabId: (tabId: TreeState['workspaceLeftPanelManualOverrideTabId']) => void;
   // Update node data through key
   updateTreeNodeDataByKey: (key: React.Key, getTreeNodeKeyParams?: GetTreeNodeKeyParams) => void;
   // Refresh data with details
@@ -565,9 +562,6 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         },
       };
     });
-  },
-  setWorkspaceLeftPanelManualOverrideTabId: (workspaceLeftPanelManualOverrideTabId) => {
-    set({ workspaceLeftPanelManualOverrideTabId });
   },
   updateTreeNodeDataByKey: (key, getTreeNodeKeyParams) => {
     const newTreeData = get().treeData;

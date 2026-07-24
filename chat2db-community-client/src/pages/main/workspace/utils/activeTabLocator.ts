@@ -1,14 +1,11 @@
 import { TreeNodeType, WorkspaceTabType } from '@/constants';
 import { treeConfig } from '@/blocks/NewTree/treeConfig';
 import type { IWorkspaceTab } from '@/typings';
-import { getDirectActiveTabLocateTarget } from './activeTabTarget';
+import { getDirectActiveTabLocateTargets, type ExplorerActiveTabLocateTarget } from './activeTabTarget';
 
 export {
-  getAutoFollowWorkspaceLeftPanel,
-  resolveWorkspaceLeftAutoFollowState,
+  getActiveTabLocateTargetForPanel,
   resolveWorkspaceLeftPanel,
-  shouldLocateActiveTabOnPanelSelection,
-  type WorkspaceTabActivationSource,
   type WorkspaceLeftPanel,
 } from './activeTabTarget';
 
@@ -22,16 +19,18 @@ export interface ActiveTabDatabaseCandidate {
   fallback?: boolean;
 }
 
-export type ActiveTabLocateTarget =
-  | {
-      surface: 'localFile';
-      filePath: string;
-    }
-  | {
-      surface: 'databaseTree';
-      candidates: ActiveTabDatabaseCandidate[];
-      loadPath: string[];
-    };
+export interface DatabaseActiveTabLocateTarget {
+  surface: 'databaseTree';
+  candidates: ActiveTabDatabaseCandidate[];
+  loadPath: string[];
+}
+
+export interface ActiveTabLocateTargets {
+  explorer?: ExplorerActiveTabLocateTarget;
+  database?: DatabaseActiveTabLocateTarget;
+}
+
+export type ActiveTabLocateTarget = ExplorerActiveTabLocateTarget | DatabaseActiveTabLocateTarget;
 
 function createTreeKey(treeNodeType: TreeNodeType, data: Record<string, unknown>) {
   return treeConfig[treeNodeType].createTreeNodeKey?.(data);
@@ -112,9 +111,7 @@ function getContextLoadPath(uniqueData: IWorkspaceTab['uniqueData']) {
 
   const { dataSourceId, databaseName, schemaName } = uniqueData;
   const dataSourceKey = createTreeKey(TreeNodeType.DATA_SOURCE, { dataSourceId });
-  const databaseKey = databaseName
-    ? createTreeKey(TreeNodeType.DATABASE, { dataSourceId, databaseName })
-    : undefined;
+  const databaseKey = databaseName ? createTreeKey(TreeNodeType.DATABASE, { dataSourceId, databaseName }) : undefined;
   const schemaKey = schemaName
     ? createTreeKey(TreeNodeType.SCHEMA, { dataSourceId, databaseName, schemaName })
     : undefined;
@@ -140,9 +137,9 @@ function getObjectParentLoadPath(uniqueData: IWorkspaceTab['uniqueData'], parent
 function databaseTreeTarget(
   candidates: ActiveTabDatabaseCandidate[],
   loadPath: string[],
-): ActiveTabLocateTarget | null {
+): DatabaseActiveTabLocateTarget | undefined {
   if (!candidates.length) {
-    return null;
+    return undefined;
   }
 
   return {
@@ -152,10 +149,10 @@ function databaseTreeTarget(
   };
 }
 
-function getDatabaseObjectLocateTarget(activeTab: IWorkspaceTab): ActiveTabLocateTarget | null {
+function getDatabaseObjectLocateTarget(activeTab: IWorkspaceTab): DatabaseActiveTabLocateTarget | undefined {
   const uniqueData = activeTab.uniqueData;
   if (!uniqueData?.dataSourceId) {
-    return null;
+    return undefined;
   }
 
   const { dataSourceId, databaseName, schemaName } = uniqueData;
@@ -275,28 +272,26 @@ function getDatabaseObjectLocateTarget(activeTab: IWorkspaceTab): ActiveTabLocat
       return databaseTreeTarget(getContextCandidates(uniqueData), getContextLoadPath(uniqueData));
 
     default:
-      return null;
+      return undefined;
   }
 }
 
-export function getActiveTabLocateTarget(
-  activeTab?: IWorkspaceTab | null,
-): ActiveTabLocateTarget | null {
+export function getActiveTabLocateTargets(activeTab?: IWorkspaceTab | null): ActiveTabLocateTargets {
   if (!activeTab) {
-    return null;
+    return {};
   }
 
-  const directTarget = getDirectActiveTabLocateTarget(activeTab);
-  if (directTarget?.surface === 'databaseTree') {
-    return databaseTreeTarget(
-      getContextCandidates(activeTab.uniqueData),
-      getContextLoadPath(activeTab.uniqueData),
-    );
+  const directTargets = getDirectActiveTabLocateTargets(activeTab);
+  if (directTargets !== undefined) {
+    return {
+      explorer: directTargets.explorer,
+      database: directTargets.database
+        ? databaseTreeTarget(getContextCandidates(activeTab.uniqueData), getContextLoadPath(activeTab.uniqueData))
+        : undefined,
+    };
   }
 
-  if (directTarget !== undefined) {
-    return directTarget;
-  }
-
-  return getDatabaseObjectLocateTarget(activeTab);
+  return {
+    database: getDatabaseObjectLocateTarget(activeTab),
+  };
 }

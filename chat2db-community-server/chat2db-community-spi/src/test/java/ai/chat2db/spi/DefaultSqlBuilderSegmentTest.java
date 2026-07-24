@@ -4,11 +4,15 @@ import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.metadata.Table;
+import ai.chat2db.community.domain.api.model.result.Header;
+import ai.chat2db.community.domain.api.model.result.ResultOperation;
 import ai.chat2db.spi.model.request.DropTableRequest;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.spi.model.request.TruncateTableRequest;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,5 +63,46 @@ class DefaultSqlBuilderSegmentTest {
     void buildsDmlThroughUnifiedSegment() {
         assertEquals("",
                 builder.dml().buildTemplate(null, "INSERT"));
+    }
+
+    @Test
+    void copyWhereSqlUsesIsNullForAllNullSameColumnValues() throws Exception {
+        String whereSql = copyWhereSql(List.of(
+                whereOperation(null),
+                whereOperation(null)
+        ));
+
+        assertEquals("WHERE name IS NULL", whereSql);
+    }
+
+    @Test
+    void copyWhereSqlKeepsNullPredicateForMixedSameColumnValues() throws Exception {
+        String whereSql = copyWhereSql(List.of(
+                whereOperation(null),
+                whereOperation("Alice")
+        ));
+
+        assertEquals("WHERE name IS NULL OR name IN ('Alice')", whereSql);
+    }
+
+    private String copyWhereSql(List<ResultOperation> operations) throws Exception {
+        Method method = DefaultSqlBuilder.class.getDeclaredMethod(
+                "copyWhereSql", List.class, List.class, IDbMetaData.class, String.class);
+        method.setAccessible(true);
+        return (String) method.invoke(builder, operations, List.of(nameHeader()), new DefaultMetaService(), "mysql");
+    }
+
+    private static ResultOperation whereOperation(String value) {
+        ResultOperation operation = new ResultOperation();
+        operation.setDataList(Collections.singletonList(value));
+        operation.setSelectCols(List.of(0));
+        return operation;
+    }
+
+    private static Header nameHeader() {
+        Header header = new Header();
+        header.setName("name");
+        header.setColumnType("VARCHAR");
+        return header;
     }
 }

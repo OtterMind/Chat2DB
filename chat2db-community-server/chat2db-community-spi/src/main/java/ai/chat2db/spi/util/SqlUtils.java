@@ -409,20 +409,22 @@ public class SqlUtils {
         String s = sql.trim();
         try {
             String countSql = SqlGenerateUtil.generateSelectCountSql(sql, dataBaseType);
-            if (countSql.endsWith(";")) {
-                countSql = countSql.substring(0, s.length() - 1);
-            }
-            return countSql;
+            return trimTrailingSemicolon(countSql);
         } catch (Exception e) {
             log.error("druid parser sql error,sql:" + sql, e);
             if (!s.toLowerCase().startsWith("select")) {
                 return null;
             }
-            if (s.endsWith(";")) {
-                s = s.substring(0, s.length() - 1);
-            }
+            s = trimTrailingSemicolon(s);
             return "SELECT COUNT(*) FROM (" + s + ") chat2db_count_temp_table";
         }
+    }
+
+    static String trimTrailingSemicolon(String sql) {
+        if (sql.endsWith(";")) {
+            return sql.substring(0, sql.length() - 1);
+        }
+        return sql;
     }
 
     public static List<SimpleSqlStatement> parseStatements(String script, DbType dbType, String type) {

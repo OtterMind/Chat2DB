@@ -21,7 +21,6 @@ type SearchBarHandle = { focus: () => void; blur: () => void };
 
 interface WorkspaceExplorerProps {
   active?: boolean;
-  onSessionActivate?: (sessionId: IWorkspaceTab['id']) => void;
 }
 
 export interface WorkspaceExplorerRef {
@@ -30,7 +29,7 @@ export interface WorkspaceExplorerRef {
 
 const WorkspaceExplorer = memo(
   forwardRef<WorkspaceExplorerRef, WorkspaceExplorerProps>((
-    { active = true, onSessionActivate },
+    { active = true },
     ref,
   ) => {
   const { styles } = useStyles();
@@ -85,8 +84,16 @@ const WorkspaceExplorer = memo(
   }, [openSessions, trimmedSearchKeyword]);
 
   useEffect(() => {
+    if (!active) {
+      return;
+    }
     const activeRow = activeSessionRowRef.current;
     if (!activeRow) {
+      const activeSessionIsFiltered =
+        !!trimmedSearchKeyword && openSessions.some((session) => session.id === activeConsoleId);
+      if (activeSessionIsFiltered) {
+        setSearchKeyword('');
+      }
       return;
     }
 
@@ -97,7 +104,7 @@ const WorkspaceExplorer = memo(
         activeRow.scrollIntoView(false);
       }
     });
-  }, [activeConsoleId, filteredOpenSessions.length, sessionPanelHeight]);
+  }, [active, activeConsoleId, filteredOpenSessions.length, openSessions, sessionPanelHeight, trimmedSearchKeyword]);
 
   useImperativeHandle(
     ref,
@@ -153,7 +160,6 @@ const WorkspaceExplorer = memo(
   }
 
   function handleSessionDragStart(event: React.DragEvent<HTMLButtonElement>, session: IWorkspaceTab) {
-    onSessionActivate?.(session.id);
     setActiveConsoleId(session.id);
     const payload = {
       id: session.id,
@@ -251,7 +257,6 @@ const WorkspaceExplorer = memo(
                 onDragStart={(event) => handleSessionDragStart(event, session)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onSessionActivate?.(session.id);
                   setActiveConsoleId(session.id);
                 }}
               >
