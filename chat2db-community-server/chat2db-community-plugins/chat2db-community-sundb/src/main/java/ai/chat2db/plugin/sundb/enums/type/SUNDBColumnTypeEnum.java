@@ -10,6 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static ai.chat2db.plugin.sundb.constant.SUNDBColumnTypeEnumConstants.*;
 public enum SUNDBColumnTypeEnum implements IColumnBuilder {
@@ -157,7 +158,7 @@ public enum SUNDBColumnTypeEnum implements IColumnBuilder {
         script.append("\"").append(column.getName()).append("\"").append(" ");
         if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus()) &&
                 StringUtils.equalsIgnoreCase(column.getOldColumn().getColumnType(), column.getColumnType())
-                && column.getOldColumn().getColumnSize().equals(column.getColumnSize())
+                && Objects.equals(column.getOldColumn().getColumnSize(), column.getColumnSize())
             ){
 
         } else {
@@ -168,7 +169,9 @@ public enum SUNDBColumnTypeEnum implements IColumnBuilder {
 
         script.append(buildAutoIncrement(column,type)).append(" ");
         if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus()) &&
-            column.getNullable().equals(column.getOldColumn().getNullable())){
+            (column.getNullable() == null
+                || column.getOldColumn().getNullable() == null
+                || Objects.equals(column.getNullable(), column.getOldColumn().getNullable()))){
 
         } else {
             script.append(buildNullable(column, type)).append(" ");
