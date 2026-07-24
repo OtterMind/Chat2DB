@@ -13,12 +13,13 @@ import { QuestionType } from '@/constants/chat';
 
 interface IProps {
   resultData: IManageResultData;
+  active: boolean;
   viewTable?: boolean;
 }
 
 export default memo<IProps>(
   (props) => {
-    const { resultData, viewTable } = props;
+    const { active, resultData, viewTable } = props;
     const { styles } = useStyles();
     const setCurrentWorkspaceExtend = useWorkspaceStore((s) => s.setCurrentWorkspaceExtend);
 
@@ -51,7 +52,7 @@ export default memo<IProps>(
       return (
         <div className={styles.successResult}>
           {needTable ? (
-            <ResultSet viewTable={viewTable} resultData={resultData} />
+            <ResultSet active={active} viewTable={viewTable} resultData={resultData} />
           ) : (
             <div className={styles.updateCountBox}>
               <div className={styles.updateCount}>{i18n('common.text.affectedRows', resultData.updateCount)}</div>
@@ -79,5 +80,7 @@ export default memo<IProps>(
     );
   },
   (prevProps, nextProps) =>
-    prevProps.resultData === nextProps.resultData && prevProps.viewTable === nextProps.viewTable,
+    prevProps.active === nextProps.active &&
+    prevProps.resultData === nextProps.resultData &&
+    prevProps.viewTable === nextProps.viewTable,
 );
