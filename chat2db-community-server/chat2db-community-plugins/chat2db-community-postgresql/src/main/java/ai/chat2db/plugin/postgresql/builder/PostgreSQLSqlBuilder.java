@@ -441,7 +441,7 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
         }
         String viewName = modifyView.getViewName();
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.BACK_QUOTE).append(viewName).append(SQLConstants.BACK_QUOTE);
+            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE);
         } else {
             createViewSqlBuilder.append(UNDEFINED_KEYWORD);
         }
@@ -458,11 +458,15 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
         String comment = modifyView.getComment();
         if (StringUtils.isNotBlank(comment)) {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
-            createViewSqlBuilder.append(SQL_COMMENT_VIEW)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
+            createViewSqlBuilder.append(SQL_COMMENT_VIEW).append(SQLConstants.SPACE);
+            if (StringUtils.isNotBlank(schemaName)) {
+                createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
+                        .append(SQLConstants.DOT);
+            }
+            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
                     .append(SQLConstants.SQL_IS_LOWER)
-                    .append(comment).append(SQLConstants.SEMICOLON);
+                    .append(SQLConstants.SINGLE_QUOTE).append(comment).append(SQLConstants.SINGLE_QUOTE)
+                    .append(SQLConstants.SEMICOLON);
         }
         return createViewSqlBuilder.toString();
     }
