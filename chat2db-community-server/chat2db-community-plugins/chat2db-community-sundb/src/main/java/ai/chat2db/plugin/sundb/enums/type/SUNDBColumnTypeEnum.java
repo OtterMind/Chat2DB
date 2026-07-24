@@ -169,7 +169,9 @@ public enum SUNDBColumnTypeEnum implements IColumnBuilder {
 
         script.append(buildAutoIncrement(column,type)).append(" ");
         if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus()) &&
-            Objects.equals(column.getNullable(), column.getOldColumn().getNullable())){
+            (column.getNullable() == null
+                || column.getOldColumn().getNullable() == null
+                || Objects.equals(column.getNullable(), column.getOldColumn().getNullable()))){
 
         } else {
             script.append(buildNullable(column, type)).append(" ");

@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -20,7 +21,8 @@ class SUNDBColumnTypeEnumTest {
     void buildCreateColumnSqlToleratesNullIntegerMetadataOnModify() {
         TableColumn oldColumn = new TableColumn();
         oldColumn.setColumnType("NUMBER");
-        // columnSize / nullable intentionally left null (missing metadata)
+        oldColumn.setNullable(1);
+        // columnSize intentionally left null (missing metadata)
 
         TableColumn column = new TableColumn();
         column.setName("amount");
@@ -32,5 +34,6 @@ class SUNDBColumnTypeEnumTest {
 
         String sql = assertDoesNotThrow(() -> SUNDBColumnTypeEnum.NUMBER.buildCreateColumnSql(column));
         assertNotNull(sql);
+        assertFalse(sql.contains("NOT NULL"), "missing nullable metadata must not change nullability");
     }
 }
