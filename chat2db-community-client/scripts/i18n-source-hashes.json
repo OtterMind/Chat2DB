@@ -5,7 +5,7 @@
     "es-ES": {
       "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
       "chat.ts": "0cbe009eacbaa95a9a29bbc69588cb547e90b563667c53edec3e54ee64f5667b",
-      "common.ts": "91dad744d8a1a7b829c61e0dc47e6912953f106f2c96bab1ad0d9858278badcd",
+      "common.ts": "9ae18f30c9bec0784fc6dca322c63dd440d4d3281e223dbddfd811685f63a7cd",
       "connection.ts": "41d07fd10c9550ae51995620cc998de5e99add35edb31c2bb592864c76c13688",
       "dashboard.ts": "b217bbe260c7674d4efad1dd1b61136653858884f5b9b2134cfdf7d1de5a44ee",
       "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
@@ -32,7 +32,7 @@
     "ko-KR": {
       "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
       "chat.ts": "0cbe009eacbaa95a9a29bbc69588cb547e90b563667c53edec3e54ee64f5667b",
-      "common.ts": "91dad744d8a1a7b829c61e0dc47e6912953f106f2c96bab1ad0d9858278badcd",
+      "common.ts": "9ae18f30c9bec0784fc6dca322c63dd440d4d3281e223dbddfd811685f63a7cd",
       "connection.ts": "41d07fd10c9550ae51995620cc998de5e99add35edb31c2bb592864c76c13688",
       "dashboard.ts": "b217bbe260c7674d4efad1dd1b61136653858884f5b9b2134cfdf7d1de5a44ee",
       "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
