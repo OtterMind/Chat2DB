@@ -15,6 +15,12 @@ import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 import { StateCreator } from 'zustand/vanilla';
 import { useAIStore } from '../ai';
+import {
+  applyExistingTreeNodeRefresh,
+  LatestTreeRefreshTracker,
+  loadExistingTreeNodeRefresh,
+  reconcileTreeInteractionAfterRefresh,
+} from './backgroundRefresh';
 import { loadNamespaceTree } from './loadNamespaceTree';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
 
@@ -117,6 +123,8 @@ export interface TreeAction {
   updateTreeNodeDataByKey: (key: React.Key, getTreeNodeKeyParams?: GetTreeNodeKeyParams) => void;
   // Refresh data with details
   updateTreeNodeDataByDetail: (props: GetTreeNodeKeyParams) => void;
+  // Refresh an existing node without changing the current tree interaction state.
+  refreshTreeNodeDataInBackground: (props: GetTreeNodeKeyParams) => Promise<void>;
   getTreeNodeKey: (props: GetTreeNodeKeyParams) => string;
   // close connection
   closeConnection: (dataSourceId: number) => void;
@@ -133,6 +141,8 @@ export interface TreeAction {
     },
   ) => void;
 }
+
+const backgroundRefreshTracker = new LatestTreeRefreshTracker();
 
 const updateTreeData = (
   list: TreeNodeData[],
@@ -579,6 +589,64 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   updateTreeNodeDataByDetail: (props) => {
     const key = get().getTreeNodeKey(props);
     get().updateTreeNodeDataByKey(key, props);
+  },
+  refreshTreeNodeDataInBackground: async (props) => {
+    const treeData = get().treeData;
+    if (!treeData) {
+      return;
+    }
+
+    const key = get().getTreeNodeKey(props);
+    const node = findNode(key, treeData);
+    if (!node) {
+      return;
+    }
+
+    const { treeNodeType, ...rest } = props;
+    const getChildren = treeConfig[treeNodeType].getChildren;
+    if (!getChildren) {
+      return;
+    }
+
+    const requestSequence = backgroundRefreshTracker.begin(key);
+
+    try {
+      const loadResult = await loadExistingTreeNodeRefresh(treeData, key, () =>
+        getChildren({
+          ...rest,
+          refresh: true,
+        }),
+      );
+      if (!loadResult) {
+        return;
+      }
+      if (!backgroundRefreshTracker.isLatest(key, requestSequence)) {
+        return;
+      }
+
+      set((state) => {
+        if (!state.treeData) {
+          return {};
+        }
+        const refreshedTreeData = applyExistingTreeNodeRefresh(state.treeData, key, loadResult);
+        if (refreshedTreeData === state.treeData) {
+          return {};
+        }
+        const interactionState = reconcileTreeInteractionAfterRefresh(
+          refreshedTreeData,
+          state.selectedKeys,
+          state.currentTreeNode,
+        );
+        return {
+          treeData: refreshedTreeData,
+          ...interactionState,
+        };
+      });
+    } catch {
+      // A background refresh must not turn a successful console save into an error.
+    } finally {
+      backgroundRefreshTracker.finish(key, requestSequence);
+    }
   },
   closeConnection: (dataSourceId) => {
     connectionService.closeConnection({ id: dataSourceId }).then(() => {
