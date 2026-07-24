@@ -48,13 +48,14 @@ const useFilterAndSort: IUseFilterAndSort = ({
   >([]);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
 
-  // Track active VTable render-settling pollers so they can be cleared on unmount.
+  // Track active VTable render-settling pollers so they can be cleared on unmount
+  // or when the table instance is replaced.
   const pollTimerIdsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
   // VTable has no post-filter/sort callback, so poll until the rendered
   // CHAT2DB_ROW_NUMBER list changes. Cap iterations so a poll cannot run
   // forever when the list never changes, and register each timer so unmount
-  // clears it instead of firing setState on an unmounted component.
+  // clears it instead of using an unmounted or stale table instance.
   const pollUntilRowNumbersChange = (
     beforeGetRowNumberList: (string | number)[],
     onSettled: () => void,
@@ -80,7 +81,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
       pollTimerIdsRef.current.forEach((timerId) => clearInterval(timerId));
       pollTimerIdsRef.current.clear();
     };
-  }, []);
+  }, [tableInstance]);
 
   // useEffect(() => {
   //   if (!tableInstance) return;
