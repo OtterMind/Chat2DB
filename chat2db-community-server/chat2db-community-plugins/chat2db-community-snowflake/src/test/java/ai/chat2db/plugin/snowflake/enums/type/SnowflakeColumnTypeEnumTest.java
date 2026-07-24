@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -51,5 +52,6 @@ class SnowflakeColumnTypeEnumTest {
 
         String sql = assertDoesNotThrow(() -> SnowflakeColumnTypeEnum.NUMBER.buildCreateColumnSql(column));
         assertNotNull(sql);
+        assertFalse(sql.contains("NOT NULL"), "missing nullable metadata must not change nullability");
     }
 }

@@ -172,7 +172,10 @@ public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
         if(!type.getColumnType().isSupportNullable()){
             return "";
         }
-        if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus()) && !Objects.equals(column.getNullable(), column.getOldColumn().getNullable())) {
+        if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus())
+                && column.getNullable() != null
+                && column.getOldColumn().getNullable() != null
+                && !Objects.equals(column.getNullable(), column.getOldColumn().getNullable())) {
             if (column.getNullable()!=null && 1==column.getNullable()) {
                 return "DROP NOT NULL";
             } else {
