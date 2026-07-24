@@ -916,14 +916,7 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                     }
                 }
             } else {
-                List<String> nonNullValues = resultClause.stream()
-                        .filter(Objects::nonNull)
-                        .map(value -> {
-                            sqlDataValue.setValue(value);
-                            return valueProcessor.getSqlValueString(sqlDataValue);
-                        })
-                        .toList();
-                return SQLConstants.WHERE_SQL_PREFIX + columnName + SQLConstants.SQL_IN_OPEN_PARENTHESIS + String.join(SQLConstants.COMMA_SPACE, nonNullValues) + SQLConstants.CLOSE_PARENTHESIS;
+                return buildWhereClauseForSameColumnValues(columnName, resultClause, sqlDataValue, valueProcessor);
             }
         }
         String whereClause = row.stream().map(
@@ -958,6 +951,29 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                 }).collect(Collectors.joining(SQLConstants.SQL_OR));
 
         return SQLConstants.WHERE_SQL_PREFIX + whereClause;
+    }
+
+    private String buildWhereClauseForSameColumnValues(String columnName, List<String> values, SQLDataValue sqlDataValue,
+                                                       IValueProcessor valueProcessor) {
+        List<String> conditions = new ArrayList<>();
+        if (values.stream().anyMatch(Objects::isNull)) {
+            conditions.add(columnName + SQLConstants.SQL_IS_NULL);
+        }
+
+        List<String> nonNullValues = values.stream()
+                .filter(Objects::nonNull)
+                .map(value -> {
+                    sqlDataValue.setValue(value);
+                    return valueProcessor.getSqlValueString(sqlDataValue);
+                })
+                .toList();
+        if (CollectionUtils.isNotEmpty(nonNullValues)) {
+            conditions.add(columnName + SQLConstants.SQL_IN_OPEN_PARENTHESIS
+                    + String.join(SQLConstants.COMMA_SPACE, nonNullValues)
+                    + SQLConstants.CLOSE_PARENTHESIS);
+        }
+
+        return SQLConstants.WHERE_SQL_PREFIX + String.join(SQLConstants.SQL_OR, conditions);
     }
 
     private static @NotNull List<SQLDataValue> header2SQLDataValue(List<Header> headerList, String dbType, ArrayList<String> columnNameList) {
