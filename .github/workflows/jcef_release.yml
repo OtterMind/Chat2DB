@@ -27,7 +27,6 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       tag_name: ${{ steps.metadata.outputs.tag_name }}
       channel: ${{ steps.metadata.outputs.channel }}
-      publish_cdn: ${{ steps.metadata.outputs.publish_cdn }}
       update_latest: ${{ steps.metadata.outputs.update_latest }}
       publish: ${{ steps.metadata.outputs.publish }}
       package_prefix: ${{ steps.metadata.outputs.package_prefix }}
@@ -40,7 +39,6 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
-          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -51,13 +49,11 @@ jobs:
             fi
             version="${REF_NAME#v}"
             channel=release
-            publish_cdn=true
             update_latest=true
             publish=true
           else
             version="${INPUT_VERSION}"
             channel=gray
-            publish_cdn=true
             update_latest=false
             publish=false
           fi
@@ -79,19 +75,13 @@ jobs:
             exit 1
           fi
 
-          if [ "${channel}" = "release" ]; then
-            package_prefix="community/${version}"
-            update_prefix="community/updates/${version}"
-          else
-            package_prefix="community/gray/${version}/${RUN_ID}"
-            update_prefix="${package_prefix}/updates"
-          fi
+          package_prefix="community/${version}"
+          update_prefix="community/updates/${version}"
 
           {
             echo "version=${version}"
             echo "tag_name=v${version}"
             echo "channel=${channel}"
-            echo "publish_cdn=${publish_cdn}"
             echo "update_latest=${update_latest}"
             echo "publish=${publish}"
             echo "package_prefix=${package_prefix}"
@@ -108,8 +98,6 @@ jobs:
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version }}
-          UPLOAD_CDN: ${{ needs.resolve.outputs.publish_cdn }}
-          UPDATE_LATEST_VERSION_JSON: ${{ needs.resolve.outputs.update_latest }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: python
         run: |
@@ -126,8 +114,7 @@ jobs:
           lines = [
               "Chat2DB Community gray build started",
               f"Version: {os.environ['VERSION']}",
-              f"Publish to CDN: {os.environ['UPLOAD_CDN']}",
-              f"Update latest_version.json: {os.environ['UPDATE_LATEST_VERSION_JSON']}",
+              "Distribution: GitHub Actions artifacts only",
               f"Workflow run: {os.environ['RUN_URL']}",
           ]
           payload = json.dumps(
@@ -281,7 +268,7 @@ jobs:
           xcrun stapler staple "${dmg}"
           xcrun stapler validate "${dmg}"
 
-      - name: Upload release artifacts
+      - name: Upload platform artifacts to GitHub Actions
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: chat2db-community-${{ needs.resolve.outputs.version }}-${{ matrix.artifact_name }}
@@ -299,11 +286,11 @@ jobs:
             jpackage/input/sourceFile/*.zip
 
   cdn_release:
-    name: Publish Community packages to CDN
+    name: Publish Community release packages to CDN
     needs:
       - resolve
       - build
-    if: ${{ needs.resolve.outputs.publish_cdn == 'true' }}
+    if: ${{ needs.resolve.outputs.channel == 'release' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -657,10 +644,6 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version || inputs.version }}
           BUILD_RESULT: ${{ needs.build.result }}
-          CDN_RESULT: ${{ needs.cdn_release.result }}
-          UPLOAD_CDN: ${{ needs.resolve.outputs.publish_cdn }}
-          PACKAGE_URL: https://cdn.chat2db-ai.com/${{ needs.resolve.outputs.package_prefix }}/
-          UPDATE_METADATA_URL: https://cdn.chat2db-ai.com/${{ needs.resolve.outputs.update_prefix }}/version.json
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GITHUB_TOKEN: ${{ github.token }}
         shell: python
@@ -701,38 +684,21 @@ jobs:
 
           version = os.environ["VERSION"]
           build_result = os.environ["BUILD_RESULT"]
-          cdn_result = os.environ["CDN_RESULT"]
-          upload_cdn = os.environ["UPLOAD_CDN"]
-          package_url = os.environ["PACKAGE_URL"]
-          update_metadata_url = os.environ["UPDATE_METADATA_URL"]
           run_url = os.environ["RUN_URL"]
 
-          if build_result == "success" and (upload_cdn != "true" or cdn_result == "success"):
+          if build_result == "success":
               lines = [
                   "Chat2DB Community gray build completed",
                   f"Version: {version}",
                   f"Build result: {build_result}",
+                  "Distribution: GitHub Actions artifacts only",
+                  f"Workflow run: {run_url}",
               ]
-              if upload_cdn == "true":
-                  lines.extend(
-                      [
-                          "CDN publication: success",
-                          f"Package directory: {package_url}",
-                          f"Update metadata: {update_metadata_url}",
-                      ]
-                  )
-              else:
-                  lines.append(
-                      "CDN publication was not requested; packages are available "
-                      "only as GitHub Actions artifacts."
-                  )
-              lines.append(f"Workflow run: {run_url}")
           else:
               lines = [
                   "Chat2DB Community gray build did not complete successfully",
                   f"Version: {version}",
                   f"Build result: {build_result}",
-                  f"CDN result: {cdn_result}",
                   "Failed build jobs:",
                   *failed_build_jobs(),
                   f"Workflow run: {run_url}",

@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
 
@@ -90,40 +91,47 @@ public class SetTypeScript extends BaseTypeScript implements ITypeScript {
         if (newKey == null) {
             String delete = delete(oldKey.getName());
             return List.of(delete);
-        } else {
-            List<String> script = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(newKey.getValues())) {
-                for (SetValue field : newKey.getValues()) {
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.CREATE.equals(field.getAction())) {
-                        String s = createItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.UPDATE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                        s = createItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                    }
-                }
-            }
-            return script;
         }
+        // Member edits carry only the new value, so reconcile against the full
+        // old member list instead of trusting per-row action flags.
+        Set<String> desired = memberSet(newKey.getValues(), true);
+        if (desired.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Set<String> existing = memberSet(oldKey.getValues(), false);
+        List<String> scripts = new ArrayList<>();
+        List<String> removed = existing.stream().filter(value -> !desired.contains(value)).toList();
+        if (!removed.isEmpty()) {
+            scripts.add(membersCommand(RedisConstants.COMMAND_SET_REMOVE_PREFIX, newKey.getName(), removed));
+        }
+        List<String> added = desired.stream().filter(value -> !existing.contains(value)).toList();
+        if (!added.isEmpty()) {
+            scripts.add(membersCommand(RedisConstants.COMMAND_SET_ADD_PREFIX, newKey.getName(), added));
+        }
+        return scripts;
     }
 
-    private String createItem(String name, String value) {
-        return RedisConstants.COMMAND_SET_ADD_PREFIX + getRedisValue(name)
-                + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(value)
-                + RedisConstants.COMMAND_LINE_SEPARATOR;
+    private Set<String> memberSet(List<SetValue> values, boolean skipDeleted) {
+        Set<String> members = new java.util.LinkedHashSet<>();
+        if (CollectionUtils.isEmpty(values)) {
+            return members;
+        }
+        for (SetValue value : values) {
+            if (skipDeleted && ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(value.getAction())) {
+                continue;
+            }
+            members.add(StringUtils.defaultString(value.getValue()));
+        }
+        return members;
     }
 
-    private String deleteItem(String name, String value) {
-        return RedisConstants.COMMAND_SET_REMOVE_PREFIX + getRedisValue(name)
-                + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(value)
-                + RedisConstants.COMMAND_LINE_SEPARATOR;
+    private String membersCommand(String commandPrefix, String name, List<String> members) {
+        StringBuilder script = new StringBuilder();
+        script.append(commandPrefix).append(getRedisValue(name)).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        for (String member : members) {
+            script.append(getRedisValue(member)).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        }
+        return script.toString();
     }
 
 }

@@ -9,6 +9,7 @@ import { EditorSetValueType } from '@/components/SQLEditor';
 import { useIndexDBStore } from '@/store/indexDB';
 import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
+import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
 
@@ -68,6 +69,7 @@ const hasFunctionValue = (value: unknown): boolean => {
 export interface ConsoleAction {
   getOpenConsoleList: () => void;
   getSavedConsoleList: () => void;
+  removeSavedConsole: (consoleId: number) => Promise<void>;
   setActiveConsoleId: (data: ConsoleState['activeConsoleId']) => void;
   setWorkspaceTabList: (data: ConsoleState['workspaceTabList']) => void;
   updateWorkspaceTabBoundInfo: (data: IBoundInfo) => void;
@@ -114,6 +116,15 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
           savedConsoleList: res?.data,
         });
       });
+  },
+  removeSavedConsole: async (consoleId) => {
+    const removalPlan = resolveSavedConsoleRemoval(get().workspaceTabList, consoleId);
+    await executeSavedConsoleRemoval(consoleId, removalPlan, {
+      updateSavedConsole: historyService.updateSavedConsole,
+      deleteSavedConsole: historyService.deleteSavedConsole,
+      updateWorkspaceTabBoundInfo: get().updateWorkspaceTabBoundInfo,
+    });
+    get().getSavedConsoleList();
   },
   setActiveConsoleId: (data) => {
     set({

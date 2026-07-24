@@ -258,7 +258,17 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
                 return sqlBuilder.toString();
             }
         }
-        return SQLConstants.EMPTY;
+        // SQL Server < 2012: use ROW_NUMBER() window function
+        int startRow = offset + 1;
+        int endRow = offset + pageSize;
+        StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
+        sqlBuilder.append(SQL_ROW_NUMBER_PREFIX);
+        sqlBuilder.append(sql);
+        sqlBuilder.append(SQL_ROW_NUMBER_SUFFIX);
+        sqlBuilder.append(startRow);
+        sqlBuilder.append(SQL_AND);
+        sqlBuilder.append(endRow);
+        return sqlBuilder.toString();
     }
 
 

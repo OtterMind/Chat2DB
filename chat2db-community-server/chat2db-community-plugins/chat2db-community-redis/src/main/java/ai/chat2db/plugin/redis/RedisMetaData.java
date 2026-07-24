@@ -315,7 +315,7 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
             return super.tables(connection, databaseName, schemaName, tableName, pageNo, pageSize);
         } else {
             List<Table> result = DefaultSQLExecutor.getInstance().execute(connection,
-                    String.format(RedisConstants.COMMAND_EXISTS_KEY, tableName), resultSet -> {
+                    String.format(RedisConstants.COMMAND_EXISTS_KEY, RedisValueUtils.getRedisValue(tableName)), resultSet -> {
                 List<Table> tables = new ArrayList<>();
                 while (resultSet.next()) {
                     if (resultSet.getInt(1) == 1) {

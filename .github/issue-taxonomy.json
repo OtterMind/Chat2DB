@@ -97,6 +97,7 @@
       }
     ],
     "workflows": {
+      "provider": ".github/workflows/community-project-sync.yml",
       "autoAddSubIssues": true,
       "autoCloseIssue": false,
       "itemAddedStatus": "Inbox",
@@ -297,6 +298,11 @@
       "description": "Snowflake-specific behavior"
     },
     {
+      "name": "db/bigquery",
+      "color": "0E8A16",
+      "description": "BigQuery-specific behavior"
+    },
+    {
       "name": "db/other",
       "color": "0E8A16",
       "description": "Database-specific behavior without a dedicated label"
@@ -340,6 +346,11 @@
       "name": "edition/pro",
       "color": "006B75",
       "description": "Chat2DB Pro report requiring rerouting"
+    },
+    {
+      "name": "edition/enterprise",
+      "color": "006B75",
+      "description": "Chat2DB Enterprise report requiring rerouting"
     },
     {
       "name": "edition/unknown",

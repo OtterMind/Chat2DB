@@ -78,6 +78,17 @@ public class SqlUtils {
                     if ((sqlStatement instanceof SQLSelectStatement sqlSelectStatement)) {
                         SQLExprTableSource sqlExprTableSource = (SQLExprTableSource) getSQLExprTableSource(
                                 sqlSelectStatement.getSelect().getFirstQueryBlock().getFrom());
+                        // A derived table (subquery in FROM) or other non-expr/non-join table
+                        // source cannot be mapped to a single physical table; without this guard
+                        // tableName stays null and the edit flow would emit invalid SQL such as
+                        // "UPDATE null SET ...". getSQLExprTableSource returns null for those
+                        // cases (see below), so keep the result set non-editable, mirroring the
+                        // null-check already present in getTableName(). Follows the same
+                        // setCanEdit(false)+return pattern used above for aliased/COUNT columns.
+                        if (sqlExprTableSource == null) {
+                            executeResult.setCanEdit(false);
+                            return;
+                        }
                         executeResult.setTableName(getMetaDataTableName(sqlExprTableSource.getCatalog(), sqlExprTableSource.getSchema(), sqlExprTableSource.getTableName()));
                     }
                 } else {

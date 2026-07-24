@@ -58,18 +58,14 @@ public class ListTypeScript extends BaseTypeScript implements ITypeScript {
         if(redisKey == null || CollectionUtils.isEmpty(redisKey.getListValues())) {
             return Lists.newArrayList();
         }
-        List<String> scripts = new ArrayList<>();
-        StringBuilder script = new StringBuilder();
-        script.append(RedisConstants.COMMAND_LIST_PUSH_PREFIX).append(getRedisValue(redisKey.getName()))
-                .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
-        List<ListValue> valueList = redisKey.getListValues();
-        for (ListValue value : valueList) {
-            script.append(getRedisValue(value.getValue())).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        List<ListValue> desired = desiredValues(redisKey);
+        if (desired.isEmpty()) {
+            return Lists.newArrayList();
         }
-        scripts.add(script.toString());
-        script = new StringBuilder();
-
+        List<String> scripts = new ArrayList<>();
+        scripts.add(pushAll(redisKey.getName(), desired));
         if (redisKey.getTtl() != null && redisKey.getTtl() > 0) {
+            StringBuilder script = new StringBuilder();
             script.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(redisKey.getName()))
                     .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(redisKey.getTtl())
                     .append(RedisConstants.COMMAND_LINE_SEPARATOR);
@@ -89,49 +85,38 @@ public class ListTypeScript extends BaseTypeScript implements ITypeScript {
         if (newKey == null) {
             String delete = delete(oldKey.getName());
             return List.of(delete);
-        } else {
-            List<String> script = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(newKey.getListValues())) {
-                String before = null;
-                for (ListValue field : newKey.getListValues()) {
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.CREATE.equals(field.getAction())) {
-                        String s = createItem(newKey.getName(), before, field);
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.UPDATE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getValue());
-                        script.add(s);
-                        s = createItem(newKey.getName(), before, field);
-                        script.add(s);
-                    }
-                    before = field.getValue();
-                }
-            }
-            return script;
         }
+        // The editor submits the full desired list (rows flagged delete excluded),
+        // so rewrite the key to match it. Element edits carry only the new value,
+        // which makes value-based LREM/LINSERT reconciliation unsafe.
+        List<ListValue> desired = desiredValues(newKey);
+        if (desired.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        List<String> scripts = new ArrayList<>();
+        scripts.add(delete(newKey.getName()));
+        scripts.add(pushAll(newKey.getName(), desired));
+        return scripts;
     }
 
-    private String createItem(String name, String before, ListValue field) {
-        if (before == null) {
-            return RedisConstants.COMMAND_LIST_PUSH_PREFIX + getRedisValue(name)
-                    + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(field.getValue())
-                    + RedisConstants.COMMAND_LINE_SEPARATOR;
-        } else {
-            return RedisConstants.COMMAND_LIST_INSERT_PREFIX + getRedisValue(name)
-                    + RedisConstants.COMMAND_LIST_INSERT_AFTER_FRAGMENT + getRedisValue(before)
-                    + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(field.getValue())
-                    + RedisConstants.COMMAND_LINE_SEPARATOR;
+    private List<ListValue> desiredValues(RedisKey redisKey) {
+        if (CollectionUtils.isEmpty(redisKey.getListValues())) {
+            return Lists.newArrayList();
         }
+        return redisKey.getListValues().stream()
+                .filter(value -> !ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(value.getAction()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
-    private String deleteItem(String name, String value) {
-        return RedisConstants.COMMAND_LIST_REMOVE_PREFIX + getRedisValue(name)
-                + RedisConstants.COMMAND_LIST_REMOVE_ONE_FRAGMENT + getRedisValue(value)
-                + RedisConstants.COMMAND_LINE_SEPARATOR;
+    private String pushAll(String name, List<ListValue> values) {
+        StringBuilder script = new StringBuilder();
+        script.append(RedisConstants.COMMAND_LIST_RIGHT_PUSH_PREFIX).append(getRedisValue(name))
+                .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        for (ListValue value : values) {
+            script.append(getRedisValue(StringUtils.defaultString(value.getValue())))
+                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        }
+        return script.toString();
     }
 
 }

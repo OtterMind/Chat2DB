@@ -61,6 +61,11 @@ public final class SqlServerSqlBuilderConstants {
     public static final String UPDATE_TABLE_COMMENT_SCRIPT = "exec sp_updateextendedproperty 'MS_Description','%s','SCHEMA','%s','TABLE','%s' \ngo\n";
     public static final String RENAME_TABLE_SCRIPT = "exec sp_rename '%s','%s','OBJECT' \ngo\n";
 
+    // ROW_NUMBER pagination for SQL Server < 2012
+    public static final String SQL_ROW_NUMBER_PREFIX = "SELECT * FROM (SELECT TMP_PAGE.*, ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) AS CAHT2DB_AUTO_ROW_ID FROM (\n";
+    public static final String SQL_ROW_NUMBER_SUFFIX = "\n) TMP_PAGE) TMP_PAGE WHERE CAHT2DB_AUTO_ROW_ID BETWEEN ";
+    public static final String SQL_AND = " AND ";
+
 
     private SqlServerSqlBuilderConstants() {
     }

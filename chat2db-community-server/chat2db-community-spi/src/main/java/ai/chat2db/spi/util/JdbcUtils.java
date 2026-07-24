@@ -15,6 +15,7 @@ import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import ai.chat2db.spi.sql.JdbcDriverManager;
 import ai.chat2db.spi.ssh.SSHManager;
 import ai.chat2db.community.tools.util.ExceptionUtils;
+import ai.chat2db.community.tools.util.I18nUtils;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.jcraft.jsch.Session;
@@ -211,7 +212,7 @@ public class JdbcUtils {
                 }
             }
         }
-        dataSourceConnect.setDescription("成功");
+        dataSourceConnect.setDescription(I18nUtils.getMessage("sqlResult.success"));
         return dataSourceConnect;
     }
 

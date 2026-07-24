@@ -1,100 +1,57 @@
 <div align="center">
-  <h1>Chat2DB</h1>
+  <img src="./icon.png" alt="Chat2DB" width="100">
   <p><strong>Un cliente de bases de datos y espacio de trabajo SQL con IA para desarrolladores, administradores de bases de datos, analistas y equipos de datos.</strong></p>
 </div>
-<div align="center">
-<a href="https://trendshift.io/repositories/11808" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11808" alt="OtterMind%2FChat2DB | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</div>
 
 <div align="center">
-
-[![ModelScope][Modelscope-image]][Modelscope-url]
-[![Discord][discord-image]][discord-url]
-[![X][x-image]][x-url]
-
-[Modelscope-image]: https://img.shields.io/badge/modelscope-blue?style=flat-square\&logo=modelscope
-[Modelscope-url]: https://modelscope.cn/
-[discord-image]: https://img.shields.io/badge/-Join%20us%20on%20Discord-%237289DA.svg?style=flat&logo=discord&logoColor=white
-[discord-url]: https://discord.gg/uNjb3n5JVN
-[x-image]: https://img.shields.io/badge/X-%40Chat2DB_AI-000000?style=flat&logo=x&logoColor=white
-[x-url]: https://x.com/Chat2DB_AI
-
-</div>
-
-<div align="center">
-  <a href="./README.md"><img alt="README en inglés" src="https://img.shields.io/badge/English-d9d9d9"></a>
-  <a href="./README_CN.md"><img alt="README en chino simplificado" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
-  <a href="./README_JA.md"><img alt="README en japonés" src="https://img.shields.io/badge/日本語-d9d9d9"></a>
+  <a href="./README.md"><img alt="README in English" src="https://img.shields.io/badge/English-d9d9d9"></a>
+  <a href="./README_CN.md"><img alt="简体中文版自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
+  <a href="./README_JA.md"><img alt="日本語のREADME" src="https://img.shields.io/badge/日本語-d9d9d9"></a>
   <a href="./README_ES.md"><img alt="README en español" src="https://img.shields.io/badge/Español-d9d9d9"></a>
-  <a href="./README_KO.md"><img alt="README en coreano" src="https://img.shields.io/badge/한국어-d9d9d9"></a>
+  <a href="./README_KO.md"><img alt="한국어 README" src="https://img.shields.io/badge/한국어-d9d9d9"></a>
+</div>
+
+## ¿Qué es Chat2DB?
+
+Chat2DB Community es un cliente de bases de datos gratuito y multiplataforma para Windows, macOS y Linux. Se ejecuta por completo en su equipo y combina un espacio de trabajo SQL con todas las funciones con un asistente de IA que usted conecta a su propio modelo.
+
+- **Más de 30 bases de datos** — MySQL, PostgreSQL, Oracle, SQL Server, ClickHouse, MongoDB, Redis, SQLite, MariaDB, TiDB, Hive, DB2, Snowflake, BigQuery, Elasticsearch y más mediante plugins.
+- **Espacio de trabajo SQL** — edición, autocompletado, formato, ejecución, SQL guardado e historial de ejecución.
+- **Asistente de IA** — use su propio modelo de IA para generar, explicar y optimizar SQL en lenguaje natural.
+- **Gestión de bases de datos** — explore metadatos, gestione tablas y objetos (DDL/DML) y edite los datos directamente.
+- **Importación y exportación de datos**, **paneles y gráficos**, y una **CLI con soporte de MCP**.
+
+<div align="center">
+
+[![Espacio de trabajo de Chat2DB con editor SQL y asistente de IA — haga clic para ver el vídeo de presentación](https://cdn.chat2db-ai.com/website/img/first_video_cover.webp)](https://cdn.chat2db-ai.com/website/video/first_sceen_en.mp4)
 
 </div>
 
-> 📣 **¡Novedades del equipo de Chat2DB!**
-> Acabamos de publicar como código abierto **[Nubase](https://github.com/ottermind/nubase)**, nuestra nueva capa de despliegue para aplicaciones nativas de inteligencia artificial.
-> Si Chat2DB le ayuda a gestionar datos con facilidad, Nubase le ayudará a desplegar sus herramientas y agentes de programación con IA sin complicaciones.
->
-> Apoye nuestro trabajo de código abierto y **[dé una ⭐️ a Nubase en GitHub](https://github.com/ottermind/nubase)**.
+### Capturas de pantalla
 
-## Comparación de funciones
+| Paneles y gráficos | Diagramas ER |
+| --- | --- |
+| ![Paneles y gráficos](https://cdn.chat2db-ai.com/website/img/bi_dashboard.png) | ![Diagrama ER](https://cdn.chat2db-ai.com/website/img/er_diagrams.png) |
 
-Community, Pro y Enterprise comparten las mismas funciones básicas del cliente de bases de datos. Las ediciones comerciales añaden IA oficial, almacenamiento en la nube, acceso multidispositivo, colaboración y gobierno sobre esa base, en lugar de sustituirla por otro motor de base de datos.
+| Gestión visual de datos | Importación y exportación de datos |
+| --- | --- |
+| ![Gestión visual de datos](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![Importación y exportación de datos](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
-| Función | Community | Pro (personal en línea) | Enterprise |
-| --- | --- | --- | --- |
-| Conexiones a fuentes de datos y gestión de credenciales | ✅ | ✅ | ✅ |
-| Plugins de bases de datos y exploración de metadatos | ✅ | ✅ | ✅ |
-| Edición, autocompletado, formato y ejecución de SQL | ✅ | ✅ | ✅ |
-| DDL/DML, gestión de objetos y edición de datos | ✅ | ✅ | ✅ |
-| Importación y exportación de datos | ✅ | ✅ | ✅ |
-| SQL guardado, historial y tareas | ✅ | ✅ | ✅ |
-| Paneles y gráficos | ✅ | ✅ | ✅ |
-| CLI y MCP | ✅ | ✅ | ✅ |
-| Modelos de IA personalizados | ✅ | ✅ | ✅ |
-| Créditos oficiales de IA e historial de chat en la nube | ❌ | ✅ | ✅ |
-| Sistema de cuentas e identidad | ❌ | ✅ | ✅ |
-| Nube y varios dispositivos | ❌ | ✅ | ✅ |
-| Fuentes de datos de equipo y activos compartidos | ❌ | ❌ | ✅ |
-| Miembros y roles | ❌ | ❌ | ✅ |
-| Permisos, aprobaciones y auditoría | ❌ | ❌ | ✅ |
-| Contexto de datos de la organización y base de conocimiento empresarial | ❌ | ❌ | ✅ |
+## Inicio rápido
 
-## Descarga e instalación
+### Opción 1: Aplicación de escritorio
 
-Chat2DB es una aplicación multiplataforma compatible con Windows, macOS y Linux. Puede descargar Chat2DB desde los enlaces siguientes:
+Descargue el instalador para su plataforma desde [GitHub Releases](https://github.com/OtterMind/Chat2DB/releases), instálelo y empiece a conectarse a sus bases de datos. No se requiere ninguna configuración adicional.
 
-- [Descargar la versión Pro](https://chat2db.ai/download)
-- [Descargar Community (Source Available)](https://github.com/OtterMind/Chat2DB/releases)
+### Opción 2: Docker
 
-## Límite de seguridad de Community Edition
+Requisitos: Docker 19.03.0 o posterior, Docker Compose 2.0.0 o posterior (Compose V2, solo para la variante con Compose), 2 o más núcleos de CPU, 4 GiB o más de RAM.
 
-> [!WARNING]
-> Chat2DB Community es una aplicación para un solo usuario y de uso local. No
-> proporciona cuentas de usuario, aislamiento entre inquilinos ni límites de
-> autorización entre varios usuarios. Mantenga el servicio HTTP enlazado a
-> `127.0.0.1` o `::1` y no lo exponga directamente a otros usuarios ni a redes
-> que no sean de confianza.
->
-> Los controladores JDBC personalizados son código Java ejecutable. Instálelos
-> solo desde fuentes de confianza. Los archivos de configuración, archivos
-> comprimidos, archivos SQL, contenidos de bases de datos y respuestas de IA
-> importados siguen siendo datos no confiables. Consulte la [Política de
-> seguridad](SECURITY.md) para conocer el límite de confianza completo y el
-> proceso de notificación de vulnerabilidades.
-
-## Instalación de Community Edition con Docker
-
-### Requisitos del sistema
-
-Antes de instalar Chat2DB, asegúrese de que el sistema cumpla los requisitos siguientes:
-
-- Docker 19.03.0 o posterior
-- Docker Compose 2.0.0 o posterior (Compose V2)
-- CPU >= 2 núcleos
-- RAM >= 4 GiB
+Primero cree la clave de cifrado (consulte [Clave de cifrado](#clave-de-cifrado) para saber por qué es importante) y, a continuación, inicie el contenedor:
 
 ```bash
 # Ejecútelo una vez desde un checkout del repositorio. Las ejecuciones posteriores reutilizan la misma clave válida.
+git clone https://github.com/OtterMind/Chat2DB.git && cd Chat2DB
 ./script/security/init-community-encryption-key.sh
 
 docker run --detach \
@@ -105,36 +62,59 @@ docker run --detach \
   --env CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE=/run/secrets/chat2db-community-encryption.key \
   --volume "$HOME/.config/chat2db-community/encryption.key:/run/secrets/chat2db-community-encryption.key:ro" \
   chat2db/chat2db:latest
-
-docker logs --follow chat2db-community
 ```
 
-Abra `http://localhost:10825`. Para actualizar el contenedor, descargue la nueva imagen, elimine el contenedor anterior y vuelva a ejecutar el comando.
+Después abra `http://localhost:10825` en su navegador.
 
-Chat2DB Community 5.3.0 utiliza el directorio independiente `/root/.chat2db-community`. No migra automáticamente los datos de imágenes anteriores que utilizaban `/root/.chat2db`.
-
-Conserve `~/.config/chat2db-community/encryption.key` entre reconstrucciones del contenedor y haga una copia de seguridad por separado. Si la sustituye o la pierde, las contraseñas de fuentes de datos y las claves API de modelos de IA guardadas anteriormente dejarán de ser legibles. El inicio con un valor de `chat2db.mode` distinto de `DESKTOP`, incluido el inicio web/headless habitual, falla si no se proporciona una clave válida.
-
-El repositorio también incluye una definición de Compose:
+Como alternativa, use la definición de Compose incluida:
 
 ```bash
 ./script/security/init-community-encryption-key.sh
 docker compose --file docker/docker-compose.yml up --detach
 ```
 
-`docker run` guarda los datos en `$HOME/.chat2db-community-docker`, mientras que Compose utiliza el volumen con nombre `chat2db-community-data`. Ambos métodos no comparten ni migran los datos automáticamente.
+Notas:
 
-## Clave de cifrado de Community
+- Para actualizar, descargue la nueva imagen, elimine el contenedor anterior y ejecute de nuevo el comando de inicio. Conserve `~/.config/chat2db-community/encryption.key` entre reconstrucciones.
+- El ejemplo de `docker run` almacena los datos de la aplicación en `$HOME/.chat2db-community-docker`; la definición de Compose usa el volumen con nombre `chat2db-community-data`. Estas ubicaciones no comparten datos.
+- Chat2DB Community 5.3.0 utiliza el directorio independiente `/root/.chat2db-community` y no migra automáticamente los datos de imágenes anteriores que usaban `/root/.chat2db`.
 
-Chat2DB Community cifra las contraseñas de fuentes de datos y las claves API de modelos de IA configuradas por el usuario mediante AES-256-GCM. Ambas utilizan la misma clave de instalación con valores AAD autenticados independientes, por lo que el texto cifrado de un propósito no se puede descifrar como si perteneciera al otro. La clave debe ser Base64 válido y decodificarse exactamente en 32 bytes. El inicializador incluido genera el formato estándar con relleno: 44 caracteres Base64 terminados en `=`. Es material criptográfico, no una contraseña legible.
+## Notas de seguridad
 
-Cree una vez el archivo de clave predeterminado desde un checkout del repositorio:
+Chat2DB Community es una aplicación local y para un solo usuario. No tiene
+cuentas de usuario ni límites de autorización entre usuarios. Mantenga el
+servicio HTTP enlazado a `127.0.0.1` o `::1` y no lo exponga a otros usuarios
+ni a redes que no sean de confianza.
+
+Los controladores JDBC personalizados son código Java ejecutable: instálelos
+solo desde fuentes en las que confíe. Los archivos de configuración
+importados, los archivos comprimidos, los archivos SQL, los contenidos de las
+bases de datos y las respuestas de la IA siguen siendo datos no confiables.
+Consulte la [Política de seguridad](SECURITY.md) para conocer el límite de
+confianza completo y el proceso de notificación de vulnerabilidades.
+
+Si este proyecto le resulta útil, ¡regálenos una estrella ⭐️!
+
+<div align="center">
+  <a href="https://github.com/OtterMind/Chat2DB"><img src="https://cdn.chat2db.ai/g/Area.gif" alt="Dar una estrella a Chat2DB en GitHub" width="600"></a>
+</div>
+
+## Clave de cifrado
+
+Chat2DB Community cifra las contraseñas de fuentes de datos y las claves API de modelos de IA almacenadas con AES-256-GCM usando una clave por instalación. Créela una sola vez desde un checkout del repositorio (requiere `openssl`):
 
 ```bash
 ./script/security/init-community-encryption-key.sh
 ```
 
-La ruta predeterminada es `~/.config/chat2db-community/encryption.key`. Para utilizar otra ruta, pásela al script y configure la misma ruta al iniciar Chat2DB:
+La clave se escribe en `~/.config/chat2db-community/encryption.key`. **Haga una copia de seguridad de este archivo por separado y consérvelo entre actualizaciones y reconstrucciones del contenedor**: si lo sustituye o lo pierde, las contraseñas de fuentes de datos y las claves API de modelos de IA almacenadas anteriormente dejarán de ser legibles. El inicio en modo web/headless falla cuando no se proporciona una clave válida; solo el modo Desktop crea automáticamente una clave que falte.
+
+<details>
+<summary>Referencia de configuración de la clave (rutas personalizadas, orden de resolución, validación)</summary>
+
+La clave debe ser Base64 válido que se decodifique exactamente en 32 bytes. El inicializador incluido genera el formato estándar con relleno: 44 caracteres Base64 terminados en `=`. Es material criptográfico de clave, no una contraseña legible por humanos. Las contraseñas de fuentes de datos y las claves API de IA usan la misma clave con valores AAD autenticados independientes, por lo que el texto cifrado de un propósito no se puede descifrar como si perteneciera al otro.
+
+Para usar una ruta personalizada, pásela al script y configure la misma ruta al iniciar Chat2DB:
 
 ```bash
 ./script/security/init-community-encryption-key.sh /secure/path/chat2db-community.key
@@ -150,35 +130,37 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
     -jar chat2db-community-server/chat2db-community-start/target/chat2db-community.jar
 ```
 
-El script necesita `openssl`. La prioridad para seleccionar la ruta del archivo es: el argumento posicional, `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE` y, por último, la ruta predeterminada. El script reutiliza un archivo normal válido, rechaza enlaces simbólicos y archivos que no sean normales, y se niega a sobrescribir un archivo no válido. Mantenga la clave legible únicamente por el propietario del proceso de Chat2DB, consérvela entre actualizaciones y reconstrucciones del contenedor, y haga una copia de seguridad independiente del almacenamiento de las fuentes de datos.
+La prioridad del script para la ruta del archivo de clave es: el argumento posicional, `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE` y, por último, la ruta predeterminada. El script reutiliza un archivo regular válido, rechaza enlaces simbólicos y archivos no regulares, y se niega a sobrescribir un archivo no válido. Mantenga la clave legible únicamente por el propietario del proceso de Chat2DB.
 
 La configuración de la clave se resuelve en este orden:
 
 1. Propiedad JVM `chat2db.community.encryption-key` que contiene la clave Base64.
 2. Variable de entorno `CHAT2DB_COMMUNITY_ENCRYPTION_KEY` que contiene la clave Base64.
-3. Propiedad JVM `chat2db.community.encryption-key-file` que contiene la ruta del archivo de clave.
-4. Variable de entorno `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE` que contiene la ruta del archivo de clave.
+3. Propiedad JVM `chat2db.community.encryption-key-file` que contiene la ruta de un archivo de clave.
+4. Variable de entorno `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE` que contiene la ruta de un archivo de clave.
 5. Archivo predeterminado `~/.config/chat2db-community/encryption.key`.
 
-El primer valor configurado es el que se utiliza. Un valor vacío, Base64 mal formado, una clave que no se decodifica en 32 bytes o un archivo de clave no válido provocan un error de inicio en vez de continuar con el origen siguiente. Se recomienda configurar un archivo porque evita incluir el valor de la clave directamente en los argumentos del proceso o en las variables de entorno.
+El primer valor configurado es el autoritativo. Un valor en blanco, Base64 mal formado, una clave que no se decodifica en 32 bytes o un archivo de clave no válido hacen fallar el inicio en lugar de continuar con el origen siguiente. Se recomienda la configuración basada en archivo porque evita colocar el valor de la clave directamente en los argumentos del proceso o en las variables de entorno.
 
-La creación automática del archivo de clave depende de `chat2db.mode`, no de `chat2db.gui`. El modo Community Desktop (`chat2db.runtime.mode=community` con `chat2db.mode=DESKTOP`) crea el archivo de clave seleccionado si no hay una clave en línea configurada y el archivo no existe. Cualquier modo que no sea Desktop, incluido el inicio web/headless habitual, nunca crea una clave que falte y genera un error hasta que se proporcione o inicialice una clave válida. La clave resuelta se almacena en caché durante la vida del proceso, por lo que los cambios en la configuración requieren reiniciar la aplicación. Si se sustituye o se pierde la clave, las contraseñas de fuentes de datos y las claves API de modelos de IA guardadas anteriormente dejan de ser legibles.
+La creación automática del archivo de clave depende de `chat2db.mode`, no de `chat2db.gui`. El modo Desktop de Community (`chat2db.runtime.mode=community` con `chat2db.mode=DESKTOP`) crea el archivo de clave seleccionado cuando no hay configurada una clave en línea y el archivo no existe. Cualquier modo que no sea Desktop, incluido el inicio web/headless normal, nunca crea una clave que falte y falla hasta que se proporcione o inicialice una clave válida. La clave resuelta se almacena en caché durante la vida del proceso, por lo que cambiar la configuración de la clave requiere reiniciar la aplicación.
 
-## Desarrollo
+</details>
 
-### Entorno de ejecución
+## Compilar desde el código fuente
+
+### Requisitos previos
 
 - Entorno de ejecución de Java: <a href="https://adoptium.net/temurin/releases/?version=17" target="_blank">Eclipse Temurin 17</a>
-- Entorno de ejecución de Node.js: Node.js 18.17.0 o posterior
+- Node.js 18.17.0 o posterior
 - Maven 3.8 o posterior
 
-### Clonar el repositorio localmente
+### Clonar el repositorio
 
 ```bash
-git clone git@github.com:OtterMind/Chat2DB.git
+git clone https://github.com/OtterMind/Chat2DB.git
 ```
 
-### Depuración del frontend
+### Frontend
 
 Use Yarn con el archivo de bloqueo incluido en el repositorio.
 
@@ -188,7 +170,7 @@ yarn install --frozen-lockfile
 yarn run start:community:hot
 ```
 
-### Depuración del backend
+### Backend
 
 ```bash
 cd Chat2DB
@@ -214,45 +196,39 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
 ./docker/docker-build.sh 5.3.0 chat2db/chat2db:5.3.0
 ```
 
+## Ediciones Community y comerciales
+
+La edición Community contiene el cliente local de bases de datos completo descrito anteriormente, incluido el soporte de modelos de IA personalizados. Las ediciones comerciales Pro y Enterprise se basan en el mismo núcleo y añaden servicios de IA alojados, cuentas de usuario, almacenamiento en la nube y sincronización entre dispositivos, así como funciones de colaboración y gobierno para equipos. Consulte [chat2db.ai](https://chat2db.ai) para más detalles.
+
 ## Contribuciones
 
 Agradecemos los informes de errores, las solicitudes de funciones, las mejoras de documentación, los comentarios sobre pruebas y las pull requests de la comunidad.
 
-Antes de abrir una incidencia o enviar una pull request, lea nuestra [Guía de contribución](./CONTRIBUTING.md). Explica cómo informar de errores, sugerir mejoras y facilitar la revisión de contribuciones por parte de los mantenedores.
+Antes de abrir una incidencia o enviar una pull request, lea nuestra [Guía de contribución](./CONTRIBUTING.md). Explica cómo informar de errores, sugerir mejoras y facilitar la revisión de las contribuciones por parte de los mantenedores.
 
 - Para errores y solicitudes de funciones, utilice [GitHub Issues](https://github.com/OtterMind/Chat2DB/issues).
-- Para preguntas, ayuda de configuración y debates abiertos, utilice [GitHub Discussions](https://github.com/OtterMind/Chat2DB/discussions).
-- Si su pull request está relacionada con una incidencia, incluya el enlace en su descripción.
+- Para preguntas, ayuda con la configuración y debates abiertos, utilice [GitHub Discussions](https://github.com/OtterMind/Chat2DB/discussions).
+- Si su pull request está relacionada con una incidencia, enlácela en la descripción de la PR.
 
-## Contacto
+## Comunidad y soporte
 
+- GitHub Issues: [informe de un error o solicite una función](https://github.com/OtterMind/Chat2DB/issues)
+- GitHub Discussions: [haga preguntas y comparta ideas](https://github.com/OtterMind/Chat2DB/discussions)
+- Discord: [únase a nuestro servidor de Discord](https://discord.gg/uNjb3n5JVN)
 - Correo electrónico: Chat2DB@ch2db.com
-- Discord: [Únase a nuestro servidor de Discord](https://discord.gg/uNjb3n5JVN)
-- X: [@Chat2DB_AI](https://x.com/Chat2DB_AI)
-- YouTube: [Canal de Chat2DB](https://www.youtube.com/@chat2db.tutorial)
-- GitHub: [Chat2DB en GitHub](https://github.com/OtterMind/Chat2DB)
-
 
 ## Agradecimientos
 
-
 Gracias a todas las personas que han contribuido a Chat2DB.
-
 
 <a href="https://github.com/OtterMind/Chat2DB/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=OtterMind/Chat2DB" alt="Colaboradores de Chat2DB" />
 </a>
 
-## Historial de estrellas
-
-<a href="https://www.star-history.com/?repos=OtterMind%2FChat2DB&type=date&legend=top-left">
- <img alt="Gráfico del historial de estrellas" src="https://api.star-history.com/chart?repos=OtterMind/Chat2DB&type=date&legend=top-left&sealed_token=HqUTPR9nqjAv9Iikq8Jw6_J5TVBqOi0TiLtkPzm23BAJclEPLy93G-5ts_ZiNPJjnOAYTJoedoV7GqiMMkvlxjN0hTCKVn1_Bbe3RABuGYqg3jRibN8db-xChpiLkLrfnEa_C_O4bVoHnwjB1lNnlYNEHEvxFw_6WRuoSKwAj4t5KXYS2dz315a9Yo3c" />
-</a>
-
 ## Licencia
 
 La versión 5.3.0 y posteriores de Chat2DB Community están disponibles bajo los
-[términos de licencia de este repositorio](./LICENSE). Se trata de una licencia de código disponible
-basada en Apache License 2.0 con condiciones adicionales. Las versiones de Chat2DB
-publicadas antes de la 5.3.0, incluida la 0.3.7 y las etiquetas históricas
-anteriores, siguen estando disponibles bajo Apache License 2.0.
+[términos de licencia de este repositorio](./LICENSE). Se trata de una licencia
+de código disponible basada en Apache License 2.0 con condiciones adicionales.
+Las versiones de Chat2DB publicadas antes de la 5.3.0, incluida la 0.3.7 y las
+etiquetas históricas anteriores, siguen estando bajo Apache License 2.0.

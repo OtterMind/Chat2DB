@@ -21,6 +21,7 @@ public final class RedisConstants {
     public static final String COMMAND_LIST_INSERT_AFTER_FRAGMENT = " AFTER ";
     public static final String COMMAND_LIST_INSERT_PREFIX = "LINSERT ";
     public static final String COMMAND_LIST_PUSH_PREFIX = "LPUSH ";
+    public static final String COMMAND_LIST_RIGHT_PUSH_PREFIX = "RPUSH ";
     public static final String COMMAND_LIST_RANGE_ALL_SUFFIX = " 0 -1";
     public static final String COMMAND_LIST_RANGE_PREFIX = "LRANGE ";
     public static final String COMMAND_LIST_REMOVE_ONE_FRAGMENT = " 1 ";
@@ -42,7 +43,7 @@ public final class RedisConstants {
     public static final String COMMAND_TYPE_KEY = "type %s";
     public static final String COMMAND_ZSET_ADD_PREFIX = "ZADD ";
     public static final String COMMAND_ZSET_RANGE_PREFIX = "ZRANGE ";
-    public static final String COMMAND_ZSET_RANGE_WITH_SCORES_SUFFIX = " 0 1001 WITHSCORES";
+    public static final String COMMAND_ZSET_RANGE_WITH_SCORES_SUFFIX = " 0 -1 WITHSCORES";
     public static final String COMMAND_ZSET_REMOVE_PREFIX = "ZREM ";
     public static final String JDBC_REDIS_URL_PREFIX = "jdbc:redis://";
     public static final String CONFIG_GET_PERMISSION_ERROR = "config|get";

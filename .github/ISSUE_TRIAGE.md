@@ -21,6 +21,7 @@ The machine-readable taxonomy is [`issue-taxonomy.json`](issue-taxonomy.json).
 | Database compatibility bug | Bug | Database-specific connection, metadata, SQL, or editor behavior |
 | Feature request | Feature | A new capability or product improvement |
 | Documentation task | Task | Documentation corrections, additions, examples, or translations |
+| Maintainer task | Task | Tests, refactoring, build, release, or repository maintenance |
 
 Questions belong in GitHub Discussions. Sensitive security reports are outside
 this public issue process and must be submitted through the [security policy](../SECURITY.md).
@@ -131,9 +132,34 @@ claim lease.
 The `contribution/*` label is the claim bot's machine-readable publication
 switch. Apply it only after setting Status to `Ready`, and remove it whenever a
 task moves back to `Inbox` or `Backlog`; label removal automatically releases an
-active claim. The linked-pull-request workflow moves work to `In Progress`.
-When the pull request is ready for maintainer review, set `In Review` manually;
-GitHub does not provide a built-in ready-for-review Project workflow.
+active claim. The source-controlled Project workflow adds new Issues as
+`Inbox`, moves linked draft pull requests to `In Progress`, ready pull requests
+to `In Review`, and closed Issues or merged pull requests to `Done`.
+
+Before publishing, apply the contribution-fit gate in
+[`contribution-boundaries.yml`](contribution-boundaries.yml). `open` work can be
+scoped, `approval-required` work needs a recorded design or ownership decision,
+and `closed` work must be declined with the listed reason and alternative.
+
+Every published task must append the complete `Maintainer Ready Contract` from
+[`COMMUNITY_OPERATIONS.md`](COMMUNITY_OPERATIONS.md). A contribution label
+without that contract, a named review maintainer, or executable verification is
+a publishing defect and must be removed during weekly reconciliation.
+
+## Ownership And Cadence
+
+The current primary Product, Triage, Review, and Release owner is `@openai0229`.
+Each Ready Issue names its actual review maintainer. A backup reviewer is
+required for Milestone-committed work; leave work outside the Milestone when no
+second maintainer has accepted that responsibility.
+
+- Daily: P0/P1 triage, due contributor responses, and claim automation health.
+- Weekly: empty Inbox, replenish Ready inventory, and reconcile Project drift.
+- Monthly: review P3 and decision backlog, boundaries, and observed funnel data.
+
+Ready-Issue questions target three business days, first substantive pull
+request reviews target five business days, and follow-up reviews target three
+business days. Automated comments do not satisfy these targets.
 
 ## Triage Procedure
 
@@ -147,6 +173,22 @@ GitHub does not provide a built-in ready-for-review Project workflow.
 5. Assign Priority, owner, Milestone (target release), and Project Status.
 6. Close duplicates or completed work with a concrete link and GitHub state
    reason.
+
+Choose one explicit result after those fields are set: close or reroute, keep in
+Backlog with the missing evidence or decision named, assign for internal work,
+or publish through the Ready contract. Do not leave reviewed Issues in Inbox.
+
+## Milestones And Release
+
+Milestones are versioned product delivery windows, not workflow phases. Create
+one only when there is a user outcome, due date, release owner, inclusion rule,
+exit criteria, and move-out rule. Only scoped work with an owner and executable
+acceptance evidence enters a Milestone.
+
+Before closing a Milestone, move every incomplete Issue with a public reason,
+publish and verify the GitHub Release, check promised artifacts and update paths,
+and link the release notes. Project Status continues to describe workflow while
+Milestone describes the delivery commitment.
 
 The label sync script only creates or updates labels from the taxonomy. It
 never deletes legacy labels.
@@ -180,9 +222,10 @@ issues.
    review the target configuration, then add `--apply`. The script creates or
    validates Project metadata, Status, Priority, repository linkage, and saved
    views. It also creates a missing Project when `--project` is omitted.
-6. In the Project UI, add the `Type` column where useful, rename or remove the
-   default `View 1`, and configure the built-in workflows printed by the script.
-   GitHub does not expose update APIs for these settings.
+6. In the Project UI, add the `Type` column where useful and rename or remove
+   the default `View 1`. GitHub does not expose update APIs for those settings.
+   Project lifecycle automation is source-controlled in
+   `community-project-sync.yml` and uses the repository `ACCESS_TOKEN` secret.
 
 Do not bulk-import the historical backlog. The Project auto-add workflow adds new
 matching Issues and later re-activated historical Issues without backfilling all
