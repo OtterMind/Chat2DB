@@ -1,12 +1,20 @@
 # QQ Group Notifications
 
-The `QQ group notifications` workflow sends Issue, pull-request, Release,
-Deployment, and Discussion state changes to QQ group `1080856850` through a
-dedicated NapCat/OneBot account. GitHub Actions can reach the private Mac Studio
-deployment only through an authenticated Cloudflare Tunnel endpoint.
+The `QQ group notifications` workflow sends Issue, pull-request, comment,
+pull-request review, Release, Deployment, and Discussion state changes to QQ
+group `1080856850` through a dedicated NapCat/OneBot account. GitHub Actions can
+reach the private Mac Studio deployment only through an authenticated
+Cloudflare Tunnel endpoint.
 
 ```text
 GitHub Actions -> HTTPS relay -> OneBot HTTP -> NapCat -> QQ group 1080856850
+```
+
+Issue/PR comment and review events use a two-stage path so fork pull requests do
+not need access to repository secrets:
+
+```text
+Unprivileged event collector -> 1-day sanitized artifact -> trusted sender -> HTTPS relay
 ```
 
 The QQ account used by NapCat must be a dedicated secondary account. NapCat is
@@ -21,14 +29,22 @@ protocol changes, or account risk controls.
   token, the exact repository name, a bounded message, and a delivery ID.
 - Successful delivery IDs are deduplicated for 24 hours and accepted sends are
   rate-limited to 30 per minute.
+- The comment/review collector has no secrets, checks out only the default-branch
+  notifier, and uploads one 1-day artifact. The trusted `workflow_run` sender
+  validates its schema, repository, event allowlist, and message length before
+  using relay secrets.
 - NapCat WebUI binds only to host loopback. OneBot HTTP and WebSocket ports are
   not published on the host or Internet.
-- Only Issue, pull-request, and Discussion titles plus selected Release and
-  Deployment metadata are sent. Bodies, comments, source code, Deployment
-  payloads, credentials, and other event payload fields are excluded.
-- `pull_request_target` checks out the notifier from the trusted default branch
-  and never executes pull-request code. A manually dispatched test may use the
-  explicitly selected maintainer branch.
+- Comment and review notifications include at most 180 sanitized characters
+  from the public comment body. Deleted content, diff hunks, and source code are
+  never sent. OneBot CQ-code sequences are neutralized and rejected again by the
+  trusted sender. Because excerpts preserve other public user content,
+  credentials must never be posted in repository comments or reviews.
+- Issue, pull-request, Discussion, and Release bodies, Deployment payloads,
+  credentials, and other event payload fields are excluded.
+- Every repository event checks out the notifier from the trusted default branch
+  and never executes pull-request code or artifact content. A manually dispatched
+  test may use the explicitly selected maintainer branch.
 
 ## Mac Studio deployment
 
@@ -105,6 +121,15 @@ verified.
 The workflow sends these repository events:
 
 - Issue and pull-request lifecycle and state changes listed in the workflow.
+- Issue and pull-request conversation comment `created`, `edited`, and `deleted`
+  events. Messages distinguish Issue comments from pull-request comments and
+  include a bounded excerpt except when content is deleted.
+- Pull-request review `submitted`, `edited`, and `dismissed` events. Submitted
+  reviews distinguish approved, changes-requested, and commented states.
+- Line-level pull-request review comment `created`, `edited`, and `deleted`
+  events. Messages include the file location but exclude the diff hunk. A review
+  containing line comments can generate both a review summary notification and
+  individual line-comment notifications.
 - Release `published`, `unpublished`, `created`, `edited`, `deleted`,
   `prereleased`, and `released` events. Messages include the tag, release name,
   release state, actor, and release URL.
@@ -132,7 +157,10 @@ Run automated checks:
 ```bash
 python3 script/github/test_notify_qq.py
 python3 script/github/qq_relay/test_relay_server.py
-actionlint .github/workflows/ci.yml .github/workflows/qq-group-notifications.yml
+actionlint .github/workflows/ci.yml \
+  .github/workflows/qq-group-notifications.yml \
+  .github/workflows/qq-comment-review-events.yml \
+  .github/workflows/qq-comment-review-sender.yml
 ```
 
 Verify the live path in this order:
@@ -146,12 +174,17 @@ Verify the live path in this order:
    action, number, title, actor, URL, and merged/closed distinction.
 6. Publish or edit a test Release, create a test Deployment status, and change a
    test Discussion state. Confirm their selected metadata and links, and confirm
-   that bodies, comments, Deployment payloads, and URL query strings are absent.
+   that bodies, Deployment payloads, and URL query strings are absent.
+7. Create, edit, and delete a test Issue or pull-request comment, then submit an
+   approved, changes-requested, or commented pull-request review. Confirm the
+   item type, review result, bounded excerpt, actor, and URL; confirm deleted
+   text and diff hunks are absent.
 
 The relay intentionally returns a generic `QQ delivery failed` response when
 OneBot is offline or rejects a message, so internal details are not exposed on
 the public endpoint. Inspect local relay and NapCat container logs for diagnosis.
 
-To stop notifications immediately, disable the GitHub workflow or stop the
-Cloudflare connector. Rotate `RELAY_TOKEN`, `ONEBOT_TOKEN`, and the WebUI token
-by replacing the local values and updating the corresponding consumer.
+To stop notifications immediately, disable the QQ notification workflows or
+stop the Cloudflare connector. Rotate `RELAY_TOKEN`, `ONEBOT_TOKEN`, and the
+WebUI token by replacing the local values and updating the corresponding
+consumer.
