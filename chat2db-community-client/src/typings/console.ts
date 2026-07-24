@@ -29,4 +29,4 @@ export interface IConsole {
   popoverContent?: string;
 }
 
-export type ICreateConsole = Omit<IConsole, 'id' | 'dataSourceName' | 'connectable'>;
+export type ICreateConsole = Omit<IConsole, 'id' | 'connectable'> & { id?: number };

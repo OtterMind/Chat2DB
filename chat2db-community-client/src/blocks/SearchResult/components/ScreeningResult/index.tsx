@@ -5,6 +5,8 @@ import SingleFileMonacoEditor from '@/components/SingleFileMonacoEditor';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import { useStyles } from './style';
 import { useUpdateEffect } from 'ahooks';
+import { DatabaseTypeCode } from '@/constants/common';
+import { composeResultQuery } from './queryComposer';
 
 interface IProps {
   className?: string;
@@ -12,6 +14,7 @@ interface IProps {
   onSearch?: () => void;
   originalSql: string;
   orderByText?: string;
+  databaseType?: DatabaseTypeCode;
 }
 
 export interface IScreeningResultRef {
@@ -36,9 +39,25 @@ const keywordHintList = [
   'DESC',
 ];
 
+const mongoKeywordHintList = [
+  '$and',
+  '$or',
+  '$not',
+  '$eq',
+  '$ne',
+  '$gt',
+  '$gte',
+  '$lt',
+  '$lte',
+  '$in',
+  '$nin',
+  '$exists',
+];
+
 const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningResultRef>) => {
-  const { promptWord, onSearch, originalSql, orderByText } = props;
+  const { promptWord, onSearch, originalSql, orderByText, databaseType } = props;
   const { styles } = useStyles();
+  const isMongoDB = databaseType === DatabaseTypeCode.MONGODB;
   const [isActive, setIsActive] = React.useState(false);
   const keywordHintRef = React.useRef<any>(null);
   const fieldHintRef = React.useRef<any>(null);
@@ -55,7 +74,7 @@ const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningR
       keywordHintRef.current && keywordHintRef.current.dispose();
       fieldHintRef.current && fieldHintRef.current.dispose();
     };
-  }, [promptWord, isActive]);
+  }, [promptWord, isActive, databaseType]);
 
   useUpdateEffect(() => {
     if (orderByText) {
@@ -71,9 +90,7 @@ const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningR
     getJointSQL: () => {
       const whereValue = whereSingleFileMonacoEditorRef.current?.getAllContent().trim() || '';
       const orderByValue = orderBySingleFileMonacoEditorRef.current?.getAllContent().trim() || '';
-      let sql = whereValue ? originalSql + ' WHERE ' + whereValue : originalSql;
-      sql = orderByValue ? sql + ' ORDER BY ' + orderByValue : sql;
-      return sql;
+      return composeResultQuery({ databaseType, filterValue: whereValue, orderByValue, originalSql });
     },
   }));
 
@@ -97,7 +114,7 @@ const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningR
     keywordHintRef.current = monaco.languages.registerCompletionItemProvider('sql', {
       provideCompletionItems: () => {
         return {
-          suggestions: keywordHintList.map((item) => {
+          suggestions: (isMongoDB ? mongoKeywordHintList : keywordHintList).map((item) => {
             return {
               insertText: item,
               kind: monaco.languages.CompletionItemKind.Keyword,
@@ -132,7 +149,7 @@ const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningR
               [styles.activeTitle]: true,
             })}
           >
-            WHERE
+            {isMongoDB ? 'FIND' : 'WHERE'}
           </div>
         </div>
         <SingleFileMonacoEditor
@@ -150,7 +167,7 @@ const ScreeningResult = forwardRef((props: IProps, ref: ForwardedRef<IScreeningR
               [styles.activeTitle]: true,
             })}
           >
-            ORDER BY
+            {isMongoDB ? 'SORT' : 'ORDER BY'}
           </div>
         </div>
         <SingleFileMonacoEditor

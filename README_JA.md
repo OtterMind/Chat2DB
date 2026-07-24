@@ -1,24 +1,6 @@
 <div align="center">
-  <h1>Chat2DB</h1>
+  <img src="./icon.png" alt="Chat2DB" width="100">
   <p><strong>開発者、DBA、アナリスト、データチーム向けの AI 搭載データベースクライアント兼 SQL ワークスペースです。</strong></p>
-</div>
-<div align="center">
-    <a href="https://trendshift.io/repositories/11808" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11808" alt="OtterMind%2FChat2DB | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</div>
-
-<div align="center">
-
-[![ModelScope][Modelscope-image]][Modelscope-url]
-[![Discord][discord-image]][discord-url]
-[![X][x-image]][x-url]
-
-[Modelscope-image]: https://img.shields.io/badge/modelscope-blue?style=flat-square\&logo=modelscope
-[Modelscope-url]: https://modelscope.cn/
-[discord-image]: https://img.shields.io/badge/-Join%20us%20on%20Discord-%237289DA.svg?style=flat&logo=discord&logoColor=white
-[discord-url]: https://discord.gg/uNjb3n5JVN
-[x-image]: https://img.shields.io/badge/X-%40Chat2DB_AI-000000?style=flat&logo=x&logoColor=white
-[x-url]: https://x.com/Chat2DB_AI
-
 </div>
 
 <div align="center">
@@ -29,69 +11,47 @@
   <a href="./README_KO.md"><img alt="한국어 README" src="https://img.shields.io/badge/한국어-d9d9d9"></a>
 </div>
 
-> 📣 **Chat2DB チームからのお知らせ！**
-> AI ネイティブアプリケーション向けの新しいデプロイレイヤー **[Nubase](https://github.com/ottermind/nubase)** をオープンソースで公開しました！
-> Chat2DB がデータ管理を簡単にするように、Nubase は AI コーディングツールやエージェントのデプロイをよりスムーズにします。
->
-> オープンソースの取り組みを応援するため、GitHub で **[Nubase に ⭐️](https://github.com/ottermind/nubase)** をお願いします！
+## Chat2DB とは？
 
-## 機能比較
+Chat2DB Community は、Windows、macOS、Linux に対応した無料のクロスプラットフォームデータベースクライアントです。すべてローカルマシン上で動作し、フル機能の SQL ワークスペースと、自分で用意したモデルに接続して使う AI アシスタントを組み合わせています。
 
-Community、Pro、Enterprise は、同じデータベースクライアントの基本機能を共有します。商用版は別のデータベースエンジンを提供するのではなく、その基本機能に公式 AI、クラウドストレージ、マルチデバイス利用、コラボレーション、ガバナンスを追加します。
+- **30 以上のデータベース** — MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、MongoDB、Redis、SQLite、MariaDB、TiDB、Hive、DB2、Snowflake、BigQuery、Elasticsearch など。プラグインによりさらに拡張できます。
+- **SQL ワークスペース** — 編集、補完、フォーマット、実行、保存済み SQL、実行履歴。
+- **AI アシスタント** — 自分の AI モデルを接続し、自然言語で SQL の生成・説明・最適化を行えます。
+- **データベース管理** — メタデータの参照、テーブルとオブジェクトの管理（DDL/DML）、データのインライン編集。
+- **データのインポートとエクスポート**、**ダッシュボードとチャート**、**MCP 対応の CLI**。
 
-| 機能 | Community | Pro（オンライン個人版） | Enterprise |
-| --- | --- | --- | --- |
-| データソース接続と認証情報管理 | ✅ | ✅ | ✅ |
-| データベースプラグインとメタデータ参照 | ✅ | ✅ | ✅ |
-| SQL の編集、補完、フォーマット、実行 | ✅ | ✅ | ✅ |
-| DDL/DML、オブジェクト管理、データ編集 | ✅ | ✅ | ✅ |
-| データのインポートとエクスポート | ✅ | ✅ | ✅ |
-| 保存済み SQL、履歴、タスク | ✅ | ✅ | ✅ |
-| ダッシュボードとチャート | ✅ | ✅ | ✅ |
-| CLI と MCP | ✅ | ✅ | ✅ |
-| カスタム AI モデル | ✅ | ✅ | ✅ |
-| 公式 AI クレジットとクラウド会話履歴 | ❌ | ✅ | ✅ |
-| アカウントと ID 管理 | ❌ | ✅ | ✅ |
-| クラウドとマルチデバイス | ❌ | ✅ | ✅ |
-| チームデータソースと共有資産 | ❌ | ❌ | ✅ |
-| メンバーとロール | ❌ | ❌ | ✅ |
-| 権限、承認、監査 | ❌ | ❌ | ✅ |
-| 組織データコンテキストと企業ナレッジベース | ❌ | ❌ | ✅ |
+<div align="center">
 
-## ダウンロードとインストール
+[![SQL エディタと AI アシスタントを備えた Chat2DB ワークスペース — クリックして紹介動画を見る](https://cdn.chat2db-ai.com/website/img/first_video_cover.webp)](https://cdn.chat2db-ai.com/website/video/first_sceen_en.mp4)
 
-Chat2DB は、Windows、macOS、Linux をサポートするクロスプラットフォームアプリケーションです。以下のリンクから Chat2DB をダウンロードできます。
+</div>
 
-- [Proバージョンのダウンロード](https://chat2db.ai/download)
-- [Community（Source Available）のダウンロード](https://github.com/OtterMind/Chat2DB/releases)
+### スクリーンショット
 
-## Community Edition のセキュリティ境界
+| ダッシュボードとチャート | ER 図 |
+| --- | --- |
+| ![ダッシュボードとチャート](https://cdn.chat2db-ai.com/website/img/bi_dashboard.png) | ![ER 図](https://cdn.chat2db-ai.com/website/img/er_diagrams.png) |
 
-> [!WARNING]
-> Chat2DB Community は、単一ユーザー向けのローカルファーストなアプリケーションです。
-> ユーザーアカウント、テナント分離、複数ユーザー間の認可境界は提供しません。
-> HTTP サービスは `127.0.0.1` または `::1` にバインドし、他のユーザーや
-> 信頼できないネットワークへ直接公開しないでください。
->
-> カスタム JDBC ドライバーは実行可能な Java コードです。信頼できる提供元の
-> ドライバーだけをインストールしてください。インポートした設定ファイル、
-> アーカイブ、SQL ファイル、データベースの内容、AI の応答は引き続き信頼できない
-> データとして扱います。完全な信頼境界と脆弱性の報告手順については、
-> [セキュリティポリシー](SECURITY.md)を参照してください。
+| ビジュアルデータ管理 | データのインポートとエクスポート |
+| --- | --- |
+| ![ビジュアルデータ管理](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![データのインポートとエクスポート](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
-## コミュニティエディションの Docker インストール
+## クイックスタート
 
-### システム要件
+### オプション 1: デスクトップアプリ
 
-Chat2DBをインストールする前に、システムが以下の要件を満たしていることを確認してください：
+[GitHub Releases](https://github.com/OtterMind/Chat2DB/releases) からお使いのプラットフォーム向けのインストーラーをダウンロードしてインストールし、データベースへの接続を始めてください。追加のセットアップは不要です。
 
-- Docker 19.03.0以上
-- Docker Compose 2.0.0 以降（Compose V2）
-- CPU >= 2コア
-- RAM >= 4 GiB
+### オプション 2: Docker
+
+要件: Docker 19.03.0 以上、Docker Compose 2.0.0 以上（Compose V2、Compose を使う場合のみ）、CPU 2 コア以上、RAM 4 GiB 以上。
+
+最初に暗号化キーを作成し（その重要性については[暗号化キー](#暗号化キー)を参照）、その後コンテナを起動します：
 
 ```bash
-# リポジトリ内で初回に一度実行します。再実行時は同じ有効なキーを再利用します。
+# リポジトリのチェックアウト内で一度だけ実行します。再実行時は同じ有効なキーを再利用します。
+git clone https://github.com/OtterMind/Chat2DB.git && cd Chat2DB
 ./script/security/init-community-encryption-key.sh
 
 docker run --detach \
@@ -102,36 +62,58 @@ docker run --detach \
   --env CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE=/run/secrets/chat2db-community-encryption.key \
   --volume "$HOME/.config/chat2db-community/encryption.key:/run/secrets/chat2db-community-encryption.key:ro" \
   chat2db/chat2db:latest
-
-docker logs --follow chat2db-community
 ```
 
-`http://localhost:10825` を開いてください。更新する場合は、新しいイメージを取得し、古いコンテナを削除してから上記のコマンドを再実行します。
+その後、ブラウザで `http://localhost:10825` を開いてください。
 
-Chat2DB Community 5.3.0 は独立した `/root/.chat2db-community` ディレクトリを使用し、旧イメージの `/root/.chat2db` にあるデータを自動移行しません。
-
-コンテナを再作成しても `~/.config/chat2db-community/encryption.key` を保持し、別途バックアップしてください。このファイルを置き換えたり失ったりすると、保存済みのデータソースパスワードと AI モデル API キーを復号できません。`chat2db.mode` が `DESKTOP` 以外の起動方式（通常の Web/headless 起動を含む）は、有効なキーがない場合に起動に失敗します。
-
-リポジトリには Compose 定義も含まれています：
+代わりに、リポジトリに含まれる Compose 定義を使用することもできます：
 
 ```bash
 ./script/security/init-community-encryption-key.sh
 docker compose --file docker/docker-compose.yml up --detach
 ```
 
-`docker run` は `$HOME/.chat2db-community-docker` にデータを保存し、Compose は `chat2db-community-data` という名前付きボリュームを使用します。両者はデータを自動的に共有または移行しません。
+注意事項：
 
-## コミュニティエディションの暗号化キー
+- 更新する場合は、新しいイメージを取得し、古いコンテナを削除してから起動コマンドを再実行します。コンテナを再作成しても `~/.config/chat2db-community/encryption.key` は保持してください。
+- `docker run` の例ではアプリケーションデータを `$HOME/.chat2db-community-docker` に保存し、Compose 定義は名前付きボリューム `chat2db-community-data` を使用します。両者のデータは共有されません。
+- Chat2DB Community 5.3.0 は独立した `/root/.chat2db-community` ディレクトリを使用し、`/root/.chat2db` を使用していた旧イメージのデータを自動移行しません。
 
-Chat2DB Community は、保存されたデータソースパスワードとユーザー設定の AI モデル API キーを AES-256-GCM で暗号化します。両者は同じインストールキーを使用しますが、認証用 AAD は別々であるため、一方の暗号文をもう一方として復号できません。キーは有効な Base64 で、デコード後に正確に32バイトでなければなりません。付属の初期化スクリプトは、末尾が `=` の44文字からなる標準のパディング付き形式を生成します。人が決める通常のパスワードではなく、暗号化用のキーマテリアルです。
+## セキュリティに関する注意
 
-リポジトリ内で次のコマンドを実行し、デフォルトのキーファイルを作成します：
+Chat2DB Community は、単一ユーザー向けのローカルファーストなアプリケーションです。
+ユーザーアカウントや、複数ユーザー間の認可境界は提供しません。HTTP サービスは
+`127.0.0.1` または `::1` にバインドしたままにし、他のユーザーや
+信頼できないネットワークへ公開しないでください。
+
+カスタム JDBC ドライバーは実行可能な Java コードです。信頼できる提供元の
+ドライバーだけをインストールしてください。インポートした設定ファイル、
+アーカイブ、SQL ファイル、データベースの内容、AI の応答は引き続き信頼できない
+データとして扱います。完全な信頼境界と脆弱性の報告手順については、
+[セキュリティポリシー](SECURITY.md)を参照してください。
+
+このプロジェクトが役に立ったら、ぜひ Star ⭐️ をお願いします!
+
+<div align="center">
+  <a href="https://github.com/OtterMind/Chat2DB"><img src="https://cdn.chat2db.ai/g/Area.gif" alt="GitHub で Chat2DB に Star を付ける" width="600"></a>
+</div>
+
+## 暗号化キー
+
+Chat2DB Community は、保存されたデータソースパスワードと AI モデル API キーを、インストールごとのキーを使って AES-256-GCM で暗号化します。リポジトリのチェックアウト内で一度だけ作成してください（`openssl` が必要です）：
 
 ```bash
 ./script/security/init-community-encryption-key.sh
 ```
 
-デフォルトパスは `~/.config/chat2db-community/encryption.key` です。カスタムパスを使用する場合は、初期化スクリプトと Chat2DB の起動引数に同じパスを指定します：
+キーは `~/.config/chat2db-community/encryption.key` に書き込まれます。**このファイルは別途バックアップし、アップグレードやコンテナ再作成後も保持してください。** キーを置き換えたり失ったりすると、保存済みのデータソースパスワードと AI モデル API キーを復号できなくなります。有効なキーが与えられていない場合、Web/headless 起動は失敗します。存在しないキーを自動生成するのは Desktop モードだけです。
+
+<details>
+<summary>キー設定リファレンス（カスタムパス、解決順序、検証）</summary>
+
+キーは有効な Base64 で、デコード後に正確に 32 バイトでなければなりません。付属の初期化スクリプトは、末尾が `=` の 44 文字の Base64 からなる標準のパディング付き形式を生成します。これは暗号化用のキーマテリアルであり、人が読めるパスワードではありません。データソースパスワードと AI API キーは同じキーを使用しますが、認証された AAD 値がそれぞれ別であるため、一方の用途の暗号文をもう一方として復号することはできません。
+
+カスタムパスを使用する場合は、スクリプトにそのパスを渡し、Chat2DB の起動時にも同じパスを設定します：
 
 ```bash
 ./script/security/init-community-encryption-key.sh /secure/path/chat2db-community.key
@@ -147,35 +129,37 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
     -jar chat2db-community-server/chat2db-community-start/target/chat2db-community.jar
 ```
 
-初期化スクリプトには `openssl` が必要です。スクリプトが使用するキーファイルパスの優先順位は、位置引数、`CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE`、デフォルトパスの順です。既存の有効な通常ファイルは再利用し、シンボリックリンクと通常ファイル以外のパスを拒否し、無効なファイルを上書きしません。キーファイルは Chat2DB プロセスの所有者だけが読み取れるようにし、アップグレードやコンテナ再作成後も保持して、データソースストレージとは別にバックアップしてください。
+スクリプトが使用するキーファイルパスの優先順位は、位置引数、`CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE`、デフォルトパスの順です。スクリプトは有効な通常ファイルを再利用し、シンボリックリンクと通常ファイル以外を拒否し、無効なファイルの上書きを拒みます。キーは Chat2DB プロセスの所有者だけが読み取れる状態に保ってください。
 
-キー設定は次の優先順位で解決されます：
+キー設定は次の順序で解決されます：
 
-1. Base64 キーを指定する JVM プロパティ `chat2db.community.encryption-key`。
-2. Base64 キーを指定する環境変数 `CHAT2DB_COMMUNITY_ENCRYPTION_KEY`。
-3. キーファイルのパスを指定する JVM プロパティ `chat2db.community.encryption-key-file`。
-4. キーファイルのパスを指定する環境変数 `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE`。
+1. Base64 キーを含む JVM プロパティ `chat2db.community.encryption-key`。
+2. Base64 キーを含む環境変数 `CHAT2DB_COMMUNITY_ENCRYPTION_KEY`。
+3. キーファイルのパスを含む JVM プロパティ `chat2db.community.encryption-key-file`。
+4. キーファイルのパスを含む環境変数 `CHAT2DB_COMMUNITY_ENCRYPTION_KEY_FILE`。
 5. デフォルトファイル `~/.config/chat2db-community/encryption.key`。
 
-最初に設定された値が優先されます。空の値、不正な Base64、デコード後に32バイトにならないキー、または不正なキーファイルは、次の設定へフォールバックせず起動エラーになります。キー値をプロセス引数や環境変数へ直接置かないため、キーファイル方式を推奨します。
+最初に設定されている値が優先されます。空の値、不正な Base64、デコード後に 32 バイトにならないキー、無効なキーファイルは、次の設定ソースへフォールバックせずに起動を失敗させます。キー値をプロセス引数や環境変数に直接置かずに済むため、ファイルベースの設定を推奨します。
 
-キーファイルの自動生成は `chat2db.mode` だけで決まり、`chat2db.gui` には依存しません。Community Desktop モード（`chat2db.runtime.mode=community` と `chat2db.mode=DESKTOP`）では、インラインキーが設定されておらず、選択されたキーファイルが存在しない場合にファイルを自動生成します。通常の Web/headless 起動を含む Desktop 以外のモードは不足しているキーを自動生成しないため、起動前に有効なキーを初期化または明示的に設定する必要があります。解決されたキーはプロセスの存続期間中キャッシュされるため、キー設定を変更した後はアプリケーションを再起動してください。キーを置き換えたり失ったりすると、保存済みのデータソースパスワードと AI モデル API キーを復号できません。
+キーファイルの自動生成は `chat2db.gui` ではなく `chat2db.mode` に依存します。Community Desktop モード（`chat2db.runtime.mode=community` かつ `chat2db.mode=DESKTOP`）は、インラインキーが設定されておらず、選択されたキーファイルが存在しない場合にそのファイルを作成します。通常の Web/headless 起動を含む Desktop 以外のモードは、存在しないキーを決して作成せず、有効なキーが提供または初期化されるまで起動に失敗します。解決されたキーはプロセスの存続期間中キャッシュされるため、キー設定を変更した場合はアプリケーションの再起動が必要です。
 
-## 開発
+</details>
 
-### 実行環境
+## ソースからビルド
+
+### 前提条件
 
 - Java runtime: <a href="https://adoptium.net/temurin/releases/?version=17" target="_blank">Eclipse Temurin 17</a>
-- Node.js runtime: Node.js 18.17.0 以降
+- Node.js 18.17.0 以降
 - Maven 3.8 以降
 
-### リポジトリをローカルにクローン
+### リポジトリのクローン
 
 ```bash
-git clone git@github.com:OtterMind/Chat2DB.git
+git clone https://github.com/OtterMind/Chat2DB.git
 ```
 
-### フロントエンドデバッグ
+### フロントエンド
 
 リポジトリに含まれる Yarn lockfile を使用してください。
 
@@ -185,7 +169,7 @@ yarn install --frozen-lockfile
 yarn run start:community:hot
 ```
 
-### バックエンドデバッグ
+### バックエンド
 
 ```bash
 cd Chat2DB
@@ -211,45 +195,40 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
 ./docker/docker-build.sh 5.3.0 chat2db/chat2db:5.3.0
 ```
 
+## Community 版と商用版の違い
+
+Community 版には、カスタム AI モデルのサポートを含め、上記で説明したローカルデータベースクライアントの全機能が含まれています。商用の Pro 版と Enterprise 版は同じコアを基盤とし、ホスティングされた AI サービス、ユーザーアカウント、クラウドストレージとマルチデバイス同期、チームコラボレーションとガバナンス機能を追加します。詳細は [chat2db.ai](https://chat2db.ai) を参照してください。
+
 ## コントリビューション
 
 コミュニティからのバグ報告、機能リクエスト、ドキュメント改善、テストフィードバック、Pull Request を歓迎します。
 
-Issue の作成や Pull Request の送信前に、[コントリビューションガイド](./CONTRIBUTING.md)をお読みください。バグの報告、改善提案、メンテナーがレビューしやすい形で貢献する方法を説明しています。
+Issue の作成や Pull Request の送信前に、[コントリビューションガイド](./CONTRIBUTING.md)をお読みください。バグの報告方法、改善の提案方法、メンテナーがレビューしやすい形で貢献する方法を説明しています。
 
 - バグや機能リクエストには [GitHub Issues](https://github.com/OtterMind/Chat2DB/issues) を使用してください。
 - 質問、セットアップ支援、自由な議論には [GitHub Discussions](https://github.com/OtterMind/Chat2DB/discussions) を使用してください。
 - Pull Request が Issue に関連する場合は、PR の説明に Issue へのリンクを含めてください。
 
+## コミュニティとサポート
 
-## お問い合わせ
-
+- GitHub Issues: [バグの報告や機能のリクエスト](https://github.com/OtterMind/Chat2DB/issues)
+- GitHub Discussions: [質問やアイデアの共有](https://github.com/OtterMind/Chat2DB/discussions)
+- Discord: [Discord サーバーに参加](https://discord.gg/uNjb3n5JVN)
 - メール: Chat2DB@ch2db.com
-- Discord: [Discordサーバーに参加](https://discord.gg/uNjb3n5JVN)
-- X: [@Chat2DB_AI](https://x.com/Chat2DB_AI)
-- YouTube: [Chat2DB チャンネル](https://www.youtube.com/@chat2db.tutorial)
-- GitHub: [Chat2DB GitHub](https://github.com/OtterMind/Chat2DB)
 
 ## 謝辞
 
-Chat2DBに貢献してくださったすべての方々に感謝します。
-
-
+Chat2DB に貢献してくださったすべての方々に感謝します。
 
 <a href="https://github.com/OtterMind/Chat2DB/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=OtterMind/Chat2DB" alt="Chat2DB のコントリビューター" />
 </a>
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=OtterMind%2FChat2DB&type=date&legend=top-left">
- <img alt="Star History チャート" src="https://api.star-history.com/chart?repos=OtterMind/Chat2DB&type=date&legend=top-left&sealed_token=HqUTPR9nqjAv9Iikq8Jw6_J5TVBqOi0TiLtkPzm23BAJclEPLy93G-5ts_ZiNPJjnOAYTJoedoV7GqiMMkvlxjN0hTCKVn1_Bbe3RABuGYqg3jRibN8db-xChpiLkLrfnEa_C_O4bVoHnwjB1lNnlYNEHEvxFw_6WRuoSKwAj4t5KXYS2dz315a9Yo3c" />
-</a>
-
 ## ライセンス
 
-Chat2DB Community 5.3.0 以降には、このリポジトリの
-[LICENSE](./LICENSE) が適用されます。このライセンスは Apache License 2.0
-を基礎として追加条件を設けた Source Available ライセンスです。Chat2DB
-5.3.0 より前に公開されたすべてのリリース（0.3.7 およびそれ以前の履歴
-バージョンを含む）には、引き続き Apache License 2.0 が適用されます。
+Chat2DB Community バージョン 5.3.0 以降は、
+[このリポジトリのライセンス条項](./LICENSE)の下で提供されます。これは
+Apache License 2.0 を基礎として追加条件を設けた Source Available
+ライセンスです。バージョン 5.3.0 より前に公開された Chat2DB のリリース
+（バージョン 0.3.7 およびそれ以前の履歴タグを含む）には、引き続き
+Apache License 2.0 が適用されます。

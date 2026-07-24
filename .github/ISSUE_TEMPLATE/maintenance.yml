@@ -1,0 +1,92 @@
+name: Maintainer task
+description: Propose bounded test, refactoring, build, release, or repository maintenance work
+type: Task
+body:
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Chat2DB Edition
+      description: Select the edition this task concerns.
+      options:
+        - Chat2DB Community
+        - Chat2DB Local
+        - Chat2DB Pro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Task Category
+      options:
+        - Automated test
+        - Refactoring
+        - Build or release
+        - Contributor infrastructure
+        - Other maintenance
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the concrete maintenance gap and why it matters.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List the behavior, code, or files included in this task.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: State what this task must not change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Completion Criteria
+      description: List observable conditions a maintainer can use to accept the work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Provide exact commands, fixtures, or environments when known.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Tell us how you can help after the task is reviewed.
+      options:
+        - I can submit a pull request
+        - I can review or test a pull request
+        - I cannot contribute implementation work
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission Checklist
+      options:
+        - label: I searched existing Issues and Discussions for duplicates.
+          required: true
+        - label: I selected the affected Chat2DB edition.
+          required: true
+        - label: This proposal does not include credentials, private data, or unpublished vulnerability details.
+          required: true

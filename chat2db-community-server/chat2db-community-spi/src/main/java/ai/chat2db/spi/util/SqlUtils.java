@@ -78,6 +78,17 @@ public class SqlUtils {
                     if ((sqlStatement instanceof SQLSelectStatement sqlSelectStatement)) {
                         SQLExprTableSource sqlExprTableSource = (SQLExprTableSource) getSQLExprTableSource(
                                 sqlSelectStatement.getSelect().getFirstQueryBlock().getFrom());
+                        // A derived table (subquery in FROM) or other non-expr/non-join table
+                        // source cannot be mapped to a single physical table; without this guard
+                        // tableName stays null and the edit flow would emit invalid SQL such as
+                        // "UPDATE null SET ...". getSQLExprTableSource returns null for those
+                        // cases (see below), so keep the result set non-editable, mirroring the
+                        // null-check already present in getTableName(). Follows the same
+                        // setCanEdit(false)+return pattern used above for aliased/COUNT columns.
+                        if (sqlExprTableSource == null) {
+                            executeResult.setCanEdit(false);
+                            return;
+                        }
                         executeResult.setTableName(getMetaDataTableName(sqlExprTableSource.getCatalog(), sqlExprTableSource.getSchema(), sqlExprTableSource.getTableName()));
                     }
                 } else {
@@ -398,20 +409,22 @@ public class SqlUtils {
         String s = sql.trim();
         try {
             String countSql = SqlGenerateUtil.generateSelectCountSql(sql, dataBaseType);
-            if (countSql.endsWith(";")) {
-                countSql = countSql.substring(0, s.length() - 1);
-            }
-            return countSql;
+            return trimTrailingSemicolon(countSql);
         } catch (Exception e) {
             log.error("druid parser sql error,sql:" + sql, e);
             if (!s.toLowerCase().startsWith("select")) {
                 return null;
             }
-            if (s.endsWith(";")) {
-                s = s.substring(0, s.length() - 1);
-            }
+            s = trimTrailingSemicolon(s);
             return "SELECT COUNT(*) FROM (" + s + ") chat2db_count_temp_table";
         }
+    }
+
+    static String trimTrailingSemicolon(String sql) {
+        if (sql.endsWith(";")) {
+            return sql.substring(0, sql.length() - 1);
+        }
+        return sql;
     }
 
     public static List<SimpleSqlStatement> parseStatements(String script, DbType dbType, String type) {

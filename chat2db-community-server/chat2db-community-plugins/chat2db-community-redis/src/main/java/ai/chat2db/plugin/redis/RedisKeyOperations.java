@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.key.KeyScanRequest;
 import ai.chat2db.community.domain.api.model.key.KeyScanResult;
 import ai.chat2db.community.domain.api.model.key.KeyUpdate;
 import ai.chat2db.plugin.redis.converter.RedisKeyConverter;
+import ai.chat2db.plugin.redis.model.RedisKey;
 import ai.chat2db.plugin.redis.model.RedisKeyScanResult;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.IKeyOperations;
@@ -61,14 +62,19 @@ public class RedisKeyOperations implements IKeyOperations {
     @Override
     public KeyEntry create(Connection connection, KeyCreate command) {
         RedisScriptExecutor.getInstance().createRedisKey(redisKeyConverter.keyCreate2redisKey(command));
-        return redisKeyConverter.redisKey2keyEntry(RedisScriptExecutor.getInstance().getKey(command.getName()));
+        return redisKeyConverter.redisKey2keyEntry(redisMetaData.keyDetail(command.getName()));
     }
 
     @Override
     public KeyEntry update(Connection connection, KeyUpdate command) {
-        RedisScriptExecutor.getInstance().update(redisKeyConverter.keyEntry2redisKey(command.getOldKey()),
-                redisKeyConverter.keyEntry2redisKey(command.getNewKey()));
-        return redisKeyConverter.redisKey2keyEntry(RedisScriptExecutor.getInstance().getKey(command.getNewKey().getName()));
+        RedisKey oldKey = command.getOldKey() == null ? null : redisKeyConverter.keyEntry2redisKey(command.getOldKey());
+        RedisKey newKey = command.getNewKey() == null ? null : redisKeyConverter.keyEntry2redisKey(command.getNewKey());
+        RedisScriptExecutor.getInstance().update(oldKey, newKey);
+        String resultName = newKey != null ? newKey.getName() : oldKey != null ? oldKey.getName() : null;
+        if (resultName == null) {
+            return null;
+        }
+        return redisKeyConverter.redisKey2keyEntry(redisMetaData.keyDetail(resultName));
     }
 
     @Override

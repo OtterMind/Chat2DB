@@ -6,6 +6,9 @@ public class RedisValueUtils {
         if(value == null) {
             return null;
         }
+        if(value.contains("\\")) {
+            value = value.replace("\\", "\\\\");
+        }
         if(value.contains("'")) {
             value = value.replace("'", "\\'");
         }

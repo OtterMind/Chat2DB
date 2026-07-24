@@ -70,7 +70,7 @@ print_ui_checklist() {
   jq -r '.project.uiOnlyViewFields[] | "- \(.)"' "${MANIFEST}"
   echo "Default view cleanup (GitHub UI):"
   echo "- Rename or remove View 1 after verifying the managed views"
-  echo "Built-in workflows (configure once in the GitHub UI):"
+  echo "Project workflows (source-controlled provider plus desired transitions):"
   jq -r '.project.workflows | to_entries[] | "- \(.key)=\(.value)"' "${MANIFEST}"
   echo "Manual transitions:"
   jq -r '.project.manualTransitions | to_entries[] | "- \(.key)=\(.value)"' "${MANIFEST}"

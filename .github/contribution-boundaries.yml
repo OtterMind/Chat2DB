@@ -1,0 +1,84 @@
+version: 1
+owner: openai0229
+reviewed_on: "2026-07-23"
+areas:
+  - id: community-bug-fixes
+    status: open
+    reason_category: community-maintenance
+    boundary: Focused fixes to reproducible behavior in the public Community codebase.
+    alternative: Split broad reports into one independently verifiable fix.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: CONTRIBUTING.md
+
+  - id: docs-tests-and-examples
+    status: open
+    reason_category: community-maintenance
+    boundary: Documentation, tests, examples, and translations for public Community behavior.
+    alternative: Keep product decisions and unpublished commercial behavior out of the task.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: CONTRIBUTING.md
+
+  - id: database-plugins
+    status: approval-required
+    reason_category: maintenance-ownership
+    boundary: New database plugins and material changes to plugin contracts require an accepted design and a long-term maintainer.
+    alternative: Contribute a focused compatibility fix or test to an existing plugin.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: .github/ISSUE_TRIAGE.md
+
+  - id: public-contracts-and-storage
+    status: approval-required
+    reason_category: compatibility-risk
+    boundary: Public APIs, persisted workspace data, migration formats, and cross-client contracts require design approval before implementation.
+    alternative: Start with a reproduction, compatibility test, or written design proposal.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: .github/ISSUE_TRIAGE.md
+
+  - id: ai-provider-integration
+    status: approval-required
+    reason_category: maintenance-ownership
+    boundary: New AI providers and provider-specific protocol branches require evidence that the public compatibility layer cannot support the provider.
+    alternative: Add a provider-neutral compatibility fixture or improve an existing adapter.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: .github/ISSUE_TRIAGE.md
+
+  - id: release-and-packaging
+    status: approval-required
+    reason_category: release-risk
+    boundary: Installer dependencies, signing, update channels, artifact publication, and release workflows require release-owner approval.
+    alternative: Contribute documentation, reproducible packaging evidence, or tests that do not require secrets.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: .github/COMMUNITY_OPERATIONS.md
+
+  - id: sensitive-security
+    status: closed
+    reason_category: security-sensitive
+    boundary: Vulnerability details, exploit work, credentials, and private remediation are not accepted through public contribution Issues.
+    alternative: Use the private reporting route in SECURITY.md.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: SECURITY.md
+
+  - id: commercial-editions
+    status: closed
+    reason_category: commercial-ownership
+    boundary: Chat2DB Local, Pro, Enterprise, Gateway, licensing, billing, and private service implementation are outside the Community contribution queue.
+    alternative: Use the product support route or propose a Community-only change with no private-code dependency.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: CONTRIBUTING.md
+
+  - id: unbounded-rewrites
+    status: closed
+    reason_category: maintenance-unbounded
+    boundary: Repository-wide rewrites or speculative architecture replacements without an accepted Issue are not contributor-ready work.
+    alternative: Propose one independently mergeable behavior change with executable acceptance evidence.
+    owner: openai0229
+    review_after: "2026-10-31"
+    source: CONTRIBUTING.md

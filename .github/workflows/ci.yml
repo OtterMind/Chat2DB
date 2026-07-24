@@ -45,6 +45,18 @@ jobs:
       - name: Run SQL clipboard test
         run: yarn run test:sql-in-clipboard
 
+      - name: Run result Markdown formatter test
+        run: yarn run test:result-markdown
+
+      - name: Run active workspace tab locator contract
+        run: yarn run test:active-tab-locator
+
+      - name: Run saved console tree refresh contract
+        run: yarn run test:saved-console-tree-refresh
+
+      - name: Run saved console lifecycle contract
+        run: yarn run test:saved-console-lifecycle
+
       - name: Run BaseTable tree interaction contract
         run: yarn run test:base-table-interaction
 
@@ -53,6 +65,9 @@ jobs:
 
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
+
+      - name: Run result inspector contract
+        run: yarn run test:result-inspector
 
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
@@ -102,5 +117,13 @@ jobs:
             puts "validated #{path}"
           end
 
-      - name: Test issue claim automation
-        run: node --test script/github/issue-claim.test.js
+      - name: Validate Community operations contracts
+        run: ruby script/github/validate-community-operations.rb
+
+      - name: Test Community workflow automation
+        run: node --test script/github/issue-claim.test.js script/github/sync-community-project.test.js
+
+      - name: Test QQ notification automation
+        run: |
+          python3 script/github/test_notify_qq.py
+          python3 script/github/qq_relay/test_relay_server.py

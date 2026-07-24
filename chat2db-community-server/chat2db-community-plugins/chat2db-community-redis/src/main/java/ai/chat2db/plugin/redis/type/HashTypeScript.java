@@ -12,7 +12,9 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
@@ -26,7 +28,8 @@ public class HashTypeScript extends BaseTypeScript implements ITypeScript {
                     .append(RedisConstants.COMMAND_LINE_SEPARATOR);
         } else {
             script.append(RedisConstants.COMMAND_HASH_GET_PREFIX).append(getRedisValue(redisKey.getName()))
-                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(redisKey.getHashValues().get(0).getField())
+                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                    .append(getRedisValue(redisKey.getHashValues().get(0).getField()))
                     .append(RedisConstants.COMMAND_LINE_SEPARATOR);
         }
         return script.toString();
@@ -81,35 +84,54 @@ public class HashTypeScript extends BaseTypeScript implements ITypeScript {
         if (newKey == null) {
             String delete = delete(oldKey.getName());
             return Lists.newArrayList(delete);
-        } else {
-            List<String> script = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(newKey.getHashValues())) {
-                for (HashValue field : newKey.getHashValues()) {
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getField());
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.CREATE.equals(field.getAction())) {
-                        String s = createItem(newKey.getName(), field);
-                        script.add(s);
-                    }
-                    if (ai.chat2db.plugin.redis.constant.ActionConstants.UPDATE.equals(field.getAction())) {
-                        String s = deleteItem(newKey.getName(), field.getField());
-                        script.add(s);
-                        s = createItem(newKey.getName(), field);
-                        script.add(s);
-                    }
-                }
-            }
-            return script;
         }
+        // The editor drops removed rows from the payload instead of flagging them,
+        // so reconcile against the full old field list.
+        Map<String, String> desired = fieldValues(newKey.getHashValues(), true);
+        if (desired.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Map<String, String> existing = fieldValues(oldKey.getHashValues(), false);
+        List<String> scripts = new ArrayList<>();
+        List<String> removed = existing.keySet().stream().filter(field -> !desired.containsKey(field)).toList();
+        if (!removed.isEmpty()) {
+            StringBuilder script = new StringBuilder();
+            script.append(RedisConstants.COMMAND_HASH_DELETE_PREFIX).append(getRedisValue(newKey.getName()))
+                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+            for (String field : removed) {
+                script.append(getRedisValue(field)).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+            }
+            scripts.add(script.toString());
+        }
+        StringBuilder upserts = new StringBuilder();
+        for (Map.Entry<String, String> entry : desired.entrySet()) {
+            if (!existing.containsKey(entry.getKey()) || !Objects.equals(existing.get(entry.getKey()), entry.getValue())) {
+                upserts.append(getRedisValue(entry.getKey())).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                        .append(getRedisValue(entry.getValue())).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+            }
+        }
+        if (upserts.length() > 0) {
+            scripts.add(RedisConstants.COMMAND_HASH_SET_PREFIX + getRedisValue(newKey.getName())
+                    + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + upserts);
+        }
+        return scripts;
     }
 
-    private String createItem(String name, HashValue hashValue) {
-        return RedisConstants.COMMAND_HASH_SET_PREFIX + getRedisValue(name)
-                + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(hashValue.getField())
-                + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(hashValue.getValue())
-                + RedisConstants.COMMAND_LINE_SEPARATOR;
+    private Map<String, String> fieldValues(List<HashValue> values, boolean skipDeleted) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        if (CollectionUtils.isEmpty(values)) {
+            return fields;
+        }
+        for (HashValue value : values) {
+            if (value.getField() == null) {
+                continue;
+            }
+            if (skipDeleted && ai.chat2db.plugin.redis.constant.ActionConstants.DELETE.equals(value.getAction())) {
+                continue;
+            }
+            fields.put(value.getField(), StringUtils.defaultString(value.getValue()));
+        }
+        return fields;
     }
 
     private List<String> addItem(RedisKey redisKey) {
@@ -135,12 +157,6 @@ public class HashTypeScript extends BaseTypeScript implements ITypeScript {
             scripts.add(script.toString());
         }
         return scripts;
-    }
-
-    private String deleteItem(String keyName, String filedName) {
-        return RedisConstants.COMMAND_HASH_DELETE_PREFIX + getRedisValue(keyName)
-                + RedisConstants.COMMAND_ARGUMENT_SEPARATOR + getRedisValue(filedName)
-                + RedisConstants.COMMAND_LINE_SEPARATOR;
     }
 
 }

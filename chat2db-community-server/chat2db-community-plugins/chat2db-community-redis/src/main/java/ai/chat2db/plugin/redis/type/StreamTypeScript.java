@@ -130,7 +130,8 @@ public class StreamTypeScript extends BaseTypeScript implements ITypeScript {
         StringBuilder script = new StringBuilder();
         script.append(RedisConstants.COMMAND_STREAM_ADD_PREFIX).append(getRedisValue(name))
                 .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
-        script.append(field.getId()).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
+        String id = StringUtils.isBlank(field.getId()) ? "*" : field.getId();
+        script.append(id).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR);
         for (KeyValue entry : field.getValues()) {
             if (StringUtils.isNotBlank(entry.getKey()) && StringUtils.isNotBlank(entry.getValue())) {
                 script.append(getRedisValue(entry.getKey())).append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
