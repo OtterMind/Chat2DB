@@ -39,8 +39,12 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     private final Path baseDir;
 
     public AiChatHistoryServiceImpl(ObjectMapper objectMapper) {
+        this(objectMapper, Paths.get(ConfigUtils.getBasePath(), "ai-chat-history"));
+    }
+
+    AiChatHistoryServiceImpl(ObjectMapper objectMapper, Path baseDir) {
         this.objectMapper = objectMapper;
-        this.baseDir = Paths.get(ConfigUtils.getBasePath(), "ai-chat-history");
+        this.baseDir = baseDir;
     }
 
     @Override
