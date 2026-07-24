@@ -1,13 +1,14 @@
 package ai.chat2db.community.domain.core.cache;
 
 import java.io.Serializable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 import java.util.function.Supplier;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.Weigher;
+import com.google.common.util.concurrent.Striped;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.cache.support.NullValue;
@@ -21,7 +22,7 @@ public class MemoryCacheManage {
 
     private static final byte[] NULL_BYTES = SerializationUtils.serialize((NullValue)NullValue.INSTANCE);
     private static final String SYNCHRONIZED_PREFIX = "MemoryCache:";
-    private static final ConcurrentHashMap<String, Object> LOCK_MAP = new ConcurrentHashMap<>();
+    static final Striped<Lock> LOCKS = Striped.lock(1024);
 
     private static final Cache<String, byte[]> CACHE = CacheBuilder.newBuilder()
         // 100M
@@ -48,7 +49,9 @@ public class MemoryCacheManage {
             return data;
         }
         String lockKey = SYNCHRONIZED_PREFIX + key;
-        synchronized (LOCK_MAP.computeIfAbsent(lockKey, k -> new Object())) {
+        Lock lock = LOCKS.get(lockKey);
+        lock.lock();
+        try {
             data = get(key);
             if (data != null) {
                 return data;
@@ -57,6 +60,8 @@ public class MemoryCacheManage {
             T value = queryData.get();
             put(key, value);
             return value;
+        } finally {
+            lock.unlock();
         }
     }
 
