@@ -75,7 +75,7 @@
     "copy-to-clipboard": "^3.3.3",
     "dayjs": "^1.11.11",
     "dexie": "^4.0.11",
-    "echarts": "^5.5.1",
+    "echarts": "^6.1.0",
     "echarts-wordcloud": "^2.1.0",
     "elkjs": "^0.9.3",
     "event-source-polyfill": "^1.0.31",
