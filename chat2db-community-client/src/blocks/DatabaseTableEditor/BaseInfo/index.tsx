@@ -1,4 +1,4 @@
-import { useContext, useEffect, useImperativeHandle, ForwardedRef, forwardRef } from 'react';
+import { useContext, useEffect, useImperativeHandle, ForwardedRef, forwardRef, memo } from 'react';
 import classnames from 'classnames';
 import { Form, Input } from 'antd';
 import { Context } from '../index';
@@ -73,4 +73,4 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
   );
 });
 
-export default BaseInfo;
+export default memo(BaseInfo);
