@@ -29,6 +29,9 @@ const getRowNumberList = (tableInstance) => {
   return rowNumberList;
 };
 
+// Upper bound on VTable render-settling poll iterations (100ms interval * 100 = 10s).
+const MAX_POLL_ITERATIONS = 100;
+
 const useFilterAndSort: IUseFilterAndSort = ({
   theme,
   tableInstance,
@@ -44,6 +47,40 @@ const useFilterAndSort: IUseFilterAndSort = ({
     }[]
   >([]);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
+
+  // Track active VTable render-settling pollers so they can be cleared on unmount.
+  const pollTimerIdsRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
+
+  // VTable has no post-filter/sort callback, so poll until the rendered
+  // CHAT2DB_ROW_NUMBER list changes. Cap iterations so a poll cannot run
+  // forever when the list never changes, and register each timer so unmount
+  // clears it instead of firing setState on an unmounted component.
+  const pollUntilRowNumbersChange = (
+    beforeGetRowNumberList: (string | number)[],
+    onSettled: () => void,
+  ) => {
+    let iterations = 0;
+    const timerId = setInterval(() => {
+      iterations += 1;
+      const afterGetRowNumberList = getRowNumberList(tableInstance);
+      if (
+        beforeGetRowNumberList.join(',') !== afterGetRowNumberList.join(',') ||
+        iterations >= MAX_POLL_ITERATIONS
+      ) {
+        clearInterval(timerId);
+        pollTimerIdsRef.current.delete(timerId);
+        onSettled();
+      }
+    }, 100);
+    pollTimerIdsRef.current.add(timerId);
+  };
+
+  useEffect(() => {
+    return () => {
+      pollTimerIdsRef.current.forEach((timerId) => clearInterval(timerId));
+      pollTimerIdsRef.current.clear();
+    };
+  }, []);
 
   // useEffect(() => {
   //   if (!tableInstance) return;
@@ -184,13 +221,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
       });
     }
 
-    const timerId = setInterval(() => {
-      const afterGetRowNumberList = getRowNumberList(tableInstance);
-      if (beforeGetRowNumberList.join(',') !== afterGetRowNumberList.join(',')) {
-        sortAfter?.();
-        clearInterval(timerId);
-      }
-    }, 100);
+    pollUntilRowNumbersChange(beforeGetRowNumberList, () => sortAfter?.());
   };
 
   const handleFilter = (col, row, event) => {
@@ -216,13 +247,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
         setActiveFilterCount(filterRulesRef.current.length);
 
         // VTable has no post-filter callback, so poll until filtering and rendering have completed.
-        const timerId = setInterval(() => {
-          const afterGetRowNumberList = getRowNumberList(tableInstance);
-          if (beforeGetRowNumberList.join(',') !== afterGetRowNumberList.join(',')) {
-            filterAfter?.();
-            clearInterval(timerId);
-          }
-        }, 100);
+        pollUntilRowNumbersChange(beforeGetRowNumberList, () => filterAfter?.());
         return;
       }
 
@@ -247,13 +272,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
       tableInstance.updateColumns(columns);
       tableInstance.updateFilterRules(filterRulesRef.current);
       setActiveFilterCount(filterRulesRef.current.length);
-      const timerId = setInterval(() => {
-        const afterGetRowNumberList = getRowNumberList(tableInstance);
-        if (beforeGetRowNumberList.join(',') !== afterGetRowNumberList.join(',')) {
-          filterAfter?.();
-          clearInterval(timerId);
-        }
-      }, 100);
+      pollUntilRowNumbersChange(beforeGetRowNumberList, () => filterAfter?.());
     };
 
     const selectedKeys = filterRulesRef.current.find((rule) => rule.filterKey === field)?.filteredValues || [];
@@ -306,13 +325,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
     tableInstance.updateFilterRules([]);
     setActiveFilterCount(0);
 
-    const timerId = setInterval(() => {
-      const afterGetRowNumberList = getRowNumberList(tableInstance);
-      if (beforeGetRowNumberList.join(',') !== afterGetRowNumberList.join(',')) {
-        filterAfter?.();
-        clearInterval(timerId);
-      }
-    }, 100);
+    pollUntilRowNumbersChange(beforeGetRowNumberList, () => filterAfter?.());
   }, [tableInstance, filterAfter]);
 
   return {
