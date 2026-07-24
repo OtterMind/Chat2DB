@@ -108,9 +108,10 @@ The workflow sends these repository events:
 - Release `published`, `unpublished`, `created`, `edited`, `deleted`,
   `prereleased`, and `released` events. Messages include the tag, release name,
   release state, actor, and release URL.
-- Deployment creation and every Deployment status update. Messages include the
-  environment, ref, mapped status, actor, and an environment or log URL when
-  GitHub provides one. URL query strings and fragments are removed.
+- Deployment creation and Deployment status updates emitted to Actions.
+  Messages include the environment, ref, mapped status, actor, and an
+  environment or log URL when GitHub provides one. URL query strings and
+  fragments are removed.
 - Discussion `created`, `edited`, `deleted`, `transferred`, `pinned`,
   `unpinned`, `labeled`, `unlabeled`, `locked`, `unlocked`, `category_changed`,
   `answered`, and `unanswered` events. Messages include the number, title,
@@ -120,6 +121,9 @@ Discussion comments are intentionally not subscribed to and do not generate QQ
 messages. GitHub does not run the `created`, `edited`, or `deleted` Release
 activity types for draft releases; `published` is the reliable event for both
 stable releases and prereleases when they become public.
+GitHub also does not start `deployment_status` workflows when a Deployment is
+set to `inactive`, so transient-environment cleanup does not generate a QQ
+message.
 
 ## Verification
 
