@@ -84,7 +84,7 @@
     "idb-keyval": "^6.2.1",
     "is-online": "^11.0.0",
     "localforage": "^1.10.0",
-    "lodash": "^4.17.21",
+    "lodash": "^4.18.0",
     "lottie-react": "^2.4.0",
     "lucide-react": "^0.356.0",
     "monaco-editor": "^0.52.0",
