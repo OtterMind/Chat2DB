@@ -1,7 +1,12 @@
-import { Fragment, memo, useEffect, useState, useRef } from 'react';
+import { Fragment, memo, useLayoutEffect, useState, useRef } from 'react';
 import WorkspaceExtendBody from '../WorkspaceExtend/WorkspaceExtendBody';
 import WorkspaceExtendNav from '../WorkspaceExtend/WorkspaceExtendNav';
 import { useWorkspaceStore } from '@/store/workspace';
+import {
+  getResultInspectorPanelSize,
+  isWorkspaceResultInspectorCode,
+  RESULT_INSPECTOR_MAX_PANEL_RATIO,
+} from '@/store/workspace/utils/resultInspector';
 import SplitPane from 'react-split-pane';
 import ExportProgressBar from '@/blocks/ImportAndExport/components/ExportProgressBar';
 import { canImportExport } from '@/utils/env';
@@ -12,26 +17,27 @@ import WorkspaceTabs from '../WorkspaceTabs';
 import { useStyles } from './style';
 
 const WorkspaceRight = memo(() => {
-  const [size, setSize] = useState(0);
-  const [maxPanelSize, setMaxPanelSize] = useState(0);
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const draggablePanelRef = useRef<HTMLDivElement>(null);
 
   const { styles } = useStyles();
 
-  const { panelRight, panelRightWidth, setPanelRightWidth } = useWorkspaceStore((state) => {
+  const { currentWorkspaceExtend, panelRight, panelRightWidth, setPanelRightWidth } = useWorkspaceStore((state) => {
     return {
+      currentWorkspaceExtend: state.currentWorkspaceExtend,
       panelRight: state.layout.panelRight,
       panelRightWidth: state.layout.panelRightWidth,
       setPanelRightWidth: state.setPanelRightWidth,
     };
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!draggablePanelRef.current) return;
 
+    setWorkspaceWidth(draggablePanelRef.current.getBoundingClientRect().width);
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setMaxPanelSize(entry.contentRect.width * 0.8);
+        setWorkspaceWidth(entry.contentRect.width);
       }
     });
 
@@ -39,13 +45,14 @@ const WorkspaceRight = memo(() => {
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!panelRight) {
-      setSize(0);
-    } else {
-      setSize(panelRightWidth || 320);
-    }
-  }, [panelRight, panelRightWidth]);
+  const resultInspectorOpen = isWorkspaceResultInspectorCode(currentWorkspaceExtend);
+  const preferredPanelSize = panelRightWidth || 320;
+  const size = panelRight
+    ? resultInspectorOpen
+      ? getResultInspectorPanelSize(preferredPanelSize, workspaceWidth)
+      : preferredPanelSize
+    : 0;
+  const maxPanelSize = workspaceWidth * (resultInspectorOpen ? RESULT_INSPECTOR_MAX_PANEL_RATIO : 0.8);
 
   return (
     <div className={styles.workspaceRight}>
@@ -53,7 +60,7 @@ const WorkspaceRight = memo(() => {
         <SplitPane
           split="vertical"
           size={size}
-          pane1Style={{ width: '0px' }}
+          pane1Style={{ minWidth: '0px' }}
           minSize={150}
           maxSize={maxPanelSize}
           primary="second"

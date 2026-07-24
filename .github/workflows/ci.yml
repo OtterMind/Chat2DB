@@ -48,6 +48,12 @@ jobs:
       - name: Run active workspace tab locator contract
         run: yarn run test:active-tab-locator
 
+      - name: Run saved console tree refresh contract
+        run: yarn run test:saved-console-tree-refresh
+
+      - name: Run saved console lifecycle contract
+        run: yarn run test:saved-console-lifecycle
+
       - name: Run BaseTable tree interaction contract
         run: yarn run test:base-table-interaction
 
@@ -56,6 +62,9 @@ jobs:
 
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
+
+      - name: Run result inspector contract
+        run: yarn run test:result-inspector
 
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
