@@ -280,9 +280,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             boolean query = stmt.execute();
             if (query) {
                 long n = 0;
-                ResultSet rs = stmt.getResultSet();
-                while (rs.next()) {
-                    n++;
+                try (ResultSet rs = stmt.getResultSet()) {
+                    while (rs.next()) {
+                        n++;
+                    }
                 }
                 return n;
             } else {
@@ -1476,19 +1477,36 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String sql = request.getSql();
         int batchSize = request.getBatchSize();
         IResultSetConsumer consumer = request.getConsumer();
+        boolean originalAutoCommit = true;
+        try {
+            originalAutoCommit = connection.getAutoCommit();
+        } catch (SQLException ex) {
+            log.warn("Failed to read original autoCommit", ex);
+        }
         try (PreparedStatement stmt = connection.prepareStatement(sql,
                 ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY
         )) {
             connection.setAutoCommit(false);
             stmt.setFetchSize(batchSize);
-            ResultSet rs = stmt.executeQuery();
-            consumer.accept(rs);
+            try (ResultSet rs = stmt.executeQuery()) {
+                consumer.accept(rs);
+            }
             connection.commit();
-            connection.setAutoCommit(true);
         } catch (Exception e) {
             log.error("Failed to fetch table records. Query: {}", sql, e);
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackEx) {
+                log.warn("Failed to rollback after error", rollbackEx);
+            }
             throw new RuntimeException(e);
+        } finally {
+            try {
+                connection.setAutoCommit(originalAutoCommit);
+            } catch (SQLException ex) {
+                log.warn("Failed to restore autoCommit", ex);
+            }
         }
     }
 

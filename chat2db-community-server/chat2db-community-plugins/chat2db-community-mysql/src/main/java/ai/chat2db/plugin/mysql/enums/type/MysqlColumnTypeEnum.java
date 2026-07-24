@@ -299,7 +299,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (!type.columnType.isSupportExtent() || StringUtils.isEmpty(column.getExtent())) {
             return "";
         }
-        return column.getComment();
+        return column.getExtent();
     }
 
     private String buildDefaultValue(TableColumn column, MysqlColumnTypeEnum type) {

@@ -292,7 +292,7 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         if (StringUtils.isNotBlank(databaseName)) {
             script.append(SQLConstants.OPEN_SQUARE_BRACKET).append(databaseName).append(SQLConstants.CLOSE_SQUARE_BRACKET).append('.');
         }
-        if (StringUtils.isNotBlank(databaseName)) {
+        if (StringUtils.isNotBlank(schemaName)) {
             script.append(SQLConstants.OPEN_SQUARE_BRACKET).append(schemaName).append(SQLConstants.CLOSE_SQUARE_BRACKET).append('.');
         }
         if (!(tableName.startsWith(SQLConstants.OPEN_SQUARE_BRACKET) && tableName.endsWith(SQLConstants.CLOSE_SQUARE_BRACKET))) {

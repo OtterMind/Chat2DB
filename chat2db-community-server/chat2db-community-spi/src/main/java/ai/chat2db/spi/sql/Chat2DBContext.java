@@ -48,12 +48,20 @@ public class Chat2DBContext {
         }
     }
 
+    private static IPlugin getPlugin(String dbType) {
+        IPlugin plugin = PLUGIN_MAP.get(dbType);
+        if (plugin == null) {
+            throw new IllegalArgumentException("Unsupported database type: " + dbType + ". Registered types: " + PLUGIN_MAP.keySet());
+        }
+        return plugin;
+    }
+
     public static DriverConfig getDefaultDriverConfig(String dbType) {
-        return PLUGIN_MAP.get(dbType).getDBConfig().getDefaultDriverConfig();
+        return getPlugin(dbType).getDBConfig().getDefaultDriverConfig();
     }
 
     public static ISqlBuilder getSqlBuilder() {
-        return PLUGIN_MAP.get(getConnectInfo().getDbType()).getDbMetaData().getSqlBuilder();
+        return getPlugin(getConnectInfo().getDbType()).getDbMetaData().getSqlBuilder();
     }
 
 
@@ -62,18 +70,18 @@ public class Chat2DBContext {
     }
 
     public static IDbMetaData getDbMetaData() {
-        return PLUGIN_MAP.get(getConnectInfo().getDbType()).getDbMetaData();
+        return getPlugin(getConnectInfo().getDbType()).getDbMetaData();
     }
 
     public static IDbMetaData getDbMetaData(String dbType) {
         if (StringUtils.isBlank(dbType)) {
             return getDbMetaData();
         }
-        return PLUGIN_MAP.get(dbType).getDbMetaData();
+        return getPlugin(dbType).getDbMetaData();
     }
 
     public static DBConfig getDBConfig(String dbType) {
-        return PLUGIN_MAP.get(dbType).getDBConfig();
+        return getPlugin(dbType).getDBConfig();
     }
 
     public static DBConfig getDBConfig() {
@@ -81,15 +89,15 @@ public class Chat2DBContext {
         if (connectInfo == null) {
             return null;
         }
-        return PLUGIN_MAP.get(connectInfo.getDbType()).getDBConfig();
+        return getPlugin(connectInfo.getDbType()).getDBConfig();
     }
 
     public static IDbManager getDbManager() {
-        return PLUGIN_MAP.get(getConnectInfo().getDbType()).getDbManager();
+        return getPlugin(getConnectInfo().getDbType()).getDbManager();
     }
 
     public static IDbManager getDbManager(String dbType) {
-        return PLUGIN_MAP.get(dbType).getDbManager();
+        return getPlugin(dbType).getDbManager();
     }
 
     public static IAccountManager getAccountManager() {
