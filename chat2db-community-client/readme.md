@@ -64,6 +64,7 @@ and installers are written under `jpackage/` and are not frontend source files.
 ```bash
 yarn run lint
 yarn run test:i18n
+yarn run test:result-markdown
 yarn run test:sql-in-clipboard
 ```
 
