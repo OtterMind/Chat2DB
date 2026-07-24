@@ -343,7 +343,7 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         }
         String viewName = modifyView.getViewName();
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.BACK_QUOTE).append(viewName).append(SQLConstants.BACK_QUOTE);
+            createViewSqlBuilder.append(SQLConstants.OPEN_SQUARE_BRACKET).append(viewName).append(SQLConstants.CLOSE_SQUARE_BRACKET);
         } else {
             createViewSqlBuilder.append(UNDEFINED_KEYWORD);
         }
