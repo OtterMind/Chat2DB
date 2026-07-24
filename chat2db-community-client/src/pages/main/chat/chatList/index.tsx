@@ -77,9 +77,9 @@ const ChatList = ({ trigger, forcibleTrigger }) => {
             loader={<div className={styles.centerDiv}>{i18n('common.text.loading')}</div>}
             endMessage={<div className={styles.centerDiv}>{i18n('common.text.noMore')}</div>}
           >
-            {[...(chatDetailsIds || [])].reverse().map((item, index) => {
+            {[...(chatDetailsIds || [])].reverse().map((item) => {
               return (
-                <div key={index} className={styles.oneRoundChat}>
+                <div key={item} className={styles.oneRoundChat}>
                   <ListItem id={item} />
                 </div>
               );
