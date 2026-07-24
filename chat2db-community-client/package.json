@@ -41,7 +41,7 @@
     "test:saved-console-tree-refresh": "tsx src/store/tree/savedConsoleTreeRefresh.test.ts",
     "test:saved-console-lifecycle": "tsx src/store/workspace/utils/savedConsoleLifecycle.test.ts",
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
-    "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts",
+    "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts && tsx src/components/SQLEditor/helper/sqlInsertValueDefaults.test.ts",
     "test:tree-title-highlight": "tsx src/blocks/NewTree/components/TitleRender/highlightSearchText.test.ts",
     "modify:package:name": "node ./scripts/modify-package-name.js",
     "start": "APP_VERSION=${npm_config_app_version} UMI_DEV_SERVER_COMPRESS=none umi dev",

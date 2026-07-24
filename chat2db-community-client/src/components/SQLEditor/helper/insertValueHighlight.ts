@@ -152,7 +152,11 @@ export function shouldAutoShowInsertValueHint(context: InsertValueHintContext | 
 export function insertValueHintContextFromEditorHint(
   editorHint: ISqlEditorHintVO | null | undefined,
 ): InsertValueHintContext | null {
-  if (!editorHint || editorHint.type !== 'INSERT_VALUE' || !editorHint.items?.length) {
+  if (
+    !editorHint
+    || editorHint.type !== 'INSERT_VALUE'
+    || !editorHint.items?.length
+  ) {
     return null;
   }
 

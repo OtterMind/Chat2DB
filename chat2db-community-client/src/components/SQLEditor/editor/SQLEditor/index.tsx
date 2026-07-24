@@ -7,6 +7,7 @@ import MonacoEditor, { MonacoEditorRef } from '../MonacoEditor';
 import CompletionProviderManager from '../../core/completionProviderManager';
 import {
   isBackendCompletionDatabaseType,
+  isBackendEditorHintsDatabaseType,
   setBackendCompletionModel,
 } from '../../core/sqlCompletionModelMode';
 import {
@@ -17,6 +18,7 @@ import {
 import {
   setExecuteButtonDecorations,
   setInsertValueHighlightDecorations,
+  setSqlValueTypeHintDecorations,
   setTableIdentifierDecorations,
 } from '../../core/setDecorations';
 import * as monaco from 'monaco-editor';
@@ -44,6 +46,12 @@ import {
 } from '../../helper/tableIdentifier';
 import i18n from '@/i18n';
 import ParameterHintWidget from '../../components/ParameterHintWidget';
+import {
+  getInsertValueAutoFill,
+  materializeInsertValueAutoFillHints,
+  mergeInsertValueHints,
+  rematerializeInsertValueHints,
+} from '../../helper/sqlInsertValueDefaults';
 import {
   ShortcutAction,
   ShortcutOverrides,
@@ -145,6 +153,9 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const completionProvider = useRef<CompletionProviderManager>();
     const editorRef = useRef<MonacoEditorRef | null>(null);
     const decorationCollectionRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+    const sqlValueTypeHintCollectionRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+    const sqlValueTypeHintsRef = useRef<ISqlEditorHintVO[]>([]);
+    const sqlValueTypeHintSnapshotRef = useRef<string | null>(null);
     const parameterHintWidgetRef = useRef<ParameterHintWidget | null>(null);
     const insertValueHintActionRef = useRef<monaco.IDisposable | null>(null);
     const insertValueHintKeydownRef = useRef<monaco.IDisposable | null>(null);
@@ -159,6 +170,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const backendEditorHintsListenerRef = useRef<EditorHintsListener | null>(null);
     const backendEditorHintsRequestRef = useRef(0);
     const backendEditorHintsEpochRef = useRef(0);
+    const autoFillEditInProgressRef = useRef(false);
     const cursorPositionRef = useRef<HTMLDivElement | null>(null);
 
     const sqlStatementListRef = useRef<SqlStatement[]>([]);
@@ -237,6 +249,8 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       return () => {
         safelyDisposeEditorResource(() => decorationCollectionRef.current?.clear());
         decorationCollectionRef.current = null;
+        safelyDisposeEditorResource(() => sqlValueTypeHintCollectionRef.current?.clear());
+        sqlValueTypeHintCollectionRef.current = null;
         safelyDisposeEditorResource(() => insertValueHintActionRef.current?.dispose());
         safelyDisposeEditorResource(() => insertValueHintKeydownRef.current?.dispose());
         safelyDisposeEditorResource(() => insertValueHintBlurRef.current?.dispose());
@@ -284,7 +298,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         bindSnippetPlaceholderCompletion(editor);
         const editorHintsListener: EditorHintsListener = (editorHints) => {
           backendEditorHintsRequestRef.current += 1;
-          applyBackendEditorHints(editorHints || [], { source: 'completion' });
+          applyBackendEditorHints(withoutSqlValueTypeHints(editorHints), { source: 'completion' });
         };
         backendEditorHintsListenerRef.current = editorHintsListener;
         completionProvider.current.setEditorHintsListener(editorHintsListener, model);
@@ -391,6 +405,15 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         setSqlTemp(sql);
         onChange && onChange?.(sql);
 
+        const isAutoFillChange = autoFillEditInProgressRef.current;
+        autoFillEditInProgressRef.current = false;
+        const preservedValueTypeHints = sqlValueTypeHintSnapshotRef.current === sql
+          ? sqlValueTypeHintsRef.current
+          : rematerializeInsertValueHints(sql, sqlValueTypeHintsRef.current, sqlValueTypeHintSnapshotRef.current);
+        if (!preservedValueTypeHints.length) {
+          clearSqlValueTypeHints();
+        }
+        clearBackendEditorHints();
         decorationCollectionRef.current?.clear();
         if (!sql.trim()) {
           backendEditorHintsRequestRef.current += 1;
@@ -398,6 +421,19 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
           clearBackendEditorHints();
           hideParameterHint();
           return;
+        }
+        if (isAutoFillChange || preservedValueTypeHints.length) {
+          if (preservedValueTypeHints.length) {
+            window.requestAnimationFrame(() => {
+              if (editor.getModel()?.getValue() === sql) {
+                showSqlValueTypeHints(editor, preservedValueTypeHints);
+              }
+            });
+          }
+          setHoverHelpInfo(hoverHelpDefaultConfig);
+          if (isAutoFillChange) {
+            return;
+          }
         }
         refreshBackendParameterHints(
           editor,
@@ -462,11 +498,10 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
 
       const position = editor.getPosition();
       const model = editor.getModel();
-      const nextDecorations =
+      const nextDecorations: monaco.editor.IModelDeltaDecoration[] =
         getTableDDLTriggerMode(useGlobalStore.getState().editorSettings) === 'click' && isObjectClickModifierPressed
           ? toArray(setTableIdentifierDecorations(getTableIdentifierUnderlineRanges(sqlStatementListRef.current)))
           : [];
-
       if (position && model) {
         const currentStatement = findSqlStatement(position, sqlStatementListRef.current);
         const insertValueHint = getInsertValueHintContext(currentStatement, position, (range) =>
@@ -509,6 +544,28 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       backendEditorHintsRef.current = backendEditorHintStoreRef.current.clear();
     }
 
+    function clearSqlValueTypeHints() {
+      sqlValueTypeHintCollectionRef.current?.clear();
+      sqlValueTypeHintsRef.current = [];
+      sqlValueTypeHintSnapshotRef.current = null;
+    }
+
+    function showSqlValueTypeHints(
+      editor: monaco.editor.IStandaloneCodeEditor,
+      editorHints: ISqlEditorHintVO[],
+    ) {
+      if (!sqlValueTypeHintCollectionRef.current) {
+        sqlValueTypeHintCollectionRef.current = editor.createDecorationsCollection();
+      }
+      sqlValueTypeHintsRef.current = editorHints;
+      sqlValueTypeHintSnapshotRef.current = editor.getModel()?.getValue() || null;
+      sqlValueTypeHintCollectionRef.current.set(setSqlValueTypeHintDecorations(editorHints));
+    }
+
+    function withoutSqlValueTypeHints(editorHints: ISqlEditorHintVO[] | null | undefined) {
+      return (editorHints || []).filter((hint) => hint.type !== 'INSERT_VALUE');
+    }
+
     function applyBackendEditorHints(editorHints: ISqlEditorHintVO[], hintOptions?: ApplyBackendEditorHintsOptions) {
       const editor = getInstance();
       if (hintOptions?.scope) {
@@ -518,6 +575,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       } else {
         backendEditorHintsRef.current = backendEditorHintStoreRef.current.clear();
       }
+      updateDecoration(editor, decorationCollectionRef.current);
       updateParameterHint(editor, localInsertValueParameterHint(editor));
     }
 
@@ -585,6 +643,10 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         hideParameterHint();
         return null;
       }
+      if (context.source === 'INSERT_VALUE') {
+        hideParameterHint();
+        return context;
+      }
       if (!forceOpen && !parameterHintFocusedRef.current) {
         return context;
       }
@@ -609,7 +671,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         positionSnapshot?: monaco.Position | null,
         scope?: SqlCompletionHintScope | null,
       ) => {
-        if (!isBackendCompletionDatabaseType(dbInfo.databaseType) || !completionProvider.current || !editor) {
+        if (!isBackendEditorHintsDatabaseType(dbInfo.databaseType) || !completionProvider.current || !editor) {
           return;
         }
         const model = editor.getModel();
@@ -634,9 +696,50 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         ) {
           return;
         }
-        applyBackendEditorHints(editorHints, { source, scope });
+        const autoFill = source === 'content' && !readOnly
+          ? getInsertValueAutoFill(model.getValue(), model.getOffsetAt(position), editorHints)
+          : null;
+        if (autoFill) {
+          editor.pushUndoStop();
+          autoFillEditInProgressRef.current = true;
+          const applied = editor.executeEdits('chat2db-insert-value-defaults', [{
+            range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+            text: autoFill.text,
+            forceMoveMarkers: true,
+          }]);
+          if (applied) {
+            refreshBackendParameterHints.cancel();
+            const insertionOffset = model.getOffsetAt(position);
+            const filledSql = model.getValue();
+            const materializedHints = materializeInsertValueAutoFillHints(
+              filledSql,
+              insertionOffset,
+              editorHints,
+            );
+            const accumulatedHints = mergeInsertValueHints(
+              filledSql,
+              sqlValueTypeHintsRef.current,
+              materializedHints,
+            );
+            editor.setSelection(new monaco.Selection(
+              position.lineNumber,
+              position.column,
+              position.lineNumber,
+              position.column + autoFill.firstValueLength,
+            ));
+            editor.pushUndoStop();
+            window.requestAnimationFrame(() => {
+              if (getInstance()?.getModel() === model && model.getValue() === filledSql) {
+                showSqlValueTypeHints(editor, accumulatedHints);
+              }
+            });
+            return;
+          }
+          autoFillEditInProgressRef.current = false;
+        }
+        applyBackendEditorHints(withoutSqlValueTypeHints(editorHints), { source, scope });
       }, 150),
-      [dbInfo.databaseType],
+      [dbInfo.databaseType, readOnly],
     );
 
     useEffect(() => {

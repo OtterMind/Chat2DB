@@ -245,6 +245,7 @@ export interface ISqlEditorHintItemVO {
   columnIndex: number;
   fieldName?: string;
   fieldType?: string;
+  defaultValue?: string;
   label?: string;
   range?: ISqlEditorHintRangeVO;
   active?: boolean;

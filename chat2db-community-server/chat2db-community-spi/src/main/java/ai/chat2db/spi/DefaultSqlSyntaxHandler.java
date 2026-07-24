@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.parser.statement.Statement;
 import ai.chat2db.community.domain.api.model.parser.statement.create.CreateTableStatement;
 import ai.chat2db.community.domain.api.service.task.ITaskProgressListener;
 import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
+import ai.chat2db.community.domain.api.model.completion.SqlCompletionEditorHint;
 import ai.chat2db.community.domain.api.model.completion.request.DbSqlCompletionRequest;
 import ai.chat2db.community.domain.api.model.completion.result.SqlCompletionResponse;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -193,6 +194,18 @@ public class DefaultSqlSyntaxHandler {
             return SqlCompletionResponse.unsupported(databaseType);
         }
         return completionProvider.complete(request);
+    }
+
+    public static List<SqlCompletionEditorHint> editorHints(DbSqlCompletionRequest request) {
+        if (Objects.isNull(request) || StringUtils.isBlank(request.databaseType())) {
+            return List.of();
+        }
+        ISqlSyntaxPlugin sqlSyntaxPlugin = sqlSyntaxPluginMap.get(resolvePluginKey(request.databaseType()));
+        if (Objects.isNull(sqlSyntaxPlugin)) {
+            return List.of();
+        }
+        List<SqlCompletionEditorHint> hints = sqlSyntaxPlugin.getSqlEditorHints(request);
+        return hints == null ? List.of() : hints;
     }
 
     public static int parserSqlScript(File file, String databaseType, ITaskProgressListener progressListener, ISqlBatchHandler sqlBatchHandler) {
