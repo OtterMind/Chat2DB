@@ -117,6 +117,9 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     private synchronized AiChatMessage addMessageLocal(String sessionId, Long userId, String role, String content,
                                                        String reasoningContent,
                                                        List<ChatAttachment> attachments) {
+        if (!ownsSession(userId, sessionId)) {
+            throw new BusinessException("ai.chat.history.sessionNotOwned", new Object[]{sessionId});
+        }
         AiChatMessage message = new AiChatMessage();
         message.setId(UUID.randomUUID().toString());
         message.setSessionId(sessionId);
@@ -143,12 +146,14 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     }
 
     private synchronized List<AiChatMessage> getMessagesLocal(String sessionId, Long userId) {
-        List<AiChatSession> sessions = loadSessions(userId);
-        boolean owned = sessions.stream().anyMatch(s -> Objects.equals(s.getId(), sessionId));
-        if (!owned) {
+        if (!ownsSession(userId, sessionId)) {
             return new ArrayList<>();
         }
         return loadMessages(sessionId);
+    }
+
+    private boolean ownsSession(Long userId, String sessionId) {
+        return loadSessions(userId).stream().anyMatch(s -> Objects.equals(s.getId(), sessionId));
     }
 
     private synchronized List<AiChatMessage> getHistoryForAILocal(String sessionId, Long userId) {
