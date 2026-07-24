@@ -8,6 +8,7 @@ import { v4 as uuid } from 'uuid';
 import chatService from '@/service/chat';
 import { TaskStatus } from '@/constants';
 import { revisalChatDetail } from '@/utils/chat';
+import { updateFirstAnswer } from './answerUpdates';
 
 interface CreateQuestionParams {
   chatId?: number;
@@ -78,7 +79,7 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
     });
   },
   appendChatDetails: (content, type) => {
-    const chatDetails = get().chatDetails || {};
+    const chatDetails = { ...(get().chatDetails || {}) };
     const chatDetailId = uuid();
     if (type === 'question') {
       chatDetails[chatDetailId] = {
@@ -88,9 +89,13 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
     }
 
     if (type === 'answers') {
-      const lastChatDetail = _.last(Object.values(chatDetails));
+      const entries = Object.values(chatDetails);
+      const lastChatDetail = _.last(entries);
       if (lastChatDetail) {
-        lastChatDetail.answers = content;
+        const lastKey = Object.keys(chatDetails).find(k => chatDetails[k] === lastChatDetail);
+        if (lastKey) {
+          chatDetails[lastKey] = { ...lastChatDetail, answers: content };
+        }
       }
     }
 
@@ -119,11 +124,12 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
     const chatDetails = get().chatDetails;
     const question = chatDetails?.[chatDetailId]?.question;
     if (question) {
-      question.id = questionId;
-      question.chatId = chatId;
-      set({
-        chatDetails,
-      });
+      const newChatDetails = { ...chatDetails };
+      newChatDetails[chatDetailId] = {
+        ...newChatDetails[chatDetailId],
+        question: { ...question, id: questionId, chatId },
+      };
+      set({ chatDetails: newChatDetails });
     }
   },
   getQuestionAnswerByQuestionId: (questionId: number) => {
@@ -176,8 +182,8 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
         ...newParts[step],
         ...data,
       };
-      // Update answer.parts to the new array
-      answer.parts = newParts;
+      // Create new answer with new parts
+      answer = { ...answer, parts: newParts };
     }
     // answer.databaseInfo = databaseInfo;
     get().appendChatDetails([answer], 'answers');
@@ -195,8 +201,8 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
         status: AnswerPartsStatus.FINISH,
       };
     });
-    answer.parts = newParts;
-    get().appendChatDetails([answer], 'answers');
+    const updatedAnswer = { ...answer, parts: newParts };
+    get().appendChatDetails([updatedAnswer], 'answers');
   },
   updateAnswer: (questionId, params) => {
     const chatDetails = get().chatDetails;
@@ -209,13 +215,12 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
     }
     const answer = chatDetails[chatDetailId].answers?.[0];
     if (answer) {
-      chatDetails[chatDetailId].answers![0] = {
-        ...answer,
-        ...params,
+      const newChatDetails = { ...chatDetails };
+      newChatDetails[chatDetailId] = {
+        ...newChatDetails[chatDetailId],
+        answers: updateFirstAnswer(newChatDetails[chatDetailId].answers, params),
       };
-      set({
-        chatDetails,
-      });
+      set({ chatDetails: newChatDetails });
     }
   },
 
