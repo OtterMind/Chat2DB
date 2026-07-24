@@ -51,7 +51,7 @@
         <commons-io.version>2.18.0</commons-io.version>
         <easyexcel.version>3.3.2</easyexcel.version>
         <pdfbox.version>2.0.24</pdfbox.version>
-        <java-jwt.version>4.4.0</java-jwt.version>
+        <java-jwt.version>4.6.0</java-jwt.version>
         <sql-formatter.version>2.0.4</sql-formatter.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
         <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
