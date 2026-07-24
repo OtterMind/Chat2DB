@@ -44,8 +44,7 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
     }
 
     private String getDDL(Connection connection, String databaseName, String schemaName, String tableName) {
-        try {
-            ResultSet columns = connection.getMetaData().getColumns(databaseName, schemaName, tableName, null);
+        try (ResultSet columns = connection.getMetaData().getColumns(databaseName, schemaName, tableName, null)) {
             List<String> columnDefinitions = new ArrayList<>();
             while (columns.next()) {
                 String columnName = columns.getString("COLUMN_NAME");
@@ -68,32 +67,33 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
                 }
                 columnDefinitions.add(columnDefinition.toString());
             }
-            ResultSet indexes = connection.getMetaData().getIndexInfo(databaseName, schemaName, tableName, false,
-                false);
-            Map<String, List<String>> indexMap = new HashMap<>();
-            while (indexes.next()) {
-                String indexName = indexes.getString("INDEX_NAME");
-                String columnName = indexes.getString("COLUMN_NAME");
-                if (indexName != null) {
-                    if (!indexMap.containsKey(indexName)) {
-                        indexMap.put(indexName, new ArrayList<>());
+            try (ResultSet indexes = connection.getMetaData().getIndexInfo(databaseName, schemaName, tableName, false,
+                false)) {
+                Map<String, List<String>> indexMap = new HashMap<>();
+                while (indexes.next()) {
+                    String indexName = indexes.getString("INDEX_NAME");
+                    String columnName = indexes.getString("COLUMN_NAME");
+                    if (indexName != null) {
+                        if (!indexMap.containsKey(indexName)) {
+                            indexMap.put(indexName, new ArrayList<>());
+                        }
+                        indexMap.get(indexName).add(columnName);
                     }
-                    indexMap.get(indexName).add(columnName);
                 }
+                StringBuilder createTableDDL = new StringBuilder(SQL_CREATE_TABLE);
+                createTableDDL.append(tableName).append(" (\n");
+                createTableDDL.append(String.join(",\n", columnDefinitions));
+                createTableDDL.append("\n);\n");
+                for (Map.Entry<String, List<String>> entry : indexMap.entrySet()) {
+                    String indexName = entry.getKey();
+                    List<String> columnList = entry.getValue();
+                    String indexColumns = String.join(", ", columnList);
+                    String createIndexDDL = String.format(SQL_CREATE_INDEX, indexName, tableName,
+                        indexColumns);
+                    createTableDDL.append(createIndexDDL);
+                }
+                return createTableDDL.toString();
             }
-            StringBuilder createTableDDL = new StringBuilder(SQL_CREATE_TABLE);
-            createTableDDL.append(tableName).append(" (\n");
-            createTableDDL.append(String.join(",\n", columnDefinitions));
-            createTableDDL.append("\n);\n");
-            for (Map.Entry<String, List<String>> entry : indexMap.entrySet()) {
-                String indexName = entry.getKey();
-                List<String> columnList = entry.getValue();
-                String indexColumns = String.join(", ", columnList);
-                String createIndexDDL = String.format(SQL_CREATE_INDEX, indexName, tableName,
-                    indexColumns);
-                createTableDDL.append(createIndexDDL);
-            }
-            return createTableDDL.toString();
 
         } catch (Exception e) {
             log.error("Failed to get table DDL", e);
