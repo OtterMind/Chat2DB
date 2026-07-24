@@ -156,8 +156,13 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
 
     private synchronized void deleteSessionLocal(String sessionId, Long userId) {
         List<AiChatSession> sessions = loadSessions(userId);
-        sessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
+        // Only delete the message file when the session was actually owned by
+        // this user; otherwise a caller could delete another user's file by id.
+        boolean removed = sessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
         persistSessions(userId, sessions);
+        if (!removed) {
+            return;
+        }
 
         Path msgFile = messagesPath(sessionId);
         try {
