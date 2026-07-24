@@ -691,4 +691,4 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
   );
 });
 
-export default ColumnList;
+export default React.memo(ColumnList);

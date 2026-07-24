@@ -41,6 +41,9 @@ public class XUGUDBSqlBuilder extends DefaultSqlBuilder {
                 continue;
             }
             XUGUDBColumnTypeEnum typeEnum = XUGUDBColumnTypeEnum.getByType(column.getColumnType());
+            if (typeEnum == null) {
+                continue;
+            }
             script.append(SQLConstants.TAB).append(typeEnum.buildCreateColumnSql(column)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -52,6 +55,9 @@ public class XUGUDBSqlBuilder extends DefaultSqlBuilder {
                 continue;
             }
             XUGUDBIndexTypeEnum indexTypeEnum = XUGUDBIndexTypeEnum.getByType(tableIndex.getType());
+            if (indexTypeEnum == null) {
+                continue;
+            }
             script.append(SQLConstants.LINE_SEPARATOR).append(SQLConstants.EMPTY).append(indexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.SEMICOLON);
         }
 
@@ -97,6 +103,9 @@ public class XUGUDBSqlBuilder extends DefaultSqlBuilder {
             String editStatus = tableColumn.getEditStatus();
             if (StringUtils.isNotBlank(editStatus)) {
                 XUGUDBColumnTypeEnum typeEnum = XUGUDBColumnTypeEnum.getByType(tableColumn.getColumnType());
+                if (typeEnum == null) {
+                    continue;
+                }
                 script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 if (StringUtils.isNotBlank(tableColumn.getComment())&&!Objects.equals(EditStatusEnum.DELETE.toString(),editStatus)) {
                     script.append(SQLConstants.LINE_SEPARATOR).append(buildComment(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
@@ -106,6 +115,9 @@ public class XUGUDBSqlBuilder extends DefaultSqlBuilder {
         for (TableIndex tableIndex : newTable.getIndexList()) {
             if (StringUtils.isNotBlank(tableIndex.getEditStatus()) && StringUtils.isNotBlank(tableIndex.getType())) {
                 XUGUDBIndexTypeEnum mysqlIndexTypeEnum = XUGUDBIndexTypeEnum.getByType(tableIndex.getType());
+                if (mysqlIndexTypeEnum == null) {
+                    continue;
+                }
                 script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
             }
         }

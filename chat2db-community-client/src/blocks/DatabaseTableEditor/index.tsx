@@ -261,18 +261,20 @@ export default memo((props: IProps) => {
     submitCallback?.();
   };
 
+  const contextValue = useMemo<IContext>(() => ({
+    databaseBaseInfo,
+    changeTabDetails,
+    tabDetails,
+    submitCallback,
+    tableDetails,
+    baseInfoRef,
+    columnListRef,
+    indexListRef,
+    databaseSupportField,
+  }), [databaseBaseInfo, changeTabDetails, tabDetails, submitCallback, tableDetails, databaseSupportField]);
+
   return (
-    <Context.Provider
-      value={{
-        ...props,
-        tableDetails,
-        baseInfoRef,
-        columnListRef,
-        indexListRef,
-        databaseSupportField,
-        databaseBaseInfo,
-      }}
-    >
+    <Context.Provider value={contextValue}>
       <LoadingContent coverLoading isLoading={isLoading} className={styles.tableEditor}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>

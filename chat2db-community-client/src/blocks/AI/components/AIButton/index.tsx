@@ -9,7 +9,7 @@ interface AIButtonProps {
 const AIButton = (props: AIButtonProps) => {
   const { onClick, size = 'lg' } = props;
   const { styles } = useStyles();
-  const { showPanel } = useAIStore((s) => s);
+  const showPanel = useAIStore((s) => s.showPanel);
   return (
     <IconButton
       type="primary"
