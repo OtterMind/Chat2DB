@@ -136,7 +136,9 @@ public class DbExcelTableServiceImpl implements IDbExcelTableService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            excelReader.close();
+            if (excelReader != null) {
+                excelReader.close();
+            }
         }
     }
 
@@ -179,7 +181,9 @@ public class DbExcelTableServiceImpl implements IDbExcelTableService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            excelReader.close();
+            if (excelReader != null) {
+                excelReader.close();
+            }
         }
     }
 
