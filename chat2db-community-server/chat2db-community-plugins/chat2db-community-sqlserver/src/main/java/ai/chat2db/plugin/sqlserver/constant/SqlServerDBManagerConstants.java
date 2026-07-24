@@ -22,8 +22,9 @@ public final class SqlServerDBManagerConstants {
 
     public static final String SQL_DROP_TABLE_EXISTS = "DROP TABLE IF EXISTS ";
     public static final String SQL_DROP_VIEW_EXISTS = "DROP VIEW IF EXISTS ";
-    public static final String SQL_COPY_TABLE_DATA = "SELECT * INTO %s FROM %s";
-    public static final String SQL_COPY_TABLE_STRUCTURE = "SELECT * INTO %s FROM %s WHERE 1=0";
+    public static final String SQL_COPY_TABLE_DATA = "INSERT INTO %s SELECT * FROM %s";
+    public static final String SQL_COPY_TABLE_DATA_WITH_COLUMNS = "INSERT INTO %s (%s) SELECT %s FROM %s";
+    public static final String SQL_SET_IDENTITY_INSERT = "SET IDENTITY_INSERT %s %s";
     public static final String SQL_DROP_TABLE = "DROP TABLE %s";
     public static final String SQL_DROP_VIEW = "DROP VIEW %s";
     public static final String SQL_USE_DATABASE = "use [%s];";
