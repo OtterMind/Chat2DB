@@ -24,8 +24,8 @@ assert.equal(
 );
 assert.equal(
   isBackendEditorHintsDatabaseType(DatabaseTypeCode.SQLSERVER),
-  true,
-  'compatible relational databases support standard INSERT editor hints',
+  false,
+  'unvalidated SQL dialects do not request INSERT editor hints',
 );
 assert.equal(
   isBackendEditorHintsDatabaseType(DatabaseTypeCode.MONGODB),

@@ -170,11 +170,11 @@ const setSqlValueTypeHintDecorations = (
         item.range!.endColumn,
       ),
       options: {
-        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        stickiness: monaco.editor.TrackedRangeStickiness.GrowsOnlyWhenTypingAfter,
         after: {
-          content: `  ${item.label || item.fieldName}`,
+          content: `· ${item.label || item.fieldName}`,
           inlineClassName: 'sql-value-type-hint',
-          cursorStops: monaco.editor.InjectedTextCursorStops.None,
+          cursorStops: monaco.editor.InjectedTextCursorStops.Left,
         },
       },
     }));

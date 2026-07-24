@@ -1,4 +1,4 @@
-package ai.chat2db.spi.completion;
+package ai.chat2db.plugin.postgresql.completion;
 
 import ai.chat2db.community.domain.api.enums.completion.SqlCompletionCandidateTypeEnum;
 import ai.chat2db.community.domain.api.enums.completion.SqlCompletionEditorHintTypeEnum;
@@ -16,31 +16,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * Conservative INSERT value hints shared by relational dialects that use the
- * standard {@code INSERT INTO table (columns) VALUES (...)} shape.
+ * PostgreSQL INSERT value hints for explicit column lists.
  */
-public final class StandardSqlInsertEditorHintProvider {
+public final class PostgreSqlInsertEditorHintProvider {
 
-    private static final String IDENTIFIER = "(?:\"(?:[^\"]|\"\")*\"|`(?:[^`]|``)*`|\\[(?:[^\\]]|\\]\\])*\\]|[A-Za-z_][A-Za-z0-9_$]*)";
+    private static final String IDENTIFIER = "(?:\"(?:[^\"]|\"\")*\"|[A-Za-z_][A-Za-z0-9_$]*)";
     private static final Pattern INSERT_VALUES = Pattern.compile(
             "(?is)\\binsert\\s+into\\s+(" + IDENTIFIER + "(?:\\s*\\.\\s*" + IDENTIFIER
-                    + "){0,2})\\s*\\(([^()]*)\\)\\s*values\\s*\\((.*)$");
-    private static final Set<String> MYSQL_FAMILY = Set.of("MARIADB", "TIDB", "OCEANBASE");
-    private static final Set<String> ZERO_BOOLEAN_DIALECTS = Set.of(
-            "SQLSERVER", "ORACLE", "OCEANBASE_ORACLE", "DB2", "DM", "OSCAR", "XUGUDB", "GBASE8S",
-            "INFOMIX");
-
-    private final String databaseType;
-
-    public StandardSqlInsertEditorHintProvider(String databaseType) {
-        this.databaseType = StringUtils.upperCase(StringUtils.trimToEmpty(databaseType), Locale.ROOT);
-    }
+                    + "){0,1})\\s*\\(([^()]*)\\)\\s*values\\s*\\((.*)$");
 
     public List<SqlCompletionEditorHint> build(DbSqlCompletionRequest request) {
         if (request == null || request.metadataProvider() == null) {
@@ -58,8 +46,7 @@ public final class StandardSqlInsertEditorHintProvider {
         if (!matcher.find()) {
             return List.of();
         }
-        boolean backslashEscapes = MYSQL_FAMILY.contains(databaseType);
-        if (hasClosedValuesRow(matcher.group(3), backslashEscapes)) {
+        if (hasClosedValuesRow(matcher.group(3))) {
             return List.of();
         }
         Relation relation = relation(matcher.group(1));
@@ -72,7 +59,7 @@ public final class StandardSqlInsertEditorHintProvider {
             return List.of();
         }
         int valuesOffset = statementOffset + matcher.start(3);
-        List<ValueRange> values = valueRanges(matcher.group(3), valuesOffset, backslashEscapes);
+        List<ValueRange> values = valueRanges(matcher.group(3), valuesOffset);
         List<SqlCompletionEditorHint.Item> items = new ArrayList<>();
         for (int index = 0; index < columns.size(); index++) {
             String fieldName = columns.get(index);
@@ -135,12 +122,7 @@ public final class StandardSqlInsertEditorHintProvider {
             return new Relation(null, null, parts.get(0));
         }
         if (parts.size() == 2) {
-            return MYSQL_FAMILY.contains(databaseType)
-                    ? new Relation(parts.get(0), null, parts.get(1))
-                    : new Relation(null, parts.get(0), parts.get(1));
-        }
-        if (parts.size() == 3) {
-            return new Relation(parts.get(0), parts.get(1), parts.get(2));
+            return new Relation(null, parts.get(0), parts.get(1));
         }
         return null;
     }
@@ -155,8 +137,8 @@ public final class StandardSqlInsertEditorHintProvider {
         char quoteEnd = '\0';
         for (int index = 0; index < Objects.toString(value, "").length(); index++) {
             char currentChar = value.charAt(index);
-            if (quoteEnd == '\0' && (currentChar == '\"' || currentChar == '`' || currentChar == '[')) {
-                quoteEnd = currentChar == '[' ? ']' : currentChar;
+            if (quoteEnd == '\0' && currentChar == '\"') {
+                quoteEnd = currentChar;
                 current.append(currentChar);
             } else if (quoteEnd != '\0' && currentChar == quoteEnd) {
                 current.append(currentChar);
@@ -190,11 +172,9 @@ public final class StandardSqlInsertEditorHintProvider {
         }
         char first = trimmed.charAt(0);
         char last = trimmed.charAt(trimmed.length() - 1);
-        if ((first == '\"' && last == '\"') || (first == '`' && last == '`') || (first == '[' && last == ']')) {
+        if (first == '\"' && last == '\"') {
             String body = trimmed.substring(1, trimmed.length() - 1);
-            String escaped = first == '[' ? "]]" : String.valueOf(first) + first;
-            String replacement = first == '[' ? "]" : String.valueOf(first);
-            return body.replace(escaped, replacement);
+            return body.replace("\"\"", "\"");
         }
         return trimmed;
     }
@@ -209,22 +189,20 @@ public final class StandardSqlInsertEditorHintProvider {
 
     private String defaultValue(String type) {
         String normalized = StringUtils.lowerCase(StringUtils.trimToEmpty(type), Locale.ROOT);
-        if ("POSTGRESQL".equals(databaseType)) {
-            if (normalized.endsWith("[]")) {
-                return "'{}'";
-            }
-            if (normalized.contains("jsonb")) {
-                return "'{}'::jsonb";
-            }
-            if (normalized.matches(".*\\bjson\\b.*")) {
-                return "'{}'::json";
-            }
-            if (normalized.contains("bytea")) {
-                return "'\\\\x'::bytea";
-            }
+        if (normalized.endsWith("[]")) {
+            return "'{}'";
+        }
+        if (normalized.contains("jsonb")) {
+            return "'{}'::jsonb";
+        }
+        if (normalized.matches(".*\\bjson\\b.*")) {
+            return "'{}'::json";
+        }
+        if (normalized.contains("bytea")) {
+            return "'\\\\x'::bytea";
         }
         if (normalized.contains("bool") || normalized.equals("bit")) {
-            return ZERO_BOOLEAN_DIALECTS.contains(databaseType) ? "0" : "FALSE";
+            return "FALSE";
         }
         if (normalized.matches(".*\\bnumber\\s*\\(\\s*\\d+\\s*(?:,\\s*0\\s*)?\\).*")
                 || normalized.matches(".*\\b(tinyint|smallint|integer|bigint|int|int2|int4|int8)\\b.*")) {
@@ -234,28 +212,13 @@ public final class StandardSqlInsertEditorHintProvider {
             return "0.0";
         }
         if (normalized.contains("timestamp") || normalized.contains("datetime")) {
-            if ("INFOMIX".equals(databaseType)) {
-                return "CURRENT";
-            }
-            if ("TDENGINE".equals(databaseType)) {
-                return "NOW";
-            }
             return "CURRENT_TIMESTAMP";
         }
         if (normalized.matches(".*\\bdate\\b.*")) {
-            if ("INFOMIX".equals(databaseType)) {
-                return "TODAY";
-            }
-            if ("SQLSERVER".equals(databaseType)) {
-                return "CAST(CURRENT_TIMESTAMP AS DATE)";
-            }
-            return "BIGQUERY".equals(databaseType) ? "CURRENT_DATE()" : "CURRENT_DATE";
+            return "CURRENT_DATE";
         }
         if (normalized.matches(".*\\btime\\b.*")) {
-            if ("SQLSERVER".equals(databaseType)) {
-                return "CAST(CURRENT_TIMESTAMP AS TIME)";
-            }
-            return "BIGQUERY".equals(databaseType) ? "CURRENT_TIME()" : "CURRENT_TIME";
+            return "CURRENT_TIME";
         }
         if (normalized.matches(".*\\b(char|varchar|varchar2|nvarchar|nvarchar2|text|clob|string|enum|set)\\b.*")) {
             return "''";
@@ -263,7 +226,7 @@ public final class StandardSqlInsertEditorHintProvider {
         return "NULL";
     }
 
-    private List<ValueRange> valueRanges(String value, int sourceOffset, boolean backslashEscapes) {
+    private List<ValueRange> valueRanges(String value, int sourceOffset) {
         List<ValueRange> result = new ArrayList<>();
         int segmentStart = 0;
         int depth = 0;
@@ -272,10 +235,6 @@ public final class StandardSqlInsertEditorHintProvider {
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
-            if (singleQuoted && backslashEscapes && current == '\\' && next != '\0') {
-                index++;
-                continue;
-            }
             if (!doubleQuoted && current == '\'' && !(singleQuoted && next == '\'')) {
                 singleQuoted = !singleQuoted;
             } else if (singleQuoted && current == '\'' && next == '\'') {
@@ -314,14 +273,9 @@ public final class StandardSqlInsertEditorHintProvider {
     private boolean insideLiteralOrComment(String sql) {
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
-        boolean backslashEscapes = MYSQL_FAMILY.contains(databaseType);
         for (int index = 0; index < sql.length(); index++) {
             char current = sql.charAt(index);
             char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
-            if (singleQuoted && backslashEscapes && current == '\\' && next != '\0') {
-                index++;
-                continue;
-            }
             if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
                 int newline = sql.indexOf('\n', index + 2);
                 if (newline < 0) {
@@ -356,7 +310,6 @@ public final class StandardSqlInsertEditorHintProvider {
         boolean doubleQuoted = false;
         boolean lineComment = false;
         boolean blockComment = false;
-        boolean backslashEscapes = MYSQL_FAMILY.contains(databaseType);
         int statementStart = 0;
         for (int index = 0; index < sql.length(); index++) {
             char current = sql.charAt(index);
@@ -372,10 +325,6 @@ public final class StandardSqlInsertEditorHintProvider {
                     blockComment = false;
                     index++;
                 }
-                continue;
-            }
-            if (singleQuoted && backslashEscapes && current == '\\' && next != '\0') {
-                index++;
                 continue;
             }
             if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
@@ -403,16 +352,14 @@ public final class StandardSqlInsertEditorHintProvider {
         return statementStart;
     }
 
-    private boolean hasClosedValuesRow(String value, boolean backslashEscapes) {
+    private boolean hasClosedValuesRow(String value) {
         int depth = 0;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
-            if (singleQuoted && backslashEscapes && current == '\\' && next != '\0') {
-                index++;
-            } else if (!doubleQuoted && current == '\'') {
+            if (!doubleQuoted && current == '\'') {
                 if (singleQuoted && next == '\'') {
                     index++;
                 } else {
