@@ -270,7 +270,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                         if (StringUtils.isNotBlank(sizes[0])) {
                             column.setColumnSize(Integer.parseInt(sizes[0]));
                         }
-                        if (StringUtils.isNotBlank(sizes[1])) {
+                        if (sizes.length > 1 && StringUtils.isNotBlank(sizes[1])) {
                             column.setDecimalDigits(Integer.parseInt(sizes[1]));
                         }
                     } else {
@@ -279,6 +279,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 }
             }
         } catch (Exception e) {
+            log.warn("parse column size failed: {}", columnType, e);
         }
     }
 
