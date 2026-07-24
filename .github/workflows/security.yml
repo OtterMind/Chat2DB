@@ -59,7 +59,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Generate CycloneDX SBOM
-        uses: anchore/sbom-action@9246b90769f852b3a8921f330c59e0b3f439d6e9
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
         with:
           path: .
           format: cyclonedx-json
