@@ -1,10 +1,20 @@
+import type { DatabaseTypeCode } from './common';
+
 export enum CreateTabIntroType {
   EditorTable = 'editorTable',
   EditTableData = 'editTableData',
 }
 
 export const LOCAL_SQL_FILE_SAVED_EVENT = 'chat2db:local-sql-file-saved';
+export const SAVED_CONSOLE_UPDATED_EVENT = 'chat2db:saved-console-updated';
 export const LOCAL_SQL_SESSION_DRAG_TYPE = 'application/x-chat2db-local-sql-session';
+
+export interface SavedConsoleUpdatedEventDetail {
+  dataSourceId: number;
+  databaseType: DatabaseTypeCode;
+  databaseName?: string;
+  schemaName?: string;
+}
 
 // Types of workbench tabs
 export enum WorkspaceTabType {
@@ -92,5 +102,6 @@ export const workspaceTabConfig: {
 export const initUserConfigTree = {
   showComment: true,
   followActiveWorkspaceTab: true,
+  workspaceLeftPanel: 'database' as const,
   sortDatabaseObjects: false,
 };

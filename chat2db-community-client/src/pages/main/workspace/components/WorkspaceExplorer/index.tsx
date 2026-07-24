@@ -84,8 +84,16 @@ const WorkspaceExplorer = memo(
   }, [openSessions, trimmedSearchKeyword]);
 
   useEffect(() => {
+    if (!active) {
+      return;
+    }
     const activeRow = activeSessionRowRef.current;
     if (!activeRow) {
+      const activeSessionIsFiltered =
+        !!trimmedSearchKeyword && openSessions.some((session) => session.id === activeConsoleId);
+      if (activeSessionIsFiltered) {
+        setSearchKeyword('');
+      }
       return;
     }
 
@@ -96,7 +104,7 @@ const WorkspaceExplorer = memo(
         activeRow.scrollIntoView(false);
       }
     });
-  }, [activeConsoleId, filteredOpenSessions.length, sessionPanelHeight]);
+  }, [active, activeConsoleId, filteredOpenSessions.length, openSessions, sessionPanelHeight, trimmedSearchKeyword]);
 
   useImperativeHandle(
     ref,

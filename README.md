@@ -92,6 +92,12 @@ database contents, and AI responses remain untrusted data. See the
 [Security Policy](SECURITY.md) for the complete trust boundary and
 vulnerability reporting process.
 
+If you find this project useful, please give us a Star ⭐️ — it really helps!
+
+<div align="center">
+  <a href="https://github.com/OtterMind/Chat2DB"><img src="https://cdn.chat2db.ai/g/Area.gif" alt="Star Chat2DB on GitHub" width="600"></a>
+</div>
+
 ## Encryption Key
 
 Chat2DB Community encrypts stored datasource passwords and AI model API keys with AES-256-GCM using a per-installation key. Create it once from a repository checkout (requires `openssl`):

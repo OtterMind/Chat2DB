@@ -41,6 +41,7 @@ import ContentDiffTab from './ContentDiffTab';
 
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
+import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import { useTreeStore } from '@/store/tree';
 
 // ----- services -----
@@ -716,6 +717,13 @@ const WorkspaceTabs = memo(() => {
       });
     }
   }, [workspaceTabList, workspaceTabSplitLayout, activeConsoleId]);
+
+  useEffect(() => {
+    const workspaceStore = useWorkspaceStore.getState();
+    if (isWorkspaceResultInspectorCode(workspaceStore.currentWorkspaceExtend)) {
+      workspaceStore.setCurrentWorkspaceExtend(null);
+    }
+  }, [activeConsoleId]);
 
   // Convert consoleList to the shared workspaceTabList format first.
   useEffect(() => {

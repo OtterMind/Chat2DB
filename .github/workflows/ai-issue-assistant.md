@@ -24,6 +24,9 @@ network:
     - github
     - sub.1024x.ai
 tools:
+  # Keep Safe Outputs on the generated CLI proxy instead of the internal HTTP
+  # MCP endpoint, which can be misreported as blocked egress by the firewall.
+  cli-proxy: true
   github:
     mode: gh-proxy
     toolsets: [issues, repos, labels]
@@ -47,6 +50,7 @@ safe-outputs:
       - needs/info
       - needs/reproduction
   noop:
+    report-as-issue: false
 timeout-minutes: 10
 max-ai-credits: 300
 ---
@@ -77,7 +81,8 @@ Follow one bounded loop: observe, classify, act, verify, then stop.
    shell command.
 2. Use this idempotency marker for this event:
    `<!-- chat2db-ai-issue:${{ github.run_id }} -->`.
-   If a comment already contains that exact marker, call `noop` and stop.
+   If a comment already contains that exact marker, or the generated gh-aw
+   footer identifies this workflow and run ID, call `noop` and stop.
 3. Identify the matching Issue form from its rendered headings. Check only
    fields marked required by that form. Do not invent missing environment,
    reproduction, expected behavior, logs, edition, or ownership facts.
@@ -86,8 +91,12 @@ Follow one bounded loop: observe, classify, act, verify, then stop.
    fields, and give the smallest next step that would let a maintainer proceed.
    If the form is complete, summarize the understood next step without
    promising acceptance, priority, assignment, delivery, or a release date.
-5. End the response with the idempotency marker and emit exactly one
-   `add_comment` safe output.
+5. End the response with the exact idempotency marker, confirm it is present in
+   the final body, and emit exactly one `add_comment` safe output. Pass the
+   complete comment as a JSON object on stdin with the `.` sentinel. Use a
+   single-quoted heredoc so Markdown backticks, dollar signs, backslashes, and
+   newlines are data rather than shell syntax. Never pass public Markdown via a
+   `--body` shell argument.
 6. Optionally emit one `add_labels` safe output, with at most two labels, only
    when current Issue fields directly support them. Edition labels map only
    from the explicit edition field. Use `needs/info` only for missing required
@@ -105,6 +114,18 @@ The public comment must be concise GitHub-flavored Markdown:
 
 Use only `add_comment`, optional `add_labels`, or `noop`. After emitting the
 required safe output or outputs, stop. Do not narrate private reasoning.
+
+For `add_comment`, use this schema-derived CLI shape with valid JSON and JSON
+newline escapes. Replace the example values, but keep the stdin boundary:
+
+```bash
+safeoutputs add_comment . <<'CHAT2DB_SAFE_OUTPUT_JSON'
+{"item_number": 123, "body": "First paragraph with `code`.\n\n<!-- chat2db-ai-issue:123456 -->"}
+CHAT2DB_SAFE_OUTPUT_JSON
+```
+
+Do not use `safeoutputs add_comment --body ...`, command substitution, an
+unquoted heredoc, or shell interpolation for the comment body.
 
 ## Constraints
 

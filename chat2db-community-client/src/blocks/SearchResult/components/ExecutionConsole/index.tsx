@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { ArrowDownToLine, Copy, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowDownUp, ArrowUpToLine, Check, Copy, Sparkles, Trash2 } from 'lucide-react';
 import { IconfontSvg, staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import { copyToClipboard } from '@/utils/copy';
@@ -16,7 +16,18 @@ import type {
   SqlExecutionLogRecord,
   SqlExecutionLogResultOutput,
 } from '@/service/sqlExecutionLog';
+import {
+  createExecutionConsoleOrderStorageKey,
+  getExecutionConsolePreferenceStorage,
+  getLatestExecutionEdgeScrollTop,
+  orderExecutionLogRecords,
+  persistExecutionConsoleOrder,
+  readExecutionConsoleOrder,
+  type ExecutionConsoleOrder,
+} from './executionConsolePreferences';
 import { useStyles } from './style';
+
+const ORDER_STORAGE_KEY = createExecutionConsoleOrderStorageKey('community', __RUNTIME_ENV__);
 
 interface IProps {
   records: SqlExecutionLogRecord[];
@@ -31,36 +42,66 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
     theme: { appearance },
   } = useStyles();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [followTail, setFollowTail] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [order, setOrder] = useState<ExecutionConsoleOrder>(() =>
+    readExecutionConsoleOrder(getExecutionConsolePreferenceStorage(), ORDER_STORAGE_KEY),
+  );
+  const [followLatest, setFollowLatest] = useState(true);
   const setCurrentWorkspaceExtend = useWorkspaceStore((state) => state.setCurrentWorkspaceExtend);
+  const orderedRecords = useMemo(() => orderExecutionLogRecords(records, order), [records, order]);
+
+  const alignToLatest = useCallback(() => {
+    const container = scrollRef.current;
+    if (container) {
+      container.scrollTop = getLatestExecutionEdgeScrollTop(container.scrollHeight, order);
+    }
+  }, [order]);
 
   useEffect(() => {
-    if (!followTail) return;
-    const frame = window.requestAnimationFrame(() => {
-      const container = scrollRef.current;
-      if (container) container.scrollTop = container.scrollHeight;
-    });
+    if (!followLatest) return;
+    const frame = window.requestAnimationFrame(alignToLatest);
     return () => window.cancelAnimationFrame(frame);
-  }, [records, followTail]);
+  }, [orderedRecords, followLatest, alignToLatest]);
 
-  const plainText = useMemo(() => buildPlainText(records), [records]);
+  useEffect(() => {
+    const container = scrollRef.current;
+    const content = contentRef.current;
+    if (!container || !content || typeof ResizeObserver === 'undefined') return;
+
+    let frame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (!followLatest) return;
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(alignToLatest);
+    });
+    observer.observe(container);
+    observer.observe(content);
+
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, [followLatest, alignToLatest]);
+
+  const plainText = useMemo(() => buildPlainText(orderedRecords), [orderedRecords]);
 
   const handleCopy = async () => {
     await copyToClipboard(plainText);
     staticMessage.success(i18n('common.button.copySuccessfully'));
   };
 
-  const handleScroll = () => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    setFollowTail(distanceFromBottom < 24);
+  const handleToggleFollowLatest = () => {
+    if (followLatest) {
+      setFollowLatest(false);
+      return;
+    }
+    setFollowLatest(true);
+    alignToLatest();
   };
 
-  const handleFollowTail = () => {
-    setFollowTail(true);
-    const container = scrollRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
+  const handleOrderChange = (nextOrder: ExecutionConsoleOrder) => {
+    setOrder(nextOrder);
+    persistExecutionConsoleOrder(getExecutionConsolePreferenceStorage(), ORDER_STORAGE_KEY, nextOrder);
   };
 
   const handleContextMenuClick: MenuProps['onClick'] = ({ key }) => {
@@ -69,7 +110,9 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
     } else if (key === 'clear') {
       onClear();
     } else if (key === 'follow') {
-      handleFollowTail();
+      handleToggleFollowLatest();
+    } else if (key === 'toggle-order') {
+      handleOrderChange(order === 'oldest-first' ? 'newest-first' : 'oldest-first');
     }
   };
 
@@ -96,93 +139,109 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
         menu={{
           items: [
             { key: 'copy', icon: <Copy size={14} />, label: i18n('common.button.copyConsole') },
+            { type: 'divider' },
+            {
+              key: 'toggle-order',
+              icon: <ArrowDownUp size={14} />,
+              label: `${i18n('common.text.order')}: ${i18n(
+                order === 'oldest-first' ? 'common.text.oldestFirst' : 'common.text.newestFirst',
+              )}`,
+            },
+            {
+              key: 'follow',
+              icon: followLatest ? (
+                <Check size={14} />
+              ) : order === 'newest-first' ? (
+                <ArrowUpToLine size={14} />
+              ) : (
+                <ArrowDownToLine size={14} />
+              ),
+              label: i18n('common.button.followConsole'),
+            },
+            { type: 'divider' },
             { key: 'clear', icon: <Trash2 size={14} />, label: i18n('common.button.clearConsole'), danger: true },
-            { key: 'follow', icon: <ArrowDownToLine size={14} />, label: i18n('common.button.followConsole') },
           ],
           onClick: handleContextMenuClick,
         }}
         trigger={['contextMenu']}
       >
-        <div className={styles.scrollArea} ref={scrollRef} onScroll={handleScroll}>
-          {records.map((record, recordIndex) => {
-            const showContext =
-              recordIndex === 0 || contextKey(records[recordIndex - 1].context) !== contextKey(record.context);
-            const databaseInfo = getDatabaseInfo(record.context.databaseType);
-            return (
-              <div className={styles.record} key={record.id}>
-                {showContext && (
-                  <div className={styles.contextLine}>
-                    <span className={styles.contextRule} />
-                    <span className={styles.contextContent}>
-                      <IconfontSvg
-                        className={styles.databaseIcon}
-                        size={14}
-                        existDark={databaseInfo?.iconExistDark}
-                        appearance={appearance}
-                        code={databaseInfo?.icon || 'icon-chat-database'}
-                      />
-                      <span className={styles.contextText}>{formatContext(record.context)}</span>
-                    </span>
-                    <span className={styles.contextRule} />
-                  </div>
-                )}
-                <div className={styles.line}>
-                  <TimeCell value={record.startedAtEpochMs} prominent />
-                  <div className={styles.sqlContent}>
-                    <span className={styles.prompt}>
-                      {record.context.schemaName || record.context.databaseName || 'SQL'}&gt;
-                    </span>
-                    <SQLPreview className={styles.sql} sql={record.sql} source="execution-console" />
-                  </div>
-                </div>
-                {record.outputs.map((output) =>
-                  output.kind === 'message' ? (
-                    <MessageLine
-                      key={output.id}
-                      output={output}
-                      record={record}
-                      onAIDiagnose={handleAIDiagnose}
-                    />
-                  ) : (
-                    <ResultLine
-                      key={output.id}
-                      output={output}
-                      record={record}
-                      isResultAvailable={isResultAvailable}
-                      onOpenResult={onOpenResult}
-                      onAIDiagnose={handleAIDiagnose}
-                    />
-                  ),
-                )}
-                {record.status === 'running' && (
-                  <ConsoleLine
-                    className={styles.runningLine}
-                    timestamp={record.startedAtEpochMs}
-                    content={
-                      <span className={styles.runningContent}>
-                        <span className={styles.runningDot} />
-                        {i18n('common.text.currentExecution')}
+        <div className={styles.scrollArea} ref={scrollRef}>
+          <div className={styles.scrollContent} ref={contentRef}>
+            {orderedRecords.map((record, recordIndex) => {
+              const showContext =
+                recordIndex === 0 || contextKey(orderedRecords[recordIndex - 1].context) !== contextKey(record.context);
+              const databaseInfo = getDatabaseInfo(record.context.databaseType);
+              return (
+                <div className={styles.record} key={record.id}>
+                  {showContext && (
+                    <div className={styles.contextLine}>
+                      <span className={styles.contextRule} />
+                      <span className={styles.contextContent}>
+                        <IconfontSvg
+                          className={styles.databaseIcon}
+                          size={14}
+                          existDark={databaseInfo?.iconExistDark}
+                          appearance={appearance}
+                          code={databaseInfo?.icon || 'icon-chat-database'}
+                        />
+                        <span className={styles.contextText}>{formatContext(record.context)}</span>
                       </span>
-                    }
-                  />
-                )}
-                {record.status === 'cancelled' && (
-                  <ConsoleLine
-                    className={styles.cancelledLine}
-                    timestamp={record.finishedAtEpochMs || record.startedAtEpochMs}
-                    content={i18n('common.text.executionCancelled')}
-                  />
-                )}
-                {record.status === 'success' && record.outputs.length === 0 && (
-                  <ConsoleLine
-                    className={styles.successLine}
-                    timestamp={record.finishedAtEpochMs || record.startedAtEpochMs}
-                    content={`${i18n('common.text.executionCompleted')} · ${formatMilliseconds(record.durationMs)}`}
-                  />
-                )}
-              </div>
-            );
-          })}
+                      <span className={styles.contextRule} />
+                    </div>
+                  )}
+                  <div className={styles.line}>
+                    <TimeCell value={record.startedAtEpochMs} prominent />
+                    <div className={styles.sqlContent}>
+                      <span className={styles.prompt}>
+                        {record.context.schemaName || record.context.databaseName || 'SQL'}&gt;
+                      </span>
+                      <SQLPreview className={styles.sql} sql={record.sql} source="execution-console" />
+                    </div>
+                  </div>
+                  {record.outputs.map((output) =>
+                    output.kind === 'message' ? (
+                      <MessageLine key={output.id} output={output} record={record} onAIDiagnose={handleAIDiagnose} />
+                    ) : (
+                      <ResultLine
+                        key={output.id}
+                        output={output}
+                        record={record}
+                        isResultAvailable={isResultAvailable}
+                        onOpenResult={onOpenResult}
+                        onAIDiagnose={handleAIDiagnose}
+                      />
+                    ),
+                  )}
+                  {record.status === 'running' && (
+                    <ConsoleLine
+                      className={styles.runningLine}
+                      timestamp={record.startedAtEpochMs}
+                      content={
+                        <span className={styles.runningContent}>
+                          <span className={styles.runningDot} />
+                          {i18n('common.text.currentExecution')}
+                        </span>
+                      }
+                    />
+                  )}
+                  {record.status === 'cancelled' && (
+                    <ConsoleLine
+                      className={styles.cancelledLine}
+                      timestamp={record.finishedAtEpochMs || record.startedAtEpochMs}
+                      content={i18n('common.text.executionCancelled')}
+                    />
+                  )}
+                  {record.status === 'success' && record.outputs.length === 0 && (
+                    <ConsoleLine
+                      className={styles.successLine}
+                      timestamp={record.finishedAtEpochMs || record.startedAtEpochMs}
+                      content={`${i18n('common.text.executionCompleted')} · ${formatMilliseconds(record.durationMs)}`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </Dropdown>
     </div>

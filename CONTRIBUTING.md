@@ -16,6 +16,19 @@ Before starting a larger change, please open an issue or leave a comment on an e
 
 If your pull request is related to an issue, please link it in the PR description.
 
+## What The Community Queue Accepts
+
+Focused Community bug fixes, tests, documentation, examples, and translations
+are the easiest changes to publish for contribution. New database plugins,
+public or stored-data contracts, AI-provider branches, and release packaging
+need maintainer approval before implementation.
+
+Private security work and Chat2DB Local, Pro, Enterprise, Gateway, licensing,
+billing, or private-service implementation are not accepted through the public
+Community contribution queue. See the maintained
+[contribution boundary map](.github/contribution-boundaries.yml) for the exact
+rules and an alternative path for each restricted area.
+
 ## Finding And Claiming Work
 
 The public [Chat2DB Community Project](https://github.com/orgs/OtterMind/projects/3)
@@ -26,6 +39,13 @@ Tasks that are ready for an external contribution have one of these labels:
 
 - `contribution/good-first-issue`: bounded work suitable for a first contribution.
 - `contribution/help-wanted`: scoped work where maintainers welcome a contribution.
+
+A published task includes a maintainer Ready Contract with the user outcome,
+scope, non-goals, acceptance criteria, exact verification, dependencies, review
+maintainer, response target, and release commitment. Do not start from an
+unscoped Issue merely because it appears in a Milestone. Milestones communicate
+delivery windows; the Project's Available Tasks and Good First Issues views are
+the task shelves.
 
 To claim an available task, comment `/claim` on its Issue. A successful claim
 assigns the Issue to you and gives you seven days to open a linked draft or
@@ -42,6 +62,13 @@ maintainers owe review. Use `Closes #123` in the pull request description so the
 Issue, pull request, and Project stay connected. Claims without a linked pull
 request are released automatically after the deadline so another contributor
 can continue the task.
+
+Maintainers target a substantive answer to questions on Ready Issues within
+three business days, a first substantive pull request review within five
+business days, and a follow-up review within three business days. When a target
+cannot be met, the responsible maintainer posts the blocker and next review
+date. The complete operating contract is in
+[Community Operations](.github/COMMUNITY_OPERATIONS.md).
 
 ## Bug Reports
 

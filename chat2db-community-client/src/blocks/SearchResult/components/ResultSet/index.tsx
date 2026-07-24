@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStyles } from './style';
 import ResultSetToolbar, { ResultSetToolbarRef, ToolbarOperationType } from '../ResultSetToolbar';
 import ScreeningResult, { IScreeningResultRef } from '../ScreeningResult';
@@ -26,11 +27,19 @@ import {
   isShortcutEventMatch,
 } from '@/constants/shortcut';
 import { useGlobalStore } from '@/store/global';
+import { useAIStore } from '@/store/ai';
+import { useWorkspaceStore } from '@/store/workspace';
+import {
+  getWorkspaceResultInspectorCode,
+  shouldClearInactiveResultInspector,
+  WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
+} from '@/store/workspace/utils/resultInspector';
 import { staticMessage } from '@chat2db/ui';
 import { X } from 'lucide-react';
 
 interface IProps {
   resultData: IManageResultData;
+  active: boolean;
   viewTable?: boolean;
 }
 
@@ -59,11 +68,14 @@ export default memo<IProps>(
     const feSearchRef = useRef<FESearchRef>(null);
     const [orderByText, setOrderByText] = useState<string>('');
     const [submitLoading, setSubmitLoading] = useState(false);
-    const [inspectorOpen, setInspectorOpen] = useState(false);
     const [inspectorTab, setInspectorTab] = useState<InspectorTab>('row');
+    const [inspectorPortalTarget, setInspectorPortalTarget] = useState<HTMLElement | null>(null);
     const [selectedValues, setSelectedValues] = useState<unknown[]>([]);
     const [selectedRowCount, setSelectedRowCount] = useState(0);
     const [lastActiveCell, setLastActiveCell] = useState<IResultSetSelection['activeCell']>();
+    const currentWorkspaceExtend = useWorkspaceStore((state) => state.currentWorkspaceExtend);
+    const inspectorExtendCode = useMemo(() => getWorkspaceResultInspectorCode(searchAreaId), [searchAreaId]);
+    const inspectorOpen = currentWorkspaceExtend === inspectorExtendCode;
     const shortcutOverrides = useGlobalStore((s) => s.shortcutOverrides);
     const shortcutConfig = useMemo(
       () => getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides),
@@ -78,8 +90,58 @@ export default memo<IProps>(
       setSelectedValues([]);
       setSelectedRowCount(0);
       setLastActiveCell(undefined);
-      setInspectorOpen(false);
-    }, [resultData]);
+      const workspaceStore = useWorkspaceStore.getState();
+      if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
+        workspaceStore.setCurrentWorkspaceExtend(null);
+      }
+    }, [inspectorExtendCode, resultData]);
+
+    const closeInspector = useCallback(() => {
+      const workspaceStore = useWorkspaceStore.getState();
+      if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
+        workspaceStore.setCurrentWorkspaceExtend(null);
+      }
+    }, [inspectorExtendCode]);
+
+    useEffect(() => {
+      const workspaceStore = useWorkspaceStore.getState();
+      if (
+        shouldClearInactiveResultInspector(
+          workspaceStore.currentWorkspaceExtend,
+          inspectorExtendCode,
+          props.active,
+        )
+      ) {
+        workspaceStore.setCurrentWorkspaceExtend(null);
+      }
+    }, [inspectorExtendCode, props.active]);
+
+    const activateInspector = useCallback(
+      (tab: InspectorTab) => {
+        setInspectorTab(tab);
+        useAIStore.getState().setShowPanel(false);
+        const workspaceStore = useWorkspaceStore.getState();
+        workspaceStore.setCurrentWorkspaceExtend(inspectorExtendCode);
+        workspaceStore.togglePanelRight(true);
+      },
+      [inspectorExtendCode],
+    );
+
+    useEffect(() => closeInspector, [closeInspector]);
+
+    useLayoutEffect(() => {
+      if (!inspectorOpen) {
+        setInspectorPortalTarget(null);
+        return undefined;
+      }
+
+      const resolvePortalTarget = () => {
+        setInspectorPortalTarget(document.getElementById(WORKSPACE_RESULT_INSPECTOR_PORTAL_ID));
+      };
+      resolvePortalTarget();
+      const animationFrame = window.requestAnimationFrame(resolvePortalTarget);
+      return () => window.cancelAnimationFrame(animationFrame);
+    }, [inspectorOpen]);
 
     // Only resultData changes here. Database metadata is stable, and the toolbar controls pagination.
     const handleExecuteSQL = useCallback(
@@ -280,8 +342,7 @@ export default memo<IProps>(
           row: params.row,
           rowId: nextParams.rowId,
         });
-        setInspectorOpen(true);
-        setInspectorTab('value');
+        activateInspector('value');
         setTimeout(() => {
           viewDataRef.current?.openPanel({
             ...nextParams,
@@ -290,7 +351,7 @@ export default memo<IProps>(
           });
         }, 0);
       },
-      [resultData?.canEdit],
+      [activateInspector, resultData?.canEdit],
     );
 
     const openRowInspector = useCallback((params) => {
@@ -304,10 +365,9 @@ export default memo<IProps>(
         row: params.row,
         rowId: params.rowId ?? record?.CHAT2DB_ROW_NUMBER,
       });
-      setInspectorOpen(true);
-      setInspectorTab('row');
+      activateInspector('row');
       setTimeout(() => rowDetailRef.current?.openPanel(params), 0);
-    }, []);
+    }, [activateInspector]);
 
     const onTableOperationUtils = useMemo(() => {
       return {
@@ -388,7 +448,7 @@ export default memo<IProps>(
         setSelectedRowCount(selection.rowCount);
         if (!selection.activeCell) {
           setLastActiveCell(undefined);
-          setInspectorOpen(false);
+          closeInspector();
           return;
         }
         setLastActiveCell(selection.activeCell);
@@ -400,7 +460,7 @@ export default memo<IProps>(
           }
         }
       },
-      [inspectorOpen, inspectorTab, openValueInspector],
+      [closeInspector, inspectorOpen, inspectorTab, openValueInspector],
     );
 
     const handleInspectorTabChange = useCallback(
@@ -417,7 +477,7 @@ export default memo<IProps>(
             String(record?.CHAT2DB_ROW_NUMBER) !== String(lastActiveCell.rowId)
           ) {
             setLastActiveCell(undefined);
-            setInspectorOpen(false);
+            closeInspector();
             return;
           }
           if (nextTab === 'row') {
@@ -432,16 +492,25 @@ export default memo<IProps>(
           });
         }, 0);
       },
-      [lastActiveCell, resultData?.canEdit],
+      [closeInspector, lastActiveCell, resultData?.canEdit],
     );
 
     const showAllAggregates = useCallback(() => {
-      setInspectorOpen(true);
-      setInspectorTab('aggregates');
-    }, []);
+      activateInspector('aggregates');
+    }, [activateInspector]);
 
     useEffect(() => {
-      setTimeout(() => tableInstance?.resize?.(), 0);
+      if (!tableInstance) {
+        return;
+      }
+
+      const resizeTimer = window.setTimeout(() => {
+        if (resultSetTableRef.current?.tableInstance === tableInstance) {
+          tableInstance.resize?.();
+        }
+      }, 0);
+
+      return () => window.clearTimeout(resizeTimer);
     }, [inspectorOpen, tableInstance]);
 
     return (
@@ -498,57 +567,59 @@ export default memo<IProps>(
                   onSelectionChange={handleSelectionChange}
                 />
               </div>
-              {inspectorOpen && (
-                <aside className={styles.inspector}>
-                  <Tabs
-                    className={styles.inspectorTabs}
-                    size="small"
-                    activeKey={inspectorTab}
-                    onChange={handleInspectorTabChange}
-                    tabBarExtraContent={
-                      <Tooltip title={i18n('common.button.close')}>
-                        <Button
-                          type="text"
-                          size="small"
-                          className={styles.inspectorClose}
-                          aria-label={i18n('common.button.close')}
-                          icon={<X size={15} strokeWidth={1.75} />}
-                          onClick={() => setInspectorOpen(false)}
-                        />
-                      </Tooltip>
-                    }
-                    items={[
-                      {
-                        key: 'row',
-                        label: i18n('common.resultInspector.record'),
-                        children: (
-                          <RowDetail
-                            ref={rowDetailRef}
-                            resultData={resultData}
-                            onChangeData={handleRowDetailChangeData}
-                            onViewData={openValueInspector}
+              {inspectorOpen && inspectorPortalTarget &&
+                createPortal(
+                  <aside className={styles.inspector}>
+                    <Tabs
+                      className={styles.inspectorTabs}
+                      size="small"
+                      activeKey={inspectorTab}
+                      onChange={handleInspectorTabChange}
+                      tabBarExtraContent={
+                        <Tooltip title={i18n('common.button.close')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            className={styles.inspectorClose}
+                            aria-label={i18n('common.button.close')}
+                            icon={<X size={15} strokeWidth={1.75} />}
+                            onClick={closeInspector}
                           />
-                        ),
-                      },
-                      {
-                        key: 'value',
-                        label: i18n('common.resultInspector.value'),
-                        children: <ViewData ref={viewDataRef} />,
-                      },
-                      {
-                        key: 'aggregates',
-                        label: i18n('common.resultInspector.aggregates'),
-                        children: (
-                          <SelectionAggregates
-                            selectedValues={selectedValues}
-                            selectedRowCount={selectedRowCount}
-                          />
-                        ),
-                      },
-                    ]}
-                  />
-                </aside>
-              )}
+                        </Tooltip>
+                      }
+                      items={[
+                        {
+                          key: 'row',
+                          label: i18n('common.resultInspector.record'),
+                          children: (
+                            <RowDetail
+                              ref={rowDetailRef}
+                              resultData={resultData}
+                              onChangeData={handleRowDetailChangeData}
+                              onViewData={openValueInspector}
+                            />
+                          ),
+                        },
+                        {
+                          key: 'value',
+                          label: i18n('common.resultInspector.value'),
+                          children: <ViewData ref={viewDataRef} />,
+                        },
+                        {
+                          key: 'aggregates',
+                          label: i18n('common.resultInspector.aggregates'),
+                          children: (
+                            <SelectionAggregates
+                              selectedValues={selectedValues}
+                              selectedRowCount={selectedRowCount}
+                            />
+                          ),
+                        },
+                      ]}
+                    />
+                  </aside>,
+                  inspectorPortalTarget,
+                )}
             </div>
             <StatusBar
               ref={statusBarRef}
@@ -569,5 +640,7 @@ export default memo<IProps>(
     );
   },
   (prevProps, nextProps) =>
-    prevProps.resultData === nextProps.resultData && prevProps.viewTable === nextProps.viewTable,
+    prevProps.active === nextProps.active &&
+    prevProps.resultData === nextProps.resultData &&
+    prevProps.viewTable === nextProps.viewTable,
 );

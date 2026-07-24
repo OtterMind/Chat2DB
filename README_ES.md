@@ -93,6 +93,12 @@ bases de datos y las respuestas de la IA siguen siendo datos no confiables.
 Consulte la [Política de seguridad](SECURITY.md) para conocer el límite de
 confianza completo y el proceso de notificación de vulnerabilidades.
 
+Si este proyecto le resulta útil, ¡regálenos una estrella ⭐️!
+
+<div align="center">
+  <a href="https://github.com/OtterMind/Chat2DB"><img src="https://cdn.chat2db.ai/g/Area.gif" alt="Dar una estrella a Chat2DB en GitHub" width="600"></a>
+</div>
+
 ## Clave de cifrado
 
 Chat2DB Community cifra las contraseñas de fuentes de datos y las claves API de modelos de IA almacenadas con AES-256-GCM usando una clave por instalación. Créela una sola vez desde un checkout del repositorio (requiere `openssl`):
