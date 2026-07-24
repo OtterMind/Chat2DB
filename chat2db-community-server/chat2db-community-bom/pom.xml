@@ -45,7 +45,7 @@
         <openai-gpt3-java.version>0.12.0</openai-gpt3-java.version>
         <logbook.version>3.3.0</logbook.version>
         <spring-context-indexer.version>6.0.10</spring-context-indexer.version>
-        <commons-beanutils.version>1.9.4</commons-beanutils.version>
+        <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <ehcache.version>3.10.8</ehcache.version>
         <cache-api.version>1.1.1</cache-api.version>
         <commons-io.version>2.18.0</commons-io.version>
