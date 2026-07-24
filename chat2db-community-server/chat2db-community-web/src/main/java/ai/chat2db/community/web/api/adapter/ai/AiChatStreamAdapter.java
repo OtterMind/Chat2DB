@@ -218,7 +218,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
 
     public String chatSync(ChatRequest request) {
         AiRuntimeModel runtimeModel = modelConfigService.resolveRuntimeModel(chatConverter.toRuntimeResolveParam(request));
-        AiModelFactory.AiChatClient aiChatClient = modelFactory.create(runtimeModel);
+        AiModelFactory.AiChatClient aiChatClient = modelFactory.create(runtimeModel,
+                AiModelFactory.RequestMode.SYNCHRONOUS);
         try {
             List<ChatMessage> effectiveHistory = request.getHistory() != null
                     ? request.getHistory()
@@ -267,7 +268,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     public SseEmitter stream(ChatRequest request) {
         SseEmitter emitter = buildSseEmitter(request);
         AiRuntimeModel runtimeModel = modelConfigService.resolveRuntimeModel(chatConverter.toRuntimeResolveParam(request));
-        AiModelFactory.AiChatClient aiChatClient = modelFactory.create(runtimeModel);
+        AiModelFactory.AiChatClient aiChatClient = modelFactory.create(runtimeModel,
+                AiModelFactory.RequestMode.STREAMING);
         Set<String> emittedToolCallIds = new HashSet<>();
         List<Map<String, Object>> traceEvents = Collections.synchronizedList(new ArrayList<>());
         StringBuilder persistedTraceBuilder = new StringBuilder();

@@ -16,7 +16,7 @@ interface IProps {
 }
 
 function ApprovalFlow(props: IProps) {
-  const { curUser: userInfo } = useUserStore();
+  const userInfo = useUserStore((s) => s.curUser);
   const { isOwner } = useOrgStore((s) => ({
     isOwner: s.isOwner,
   }));

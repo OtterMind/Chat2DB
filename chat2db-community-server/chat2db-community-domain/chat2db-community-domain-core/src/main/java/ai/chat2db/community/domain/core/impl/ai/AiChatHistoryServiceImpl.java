@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -38,9 +39,14 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     private final ObjectMapper objectMapper;
     private final Path baseDir;
 
+    @Autowired
     public AiChatHistoryServiceImpl(ObjectMapper objectMapper) {
+        this(objectMapper, Paths.get(ConfigUtils.getBasePath(), "ai-chat-history"));
+    }
+
+    AiChatHistoryServiceImpl(ObjectMapper objectMapper, Path baseDir) {
         this.objectMapper = objectMapper;
-        this.baseDir = Paths.get(ConfigUtils.getBasePath(), "ai-chat-history");
+        this.baseDir = baseDir;
     }
 
     @Override
@@ -111,6 +117,9 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     private synchronized AiChatMessage addMessageLocal(String sessionId, Long userId, String role, String content,
                                                        String reasoningContent,
                                                        List<ChatAttachment> attachments) {
+        if (!ownsSession(userId, sessionId)) {
+            throw new BusinessException("ai.chat.history.sessionNotOwned", new Object[]{sessionId});
+        }
         AiChatMessage message = new AiChatMessage();
         message.setId(UUID.randomUUID().toString());
         message.setSessionId(sessionId);
@@ -137,12 +146,14 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
     }
 
     private synchronized List<AiChatMessage> getMessagesLocal(String sessionId, Long userId) {
-        List<AiChatSession> sessions = loadSessions(userId);
-        boolean owned = sessions.stream().anyMatch(s -> Objects.equals(s.getId(), sessionId));
-        if (!owned) {
+        if (!ownsSession(userId, sessionId)) {
             return new ArrayList<>();
         }
         return loadMessages(sessionId);
+    }
+
+    private boolean ownsSession(Long userId, String sessionId) {
+        return loadSessions(userId).stream().anyMatch(s -> Objects.equals(s.getId(), sessionId));
     }
 
     private synchronized List<AiChatMessage> getHistoryForAILocal(String sessionId, Long userId) {
@@ -156,8 +167,13 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
 
     private synchronized void deleteSessionLocal(String sessionId, Long userId) {
         List<AiChatSession> sessions = loadSessions(userId);
-        sessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
+        // Only delete the message file when the session was actually owned by
+        // this user; otherwise a caller could delete another user's file by id.
+        boolean removed = sessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
         persistSessions(userId, sessions);
+        if (!removed) {
+            return;
+        }
 
         Path msgFile = messagesPath(sessionId);
         try {

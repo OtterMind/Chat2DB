@@ -45,6 +45,9 @@ jobs:
       - name: Run SQL clipboard test
         run: yarn run test:sql-in-clipboard
 
+      - name: Run result Markdown formatter test
+        run: yarn run test:result-markdown
+
       - name: Run active workspace tab locator contract
         run: yarn run test:active-tab-locator
 
@@ -119,3 +122,8 @@ jobs:
 
       - name: Test Community workflow automation
         run: node --test script/github/issue-claim.test.js script/github/sync-community-project.test.js
+
+      - name: Test QQ notification automation
+        run: |
+          python3 script/github/test_notify_qq.py
+          python3 script/github/qq_relay/test_relay_server.py

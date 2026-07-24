@@ -150,6 +150,7 @@ export default {
   'common.button.tabularSeparatedValues': 'TAB delimited (data)',
   'common.button.tabularSeparatedValuesFieldName': 'TAB delimited (field name)',
   'common.button.tabularSeparatedValuesFieldNameAndData': 'Tab-separated (field names and data)',
+  'common.button.markdownTable': 'Markdown table',
   'common.button.cloneRow': 'Clone row',
   'common.button.deleteRow': 'Delete row',
   'common.button.setNull': 'Set NULL',
