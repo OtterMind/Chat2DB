@@ -280,7 +280,7 @@ public enum SqlServerColumnTypeEnum implements IColumnBuilder {
             }
             return script.toString();
         }
-        if (Arrays.asList(DECIMAL, FLOAT, TIMESTAMP, FLOAT, NUMERIC).contains(type)) {
+        if (Arrays.asList(DECIMAL, FLOAT, TIMESTAMP, NUMERIC).contains(type)) {
             StringBuilder script = new StringBuilder();
             script.append(columnType);
             if (column.getColumnSize() != null && column.getDecimalDigits() == null) {
@@ -291,16 +291,6 @@ public enum SqlServerColumnTypeEnum implements IColumnBuilder {
             return script.toString();
         }
 
-        if (Arrays.asList().contains(type)) {
-            StringBuilder script = new StringBuilder();
-            if (column.getColumnSize() == null) {
-                script.append(columnType);
-            } else {
-                String[] split = columnType.split("TIMESTAMP");
-                script.append("TIMESTAMP").append("(").append(column.getColumnSize()).append(")").append(split[1]);
-            }
-            return script.toString();
-        }
         if (OTHER.equals(columnType)) {
             return column.getColumnType();
         }

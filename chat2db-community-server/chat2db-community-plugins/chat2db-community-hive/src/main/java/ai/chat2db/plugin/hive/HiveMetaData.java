@@ -198,7 +198,8 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
                         String defaultConstraintName = resultSet.getString(2).trim();
                         resultSet.next();
 
-                        key = resultSet.getString(1).trim().split(":")[1];
+                        String[] keyParts = resultSet.getString(1).trim().split(":");
+                        key = keyParts.length > 1 ? keyParts[1] : keyParts[0];
                         value = resultSet.getString(2).trim();
                         int valueIndex = value.indexOf(":");
                         value = value.substring(valueIndex + 1);
