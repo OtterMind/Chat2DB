@@ -8,6 +8,7 @@ import { v4 as uuid } from 'uuid';
 import chatService from '@/service/chat';
 import { TaskStatus } from '@/constants';
 import { revisalChatDetail } from '@/utils/chat';
+import { updateFirstAnswer } from './answerUpdates';
 
 interface CreateQuestionParams {
   chatId?: number;
@@ -217,7 +218,7 @@ export const createChatDetailAction: StateCreator<ChatStore, [['zustand/devtools
       const newChatDetails = { ...chatDetails };
       newChatDetails[chatDetailId] = {
         ...newChatDetails[chatDetailId],
-        answers: [{ ...answer, ...params }],
+        answers: updateFirstAnswer(newChatDetails[chatDetailId].answers, params),
       };
       set({ chatDetails: newChatDetails });
     }
