@@ -19,7 +19,7 @@ Chat2DB Community es un cliente de bases de datos gratuito y multiplataforma par
 - **Espacio de trabajo SQL** — edición, autocompletado, formato, ejecución, SQL guardado e historial de ejecución.
 - **Asistente de IA** — use su propio modelo de IA para generar, explicar y optimizar SQL en lenguaje natural.
 - **Gestión de bases de datos** — explore metadatos, gestione tablas y objetos (DDL/DML) y edite los datos directamente.
-- **Importación y exportación de datos**, **paneles y gráficos**, y una **CLI con soporte de MCP**.
+- **Importación y exportación de datos**, **paneles y gráficos**, y una **[CLI de código abierto compatible con MCP](https://github.com/OtterMind/Chat2DB-CLI)**.
 
 <div align="center">
 
