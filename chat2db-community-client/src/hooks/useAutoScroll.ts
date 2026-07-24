@@ -21,7 +21,7 @@ const useAutoScroll = (triggerData: any, isStreaming: boolean): React.RefObject<
       containerRef.current?.scrollTo({
         top: containerRef.current.scrollHeight,
         // smooth
-        behavior: smooth ? 'auto' : 'auto',
+        behavior: smooth ? 'smooth' : 'auto',
       });
     }
     
