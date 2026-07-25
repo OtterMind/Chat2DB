@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>개발자, DBA, 분석가 및 데이터 팀을 위한 AI 기반 데이터베이스 클라이언트이자 SQL 워크스페이스입니다.</strong></p>
 </div>
 
