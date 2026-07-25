@@ -312,7 +312,8 @@ public final class MysqlSqlCompletionRelationScopeResolver {
         }
         int boundaryIndex = MysqlSqlCompletionTokenUtil.lastDefaultIndexBeforeAtDepth(tokens,
                 tokens.get(commaIndex).getStartIndex(), depth, MySqlLexer.WHERE, MySqlLexer.GROUP,
-                MySqlLexer.HAVING, MySqlLexer.WINDOW, MySqlLexer.ORDER, MySqlLexer.LIMIT, MySqlLexer.UNION);
+                MySqlLexer.HAVING, MySqlLexer.WINDOW, MySqlLexer.ORDER, MySqlLexer.LIMIT, MySqlLexer.UNION,
+                MySqlLexer.INTO);
         return boundaryIndex < fromIndex;
     }
 
