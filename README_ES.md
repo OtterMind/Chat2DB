@@ -1,10 +1,10 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
-  <p><strong>Un cliente de bases de datos y espacio de trabajo SQL con IA para desarrolladores, administradores de bases de datos, analistas y equipos de datos.</strong></p>
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
 </div>
-
-<div align="center">
-  <a href="https://ottermind.ai">Powered by OtterMind.ai</a>
+  <br/>
+  <p><strong>Un cliente de bases de datos y espacio de trabajo SQL con IA para desarrolladores, administradores de bases de datos, analistas y equipos de datos.</strong></p>
 </div>
 
 <div align="center">
