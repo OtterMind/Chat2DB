@@ -112,8 +112,10 @@ public class SqliteBuilder extends DefaultSqlBuilder {
             }
         }
 
-        script = new StringBuilder(script.substring(0, script.length() - 2));
-        script.append(SQLConstants.SEMICOLON);
+        if (script.length() > 2) {
+            script = new StringBuilder(script.substring(0, script.length() - 2));
+            script.append(SQLConstants.SEMICOLON);
+        }
 
         return script.toString();
     }

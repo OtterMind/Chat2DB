@@ -135,10 +135,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<Table> tables(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(SELECT_TABLE_SQL, schemaName);
-        if (StringUtils.isNotBlank(tableName)) {
-            sql = sql + " and A.TABLE_NAME = '" + tableName + "'";
-        }
+        String sql = buildTablesSql(schemaName, tableName);
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             List<Table> tables = new ArrayList<>();
             while (resultSet.next()) {
@@ -151,6 +148,18 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
             }
             return tables;
         });
+    }
+
+    static String buildTablesSql(String schemaName, String tableName) {
+        String sql = String.format(SELECT_TABLE_SQL, escapeSqlLiteral(schemaName));
+        if (StringUtils.isNotBlank(tableName)) {
+            sql = sql + " and A.TABLE_NAME = '" + escapeSqlLiteral(tableName) + "'";
+        }
+        return sql;
+    }
+
+    private static String escapeSqlLiteral(String value) {
+        return StringUtils.replace(value, "'", "''");
     }
 
 

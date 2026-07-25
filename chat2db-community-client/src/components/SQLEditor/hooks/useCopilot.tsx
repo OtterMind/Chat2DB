@@ -52,7 +52,7 @@ const useCopilot = ({ editorRef, placeholderContentWidget, canAI, aiInputParams,
   }>();
   const editorZoneIdRef = useRef<string | null>(null);
   const overlayWidgetRef = useRef<monaco.editor.IOverlayWidget>();
-  const globalEditorSettings = useGlobalStore().editorSettings;
+  const globalEditorSettings = useGlobalStore((s) => s.editorSettings);
 
   const focusCopilotInput = useCallback((retryCount = 0) => {
     const overlayDom = overlayDomRef.current?.newOverlayDom as HTMLElement | undefined;

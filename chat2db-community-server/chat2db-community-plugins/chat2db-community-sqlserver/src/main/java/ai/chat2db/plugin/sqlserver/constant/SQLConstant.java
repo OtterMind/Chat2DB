@@ -139,7 +139,8 @@ public class SQLConstant {
                                                  SELECT
                                                      fk.name AS CONSTRAINT_NAME,
                                                      c.name AS COLUMN_NAME,
-                                                     SCHEMA_NAME(ro.schema_id) + '.' + OBJECT_NAME(fk.referenced_object_id) AS REFERENCED_TABLE_NAME,
+                                                     SCHEMA_NAME(ro.schema_id) AS REFERENCED_SCHEMA_NAME,
+                                                     OBJECT_NAME(fk.referenced_object_id) AS REFERENCED_TABLE_NAME,
                                                      rc.name AS REFERENCED_COLUMN_NAME,
                                                      fk.delete_referential_action                                           as DELETE_ACTION,
                                                      fk.update_referential_action                                           as UPDATE_ACTION

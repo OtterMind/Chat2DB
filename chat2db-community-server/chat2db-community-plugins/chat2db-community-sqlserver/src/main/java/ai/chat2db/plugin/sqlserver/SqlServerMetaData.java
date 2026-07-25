@@ -11,6 +11,7 @@ import ai.chat2db.plugin.sqlserver.constant.SQLConstant;
 import ai.chat2db.plugin.sqlserver.enums.SqlServerViewAttributeOptionEnum;
 import ai.chat2db.plugin.sqlserver.enums.SqlServerViewCheckOptionEnum;
 import ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierProcessor;
+import ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierUtils;
 import ai.chat2db.plugin.sqlserver.enums.type.SqlServerColumnTypeEnum;
 import ai.chat2db.plugin.sqlserver.enums.type.SqlServerDefaultValueEnum;
 import ai.chat2db.plugin.sqlserver.enums.type.SqlServerIndexTypeEnum;
@@ -33,11 +34,11 @@ import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.util.SortUtils;
 import ai.chat2db.spi.util.SqlUtils;
 import jakarta.validation.constraints.NotEmpty;
-import net.sf.jsqlparser.statement.ReferentialAction;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -45,6 +46,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.sqlserver.constant.SQLConstant.*;
+import static ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierUtils.quoteIdentifierPart;
 import static ai.chat2db.spi.util.SortUtils.sortDatabase;
 
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerMetaDataConstants.*;
@@ -74,7 +76,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
 
 
     private String format(String objectName) {
-        return "[" + objectName + "]";
+        return quoteIdentifierPart(objectName);
 
     }
 
@@ -98,18 +100,15 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 boolean isPersisted = resultSet.getBoolean("IS_PERSISTED");
                 String dataType = resultSet.getString("DATA_TYPE").toUpperCase();
                 boolean isIdentity = resultSet.getBoolean("IS_IDENTITY");
-                int seedValue = resultSet.getInt("SEED_VALUE");
-                int incrementValue = resultSet.getInt("INCREMENT_VALUE");
+                BigDecimal seedValue = resultSet.getBigDecimal("SEED_VALUE");
+                BigDecimal incrementValue = resultSet.getBigDecimal("INCREMENT_VALUE");
                 if (StringUtils.isNotBlank(computedDefinition)) {
                     dataType = "AS " + computedDefinition;
                     if (isPersisted) {
                         dataType += " PERSISTED";
                     }
                 } else if (isIdentity) {
-                    dataType += " identity";
-                    if (seedValue != 1 && incrementValue != 1) {
-                        dataType += " (" + seedValue + "," + incrementValue + ")";
-                    }
+                    dataType = buildIdentityDataType(dataType, seedValue, incrementValue);
                 }
                 tableColumn.setColumnType(dataType);
                 tableColumn.setSparse(resultSet.getBoolean("IS_SPARSE"));
@@ -144,11 +143,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 if (StringUtils.isNotBlank(indexType)) {
                     clusteredMap.computeIfAbsent(constraintName, k -> indexType);
                 }
-                if (isDesc) {
-                    columnName += " desc";
-                } else {
-                    columnName += " asc";
-                }
+                columnName = quoteIdentifierPart(columnName) + (isDesc ? " desc" : " asc");
                 if ("PK".equals(constraintType)) {
                     PKConstraintsMap.computeIfAbsent(constraintName, k -> new ArrayList<>()).add(columnName);
                 } else if ("UQ".equals(constraintType)) {
@@ -160,7 +155,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 if (MapUtils.isNotEmpty(PKConstraintsMap)) {
                     PKConstraintsMap.forEach((key, value) -> {
                         tempBuilder.append("constraint ")
-                                .append(key)
+                                .append(quoteIdentifierPart(key))
                                 .append("\n")
                                 .append("primary key ");
                         if (clusteredMap.containsKey(key)) {
@@ -176,7 +171,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 if (MapUtils.isNotEmpty(UQConstraintsMap)) {
                     UQConstraintsMap.forEach((key, value) -> {
                         tempBuilder.append("constraint ")
-                                .append(key)
+                                .append(quoteIdentifierPart(key))
                                 .append("\n")
                                 .append("unique ");
                         if (clusteredMap.containsKey(key)) {
@@ -216,7 +211,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                             ddlBuilder.append(",\n");
                             isFirst = false;
                         }
-                        tempBuilder.append("constraint ").append(constraintName).append("\n")
+                        tempBuilder.append("constraint ").append(quoteIdentifierPart(constraintName)).append("\n")
                                 .append("check ").append(constraintDefinition);
                         tempList.add(tempBuilder.toString());
                         tempBuilder.setLength(0);
@@ -228,60 +223,39 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 });
 
         DefaultSQLExecutor.getInstance().preExecute(connection, FOREIGN_KEY_SQL, new String[]{schemaName, tableName}, resultSet -> {
-            HashMap<String, String> foreignMap = new HashMap<>();
+            HashMap<String, String> referencedSchemaMap = new HashMap<>();
+            HashMap<String, String> referencedTableMap = new HashMap<>();
             HashMap<String, List<String>> columnMap = new HashMap<>();
             HashMap<String, List<String>> referencedColumnMap = new HashMap<>();
-            HashMap<String, List<String>> actionMap = new HashMap<>();
+            HashMap<String, Integer> updateActionMap = new HashMap<>();
+            HashMap<String, Integer> deleteActionMap = new HashMap<>();
             while (resultSet.next()) {
                 String constraintName = resultSet.getString("CONSTRAINT_NAME");
+                String referencedSchemaName = resultSet.getString("REFERENCED_SCHEMA_NAME");
                 String referencedTableName = resultSet.getString("REFERENCED_TABLE_NAME");
-                foreignMap.computeIfAbsent(constraintName, k -> referencedTableName);
+                referencedSchemaMap.putIfAbsent(constraintName, referencedSchemaName);
+                referencedTableMap.putIfAbsent(constraintName, referencedTableName);
                 String columnName = resultSet.getString("COLUMN_NAME");
                 columnMap.computeIfAbsent(constraintName, k -> new ArrayList<>()).add(columnName);
                 String referencedColumnName = resultSet.getString("REFERENCED_COLUMN_NAME");
                 referencedColumnMap.computeIfAbsent(constraintName, k -> new ArrayList<>()).add(referencedColumnName);
-                int updateAction = resultSet.getInt("UPDATE_ACTION");
-                if (updateAction != 0) {
-                    actionMap.computeIfAbsent(constraintName, k -> new ArrayList<>()).add(buildReferentialAction(updateAction));
-                }
-                int deleteAction = resultSet.getInt("DELETE_ACTION");
-                if (updateAction != 0) {
-                    actionMap.computeIfAbsent(constraintName, k -> new ArrayList<>()).add(buildReferentialAction(deleteAction));
-                }
+                updateActionMap.putIfAbsent(constraintName, resultSet.getInt("UPDATE_ACTION"));
+                deleteActionMap.putIfAbsent(constraintName, resultSet.getInt("DELETE_ACTION"));
             }
-            if (MapUtils.isNotEmpty(foreignMap)) {
+            if (MapUtils.isNotEmpty(referencedTableMap)) {
                 ddlBuilder.append(",\n");
-                foreignMap.forEach((key, value) -> {
-                    tempBuilder.append("constraint ").append(key).append("\n")
-                            .append("foreign key (")
-                            .append(String.join(" , ", columnMap.get(key)))
-                            .append(")\n")
-                            .append("references ")
-                            .append(value)
-                            .append(" (")
-                            .append(String.join(" , ", referencedColumnMap.get(key)))
-                            .append(")");
-                    if (actionMap.containsKey(key)) {
-                        for (int i = 0; i < actionMap.get(key).size(); i++) {
-                            if (i == 0) {
-                                tempBuilder.append(SQL_UPDATE).append(actionMap.get(key).get(i));
-                            } else if (i == 1) {
-                                tempBuilder.append(SQL_DELETE).append(actionMap.get(key).get(i));
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    tempList.add(tempBuilder.toString());
-                    tempBuilder.setLength(0);
+                referencedTableMap.forEach((constraintName, referencedTableName) -> {
+                    tempList.add(buildForeignKeyDefinition(
+                            constraintName,
+                            columnMap.get(constraintName),
+                            referencedSchemaMap.get(constraintName),
+                            referencedTableName,
+                            referencedColumnMap.get(constraintName),
+                            updateActionMap.getOrDefault(constraintName, 0),
+                            deleteActionMap.getOrDefault(constraintName, 0)));
                 });
                 ddlBuilder.append(String.join(",\n", tempList));
                 tempList.clear();
-                foreignMap.clear();
-                columnMap.clear();
-                referencedColumnMap.clear();
-                actionMap.clear();
-                foreignMap.clear();
             }
 
         });
@@ -375,7 +349,7 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                     ddlBuilder.append("\n").append(sqlServerIndexTypeEnum.buildIndexScript(index));
                     String comment = index.getComment();
                     if (StringUtils.isNotBlank(comment)) {
-                        ddlBuilder.append("\t").append(SQLConstant.buildIndexComment(comment, schemaName, tableName, index.getName()));
+                        ddlBuilder.append("\n").append(SQLConstant.buildIndexComment(comment, schemaName, tableName, index.getName()));
                     }
                 }
             });
@@ -384,28 +358,64 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
         return ddlBuilder.toString();
     }
 
-    private String buildReferentialAction(int actionCode) {
-        switch (actionCode) {
-            case 1 -> {
-                return ReferentialAction.Action.CASCADE.toString().toLowerCase();
-            }
-            case 2 -> {
-                return ReferentialAction.Action.SET_NULL.toString().toLowerCase();
-            }
-            case 3 -> {
-                return ReferentialAction.Action.SET_DEFAULT.toString().toLowerCase();
-            }
-            default -> {
-                return ReferentialAction.Action.NO_ACTION.toString().toLowerCase();
-            }
+    static String buildIdentityDataType(String dataType, BigDecimal seedValue, BigDecimal incrementValue) {
+        String identityType = dataType + " identity";
+        if (seedValue == null || incrementValue == null) {
+            return identityType;
         }
+        if (seedValue.compareTo(BigDecimal.ONE) != 0 || incrementValue.compareTo(BigDecimal.ONE) != 0) {
+            return identityType + " (" + formatIdentityValue(seedValue) + ","
+                    + formatIdentityValue(incrementValue) + ")";
+        }
+        return identityType;
+    }
+
+    private static String formatIdentityValue(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    static String buildForeignKeyDefinition(String constraintName, List<String> columnNames,
+                                            String referencedSchemaName, String referencedTableName,
+                                            List<String> referencedColumnNames, int updateAction,
+                                            int deleteAction) {
+        String referencedTable = quoteIdentifierPart(referencedTableName);
+        if (StringUtils.isNotBlank(referencedSchemaName)) {
+            referencedTable = quoteIdentifierPart(referencedSchemaName) + "." + referencedTable;
+        }
+        return "constraint " + quoteIdentifierPart(constraintName) + "\n"
+                + "foreign key (" + quoteIdentifierList(columnNames) + ")\n"
+                + "references " + referencedTable + " (" + quoteIdentifierList(referencedColumnNames) + ")"
+                + buildReferentialActions(updateAction, deleteAction);
+    }
+
+    private static String quoteIdentifierList(List<String> identifiers) {
+        return identifiers.stream().map(SqlServerIdentifierUtils::quoteIdentifierPart)
+                .collect(Collectors.joining(" , "));
+    }
+
+    static String buildReferentialActions(int updateAction, int deleteAction) {
+        StringBuilder actions = new StringBuilder();
+        if (deleteAction != 0) {
+            actions.append(SQL_DELETE).append(buildReferentialAction(deleteAction));
+        }
+        if (updateAction != 0) {
+            actions.append(SQL_UPDATE).append(buildReferentialAction(updateAction));
+        }
+        return actions.toString();
+    }
+
+    private static String buildReferentialAction(int actionCode) {
+        return switch (actionCode) {
+            case 1 -> "cascade";
+            case 2 -> "set null";
+            case 3 -> "set default";
+            default -> "no action";
+        };
 
     }
 
     private void configureColumnSize(ResultSet columns, TableColumn tableColumn) throws SQLException {
-        if (Arrays.asList(SqlServerColumnTypeEnum.FLOAT.name(),
-                        SqlServerColumnTypeEnum.REAL.name())
-                .contains(tableColumn.getColumnType())) {
+        if (shouldOmitColumnSize(tableColumn.getColumnType())) {
             return;
         }
         int columnSize = columns.getInt("COLUMN_SIZE");
@@ -444,6 +454,14 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
 
         }
         tableColumn.setDecimalDigits(numericScale);
+    }
+
+    static boolean shouldOmitColumnSize(String columnType) {
+        return Arrays.asList(SqlServerColumnTypeEnum.FLOAT.name(),
+                        SqlServerColumnTypeEnum.REAL.name(),
+                        SqlServerColumnTypeEnum.TIMESTAMP.name(),
+                        "ROWVERSION")
+                .contains(columnType);
     }
 
 
@@ -749,7 +767,8 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "[" + name + "]").collect(Collectors.joining("."));
+        return Arrays.stream(names).filter(StringUtils::isNotBlank)
+                .map(SqlServerIdentifierUtils::quoteIdentifierPart).collect(Collectors.joining("."));
     }
 
     @Override

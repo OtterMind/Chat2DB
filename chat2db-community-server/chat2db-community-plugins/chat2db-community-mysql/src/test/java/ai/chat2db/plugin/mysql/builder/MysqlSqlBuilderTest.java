@@ -14,6 +14,7 @@ import ai.chat2db.community.domain.api.model.result.QueryResponse;
 import ai.chat2db.community.domain.api.model.result.ResultOperation;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,6 +24,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MysqlSqlBuilderTest {
+
+    @Test
+    void shouldUseEnumExtentInsteadOfColumnComment() {
+        TableColumn column = TableColumn.builder()
+                .name("status")
+                .columnType("ENUM")
+                .extent("('draft','published')")
+                .comment("workflow status")
+                .build();
+
+        String sql = MysqlColumnTypeEnum.ENUM.buildCreateColumnSql(column);
+
+        assertTrue(sql.contains("('draft','published')"), sql);
+    }
 
     @Test
     void shouldBuildCreateDatabaseWithCharsetAndCollation() {
