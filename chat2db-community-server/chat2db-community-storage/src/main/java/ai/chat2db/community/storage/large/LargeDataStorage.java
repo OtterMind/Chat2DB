@@ -72,7 +72,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     @Override
-    public Long save(T data) {
+    public synchronized Long save(T data) {
         if (data == null) {
             return null;
         }
@@ -113,7 +113,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
 
     @Override
-    public void update(T data) {
+    public synchronized void update(T data) {
         if (data == null) {
             return;
         }
@@ -123,6 +123,9 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 return;
             }
             T before = dataMap.get(id);
+            if (before == null) {
+                return;
+            }
             before = getAfterSave(before, data);
             saveDetailData(id, before);
         } catch (Exception e) {
@@ -131,7 +134,10 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     @Override
-    public void delete(Long id) {
+    public synchronized void delete(Long id) {
+        if (id == null) {
+            return;
+        }
         dataMap.remove(id);
         saveDataList();
         deleteDetailData(id);
