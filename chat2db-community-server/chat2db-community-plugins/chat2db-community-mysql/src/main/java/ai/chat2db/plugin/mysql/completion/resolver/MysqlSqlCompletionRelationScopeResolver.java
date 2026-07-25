@@ -297,9 +297,23 @@ public final class MysqlSqlCompletionRelationScopeResolver {
                     MySqlLexer.JOIN,
                     MySqlLexer.STRAIGHT_JOIN,
                     MySqlLexer.INTO -> true;
+            case MySqlLexer.COMMA -> isFromRelationSeparator(tokens, index);
             case MySqlLexer.UPDATE -> !isOnDuplicateKeyUpdate(tokens, index);
             default -> false;
         };
+    }
+
+    private static boolean isFromRelationSeparator(List<Token> tokens, int commaIndex) {
+        int depth = MysqlSqlCompletionTokenUtil.depthAtOffset(tokens, tokens.get(commaIndex).getStartIndex());
+        int fromIndex = MysqlSqlCompletionTokenUtil.lastDefaultIndexBeforeAtDepth(tokens,
+                tokens.get(commaIndex).getStartIndex(), depth, MySqlLexer.FROM);
+        if (fromIndex < 0) {
+            return false;
+        }
+        int boundaryIndex = MysqlSqlCompletionTokenUtil.lastDefaultIndexBeforeAtDepth(tokens,
+                tokens.get(commaIndex).getStartIndex(), depth, MySqlLexer.WHERE, MySqlLexer.GROUP,
+                MySqlLexer.HAVING, MySqlLexer.WINDOW, MySqlLexer.ORDER, MySqlLexer.LIMIT, MySqlLexer.UNION);
+        return boundaryIndex < fromIndex;
     }
 
     private static boolean isOnDuplicateKeyUpdate(List<Token> tokens, int index) {

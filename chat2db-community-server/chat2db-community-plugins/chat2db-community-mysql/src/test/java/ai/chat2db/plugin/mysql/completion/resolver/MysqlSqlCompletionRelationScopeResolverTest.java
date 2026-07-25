@@ -46,6 +46,27 @@ class MysqlSqlCompletionRelationScopeResolverTest {
     }
 
     @Test
+    void resolvesCommaRelationAfterJoinPredicate() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select * from users u join orders o on u.id = o.user_id, payments p where p.{caret}");
+
+        assertRelations(scope,
+                relation(null, null, "users", "u"),
+                relation(null, null, "orders", "o"),
+                relation(null, null, "payments", "p"));
+    }
+
+    @Test
+    void doesNotTreatNamedWindowAsRelation() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select * from users u window w1 as (order by u.id), w2 as (order by u.id) "
+                        + "order by u.{caret}");
+
+        assertRelations(scope, relation(null, null, "users", "u"));
+        Assertions.assertTrue(scope.resolveOwner("w2").isEmpty());
+    }
+
+    @Test
     void doesNotTreatIndexHintAsAlias() {
         MysqlSqlCompletionRelationScope scope = resolveAtCaret(
                 "select * from orders force index for join (idx_orders_status) where {caret}");

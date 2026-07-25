@@ -630,6 +630,26 @@ class MysqlSqlCompletionProviderTest {
     }
 
     @Test
+    void completesOnlySecondJoinRelationColumnsAfterAliasDot() {
+        String sql = "select * from users a join orders b on a.id = b.id where b.";
+
+        SqlCompletionResponse result = complete(sql, sql.length());
+
+        assertSuccessReplacement(result, sql.length(), sql.length());
+        assertOnlyOrdersAliasBColumns(result);
+    }
+
+    @Test
+    void completesOnlySecondCommaSeparatedRelationColumnsAfterAliasDot() {
+        String sql = "select * from users a, orders b where b.";
+
+        SqlCompletionResponse result = complete(sql, sql.length());
+
+        assertSuccessReplacement(result, sql.length(), sql.length());
+        assertOnlyOrdersAliasBColumns(result);
+    }
+
+    @Test
     void completesRelationAliasBeforeDotInWherePredicate() {
         String sql = """
                 select
@@ -2424,6 +2444,17 @@ class MysqlSqlCompletionProviderTest {
         Assertions.assertFalse(result.getCandidates().stream()
                         .anyMatch(candidate -> candidate.getType() == type && label.equals(candidate.getLabel())),
                 () -> "unexpected candidate " + type + ":" + label);
+    }
+
+    private void assertOnlyOrdersAliasBColumns(SqlCompletionResponse result) {
+        Assertions.assertTrue(result.getCandidates().stream()
+                .allMatch(candidate -> candidate.getType() == SqlCompletionCandidateTypeEnum.COLUMN
+                        && "orders".equals(candidate.getTableName())
+                        && "b".equals(candidate.getTableAlias())));
+        Assertions.assertTrue(result.getCandidates().stream()
+                .anyMatch(candidate -> "amount".equals(candidate.getLabel())));
+        Assertions.assertFalse(result.getCandidates().stream()
+                .anyMatch(candidate -> "name".equals(candidate.getLabel())));
     }
 
     private void assertFunctionCandidate(String sql, String label, String detail, String dataType) {
