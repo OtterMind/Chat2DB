@@ -298,6 +298,7 @@ export default {
   'setting.placeholder.customFont': 'Please enter the font name, such as SN Pro, Arial',
   'setting.modelConfig.title': 'Custom Models',
   'setting.modelConfig.entry': 'Custom model',
+  'setting.modelConfig.entryHint': 'Connect OpenAI, Claude, Gemini, or compatible APIs',
   'setting.modelConfig.listTitle': 'Model List',
   'setting.modelConfig.new': 'New Model',
   'setting.modelConfig.name': 'Name',

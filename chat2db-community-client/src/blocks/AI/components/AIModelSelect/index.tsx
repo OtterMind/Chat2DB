@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Select, Divider } from 'antd';
+import { PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai/store';
@@ -63,15 +64,26 @@ const AIModelSelect = ({
   const selectOptions = options !== undefined ? options : modelList;
   const customModelEntry =
     showCustomModelEntry && onCustomModelClick ? (
-      <div
+      <button
+        type="button"
         className={styles.customModelEntry}
         onMouseDown={(e) => {
           e.preventDefault();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
           onCustomModelClick();
         }}
       >
-        {customModelText || i18n('setting.modelConfig.entry')}
-      </div>
+        <span className={styles.customModelIcon}>
+          <PlusOutlined />
+        </span>
+        <span className={styles.customModelContent}>
+          <span className={styles.customModelTitle}>{customModelText || i18n('setting.modelConfig.entry')}</span>
+          <span className={styles.customModelHint}>{i18n('setting.modelConfig.entryHint')}</span>
+        </span>
+        <RightOutlined className={styles.customModelArrow} />
+      </button>
     ) : null;
 
   return (
@@ -85,7 +97,7 @@ const AIModelSelect = ({
       onChange={handleChange}
       options={selectOptions}
       size="small"
-      placeholder=""
+      placeholder={i18n('ai.select.model')}
       // rc-select suppresses an empty popup unless it has explicit empty-state content.
       notFoundContent={customModelEntry}
       onDropdownVisibleChange={handleDropdownVisibleChange}
