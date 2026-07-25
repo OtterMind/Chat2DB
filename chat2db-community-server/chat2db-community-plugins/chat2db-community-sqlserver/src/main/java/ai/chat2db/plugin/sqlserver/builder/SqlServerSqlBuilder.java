@@ -24,6 +24,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierUtils.escapeStringLiteral;
+import static ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierUtils.quoteIdentifierPart;
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerSqlBuilderConstants.*;
 public class SqlServerSqlBuilder extends DefaultSqlBuilder {
 
@@ -292,7 +294,7 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         if (StringUtils.isNotBlank(databaseName)) {
             script.append(SQLConstants.OPEN_SQUARE_BRACKET).append(databaseName).append(SQLConstants.CLOSE_SQUARE_BRACKET).append('.');
         }
-        if (StringUtils.isNotBlank(databaseName)) {
+        if (StringUtils.isNotBlank(schemaName)) {
             script.append(SQLConstants.OPEN_SQUARE_BRACKET).append(schemaName).append(SQLConstants.CLOSE_SQUARE_BRACKET).append('.');
         }
         if (!(tableName.startsWith(SQLConstants.OPEN_SQUARE_BRACKET) && tableName.endsWith(SQLConstants.CLOSE_SQUARE_BRACKET))) {
@@ -339,11 +341,11 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         }
         String schemaName = modifyView.getSchemaName();
         if (StringUtils.isNotBlank(schemaName)) {
-            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.DOT);
+            createViewSqlBuilder.append(quoteIdentifierPart(schemaName)).append(SQLConstants.DOT);
         }
         String viewName = modifyView.getViewName();
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.BACK_QUOTE).append(viewName).append(SQLConstants.BACK_QUOTE);
+            createViewSqlBuilder.append(quoteIdentifierPart(viewName));
         } else {
             createViewSqlBuilder.append(UNDEFINED_KEYWORD);
         }
@@ -356,19 +358,19 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         }
         createViewSqlBuilder.append(SQLConstants.SEMICOLON);
         String comment = modifyView.getComment();
-        if (StringUtils.isNotBlank(comment)) {
+        if (StringUtils.isNotBlank(comment) && StringUtils.isNotBlank(schemaName)) {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
             createViewSqlBuilder.append(SQL_EXEC_SP_ADDEXTENDEDPROPERTY_SINGLE_QUOTE_MS_DESCRIPTION_SINGLE_QUOTE_COMMA)
                     .append(SQLConstants.SPACE)
-                    .append(SQLConstants.SINGLE_QUOTE).append(comment).append(SQLConstants.SINGLE_QUOTE).append(SQLConstants.COMMA)
+                    .append(SQLConstants.SINGLE_QUOTE).append(escapeStringLiteral(comment)).append(SQLConstants.SINGLE_QUOTE).append(SQLConstants.COMMA)
                     .append(SQLConstants.SPACE)
                     .append(SQL_SINGLE_QUOTE_SCHEMA_SINGLE_QUOTE).append(SQLConstants.COMMA)
                     .append(SQLConstants.SPACE)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.COMMA)
+                    .append(SQLConstants.SINGLE_QUOTE).append(escapeStringLiteral(schemaName)).append(SQLConstants.SINGLE_QUOTE).append(SQLConstants.COMMA)
                     .append(SQLConstants.SPACE)
                     .append(SQL_SINGLE_QUOTE_VIEW_SINGLE_QUOTE).append(SQLConstants.COMMA)
                     .append(SQLConstants.SPACE)
-                    .append(SQLConstants.SINGLE_QUOTE).append(viewName).append(SQLConstants.SINGLE_QUOTE);
+                    .append(SQLConstants.SINGLE_QUOTE).append(escapeStringLiteral(viewName)).append(SQLConstants.SINGLE_QUOTE);
 
         }
 

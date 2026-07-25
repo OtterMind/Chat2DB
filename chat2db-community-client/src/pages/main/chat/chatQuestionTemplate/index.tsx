@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
 import chatService from '@/service/chat';
 import { ChatExamplePrompt } from '@/typings/chat';
@@ -13,14 +13,19 @@ interface IProps {
 export default memo<IProps>(({ onSendQuestionTemplate }) => {
   const { styles } = useStyles();
   const [explamePromptList, setExamplePromptList] = useState<ChatExamplePrompt[]>([]);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     queryExamplePrompt();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const queryExamplePrompt = async () => {
     const res = await chatService.queryChatExamplePrompt({});
-    if (res) {
+    if (res && mountedRef.current) {
       setExamplePromptList(res);
     }
   };

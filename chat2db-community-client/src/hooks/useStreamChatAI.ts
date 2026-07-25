@@ -150,7 +150,7 @@ export const useStreamChatAI = (params: UseChatAIParams = {}): UseChatAIResult =
                     });
                   }
                 } else {
-                  const newMessage = JSON.parse(_message).content;
+                  const newMessage = JSON.parse(_message)?.content ?? '';
                   setMessageContent((prev) => prev + newMessage);
                   messageContentRef.current += newMessage;
                   messageChangeCallback?.({

@@ -417,6 +417,13 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
                 + SQLConstants.DOUBLE_QUOTE;
     }
 
+    private static String quotePostgreSqlStringLiteral(String value) {
+        return SQLConstants.SINGLE_QUOTE
+                + value.replace(SQLConstants.SINGLE_QUOTE,
+                        SQLConstants.SINGLE_QUOTE + SQLConstants.SINGLE_QUOTE)
+                + SQLConstants.SINGLE_QUOTE;
+    }
+
 
     @Override
     public String buildCreateView(ModifyView modifyView) {
@@ -436,15 +443,14 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
         }
         createViewSqlBuilder.append(SQLConstants.VIEW_KEYWORD);
         String schemaName = modifyView.getSchemaName();
-        if (StringUtils.isNotBlank(schemaName)) {
-            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.DOT);
-        }
         String viewName = modifyView.getViewName();
+        String qualifiedViewName;
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.BACK_QUOTE).append(viewName).append(SQLConstants.BACK_QUOTE);
+            qualifiedViewName = quoteQualifiedIdentifier(schemaName, viewName);
         } else {
-            createViewSqlBuilder.append(UNDEFINED_KEYWORD);
+            qualifiedViewName = UNDEFINED_KEYWORD;
         }
+        createViewSqlBuilder.append(qualifiedViewName);
         createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR_SQL_AS);
         String viewBody = modifyView.getViewBody();
         createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR).append(viewBody).append(SQLConstants.SPACE);
@@ -459,10 +465,11 @@ public class PostgreSQLSqlBuilder extends DefaultSqlBuilder {
         if (StringUtils.isNotBlank(comment)) {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
             createViewSqlBuilder.append(SQL_COMMENT_VIEW)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
+                    .append(SQLConstants.SPACE)
+                    .append(qualifiedViewName)
                     .append(SQLConstants.SQL_IS_LOWER)
-                    .append(comment).append(SQLConstants.SEMICOLON);
+                    .append(quotePostgreSqlStringLiteral(comment))
+                    .append(SQLConstants.SEMICOLON);
         }
         return createViewSqlBuilder.toString();
     }

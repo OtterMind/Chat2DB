@@ -455,4 +455,4 @@ const IndexList = forwardRef((props: IProps, ref: ForwardedRef<IIndexListRef>) =
   );
 });
 
-export default IndexList;
+export default React.memo(IndexList);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import PageTitle from '@/components/PageTitle';
 import pluginService from '@/service/plugin';
 import { IPluginItem } from '@/typings/plugin';
@@ -15,6 +15,7 @@ interface PluginMenuListProps {
 const PluginMenuList = ({ curPlugin, onClick }: PluginMenuListProps) => {
   const [pluginList, setPluginList] = useState<IPluginItem[]>([]);
   const { styles } = useStyles();
+  const mountedRef = useRef(true);
 
   const { curUser } = useUserStore((s) => ({
     curUser: s.curUser,
@@ -23,11 +24,16 @@ const PluginMenuList = ({ curPlugin, onClick }: PluginMenuListProps) => {
   const isVip = useMemo(() => curUser?.vip || curUser?.activated, [curUser?.vip, curUser?.activated]);
 
   useEffect(() => {
+    mountedRef.current = true;
     queryPluginList();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const queryPluginList = async () => {
     const res = await pluginService.queryPluginList();
+    if (!mountedRef.current) return;
     setPluginList(res);
 
     if (!curPlugin && res[0]) {
