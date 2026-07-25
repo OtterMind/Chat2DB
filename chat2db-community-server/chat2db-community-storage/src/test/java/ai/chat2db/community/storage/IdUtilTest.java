@@ -1,5 +1,8 @@
 package ai.chat2db.community.storage;
 
+import ai.chat2db.community.tools.model.Context;
+import ai.chat2db.community.tools.model.LoginUser;
+import ai.chat2db.community.tools.util.ContextUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -36,6 +39,21 @@ public class IdUtilTest {
     }
 
     @Test
+    void idsMustRemainIncreasingWhenUserSuffixWidthChanges() {
+        try {
+            ContextUtils.setContext(context(999L));
+            Long previous = IdUtil.generateId();
+            ContextUtils.setContext(context(0L));
+            Long next = IdUtil.generateId();
+
+            assertTrue(next > previous,
+                    "the fixed-width user suffix must preserve timestamp ordering: " + previous + " -> " + next);
+        } finally {
+            ContextUtils.removeContext();
+        }
+    }
+
+    @Test
     void concurrentCallsMustNotProduceDuplicateIds() throws Exception {
         int threads = 8;
         int perThread = 1000;
@@ -59,5 +77,11 @@ public class IdUtilTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private Context context(Long userId) {
+        LoginUser loginUser = new LoginUser();
+        loginUser.setId(userId);
+        return Context.builder().loginUser(loginUser).build();
     }
 }

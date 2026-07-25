@@ -7,6 +7,8 @@ import ai.chat2db.community.tools.util.ContextUtils;
 
 public class IdUtil {
 
+    private static final long USER_ID_BUCKETS = 1000L;
+
     /**
      * Last timestamp handed out. Calls within the same millisecond (or after a
      * clock rollback) borrow the next millisecond so the timestamp part is
@@ -25,9 +27,9 @@ public class IdUtil {
         }
         long timestamp = LAST_TIMESTAMP.updateAndGet(
             last -> Math.max(last + 1, System.currentTimeMillis()));
-        // Kept as timestamp + userId%1000 so ids stay within JS Number.MAX_SAFE_INTEGER.
-        String id = timestamp + "" + Math.floorMod(userId, 1000);
-        return Long.parseLong(id);
+        long userSuffix = Math.floorMod(userId, USER_ID_BUCKETS);
+        // Reserve three decimal digits for the user suffix so full ids preserve timestamp ordering.
+        return Math.addExact(Math.multiplyExact(timestamp, USER_ID_BUCKETS), userSuffix);
     }
 
 }
