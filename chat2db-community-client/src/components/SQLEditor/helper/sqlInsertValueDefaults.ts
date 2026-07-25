@@ -12,7 +12,13 @@ export function getInsertValueAutoFill(
   editorHints: ISqlEditorHintVO[] | null | undefined,
 ): InsertValueAutoFill | null {
   const safeCursor = Math.max(0, Math.min(cursor, sql.length));
-  if (!/\bvalues?\s*\(\s*$/i.test(sql.substring(0, safeCursor))) {
+  const valuesMatch = sql.substring(0, safeCursor).match(/\bvalues?\s*\(\s*$/i);
+  if (!valuesMatch || valuesMatch.index === undefined) {
+    return null;
+  }
+  const openingParenthesis = valuesMatch.index + valuesMatch[0].lastIndexOf('(');
+  const codeMask = sqlCodeMask(sql);
+  if (!codeMask[valuesMatch.index] || !codeMask[openingParenthesis]) {
     return null;
   }
 
@@ -179,12 +185,16 @@ function findValuesRow(sql: string, expectedValues: string[], preferredOffset?: 
 
 function findValuesRows(sql: string): OffsetRange[][] {
   const valuesPattern = /\bvalues?\s*\(/gi;
+  const codeMask = sqlCodeMask(sql);
   const rows: OffsetRange[][] = [];
   let match = valuesPattern.exec(sql);
   while (match) {
-    const ranges = scanValuesRow(sql, valuesPattern.lastIndex);
-    if (ranges?.length) {
-      rows.push(ranges);
+    const openingParenthesis = valuesPattern.lastIndex - 1;
+    if (codeMask[match.index] && codeMask[openingParenthesis]) {
+      const ranges = scanValuesRow(sql, valuesPattern.lastIndex, codeMask);
+      if (ranges?.length) {
+        rows.push(ranges);
+      }
     }
     match = valuesPattern.exec(sql);
   }
@@ -202,52 +212,15 @@ function nearestRowIndex(rows: OffsetRange[][], preferredOffset: number): number
   0);
 }
 
-function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
+function scanValuesRow(sql: string, rowStart: number, codeMask: boolean[]): OffsetRange[] | null {
   const ranges: OffsetRange[] = [];
   let valueStart = rowStart;
   let depth = 0;
-  let singleQuoted = false;
-  let doubleQuoted = false;
-  let dollarQuote: string | null = null;
   for (let index = rowStart; index < sql.length; index += 1) {
-    if (dollarQuote) {
-      if (sql.startsWith(dollarQuote, index)) {
-        index += dollarQuote.length - 1;
-        dollarQuote = null;
-      }
+    if (!codeMask[index]) {
       continue;
     }
     const current = sql[index];
-    const next = sql[index + 1];
-    const delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(sql, index) : null;
-    if (delimiter) {
-      dollarQuote = delimiter;
-      index += delimiter.length - 1;
-      continue;
-    }
-    if (singleQuoted && current === '\\' && next !== undefined) {
-      index += 1;
-      continue;
-    }
-    if (!doubleQuoted && current === "'") {
-      if (singleQuoted && next === "'") {
-        index += 1;
-      } else {
-        singleQuoted = !singleQuoted;
-      }
-      continue;
-    }
-    if (!singleQuoted && current === '"') {
-      if (doubleQuoted && next === '"') {
-        index += 1;
-      } else {
-        doubleQuoted = !doubleQuoted;
-      }
-      continue;
-    }
-    if (singleQuoted || doubleQuoted) {
-      continue;
-    }
     if (current === '(' || current === '[') {
       depth += 1;
     } else if ((current === ')' || current === ']') && depth > 0) {
@@ -262,6 +235,102 @@ function scanValuesRow(sql: string, rowStart: number): OffsetRange[] | null {
   }
   ranges.push(trimOffsetRange(sql, valueStart, sql.length));
   return ranges;
+}
+
+function sqlCodeMask(sql: string): boolean[] {
+  const codeMask = new Array<boolean>(sql.length).fill(true);
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  let backtickQuoted = false;
+  let bracketQuoted = false;
+  let lineComment = false;
+  let blockComment = false;
+  let dollarQuote: string | null = null;
+  for (let index = 0; index < sql.length; index += 1) {
+    const current = sql[index];
+    const next = sql[index + 1];
+    if (lineComment) {
+      codeMask[index] = false;
+      if (current === '\n') {
+        lineComment = false;
+      }
+      continue;
+    }
+    if (blockComment) {
+      codeMask[index] = false;
+      if (current === '*' && next === '/') {
+        codeMask[index + 1] = false;
+        index += 1;
+        blockComment = false;
+      }
+      continue;
+    }
+    if (dollarQuote) {
+      codeMask[index] = false;
+      if (sql.startsWith(dollarQuote, index)) {
+        markNonCode(codeMask, index, index + dollarQuote.length);
+        index += dollarQuote.length - 1;
+        dollarQuote = null;
+      }
+      continue;
+    }
+    if (singleQuoted || doubleQuoted || backtickQuoted || bracketQuoted) {
+      codeMask[index] = false;
+      const quote = singleQuoted ? "'" : doubleQuoted ? '"' : backtickQuoted ? '`' : ']';
+      if (singleQuoted && current === '\\' && next !== undefined) {
+        codeMask[index + 1] = false;
+        index += 1;
+      } else if (current === quote && next === quote) {
+        codeMask[index + 1] = false;
+        index += 1;
+      } else if (current === quote) {
+        singleQuoted = false;
+        doubleQuoted = false;
+        backtickQuoted = false;
+        bracketQuoted = false;
+      }
+      continue;
+    }
+
+    const delimiter = dollarQuoteDelimiterAt(sql, index);
+    if (delimiter) {
+      markNonCode(codeMask, index, index + delimiter.length);
+      dollarQuote = delimiter;
+      index += delimiter.length - 1;
+    } else if (current === '-' && next === '-') {
+      codeMask[index] = false;
+      codeMask[index + 1] = false;
+      index += 1;
+      lineComment = true;
+    } else if (current === '/' && next === '*') {
+      codeMask[index] = false;
+      codeMask[index + 1] = false;
+      index += 1;
+      blockComment = true;
+    } else if (current === '#' && (index === 0 || /\s/.test(sql[index - 1]))) {
+      codeMask[index] = false;
+      lineComment = true;
+    } else if (current === "'") {
+      codeMask[index] = false;
+      singleQuoted = true;
+    } else if (current === '"') {
+      codeMask[index] = false;
+      doubleQuoted = true;
+    } else if (current === '`') {
+      codeMask[index] = false;
+      backtickQuoted = true;
+    } else if (current === '[') {
+      codeMask[index] = false;
+      bracketQuoted = true;
+    }
+  }
+  return codeMask;
+}
+
+function markNonCode(codeMask: boolean[], start: number, end: number) {
+  for (let index = start; index < Math.min(end, codeMask.length); index += 1) {
+    codeMask[index] = false;
+  }
 }
 
 function trimOffsetRange(sql: string, start: number, end: number): OffsetRange {

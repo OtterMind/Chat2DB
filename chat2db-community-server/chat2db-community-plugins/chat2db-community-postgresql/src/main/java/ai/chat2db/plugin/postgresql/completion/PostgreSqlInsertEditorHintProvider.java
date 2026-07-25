@@ -311,6 +311,8 @@ public final class PostgreSqlInsertEditorHintProvider {
         int depth = 0;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        boolean lineComment = false;
+        boolean blockComment = false;
         String dollarQuote = null;
         for (int index = 0; index < value.length(); index++) {
             if (dollarQuote != null) {
@@ -322,10 +324,29 @@ public final class PostgreSqlInsertEditorHintProvider {
             }
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
+            if (lineComment) {
+                if (current == '\n') {
+                    lineComment = false;
+                }
+                continue;
+            }
+            if (blockComment) {
+                if (current == '*' && next == '/') {
+                    blockComment = false;
+                    index++;
+                }
+                continue;
+            }
             String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(value, index) : null;
             if (delimiter != null) {
                 dollarQuote = delimiter;
                 index += delimiter.length() - 1;
+            } else if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+                lineComment = true;
+                index++;
+            } else if (!singleQuoted && !doubleQuoted && current == '/' && next == '*') {
+                blockComment = true;
+                index++;
             } else if (!doubleQuoted && current == '\'' && !(singleQuoted && next == '\'')) {
                 singleQuoted = !singleQuoted;
             } else if (singleQuoted && current == '\'' && next == '\'') {
@@ -471,6 +492,8 @@ public final class PostgreSqlInsertEditorHintProvider {
         int depth = 0;
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
+        boolean lineComment = false;
+        boolean blockComment = false;
         String dollarQuote = null;
         for (int index = 0; index < value.length(); index++) {
             if (dollarQuote != null) {
@@ -482,10 +505,29 @@ public final class PostgreSqlInsertEditorHintProvider {
             }
             char current = value.charAt(index);
             char next = index + 1 < value.length() ? value.charAt(index + 1) : '\0';
+            if (lineComment) {
+                if (current == '\n') {
+                    lineComment = false;
+                }
+                continue;
+            }
+            if (blockComment) {
+                if (current == '*' && next == '/') {
+                    blockComment = false;
+                    index++;
+                }
+                continue;
+            }
             String delimiter = !singleQuoted && !doubleQuoted ? dollarQuoteDelimiterAt(value, index) : null;
             if (delimiter != null) {
                 dollarQuote = delimiter;
                 index += delimiter.length() - 1;
+            } else if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+                lineComment = true;
+                index++;
+            } else if (!singleQuoted && !doubleQuoted && current == '/' && next == '*') {
+                blockComment = true;
+                index++;
             } else if (!doubleQuoted && current == '\'') {
                 if (singleQuoted && next == '\'') {
                     index++;

@@ -102,6 +102,18 @@ class PostgreSqlInsertEditorHintProviderTest {
     }
 
     @Test
+    void ignoresCommentDelimitersInsideValuesRow() {
+        String sql = "INSERT INTO demo (id, enabled, name) VALUES (0 /* , ) */, -- , )\n FALSE, ''";
+
+        List<SqlCompletionEditorHint> hints = provider.build(request(sql, null));
+
+        assertEquals(1, hints.size());
+        assertEquals(3, hints.get(0).getItems().size());
+        assertEquals(2, hints.get(0).getItems().get(1).getRange().getEndLineNumber());
+        assertTrue(provider.build(request(sql + ")", null)).isEmpty());
+    }
+
+    @Test
     void scopesHintsToCurrentStatementAndStopsAfterValuesRowCloses() {
         String sql = "INSERT INTO old_table (id) VALUES (1);\nINSERT INTO demo (id, name) VALUES (";
         AtomicReference<DbSqlCompletionMetadataRequest> metadataRequest = new AtomicReference<>();

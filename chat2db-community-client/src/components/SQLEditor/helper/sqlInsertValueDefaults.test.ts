@@ -139,6 +139,36 @@ assert.equal(
   'backslash-escaped quotes do not shift later label ranges',
 );
 
+const commentPrefixedSql = `-- VALUES (0, FALSE, '')
+INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, '');`;
+const commentPrefixedHints = rematerializeInsertValueHints(
+  commentPrefixedSql,
+  materializedHints,
+  "INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, '');",
+);
+assert.deepEqual(
+  [...(commentPrefixedHints[0]?.items || [])]
+    .sort((left, right) => left.columnIndex - right.columnIndex)
+    .map((item) => item.range?.startLineNumber),
+  [2, 2, 2],
+  'VALUES text inside a line comment does not capture INSERT value labels',
+);
+
+const stringPrefixedSql = `SELECT $$VALUES (0, FALSE, '')$$;
+INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, '');`;
+const stringPrefixedHints = rematerializeInsertValueHints(
+  stringPrefixedSql,
+  materializedHints,
+  "INSERT INTO demo (id, enabled, name) VALUES (0, FALSE, '');",
+);
+assert.deepEqual(
+  [...(stringPrefixedHints[0]?.items || [])]
+    .sort((left, right) => left.columnIndex - right.columnIndex)
+    .map((item) => item.range?.startLineNumber),
+  [2, 2, 2],
+  'VALUES text inside a dollar-quoted string does not capture INSERT value labels',
+);
+
 const dollarQuotedSql = 'INSERT INTO demo (id, enabled, name) VALUES (0, $tag$a,b);($tag$, FALSE)';
 const dollarQuotedItems = [...(
   rematerializeInsertValueHints(dollarQuotedSql, materializedHints)[0]?.items || []
@@ -171,6 +201,20 @@ assert.equal(
   getInsertValueAutoFill('SELECT (', 8, hints),
   null,
   'non-INSERT parentheses never expand',
+);
+
+const commentValuesSql = '-- VALUES (';
+assert.equal(
+  getInsertValueAutoFill(commentValuesSql, commentValuesSql.length, hints),
+  null,
+  'VALUES opening parentheses inside comments never expand',
+);
+
+const quotedValuesSql = "SELECT 'VALUES (";
+assert.equal(
+  getInsertValueAutoFill(quotedValuesSql, quotedValuesSql.length, hints),
+  null,
+  'VALUES opening parentheses inside strings never expand',
 );
 
 assert.equal(
