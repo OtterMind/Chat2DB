@@ -57,6 +57,66 @@ class MysqlSqlCompletionRelationScopeResolverTest {
     }
 
     @Test
+    void doesNotReuseFromFromSiblingSubqueryForProjectionComma() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select (select id from users u), (select x, y, z{caret} from orders o)");
+
+        assertRelations(scope, relation(null, null, "orders", "o"));
+        Assertions.assertTrue(scope.resolveOwner("y").isEmpty());
+    }
+
+    @Test
+    void doesNotReuseFromFromPreviousCteBodyForProjectionComma() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "with first_cte as (select id from users u), "
+                        + "second_cte as (select x, y, z{caret} from orders o) select * from second_cte");
+
+        assertRelations(scope, relation(null, null, "orders", "o"));
+        Assertions.assertTrue(scope.resolveOwner("y").isEmpty());
+    }
+
+    @Test
+    void doesNotReuseFromFromPreviousStatementForProjectionComma() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select id from users u; select x, y, z{caret} from orders o");
+
+        assertRelations(scope, relation(null, null, "orders", "o"));
+        Assertions.assertTrue(scope.resolveOwner("y").isEmpty());
+    }
+
+    @Test
+    void doesNotTreatOnDuplicateKeyUpdateCommaAsRelation() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "insert into dst (id, v) select s.id, s.v from src s "
+                        + "on duplicate key update id = values(id), v = s.{caret}");
+
+        assertRelations(scope,
+                relation(null, null, "dst", null),
+                relation(null, null, "src", "s"));
+        Assertions.assertTrue(scope.resolveOwner("v").isEmpty());
+    }
+
+    @Test
+    void doesNotTreatForUpdateCommaAsRelation() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select * from users u join orders o on u.id = o.user_id for update of u, o.{caret}");
+
+        assertRelations(scope,
+                relation(null, null, "users", "u"),
+                relation(null, null, "orders", "o"));
+    }
+
+    @Test
+    void doesNotTreatForShareCommaAsRelation() {
+        MysqlSqlCompletionRelationScope scope = resolveAtCaret(
+                "select * from users u join orders o on u.id = o.user_id for share of u, o.{caret}");
+
+        assertRelations(scope,
+                relation(null, null, "users", "u"),
+                relation(null, null, "orders", "o"));
+    }
+
+    @Test
     void doesNotTreatNamedWindowAsRelation() {
         MysqlSqlCompletionRelationScope scope = resolveAtCaret(
                 "select * from users u window w1 as (order by u.id), w2 as (order by u.id) "

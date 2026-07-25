@@ -2447,6 +2447,9 @@ class MysqlSqlCompletionProviderTest {
     }
 
     private void assertOnlyOrdersAliasBColumns(SqlCompletionResponse result) {
+        Assertions.assertEquals(SqlCompletionCandidateTypeEnum.COLUMN.name(), metadataProvider.lastRequest.type());
+        Assertions.assertEquals("orders", metadataProvider.lastRequest.scope().table());
+        Assertions.assertEquals("", metadataProvider.lastRequest.prefix());
         Assertions.assertTrue(result.getCandidates().stream()
                 .allMatch(candidate -> candidate.getType() == SqlCompletionCandidateTypeEnum.COLUMN
                         && "orders".equals(candidate.getTableName())
