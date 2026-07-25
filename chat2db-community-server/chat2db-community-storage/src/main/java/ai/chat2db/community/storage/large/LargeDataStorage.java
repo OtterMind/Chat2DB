@@ -26,6 +26,8 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     private ConcurrentSkipListMap<Long, T> dataMap = new ConcurrentSkipListMap<>();
 
 
+    private String storageDir;
+
     private String filePath;
 
     private String name;
@@ -33,7 +35,12 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     private int limit;
 
     protected LargeDataStorage(String name, Class<T> clazz, int limit) {
-        this.filePath = DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json";
+        this(name, clazz, limit, DB_STORAGE_PATH);
+    }
+
+    protected LargeDataStorage(String name, Class<T> clazz, int limit, String storageBasePath) {
+        this.storageDir = storageBasePath + File.separator + name;
+        this.filePath = storageDir + File.separator + name + ".json";
         this.limit = limit;
         this.name = name;
         if (!FileUtil.exist(filePath)) {
@@ -43,8 +50,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 if (StringUtils.isNotBlank(line)) {
                     try {
                         Long id = Long.parseLong(line.trim());
-                        String detailFilePath = DB_STORAGE_PATH + File.separator + name + File.separator + id + ".json";
-                        String detail = FileUtil.readUtf8String(detailFilePath);
+                        String detail = FileUtil.readUtf8String(detailFilePath(id));
                         if (StringUtils.isNotBlank(detail)) {
                             T t = JSON.parseObject(detail, clazz);
                             dataMap.put(id, t);
@@ -55,6 +61,10 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 }
             });
         }
+    }
+
+    private String detailFilePath(Long id) {
+        return storageDir + File.separator + id + ".json";
     }
 
     @Override
@@ -104,8 +114,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return;
         }
         try {
-            String detailFile = DB_STORAGE_PATH + File.separator + name + File.separator + id + ".json";
-            FileUtil.writeUtf8String(JSON.toJSONString(data), detailFile);
+            FileUtil.writeUtf8String(JSON.toJSONString(data), detailFilePath(id));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -148,8 +157,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return;
         }
         try {
-            String detailFile = DB_STORAGE_PATH + File.separator + name + File.separator + id + ".json";
-            FileUtil.del(detailFile);
+            FileUtil.del(detailFilePath(id));
         } catch (Exception e) {
             log.error("deleteDetailData error", e);
         }
