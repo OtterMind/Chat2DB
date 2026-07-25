@@ -72,6 +72,9 @@ jobs:
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
 
+      - name: Run verification-code countdown lifecycle contract
+        run: yarn run test:verification-code-countdown
+
       - name: Build Community web client
         run: yarn run build:web:community --app_version=5.3.0
 

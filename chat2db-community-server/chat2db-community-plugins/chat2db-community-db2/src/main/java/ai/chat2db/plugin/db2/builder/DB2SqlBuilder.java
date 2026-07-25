@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
+import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import org.apache.commons.lang3.StringUtils;
 
 import static ai.chat2db.plugin.db2.constant.DB2SqlBuilderConstants.*;
@@ -109,7 +110,8 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
                     continue;
                 }
                 script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
-                if (StringUtils.isNotBlank(tableColumn.getComment())) {
+                if (StringUtils.isNotBlank(tableColumn.getComment())
+                        && !EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
                     script.append(SQLConstants.LINE_SEPARATOR).append(buildComment(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 }
             }

@@ -45,42 +45,46 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
 
     private String getDDL(Connection connection, String databaseName, String schemaName, String tableName) {
         try {
-            ResultSet columns = connection.getMetaData().getColumns(databaseName, schemaName, tableName, null);
             List<String> columnDefinitions = new ArrayList<>();
-            while (columns.next()) {
-                String columnName = columns.getString("COLUMN_NAME");
-                String columnType = columns.getString("TYPE_NAME");
-                int columnSize = columns.getInt("COLUMN_SIZE");
-                String remarks = columns.getString("REMARKS");
-                String defaultValue = columns.getString("COLUMN_DEF");
-                String nullable = columns.getInt("NULLABLE") == ResultSetMetaData.columnNullable ? "NULL" : "NOT NULL";
-                StringBuilder columnDefinition = new StringBuilder();
-                columnDefinition.append(columnName).append(" ").append(columnType);
-                if (columnSize != 0) {
-                    columnDefinition.append("(").append(columnSize).append(")");
-                }
-                columnDefinition.append(" ").append(nullable);
-                if (defaultValue != null) {
-                    columnDefinition.append(" DEFAULT ").append(defaultValue);
-                }
-                if (remarks != null) {
-                    columnDefinition.append(SQL_COMMENT).append(remarks).append("'");
-                }
-                columnDefinitions.add(columnDefinition.toString());
-            }
-            ResultSet indexes = connection.getMetaData().getIndexInfo(databaseName, schemaName, tableName, false,
-                false);
-            Map<String, List<String>> indexMap = new HashMap<>();
-            while (indexes.next()) {
-                String indexName = indexes.getString("INDEX_NAME");
-                String columnName = indexes.getString("COLUMN_NAME");
-                if (indexName != null) {
-                    if (!indexMap.containsKey(indexName)) {
-                        indexMap.put(indexName, new ArrayList<>());
+            try (ResultSet columns = connection.getMetaData().getColumns(databaseName, schemaName, tableName, null)) {
+                while (columns.next()) {
+                    String columnName = columns.getString("COLUMN_NAME");
+                    String columnType = columns.getString("TYPE_NAME");
+                    int columnSize = columns.getInt("COLUMN_SIZE");
+                    String remarks = columns.getString("REMARKS");
+                    String defaultValue = columns.getString("COLUMN_DEF");
+                    String nullable = columns.getInt("NULLABLE") == ResultSetMetaData.columnNullable ? "NULL" : "NOT NULL";
+                    StringBuilder columnDefinition = new StringBuilder();
+                    columnDefinition.append(columnName).append(" ").append(columnType);
+                    if (columnSize != 0) {
+                        columnDefinition.append("(").append(columnSize).append(")");
                     }
-                    indexMap.get(indexName).add(columnName);
+                    columnDefinition.append(" ").append(nullable);
+                    if (defaultValue != null) {
+                        columnDefinition.append(" DEFAULT ").append(defaultValue);
+                    }
+                    if (remarks != null) {
+                        columnDefinition.append(SQL_COMMENT).append(remarks).append("'");
+                    }
+                    columnDefinitions.add(columnDefinition.toString());
                 }
             }
+
+            Map<String, List<String>> indexMap = new HashMap<>();
+            try (ResultSet indexes = connection.getMetaData().getIndexInfo(databaseName, schemaName, tableName, false,
+                false)) {
+                while (indexes.next()) {
+                    String indexName = indexes.getString("INDEX_NAME");
+                    String columnName = indexes.getString("COLUMN_NAME");
+                    if (indexName != null) {
+                        if (!indexMap.containsKey(indexName)) {
+                            indexMap.put(indexName, new ArrayList<>());
+                        }
+                        indexMap.get(indexName).add(columnName);
+                    }
+                }
+            }
+
             StringBuilder createTableDDL = new StringBuilder(SQL_CREATE_TABLE);
             createTableDDL.append(tableName).append(" (\n");
             createTableDDL.append(String.join(",\n", columnDefinitions));
@@ -94,7 +98,6 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
                 createTableDDL.append(createIndexDDL);
             }
             return createTableDDL.toString();
-
         } catch (Exception e) {
             log.error("Failed to get table DDL", e);
         }

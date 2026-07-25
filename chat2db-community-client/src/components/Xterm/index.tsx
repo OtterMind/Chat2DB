@@ -68,6 +68,11 @@ export default forwardRef((props: IProps, ref: ForwardedRef<IXtermRef>) => {
     initXterm();
     return () => {
       window.removeEventListener('resize', resizeFitAddon);
+      // Dispose the Terminal (and its loaded FitAddon / onData listener)
+      // so the instance, DOM, and renderer are torn down on unmount.
+      xtermRef.current?.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
     };
   }, []);
 

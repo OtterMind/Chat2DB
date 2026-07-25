@@ -1,9 +1,13 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Input, Button, Form } from 'antd';
 import userServices from '@/service/enterprise/user';
 import { createStyles } from 'antd-style';
 import i18n from '@/i18n';
 import { staticMessage } from '@chat2db/ui';
+import {
+  createVerificationCodeCountdownLifecycle,
+  type VerificationCodeCountdownLifecycle,
+} from '@/utils/verificationCodeCountdown';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
@@ -34,6 +38,17 @@ export default memo<IProps>((props) => {
   const [sendCodeCount, setSendCodeCount] = useState<number>(0); // Number of verification-code sends.
   const [submitLoading, setSubmitLoading] = useState<boolean>(false);
   const [form] = Form.useForm();
+  const countdownLifecycleRef = useRef<VerificationCodeCountdownLifecycle | null>(null);
+  useEffect(() => {
+    const lifecycle = createVerificationCodeCountdownLifecycle(setCodeCountDown);
+    countdownLifecycleRef.current = lifecycle;
+    return () => {
+      lifecycle.dispose();
+      if (countdownLifecycleRef.current === lifecycle) {
+        countdownLifecycleRef.current = null;
+      }
+    };
+  }, []);
 
   const onFinish = (formValue: any) => {
     setSubmitLoading(true);
@@ -52,28 +67,26 @@ export default memo<IProps>((props) => {
   };
 
   const handleSendSMSAndStartTiming = () => {
+    const lifecycle = countdownLifecycleRef.current;
+    if (!lifecycle) {
+      return;
+    }
+    const request = lifecycle.beginRequest();
     // Validate the email address.
     form.validateFields(['email']).then(() => {
+      if (!request.isCurrent()) {
+        return;
+      }
       const email = form.getFieldValue('email');
       setSendCodeLoading(true);
-      userServices
-        .sendEmailSMS({ email })
-        .then(() => {
-          let countdown = 60;
-          setCodeCountDown(countdown);
-          const timer = setInterval(() => {
-            countdown -= 1;
-            setCodeCountDown(countdown);
-            if (countdown === 0) {
-              clearInterval(timer);
-              setCodeCountDown(null);
-            }
-          }, 1000);
-        })
-        .finally(() => {
-          setSendCodeCount(sendCodeCount + 1);
+      request.track(
+        userServices.sendEmailSMS({ email }),
+        () => request.startCountdown(),
+        () => {
+          setSendCodeCount((count) => count + 1);
           setSendCodeLoading(false);
-        });
+        },
+      );
     });
   };
 

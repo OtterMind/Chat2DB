@@ -123,6 +123,7 @@ export const useStyles = createStyles(({ css, token }, { sidebarExpanded }: { si
       position: relative;
       flex: 1;
       background-color: ${token.colorBgBase};
+      overflow: auto;
     `,
     componentBox: css`
       width: 100%;
