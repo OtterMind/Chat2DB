@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>開発者、DBA、アナリスト、データチーム向けの AI 搭載データベースクライアント兼 SQL ワークスペースです。</strong></p>
 </div>
 
@@ -19,7 +23,7 @@ Chat2DB Community は、Windows、macOS、Linux に対応した無料のクロ�
 - **SQL ワークスペース** — 編集、補完、フォーマット、実行、保存済み SQL、実行履歴。
 - **AI アシスタント** — 自分の AI モデルを接続し、自然言語で SQL の生成・説明・最適化を行えます。
 - **データベース管理** — メタデータの参照、テーブルとオブジェクトの管理（DDL/DML）、データのインライン編集。
-- **データのインポートとエクスポート**、**ダッシュボードとチャート**、**MCP 対応の CLI**。
+- **データのインポートとエクスポート**、**ダッシュボードとチャート**、**[MCP 対応のオープンソース CLI](https://github.com/OtterMind/Chat2DB-CLI)**。
 
 <div align="center">
 

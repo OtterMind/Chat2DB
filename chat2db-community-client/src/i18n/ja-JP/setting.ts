@@ -300,6 +300,7 @@ export default {
   'setting.shortcut.tableSelectAll': 'テーブル すべて選択',
   'setting.modelConfig.title': 'カスタムモデル',
   'setting.modelConfig.entry': 'カスタムモデル',
+  'setting.modelConfig.entryHint': 'OpenAI、Claude、Gemini、互換 API を接続',
   'setting.modelConfig.listTitle': 'モデル一覧',
   'setting.modelConfig.new': '新規モデル',
   'setting.modelConfig.name': '名称',

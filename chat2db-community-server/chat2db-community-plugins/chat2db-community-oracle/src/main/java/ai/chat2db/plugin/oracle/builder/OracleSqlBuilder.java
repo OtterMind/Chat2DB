@@ -208,24 +208,19 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
     public String buildPageLimit(PageLimitRequest request) {
         String sql = request.getSql();
         int offset = request.getOffset();
-        int pageNo = request.getPageNo();
         int pageSize = request.getPageSize();
         int startRow = offset;
         int endRow = offset + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
+        sqlBuilder.append(SQL_SELECT);
         if (startRow > 0) {
-            sqlBuilder.append(SQL_SELECT);
-        }
-        if (endRow > 0) {
             sqlBuilder.append(SQL_SELECT_TMP_PAGE_ROWNUM_CAHT2DB);
         }
         sqlBuilder.append(SQLConstants.LINE_SEPARATOR);
         sqlBuilder.append(sql);
         sqlBuilder.append(SQLConstants.LINE_SEPARATOR);
-        if (endRow > 0) {
-            sqlBuilder.append(SQL_CLOSE_PAREN_TMP_PAGE_WHERE_ROWNUM_EQUAL);
-            sqlBuilder.append(endRow);
-        }
+        sqlBuilder.append(SQL_CLOSE_PAREN_TMP_PAGE_WHERE_ROWNUM_EQUAL);
+        sqlBuilder.append(endRow);
         if (startRow > 0) {
             sqlBuilder.append(SQL_CLOSE_PAREN_WHERE_CAHT2DB_AUTO_ROW_ID);
             sqlBuilder.append(startRow);
@@ -269,11 +264,11 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         createViewSqlBuilder.append(SQLConstants.VIEW_KEYWORD);
         String schemaName = modifyView.getSchemaName();
         if (StringUtils.isNotBlank(schemaName)) {
-            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.DOT);
+            createViewSqlBuilder.append(quoteOracleIdentifier(schemaName)).append(SQLConstants.DOT);
         }
         String viewName = modifyView.getViewName();
         if (StringUtils.isNotBlank(viewName)) {
-            createViewSqlBuilder.append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE);
+            createViewSqlBuilder.append(quoteOracleIdentifier(viewName));
         } else {
             createViewSqlBuilder.append(UNDEFINED_KEYWORD);
         }
@@ -320,13 +315,28 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         String comment = modifyView.getComment();
         if (StringUtils.isNotBlank(comment)) {
             createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR);
-            createViewSqlBuilder.append(SQL_COMMENT_TABLE)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(schemaName).append(SQLConstants.DOUBLE_QUOTE)
-                    .append(SQLConstants.DOUBLE_QUOTE).append(viewName).append(SQLConstants.DOUBLE_QUOTE)
+            createViewSqlBuilder.append(SQL_COMMENT_TABLE_2);
+            if (StringUtils.isNotBlank(schemaName)) {
+                createViewSqlBuilder.append(quoteOracleIdentifier(schemaName)).append(SQLConstants.DOT);
+            }
+            createViewSqlBuilder.append(quoteOracleIdentifier(viewName))
                     .append(SQLConstants.SQL_IS_LOWER)
-                    .append(comment).append(SQLConstants.SEMICOLON);
+                    .append(quoteStringLiteral(comment))
+                    .append(SQLConstants.SEMICOLON);
         }
         return createViewSqlBuilder.toString();
+    }
+
+    private static String quoteOracleIdentifier(String identifier) {
+        return SQLConstants.DOUBLE_QUOTE
+                + identifier.replace(SQLConstants.DOUBLE_QUOTE, SQLConstants.DOUBLE_QUOTE + SQLConstants.DOUBLE_QUOTE)
+                + SQLConstants.DOUBLE_QUOTE;
+    }
+
+    private static String quoteStringLiteral(String value) {
+        return SQLConstants.SINGLE_QUOTE
+                + value.replace(SQLConstants.SINGLE_QUOTE, SQLConstants.SINGLE_QUOTE + SQLConstants.SINGLE_QUOTE)
+                + SQLConstants.SINGLE_QUOTE;
     }
 
     @Override

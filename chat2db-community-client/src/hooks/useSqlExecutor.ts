@@ -30,11 +30,10 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
   // Process data
   const handleData = (params: { data: any[] }) => {
     const { data } = params;
-    let res = data;
     if (onlyOne) {
-      res = data[0];
+      return data[0] ? [data[0]] : [];
     }
-    return res;
+    return data;
   };
 
   // execute sql

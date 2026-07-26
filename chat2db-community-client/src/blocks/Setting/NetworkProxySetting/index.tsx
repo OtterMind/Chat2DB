@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Form, Input, InputNumber, Radio, Select, Tooltip } from 'antd';
 import { CircleHelp } from 'lucide-react';
 import { staticMessage } from '@chat2db/ui';
@@ -12,6 +12,7 @@ import networkProxyService, {
 import SettingSubsection from '../SettingSubsection';
 import { useStyles as useBaseStyles } from '../BaseSetting/style';
 import { useStyles } from './style';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 const defaultProxySettings: INetworkProxySettings = {
   mode: NetworkProxyMode.NO_PROXY,
@@ -29,9 +30,12 @@ export default function NetworkProxySetting() {
   const [testing, setTesting] = useState(false);
   const [restartRequired, setRestartRequired] = useState(false);
   const mode = Form.useWatch('mode', form);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     networkProxyService.get().then((settings) => {
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       const nextSettings = {
         ...defaultProxySettings,
         ...settings,
@@ -42,6 +46,9 @@ export default function NetworkProxySetting() {
       });
       setRestartRequired(!!nextSettings.restartRequired);
     });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, [form]);
 
   async function saveSettings() {

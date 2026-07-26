@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>개발자, DBA, 분석가 및 데이터 팀을 위한 AI 기반 데이터베이스 클라이언트이자 SQL 워크스페이스입니다.</strong></p>
 </div>
 
@@ -19,7 +23,7 @@ Chat2DB Community는 Windows, macOS, Linux를 지원하는 무료 크로스 플�
 - **SQL 워크스페이스** — 편집, 자동 완성, 서식 지정, 실행, 저장된 SQL 및 실행 기록을 제공합니다.
 - **AI 어시스턴트** — 자체 AI 모델을 연결하여 자연어로 SQL을 생성, 설명 및 최적화합니다.
 - **데이터베이스 관리** — 메타데이터 탐색, 테이블 및 객체 관리(DDL/DML), 데이터 직접 편집을 지원합니다.
-- **데이터 가져오기 및 내보내기**, **대시보드 및 차트**, 그리고 **MCP를 지원하는 CLI**를 제공합니다.
+- **데이터 가져오기 및 내보내기**, **대시보드 및 차트**, 그리고 **[MCP를 지원하는 오픈 소스 CLI](https://github.com/OtterMind/Chat2DB-CLI)**를 제공합니다.
 
 <div align="center">
 

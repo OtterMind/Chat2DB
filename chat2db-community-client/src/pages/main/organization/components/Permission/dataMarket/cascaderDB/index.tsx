@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import connection from '@/service/connection';
 import sqlService from '@/service/sql';
 import { Cascader } from 'antd';
@@ -6,6 +6,7 @@ import Iconfont from '@/components/Iconfont';
 import { databaseMap } from '@/constants/database';
 import { useStyles } from './style';
 import { IConnectionListItem } from '@/typings/connection';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 enum DBFieldType {
   'dataSource',
@@ -41,12 +42,17 @@ interface CascaderDBProps {
 const CascaderDB = (props: CascaderDBProps) => {
   const [options, setOptions] = useState<Option[]>([]);
   const { styles } = useStyles();
+  const requestGenerationRef = useRef(0);
   useEffect(() => {
     // TODO: Request data-source data.
     loadDataSource();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const loadDataSource = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     try {
       let dataSourceList = props.dataSourceList ?? [];
       if (dataSourceList.length === 0) {
@@ -70,6 +76,7 @@ const CascaderDB = (props: CascaderDBProps) => {
         isLeaf: false,
         dataSourceId: item.id,
       }));
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       setOptions(formattedData);
     } catch (error) {
       console.log(error);

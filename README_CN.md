@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>面向开发者、DBA、分析师和数据团队的 AI 驱动数据库客户端与 SQL 工作空间。</strong></p>
 </div>
 
@@ -19,7 +23,7 @@ Chat2DB Community 是一款免费的跨平台数据库客户端,支持 Windows�
 - **SQL 工作空间** —— SQL 编辑、补全、格式化、执行、SQL 收藏与历史记录。
 - **AI 助手** —— 接入自定义 AI 模型,用自然语言生成、解释和优化 SQL。
 - **数据库管理** —— 元数据浏览、表和对象管理(DDL/DML)、在线编辑数据。
-- **数据导入导出**、**Dashboard 与图表**,以及支持 **MCP 的 CLI**。
+- **数据导入导出**、**Dashboard 与图表**,以及支持 **[MCP 的开源 CLI](https://github.com/OtterMind/Chat2DB-CLI)**。
 
 <div align="center">
 

@@ -23,6 +23,7 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
   const timer = useRef<NodeJS.Timeout>();
   const logEndRef = useRef<HTMLDivElement>(null);
   const timerNumber = useRef<number>(500);
+  const requestGenerationRef = useRef(0);
   const { getTaskList } = useImportExportStore((state) => {
     return {
       getTaskList: state.getTaskList,
@@ -30,9 +31,12 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
   });
 
   useEffect(() => {
-    getTaskDetails();
+    const requestGeneration = requestGenerationRef.current + 1;
+    requestGenerationRef.current = requestGeneration;
     timerNumber.current = 500;
+    getTaskDetails(requestGeneration);
     return () => {
+      requestGenerationRef.current += 1;
       // clear timer
       if (timer.current) {
         clearTimeout(timer.current);
@@ -40,13 +44,16 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
     };
   }, [taskId]);
 
-  const getTaskDetails = () => {
+  const getTaskDetails = (requestGeneration: number) => {
     // clear timer
     if (timer.current) {
       clearTimeout(timer.current);
     }
     // Get task details
     importExportServices.getTaskDetails({ id: taskId }).then((res) => {
+      if (requestGeneration !== requestGenerationRef.current) {
+        return;
+      }
       // Setup task details
       setTaskDetails(res);
       // If the task status is INIT, PROCESSING, RUNNING, continue to poll for task details
@@ -57,7 +64,7 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
       ) {
         //
         timer.current = setTimeout(() => {
-          getTaskDetails();
+          getTaskDetails(requestGeneration);
         }, timerNumber.current);
         // timer time increment
         timerNumber.current = timerNumber.current + 1000;

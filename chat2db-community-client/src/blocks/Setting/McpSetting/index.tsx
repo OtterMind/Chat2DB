@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Form, Input, Popconfirm, Switch } from 'antd';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
@@ -7,10 +7,12 @@ import { useGlobalStore } from '@/store/global';
 import { copyToClipboard } from '@/utils/copy';
 import SettingSubsection from '../SettingSubsection';
 import { useStyles } from '../BaseSetting/style';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 export default function McpSetting() {
   const { styles } = useStyles();
   const [token, setToken] = useState('');
+  const requestGenerationRef = useRef(0);
   const { enableMcp, setBaseSetting } = useGlobalStore((state) => {
     return {
       enableMcp: state.baseSetting.enableMcp,
@@ -19,7 +21,15 @@ export default function McpSetting() {
   });
 
   useEffect(() => {
-    jcefApi.getMcpToken().then(setToken);
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
+    jcefApi.getMcpToken().then((t) => {
+      if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+        setToken(t);
+      }
+    });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   function changeMcpEnabled(checked: boolean) {

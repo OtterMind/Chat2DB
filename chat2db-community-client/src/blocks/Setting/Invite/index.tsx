@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
 import { Button, Flex, Form, Table, Tag } from 'antd';
 import { CopyButton, IconButton, Input, Modal, staticMessage } from '@chat2db/ui';
@@ -9,6 +9,7 @@ import dayjs from 'dayjs';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 import { openWebPage } from '@/utils/url';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 const InvitationStatus = {
   /** is withdrawing */
@@ -37,9 +38,13 @@ const Invite = () => {
     appUrlConfig: state.appUrlConfig,
   }));
   const [form] = Form.useForm();
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
     queryInvitationCode();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   useEffect(() => {
@@ -52,19 +57,25 @@ const Invite = () => {
    * Get invitation code
    */
   const queryInvitationCode = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     const code = await invitationService.getMyInvitationCode();
+    if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
     setInvitationCode(code);
   };
 
   const queryInvitationList = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     setLoading(true);
     try {
       const res = await invitationService.getInvitationOrderItem();
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       setInvitationOrder(res);
     } catch {
       return;
     } finally {
-      setLoading(false);
+      if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+        setLoading(false);
+      }
     }
   };
 

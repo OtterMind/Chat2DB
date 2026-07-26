@@ -1,0 +1,80 @@
+name: chat2db-qq-notifier
+
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:v4.18.13@sha256:e66a6e52dc5dd63a2b8537651bafad50255d021584c113a8bbb2cc0ff94bd772
+    restart: unless-stopped
+    environment:
+      NAPCAT_UID: ${NAPCAT_UID}
+      NAPCAT_GID: ${NAPCAT_GID}
+      WEBUI_TOKEN: ${NAPCAT_WEBUI_TOKEN}
+      WEBUI_PREFIX: /webui
+      MODE: chat2db
+    ports:
+      - 127.0.0.1:6099:6099
+    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./napcat/qq:/app/.config/QQ
+      - ./napcat/onebot11.json:/app/templates/chat2db.json:ro
+    networks:
+      - backend
+      - egress
+
+  relay:
+    container_name: chat2db-qq-relay
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - napcat
+    environment:
+      RELAY_TOKEN: ${RELAY_TOKEN}
+      ONEBOT_TOKEN: ${ONEBOT_TOKEN}
+      ONEBOT_URL: http://napcat:3000
+      RELAY_REPOSITORY: OtterMind/Chat2DB
+      QQ_GROUP_ID: ${QQ_GROUP_ID}
+      RELAY_MAX_MESSAGE_LENGTH: 900
+      RELAY_RATE_LIMIT: 30
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - backend
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+    profiles:
+      - tunnel
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - backend
+      - egress
+
+networks:
+  backend:
+    internal: true
+  egress:

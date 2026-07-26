@@ -9,6 +9,7 @@ import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { type ThemeAppearance } from 'antd-style';
 import { ContextMenuRef } from '@/components/ContextMenu';
 import Filtration from '../Filtration';
+import { splitSearchHighlight } from './highlightSearchText';
 
 interface IProps {
   className?: string;
@@ -199,15 +200,17 @@ const TitleRender = (props: IProps) => {
 
   const renderContent = () => {
     const regular: any = () => (
-      <span
-        dangerouslySetInnerHTML={{
-          __html:
-            nodeData.originalTitle?.replace(
-              new RegExp(regularSearchBarValue, 'gi'),
-              (matched) => `<span style='color:red;'>${matched}</span>`,
-            ) || '',
-        }}
-      />
+      <span>
+        {splitSearchHighlight(nodeData.originalTitle || '', regularSearchBarValue).map((segment, index) =>
+          segment.highlighted ? (
+            <span key={index} style={{ color: 'red' }}>
+              {segment.text}
+            </span>
+          ) : (
+            segment.text
+          ),
+        )}
+      </span>
     );
 
     const editTextContent: any = searchBarValue ? regular() : nodeData.originalTitle || '';

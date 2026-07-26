@@ -140,6 +140,7 @@ const ERModal = forwardRef((props: IProps, ref: ForwardedRef<ERModalRef>) => {
 
   // Customize the initLayout function.
   useEffect(() => {
+    let disposed = false;
     const initLayout = async () => {
       if (!erModalData) {
         return;
@@ -163,12 +164,18 @@ const ERModal = forwardRef((props: IProps, ref: ForwardedRef<ERModalRef>) => {
         console.error('initLayout error', error);
       }
 
+      if (disposed) {
+        return;
+      }
       setNodes(laidOutNodes);
       setEdges(laidOutEdges);
       setLoading(false);
     };
 
     initLayout();
+    return () => {
+      disposed = true;
+    };
   }, [erModalData]);
 
   // Add a handler for the end of node dragging.

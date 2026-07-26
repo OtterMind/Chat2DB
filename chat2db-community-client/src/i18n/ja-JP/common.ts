@@ -150,6 +150,7 @@ export default {
   'common.button.tabularSeparatedValues': 'タブ区切り値',
   'common.button.tabularSeparatedValuesFieldName': 'タブ区切り値(フィールド名)',
   'common.button.tabularSeparatedValuesFieldNameAndData': 'タブ区切り値(フィールド名とデータ)',
+  'common.button.markdownTable': 'Markdown テーブル',
   'common.button.cloneRow': '行を複製',
   'common.button.deleteRow': '行を削除',
   'common.button.setNull': 'NULLに設定',

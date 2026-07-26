@@ -150,7 +150,6 @@ public class EasySqlUtils {
                                 schemaName = parts[1];
                                 actualTableName = parts[2];
                                 databaseList.add(databaseName);
-                                databaseList.add(databaseName);
                                 schemaList.add(schemaName);
                                 break;
                             case 2:

@@ -51,24 +51,31 @@ public class AiModelFactory {
         this.toolCallingManager = delegate;
     }
 
-    public AiChatClient create(AiRuntimeModel runtimeModel) {
+    public AiChatClient create(AiRuntimeModel runtimeModel, RequestMode requestMode) {
         AiProviderEnum provider = AiProviderEnum.from(runtimeModel.getProvider());
         if (runtimeModel.isSystemPreset()) {
             throw new IllegalArgumentException("Community edition requires a user configured AI model.");
         }
+        RetryTemplate retryTemplate = createRetryTemplate(requestMode);
         if (provider == AiProviderEnum.OPENAI) {
-            return openAiClient(runtimeModel);
+            return openAiClient(runtimeModel, retryTemplate);
         }
         if (provider == AiProviderEnum.CLAUDE) {
-            return claudeClient(runtimeModel);
+            return claudeClient(runtimeModel, retryTemplate);
         }
         if (provider == AiProviderEnum.GEMINI) {
-            return geminiClient(runtimeModel);
+            return geminiClient(runtimeModel, retryTemplate);
         }
         throw new IllegalArgumentException("Unsupported provider: " + runtimeModel.getProvider());
     }
 
-    private AiChatClient openAiClient(AiRuntimeModel runtimeModel) {
+    static RetryTemplate createRetryTemplate(RequestMode requestMode) {
+        return requestMode == RequestMode.STREAMING
+                ? RetryTemplate.builder().maxAttempts(1).build()
+                : RetryTemplate.defaultInstance();
+    }
+
+    private AiChatClient openAiClient(AiRuntimeModel runtimeModel, RetryTemplate retryTemplate) {
         logUpstreamTarget("openai",
                 StringUtils.defaultIfBlank(runtimeModel.getBaseUrl(), OpenAiApiConstants.DEFAULT_BASE_URL) + "/v1/chat/completions",
                 buildOpenAiHeaderView(runtimeModel, null));
@@ -94,7 +101,7 @@ public class AiModelFactory {
                 .openAiApi(patchOpenAiApiChunkMerger(apiBuilder.build()))
                 .defaultOptions(optionsBuilder.build())
                 .toolCallingManager(toolCallingManager)
-                .retryTemplate(RetryTemplate.defaultInstance())
+                .retryTemplate(retryTemplate)
                 .observationRegistry(ObservationRegistry.NOOP)
                 .build();
 
@@ -102,7 +109,7 @@ public class AiModelFactory {
         });
     }
 
-    private AiChatClient claudeClient(AiRuntimeModel runtimeModel) {
+    private AiChatClient claudeClient(AiRuntimeModel runtimeModel, RetryTemplate retryTemplate) {
         logUpstreamTarget("claude",
                 StringUtils.defaultIfBlank(runtimeModel.getBaseUrl(), AnthropicApiConstants.DEFAULT_BASE_URL),
                 buildClaudeHeaderView(runtimeModel, null));
@@ -127,7 +134,7 @@ public class AiModelFactory {
                 .anthropicApi(apiBuilder.build())
                 .defaultOptions(optionsBuilder.build())
                 .toolCallingManager(toolCallingManager)
-                .retryTemplate(RetryTemplate.defaultInstance())
+                .retryTemplate(retryTemplate)
                 .observationRegistry(ObservationRegistry.NOOP)
                 .build();
 
@@ -135,7 +142,7 @@ public class AiModelFactory {
         });
     }
 
-    private AiChatClient geminiClient(AiRuntimeModel runtimeModel) {
+    private AiChatClient geminiClient(AiRuntimeModel runtimeModel, RetryTemplate retryTemplate) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("provider", "gemini");
         payload.put("projectId", runtimeModel.getProjectId());
@@ -160,7 +167,7 @@ public class AiModelFactory {
                 .vertexAI(vertexAI)
                 .defaultOptions(optionsBuilder.build())
                 .toolCallingManager(toolCallingManager)
-                .retryTemplate(RetryTemplate.defaultInstance())
+                .retryTemplate(retryTemplate)
                 .observationRegistry(ObservationRegistry.NOOP)
                 .build();
 
@@ -228,6 +235,11 @@ public class AiModelFactory {
         public void close() {
             this.cleanup.run();
         }
+    }
+
+    public enum RequestMode {
+        SYNCHRONOUS,
+        STREAMING
     }
 
     private static final class OpenAiApiConstants {

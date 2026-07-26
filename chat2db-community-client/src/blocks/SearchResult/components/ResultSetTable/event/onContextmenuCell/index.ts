@@ -7,6 +7,7 @@ import handleViewUpdateData from './handleViewUpdateData';
 import handleSetNull from './handleSetNull';
 import handleCopyRow from './handleCopyRow';
 import handleCopyAsSqlInValues from './handleCopyAsSqlInValues';
+import handleCopyAsMarkdown from './handleCopyAsMarkdown';
 import i18n from '@/i18n';
 import { copyToClipboard } from '@/utils';
 import { downloadLargeCellValue } from '@/utils/file';
@@ -191,6 +192,13 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
             label: i18n('common.button.tabularSeparatedValuesFieldNameAndData'),
             onClick: () => {
               handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.tabSplitFieldAndValue });
+            },
+          },
+          {
+            key: ContextmenuType.markdownTable,
+            label: i18n('common.button.markdownTable'),
+            onClick: () => {
+              handleCopyAsMarkdown(tableInstance);
             },
           },
         ],

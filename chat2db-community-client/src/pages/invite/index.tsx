@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
 import { Input, TextArea } from '@chat2db/ui';
 import Logo from '@/components/Logo';
@@ -9,6 +9,7 @@ import { history } from 'umi';
 import { getAllUrlParams } from '@/utils/url';
 import { IOrganizationVO } from '@/typings/enterprise/organization';
 import i18n, { i18nElement } from '@/i18n';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 enum PageStep {
   None,
   Init,
@@ -32,14 +33,20 @@ const Invite = () => {
     appUrlConfig: state.appUrlConfig,
   }));
   const [form] = Form.useForm();
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
     queryTeamInfo();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const queryTeamInfo = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     const { organizationCode, inviterId } = getAllUrlParams();
     const res = await organizationService.queryOrgByTeamCode({ teamCode: organizationCode, inviterId });
+    if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
     setInviteOrg(res);
     setPageStep(res ? PageStep.Init : PageStep.Empty);
   };

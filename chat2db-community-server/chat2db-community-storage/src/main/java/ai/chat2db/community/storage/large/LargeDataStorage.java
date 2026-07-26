@@ -26,6 +26,8 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     private ConcurrentSkipListMap<Long, T> dataMap = new ConcurrentSkipListMap<>();
 
 
+    private String storageDir;
+
     private String filePath;
 
     private String name;
@@ -33,7 +35,12 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     private int limit;
 
     protected LargeDataStorage(String name, Class<T> clazz, int limit) {
-        this.filePath = DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json";
+        this(name, clazz, limit, DB_STORAGE_PATH);
+    }
+
+    protected LargeDataStorage(String name, Class<T> clazz, int limit, String storageBasePath) {
+        this.storageDir = storageBasePath + File.separator + name;
+        this.filePath = storageDir + File.separator + name + ".json";
         this.limit = limit;
         this.name = name;
         if (!FileUtil.exist(filePath)) {
@@ -43,8 +50,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 if (StringUtils.isNotBlank(line)) {
                     try {
                         Long id = Long.parseLong(line.trim());
-                        String detailFilePath = DB_STORAGE_PATH + File.separator + name + File.separator + id + ".json";
-                        String detail = FileUtil.readUtf8String(detailFilePath);
+                        String detail = FileUtil.readUtf8String(detailFilePath(id));
                         if (StringUtils.isNotBlank(detail)) {
                             T t = JSON.parseObject(detail, clazz);
                             dataMap.put(id, t);
@@ -55,6 +61,10 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 }
             });
         }
+    }
+
+    private String detailFilePath(Long id) {
+        return storageDir + File.separator + id + ".json";
     }
 
     @Override
@@ -72,7 +82,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     @Override
-    public Long save(T data) {
+    public synchronized Long save(T data) {
         if (data == null) {
             return null;
         }
@@ -80,8 +90,8 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             if (dataMap.size() >= limit) {
                 Map.Entry<Long, T> entry = dataMap.pollFirstEntry();
                 if (entry != null) {
-                    dataMap.remove(entry.getKey());
                     saveDataList();
+                    deleteDetailData(entry.getKey());
                 }
             }
             Long id = LocalStorageConverter.ensureId(data, this::generateId);
@@ -104,8 +114,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return;
         }
         try {
-            String detailFile = DB_STORAGE_PATH + File.separator + name + File.separator + id + ".json";
-            FileUtil.writeUtf8String(JSON.toJSONString(data), detailFile);
+            FileUtil.writeUtf8String(JSON.toJSONString(data), detailFilePath(id));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -113,7 +122,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
 
     @Override
-    public void update(T data) {
+    public synchronized void update(T data) {
         if (data == null) {
             return;
         }
@@ -123,6 +132,9 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 return;
             }
             T before = dataMap.get(id);
+            if (before == null) {
+                return;
+            }
             before = getAfterSave(before, data);
             saveDetailData(id, before);
         } catch (Exception e) {
@@ -131,9 +143,24 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     @Override
-    public void delete(Long id) {
+    public synchronized void delete(Long id) {
+        if (id == null) {
+            return;
+        }
         dataMap.remove(id);
         saveDataList();
+        deleteDetailData(id);
+    }
+
+    protected void deleteDetailData(Long id) {
+        if (id == null) {
+            return;
+        }
+        try {
+            FileUtil.del(detailFilePath(id));
+        } catch (Exception e) {
+            log.error("deleteDetailData error", e);
+        }
     }
 
     protected void saveDataList() {
@@ -142,6 +169,8 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             if (CollectionUtils.isNotEmpty(dataList)) {
                 String data = dataList.stream().map(String::valueOf).collect(Collectors.joining("\n"));
                 FileUtil.writeUtf8String(data + "\n", filePath);
+            } else {
+                FileUtil.writeUtf8String("", filePath);
             }
         } catch (Exception e) {
             log.error("saveDataList error", e);

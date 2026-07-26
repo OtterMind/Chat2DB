@@ -3,8 +3,21 @@ package ai.chat2db.plugin.oracle;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class OracleMetaDataTest {
+
+    @Test
+    void buildTablesSqlEscapesSchemaAndTableFiltersAsLiterals() {
+        String sql = OracleMetaData.buildTablesSql("SCOTT' OR '1'='1", "O'Brien' OR '1'='1");
+
+        assertEquals("SELECT A.OWNER, A.TABLE_NAME, B.COMMENTS FROM ALL_TABLES A "
+                        + "LEFT JOIN ALL_TAB_COMMENTS B ON  A.OWNER = B.OWNER  AND A.TABLE_NAME = B.TABLE_NAME\n"
+                        + "where A.OWNER = 'SCOTT'' OR ''1''=''1'  "
+                        + "and A.TABLE_NAME = 'O''Brien'' OR ''1''=''1'",
+                sql);
+        assertFalse(sql.contains("A.TABLE_NAME = 'O'Brien'"));
+    }
 
     @Test
     void appendRoutineSourceTextPreservesOracleLineTerminators() {

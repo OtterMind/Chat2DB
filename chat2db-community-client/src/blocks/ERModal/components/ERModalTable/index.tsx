@@ -62,8 +62,8 @@ export default memo<IProps>((props) => {
       </div>
       <table className={styles.tableContent}>
         <tbody>
-          {tableDetail.columnList.map((item, index) => (
-            <tr key={index} className={styles.tableContentItem}>
+          {tableDetail.columnList.map((item) => (
+            <tr key={item.name} className={styles.tableContentItem}>
               <td className={styles.keyIcon}>
                 <div className={styles.keyIconContent}>
                   {renderKeyIcon(item)}

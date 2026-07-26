@@ -355,9 +355,6 @@ class CompletionProviderManager {
     sql: string;
     cursor: number;
   }): Promise<ISqlEditorHintVO[] | null> {
-    if (!this.isBackendCompletion(params.model)) {
-      return null;
-    }
     const modelUri = params.model.uri.toString();
     this.bumpEditorHintsRequestSeq(modelUri);
     const result = await this.fetchTipsResult(params);

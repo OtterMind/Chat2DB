@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { ToolbarBtn, LoadingGracile, staticMessage } from '@chat2db/ui';
@@ -11,6 +11,7 @@ import { EditableCellType } from '@/blocks/EditableAntdTable/components/InputEdi
 import { cloneDeep } from 'lodash';
 import useSyncState from '@/hooks/useSyncState';
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 interface IProps {
   className?: string;
@@ -44,11 +45,17 @@ export default memo<IProps>((props) => {
   const [submitLoading] = useState(false);
   const [dataSource, setDataSource, getDataSource] = useSyncState<any[]>([]);
 
+  const requestGenerationRef = useRef(0);
+
   useEffect(() => {
     getTableComment();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const getTableComment = () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     setColumnAlias(null);
     setBasicInfo(null);
     form.resetFields();
@@ -89,6 +96,7 @@ export default memo<IProps>((props) => {
         tableName,
         refresh: true,
       }).then((sqlRes) => {
+        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
         const findColumnAlias = (columnName: string) => {
           return aiRes.tableCommentExt?.columnAlias?.find((item) => item.columnName === columnName) || {};
         };

@@ -1,5 +1,5 @@
 import { Button, Drawer, Flex, Popover } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import i18n from '@/i18n';
@@ -27,11 +27,16 @@ const NotificationButton = ({ drawerMode, open: externalOpen, onClose }: Notific
   const [popNoSOpen, setNoSPopOpen] = useState(false);
   const [popNoSData, setNoSPopData] = useState<NotificationVO | null>(null);
   const [modalSizeWidth, setModalSizeWidth] = useState<number>();
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     queryNotificationList();
     queryUnreadCount();
     queryPopNotification();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -54,18 +59,21 @@ const NotificationButton = ({ drawerMode, open: externalOpen, onClose }: Notific
 
   const queryUnreadCount = () => {
     notificationService.queryUnreadCount().then((res) => {
+      if (!mountedRef.current) return;
       setHasUnread(res > 0);
     });
   };
 
   const queryNotificationList = () => {
     notificationService.queryNotificationList({ pageNo: 1, pageSize: 50 }).then((res) => {
+      if (!mountedRef.current) return;
       setList(res.data);
     });
   };
 
   const queryPopNotification = async () => {
     const res = await notificationService.queryPopNotification();
+    if (!mountedRef.current) return;
     // Check localStorage for notifications already displayed, distinguished by ID.
     const popedNotificationId = localStorage.getItem(runtimeEditionConfig.notificationPopupStorageKey);
     // If the notification has not been shown, display it when valid.

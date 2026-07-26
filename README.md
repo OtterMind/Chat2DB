@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>An AI-powered database client and SQL workspace for developers, DBAs, analysts, and data teams.</strong></p>
 </div>
 
@@ -19,7 +23,7 @@ Chat2DB Community is a free, cross-platform database client for Windows, macOS, 
 - **SQL workspace** — editing, completion, formatting, execution, saved SQL, and execution history.
 - **AI assistant** — bring your own AI model to generate, explain, and optimize SQL in natural language.
 - **Database management** — browse metadata, manage tables and objects (DDL/DML), and edit data in place.
-- **Data import and export**, **dashboards and charts**, and a **CLI with MCP support**.
+- **Data import and export**, **dashboards and charts**, and an **[open-source CLI with MCP support](https://github.com/OtterMind/Chat2DB-CLI)**.
 
 <div align="center">
 
@@ -194,6 +198,12 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
 ```bash
 ./docker/docker-build.sh 5.3.0 chat2db/chat2db:5.3.0
 ```
+
+## Database guides
+
+Step-by-step guides for connecting Chat2DB Community to specific databases:
+
+- [BigQuery](./docs/guides/bigquery.md) — Google BigQuery via a Google Cloud service account.
 
 ## Community vs Commercial Editions
 

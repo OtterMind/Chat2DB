@@ -148,6 +148,7 @@ export default {
   'common.button.tabularSeparatedValues': '制表符分隔值',
   'common.button.tabularSeparatedValuesFieldName': '制表符分隔值(字段名)',
   'common.button.tabularSeparatedValuesFieldNameAndData': '制表符分隔值(字段名和数据)',
+  'common.button.markdownTable': 'Markdown 表格',
   'common.button.cloneRow': '克隆行',
   'common.button.deleteRow': '删除行',
   'common.button.setNull': '设置为NULL',

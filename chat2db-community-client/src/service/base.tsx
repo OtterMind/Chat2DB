@@ -75,20 +75,14 @@ request.interceptors.response.use(async (response, _options) => {
 export default function createRequest<P = void, R = void>(url: string, options?: IOptions) {
   const { method = 'get', isFullPath, dynamicUrl, contentType, fullResponse = false } = options || {};
   const { errorLevel: initialErrorLevel = 'notification', timeout = true, permissionError = 'apply' } = options || {};
-  let errorLevel = initialErrorLevel;
   return function (
     params: P,
     restParams?: {
       signal: AbortSignal | DesktopRequestOptions['signal'] | null;
     },
   ) {
-    // Do you need mocks?
-    // Splice params on the url according to defined rules
-    // TODO: Fix errorLevel error
     const paramsInUrl: string[] = [];
-    if (params?.errorLevel !== undefined) {
-      errorLevel = params.errorLevel;
-    }
+    const effectiveErrorLevel = params?.errorLevel !== undefined ? params.errorLevel : initialErrorLevel;
 
     const _url = url.replace(/:(.+?)\b/, (_, name: string) => {
       const value = params[name];
@@ -109,7 +103,13 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           method,
           message: params,
         },
-        { errorLevel, permissionError, timeout, fullResponse, restParams: restParams as DesktopRequestOptions },
+        {
+          errorLevel: effectiveErrorLevel,
+          permissionError,
+          timeout,
+          fullResponse,
+          restParams: restParams as DesktopRequestOptions,
+        },
       );
     } else {
       return new Promise<R>((resolve, reject) => {
@@ -195,13 +195,13 @@ export default function createRequest<P = void, R = void>(url: string, options?:
                 errorCode: responseErrorCode,
                 errorMessage: responseErrorMessage,
                 requestParams: params,
-                errorLevel,
+                errorLevel: effectiveErrorLevel,
                 permissionError,
               });
               return;
             }
             // Handle errors based on errorLevel
-            switch (errorLevel) {
+            switch (effectiveErrorLevel) {
               case 'toast':
                 staticMessage.error(errorMessage);
                 break;
@@ -220,7 +220,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
             }
           })
           .catch((error) => {
-            errorHandler(error, errorLevel);
+            errorHandler(error, effectiveErrorLevel);
             reject(error);
           });
       });

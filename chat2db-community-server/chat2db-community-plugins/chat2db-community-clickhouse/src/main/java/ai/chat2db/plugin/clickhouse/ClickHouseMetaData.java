@@ -22,6 +22,8 @@ import ai.chat2db.spi.DefaultSQLExecutor;
 import com.google.common.collect.Lists;
 import jakarta.validation.constraints.NotEmpty;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.clickhouse.constant.ClickHouseMetaDataConstants.*;
 public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaData {
+    private static final Logger log = LoggerFactory.getLogger(ClickHouseMetaData.class);
 
     public static String format(String tableName) {
         return "`" + tableName + "`";
@@ -227,7 +230,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
                         if (StringUtils.isNotBlank(sizes[0])) {
                             column.setColumnSize(Integer.parseInt(sizes[0]));
                         }
-                        if (StringUtils.isNotBlank(sizes[1])) {
+                        if (sizes.length > 1 && StringUtils.isNotBlank(sizes[1])) {
                             column.setDecimalDigits(Integer.parseInt(sizes[1]));
                         }
                     } else {
@@ -236,6 +239,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
                 }
             }
         } catch (Exception e) {
+            log.warn("parse column size failed: {}", columnType, e);
         }
     }
 

@@ -36,8 +36,8 @@ public abstract class BaseImporter implements IImportStrategy {
     protected SQLDataValue getSQLDataValue(String value, TableColumn column) {
         DataType dataType = new DataType();
         dataType.setDataTypeName(column.getColumnType());
-        dataType.setScale(column.getColumnSize());
-        dataType.setPrecision(column.getDecimalDigits());
+        dataType.setScale(column.getDecimalDigits());
+        dataType.setPrecision(column.getColumnSize());
         SQLDataValue sqlDataValue = new SQLDataValue();
         sqlDataValue.setDataType(dataType);
         sqlDataValue.setValue(value);

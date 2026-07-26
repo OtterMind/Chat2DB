@@ -98,9 +98,8 @@ function splitPart() {
         const separatorIndex = line.indexOf(DEFAULT_KV_SEPARATOR);
 
         if (separatorIndex === -1) {
-          throw new Error(
-            `The key-value separator "${DEFAULT_KV_SEPARATOR}" is not found in the sse line chunk!`,
-          );
+          // SSE spec allows lines without colon (comment lines, bare field names)
+          return acc;
         }
 
         // Extract the key from the beginning of the line up to the separator

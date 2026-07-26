@@ -10,6 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static ai.chat2db.plugin.snowflake.constant.SnowflakeColumnTypeEnumConstants.*;
 public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
@@ -125,8 +126,8 @@ public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
         String columnType = type.columnType.getTypeName();
         if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus())
                 && StringUtils.equalsIgnoreCase(column.getOldColumn().getTableName(), column.getTableName())
-                && column.getOldColumn().getColumnSize().equals(column.getColumnSize())
-                && column.getOldColumn().getDecimalDigits().equals(column.getDecimalDigits())) {
+                && Objects.equals(column.getOldColumn().getColumnSize(), column.getColumnSize())
+                && Objects.equals(column.getOldColumn().getDecimalDigits(), column.getDecimalDigits())) {
             return "";
         }
         if (Arrays.asList(BINARY, VARBINARY, VARCHAR, CHAR, STRING, TEXT).contains(type)) {
@@ -137,7 +138,7 @@ public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
             }
         }
 
-        if (Arrays.asList(DATE, TIME, DATETIME, TIMESTAMP, TIMESTAMP_TZ, TIMESTAMP_LTZ, TIMESTAMP_LTZ).contains(type)) {
+        if (Arrays.asList(DATE, TIME, DATETIME, TIMESTAMP, TIMESTAMP_TZ, TIMESTAMP_LTZ, TIMESTAMP_NTZ).contains(type)) {
             if (column.getColumnSize() == null || column.getColumnSize() == 0) {
                 return columnType;
             } else {
@@ -171,7 +172,10 @@ public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
         if(!type.getColumnType().isSupportNullable()){
             return "";
         }
-        if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus()) && !column.getNullable().equals(column.getOldColumn().getNullable())) {
+        if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus())
+                && column.getNullable() != null
+                && column.getOldColumn().getNullable() != null
+                && !Objects.equals(column.getNullable(), column.getOldColumn().getNullable())) {
             if (column.getNullable()!=null && 1==column.getNullable()) {
                 return "DROP NOT NULL";
             } else {

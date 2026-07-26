@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
 import SettingSubsection from '../SettingSubsection';
 import i18n, { i18nElement } from '@/i18n';
@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import { copyToClipboard } from '@/utils';
 import { useGlobalStore } from '@/store/global';
 import AntdTable from '@/components/AntdTable';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 interface IProps {
   className?: string;
@@ -23,6 +24,7 @@ export default memo<IProps>((props) => {
   const [loading, setLoading] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeyDetail[]>([]);
   const [currentApiKey, setCurrentApiKey] = useState<ApiKeyDetail | null>(null);
+  const requestGenerationRef = useRef(0);
 
   const { openUnifiedConfirmationModal, appUrlConfig } = useGlobalStore((state) => {
     return {
@@ -33,6 +35,9 @@ export default memo<IProps>((props) => {
 
   useEffect(() => {
     getApiKeyList();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const renderDescribe = () => {
@@ -49,9 +54,11 @@ export default memo<IProps>((props) => {
   };
 
   const getApiKeyList = () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     apiKeysServices
       .getApiKeyList()
       .then((res) => {
+        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
         setApiKeys(res);
       });
   };

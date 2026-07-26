@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Flex, Form, Input, Modal } from 'antd';
 import { OrgUserRoleCode, OrganizationType } from '@/typings/enterprise/organization';
 import orgService from '@/service/enterprise/organization';
@@ -13,6 +13,7 @@ import Avatar from '@/components/Avatar';
 import { refreshPage } from '@/utils';
 import i18n from '@/i18n';
 import CopyContainer from '@/components/CopyContainer';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 enum ModalType {
   TRANSFER = 'TRANSFER',
@@ -36,6 +37,7 @@ function OrgSetting() {
 
   const [userList, setUserList] = useState<OptionType>([]);
   const [userOptions, setUserOptions] = useState<OptionType>([]);
+  const requestGenerationRef = useRef(0);
 
   if (!curOrg) return null;
 
@@ -43,9 +45,13 @@ function OrgSetting() {
 
   useEffect(() => {
     queryUserList();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const queryUserList = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     const res = await orgService.getOrganizationUserList({
       organizationId: curOrg?.id,
       searchKey: '',
@@ -61,6 +67,7 @@ function OrgSetting() {
         });
         return acc;
       }, []);
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       setUserList(options);
       setUserOptions(options);
     }

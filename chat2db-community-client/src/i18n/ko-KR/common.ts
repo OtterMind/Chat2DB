@@ -149,6 +149,7 @@ export default {
   'common.button.tabularSeparatedValues': '탭으로 구분(데이터)',
   'common.button.tabularSeparatedValuesFieldName': '탭으로 구분(필드 이름)',
   'common.button.tabularSeparatedValuesFieldNameAndData': '탭으로 구분(필드 이름 및 데이터)',
+  'common.button.markdownTable': 'Markdown 표',
   'common.button.cloneRow': '행 복제',
   'common.button.deleteRow': '행 삭제',
   'common.button.setNull': 'NULL로 설정',

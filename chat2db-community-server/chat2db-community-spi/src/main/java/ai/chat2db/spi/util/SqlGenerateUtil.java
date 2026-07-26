@@ -39,7 +39,7 @@ public class SqlGenerateUtil {
                 return select.toString();
             }
         } catch (Exception e) {
-            log.error("jsqlparser parser sql error");
+            log.error("jsqlparser parser sql error", e);
             DbType dbType = JdbcUtils.parse2DruidDbType(dataBaseType);
 
             if (dbType == null) {

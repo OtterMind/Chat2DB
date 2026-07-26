@@ -181,6 +181,8 @@ class InputEditor {
   container: HTMLElement | null = null;
   /** Editor element frame content */
   inputContainer: HTMLDivElement | null = null;
+  /** React root for the editor content; unmounted in onEnd to avoid leaks. */
+  root: ReturnType<typeof ReactDOM.createRoot> | null = null;
   /** Ref of input box */
   inputRef: any = React.createRef();
   /** onEnd successful callback */
@@ -199,7 +201,8 @@ class InputEditor {
     inputContainer.style.position = 'absolute';
     this.inputContainer = inputContainer;
     this.container?.appendChild(inputContainer);
-    ReactDOM.createRoot(inputContainer).render(
+    this.root = ReactDOM.createRoot(inputContainer);
+    this.root.render(
       <InputReact textarea={this.textarea} defaultValue={value} ref={this.inputRef} />,
     );
   }
@@ -243,6 +246,8 @@ class InputEditor {
       this.container.removeChild(this.inputContainer);
     }
     this.inputContainer = null;
+    this.root?.unmount();
+    this.root = null;
   }
 
   isEditorElement(target) {
@@ -385,7 +390,8 @@ class DateEditor extends InputEditor {
     inputContainer.style.position = 'absolute';
     this.inputContainer = inputContainer;
     this.container?.appendChild(inputContainer);
-    ReactDOM.createRoot(inputContainer).render(
+    this.root = ReactDOM.createRoot(inputContainer);
+    this.root.render(
       <DateInputReact
         defaultValue={value}
         mode={this.mode}

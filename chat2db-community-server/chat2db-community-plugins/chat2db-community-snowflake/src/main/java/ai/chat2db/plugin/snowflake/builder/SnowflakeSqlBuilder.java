@@ -10,6 +10,8 @@ import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Objects;
+
 import static ai.chat2db.plugin.snowflake.constant.SnowflakeSqlBuilderConstants.*;
 public class SnowflakeSqlBuilder extends DefaultSqlBuilder {
 
@@ -32,14 +34,14 @@ public class SnowflakeSqlBuilder extends DefaultSqlBuilder {
             if (StringUtils.isBlank(column.getName()) || StringUtils.isBlank(column.getColumnType())) {
                 continue;
             }
-            SnowflakeColumnTypeEnum typeEnum = SnowflakeColumnTypeEnum.getByType(column.getColumnType());
+            SnowflakeColumnTypeEnum typeEnum = requireColumnType(column.getColumnType());
             script.append(SQLConstants.TAB).append(typeEnum.buildCreateColumnSql(column)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         for (TableIndex tableIndex : table.getIndexList()) {
             if (StringUtils.isBlank(tableIndex.getName()) || StringUtils.isBlank(tableIndex.getType())) {
                 continue;
             }
-            SnowflakeIndexTypeEnum mysqlIndexTypeEnum = SnowflakeIndexTypeEnum.getByType(tableIndex.getType());
+            SnowflakeIndexTypeEnum mysqlIndexTypeEnum = requireIndexType(tableIndex.getType());
             script.append(SQLConstants.TAB).append(SQLConstants.EMPTY).append(mysqlIndexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -94,12 +96,12 @@ public class SnowflakeSqlBuilder extends DefaultSqlBuilder {
                 script.append(SQLConstants.TAB).append(SQL_SET_COMMENT).append(SQLConstants.SINGLE_QUOTE).append(newTable.getComment()).append(SQLConstants.SINGLE_QUOTE).append(SQLConstants.COMMA_LINE_SEPARATOR);
             }
         }
-        if (oldTable.getIncrementValue() != newTable.getIncrementValue()) {
+        if (!Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
             script.append(SQLConstants.TAB).append(SQL_AUTO_INCREMENT_EQUAL).append(newTable.getIncrementValue()).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         for (TableColumn tableColumn : newTable.getColumnList()) {
             if (StringUtils.isNotBlank(tableColumn.getEditStatus()) && StringUtils.isNotBlank(tableColumn.getColumnType()) && StringUtils.isNotBlank(tableColumn.getName())) {
-                SnowflakeColumnTypeEnum typeEnum = SnowflakeColumnTypeEnum.getByType(tableColumn.getColumnType());
+                SnowflakeColumnTypeEnum typeEnum = requireColumnType(tableColumn.getColumnType());
                 script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.COMMA_LINE_SEPARATOR);
             }
         }
@@ -112,5 +114,20 @@ public class SnowflakeSqlBuilder extends DefaultSqlBuilder {
         return script.toString();
     }
 
-}
+    private SnowflakeColumnTypeEnum requireColumnType(String columnType) {
+        SnowflakeColumnTypeEnum typeEnum = SnowflakeColumnTypeEnum.getByType(columnType);
+        if (typeEnum == null) {
+            throw new IllegalArgumentException("Unsupported Snowflake column type: " + columnType);
+        }
+        return typeEnum;
+    }
 
+    private SnowflakeIndexTypeEnum requireIndexType(String indexType) {
+        SnowflakeIndexTypeEnum typeEnum = SnowflakeIndexTypeEnum.getByType(indexType);
+        if (typeEnum == null) {
+            throw new IllegalArgumentException("Unsupported Snowflake index type: " + indexType);
+        }
+        return typeEnum;
+    }
+
+}
