@@ -85,6 +85,15 @@ public class DataSource {
     private boolean supportSchema;
 
 
+    private String email;
+
+
+    private String keyfile;
+
+
+    private String project;
+
+
     private Long organizationId;
 
 
