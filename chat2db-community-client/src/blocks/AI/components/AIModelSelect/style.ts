@@ -45,47 +45,31 @@ export const useStyles = createStyles(({ css, token }) => {
         padding: 4px 8px !important;
       }
     `,
-    dropdownDivider: css`
-      margin: 6px 0 !important;
+    customModelOption: css`
+      margin-top: 4px;
+      padding: 8px 8px 4px !important;
+      border-top: 1px solid ${token.colorSplit};
+      border-radius: 0 !important;
     `,
     customModelEntry: css`
-      width: calc(100% - 8px);
-      margin: 4px;
-      padding: 10px 12px;
+      width: 100%;
+      padding: 2px 0;
       display: flex;
       align-items: center;
-      gap: 10px;
-      border: 1px solid transparent;
-      border-radius: 12px;
-      background: linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorFillQuaternary} 100%);
+      gap: 8px;
       color: ${token.colorText};
-      font: inherit;
       text-align: left;
-      cursor: pointer;
-      transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-
-      &:hover {
-        border-color: transparent;
-        background: linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorFillTertiary} 100%);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-        transform: translateY(-1px);
-      }
-
-      &:active {
-        transform: translateY(0);
-      }
     `,
     customModelIcon: css`
-      width: 28px;
-      height: 28px;
-      flex: 0 0 28px;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 9px;
+      border-radius: 6px;
       color: ${token.colorPrimary};
-      background: ${token.colorBgElevated};
-      box-shadow: inset 0 0 0 1px ${token.colorPrimaryBorder};
+      background: ${token.colorPrimaryBg};
     `,
     customModelContent: css`
       min-width: 0;
@@ -96,7 +80,7 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     customModelTitle: css`
       color: ${token.colorText};
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       line-height: 18px;
     `,

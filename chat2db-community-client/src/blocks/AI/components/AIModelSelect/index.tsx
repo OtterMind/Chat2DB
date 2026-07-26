@@ -1,15 +1,19 @@
 import React, { useEffect } from 'react';
-import { Select, Divider } from 'antd';
+import { Select } from 'antd';
 import { PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai/store';
 import { SelectedModelOption } from '@/store/ai/slices/model/initialState';
+import {
+  appendCustomModelEntryOption,
+  isCustomModelEntryOption,
+  ModelSelectOption,
+} from './modelSelectOptions';
 
-// Add props interface with onChange and value
 interface AIModelSelectProps {
   onChange?: (value: SelectedModelOption | null) => void;
-  options?: Array<{ label: string; value: string; isDefault?: boolean }>;
+  options?: ModelSelectOption[];
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;
@@ -41,6 +45,11 @@ const AIModelSelect = ({
 
   // Handle select change
   const handleChange = (selectedValue: { value: string; label: React.ReactNode }) => {
+    if (isCustomModelEntryOption(selectedValue.value)) {
+      onCustomModelClick?.();
+      return;
+    }
+
     const nextValue = {
       value: selectedValue.value,
       label: String(selectedValue.label || ''),
@@ -64,17 +73,7 @@ const AIModelSelect = ({
   const selectOptions = options !== undefined ? options : modelList;
   const customModelEntry =
     showCustomModelEntry && onCustomModelClick ? (
-      <button
-        type="button"
-        className={styles.customModelEntry}
-        onMouseDown={(e) => {
-          e.preventDefault();
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onCustomModelClick();
-        }}
-      >
+      <div className={styles.customModelEntry}>
         <span className={styles.customModelIcon}>
           <PlusOutlined />
         </span>
@@ -83,8 +82,13 @@ const AIModelSelect = ({
           <span className={styles.customModelHint}>{i18n('setting.modelConfig.entryHint')}</span>
         </span>
         <RightOutlined className={styles.customModelArrow} />
-      </button>
+      </div>
     ) : null;
+  const optionsWithCustomModelEntry = appendCustomModelEntryOption(
+    selectOptions,
+    customModelEntry,
+    selectOptions?.length ? styles.customModelOption : undefined,
+  );
 
   return (
     <Select
@@ -95,24 +99,10 @@ const AIModelSelect = ({
       labelInValue
       value={selectedModel && selectedModel.label ? selectedModel : undefined}
       onChange={handleChange}
-      options={selectOptions}
+      options={optionsWithCustomModelEntry}
       size="small"
       placeholder={i18n('ai.select.model')}
-      // rc-select suppresses an empty popup unless it has explicit empty-state content.
-      notFoundContent={customModelEntry}
       onDropdownVisibleChange={handleDropdownVisibleChange}
-      dropdownRender={(menu) => {
-        if (!customModelEntry || !selectOptions?.length) {
-          return menu;
-        }
-        return (
-          <div>
-            {menu}
-            <Divider className={styles.dropdownDivider} />
-            {customModelEntry}
-          </div>
-        );
-      }}
     />
   );
 };
