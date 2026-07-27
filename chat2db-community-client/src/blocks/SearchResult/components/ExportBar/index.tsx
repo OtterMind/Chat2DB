@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Dropdown, MenuProps, Space } from 'antd';
-import { DownOutlined } from '@ant-design/icons';
+import { ChevronDown } from 'lucide-react';
 import { ExportSizeEnum, ExportTypeEnum } from '@/typings/resultTable';
 import i18n from '@/i18n';
 import sqlService, { IExportParams } from '@/service/sql';
@@ -92,7 +92,7 @@ export default memo<IProps>((props) => {
     <Dropdown destroyPopupOnHide menu={{ items: exportDropdownItems }} trigger={['click']}>
       <Space className={styles.exportBar}>
         {i18n('common.text.export')}
-        <DownOutlined />
+        <ChevronDown size={14} />
       </Space>
     </Dropdown>
   );

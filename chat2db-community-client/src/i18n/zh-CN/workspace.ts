@@ -221,6 +221,7 @@ export default {
   'workspace.localSqlFileTree.newFile': '新建 SQL 文件',
   'workspace.localSqlFileTree.newFolder': '新建文件夹',
   'workspace.localSqlFileTree.refresh': '刷新',
+  'workspace.localSqlFileTree.expandAll': '全部展开',
   'workspace.localSqlFileTree.collapseAll': '全部折叠',
   'workspace.localSqlFileTree.moreActions': '更多操作',
   'workspace.localSqlFileTree.open': '打开',

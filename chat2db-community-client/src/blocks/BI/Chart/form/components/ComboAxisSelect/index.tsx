@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, Dropdown } from 'antd';
 import { IChartItem } from '@/typings';
 import { newFormattedSqlExecuteData } from '@/utils/dashboard';
@@ -125,7 +126,7 @@ const ComboAxisSelectItem = (props: IItemProps) => {
       {
         key: 'move-up',
         label: i18n('common.button.moveUp'),
-        icon: <IconfontSvg code="icon-up-arrow" />,
+        icon: <ChevronUp size={16} />,
         onClick: () => {
           onAction?.('move-up');
         },
@@ -133,7 +134,7 @@ const ComboAxisSelectItem = (props: IItemProps) => {
       {
         key: 'move-down',
         label: i18n('common.button.moveDown'),
-        icon: <IconfontSvg code="icon-down-arrow" />,
+        icon: <ChevronDown size={16} />,
         onClick: () => {
           onAction?.('move-down');
         },

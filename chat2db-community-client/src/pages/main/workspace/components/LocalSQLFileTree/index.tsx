@@ -4,12 +4,13 @@ import { useSize } from 'ahooks';
 import { Button, Dropdown, Input, Modal, Tooltip, type InputRef, type MenuProps } from 'antd';
 import {
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   FilePlus,
   Folder,
   FolderInput,
   FolderOpen,
   FolderPlus,
-  ListCollapse,
   MoreHorizontal,
   RefreshCw,
 } from 'lucide-react';
@@ -295,6 +296,20 @@ function findTreeNodeWithAncestors(
   return undefined;
 }
 
+function getExpandableDirectoryKeys(nodes: LocalSQLFileTreeNode[]) {
+  const keys: string[] = [];
+
+  nodes.forEach((node) => {
+    if (node.type !== 'directory' || !node.children?.length) {
+      return;
+    }
+    keys.push(node.key);
+    keys.push(...getExpandableDirectoryKeys(node.children));
+  });
+
+  return keys;
+}
+
 function getDefaultCreateName(parent: LocalSQLFileTreeNode, type: LocalSQLFileTreeCreateType) {
   const childNames = new Set((parent.children || []).map((child) => child.name.toLowerCase()));
   const baseName = type === 'file' ? 'untitled' : 'New Folder';
@@ -353,6 +368,8 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     }
     return findTreeNode(rootNodes, (node) => node.key === selectedNodeKey);
   }, [rootNodes, selectedNodeKey]);
+  const expandableDirectoryKeys = useMemo(() => getExpandableDirectoryKeys(rootNodes), [rootNodes]);
+  const shouldExpandAll = expandableDirectoryKeys.some((key) => !expandedKeys.includes(key));
 
   const contextMenuNode = contextMenu
     ? findTreeNode(rootNodes, (node) => node.key === contextMenu.targetSnapshot.nodeKey)?.node
@@ -1443,10 +1460,12 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
         execute: () => refreshDirectory(node),
       }),
       createContextMenuAction({
-        id: 'collapseAll',
-        label: i18n('workspace.localSqlFileTree.collapseAll'),
-        shortcutAction: ShortcutAction.LocalSqlFileTreeCollapseAll,
-        execute: collapseAll,
+        id: shouldExpandAll ? 'expandAll' : 'collapseAll',
+        label: i18n(
+          shouldExpandAll ? 'workspace.localSqlFileTree.expandAll' : 'workspace.localSqlFileTree.collapseAll',
+        ),
+        shortcutAction: shouldExpandAll ? undefined : ShortcutAction.LocalSqlFileTreeCollapseAll,
+        execute: shouldExpandAll ? expandAll : collapseAll,
       }),
       ...mutationItems,
     ];
@@ -1635,6 +1654,14 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     setSelectedNodeKey(rootNodes[0].key);
   }
 
+  function expandAll() {
+    if (!expandableDirectoryKeys.length) {
+      return;
+    }
+    setCreatingNode(null);
+    setExpandedKeys((keys) => Array.from(new Set([...keys, ...expandableDirectoryKeys])));
+  }
+
   const toolbarDisabled = !rootNodes.length || !!creatingNode || !!renamingNode;
   const folderActionMode = rootNodes.length ? 'add' : 'replace';
   const folderActionTitle = rootNodes.length
@@ -1651,10 +1678,12 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
       onClick: () => startCreate('directory'),
     },
     {
-      key: 'collapseAll',
-      label: i18n('workspace.localSqlFileTree.collapseAll'),
+      key: shouldExpandAll ? 'expandAll' : 'collapseAll',
+      label: i18n(
+        shouldExpandAll ? 'workspace.localSqlFileTree.expandAll' : 'workspace.localSqlFileTree.collapseAll',
+      ),
       disabled: !rootNodes.length,
-      onClick: collapseAll,
+      onClick: shouldExpandAll ? expandAll : collapseAll,
     },
   ];
 
@@ -1712,11 +1741,15 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
                   icon={FolderPlus}
                 />
                 <IconButton
-                  title={i18n('workspace.localSqlFileTree.collapseAll')}
+                  title={i18n(
+                    shouldExpandAll
+                      ? 'workspace.localSqlFileTree.expandAll'
+                      : 'workspace.localSqlFileTree.collapseAll',
+                  )}
                   size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
                   disabled={!rootNodes.length}
-                  onClick={collapseAll}
-                  icon={ListCollapse}
+                  onClick={shouldExpandAll ? expandAll : collapseAll}
+                  icon={shouldExpandAll ? ChevronsUpDown : ChevronsDownUp}
                 />
               </>
             ) : (

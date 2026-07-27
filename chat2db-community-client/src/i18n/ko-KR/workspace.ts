@@ -226,6 +226,7 @@ export default {
   'workspace.localSqlFileTree.newFile': '새 SQL 파일',
   'workspace.localSqlFileTree.newFolder': '새 폴더',
   'workspace.localSqlFileTree.refresh': '새로 고침',
+  'workspace.localSqlFileTree.expandAll': '모두 펼치기',
   'workspace.localSqlFileTree.collapseAll': '모두 접기',
   'workspace.localSqlFileTree.moreActions': '추가 작업',
   'workspace.localSqlFileTree.open': '열기',
