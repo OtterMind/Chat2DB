@@ -27,7 +27,6 @@ import liquibase.database.jvm.JdbcConnection;
 import liquibase.diff.DiffResult;
 import liquibase.diff.compare.CompareControl;
 import liquibase.diff.output.DiffOutputControl;
-import liquibase.diff.output.changelog.DiffToChangeLog;
 import liquibase.exception.DatabaseException;
 import liquibase.exception.LiquibaseException;
 import liquibase.resource.FileSystemResourceAccessor;
@@ -140,7 +139,7 @@ public class DbDiffServiceImpl implements IDbDiffService {
         diffOutputControl.setIncludeSchema(false);
         diffOutputControl.setIncludeTablespace(false);
 
-        DiffToChangeLog diffToChangeLog = new DiffToChangeLog(diffResult, diffOutputControl);
+        Chat2dbDiffToChangeLog diffToChangeLog = new Chat2dbDiffToChangeLog(diffResult, diffOutputControl);
         diffToChangeLog.setChangeSetAuthor("Chat2DB client");
         diffToChangeLog.print(diffFilePath);
     }
