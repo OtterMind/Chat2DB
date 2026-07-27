@@ -302,6 +302,21 @@ class AiToolServiceImplTest {
         assertEquals(0, fixture.recordFailureCalls.get());
     }
 
+    @Test
+    void executeSqlThrowsExecutionExceptionAndRecordsListResultWhenExecutorReturnsNullResultSet() {
+        Fixture fixture = new Fixture();
+        injectExecuteDependencies(fixture, Collections.singletonList(null), null);
+
+        AiToolSqlExecutionException exception = assertThrows(
+                AiToolSqlExecutionException.class,
+                () -> fixture.service.executeSql(executeRequest("select null_result")));
+
+        assertEquals(true, exception.getMessage().contains("empty result"));
+        assertEquals(1, fixture.clearCalls.get());
+        assertEquals(1, fixture.recordListResultCalls.get());
+        assertEquals(0, fixture.recordFailureCalls.get());
+    }
+
     private static void injectExecuteDependencies(Fixture fixture, List<ExecuteResponse> responses, RuntimeException failure) {
         inject(fixture.service, "connectionContextService", fixture.connectionContextService());
         inject(fixture.service, "sqlService", sqlService("SELECT"));

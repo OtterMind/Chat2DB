@@ -3,7 +3,6 @@ package ai.chat2db.community.web.api.mcp.adapter;
 
 import ai.chat2db.community.tools.annotation.NotCliRuntime;
 import ai.chat2db.community.domain.api.exception.ai.AiToolException;
-import ai.chat2db.community.domain.api.model.ai.AiToolResult;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
@@ -14,9 +13,11 @@ import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.web.api.adapter.ai.AiChatStreamAdapter;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolErrorCodeMapper;
+import ai.chat2db.community.web.api.converter.ai.AiToolFailureSummaryMapper;
 import ai.chat2db.community.web.api.converter.ai.AiToolOutput;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultSerializer;
+import ai.chat2db.community.web.api.model.response.ai.AiToolResult;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -47,18 +48,22 @@ public class AiToolMcpAdapter {
 
     private final AiToolErrorCodeMapper aiToolErrorCodeMapper;
 
+    private final AiToolFailureSummaryMapper aiToolFailureSummaryMapper;
+
     public AiToolMcpAdapter(IAiToolService aiToolService,
             AiToolContextConverter aiToolContextConverter,
             AiToolResultConverter aiToolResultConverter,
             AiChatStreamAdapter aiChatStreamAdapter,
             AiToolResultSerializer aiToolResultSerializer,
-            AiToolErrorCodeMapper aiToolErrorCodeMapper) {
+            AiToolErrorCodeMapper aiToolErrorCodeMapper,
+            AiToolFailureSummaryMapper aiToolFailureSummaryMapper) {
         this.aiToolService = aiToolService;
         this.aiToolContextConverter = aiToolContextConverter;
         this.aiToolResultConverter = aiToolResultConverter;
         this.aiChatStreamAdapter = aiChatStreamAdapter;
         this.aiToolResultSerializer = aiToolResultSerializer;
         this.aiToolErrorCodeMapper = aiToolErrorCodeMapper;
+        this.aiToolFailureSummaryMapper = aiToolFailureSummaryMapper;
     }
 
     @Tool(name = "list_all_datasources", description = "List available Chat2DB datasources. Use this first, then pass the returned dataSourceId to datasource-scoped tools.")
@@ -155,9 +160,11 @@ public class AiToolMcpAdapter {
 
     private String toolFailure(String toolName, Exception e) {
         if (e instanceof AiToolException toolException) {
+            String errorCode = aiToolErrorCodeMapper.errorCodeFor(toolException);
+            log.warn("MCP tool call failed, tool={}, errorCode={}", toolName, errorCode, toolException);
             return aiToolResultSerializer.toJson(AiToolResult.failureWithCode(
-                    aiToolErrorCodeMapper.errorCodeFor(toolException),
-                    toolException.getMessage()));
+                    errorCode,
+                    aiToolFailureSummaryMapper.summaryFor(toolException)));
         }
         return aiToolResultSerializer.toJson(AiToolResult.failureWithCode(
                 "TOOL_CALL_FAILED",

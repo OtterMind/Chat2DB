@@ -529,7 +529,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                     - If several datasources or schemas could satisfy the request, make the most reasonable schema-based choice and still return SQL only.
                     - Tool results are JSON objects with fields: success, summary, data, errorCode.
                     - If success is false, use summary/errorCode to recover or explain why SQL cannot be generated from live metadata.
-                    - When success is true, consume structured values from data instead of parsing summary text.
+                    - When success is true, data is a typed payload array; consume structured values from data instead of parsing summary text.
                     """;
         }
 
@@ -550,7 +550,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                 - The final answer must remain SQL only, even if tools are used.
                 - Tool results are JSON objects with fields: success, summary, data, errorCode.
                 - If success is false, use summary/errorCode to recover or explain why SQL cannot be generated from live metadata.
-                - When success is true, consume structured values from data instead of parsing summary text.
+                - When success is true, data is a typed payload array; consume structured values from data instead of parsing summary text.
                 """;
     }
 
@@ -602,7 +602,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                 - Prefer returning CREATE TABLE DDL when available.
                 - Tool results are JSON objects with fields: success, summary, data, errorCode.
                 - If success is false, use summary/errorCode to decide whether to retry with narrower arguments or explain the failure.
-                - When success is true, consume structured values from data instead of parsing summary text.
+                - When success is true, data is a typed payload array; consume structured values from data instead of parsing summary text.
                 - Never output pseudo tool-call tags or XML-like tool invocation markup in the final answer.
                 """;
     }

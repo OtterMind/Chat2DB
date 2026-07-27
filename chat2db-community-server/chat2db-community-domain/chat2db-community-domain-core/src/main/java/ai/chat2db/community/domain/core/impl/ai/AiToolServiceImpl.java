@@ -402,7 +402,13 @@ public class AiToolServiceImpl implements IAiToolService {
             return result;
         }
         for (ExecuteResponse executeResult : results) {
-            if (executeResult == null || Boolean.TRUE.equals(executeResult.getSuccess())) {
+            if (executeResult == null) {
+                result.setSuccess(false);
+                result.errorCode("EMPTY_EXECUTION_RESULT");
+                result.setErrorMessage("SQL execution returned an empty result.");
+                break;
+            }
+            if (Boolean.TRUE.equals(executeResult.getSuccess())) {
                 continue;
             }
             result.setSuccess(false);

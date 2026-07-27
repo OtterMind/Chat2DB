@@ -1,4 +1,4 @@
-package ai.chat2db.community.domain.api.model.ai;
+package ai.chat2db.community.web.api.model.response.ai;
 
 import lombok.Data;
 

@@ -17,6 +17,7 @@ import ai.chat2db.community.web.api.adapter.ai.AiChatStreamAdapter;
 import ai.chat2db.community.web.api.adapter.ai.AiToolAdapter;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolErrorCodeMapper;
+import ai.chat2db.community.web.api.converter.ai.AiToolFailureSummaryMapper;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultSerializer;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
@@ -30,7 +31,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiToolMcpAdapterTest {
 
@@ -43,9 +43,9 @@ class AiToolMcpAdapterTest {
 
         assertEquals(true, result.getBoolean("success"));
         assertEquals("SQL generated successfully.", result.getString("summary"));
-        assertEquals("select * from users", result.getJSONObject("data").getString("sql"));
+        assertEquals("select * from users", result.getJSONArray("data").getJSONObject(0).getString("sql"));
         assertNull(result.getString("errorCode"));
-        assertTrue(json.contains("\"errorCode\":null"));
+        assertFalse(json.contains("\"errorCode\""));
     }
 
     @Test
@@ -63,6 +63,7 @@ class AiToolMcpAdapterTest {
         String mcp = mcpAdapter.executeSql("select broken", null, 1L, "app", null);
 
         assertEquals(regular, mcp);
+        assertFalse(mcp.contains("syntax error"));
     }
 
     @Test
@@ -79,8 +80,9 @@ class AiToolMcpAdapterTest {
         JSONObject result = JSON.parseObject(json);
 
         assertEquals(false, result.getBoolean("success"));
-        assertEquals("bad mcp input", result.getString("summary"));
+        assertEquals("Invalid tool arguments.", result.getString("summary"));
         assertEquals("INVALID_ARGUMENT", result.getString("errorCode"));
+        assertFalse(result.getString("summary").contains("bad mcp input"));
     }
 
     @Test
@@ -102,13 +104,35 @@ class AiToolMcpAdapterTest {
         assertFalse(result.getString("summary").contains("driver exploded"));
     }
 
+    @Test
+    void shouldReturnOuterFailureWhenServiceReturnsNullExecutionResult() {
+        IAiToolService service = new StubAiToolService() {
+            @Override
+            public List<ExecuteResponse> executeSql(AiExecuteSqlRequest request) {
+                return Collections.singletonList(null);
+            }
+        };
+        AiToolMcpAdapter mcpAdapter = mcpAdapter(service);
+
+        String json = mcpAdapter.executeSql("select 1", null, 1L, "app", null);
+        JSONObject result = JSON.parseObject(json);
+
+        assertEquals(false, result.getBoolean("success"));
+        assertEquals("SQL execution failed.", result.getString("summary"));
+        assertEquals("SQL_EXECUTION_FAILED", result.getString("errorCode"));
+        assertNull(result.get("data"));
+        assertFalse(json.contains("\"data\""));
+        assertFalse(json.contains("\"sqlType\""));
+    }
+
     private static AiToolAdapter adapter(IAiToolService service) {
         return new AiToolAdapter(
                 service,
                 new AiToolContextConverter(),
                 new AiToolResultConverter(),
                 new AiToolResultSerializer(),
-                new AiToolErrorCodeMapper());
+                new AiToolErrorCodeMapper(),
+                new AiToolFailureSummaryMapper());
     }
 
     private static AiToolMcpAdapter mcpAdapter(IAiToolService service) {
@@ -122,7 +146,8 @@ class AiToolMcpAdapterTest {
                 new AiToolResultConverter(),
                 aiChatStreamAdapter,
                 new AiToolResultSerializer(),
-                new AiToolErrorCodeMapper());
+                new AiToolErrorCodeMapper(),
+                new AiToolFailureSummaryMapper());
     }
 
     private static class StubAiChatStreamAdapter extends AiChatStreamAdapter {

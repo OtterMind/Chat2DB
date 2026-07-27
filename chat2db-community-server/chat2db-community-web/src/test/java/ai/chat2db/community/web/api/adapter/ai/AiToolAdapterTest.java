@@ -18,6 +18,7 @@ import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolErrorCodeMapper;
+import ai.chat2db.community.web.api.converter.ai.AiToolFailureSummaryMapper;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultSerializer;
 import com.alibaba.fastjson2.JSON;
@@ -37,13 +38,15 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class AiToolAdapterTest {
 
     @ParameterizedTest
     @MethodSource("typedToolExceptions")
-    void shouldMapTypedToolExceptionToStableErrorEnvelope(AiToolException exception, String expectedErrorCode) {
+    void shouldMapTypedToolExceptionToStableErrorEnvelope(AiToolException exception, String expectedErrorCode,
+            String expectedSummary) {
         AiToolAdapter adapter = adapterWith(new StubAiToolService() {
             @Override
             public List<ExecuteResponse> executeSql(AiExecuteSqlRequest request) {
@@ -56,7 +59,8 @@ class AiToolAdapterTest {
 
         assertEquals(false, result.getBoolean("success"));
         assertEquals(expectedErrorCode, result.getString("errorCode"));
-        assertEquals(exception.getMessage(), result.getString("summary"));
+        assertEquals(expectedSummary, result.getString("summary"));
+        assertFalse(result.getString("summary").contains(exception.getMessage()));
     }
 
     @Test
@@ -91,7 +95,26 @@ class AiToolAdapterTest {
 
         assertEquals(true, result.getBoolean("success"));
         assertEquals("SQL executed successfully with no result.", result.getString("summary"));
-        assertEquals(0, result.getJSONObject("data").getJSONArray("results").size());
+        assertEquals(0, result.getJSONArray("data").size());
+    }
+
+    @Test
+    void shouldReturnOuterFailureWhenServiceReturnsNullExecutionResult() {
+        AiToolAdapter adapter = adapterWith(new StubAiToolService() {
+            @Override
+            public List<ExecuteResponse> executeSql(AiExecuteSqlRequest request) {
+                return Collections.singletonList(null);
+            }
+        });
+
+        String json = adapter.executeSql("select 1", null, 1L, "db", null, null);
+        JSONObject result = JSON.parseObject(json);
+
+        assertEquals(false, result.getBoolean("success"));
+        assertEquals("SQL_EXECUTION_FAILED", result.getString("errorCode"));
+        assertEquals("SQL execution failed.", result.getString("summary"));
+        assertNull(result.get("data"));
+        assertFalse(json.contains("\"sqlType\""));
     }
 
     @Test
@@ -118,24 +141,54 @@ class AiToolAdapterTest {
         assertFalse(String.valueOf(payload.get("content")).contains("\"data\""));
     }
 
+    @Test
+    void shouldEmitStableFailureSummaryToTraceForTypedToolException() {
+        AiToolAdapter adapter = adapterWith(new StubAiToolService() {
+            @Override
+            public List<ExecuteResponse> executeSql(AiExecuteSqlRequest request) {
+                throw new AiToolSqlExecutionException("SQL execution failed: driver detail password=secret");
+            }
+        });
+        List<Map<String, Object>> tracePayloads = new ArrayList<>();
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put(AiChatTraceSupport.TRACE_EMITTER_KEY, (Consumer<Map<String, Object>>) tracePayloads::add);
+
+        String json = adapter.executeSql("select 1", null, 1L, "db", null, new ToolContext(context));
+        JSONObject result = JSON.parseObject(json);
+
+        assertEquals(false, result.getBoolean("success"));
+        assertEquals("SQL_EXECUTION_FAILED", result.getString("errorCode"));
+        assertEquals("SQL execution failed.", result.getString("summary"));
+        assertFalse(json.contains("password=secret"));
+        assertEquals(1, tracePayloads.size());
+        Map<String, Object> payload = tracePayloads.get(0);
+        assertEquals(AiChatTraceSupport.TYPE_TOOL_RESULT, payload.get("type"));
+        assertEquals("execute_sql", payload.get("name"));
+        assertEquals("SQL execution failed.", payload.get("content"));
+        assertFalse(String.valueOf(payload.get("content")).contains("password=secret"));
+    }
+
     private AiToolAdapter adapterWith(IAiToolService service) {
         return new AiToolAdapter(
                 service,
                 new AiToolContextConverter(),
                 new AiToolResultConverter(),
                 new AiToolResultSerializer(),
-                new AiToolErrorCodeMapper());
+                new AiToolErrorCodeMapper(),
+                new AiToolFailureSummaryMapper());
     }
 
     private static Stream<Object[]> typedToolExceptions() {
         return Stream.of(
-                new Object[] {new AiToolInvalidArgumentException("bad input"), "INVALID_ARGUMENT"},
-                new Object[] {new AiToolSqlConfirmationRequiredException("manual confirmation required"),
-                        "SQL_REQUIRES_MANUAL_CONFIRMATION"},
-                new Object[] {new AiToolSqlExecutionException("SQL execution failed: syntax error"),
-                        "SQL_EXECUTION_FAILED"},
-                new Object[] {new AiToolMetadataQueryException("metadata query failed"),
-                        "METADATA_QUERY_FAILED"});
+                new Object[] {new AiToolInvalidArgumentException("bad input: customer_token"), "INVALID_ARGUMENT",
+                        "Invalid tool arguments."},
+                new Object[] {new AiToolSqlConfirmationRequiredException("manual confirmation required: drop table"),
+                        "SQL_REQUIRES_MANUAL_CONFIRMATION",
+                        "SQL requires manual confirmation before execution."},
+                new Object[] {new AiToolSqlExecutionException("SQL execution failed: syntax error near password"),
+                        "SQL_EXECUTION_FAILED", "SQL execution failed."},
+                new Object[] {new AiToolMetadataQueryException("metadata query failed: driver 08001"),
+                        "METADATA_QUERY_FAILED", "Database metadata query failed."});
     }
 
     private static class StubAiToolService implements IAiToolService {

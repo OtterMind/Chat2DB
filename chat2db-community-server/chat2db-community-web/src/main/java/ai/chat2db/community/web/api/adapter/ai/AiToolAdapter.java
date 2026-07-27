@@ -1,13 +1,14 @@
 package ai.chat2db.community.web.api.adapter.ai;
 
 import ai.chat2db.community.domain.api.exception.ai.AiToolException;
-import ai.chat2db.community.domain.api.model.ai.AiToolResult;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.web.api.model.response.ai.AiToolResult;
 import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolErrorCodeMapper;
+import ai.chat2db.community.web.api.converter.ai.AiToolFailureSummaryMapper;
 import ai.chat2db.community.web.api.converter.ai.AiToolOutput;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultConverter;
 import ai.chat2db.community.web.api.converter.ai.AiToolResultSerializer;
@@ -30,17 +31,20 @@ public class AiToolAdapter {
     private final AiToolResultConverter aiToolResultConverter;
     private final AiToolResultSerializer aiToolResultSerializer;
     private final AiToolErrorCodeMapper aiToolErrorCodeMapper;
+    private final AiToolFailureSummaryMapper aiToolFailureSummaryMapper;
 
     public AiToolAdapter(ai.chat2db.community.domain.api.service.ai.IAiToolService aiToolService,
             AiToolContextConverter aiToolContextConverter,
             AiToolResultConverter aiToolResultConverter,
             AiToolResultSerializer aiToolResultSerializer,
-            AiToolErrorCodeMapper aiToolErrorCodeMapper) {
+            AiToolErrorCodeMapper aiToolErrorCodeMapper,
+            AiToolFailureSummaryMapper aiToolFailureSummaryMapper) {
         this.aiToolService = aiToolService;
         this.aiToolContextConverter = aiToolContextConverter;
         this.aiToolResultConverter = aiToolResultConverter;
         this.aiToolResultSerializer = aiToolResultSerializer;
         this.aiToolErrorCodeMapper = aiToolErrorCodeMapper;
+        this.aiToolFailureSummaryMapper = aiToolFailureSummaryMapper;
     }
 
     @Tool(name = "list_all_datasources", description = "List available Chat2DB data sources. Use this first when no datasource is selected.")
@@ -148,9 +152,11 @@ public class AiToolAdapter {
             AiToolOutput<?> output = action.get();
             return emit(toolContext, toolName, AiToolResult.success(output.summary(), output.data()));
         } catch (AiToolException e) {
+            String errorCode = aiToolErrorCodeMapper.errorCodeFor(e);
+            log.warn("AI tool call failed, tool={}, errorCode={}", toolName, errorCode, e);
             return emit(toolContext, toolName, AiToolResult.failureWithCode(
-                    aiToolErrorCodeMapper.errorCodeFor(e),
-                    e.getMessage()));
+                    errorCode,
+                    aiToolFailureSummaryMapper.summaryFor(e)));
         } catch (Exception e) {
             log.error("AI tool call failed, tool={}", toolName, e);
             return emit(toolContext, toolName, AiToolResult.failureWithCode(
