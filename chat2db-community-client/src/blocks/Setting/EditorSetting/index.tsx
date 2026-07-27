@@ -6,7 +6,6 @@ import { useCommonStyle } from '../commonStyle';
 import { Form, InputNumber, Radio, Col, Row, Input, Select, Switch } from 'antd';
 import { useGlobalStore } from '@/store/global';
 
-import { InfoCircleOutlined } from '@ant-design/icons';
 import { DEFAULT_EDITOR_SETTINGS, MonacoEditor, editorFontFamily, editorThemes } from '@/components/SQLEditor';
 import exampleSQL from '@/components/SQLEditor/data/example.sql';
 import InteractiveSelect from './InteractiveSelect';
@@ -92,7 +91,6 @@ function EditorSettings() {
             style={{ width: '50%', minWidth: '160px' }}
             tooltip={{
               title: i18n('monaco.theme.tooltip'),
-              icon: <InfoCircleOutlined />,
             }}
           >
             <InteractiveSelect
