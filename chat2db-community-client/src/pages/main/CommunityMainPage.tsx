@@ -466,11 +466,11 @@ function CommunityMainPage() {
           <div className={styles.bottomNav}>
             {sidebarExpanded ? (
               <div className={styles.navItem} onClick={() => setSettingPageActiveTab('basic')}>
-                <IconfontSvg code="icon-adjustments" className={styles.navItemIcon} size={20} />
+                <IconfontSvg code="icon-adjustments" className={styles.navItemIcon} size={18} />
                 <span className={styles.navItemLabel}>{i18n('setting.title.setting')}</span>
               </div>
             ) : (
-              <OfflineAvatar />
+              <OfflineAvatar logoSize={18} triggerSize={34} />
             )}
           </div>
         )}
