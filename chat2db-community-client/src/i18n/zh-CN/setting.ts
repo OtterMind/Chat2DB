@@ -292,6 +292,7 @@ export default {
   'setting.shortcut.localSqlFileTreeCopyRelativePath': '复制相对路径',
   'setting.modelConfig.title': '自定义模型',
   'setting.modelConfig.entry': '自定义模型',
+  'setting.modelConfig.entryHint': '接入 OpenAI、Claude、Gemini 或兼容接口',
   'setting.modelConfig.listTitle': '模型列表',
   'setting.modelConfig.new': '新建模型',
   'setting.modelConfig.name': '名称',

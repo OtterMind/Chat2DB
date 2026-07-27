@@ -141,10 +141,10 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
                             }
                         });
                     } catch (Exception e) {
-                        log.warn("Failed to get the DDL of the index.");
-                        for (TableIndex tableIndex : indexes) {
-                            DMIndexTypeEnum indexTypeEnum = DMIndexTypeEnum.getByType(tableIndex.getType());
-                            ddlBuilder.append("\n").append(indexTypeEnum.buildIndexScript(tableIndex)).append(";");
+                        log.warn("Failed to get the DDL of the index: {}", indexName, e);
+                        DMIndexTypeEnum indexTypeEnum = DMIndexTypeEnum.getByType(index.getType());
+                        if (indexTypeEnum != null) {
+                            ddlBuilder.append("\n").append(indexTypeEnum.buildIndexScript(index)).append(";");
                         }
                     }
                 }

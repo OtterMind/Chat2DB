@@ -8,6 +8,7 @@
  */
 import * as monaco from 'monaco-editor';
 import { IRange } from '../type';
+import { ISqlEditorHintVO } from '@/typings/sqlParser';
 
 /**
  * Add code block borders
@@ -154,6 +155,31 @@ const setInsertValueHighlightDecorations = (rangeList: IRange[]) => {
   return decorations;
 };
 
+const setSqlValueTypeHintDecorations = (
+  editorHints: ISqlEditorHintVO[] | null | undefined,
+): monaco.editor.IModelDeltaDecoration[] => {
+  return (editorHints || [])
+    .filter((hint) => hint.type === 'INSERT_VALUE')
+    .flatMap((hint) => hint.items || [])
+    .filter((item) => !!item.range && !!(item.label || item.fieldName))
+    .map((item) => ({
+      range: new monaco.Range(
+        item.range!.startLineNumber,
+        item.range!.startColumn,
+        item.range!.endLineNumber,
+        item.range!.endColumn,
+      ),
+      options: {
+        stickiness: monaco.editor.TrackedRangeStickiness.GrowsOnlyWhenTypingAfter,
+        after: {
+          content: `· ${item.label || item.fieldName}`,
+          inlineClassName: 'sql-value-type-hint',
+          cursorStops: monaco.editor.InjectedTextCursorStops.Left,
+        },
+      },
+    }));
+};
+
 const setTableIdentifierDecorations = (rangeList: IRange[]) => {
   const safeRangeList = Array.isArray(rangeList) ? rangeList : [];
   const decorations: monaco.editor.IModelDeltaDecoration[] = safeRangeList.map((range) => {
@@ -172,6 +198,7 @@ export {
   setCodeBorderDecorations,
   setExecuteButtonDecorations,
   setInsertValueHighlightDecorations,
+  setSqlValueTypeHintDecorations,
   setTableIdentifierDecorations,
 };
 

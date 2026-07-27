@@ -13,9 +13,11 @@ import ai.chat2db.spi.DefaultSQLExecutor;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.ast.statement.SQLInsertStatement;
 import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
 import com.alibaba.druid.sql.parser.SQLParserUtils;
 import com.github.vertical_blank.sqlformatter.SqlFormatter;
+import com.github.vertical_blank.sqlformatter.core.FormatConfig;
 import com.github.vertical_blank.sqlformatter.languages.Dialect;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -28,6 +30,10 @@ import java.util.List;
 @Service
 public class DbSqlServiceImpl implements IDbSqlService {
 
+    private static final FormatConfig POSTGRESQL_FORMAT_CONFIG = FormatConfig.builder()
+            .maxColumnLength(1)
+            .build();
+
     @Override
     public String format(DbSqlFormatRequest sqlFormatRequest) {
         String sql = sqlFormatRequest.getSql();
@@ -38,7 +44,9 @@ public class DbSqlServiceImpl implements IDbSqlService {
                     sql = SqlFormatter.of(Dialect.MySql).format(sql);
                     break;
                 case "postgresql":
-                    sql = SqlFormatter.of(Dialect.PostgreSql).format(sql);
+                    sql = isPostgreSqlInsertScript(sql)
+                            ? SqlFormatter.of(Dialect.PostgreSql).format(sql, POSTGRESQL_FORMAT_CONFIG)
+                            : SqlFormatter.of(Dialect.PostgreSql).format(sql);
                     break;
                 case "oracle":
                     sql = SqlFormatter.of(Dialect.PlSql).format(sql);
@@ -60,6 +68,15 @@ public class DbSqlServiceImpl implements IDbSqlService {
             log.debug("sql format failed", e);
         }
         return sql;
+    }
+
+    private boolean isPostgreSqlInsertScript(String sql) {
+        try {
+            List<SQLStatement> statements = SQLUtils.parseStatements(sql, DbType.postgresql);
+            return !statements.isEmpty() && statements.stream().allMatch(SQLInsertStatement.class::isInstance);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

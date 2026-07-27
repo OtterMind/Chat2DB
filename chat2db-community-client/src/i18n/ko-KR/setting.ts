@@ -295,6 +295,7 @@ export default {
   'setting.placeholder.customFont': 'SN Pro, Arial 등의 글꼴 이름을 입력해 주세요',
   'setting.modelConfig.title': '사용자 지정 모델',
   'setting.modelConfig.entry': '사용자 지정 모델',
+  'setting.modelConfig.entryHint': 'OpenAI, Claude, Gemini 또는 호환 API 연결',
   'setting.modelConfig.listTitle': '모델 목록',
   'setting.modelConfig.new': '새 모델',
   'setting.modelConfig.name': '이름',

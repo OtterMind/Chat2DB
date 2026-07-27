@@ -27,7 +27,9 @@ public class BaseErrorStrategy extends BailErrorStrategy {
                     retryCount++;
                 }
             }
-            if (offendingToken.getType() != Token.EOF && StringUtils.isNotBlank(offendingToken.getText())) {
+            if (Objects.nonNull(offendingToken)
+                    && offendingToken.getType() != Token.EOF
+                    && StringUtils.isNotBlank(offendingToken.getText())) {
                 msg += " 得到 " + escapeWSAndQuote(offendingToken.getText());
             }
         }

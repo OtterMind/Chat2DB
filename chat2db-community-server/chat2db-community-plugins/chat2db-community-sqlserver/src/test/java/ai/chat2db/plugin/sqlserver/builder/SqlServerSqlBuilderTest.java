@@ -30,6 +30,14 @@ class SqlServerSqlBuilderTest {
     }
 
     @Test
+    void shouldIncludeSchemaWhenDatabaseNameIsBlank() {
+        ExposedSqlServerSqlBuilder builder = new ExposedSqlServerSqlBuilder();
+
+        assertEquals("[dbo].[orders]", builder.tableName(null, "dbo", "orders"));
+        assertEquals("[analytics].[dbo].[orders]", builder.tableName("analytics", "dbo", "orders"));
+    }
+
+    @Test
     void shouldQuoteAndEscapeQualifiedViewName() {
         SqlServerSqlBuilder builder = new SqlServerSqlBuilder();
         ModifyView view = new ModifyView();
@@ -44,5 +52,13 @@ class SqlServerSqlBuilderTest {
                         + "exec sp_addextendedproperty 'MS_Description', 'owner''s view', 'SCHEMA', "
                         + "'order] schema', 'VIEW', 'select] view'",
                 builder.buildCreateView(view));
+    }
+
+    private static final class ExposedSqlServerSqlBuilder extends SqlServerSqlBuilder {
+        private String tableName(String databaseName, String schemaName, String tableName) {
+            StringBuilder script = new StringBuilder();
+            buildTableName(databaseName, schemaName, tableName, script);
+            return script.toString();
+        }
     }
 }

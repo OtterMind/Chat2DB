@@ -1,5 +1,9 @@
 <div align="center">
   <img src="./icon.png" alt="Chat2DB" width="100">
+  <div align="center">
+  Powered by  <a href="https://ottermind.ai">OtterMind</a>
+</div>
+  <br/>
   <p><strong>面向开发者、DBA、分析师和数据团队的 AI 驱动数据库客户端与 SQL 工作空间。</strong></p>
 </div>
 

@@ -94,7 +94,7 @@ public class EasyStringUtils {
             return null;
         }
         String limitString = StringUtils.substring(str, 0, length);
-        if (limitString.length() == length) {
+        if (str.length() > length) {
             limitString += "...";
         }
         return limitString;

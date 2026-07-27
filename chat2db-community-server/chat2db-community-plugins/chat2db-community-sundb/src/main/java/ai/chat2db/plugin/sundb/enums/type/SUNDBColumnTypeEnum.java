@@ -103,7 +103,7 @@ public enum SUNDBColumnTypeEnum implements IColumnBuilder {
 
     NUMBER("NUMBER", true, true, true, false, false, false, true, true, false, false),
 
-    NUMBERIC("NUMBERIC", true, true, true, false, false, false, true, true, false, false),
+    NUMERIC("NUMERIC", true, true, true, false, false, false, true, true, false, false),
 
     ROWID("ROWID", true, true, true, false, false, false, true, true, false, false),
 
@@ -250,7 +250,7 @@ public enum SUNDBColumnTypeEnum implements IColumnBuilder {
             return script.toString();
         }
 
-        if (Arrays.asList(DECIMAL,DEC, FLOAT, NUMBER, TIMESTAMP, NUMBERIC, NATIVE_REAL).contains(type)) {
+        if (Arrays.asList(DECIMAL,DEC, FLOAT, NUMBER, TIMESTAMP, NUMERIC, NATIVE_REAL).contains(type)) {
             StringBuilder script = new StringBuilder();
             script.append(columnType);
             if (column.getColumnSize() != null && column.getDecimalDigits() == null) {

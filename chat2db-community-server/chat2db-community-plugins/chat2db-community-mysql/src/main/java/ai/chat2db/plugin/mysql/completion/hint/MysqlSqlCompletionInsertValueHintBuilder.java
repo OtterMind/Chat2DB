@@ -3,22 +3,14 @@ package ai.chat2db.plugin.mysql.completion.hint;
 import ai.chat2db.plugin.mysql.model.completion.context.MysqlSqlCompletionCandidateContext;
 import ai.chat2db.plugin.mysql.model.completion.context.MysqlSqlCompletionInsertStatementContext;
 import ai.chat2db.plugin.mysql.completion.util.MysqlSqlCompletionTokenUtil;
-import ai.chat2db.community.domain.api.model.completion.request.DbSqlCompletionMetadataRequest;
-import ai.chat2db.community.domain.api.model.completion.result.SqlCompletionMetadataResponse;
-import ai.chat2db.community.domain.api.enums.completion.SqlCompletionCandidateTypeEnum;
+import ai.chat2db.plugin.mysql.completion.value.MysqlSqlCompletionValueDefaults;
 import ai.chat2db.community.domain.api.enums.completion.SqlCompletionEditorHintTypeEnum;
-import ai.chat2db.community.domain.api.enums.completion.SqlCompletionStatusEnum;
 import ai.chat2db.community.domain.api.model.completion.SqlCompletionCandidate;
 import ai.chat2db.community.domain.api.model.completion.SqlCompletionEditorHint;
-import ai.chat2db.community.domain.api.model.completion.SqlCompletionMetadataScope;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 
 
@@ -46,7 +38,9 @@ final class MysqlSqlCompletionInsertValueHintBuilder {
             return List.of();
         }
 
-        Map<String, SqlCompletionCandidate> metadataColumns = metadataColumns(context, insertContext.tableRef());
+        Map<String, SqlCompletionCandidate> metadataColumns = MysqlSqlCompletionColumnMetadata.load(
+                context.metadataProvider(), insertContext.tableRef().catalog(), insertContext.tableRef().schema(),
+                insertContext.tableRef().table());
         List<SqlCompletionEditorHint> hints = new ArrayList<>();
         for (MysqlSqlCompletionInsertStatementContext.RowWindow rowWindow : insertContext.valueRows()) {
             SqlCompletionEditorHint hint = buildRowHint(sourceSql, sourceOffset, sql.length(), rowWindow,
@@ -84,12 +78,14 @@ final class MysqlSqlCompletionInsertValueHintBuilder {
         for (int i = 0; i < columnWindow.columns().size(); i++) {
             MysqlSqlCompletionInsertStatementContext.ColumnRange column = columnWindow.columns().get(i);
             MysqlSqlCompletionInsertStatementContext.ValueRange valueRange = valueRangeAt(rowWindow, i, cursor);
-            String columnType = columnType(metadataColumns.get(normalize(column.name())));
+            String columnType = MysqlSqlCompletionColumnMetadata.columnType(
+                    MysqlSqlCompletionColumnMetadata.find(metadataColumns, column.name()));
             SqlCompletionEditorHint.Item item = new SqlCompletionEditorHint.Item();
             item.setRowIndex(rowWindow.rowIndex());
             item.setColumnIndex(i);
             item.setFieldName(column.name());
             item.setFieldType(columnType);
+            item.setDefaultValue(MysqlSqlCompletionValueDefaults.defaultValue(columnType));
             item.setLabel(StringUtils.isBlank(columnType) ? column.name() : column.name() + ":" + columnType);
             item.setRange(range(sourceSql, sourceOffset, valueRange.startOffset(), valueRange.endOffset()));
             item.setActive(rowWindow.active() && i == rowWindow.activeColumnIndex());
@@ -112,46 +108,8 @@ final class MysqlSqlCompletionInsertValueHintBuilder {
         return new MysqlSqlCompletionInsertStatementContext.ValueRange(offset, offset);
     }
 
-    private Map<String, SqlCompletionCandidate> metadataColumns(
-            MysqlSqlCompletionCandidateContext context,
-            MysqlSqlCompletionInsertStatementContext.TableRef tableRef) {
-        SqlCompletionMetadataScope scope = new SqlCompletionMetadataScope(tableRef.catalog(), tableRef.schema(),
-                tableRef.table(), null);
-        SqlCompletionMetadataResponse result = context.metadataProvider().list(DbSqlCompletionMetadataRequest.of(
-                SqlCompletionCandidateTypeEnum.COLUMN, scope, ""));
-        if (result == null || !SqlCompletionStatusEnum.SUCCESS.name().equals(result.getStatus()) || result.getCandidates() == null) {
-            return Map.of();
-        }
-        return result.getCandidates().stream()
-                .filter(Objects::nonNull)
-                .filter(candidate -> normalize(columnName(candidate)) != null)
-                .sorted(Comparator.comparingInt(candidate -> candidate.getSortRank() == null
-                        ? Integer.MAX_VALUE
-                        : candidate.getSortRank()))
-                .collect(Collectors.toMap(candidate -> normalize(columnName(candidate)), Function.identity(),
-                        (left, right) -> left));
-    }
-
-    private String columnName(SqlCompletionCandidate candidate) {
-        if (candidate == null) {
-            return null;
-        }
-        return StringUtils.defaultIfBlank(candidate.getColumnName(), candidate.getLabel());
-    }
-
-    private String columnType(SqlCompletionCandidate candidate) {
-        if (candidate == null) {
-            return null;
-        }
-        return StringUtils.defaultIfBlank(candidate.getDataType(), candidate.getDetail());
-    }
-
     private SqlCompletionEditorHint.Range range(String sourceSql, int sourceOffset, int startOffset, int endOffset) {
         return SqlCompletionEditorHint.Range.ofOffsets(sourceSql, sourceOffset + startOffset, sourceOffset + endOffset);
     }
 
-    private String normalize(String name) {
-        String stripped = MysqlSqlCompletionTokenUtil.stripIdentifierQuotes(name);
-        return StringUtils.isBlank(stripped) ? null : stripped.toLowerCase(Locale.ROOT);
-    }
 }

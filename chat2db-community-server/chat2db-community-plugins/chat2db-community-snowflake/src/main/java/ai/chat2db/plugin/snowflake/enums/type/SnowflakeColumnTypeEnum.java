@@ -138,7 +138,7 @@ public enum SnowflakeColumnTypeEnum implements IColumnBuilder {
             }
         }
 
-        if (Arrays.asList(DATE, TIME, DATETIME, TIMESTAMP, TIMESTAMP_TZ, TIMESTAMP_LTZ, TIMESTAMP_LTZ).contains(type)) {
+        if (Arrays.asList(DATE, TIME, DATETIME, TIMESTAMP, TIMESTAMP_TZ, TIMESTAMP_LTZ, TIMESTAMP_NTZ).contains(type)) {
             if (column.getColumnSize() == null || column.getColumnSize() == 0) {
                 return columnType;
             } else {

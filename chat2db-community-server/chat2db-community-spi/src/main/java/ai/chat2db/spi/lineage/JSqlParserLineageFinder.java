@@ -67,8 +67,8 @@ public class JSqlParserLineageFinder {
 
             }
         } catch (JSQLParserException e) {
-            log.error(" parser or find Lineage failed");
-            throw new RuntimeException();
+            log.error("parser or find Lineage failed", e);
+            throw new RuntimeException("parser or find Lineage failed", e);
         }
         return new SimpleSqlStatement(sql);
     }

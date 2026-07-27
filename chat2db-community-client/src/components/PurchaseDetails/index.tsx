@@ -225,7 +225,7 @@ export default memo<IProps>((props) => {
                 {(record.listCertificate || []).map((item, index: number) => {
                   if (item.activateType === 'ONLINE') {
                     return (
-                      <div className={styles.cerTitle} key={index}>
+                      <div className={styles.cerTitle} key={item.deviceId}>
                         {i18n('setting.purchaseDetails.device')} {index + 1} :{' '}
                         {i18n('setting.purchaseDetails.onlineActivation')}
                         <Popconfirm
@@ -248,7 +248,7 @@ export default memo<IProps>((props) => {
                     );
                   } else {
                     return (
-                      <Flex vertical key={index}>
+                      <Flex vertical key={item.deviceId}>
                         <div className={styles.cerTitle}>
                           {i18n('setting.purchaseDetails.device')} {index + 1} :{' '}
                           {i18n('setting.purchaseDetails.offlineActivation')}

@@ -3,6 +3,7 @@ export default {
   'monaco.theme.tooltip':
     'El tema del editor se guardará en segundo plano para la aplicación actual y se sincronizará al cambiar el tema de la aplicación',
   'monaco.fontFamily': 'Familia de fuentes',
+  'monaco.customFontFamily.tooltip': 'El editor prioriza la fuente personalizada',
   'monaco.fontSize': 'Tamaño de fuente',
   'monaco.lineHeight': 'Altura de línea',
   'monaco.lineNumbers': 'Mostrar números de línea',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
 import SettingSubsection from '../SettingSubsection';
 import { Form, Input, Select, Button, Typography, Flex, Popconfirm } from 'antd';
@@ -11,6 +11,7 @@ import { copyToClipboard } from '@/utils';
 import { Dot } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import { openWebPage } from '@/utils/url';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
 const DeviceCer = () => {
   const { styles } = useStyles();
@@ -23,8 +24,13 @@ const DeviceCer = () => {
   const { appUrlConfig } = useGlobalStore((state) => ({
     appUrlConfig: state.appUrlConfig,
   }));
+  const requestGenerationRef = useRef(0);
+
   useEffect(() => {
     queryLicenseInfo();
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const handleFormValuesChange = (changedValues: any, allValues: any) => {
@@ -43,10 +49,12 @@ const DeviceCer = () => {
   };
 
   const queryLicenseInfo = async () => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     const res = await LicenseService.getLicenseList();
     const filterArr = res.filter((t) => t.canGenerateCer);
     const canSelectArr = filterArr.filter((t) => t.licenseBindCount < t.licenseAvailableCount);
     const canNotSelectArr = filterArr.filter((t) => t.licenseBindCount >= t.licenseAvailableCount);
+    if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
     setLicenseList([...canSelectArr, ...canNotSelectArr]);
   };
 

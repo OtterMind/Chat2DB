@@ -227,6 +227,7 @@ export default {
   'workspace.localSqlFileTree.newFile': 'SQLファイルを新規作成',
   'workspace.localSqlFileTree.newFolder': 'フォルダーを新規作成',
   'workspace.localSqlFileTree.refresh': '更新',
+  'workspace.localSqlFileTree.expandAll': 'すべて展開',
   'workspace.localSqlFileTree.collapseAll': 'すべて折りたたむ',
   'workspace.localSqlFileTree.moreActions': 'その他の操作',
   'workspace.localSqlFileTree.open': '開く',

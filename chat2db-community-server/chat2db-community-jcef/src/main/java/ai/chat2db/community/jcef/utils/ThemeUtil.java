@@ -34,9 +34,10 @@ public class ThemeUtil {
     private static boolean isMacDarkMode() {
         try {
             Process process = Runtime.getRuntime().exec("defaults read -g AppleInterfaceStyle");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line = reader.readLine();
-            return line != null && line.equals("Dark");
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line = reader.readLine();
+                return line != null && line.equals("Dark");
+            }
         } catch (Exception e) {
             return false;
         }
@@ -45,9 +46,10 @@ public class ThemeUtil {
     private static boolean isLinuxDarkMode() {
         try {
             Process process = Runtime.getRuntime().exec("gsettings get org.gnome.desktop.interface gtk-theme");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String theme = reader.readLine().toLowerCase();
-            return theme.contains("dark");
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String theme = reader.readLine();
+                return theme != null && theme.toLowerCase().contains("dark");
+            }
         } catch (Exception e) {
             return false;
         }

@@ -3,7 +3,6 @@ package ai.chat2db.spi.util;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,7 +73,7 @@ public class SqlStringUtil {
 
     public static String quoteValue(String value, String dbType) {
         if (StringUtils.isBlank(value) || isValidSqlValue(value)) {
-            if (StringUtils.equalsAny(dbType.toUpperCase(),
+            if (StringUtils.equalsAnyIgnoreCase(dbType,
                     DatabaseTypeEnum.ORACLE.name(),
                     DatabaseTypeEnum.OSCAR.name(),
                     DatabaseTypeEnum.DM.name())) {
@@ -82,7 +81,7 @@ public class SqlStringUtil {
                     return "\"" + value + "\"";
                 }
             }
-            if (StringUtils.equalsAny(dbType.toUpperCase(),
+            if (StringUtils.equalsAnyIgnoreCase(dbType,
                     DatabaseTypeEnum.POSTGRESQL.name())) {
                 if (containsUpperCase(value)) {
                     return "\"" + value + "\"";
@@ -90,9 +89,9 @@ public class SqlStringUtil {
             }
             return value;
         }
-        if (Objects.equals(DatabaseTypeEnum.MYSQL.name(), dbType.toUpperCase())) {
+        if (StringUtils.equalsIgnoreCase(DatabaseTypeEnum.MYSQL.name(), dbType)) {
             return "`" + value + "`";
-        } else if (Objects.equals(DatabaseTypeEnum.SQLSERVER.name(), dbType.toUpperCase())) {
+        } else if (StringUtils.equalsIgnoreCase(DatabaseTypeEnum.SQLSERVER.name(), dbType)) {
             return "[" + value + "]";
         } else {
             return "\"" + value + "\"";

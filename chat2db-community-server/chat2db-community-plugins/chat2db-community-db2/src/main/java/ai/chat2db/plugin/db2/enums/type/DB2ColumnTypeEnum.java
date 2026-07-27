@@ -76,7 +76,7 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
 
     NUM("NUM", true, true, true, false, false, false, true, true, false, false),
 
-    NUMBERIC("NUMBERIC", true, true, true, false, false, false, true, true, false, false),
+    NUMERIC("NUMERIC", true, true, true, false, false, false, true, true, false, false),
 
 
     NVARCHAR("NVARCHAR", true, false, true, false, false, false, true, true, false, true),
@@ -191,7 +191,7 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
             return script.toString();
         }
 
-        if (Arrays.asList(DEC,DECIMAL, FLOAT, NUM, TIMESTAMP, NUMBERIC).contains(type)) {
+        if (Arrays.asList(DEC,DECIMAL, FLOAT, NUM, TIMESTAMP, NUMERIC).contains(type)) {
             StringBuilder script = new StringBuilder();
             script.append(columnType);
             if (column.getColumnSize() != null && column.getDecimalDigits() == null) {

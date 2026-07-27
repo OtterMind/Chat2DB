@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useOrgStore } from '@/store/organization';
 import { IOrganizationVO, OrganizationType } from '@/typings/enterprise/organization';
 import { Dropdown, Flex } from 'antd';
@@ -28,7 +29,7 @@ const OrgSelect = () => {
           <div className={styles.itemTag}>Free</div>
         </div>
         {!!checked && <div>Y</div>}
-        {isBar && <IconfontSvg code="icon-chevron-bottom" size="xs" />}
+        {isBar && <ChevronDown size={14} />}
       </div>
     );
   };
@@ -53,7 +54,7 @@ const OrgSelect = () => {
             {i18n('setting.nav.createOrgJoinOrg')}
           </Flex>
 
-          <IconfontSvg code="icon-chevron-right" size="xs" />
+          <ChevronRight size={14} />
         </div>
       </div>
     );

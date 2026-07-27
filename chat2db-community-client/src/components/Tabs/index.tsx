@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useState, useRef } from 'react';
+import { ChevronDown } from 'lucide-react';
 import Iconfont from '@/components/Iconfont';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { Popover, Dropdown } from 'antd';
@@ -838,7 +839,7 @@ export default memo<IProps>((props) => {
               trigger={['click']}
             >
               <div className={styles.moreTabsButton}>
-                <IconfontSvg code="icon-chevron-bottom" size="xs" />
+                <ChevronDown size={14} />
               </div>
             </Dropdown>
           </div>

@@ -3,6 +3,7 @@ export default {
   'monaco.theme.tooltip':
     '편집기 테마는 현재 애플리케이션의 백그라운드에 저장되며, 앱 테마를 전환하면 편집기 테마도 동기화됩니다',
   'monaco.fontFamily': '글꼴',
+  'monaco.customFontFamily.tooltip': '편집기는 사용자 지정 글꼴을 우선 사용합니다',
   'monaco.fontSize': '글꼴 크기',
   'monaco.lineHeight': '줄 높이',
   'monaco.lineNumbers': '줄 번호 표시',

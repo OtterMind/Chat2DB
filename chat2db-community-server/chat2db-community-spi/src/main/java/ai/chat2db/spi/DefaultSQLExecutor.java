@@ -46,6 +46,7 @@ import org.springframework.util.Assert;
 
 import java.sql.*;
 import java.util.*;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -56,6 +57,8 @@ import java.util.stream.Collectors;
 public class DefaultSQLExecutor implements ICommandExecutor {
 
     private static final int STREAMING_ROW_BATCH_SIZE = 200;
+
+    private static final Executor DIRECT_ABORT_EXECUTOR = Runnable::run;
 
 
     private static final DefaultSQLExecutor INSTANCE = new DefaultSQLExecutor();
@@ -280,9 +283,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             boolean query = stmt.execute();
             if (query) {
                 long n = 0;
-                ResultSet rs = stmt.getResultSet();
-                while (rs.next()) {
-                    n++;
+                try (ResultSet rs = stmt.getResultSet()) {
+                    while (rs.next()) {
+                        n++;
+                    }
                 }
                 return n;
             } else {
@@ -1476,19 +1480,83 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String sql = request.getSql();
         int batchSize = request.getBatchSize();
         IResultSetConsumer consumer = request.getConsumer();
+        final boolean manageTransaction;
+        try {
+            manageTransaction = connection.getAutoCommit();
+        } catch (SQLException ex) {
+            throw new RuntimeException("Failed to read original autoCommit", ex);
+        }
+        boolean transactionStarted = false;
+        boolean transactionResolved = false;
+        boolean discardRequired = false;
+        Exception failure = null;
         try (PreparedStatement stmt = connection.prepareStatement(sql,
                 ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY
         )) {
-            connection.setAutoCommit(false);
+            if (manageTransaction) {
+                transactionStarted = true;
+                connection.setAutoCommit(false);
+            }
             stmt.setFetchSize(batchSize);
-            ResultSet rs = stmt.executeQuery();
-            consumer.accept(rs);
-            connection.commit();
-            connection.setAutoCommit(true);
+            try (ResultSet rs = stmt.executeQuery()) {
+                consumer.accept(rs);
+            }
+            if (transactionStarted) {
+                connection.commit();
+                transactionResolved = true;
+            }
         } catch (Exception e) {
-            log.error("Failed to fetch table records. Query: {}", sql, e);
-            throw new RuntimeException(e);
+            failure = e;
+        }
+
+        if (failure != null && transactionStarted && !transactionResolved) {
+            try {
+                connection.rollback();
+                transactionResolved = true;
+            } catch (Exception rollbackEx) {
+                failure.addSuppressed(rollbackEx);
+                discardRequired = true;
+            }
+        }
+
+        if (transactionStarted && !discardRequired) {
+            try {
+                connection.setAutoCommit(true);
+            } catch (Exception restoreEx) {
+                if (failure == null) {
+                    failure = restoreEx;
+                } else {
+                    failure.addSuppressed(restoreEx);
+                }
+                discardRequired = true;
+            }
+        }
+
+        if (discardRequired) {
+            discardConnection(connection, failure);
+        }
+        if (failure != null) {
+            log.error("Failed to fetch table records. Query: {}", sql, failure);
+            throw new RuntimeException(failure);
+        }
+    }
+
+    private void discardConnection(Connection connection, Throwable failure) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo != null && connectInfo.getConnection() == connection) {
+            connectInfo.setConnection(null);
+        }
+        try {
+            connection.abort(DIRECT_ABORT_EXECUTOR);
+            return;
+        } catch (Exception abortEx) {
+            failure.addSuppressed(abortEx);
+        }
+        try {
+            connection.close();
+        } catch (Exception closeEx) {
+            failure.addSuppressed(closeEx);
         }
     }
 

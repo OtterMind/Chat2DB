@@ -298,6 +298,7 @@ export default {
   'setting.placeholder.customFont': 'Introduzca el nombre de la fuente, por ejemplo, SN Pro o Arial',
   'setting.modelConfig.title': 'Modelos personalizados',
   'setting.modelConfig.entry': 'Modelo personalizado',
+  'setting.modelConfig.entryHint': 'Conecte OpenAI, Claude, Gemini o API compatibles',
   'setting.modelConfig.listTitle': 'Lista de modelos',
   'setting.modelConfig.new': 'Nuevo modelo',
   'setting.modelConfig.name': 'Nombre',
