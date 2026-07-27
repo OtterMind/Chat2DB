@@ -414,7 +414,7 @@ jobs:
           PY
 
       - name: Set up ossutil
-        uses: yizhoumo/setup-ossutil@02384914fef2758596b303e2035c47b8c3f80fb2
+        uses: yizhoumo/setup-ossutil@121c208740cd4b110f3adac409be66c17f5f948b
         with:
           endpoint: oss-us-west-1.aliyuncs.com
           access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
