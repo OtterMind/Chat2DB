@@ -433,7 +433,7 @@ function CommunityMainPage() {
                   key={item.key}
                   size={{
                     boxSize: 34,
-                    iconSize: 22,
+                    iconSize: 18,
                   }}
                   title={item.name}
                   icon={NavIcon}
@@ -449,7 +449,7 @@ function CommunityMainPage() {
                 className={cx(styles.navItem, isActive && styles.navItemActive)}
                 onClick={() => handleNavItemClick(item)}
               >
-                <NavIcon className={styles.navItemIcon} size={20} />
+                <NavIcon className={styles.navItemIcon} size={18} />
                 <span className={styles.navItemLabel}>{item.name}</span>
               </div>
             );

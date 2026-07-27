@@ -105,7 +105,7 @@ const SQL_FILE_EXTENSION = '.sql';
 const LOCAL_SQL_DIRECTORY_PATH_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathStorageKey;
 const LOCAL_SQL_DIRECTORY_PATHS_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathsStorageKey;
 const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
-const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = 'sm';
+const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 24, iconSize: 16 };
 const LOCAL_SQL_TREE_BASE_INDENT = 0;
 const LOCAL_SQL_TREE_LEVEL_INDENT = 14;
 
