@@ -15,8 +15,6 @@ export default {
   'monaco.wordWrap.on': '启用',
   'monaco.wordWrap.off': '禁用',
   'monaco.folding': '代码折叠',
-  'monaco.text.press': '按',
-  'monaco.text.invoke': '唤起',
   'monaco.text.nl2sql': '自然语言转SQL',
   'monaco.text.sqlExplain': 'SQL解释',
   'monaco.text.sqlOptimizer': 'SQL优化',

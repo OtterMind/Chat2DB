@@ -680,7 +680,6 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           onExecuteSQL={handleExecuteSQL}
           reloadSQL={loadSQL}
           isConsole={isConsole}
-          useAI={isConsole}
           sqlActionEnabled={sqlActionEnabled}
         />
       </div>

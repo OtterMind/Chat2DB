@@ -16,8 +16,6 @@ export default {
   'monaco.wordWrap.on': 'Enable',
   'monaco.wordWrap.off': 'Disable',
   'monaco.folding': 'Code Folding',
-  'monaco.text.press': 'Press',
-  'monaco.text.invoke': 'Invoke',
   'monaco.text.nl2sql': 'NL2SQL',
   'monaco.text.sqlExplain': 'SQL Explain',
   'monaco.text.sqlOptimizer': 'SQL Optimizer',

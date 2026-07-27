@@ -16,8 +16,6 @@ export default {
   'monaco.wordWrap.on': '有効',
   'monaco.wordWrap.off': '無効',
   'monaco.folding': 'コード折りたたみ',
-  'monaco.text.press': 'さしおさえ',
-  'monaco.text.invoke': 'よびさます',
   'monaco.text.nl2sql': '自然言語からSQLへ',
   'monaco.text.sqlExplain': 'SQLの説明',
   'monaco.text.sqlOptimizer': 'SQLの最適化',

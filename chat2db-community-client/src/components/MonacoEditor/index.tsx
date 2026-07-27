@@ -4,9 +4,6 @@ import cs from 'classnames';
 import { EditorThemeType } from '@/constants';
 import { editorDefaultOptions } from './monacoEditorConfig';
 import ContextMenu, { IMenuItem } from './components/ContextMenu';
-import PlaceholderContentWidget from './plugIn/placeholder';
-import useArouseCopilot from './plugIn/arouseCopilot';
-import PlaceholderContent from './components/placeholderContent';
 import MonacoEditorErrorTips from '@/components/MonacoEditor/components/MonacoEditorErrorTips';
 import { useStyles } from './style';
 import { useGlobalStore } from '@/store/global';
@@ -40,7 +37,6 @@ export interface IMonacoEditorProps {
   didMount?: (editor: IEditorIns) => any;
   shortcutKey?: (editor, monaco, isFocus: boolean) => void;
   focusChange?: (isFocus: boolean) => void;
-  canAI?: boolean;
   contextMenu?: {
     menu: IMenuItem[];
   };
@@ -53,7 +49,6 @@ export interface IExportRefFunction {
   getAllContent: () => string;
   setValue: (text: any, range?: IRangeType) => void;
   arouseErrorTips: (errorMessage: string | null) => void;
-  arouseCopilot: (params: any) => void;
 }
 
     // Custom overlay element.
@@ -76,7 +71,6 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
     defaultValue,
     appendValue,
     shortcutKey,
-    canAI,
     contextMenu,
     autoFocus = false,
     dynamicHeight,
@@ -102,16 +96,6 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
     position: 'fixed',
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const placeholderContentWidgetRef = useRef<PlaceholderContentWidget | null>(null);
-
-  // Editor Copilot
-  const { arouseCopilot } = useArouseCopilot({
-    editorIns: editorRef.current,
-    placeholderContentWidget: placeholderContentWidgetRef.current,
-    canAI,
-    isFocus,
-  });
-
   const editorOptions = useMemo(() => {
     return {
       ...editorDefaultOptions,
@@ -127,7 +111,7 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
 
   // init
   useEffect(() => {
-    console.log('[DEBUG:MonacoEditor] Initializing editor', { id, canAI, autoFocus, language });
+    console.log('[DEBUG:MonacoEditor] Initializing editor', { id, autoFocus, language });
     setupMonacoEnvironment();
     const editorIns = monaco.editor.create(document.getElementById(`monaco-editor-${id}`)!, editorOptions);
 
@@ -135,10 +119,6 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
 
     didMount && didMount(editorIns);
     console.log('[DEBUG:MonacoEditor] Editor created successfully');
-
-    if (canAI) {
-      placeholderContentWidgetRef.current = new PlaceholderContentWidget(<PlaceholderContent />, editorIns);
-    }
 
     // Disable the context menu.
     editorIns.updateOptions({ contextmenu: false });
@@ -200,8 +180,6 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
     });
 
     return () => {
-      placeholderContentWidgetRef.current?.allDispose?.();
-      placeholderContentWidgetRef.current = null;
       didChangeModelContentDisposer.dispose();
       contextMenuDisposer.dispose();
 
@@ -264,7 +242,6 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
     getAllContent,
     setValue,
     arouseErrorTips,
-    arouseCopilot,
   }));
 
   // Track Monaco Editor line-count changes.

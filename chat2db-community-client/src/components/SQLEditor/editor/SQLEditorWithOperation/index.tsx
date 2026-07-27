@@ -10,14 +10,11 @@ import { saveFileToDesktop, updateFileContent } from '@/utils/file';
 import i18n from '@/i18n';
 import { useSaveEditorData } from '@/components/SQLEditor/hooks/useSaveEditorData';
 import { formatSql } from '../../helper/utils';
-import PlaceholderContent from '../../components/AIPlaceholder/placeholderCmp';
-import AIPlaceholder from '../../components/AIPlaceholder/PlaceholderContentWidget';
 import ContextMenu from '../../components/ContextMenu';
 import * as monaco from 'monaco-editor';
 import { useGlobalStore } from '@/store/global';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
-import useCopilot from '../../hooks/useCopilot';
 import { useAIStore } from '@/store/ai';
 import { useChatStore } from '@/store/chat';
 import ChatService from '@/service/chat';
@@ -58,8 +55,6 @@ interface ISQLEditorWithOperationProps {
 
   sqlFileName?: string;
   workspaceTabsTitle?: string;
-
-  useAI?: boolean;
 
   isConsole?: boolean;
 
@@ -105,13 +100,6 @@ export interface IContextMenuInfo {
   position: CSSProperties;
 }
 
-const createPlaceholderWidget = (editor: monaco.editor.IStandaloneCodeEditor | null) => {
-  if (!editor) return null;
-  const existingWidget = (editor as any).__chat2dbPlaceholderWidget as AIPlaceholder | undefined;
-  if (existingWidget) return existingWidget;
-  return new AIPlaceholder(<PlaceholderContent />, editor);
-};
-
 const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditorWithOperationProps>((props, ref) => {
   const {
     id,
@@ -122,7 +110,6 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     active,
     sqlFileName,
     workspaceTabsTitle,
-    useAI = true,
     isConsole = true,
     sqlActionEnabled = true,
     reloadSQL,
@@ -156,15 +143,6 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   });
   const sqlEditorRef = useRef<SQLEditorRef>(null);
   const routineExecutionEditorRef = useRef<SQLEditorRef>(null);
-  const { consoleAiInputParams } = useWorkspaceStore((state) => {
-    return {
-      consoleAiInputParams: state.consoleAiInputParams,
-    };
-  });
-
-  const [placeholderWidget, setPlaceholderWidget] = useState<AIPlaceholder | null>(null);
-  const placeholderWidgetRef = useRef<AIPlaceholder | null>(null);
-
   // Preserve the previous edit position.
   const lastPositionRef = useRef<{
     lineNumber: number;
@@ -215,37 +193,10 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   }, [defaultSQL]);
 
   useEffect(() => {
-    if (useAI && active && sqlEditorRef.current) {
-      const editor = sqlEditorRef.current.getInstance();
-      const newWidget = createPlaceholderWidget(editor);
-      placeholderWidgetRef.current = newWidget;
-      setPlaceholderWidget(newWidget);
-    }
-    return () => {
-      if (placeholderWidgetRef.current) {
-        placeholderWidgetRef.current.allDispose();
-        placeholderWidgetRef.current = null;
-        setPlaceholderWidget(null);
-      }
-    };
-  }, [useAI, active]);
-
-  useCopilot({
-    editorRef: sqlEditorRef,
-    placeholderContentWidget: placeholderWidget,
-    canAI: useAI,
-    aiInputParams: consoleAiInputParams,
-    active,
-  });
-
-  useEffect(() => {
     if (!sqlEditorRef.current) return;
     const editor = sqlEditorRef.current.getInstance();
 
     if (active) {
-      if (consoleAiInputParams) {
-        return;
-      }
       if (editor) {
         editor.focus();
         // Use setTimeout so Monaco Editor can finish layout and rendering.
@@ -268,7 +219,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     } else {
       lastPositionRef.current = editor?.getPosition() ?? { lineNumber: 1, column: 1 };
     }
-  }, [active, consoleAiInputParams]);
+  }, [active]);
 
   const { saveConsole, hasSavedSqlRecord } = useSaveEditorData({
     editorRef: sqlEditorRef,

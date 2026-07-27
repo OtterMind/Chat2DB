@@ -16,8 +16,6 @@ export default {
   'monaco.wordWrap.on': '사용',
   'monaco.wordWrap.off': '사용 안 함',
   'monaco.folding': '코드 접기',
-  'monaco.text.press': '누르기',
-  'monaco.text.invoke': '호출',
   'monaco.text.nl2sql': 'NL2SQL',
   'monaco.text.sqlExplain': 'SQL 설명',
   'monaco.text.sqlOptimizer': 'SQL 최적화',
