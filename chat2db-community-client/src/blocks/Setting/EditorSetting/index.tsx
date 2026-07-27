@@ -120,7 +120,7 @@ function EditorSettings() {
             <Col span={12}>
               <Form.Item
                 tooltip={{
-                  title: 'The editor gives priority to using custom fonts',
+                  title: i18n('monaco.customFontFamily.tooltip'),
                 }}
                 name="customFontFamily"
                 label={i18n('setting.title.customFont')}

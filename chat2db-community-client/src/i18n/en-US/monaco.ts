@@ -3,6 +3,7 @@ export default {
   'monaco.theme.tooltip':
     'The editor theme will be saved in the background for the current application, and the editor theme will be synchronized when the APP theme is switched',
   'monaco.fontFamily': 'Font Family',
+  'monaco.customFontFamily.tooltip': 'The editor prioritizes the custom font',
   'monaco.fontSize': 'Font Size',
   'monaco.lineHeight': 'Line Height',
   'monaco.lineNumbers': 'Show Line Numbers',

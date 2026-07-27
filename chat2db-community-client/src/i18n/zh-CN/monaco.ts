@@ -2,6 +2,7 @@ export default {
   'monaco.theme': '编辑器主题',
   'monaco.theme.tooltip': '后台会为当前应用主题保存此编辑器主题，切换应用主题时会同步更新编辑器主题',
   'monaco.fontFamily': '编辑器字体',
+  'monaco.customFontFamily.tooltip': '编辑器会优先使用自定义字体',
   'monaco.fontSize': '字体大小',
   'monaco.lineHeight': '行高',
   'monaco.lineNumbers': '显示行号',

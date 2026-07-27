@@ -3,6 +3,7 @@ export default {
   'monaco.theme.tooltip':
     'バックグラウンドは、現在のアプリケーションのテーマにこのエディターテーマを保存し、アプリケーションのテーマが切り替わるとエディターテーマが同期されます',
   'monaco.fontFamily': 'フォントファミリー',
+  'monaco.customFontFamily.tooltip': 'エディターではカスタムフォントが優先されます',
   'monaco.fontSize': 'フォントサイズ',
   'monaco.lineHeight': '行高',
   'monaco.lineNumbers': '行番号を表示',
