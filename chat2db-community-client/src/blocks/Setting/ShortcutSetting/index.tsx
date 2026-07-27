@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button, Table, Tag, type TableProps } from 'antd';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { staticMessage } from '@chat2db/ui';
 import { useStyles } from './style';
 import { useGlobalStore } from '@/store/global';
@@ -193,7 +194,9 @@ export default function ShortcutSetting() {
           return (
             <section key={group.scope} className={styles.groupSection}>
               <Button type="text" className={styles.groupHeader} onClick={() => toggleGroup(group.scope)}>
-                <span className={styles.groupArrow}>{collapsed ? '>' : 'v'}</span>
+                <span className={styles.groupArrow}>
+                  {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </span>
                 <span className={styles.groupTitle}>{i18n(group.title)}</span>
               </Button>
               {!collapsed && (

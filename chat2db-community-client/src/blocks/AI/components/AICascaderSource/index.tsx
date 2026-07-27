@@ -299,7 +299,7 @@ const AICascaderSource = (props: IProps) => {
       loadData={loadData}
       onChange={handleChange}
       optionRender={optionRender}
-      suffixIcon={<ChevronDown size={12} />}
+      suffixIcon={<ChevronDown size={14} />}
       prefix={
         cascaderValue.length === 0 ? (
           <div className={styles.displayRenderPlus}>

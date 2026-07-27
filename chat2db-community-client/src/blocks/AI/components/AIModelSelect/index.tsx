@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Select } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai/store';
@@ -103,6 +103,7 @@ const AIModelSelect = ({
       options={optionsWithCustomModelEntry}
       size="small"
       placeholder={i18n('ai.select.model')}
+      suffixIcon={<ChevronDown size={14} />}
       onDropdownVisibleChange={handleDropdownVisibleChange}
     />
   );

@@ -14,6 +14,7 @@ import { osNow } from '@/utils';
 import { v4 as uuid } from 'uuid';
 import { databaseMap } from '@/constants';
 import { useUpdateEffect } from 'ahooks';
+import { ChevronDown } from 'lucide-react';
 
 const THEMES = Object.entries(editorThemes).map(([key]) => ({ label: key, value: key }));
 const FONT_FAMILIES = Object.entries(editorFontFamily).map(([key, value]) => ({ label: key, value }));
@@ -172,6 +173,7 @@ function EditorSettings() {
           <Col span={12}>
             <Form.Item name="renderLineHighlight" label={i18n('monaco.renderLineHighlight')}>
               <Select
+                suffixIcon={<ChevronDown size={14} />}
                 options={['line', 'none', 'gutter', 'all'].map((value) => ({
                   label: value.toUpperCase(),
                   value,
@@ -189,6 +191,7 @@ function EditorSettings() {
             <Form.Item name="completion" label={i18n('monaco.completion.all')}>
               <Select
                 mode="multiple"
+                suffixIcon={<ChevronDown size={14} />}
                 options={Object.values(databaseMap).map((value) => ({
                   label: value.name,
                   value: value.code,
