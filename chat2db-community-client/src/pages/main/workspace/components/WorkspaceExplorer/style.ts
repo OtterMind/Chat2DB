@@ -24,42 +24,25 @@ export const useStyles = createStyles(({ css, token }) => {
       background-color: ${token.colorFillTertiary};
       height: 25px;
     `,
-    fileSection: css`
+    splitPaneContainer: css`
+      position: relative;
       flex: 1;
       min-height: 0;
       overflow: hidden;
     `,
-    sessionSection: css`
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      max-height: 220px;
-      padding: 8px 8px 10px;
-      border-top: 1px solid ${token.colorBorderLayout};
+    fileSection: css`
+      height: 100%;
+      min-height: 0;
       overflow: hidden;
     `,
-    sessionResizeHandle: css`
-      position: absolute;
-      top: -3px;
-      left: 0;
-      right: 0;
-      height: 6px;
-      cursor: row-resize;
-
-      &:hover::after {
-        background: ${token.colorPrimary};
-      }
-
-      &::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 2px;
-        height: 1px;
-        background: transparent;
-      }
+    sessionSection: css`
+      display: flex;
+      height: 100%;
+      min-height: 0;
+      flex-direction: column;
+      padding: 8px 8px 10px;
+      box-sizing: border-box;
+      overflow: hidden;
     `,
     sectionHeader: css`
       display: flex;
@@ -83,16 +66,8 @@ export const useStyles = createStyles(({ css, token }) => {
       gap: 2px;
       flex: 1;
       min-height: 0;
-      max-height: 180px;
       overflow-y: auto;
       overflow-x: hidden;
-    `,
-    sessionSectionResized: css`
-      max-height: none;
-
-      .workspace-session-list {
-        max-height: none;
-      }
     `,
     sessionRow: css`
       display: flex;
