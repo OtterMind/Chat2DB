@@ -470,7 +470,7 @@ function CommunityMainPage() {
                 <span className={styles.navItemLabel}>{i18n('setting.title.setting')}</span>
               </div>
             ) : (
-              <OfflineAvatar logoSize={18} triggerSize={34} />
+              <OfflineAvatar logoSize={24} triggerSize={34} />
             )}
           </div>
         )}
