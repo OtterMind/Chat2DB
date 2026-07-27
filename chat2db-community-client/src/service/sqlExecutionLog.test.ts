@@ -3,6 +3,13 @@ import { TableDataType } from '@/constants/table';
 import type { IManageResultData } from '@/typings';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 import {
+  beginSqlExecutionRequest,
+  createSqlExecutionRequestTracker,
+  finishSqlExecutionRequest,
+  getActiveSqlExecutionId,
+  setSqlExecutionRequestId,
+} from './sqlExecutionRequestTracker';
+import {
   beginWebSqlExecution,
   clearSqlExecutionLog,
   completeWebSqlExecution,
@@ -39,6 +46,23 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     hasNextPage: false,
     ...overrides,
   };
+}
+
+{
+  const tracker = createSqlExecutionRequestTracker();
+  const oldRequest = beginSqlExecutionRequest(tracker);
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest, 'desktop-old'), true);
+  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-old');
+
+  const newRequest = beginSqlExecutionRequest(tracker);
+  assert.equal(getActiveSqlExecutionId(tracker), undefined, 'a new request cannot cancel the previous execution');
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest, 'desktop-new'), true);
+  assert.equal(finishSqlExecutionRequest(tracker, oldRequest), false);
+  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old terminal event keeps the new cancel target');
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest, 'desktop-old-late'), false);
+  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old start response is ignored');
+  assert.equal(finishSqlExecutionRequest(tracker, newRequest), true);
+  assert.equal(getActiveSqlExecutionId(tracker), undefined);
 }
 
 function rawExecutionContext(value: Record<string, unknown>) {
@@ -311,6 +335,42 @@ function webExecution() {
     afterLateFirstEvent,
     state,
     'an older Desktop request cannot replace a newer request when its first event arrives late',
+  );
+}
+
+{
+  let state = prepareDesktopSqlExecutionLogForRequest(createSqlExecutionLogState(), 1, false);
+  state = prepareDesktopSqlExecutionLogForRequest(state, 2, true);
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-new-kept',
+      eventSequence: 1,
+      occurredAtEpochMs: 181,
+      eventType: 'failed',
+      message: { message: 'new request failed' },
+    },
+    context,
+    true,
+    2,
+  );
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old-kept',
+      eventSequence: 1,
+      occurredAtEpochMs: 182,
+      eventType: 'failed',
+      message: { message: 'old request completed late' },
+    },
+    context,
+    false,
+    1,
+  );
+  assert.deepEqual(
+    state.records.map((record) => record.executionId),
+    ['desktop-new-kept', 'desktop-old-kept'],
+    'switching to keep-history mode prevents an older request from clearing the newer output',
   );
 }
 

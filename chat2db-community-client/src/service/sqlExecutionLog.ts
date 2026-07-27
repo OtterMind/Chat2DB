@@ -306,6 +306,9 @@ export function reduceDesktopSqlExecutionEventWithHistoryPreference(
   ) {
     return state;
   }
+  if (requestSequence !== undefined) {
+    return reduceDesktopSqlExecutionEvent(state, event, context);
+  }
   const preparedState =
     event.eventType === 'started' || !isSqlExecutionTracked(state, event.executionId)
       ? prepareSqlExecutionLogForExecution(state, event.executionId, keepHistory)
