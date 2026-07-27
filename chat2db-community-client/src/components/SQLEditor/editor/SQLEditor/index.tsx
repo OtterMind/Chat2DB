@@ -75,6 +75,8 @@ export interface SQLEditorProps {
   onContextMenu?: (e: monaco.editor.IEditorMouseEvent) => void;
   /** Editor value change callback. */
   onChange?: (value: string) => void;
+  /** Immediate editor value change callback for lightweight UI state. */
+  onContentChange?: (value: string) => void;
 
   dbInfo: IBoundInfo;
   active?: boolean;
@@ -132,6 +134,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       dbInfo,
       active,
       onChange,
+      onContentChange,
       onContextMenu,
       className,
       readOnly,
@@ -989,6 +992,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             defaultValue={defaultValue}
             onMount={handleEditorMount}
             onChange={handleValueChange}
+            onContentChange={onContentChange}
             onCursorChange={handleCursorChange}
             onMouseClick={handleMouseClick}
             onContextMenu={handleContextMenu}

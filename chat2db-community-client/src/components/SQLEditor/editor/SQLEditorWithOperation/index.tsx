@@ -123,6 +123,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   const [contextTableIdentifier, setContextTableIdentifier] = useState<EditorTableIdentifier | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasEditorContent, setHasEditorContent] = useState<boolean>(!!defaultSQL?.trim());
+  const handleEditorContentChange = useCallback((value: string) => {
+    setHasEditorContent(!!value.trim());
+  }, []);
   const [routineExecutionModal, setRoutineExecutionModal] = useState({
     open: false,
     title: '',
@@ -941,9 +944,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           readOnly={isReadOnly}
           action={handleAction}
           enableContentDiffHints={enableContentDiffHints}
-          onChange={(value) => {
-            setHasEditorContent(!!value?.trim());
-          }}
+          onContentChange={handleEditorContentChange}
           contextMenuInfo={contextMenuInfo}
           onTableIdentifierContextChange={setContextTableIdentifier}
           onContextMenu={isReadOnly ? undefined : handleContextMenu}

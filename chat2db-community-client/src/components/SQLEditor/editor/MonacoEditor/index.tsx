@@ -81,6 +81,8 @@ export type MonacoSQLEditorProps = {
     changePosition?: monaco.Position | null,
     changeRange?: monaco.IRange | null,
   ) => void;
+  /** Immediate editor value change callback for lightweight UI state. */
+  onContentChange?: (value: string) => void;
   /** Cursor change callback. */
   onCursorChange?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   /** Mouse click callback. */
@@ -111,6 +113,7 @@ const MonacoSQLEditor = forwardRef<MonacoEditorRef, MonacoSQLEditorProps>(
       id,
       defaultValue,
       onChange,
+      onContentChange,
       onCursorChange,
       onMouseClick,
       onMount,
@@ -716,6 +719,8 @@ const MonacoSQLEditor = forwardRef<MonacoEditorRef, MonacoSQLEditorProps>(
 
       // Handle content changes.
       const didChangeModelContentDisposer = editor.onDidChangeModelContent((event) => {
+        onContentChange?.(editor.getValue());
+
         const lastChange = event.changes[event.changes.length - 1];
         if (
           event.changes.length === 1 &&
@@ -788,6 +793,7 @@ const MonacoSQLEditor = forwardRef<MonacoEditorRef, MonacoSQLEditorProps>(
       handleContextMenu,
       handleCursorChange,
       handleValueChange,
+      onContentChange,
       updateContentDiffGutterMarkers,
       scheduleContentDiffHintsRefresh,
     ]);
