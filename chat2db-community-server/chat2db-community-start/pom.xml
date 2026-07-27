@@ -13,7 +13,7 @@
     <packaging>jar</packaging>
     <name>chat2db-community-start</name>
     <properties>
-        <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.14</jcef.version>
+        <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.16</jcef.version>
         <chat2db.finalName>chat2db-community</chat2db.finalName>
         <chat2db.externalLib.excludeArtifactIds></chat2db.externalLib.excludeArtifactIds>
     </properties>
