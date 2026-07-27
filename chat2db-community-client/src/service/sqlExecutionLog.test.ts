@@ -63,6 +63,12 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
   assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old start response is ignored');
   assert.equal(finishSqlExecutionRequest(tracker, newRequest), true);
   assert.equal(getActiveSqlExecutionId(tracker), undefined);
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest, 'desktop-new-late'), false);
+  assert.equal(
+    getActiveSqlExecutionId(tracker),
+    undefined,
+    'a start response arriving after its terminal event cannot restore the cancel target',
+  );
 }
 
 function rawExecutionContext(value: Record<string, unknown>) {
