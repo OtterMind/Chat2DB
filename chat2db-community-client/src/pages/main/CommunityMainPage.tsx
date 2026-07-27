@@ -1,5 +1,6 @@
 import { Confetti, IconButton, IconfontSvg } from '@chat2db/ui';
 import { Tooltip, type InputRef } from 'antd';
+import { Layers, LayoutDashboard, MessagesSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '@/i18n';
@@ -40,21 +41,21 @@ function CommunityMainPage() {
     () => [
       {
         key: 'stream',
-        icon: 'icon-chat-alt-21',
+        icon: MessagesSquare,
         isLoad: false,
         component: <Stream />,
         name: i18n('stream.nav.title'),
       },
       {
         key: 'workspace',
-        icon: 'icon-gongxiang-',
+        icon: Layers,
         isLoad: false,
         component: <Workspace />,
         name: i18n('workspace.title'),
       },
       {
         key: 'dashboard',
-        icon: 'icon-chart-square-bar',
+        icon: LayoutDashboard,
         isLoad: false,
         component: <Dashboard />,
         name: i18n('dashboard.title'),
@@ -422,6 +423,7 @@ function CommunityMainPage() {
         <div className={styles.navContainer}>
           {navConfig.map((item) => {
             const isActive = item.key === mainPageActiveTab && settingPageActiveTab === false;
+            const NavIcon = item.icon;
 
             if (!sidebarExpanded) {
               return (
@@ -434,7 +436,7 @@ function CommunityMainPage() {
                     iconSize: 22,
                   }}
                   title={item.name}
-                  code={item.icon}
+                  icon={NavIcon}
                   tooltipPlacement="right"
                   onClick={() => handleNavItemClick(item)}
                 />
@@ -447,7 +449,7 @@ function CommunityMainPage() {
                 className={cx(styles.navItem, isActive && styles.navItemActive)}
                 onClick={() => handleNavItemClick(item)}
               >
-                <IconfontSvg code={item.icon} className={styles.navItemIcon} size={20} />
+                <NavIcon className={styles.navItemIcon} size={20} />
                 <span className={styles.navItemLabel}>{item.name}</span>
               </div>
             );

@@ -4,12 +4,12 @@ import { useSize } from 'ahooks';
 import { Button, Dropdown, Input, Modal, Tooltip, type InputRef, type MenuProps } from 'antd';
 import {
   ChevronRight,
-  ChevronsUp,
-  FilePlus2,
+  FilePlus,
   Folder,
   FolderInput,
   FolderOpen,
   FolderPlus,
+  ListCollapse,
   MoreHorizontal,
   RefreshCw,
 } from 'lucide-react';
@@ -105,7 +105,7 @@ const SQL_FILE_EXTENSION = '.sql';
 const LOCAL_SQL_DIRECTORY_PATH_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathStorageKey;
 const LOCAL_SQL_DIRECTORY_PATHS_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathsStorageKey;
 const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
-const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 18, iconSize: 12 };
+const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = 'sm';
 const LOCAL_SQL_TREE_BASE_INDENT = 0;
 const LOCAL_SQL_TREE_LEVEL_INDENT = 14;
 
@@ -1641,7 +1641,7 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     ? i18n('workspace.localSqlFileTree.addFolder')
     : i18n('workspace.localSqlFileTree.openFolder');
   const folderActionLoading = rootNodes.length ? addingRoot : selecting;
-  const folderActionIcon = rootNodes.length ? FolderPlus : FolderInput;
+  const folderActionIcon = rootNodes.length ? FolderInput : FolderOpen;
   const showExpandedToolbar = (headerSize?.width || 0) >= LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH;
   const toolbarMoreItems: MenuProps['items'] = [
     {
@@ -1692,7 +1692,7 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
               size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
               disabled={toolbarDisabled}
               onClick={() => startCreate('file')}
-              icon={FilePlus2}
+              icon={FilePlus}
             />
             <IconButton
               title={i18n('workspace.localSqlFileTree.refresh')}
@@ -1709,14 +1709,14 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
                   size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
                   disabled={toolbarDisabled}
                   onClick={() => startCreate('directory')}
-                  icon={FolderOpen}
+                  icon={FolderPlus}
                 />
                 <IconButton
                   title={i18n('workspace.localSqlFileTree.collapseAll')}
                   size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
                   disabled={!rootNodes.length}
                   onClick={collapseAll}
-                  icon={ChevronsUp}
+                  icon={ListCollapse}
                 />
               </>
             ) : (
