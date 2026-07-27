@@ -111,6 +111,13 @@ The optional Actions variable `QQ_NOTIFICATION_INCLUDE_URL` defaults to
 `true`. Set it to `false` to omit GitHub URLs from notifications.
 When OneBot explicitly rejects a message containing a URL, the relay retries
 once with URLs replaced by `[链接已省略]`.
+When Cloudflare reports that the Tunnel has no healthy connector with HTTP
+`530` and error code `1033`, the notifier waits 30 seconds and retries the same
+delivery once. The fixed delivery ID lets the relay suppress a duplicate if the
+first request reached it but its response was lost.
+When the relay returns HTTP `429`, the notifier waits for the 60-second rate
+limit window and retries the same delivery once instead of making short retries
+inside the already-saturated window.
 
 The old `QQ_BOT_APP_ID`, `QQ_BOT_CLIENT_SECRET`, and `QQ_GROUP_OPENID` secrets
 are not used by this implementation and may be removed after the relay path is

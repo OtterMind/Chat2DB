@@ -447,6 +447,98 @@ class RelayClientTest(unittest.TestCase):
             "Chat2DB-GitHub-Notifier/1.0", request.get_header("User-agent")
         )
 
+    @patch("notify_qq.time.sleep")
+    @patch("notify_qq.urlopen")
+    def test_cloudflare_tunnel_1033_is_retried_once(self, urlopen_mock, sleep_mock):
+        tunnel_error = HTTPError(
+            "https://qq-relay.example.com/v1/qq/github",
+            530,
+            "",
+            {},
+            io.BytesIO(b"error code: 1033"),
+        )
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok": true}'
+        urlopen_mock.side_effect = [tunnel_error, response]
+
+        result = notify_qq._post_json(
+            "https://qq-relay.example.com/v1/qq/github", {}, {}
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, urlopen_mock.call_count)
+        sleep_mock.assert_called_once_with(30)
+
+    @patch("notify_qq.time.sleep")
+    @patch("notify_qq.urlopen")
+    def test_cloudflare_tunnel_1033_stops_after_one_retry(
+        self, urlopen_mock, sleep_mock
+    ):
+        url = "https://qq-relay.example.com/v1/qq/github"
+        urlopen_mock.side_effect = [
+            HTTPError(url, 530, "", {}, io.BytesIO(b"error code: 1033")),
+            HTTPError(url, 530, "", {}, io.BytesIO(b"error code: 1033")),
+        ]
+
+        with self.assertRaises(notify_qq.RelayAPIError) as raised:
+            notify_qq._post_json(url, {}, {})
+
+        self.assertEqual(530, raised.exception.status)
+        self.assertEqual(2, urlopen_mock.call_count)
+        sleep_mock.assert_called_once_with(30)
+
+    @patch("notify_qq.time.sleep")
+    @patch("notify_qq.urlopen")
+    def test_rate_limit_429_waits_for_window_and_retries_once(
+        self, urlopen_mock, sleep_mock
+    ):
+        rate_limit_error = HTTPError(
+            "https://qq-relay.example.com/v1/qq/github",
+            429,
+            "",
+            {},
+            io.BytesIO(b'{"error": "rate limit exceeded"}'),
+        )
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok": true}'
+        urlopen_mock.side_effect = [rate_limit_error, response]
+
+        result = notify_qq._post_json(
+            "https://qq-relay.example.com/v1/qq/github", {}, {}
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, urlopen_mock.call_count)
+        sleep_mock.assert_called_once_with(60)
+
+    @patch("notify_qq.time.sleep")
+    @patch("notify_qq.urlopen")
+    def test_rate_limit_429_stops_after_one_retry(self, urlopen_mock, sleep_mock):
+        url = "https://qq-relay.example.com/v1/qq/github"
+        urlopen_mock.side_effect = [
+            HTTPError(
+                url,
+                429,
+                "",
+                {},
+                io.BytesIO(b'{"error": "rate limit exceeded"}'),
+            ),
+            HTTPError(
+                url,
+                429,
+                "",
+                {},
+                io.BytesIO(b'{"error": "rate limit exceeded"}'),
+            ),
+        ]
+
+        with self.assertRaises(notify_qq.RelayAPIError) as raised:
+            notify_qq._post_json(url, {}, {})
+
+        self.assertEqual(429, raised.exception.status)
+        self.assertEqual(2, urlopen_mock.call_count)
+        sleep_mock.assert_called_once_with(60)
+
     @patch("notify_qq._post_json")
     def test_relay_request_uses_bearer_token_and_delivery_id(self, post_json):
         post_json.return_value = {"ok": True, "message_id": "42"}

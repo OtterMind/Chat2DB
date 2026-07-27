@@ -16,7 +16,12 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
-TRANSIENT_HTTP_STATUSES = {429, 500, 502, 503, 504}
+TRANSIENT_HTTP_STATUSES = {500, 502, 503, 504}
+RATE_LIMIT_HTTP_STATUS = 429
+RATE_LIMIT_RETRY_DELAY_SECONDS = 60
+CLOUDFLARE_TUNNEL_ERROR_STATUS = 530
+CLOUDFLARE_TUNNEL_ERROR_CODE = "1033"
+CLOUDFLARE_TUNNEL_RETRY_DELAY_SECONDS = 30
 URL_PATTERN = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
 COLLECTED_EVENT_NAMES = {
     "issue_comment",
@@ -517,6 +522,7 @@ def _post_json(url: str, payload: Mapping[str, Any], headers: Mapping[str, str])
     }
 
     for attempt in range(3):
+        retry_delay = 2**attempt
         request = Request(url, data=body, headers=request_headers, method="POST")
         try:
             with urlopen(request, timeout=15) as response:
@@ -527,12 +533,24 @@ def _post_json(url: str, payload: Mapping[str, Any], headers: Mapping[str, str])
                 return decoded
         except HTTPError as error:
             relay_error = _decode_relay_error(error.code, error.read())
-            if error.code not in TRANSIENT_HTTP_STATUSES or attempt == 2:
+            tunnel_unavailable = (
+                error.code == CLOUDFLARE_TUNNEL_ERROR_STATUS
+                and CLOUDFLARE_TUNNEL_ERROR_CODE in relay_error.message
+            )
+            if error.code == RATE_LIMIT_HTTP_STATUS:
+                if attempt != 0:
+                    raise relay_error from error
+                retry_delay = RATE_LIMIT_RETRY_DELAY_SECONDS
+            elif tunnel_unavailable:
+                if attempt != 0:
+                    raise relay_error from error
+                retry_delay = CLOUDFLARE_TUNNEL_RETRY_DELAY_SECONDS
+            elif error.code not in TRANSIENT_HTTP_STATUSES or attempt == 2:
                 raise relay_error from error
         except URLError as error:
             if attempt == 2:
                 raise RuntimeError(f"QQ relay network request failed: {error.reason}") from error
-        time.sleep(2**attempt)
+        time.sleep(retry_delay)
 
     raise AssertionError("unreachable")
 
