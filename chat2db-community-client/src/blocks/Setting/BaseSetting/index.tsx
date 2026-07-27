@@ -10,6 +10,7 @@ import { settingSelectors } from '@/store/global/selectors';
 import { refreshPage } from '@/utils';
 import { PrimaryColors, primaryColorsScales, PrimaryGradient, Swatches, ThemeAppearance } from '@chat2db/ui';
 import { Form, Input, Select } from 'antd';
+import { ChevronDown } from 'lucide-react';
 import { useMemo } from 'react';
 import SettingSubsection from '../SettingSubsection';
 import { useStyles } from './style';
@@ -148,7 +149,13 @@ export default function BaseSetting() {
       </div>
       <div>
         <SettingSubsection title={i18n('setting.title.language')} describe={i18n('setting.title.languageDescribe')} />
-        <Select value={curLanguage} style={{ width: 140 }} onChange={changeLang} options={curLanguageOptions} />
+        <Select
+          value={curLanguage}
+          style={{ width: 140 }}
+          onChange={changeLang}
+          options={curLanguageOptions}
+          suffixIcon={<ChevronDown size={14} />}
+        />
       </div>
       <div>
         <SettingSubsection
@@ -175,6 +182,7 @@ export default function BaseSetting() {
               setCustomFontSize(e);
             }}
             options={customFontSizeOptions}
+            suffixIcon={<ChevronDown size={14} />}
           />
           {/* </Form.Item> */}
         </Form>

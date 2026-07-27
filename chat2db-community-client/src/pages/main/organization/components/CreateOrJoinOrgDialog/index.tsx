@@ -1,6 +1,7 @@
 import { Modal, Input, TextArea, ModalProps, IconfontSvg, Empty, EmptyImage } from '@chat2db/ui';
 import { Button, Flex, Form, Select } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { useStyles } from './style';
 import domesticCity from '@/data/domestic_city.json';
 import abroadCity from '@/data/abroad_city.json';
@@ -134,7 +135,7 @@ const CreateOrJoinOrgDialog = ({ open }: CreateOrJoinOrgDialogProps) => {
               <div className={styles.initItemDesc}>{i18n('team.create.title.desc')}</div>
             </Flex>
           </Flex>
-          <IconfontSvg className={styles.initItemArrow} code="icon-chevron-right" size="xs" />
+          <ChevronRight className={styles.initItemArrow} size={14} />
         </div>
 
         <div
@@ -152,7 +153,7 @@ const CreateOrJoinOrgDialog = ({ open }: CreateOrJoinOrgDialogProps) => {
               <div className={styles.initItemDesc}>{i18n('team.join.title.desc')}</div>
             </Flex>
           </Flex>
-          <IconfontSvg className={styles.initItemArrow} code="icon-chevron-right" size="xs" />
+          <ChevronRight className={styles.initItemArrow} size={14} />
         </div>
       </Flex>
     );

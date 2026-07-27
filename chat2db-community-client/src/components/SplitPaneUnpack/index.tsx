@@ -1,6 +1,6 @@
-import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
+import React, { memo, useRef, useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useStyles } from './style';
-import { IconfontSvg } from '@chat2db/ui';
 
 interface IProps {
   className?: string;
@@ -28,9 +28,7 @@ export default memo<IProps>((props) => {
     };
   }, [direction]);
 
-  const iconCode = useMemo(() => {
-    return size === 0 ? 'icon-chevron-up' : 'icon-chevron-bottom';
-  }, [size]);
+  const DirectionIcon = size === 0 ? ChevronUp : ChevronDown;
 
   const handleClick = () => {
     if (size === 0) {
@@ -44,7 +42,7 @@ export default memo<IProps>((props) => {
     <div className={cx(styles.splitPaneUnpack, className)} ref={splitPaneUnpackRef}>
       <div className="operatingHandleBox">
         <div className="operatingHandle" onClick={handleClick}>
-          <IconfontSvg className="operatingHandleIcon" code={iconCode} size="xs" />
+          <DirectionIcon className="operatingHandleIcon" size={14} />
         </div>
       </div>
       {children}

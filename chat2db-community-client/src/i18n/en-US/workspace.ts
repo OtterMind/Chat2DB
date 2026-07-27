@@ -227,6 +227,7 @@ export default {
   'workspace.localSqlFileTree.newFile': 'New SQL file',
   'workspace.localSqlFileTree.newFolder': 'New folder',
   'workspace.localSqlFileTree.refresh': 'Refresh',
+  'workspace.localSqlFileTree.expandAll': 'Expand all',
   'workspace.localSqlFileTree.collapseAll': 'Collapse all',
   'workspace.localSqlFileTree.moreActions': 'More actions',
   'workspace.localSqlFileTree.open': 'Open',

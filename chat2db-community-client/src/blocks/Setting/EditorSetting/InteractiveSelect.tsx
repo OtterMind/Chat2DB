@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Select } from 'antd';
+import { ChevronDown } from 'lucide-react';
 
 const InteractiveSelect = ({ onChange, options, ...props }) => {
   const [open, setOpen] = useState(false);
@@ -51,6 +52,7 @@ const InteractiveSelect = ({ onChange, options, ...props }) => {
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       options={options}
+      suffixIcon={<ChevronDown size={14} />}
     />
   );
 };

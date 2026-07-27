@@ -46,11 +46,13 @@ export const useStyles = createStyles(({ css, token }) => {
       }
     `,
     groupArrow: css`
-      width: 12px;
+      align-items: center;
       color: ${token.colorTextSecondary};
-      font-size: ${token.fontSizeSM}px;
-      line-height: 1;
-      text-align: center;
+      display: flex;
+      flex: 0 0 14px;
+      height: 14px;
+      justify-content: center;
+      width: 14px;
     `,
     groupTitle: css`
       margin: 0;

@@ -8,6 +8,7 @@ import React, {
   useState,
   useCallback,
 } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import i18n from '@/i18n';
 import { useStyles } from './style';
 import { SearchComponent } from '@visactor/vtable-search';
@@ -178,7 +179,7 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
             iconSize: 18,
             borderRadius: 3,
           }}
-          code="icon-up-arrow"
+          icon={ChevronUp}
           title={i18n('workspace.searchResult.prev')}
           onClick={handleJumpPrev}
         />
@@ -188,7 +189,7 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
             iconSize: 18,
             borderRadius: 3,
           }}
-          code="icon-down-arrow"
+          icon={ChevronDown}
           title={i18n('workspace.searchResult.next')}
           onClick={handleJumpNext}
         />

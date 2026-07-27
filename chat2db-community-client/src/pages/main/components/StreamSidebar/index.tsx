@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { Button, Input, Modal, Tooltip, type InputRef } from 'antd';
 import dayjs from 'dayjs';
-import { Search } from 'lucide-react';
+import { MessageSquarePlus, Search } from 'lucide-react';
 
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuIntent } from '@/components/ContextMenu/core';
@@ -129,7 +129,7 @@ const StreamSidebar = ({
         <Button
           type="primary"
           className={styles.streamNewChatButton}
-          icon={<IconfontSvg code="icon-new-chat" size={16} />}
+          icon={<MessageSquarePlus size={16} />}
           onClick={onNewChat}
         >
           {i18n('stream.panel.newChat')}

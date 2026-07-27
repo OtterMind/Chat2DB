@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, memo, Fragment } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { Dropdown, Input } from 'antd';
 import { useStyles } from './style';
 import { TreeNodeType, databaseMap, DatabaseTypeCode } from '@/constants';
@@ -379,7 +380,7 @@ const DropdownItem = memo((props: DropdownProps) => {
             className={styles.toolbarBtn}
             prefixIcon={currentIcon}
             text={eachOption?.label || `<${eachOption.treeNodeType}>`}
-            suffixIcon={<IconfontSvg size="xs" className={styles.suffixIcon} code="icon-chevron-right" />}
+            suffixIcon={<ChevronRight size={14} className={styles.suffixIcon} />}
           />
         </Dropdown>
       ) : (
@@ -387,7 +388,7 @@ const DropdownItem = memo((props: DropdownProps) => {
           className={styles.toolbarBtn}
           prefixIcon={currentIcon}
           text={eachOption?.label || `<${eachOption.treeNodeType}>`}
-          suffixIcon={<IconfontSvg size="xs" className={styles.suffixIcon} code="icon-chevron-right" />}
+          suffixIcon={<ChevronRight size={14} className={styles.suffixIcon} />}
         />
       )}
     </Fragment>
