@@ -3,25 +3,17 @@ import themeDarkDimmedImg from '@/assets/img/theme-dark-dimmed.png';
 import themeDarkImg from '@/assets/img/theme-dark.png';
 import themeLightImg from '@/assets/img/theme-light.png';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
-import { LangType } from '@/constants/settings';
+import type { LangType } from '@/constants/settings';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
 import { refreshPage } from '@/utils';
-import { PrimaryColors, primaryColorsScales, PrimaryGradient, Swatches, ThemeAppearance } from '@chat2db/ui';
-import { Form, Input, Select } from 'antd';
-import { ChevronDown } from 'lucide-react';
+import { PrimaryColors, primaryColorsScales, PrimaryGradient, ThemeAppearance } from '@chat2db/ui';
+import { Input, Select } from 'antd';
+import { Check, ChevronDown, Globe, Palette, Type } from 'lucide-react';
 import { useMemo } from 'react';
-import SettingSubsection from '../SettingSubsection';
+import { getAvailableLanguageOptions, resolveCurrentLanguage } from './model';
 import { useStyles } from './style';
-
-const languageOptions = [
-  { value: LangType.ZH_CN, label: '简体中文' },
-  { value: LangType.EN_US, label: 'English' },
-  { value: LangType.JA_JP, label: '日本語' },
-  { value: LangType.ES_ES, label: 'Español' },
-  { value: LangType.KO_KR, label: '한국어' },
-];
 
 const customFontSizeOptions = [
   { value: 12, label: '12px' },
@@ -74,7 +66,6 @@ export default function BaseSetting() {
       setAppearance: state.setAppearance,
       isCN: state.appConfig.isCN,
       setPrimaryColor: state.setPrimaryColor,
-      setNeutralColor: state.setNeutralColor,
       setLanguage: state.setLanguage,
       setCustomFont: state.setCustomFont,
       setCustomFontSize: state.setCustomFontSize,
@@ -83,18 +74,12 @@ export default function BaseSetting() {
 
   // If it is not a domestic version, Chinese will not be displayed.
   const curLanguageOptions = useMemo(() => {
-    if (runtimeEditionConfig.languageRegionRestricted && !isCN) {
-      return languageOptions.filter((item) => item.value !== LangType.ZH_CN);
-    }
-    return languageOptions;
+    return getAvailableLanguageOptions(runtimeEditionConfig.languageRegionRestricted, isCN);
   }, [isCN]);
 
   // If it is not a domestic version, Chinese will not be displayed.
   const curLanguage = useMemo(() => {
-    if (runtimeEditionConfig.languageRegionRestricted && !isCN && language === LangType.ZH_CN) {
-      return LangType.EN_US;
-    }
-    return language;
+    return resolveCurrentLanguage(language, runtimeEditionConfig.languageRegionRestricted, isCN);
   }, [language, isCN]);
 
   const isDark = appearance.includes('dark');
@@ -113,108 +98,138 @@ export default function BaseSetting() {
     window.setTimeout(refreshPage, 0);
   }
 
-  function changeThemeMode(item: any) {
-    setAppearance(item.code);
+  function changeThemeMode(code: ThemeAppearance) {
+    setAppearance(code);
   }
 
   function changePrimaryColor(item: any) {
     setPrimaryColor(item);
   }
 
-  // function changeNeutralColor(item: any) {
-  //   setNeutralColor(item);
-  // }
-
   return (
-    <div className={styles.baseSettingBox}>
-      <div>
-        <SettingSubsection
-          title={i18n('setting.title.backgroundColor')}
-          describe={i18n('setting.text.backgroundColorDescribe')}
-        />
-        <div className={styles.backgroundList}>
-          {themeList.map((t) => {
-            return (
-              <div key={t.code} className={styles.themeItemBox}>
-                <div
-                  className={cx(styles.themeBox, { [styles.activeThemeBox]: appearance == t.code })}
-                  onClick={changeThemeMode.bind(null, t)}
-                  style={{ backgroundImage: `url(${t.img})` }}
-                />
-                <div className={styles.themeName}>{t.name}</div>
-              </div>
-            );
-          })}
+    <div className={styles.settingsList}>
+      <div className={styles.settingRow} data-setting-group="appearance" data-setting-search-id="basic.appearance">
+        <div className={styles.settingMeta}>
+          <Palette aria-hidden="true" className={styles.settingGroupIcon} size={18} strokeWidth={1.8} />
+          <div className={styles.settingMetaContent}>
+            <div className={styles.settingTitle} data-setting-search-title="true">
+              {i18n('setting.title.appearance')}
+            </div>
+            <div className={styles.settingDescription}>{i18n('setting.text.appearanceDescribe')}</div>
+          </div>
+        </div>
+        <div className={styles.settingStack}>
+          <div className={styles.controlBlock}>
+            <div className={styles.fieldLabel}>{i18n('setting.title.backgroundColor')}</div>
+            <div aria-label={i18n('setting.title.backgroundColor')} className={styles.backgroundList} role="group">
+              {themeList.map((t) => {
+                const isActive = appearance === t.code;
+                return (
+                  <button
+                    aria-pressed={isActive}
+                    className={cx(styles.themeItemBox, { [styles.activeThemeItemBox]: isActive })}
+                    key={t.code}
+                    onClick={() => changeThemeMode(t.code)}
+                    type="button"
+                  >
+                    <span
+                      className={cx(styles.themeBox, { [styles.activeThemeBox]: isActive })}
+                      style={{ backgroundImage: `url(${t.img})` }}
+                    >
+                      {isActive ? (
+                        <span className={styles.themeCheck}>
+                          <Check aria-hidden="true" size={13} strokeWidth={2.2} />
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className={styles.themeName}>{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div aria-label={i18n('setting.title.themeColor')} className={styles.controlBlock} role="group">
+            <div className={styles.fieldLabel}>{i18n('setting.title.themeColor')}</div>
+            <div className={styles.swatchesBox}>
+              {primaryColorsSwatches.map((color) => {
+                const isActive = primaryColor?.label === color.label;
+                return (
+                  <button
+                    aria-label={color.label}
+                    aria-pressed={isActive}
+                    className={cx(styles.colorSwatch, { [styles.activeColorSwatch]: isActive })}
+                    key={color.label}
+                    onClick={() => changePrimaryColor(color)}
+                    style={{ backgroundColor: color.value }}
+                    title={color.label}
+                    type="button"
+                  >
+                    {isActive ? <Check aria-hidden="true" size={14} strokeWidth={2.5} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
-      <div>
-        <SettingSubsection title={i18n('setting.title.language')} describe={i18n('setting.title.languageDescribe')} />
-        <Select
-          value={curLanguage}
-          style={{ width: 140 }}
-          onChange={changeLang}
-          options={curLanguageOptions}
-          suffixIcon={<ChevronDown size={14} />}
-        />
-      </div>
-      <div>
-        <SettingSubsection
-          title={i18n('setting.title.customFont')}
-          describe={i18n('setting.title.customFontDescribe')}
-        />
-        <Form className={styles.customFontBox}>
-          {/* <Form.Item label={i18n('setting.title.customFont')} name="customFont"> */}
-          <Input
-            value={customFont}
-            style={{ width: 300 }}
-            onChange={(e) => {
-              setCustomFont(e.target.value);
-            }}
-            placeholder={i18n('setting.placeholder.customFont')}
-          />
-          {/* </Form.Item>
-          <Form.Item label={i18n('setting.title.customFontSize')} name="customFontSize"> */}
+      <div className={styles.settingRow} data-setting-group="language" data-setting-search-id="basic.language">
+        <div className={styles.settingMeta}>
+          <Globe aria-hidden="true" className={styles.settingGroupIcon} size={18} strokeWidth={1.8} />
+          <div className={styles.settingMetaContent}>
+            <div className={styles.settingTitle} data-setting-search-title="true">
+              {i18n('setting.title.language')}
+            </div>
+            <div className={styles.settingDescription}>{i18n('setting.title.languageDescribe')}</div>
+          </div>
+        </div>
+        <div className={styles.settingControl}>
           <Select
-            value={customFontSize}
-            placeholder={i18n('setting.title.customFontSizeDescribe')}
-            style={{ width: 200 }}
-            onChange={(e) => {
-              setCustomFontSize(e);
-            }}
-            options={customFontSizeOptions}
+            aria-label={i18n('setting.title.language')}
+            className={styles.languageSelect}
+            value={curLanguage}
+            onChange={changeLang}
+            options={curLanguageOptions}
             suffixIcon={<ChevronDown size={14} />}
           />
-          {/* </Form.Item> */}
-        </Form>
-      </div>
-      <div>
-        <SettingSubsection
-          title={i18n('setting.title.themeColor')}
-          describe={i18n('setting.title.themeColorDescribe')}
-        />
-        <Swatches
-          size={28}
-          gap={12}
-          activeColor={primaryColor?.label}
-          colors={primaryColorsSwatches}
-          onSelect={changePrimaryColor}
-        />
-      </div>
-      {/* <div>
-        <SettingSubsection
-          title={i18n('setting.title.neutralColor')}
-          describe={i18n('setting.title.neutralColorDescribe')}
-        />
-        <div className={styles.primaryColorList}>
-          <Swatches
-            size={28}
-            gap={12}
-            activeColor={neutralColor}
-            colors={neutralColorsSwatches}
-            onSelect={changeNeutralColor}
-          />
         </div>
-      </div> */}
+      </div>
+      <div className={styles.settingRow} data-setting-group="typography" data-setting-search-id="basic.typography">
+        <div className={styles.settingMeta}>
+          <Type aria-hidden="true" className={styles.settingGroupIcon} size={18} strokeWidth={1.8} />
+          <div className={styles.settingMetaContent}>
+            <div className={styles.settingTitle} data-setting-search-title="true">
+              {i18n('setting.title.interfaceFont')}
+            </div>
+            <div className={styles.settingDescription}>{i18n('setting.text.interfaceFontDescribe')}</div>
+          </div>
+        </div>
+        <div className={styles.fontControls}>
+          <label className={styles.fieldControl}>
+            <span className={styles.fieldLabel}>{i18n('setting.title.customFont')}</span>
+            <Input
+              aria-label={i18n('setting.title.customFont')}
+              value={customFont}
+              onChange={(e) => {
+                setCustomFont(e.target.value);
+              }}
+              placeholder={i18n('setting.placeholder.customFont')}
+            />
+          </label>
+          <label className={styles.fieldControl}>
+            <span className={styles.fieldLabel}>{i18n('setting.title.customFontSize')}</span>
+            <Select
+              aria-label={i18n('setting.title.customFontSize')}
+              value={customFontSize}
+              placeholder={i18n('setting.title.customFontSizeDescribe')}
+              onChange={(value) => {
+                setCustomFontSize(value);
+              }}
+              options={customFontSizeOptions}
+              suffixIcon={<ChevronDown size={14} />}
+            />
+          </label>
+        </div>
+      </div>
     </div>
   );
 }

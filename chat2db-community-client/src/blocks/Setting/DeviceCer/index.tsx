@@ -77,8 +77,6 @@ const DeviceCer = () => {
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.mainTitle}>{i18n('license.deviceCertificateTitle')}</div>
-
       <SettingSubsection
         title={i18n('license.getDeviceCertificateTitle')}
         describe={

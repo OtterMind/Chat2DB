@@ -4,15 +4,11 @@ import { CircleHelp } from 'lucide-react';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
-import networkProxyService, {
-  INetworkProxySettings,
-  NetworkProxyMode,
-  NetworkProxyType,
-} from '@/service/networkProxy';
-import SettingSubsection from '../SettingSubsection';
+import networkProxyService, { INetworkProxySettings, NetworkProxyMode, NetworkProxyType } from '@/service/networkProxy';
 import { useStyles as useBaseStyles } from '../BaseSetting/style';
 import { useStyles } from './style';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import SearchTargetLabel from '../SearchTargetLabel';
 
 const defaultProxySettings: INetworkProxySettings = {
   mode: NetworkProxyMode.NO_PROXY,
@@ -85,16 +81,6 @@ export default function NetworkProxySetting() {
   return (
     <div className={baseStyles.baseSettingBox}>
       <div>
-        <SettingSubsection
-          className={styles.subsection}
-          title={
-            <span className={styles.titleWithHelp}>
-              {i18n('setting.title.networkProxy')}
-              <HelpTooltip title={i18n('setting.networkProxy.modeTip')} />
-            </span>
-          }
-          describe={i18n('setting.text.networkProxyDescribe')}
-        />
         <Form
           form={form}
           className={styles.form}
@@ -104,7 +90,16 @@ export default function NetworkProxySetting() {
             testUrl: 'https://www.google.com',
           }}
         >
-          <Form.Item name="mode" label={i18n('setting.networkProxy.mode')} className={styles.modeItem}>
+          <Form.Item
+            name="mode"
+            label={
+              <SearchTargetLabel className={styles.titleWithHelp} targetId="networkProxy.mode">
+                {i18n('setting.networkProxy.mode')}
+                <HelpTooltip title={i18n('setting.networkProxy.modeTip')} />
+              </SearchTargetLabel>
+            }
+            className={styles.modeItem}
+          >
             <Radio.Group className={styles.modeGroup}>
               <ModeRadio
                 value={NetworkProxyMode.NO_PROXY}
@@ -156,7 +151,12 @@ export default function NetworkProxySetting() {
             </>
           )}
 
-          <Form.Item name="testUrl" label={i18n('setting.networkProxy.testUrl')}>
+          <Form.Item
+            name="testUrl"
+            label={
+              <SearchTargetLabel targetId="networkProxy.test">{i18n('setting.networkProxy.testUrl')}</SearchTargetLabel>
+            }
+          >
             <Input placeholder="https://www.google.com" autoComplete="off" />
           </Form.Item>
 

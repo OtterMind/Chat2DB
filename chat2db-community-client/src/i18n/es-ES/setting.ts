@@ -1,7 +1,11 @@
 export default {
   'setting.title.setting': 'Configuración',
+  'setting.nav.group.general': 'General',
+  'setting.nav.group.services': 'Conexiones y servicios',
+  'setting.nav.group.account': 'Cuenta y licencia',
+  'setting.nav.group.information': 'Información',
   'setting.nav.basic': 'General',
-  'setting.nav.basicDescribe': 'Incluye el tema, el idioma y otros ajustes generales',
+  'setting.nav.basicDescribe': 'Tema, idioma, fuente y preferencias de la interfaz',
   'setting.nav.personal': 'Su perfil',
   'setting.nav.personalDescribe': 'Configuración personal',
   'setting.nav.account': 'Cuenta',
@@ -16,6 +20,10 @@ export default {
   'setting.nav.mcpDescribe': 'Gestionar el inicio del MCP local',
   'setting.nav.networkProxy': 'Proxy de red',
   'setting.nav.networkProxyDescribe': 'Configurar el proxy de salida de la aplicación de escritorio',
+  'setting.title.appearance': 'Apariencia',
+  'setting.text.appearanceDescribe': 'Modo de tema y color de acento de la interfaz',
+  'setting.title.interfaceFont': 'Fuente de la interfaz',
+  'setting.text.interfaceFontDescribe': 'Familia y tamaño de fuente usados en la interfaz de Chat2DB',
   'setting.nav.switchOrg': 'Cambiar a equipos',
   'setting.nav.createOrgJoinOrg': 'Crear un equipo o unirse a uno',
   'setting.nav.switchPersonal': 'Volver al espacio personal',
@@ -69,7 +77,8 @@ export default {
   'setting.networkProxy.testUrl': 'URL de prueba',
   'setting.networkProxy.testConnection': 'Probar conexión',
   'setting.networkProxy.testSuccess': 'La prueba de conexión del proxy se completó correctamente',
-  'setting.networkProxy.restartRequired': 'La configuración del proxy se ha guardado. Reinicie la aplicación para aplicarla por completo',
+  'setting.networkProxy.restartRequired':
+    'La configuración del proxy se ha guardado. Reinicie la aplicación para aplicarla por completo',
   'setting.networkProxy.hostRequired': 'Introduzca el host del proxy',
   'setting.networkProxy.portRequired': 'Introduzca el puerto del proxy',
   'setting.title.globalMcpConfig': 'Configuración global de MCP',
@@ -101,7 +110,8 @@ export default {
   'setting.placeholder.azureEndpoint': 'Obtenga el endpoint de Azure OpenAI en Azure Portal',
   'setting.placeholder.azureDeployment': 'ID de implementación del modelo desplegado',
   'setting.ai.tips': 'Inicie sesión y seleccione la configuración de IA',
-  'setting.ai.user.hidden': 'Póngase en contacto con el administrador para configurar la ApiKey en «Configuración -> IA personalizada»',
+  'setting.ai.user.hidden':
+    'Póngase en contacto con el administrador para configurar la ApiKey en «Configuración -> IA personalizada»',
   'setting.button.startDownloading': 'Iniciar descarga',
   'setting.button.beDownloading': 'Descargando',
   'setting.button.redownload': 'Volver a descargar',
@@ -228,7 +238,8 @@ export default {
   'setting.apiKeys.deleteTips': 'Después de eliminarla, la clave dejará de estar disponible. Proceda con cuidado.',
 
   'setting.license.title': 'Licencia',
-  'setting.license.titleDes': 'Guarde el código de activación de forma segura. Cada código solo puede activar 2 dispositivos',
+  'setting.license.titleDes':
+    'Guarde el código de activación de forma segura. Cada código solo puede activar 2 dispositivos',
   'setting.license.status.unused': 'Sin activar; visite el sitio web oficial para comprar',
   'setting.license.status.trial': 'Prueba en curso; el periodo de prueba es de 14 días',
   'setting.license.status.expired': 'Expirada; visite el sitio web oficial para comprar',
@@ -241,15 +252,18 @@ export default {
   'setting.license.unbindDesc':
     'Después de desvincular el código de activación, ya no podrá utilizar las funciones sin conexión',
   'setting.license.activationTitle': 'Verificación del código de activación',
-  'setting.license.activationDesc': 'Introduzca su código de activación para mejorar de inmediato la eficiencia de su trabajo',
+  'setting.license.activationDesc':
+    'Introduzca su código de activación para mejorar de inmediato la eficiencia de su trabajo',
   'setting.license.enterLicenseKey': 'Introduzca su código de activación',
-  'setting.license.enterLicenseKey.desc': 'Después de la activación sin conexión, se necesita el certificado del dispositivo para desvincularlo',
+  'setting.license.enterLicenseKey.desc':
+    'Después de la activación sin conexión, se necesita el certificado del dispositivo para desvincularlo',
   'setting.license.deactivate': 'Desactivar',
   'setting.license.activate': 'Activar',
   'setting.license.offlineUsageNotes': 'Notas',
 
   'setting.license.deviceLimit': 'Cada código de activación solo puede activar 2 dispositivos a la vez',
-  'setting.license.changeDeviceInstruction': 'Si desea cambiar de dispositivo, desvincule primero el dispositivo activado,',
+  'setting.license.changeDeviceInstruction':
+    'Si desea cambiar de dispositivo, desvincule primero el dispositivo activado,',
   'setting.license.howToUnbind': 'Haga clic para ver cómo desvincular un dispositivo',
   'setting.license.noLicenseInstruction': 'Si todavía no tiene un código de activación,',
   'setting.license.buyLicense': 'Haga clic aquí para comprar un código de activación',
