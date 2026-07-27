@@ -48,6 +48,40 @@ class Chat2dbDiffToChangeLogTest {
     }
 
     @Test
+    void preservesEscapesInsideCharsetIntroducedLiterals() {
+        String apostrophePath = "cast(json_extract(`payload`,_latin1\\'$.\"a"
+                + "\\".repeat(3) + "'b\"\\') as unsigned)";
+        String backslashPath = "cast(json_extract(`payload`,_latin1\\'$.\"a"
+                + "\\".repeat(8) + "b\"\\') as unsigned)";
+        String trailingBackslashLiteral = "concat(_latin1\\'value"
+                + "\\".repeat(5) + "')";
+        CreateIndexChange createIndex = createIndex(
+                computed(apostrophePath),
+                computed(backslashPath),
+                computed(trailingBackslashLiteral));
+
+        List<ChangeSet> changeSets = List.of(changeSet(createIndex));
+        Chat2dbDiffToChangeLog.repairMySqlComputedIndexExpressions(changeSets, new MySQLDatabase());
+        Chat2dbDiffToChangeLog.repairMySqlComputedIndexExpressions(changeSets, new MySQLDatabase());
+
+        assertEquals("(cast(json_extract(`payload`,_latin1'$.\"a\\'b\"') as unsigned))",
+                createIndex.getColumns().get(0).getName());
+        assertEquals("(cast(json_extract(`payload`,_latin1'$.\"a"
+                        + "\\".repeat(4) + "b\"') as unsigned))",
+                createIndex.getColumns().get(1).getName());
+        assertEquals("(concat(_latin1'value" + "\\".repeat(2) + "'))",
+                createIndex.getColumns().get(2).getName());
+
+        MySQLDatabase database = new MySQLDatabase();
+        String apostropheSql = SqlGeneratorFactory.getInstance()
+                .generateSql(createIndex, database)[0].toSql();
+        assertTrue(apostropheSql.contains("_latin1'$.\"a\\'b\"'"));
+        assertTrue(apostropheSql.contains("_latin1'$.\"a" + "\\".repeat(4) + "b\"'"));
+        assertTrue(apostropheSql.contains("_latin1'value" + "\\".repeat(2) + "'"));
+        assertDoesNotThrow(() -> SqlUtils.parse(apostropheSql, DbType.mysql, true));
+    }
+
+    @Test
     void leavesOrdinaryColumnsRawSqlAndNonMysqlChangesUntouched() {
         AddColumnConfig ordinaryColumn = column("_utf8mb4\\'notAnExpression\\'", false);
         CreateIndexChange mysqlIndex = createIndex(ordinaryColumn);
