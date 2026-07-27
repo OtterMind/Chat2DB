@@ -1,6 +1,7 @@
 package ai.chat2db.spi.sql;
 
 import ai.chat2db.spi.IAccountManager;
+import ai.chat2db.spi.IDbDiffChangeSetProcessor;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
@@ -101,6 +102,10 @@ public class Chat2DBContext {
 
     public static IDbManager getDbManager(String dbType) {
         return getPlugin(dbType).getDbManager();
+    }
+
+    public static IDbDiffChangeSetProcessor getDiffChangeSetProcessor(String dbType) {
+        return getPlugin(dbType).getDiffChangeSetProcessor();
     }
 
     public static IAccountManager getAccountManager() {
