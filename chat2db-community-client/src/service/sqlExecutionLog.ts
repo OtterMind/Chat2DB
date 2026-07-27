@@ -56,6 +56,10 @@ export interface SqlExecutionLogRecord {
 
 export interface SqlExecutionLogState {
   records: SqlExecutionLogRecord[];
+  activeExecutionIds?: string[];
+  replacementExecutionId?: string;
+  replacementRequestSequence?: number;
+  supersededExecutionIds?: string[];
 }
 
 export interface BeginWebSqlExecutionParams {
@@ -74,6 +78,7 @@ export interface FailWebSqlExecutionParams extends BeginWebSqlExecutionParams {
 }
 
 const MAX_RECORDS = 200;
+const MAX_SUPERSEDED_EXECUTIONS = MAX_RECORDS;
 const MAX_OUTPUTS_PER_RECORD = 200;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MESSAGE_TRUNCATION_MARKER = '\n...[truncated]...\n';
@@ -84,9 +89,78 @@ export function createSqlExecutionLogState(): SqlExecutionLogState {
 
 export function clearSqlExecutionLog(state: SqlExecutionLogState): SqlExecutionLogState {
   return {
+    ...state,
     records: state.records
       .filter((record) => record.status === 'running')
       .map((record) => ({ ...record, outputs: [] })),
+  };
+}
+
+export function prepareSqlExecutionLogForExecution(
+  state: SqlExecutionLogState,
+  executionId: string,
+  keepHistory: boolean,
+): SqlExecutionLogState {
+  if (state.supersededExecutionIds?.includes(executionId)) {
+    return state;
+  }
+  const activeExecutionIds = addExecutionId(state.activeExecutionIds, executionId);
+  if (keepHistory) {
+    if (activeExecutionIds === state.activeExecutionIds && !state.replacementExecutionId) {
+      return state;
+    }
+    return {
+      ...state,
+      activeExecutionIds,
+      replacementExecutionId: undefined,
+    };
+  }
+  if (state.replacementExecutionId === executionId) {
+    return activeExecutionIds === state.activeExecutionIds ? state : { ...state, activeExecutionIds };
+  }
+  const supersededExecutionIds = Array.from(
+    new Set([
+      ...(state.supersededExecutionIds || []),
+      ...(state.activeExecutionIds || []).filter((activeExecutionId) => activeExecutionId !== executionId),
+      ...state.records
+        .filter((record) => record.status === 'running' && record.executionId !== executionId)
+        .map((record) => record.executionId),
+    ]),
+  ).slice(-MAX_SUPERSEDED_EXECUTIONS);
+  return {
+    ...state,
+    records: state.records.filter((record) => record.executionId === executionId),
+    activeExecutionIds: [executionId],
+    replacementExecutionId: executionId,
+    supersededExecutionIds,
+  };
+}
+
+export function prepareDesktopSqlExecutionLogForRequest(
+  state: SqlExecutionLogState,
+  requestSequence: number,
+  keepHistory: boolean,
+): SqlExecutionLogState {
+  if (keepHistory) {
+    return state.replacementExecutionId ? { ...state, replacementExecutionId: undefined } : state;
+  }
+  if ((state.replacementRequestSequence ?? 0) >= requestSequence) {
+    return state;
+  }
+  const supersededExecutionIds = Array.from(
+    new Set([
+      ...(state.supersededExecutionIds || []),
+      ...(state.activeExecutionIds || []),
+      ...state.records.filter((record) => record.status === 'running').map((record) => record.executionId),
+    ]),
+  ).slice(-MAX_SUPERSEDED_EXECUTIONS);
+  return {
+    ...state,
+    records: [],
+    activeExecutionIds: undefined,
+    replacementExecutionId: undefined,
+    replacementRequestSequence: requestSequence,
+    supersededExecutionIds,
   };
 }
 
@@ -94,10 +168,12 @@ export function beginWebSqlExecution(
   state: SqlExecutionLogState,
   params: BeginWebSqlExecutionParams,
 ): SqlExecutionLogState {
-  if (state.records.some((record) => record.executionId === params.executionId)) return state;
+  if (isSupersededExecution(state, params.executionId)) return state;
+  const trackedState = trackActiveExecution(state, params.executionId);
+  if (trackedState.records.some((record) => record.executionId === params.executionId)) return trackedState;
   const startedAtEpochMs = params.occurredAtEpochMs ?? Date.now();
-  return setRecords(state, [
-    ...state.records,
+  return setRecords(trackedState, [
+    ...trackedState.records,
     createRecord({ ...params, statementSequence: 1, startedAtEpochMs, temporary: true }),
   ]);
 }
@@ -106,16 +182,20 @@ export function completeWebSqlExecution(
   state: SqlExecutionLogState,
   params: CompleteWebSqlExecutionParams,
 ): SqlExecutionLogState {
+  if (isSupersededExecution(state, params.executionId)) return state;
   const completedAt = params.occurredAtEpochMs ?? Date.now();
   const temporary = state.records.find((record) => record.executionId === params.executionId && record.temporary);
   if (!params.results.length) {
-    return updateRecord(state, temporary?.id, (record) => ({
-      ...record,
-      temporary: false,
-      status: 'success',
-      finishedAtEpochMs: completedAt,
-      durationMs: Math.max(0, completedAt - record.startedAtEpochMs),
-    }));
+    return finishActiveExecution(
+      updateRecord(state, temporary?.id, (record) => ({
+        ...record,
+        temporary: false,
+        status: 'success',
+        finishedAtEpochMs: completedAt,
+        durationMs: Math.max(0, completedAt - record.startedAtEpochMs),
+      })),
+      params.executionId,
+    );
   }
 
   const groups = new Map<number, IManageResultData[]>();
@@ -160,16 +240,20 @@ export function completeWebSqlExecution(
     };
   });
 
-  return setRecords(state, [
-    ...state.records.filter((record) => record.id !== temporary?.id),
-    ...replacement,
-  ]);
+  return finishActiveExecution(
+    setRecords(state, [
+      ...state.records.filter((record) => record.id !== temporary?.id),
+      ...replacement,
+    ]),
+    params.executionId,
+  );
 }
 
 export function failWebSqlExecution(
   state: SqlExecutionLogState,
   params: FailWebSqlExecutionParams,
 ): SqlExecutionLogState {
+  if (isSupersededExecution(state, params.executionId)) return state;
   const finishedAtEpochMs = params.occurredAtEpochMs ?? Date.now();
   const cancelled = isSqlExecutionCancellationError(params.error);
   const existing = latestRecord(state.records, params.executionId);
@@ -185,21 +269,48 @@ export function failWebSqlExecution(
       finishedAtEpochMs,
       durationMs: 0,
     };
-    return setRecords(state, [
-      ...state.records,
-      cancelled ? finishedRecord : addError(finishedRecord, params.error, finishedAtEpochMs),
-    ]);
+    return finishActiveExecution(
+      setRecords(state, [
+        ...state.records,
+        cancelled ? finishedRecord : addError(finishedRecord, params.error, finishedAtEpochMs),
+      ]),
+      params.executionId,
+    );
   }
-  return updateRecord(state, existing.id, (record) => {
-    const finishedRecord = {
-      ...record,
-      temporary: false,
-      status: cancelled ? ('cancelled' as const) : ('failed' as const),
-      finishedAtEpochMs,
-      durationMs: Math.max(0, finishedAtEpochMs - record.startedAtEpochMs),
-    };
-    return cancelled ? finishedRecord : addError(finishedRecord, params.error, finishedAtEpochMs);
-  });
+  return finishActiveExecution(
+    updateRecord(state, existing.id, (record) => {
+      const finishedRecord = {
+        ...record,
+        temporary: false,
+        status: cancelled ? ('cancelled' as const) : ('failed' as const),
+        finishedAtEpochMs,
+        durationMs: Math.max(0, finishedAtEpochMs - record.startedAtEpochMs),
+      };
+      return cancelled ? finishedRecord : addError(finishedRecord, params.error, finishedAtEpochMs);
+    }),
+    params.executionId,
+  );
+}
+
+export function reduceDesktopSqlExecutionEventWithHistoryPreference(
+  state: SqlExecutionLogState,
+  event: SqlExecutionEvent,
+  context: SqlExecutionLogContext,
+  keepHistory: boolean,
+  requestSequence?: number,
+): SqlExecutionLogState {
+  if (
+    requestSequence !== undefined &&
+    state.replacementRequestSequence !== undefined &&
+    requestSequence < state.replacementRequestSequence
+  ) {
+    return state;
+  }
+  const preparedState =
+    event.eventType === 'started' || !isSqlExecutionTracked(state, event.executionId)
+      ? prepareSqlExecutionLogForExecution(state, event.executionId, keepHistory)
+      : state;
+  return reduceDesktopSqlExecutionEvent(preparedState, event, context);
 }
 
 export function reduceDesktopSqlExecutionEvent(
@@ -207,15 +318,17 @@ export function reduceDesktopSqlExecutionEvent(
   event: SqlExecutionEvent,
   context: SqlExecutionLogContext,
 ): SqlExecutionLogState {
+  if (isSupersededExecution(state, event.executionId)) return state;
+  const trackedState = trackActiveExecution(state, event.executionId);
   const occurredAt = event.occurredAtEpochMs ?? Date.now();
   const statementSequence = event.statementSequence ?? 1;
   const recordId = idFor(event.executionId, statementSequence);
 
-  if (event.eventType === 'started') return state;
+  if (event.eventType === 'started') return trackedState;
   if (event.eventType === 'statementStarted') {
-    if (state.records.some((record) => record.id === recordId)) return state;
-    return setRecords(state, [
-      ...state.records,
+    if (trackedState.records.some((record) => record.id === recordId)) return trackedState;
+    return setRecords(trackedState, [
+      ...trackedState.records,
       createRecord({
         executionId: event.executionId,
         statementSequence,
@@ -229,8 +342,9 @@ export function reduceDesktopSqlExecutionEvent(
 
   const target =
     (event.statementSequence === undefined
-      ? latestRecord(state.records, event.executionId)
-      : state.records.find((record) => record.id === recordId)) || latestRecord(state.records, event.executionId);
+      ? latestRecord(trackedState.records, event.executionId)
+      : trackedState.records.find((record) => record.id === recordId)) ||
+    latestRecord(trackedState.records, event.executionId);
   if (!target && (event.eventType === 'failed' || event.eventType === 'cancelled')) {
     const record = createRecord({
       executionId: event.executionId,
@@ -239,11 +353,16 @@ export function reduceDesktopSqlExecutionEvent(
       context,
       startedAtEpochMs: occurredAt,
     });
-    return setRecords(state, [...state.records, finishTerminal(record, event, occurredAt)]);
+    return finishActiveExecution(
+      setRecords(trackedState, [...trackedState.records, finishTerminal(record, event, occurredAt)]),
+      event.executionId,
+    );
   }
-  if (!target) return state;
+  if (!target) {
+    return event.eventType === 'finished' ? finishActiveExecution(trackedState, event.executionId) : trackedState;
+  }
 
-  return updateRecord(state, target.id, (record) => {
+  const nextState = updateRecord(trackedState, target.id, (record) => {
     switch (event.eventType) {
       case 'resultStarted':
         return {
@@ -312,6 +431,9 @@ export function reduceDesktopSqlExecutionEvent(
         return record;
     }
   });
+  return event.eventType === 'finished' || event.eventType === 'failed' || event.eventType === 'cancelled'
+    ? finishActiveExecution(nextState, event.executionId)
+    : nextState;
 }
 
 function mergeExecutionContext(
@@ -549,7 +671,7 @@ function updateRecord(
 }
 
 function setRecords(state: SqlExecutionLogState, records: SqlExecutionLogRecord[]): SqlExecutionLogState {
-  if (records.length <= MAX_RECORDS) return { records };
+  if (records.length <= MAX_RECORDS) return { ...state, records };
   let overflow = records.length - MAX_RECORDS;
   const next = records.filter((record) => {
     if (overflow > 0 && record.status !== 'running') {
@@ -558,7 +680,41 @@ function setRecords(state: SqlExecutionLogState, records: SqlExecutionLogRecord[
     }
     return true;
   });
-  return { records: next };
+  return { ...state, records: next };
+}
+
+function isSupersededExecution(state: SqlExecutionLogState, executionId: string) {
+  return (
+    !!state.supersededExecutionIds?.includes(executionId) ||
+    (!!state.replacementExecutionId && state.replacementExecutionId !== executionId)
+  );
+}
+
+function isSqlExecutionTracked(state: SqlExecutionLogState, executionId: string) {
+  return (
+    state.replacementExecutionId === executionId ||
+    !!state.activeExecutionIds?.includes(executionId) ||
+    !!state.supersededExecutionIds?.includes(executionId) ||
+    state.records.some((record) => record.executionId === executionId)
+  );
+}
+
+function trackActiveExecution(state: SqlExecutionLogState, executionId: string): SqlExecutionLogState {
+  const activeExecutionIds = addExecutionId(state.activeExecutionIds, executionId);
+  return activeExecutionIds === state.activeExecutionIds ? state : { ...state, activeExecutionIds };
+}
+
+function finishActiveExecution(state: SqlExecutionLogState, executionId: string): SqlExecutionLogState {
+  if (!state.activeExecutionIds?.includes(executionId)) return state;
+  const activeExecutionIds = state.activeExecutionIds.filter((activeExecutionId) => activeExecutionId !== executionId);
+  return {
+    ...state,
+    activeExecutionIds: activeExecutionIds.length ? activeExecutionIds : undefined,
+  };
+}
+
+function addExecutionId(executionIds: string[] | undefined, executionId: string) {
+  return executionIds?.includes(executionId) ? executionIds : [...(executionIds || []), executionId];
 }
 
 function latestRecord(records: SqlExecutionLogRecord[], executionId: string) {

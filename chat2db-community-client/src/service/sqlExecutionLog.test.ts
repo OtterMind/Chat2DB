@@ -9,7 +9,10 @@ import {
   createSqlExecutionLogState,
   failWebSqlExecution,
   isSqlExecutionCancellationError,
+  prepareDesktopSqlExecutionLogForRequest,
+  prepareSqlExecutionLogForExecution,
   reduceDesktopSqlExecutionEvent,
+  reduceDesktopSqlExecutionEventWithHistoryPreference,
   rethrowNonCancellationSqlExecutionError,
 } from './sqlExecutionLog';
 
@@ -70,6 +73,89 @@ function webExecution() {
     results: [],
   });
   assert.equal(clearSqlExecutionLog(completed).records.length, 0);
+}
+
+{
+  const completed = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 110,
+    results: [],
+  });
+  const state = beginWebSqlExecution(completed, {
+    executionId: 'web-2',
+    sql: 'select 2',
+    context,
+    occurredAtEpochMs: 120,
+  });
+  assert.deepEqual(
+    prepareSqlExecutionLogForExecution(state, 'web-3', true).records.map((record) => record.executionId),
+    ['web-1', 'web-2'],
+    'keep-history mode does not remove existing executions',
+  );
+  const replacement = beginWebSqlExecution(prepareSqlExecutionLogForExecution(state, 'web-3', false), {
+    executionId: 'web-3',
+    sql: 'select 3',
+    context,
+    occurredAtEpochMs: 130,
+  });
+  assert.deepEqual(
+    replacement.records.map((record) => record.executionId),
+    ['web-3'],
+    'replace mode keeps only the latest execution, including while older executions are running',
+  );
+  assert.equal(
+    completeWebSqlExecution(replacement, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 140,
+      results: [result()],
+    }),
+    replacement,
+    'a superseded execution cannot reappear when it completes later',
+  );
+  const appendMode = prepareSqlExecutionLogForExecution(replacement, 'web-4', true);
+  assert.equal(appendMode.replacementExecutionId, undefined);
+  assert.deepEqual(appendMode.supersededExecutionIds, ['web-2']);
+  assert.deepEqual(appendMode.records.map((record) => record.executionId), ['web-3']);
+  assert.equal(
+    completeWebSqlExecution(appendMode, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 150,
+      results: [result()],
+    }),
+    appendMode,
+    'switching back to keep-history mode does not revive an execution replaced while it was running',
+  );
+  const cleared = clearSqlExecutionLog(replacement);
+  assert.equal(
+    completeWebSqlExecution(cleared, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 160,
+      results: [result()],
+    }),
+    cleared,
+    'clearing output keeps the superseded-execution guard',
+  );
+
+  const boundedSupersededExecutions = prepareSqlExecutionLogForExecution(
+    {
+      records: [],
+      activeExecutionIds: ['running-old'],
+      supersededExecutionIds: Array.from({ length: 200 }, (_, index) => `superseded-${index}`),
+    },
+    'web-new',
+    false,
+  );
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.length, 200);
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.includes('superseded-0'), false);
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.includes('running-old'), true);
 }
 
 {
@@ -189,6 +275,101 @@ function webExecution() {
   });
   assert.equal(state.records[0].status, 'cancelled');
   assert.equal(state.records[0].outputs.length, 0);
+}
+
+{
+  let state = prepareDesktopSqlExecutionLogForRequest(createSqlExecutionLogState(), 1, false);
+  state = prepareDesktopSqlExecutionLogForRequest(state, 2, false);
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-new',
+      eventSequence: 1,
+      occurredAtEpochMs: 175,
+      eventType: 'failed',
+      message: { message: 'new request failed' },
+    },
+    context,
+    false,
+    2,
+  );
+  assert.deepEqual(state.records.map((record) => record.executionId), ['desktop-new']);
+  const afterLateFirstEvent = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old-late',
+      eventSequence: 1,
+      occurredAtEpochMs: 180,
+      eventType: 'failed',
+      message: { message: 'old request failed late' },
+    },
+    context,
+    false,
+    1,
+  );
+  assert.equal(
+    afterLateFirstEvent,
+    state,
+    'an older Desktop request cannot replace a newer request when its first event arrives late',
+  );
+}
+
+{
+  let state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    createSqlExecutionLogState(),
+    {
+      executionId: 'desktop-old',
+      eventSequence: 1,
+      occurredAtEpochMs: 180,
+      eventType: 'started',
+      message: {},
+    },
+    context,
+    false,
+  );
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-failed',
+      eventSequence: 1,
+      occurredAtEpochMs: 190,
+      eventType: 'failed',
+      message: { message: 'connection binding failed' },
+    },
+    context,
+    false,
+  );
+  assert.deepEqual(state.records.map((record) => record.executionId), ['desktop-failed']);
+  assert.equal(state.records[0].status, 'failed');
+  assert.deepEqual(state.supersededExecutionIds, ['desktop-old']);
+  const afterLateFailure = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old',
+      eventSequence: 2,
+      occurredAtEpochMs: 195,
+      eventType: 'failed',
+      message: { message: 'late failure' },
+    },
+    context,
+    true,
+  );
+  assert.equal(afterLateFailure, state, 'a superseded Desktop execution cannot reclaim replace mode');
+
+  const cancelled = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-cancelled',
+      eventSequence: 1,
+      occurredAtEpochMs: 200,
+      eventType: 'cancelled',
+      message: {},
+    },
+    context,
+    false,
+  );
+  assert.deepEqual(cancelled.records.map((record) => record.executionId), ['desktop-cancelled']);
+  assert.equal(cancelled.records[0].status, 'cancelled');
 }
 
 {

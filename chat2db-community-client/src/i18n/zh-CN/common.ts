@@ -225,6 +225,7 @@ export default {
   'common.button.copyConsole': '复制输出',
   'common.button.clearConsole': '清空输出',
   'common.button.followConsole': '跟随最新日志',
+  'common.button.keepHistoryOutput': '保留历史输出',
   'common.text.order': '排序规则',
   'common.text.oldestFirst': '最早优先',
   'common.text.newestFirst': '最新优先',

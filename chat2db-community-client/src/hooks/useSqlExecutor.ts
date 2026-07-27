@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import executeSqlServer from '@/service/executeSql';
 import useAbortRequest from './useAbortRequest';
@@ -16,14 +16,16 @@ import { settingSelectors } from '@/store/global/selectors';
 interface IUseSqlExecutorProps {
   // Whether to return only one piece of data
   onlyOne?: boolean;
-  onExecutionEvent?: (event: SqlExecutionEvent) => void;
+  onExecutionRequestStart?: (requestSequence: number) => void;
+  onExecutionEvent?: (event: SqlExecutionEvent, requestSequence: number) => void;
 }
 
 const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
-  const { onlyOne, onExecutionEvent } = props || {};
+  const { onlyOne, onExecutionRequestStart, onExecutionEvent } = props || {};
   const defaultPageSize = useGlobalStore((state) => settingSelectors.currentBaseSetting(state).defaultPageSize);
   const [executing, setExecuting] = useState(false);
   const [executionId, setExecutionId] = useState<string>();
+  const executionRequestSequenceRef = useRef(0);
   // interrupt request
   const [initSignal, abortRequest] = useAbortRequest();
 
@@ -45,11 +47,14 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
     };
     if (isDesktop && onExecutionEvent) {
       const requestUuid = uuidv4();
+      const requestSequence = executionRequestSequenceRef.current + 1;
+      executionRequestSequenceRef.current = requestSequence;
+      onExecutionRequestStart?.(requestSequence);
       setExecuting(true);
       return new Promise((resolve, reject) => {
         const subscription: { unsubscribe?: () => void } = {};
         subscription.unsubscribe = onSqlExecutionEvent(requestUuid, (event) => {
-          onExecutionEvent(event);
+          onExecutionEvent(event, requestSequence);
           if (event.eventType === 'finished') {
             subscription.unsubscribe?.();
             setExecuting(false);
@@ -104,7 +109,7 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
           setExecuting(false);
         });
     });
-  }, [defaultPageSize, onExecutionEvent]);
+  }, [defaultPageSize, onExecutionEvent, onExecutionRequestStart]);
 
   // Stop executing sql
   const stopExecuteSQL = useCallback(() => {

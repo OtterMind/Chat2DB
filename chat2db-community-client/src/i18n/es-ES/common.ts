@@ -264,6 +264,7 @@ export default {
   'common.button.copyConsole': 'Copiar salida',
   'common.button.clearConsole': 'Limpiar salida',
   'common.button.followConsole': 'Seguir la última entrada',
+  'common.button.keepHistoryOutput': 'Conservar el historial de salida',
   'common.text.order': 'Orden',
   'common.text.oldestFirst': 'Antiguos primero',
   'common.text.newestFirst': 'Nuevos primero',

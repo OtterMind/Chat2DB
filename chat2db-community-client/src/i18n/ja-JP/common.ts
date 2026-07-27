@@ -227,6 +227,7 @@ export default {
   'common.button.copyConsole': '出力をコピー',
   'common.button.clearConsole': '出力をクリア',
   'common.button.followConsole': '最新のログを追従',
+  'common.button.keepHistoryOutput': '出力履歴を保持',
   'common.text.order': '並び順',
   'common.text.oldestFirst': '古い順',
   'common.text.newestFirst': '新しい順',

@@ -227,6 +227,7 @@ export default {
   'common.button.copyConsole': 'Copy output',
   'common.button.clearConsole': 'Clear output',
   'common.button.followConsole': 'Follow latest entry',
+  'common.button.keepHistoryOutput': 'Keep history output',
   'common.text.order': 'Order',
   'common.text.oldestFirst': 'Oldest first',
   'common.text.newestFirst': 'Newest first',

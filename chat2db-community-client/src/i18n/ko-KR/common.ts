@@ -264,6 +264,7 @@ export default {
   'common.button.copyConsole': '출력 복사',
   'common.button.clearConsole': '출력 지우기',
   'common.button.followConsole': '최신 로그 따라가기',
+  'common.button.keepHistoryOutput': '출력 기록 유지',
   'common.text.order': '정렬',
   'common.text.oldestFirst': '오래된 순',
   'common.text.newestFirst': '최신 순',
