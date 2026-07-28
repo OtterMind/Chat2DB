@@ -51,19 +51,24 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
 {
   const tracker = createSqlExecutionRequestTracker();
   const oldRequest = beginSqlExecutionRequest(tracker);
-  assert.equal(setSqlExecutionRequestId(tracker, oldRequest, 'desktop-old'), true);
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest!, 'desktop-old'), true);
   assert.equal(getActiveSqlExecutionId(tracker), 'desktop-old');
 
+  assert.equal(beginSqlExecutionRequest(tracker), undefined, 'a new request cannot replace the active execution');
+  assert.equal(
+    getActiveSqlExecutionId(tracker),
+    'desktop-old',
+    'a rejected duplicate request preserves the previous execution cancellation target',
+  );
+  assert.equal(finishSqlExecutionRequest(tracker, oldRequest!), true);
+
   const newRequest = beginSqlExecutionRequest(tracker);
-  assert.equal(getActiveSqlExecutionId(tracker), undefined, 'a new request cannot cancel the previous execution');
-  assert.equal(setSqlExecutionRequestId(tracker, newRequest, 'desktop-new'), true);
-  assert.equal(finishSqlExecutionRequest(tracker, oldRequest), false);
-  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old terminal event keeps the new cancel target');
-  assert.equal(setSqlExecutionRequestId(tracker, oldRequest, 'desktop-old-late'), false);
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest!, 'desktop-new'), true);
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest!, 'desktop-old-late'), false);
   assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old start response is ignored');
-  assert.equal(finishSqlExecutionRequest(tracker, newRequest), true);
+  assert.equal(finishSqlExecutionRequest(tracker, newRequest!), true);
   assert.equal(getActiveSqlExecutionId(tracker), undefined);
-  assert.equal(setSqlExecutionRequestId(tracker, newRequest, 'desktop-new-late'), false);
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest!, 'desktop-new-late'), false);
   assert.equal(
     getActiveSqlExecutionId(tracker),
     undefined,
@@ -86,6 +91,7 @@ function assertTruncatedMessage(message: string | undefined) {
 function webExecution() {
   return beginWebSqlExecution(createSqlExecutionLogState(), {
     executionId: 'web-1',
+    executionSequence: 1,
     sql: 'select 1',
     context,
     occurredAtEpochMs: 100,
@@ -102,6 +108,7 @@ function webExecution() {
     occurredAtEpochMs: 110,
     results: [],
   });
+  assert.equal(completed.records[0].executionSequence, 1, 'web execution records preserve their batch sequence');
   assert.equal(clearSqlExecutionLog(completed).records.length, 0);
 }
 
@@ -451,7 +458,9 @@ function webExecution() {
       message: { originalSql: 'select * from t' },
     },
     context,
+    7,
   );
+  assert.equal(state.records[0].executionSequence, 7, 'desktop statement records preserve their batch sequence');
   for (const eventSequence of [2, 3]) {
     state = reduceDesktopSqlExecutionEvent(
       state,

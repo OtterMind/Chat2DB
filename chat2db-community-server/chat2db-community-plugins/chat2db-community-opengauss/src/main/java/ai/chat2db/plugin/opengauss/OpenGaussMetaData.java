@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.sql.Connection;
-import java.util.ArrayList;
 import java.util.List;
 
 import static ai.chat2db.plugin.opengauss.constant.OpenGaussMetaDataConstants.SEARCH_PATH_STATEMENT_PREFIX;
@@ -72,14 +71,12 @@ public class OpenGaussMetaData extends PostgreSQLMetaData implements IDbMetaData
             log.info("OpenGaussMetaData_1");
             return databases;
         }
-        List<Database> result = new ArrayList<>();
         for (Database database : databases) {
             if(SYSTEM_DATABASES.contains(database.getName())){
-                continue;
+                database.setSystem(true);
             }
-            result.add(database);
         }
-        return result;
+        return databases;
     }
 
     @Override
@@ -88,13 +85,11 @@ public class OpenGaussMetaData extends PostgreSQLMetaData implements IDbMetaData
         if(CollectionUtils.isEmpty(schemas)){
             return schemas;
         }
-        List<Schema> result = new ArrayList<>();
         for (Schema schema : schemas) {
             if(SYSTEM_SCHEMAS.contains(schema.getName())){
-                continue;
+                schema.setSystem(true);
             }
-            result.add(schema);
         }
-        return result;
+        return schemas;
     }
 }

@@ -72,8 +72,23 @@ jobs:
       - name: Run result operation record contract
         run: yarn run test:result-operation-record
 
+      - name: Run result tab preference contract
+        run: yarn run test:result-tab-preferences
+
+      - name: Run execution console preference contract
+        run: yarn run test:execution-console
+
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
+
+      - name: Run SQL execution batch contract
+        run: yarn run test:sql-execution-batch
+
+      - name: Run SQL execution request tracker contract
+        run: yarn run test:sql-execution-request-tracker
+
+      - name: Run SQL execution stream contract
+        run: yarn run test:sql-execution-stream
 
       - name: Run verification-code countdown lifecycle contract
         run: yarn run test:verification-code-countdown

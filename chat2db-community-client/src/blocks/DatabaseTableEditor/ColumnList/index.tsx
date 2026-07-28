@@ -98,7 +98,7 @@ const createInitialData = () => {
     sqlDatetimeSub: null,
     charOctetLength: null,
     ordinalPosition: null,
-    nullable: null,
+    nullable: NullableType.Null,
     generatedColumn: null,
     charSetName: null,
     collationName: null,

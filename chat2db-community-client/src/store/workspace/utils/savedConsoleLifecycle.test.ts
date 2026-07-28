@@ -5,6 +5,37 @@ import type { IConsole, ICreateConsole, IWorkspaceTab } from '@/typings';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from './savedConsoleLifecycle';
 import { SavedConsoleMutationCoordinator } from './savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from './savedConsolePersistence';
+import {
+  normalizeSavedConsoleName,
+  resolveInitialSavedConsoleName,
+} from '@/components/SQLEditor/helper/savedConsoleName';
+
+function assertInitialSavedConsoleNames() {
+  const workspaceName = resolveInitialSavedConsoleName({
+    workspaceTitle: '  Check replication lag  ',
+    databaseName: 'chat2db',
+    schemaName: 'public',
+    fallback: 'Untitled SQL',
+  });
+  const databaseName = resolveInitialSavedConsoleName({
+    workspaceTitle: '   ',
+    databaseName: '  chat2db  ',
+    schemaName: 'public',
+    fallback: 'Untitled SQL',
+  });
+  const fallbackName = resolveInitialSavedConsoleName({
+    fallback: '  Untitled SQL  ',
+  });
+
+  if (
+    workspaceName !== 'Check replication lag' ||
+    databaseName !== 'chat2db' ||
+    fallbackName !== 'Untitled SQL' ||
+    normalizeSavedConsoleName('   ') !== ''
+  ) {
+    throw new Error(`unexpected initial saved-console names: ${workspaceName}, ${databaseName}, ${fallbackName}`);
+  }
+}
 
 function assertRemovalPlans() {
   const openConsoleTab = {
@@ -81,6 +112,7 @@ async function testMissingRecordRecreatesSameId() {
 
 async function testExistingRecordUpdatesWithoutCreate() {
   const calls: string[] = [];
+  let updated: (Partial<IConsole> & { id: number }) | undefined;
   const existing = createConsoleParams() as IConsole;
   const result = await persistSavedConsoleRecord(
     {
@@ -88,19 +120,29 @@ async function testExistingRecordUpdatesWithoutCreate() {
       createConsole: async () => {
         throw new Error('existing saved console must not use create');
       },
-      updateSavedConsole: async ({ id }) => {
+      updateSavedConsole: async (params) => {
+        updated = params;
+        const { id } = params;
         calls.push(`update:${id}`);
       },
     },
     {
       manual: true,
       createParams: createConsoleParams(),
-      updateParams: { id: 42, status: ConsoleStatus.RELEASE, ddl: 'select 43' },
+      updateParams: {
+        id: 42,
+        name: 'Archive expired orders',
+        status: ConsoleStatus.RELEASE,
+        ddl: 'select 43',
+      },
     },
   );
 
   if (result !== 'updated' || calls.join(',') !== 'update:42') {
     throw new Error(`unexpected existing-record update flow: ${result} / ${calls.join(',')}`);
+  }
+  if (updated?.name !== 'Archive expired orders' || updated.ddl !== 'select 43') {
+    throw new Error(`initial save did not update the saved-console name and SQL: ${JSON.stringify(updated)}`);
   }
 }
 
@@ -250,6 +292,7 @@ async function testFailedManualSaveKeepsDraftBlock() {
 }
 
 async function run() {
+  assertInitialSavedConsoleNames();
   assertRemovalPlans();
   await testMissingRecordRecreatesSameId();
   await testExistingRecordUpdatesWithoutCreate();

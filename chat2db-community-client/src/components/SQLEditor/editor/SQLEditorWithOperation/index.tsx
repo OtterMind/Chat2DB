@@ -3,6 +3,7 @@ import { useStyles } from './style';
 import { OperationLine, MonacoEditorErrorTips } from '../../components';
 import SQLEditor, { SQLEditorRef } from '../SQLEditor';
 import RoutineOperationModals from './RoutineOperationModals';
+import InitialSaveNameModal from './InitialSaveNameModal';
 import { EditorSetValueType, EditorType, SQLOptType } from '../../type';
 import { staticMessage } from '@chat2db/ui';
 import { IConsoleReturnExecuteSql, IBoundInfo, TreeNodeData } from '@/typings';
@@ -41,6 +42,7 @@ import {
   getContentDiffEligibility,
   getContentDiffOpenBlockReason,
 } from '../../helper/contentDiffGuard';
+import { normalizeSavedConsoleName, resolveInitialSavedConsoleName } from '../../helper/savedConsoleName';
 
 interface ISQLEditorWithOperationProps {
   id: string;
@@ -123,6 +125,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   const [contextTableIdentifier, setContextTableIdentifier] = useState<EditorTableIdentifier | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasEditorContent, setHasEditorContent] = useState<boolean>(!!defaultSQL?.trim());
+  const [initialSaveNameModalOpen, setInitialSaveNameModalOpen] = useState(false);
+  const [initialSaveName, setInitialSaveName] = useState('');
+  const [initialSaveLoading, setInitialSaveLoading] = useState(false);
   const handleEditorContentChange = useCallback((value: string) => {
     setHasEditorContent(!!value.trim());
   }, []);
@@ -815,8 +820,56 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     if (type !== WorkspaceTabType.CONSOLE || typeof dbInfo.consoleId !== 'number' || isTemporaryId(dbInfo.consoleId)) {
       return;
     }
-    saveConsole(getValue());
-  }, [dbInfo.consoleId, saveConsole, type]);
+    if (!hasSavedSqlRecord) {
+      if (!initialSaveNameModalOpen) {
+        setInitialSaveName(
+          resolveInitialSavedConsoleName({
+            workspaceTitle: workspaceTabsTitle,
+            databaseName: dbInfo.databaseName,
+            schemaName: dbInfo.schemaName,
+            fallback: i18n('workspace.savedConsole.untitled'),
+          }),
+        );
+        setInitialSaveNameModalOpen(true);
+      }
+      return;
+    }
+    void saveConsole(getValue(), { mode: 'manual' });
+  }, [
+    dbInfo.consoleId,
+    dbInfo.databaseName,
+    dbInfo.schemaName,
+    hasSavedSqlRecord,
+    initialSaveNameModalOpen,
+    getValue,
+    saveConsole,
+    type,
+    workspaceTabsTitle,
+  ]);
+
+  const handleConfirmInitialSave = useCallback(async () => {
+    const name = normalizeSavedConsoleName(initialSaveName);
+    if (!name || initialSaveLoading) {
+      return;
+    }
+
+    setInitialSaveLoading(true);
+    try {
+      await saveConsole(getValue(), { mode: 'manual', initialName: name });
+      setInitialSaveNameModalOpen(false);
+    } catch {
+      // The request layer presents the error. Keep the name dialog open for retry.
+    } finally {
+      setInitialSaveLoading(false);
+    }
+  }, [getValue, initialSaveLoading, initialSaveName, saveConsole]);
+
+  const handleCancelInitialSave = useCallback(() => {
+    if (initialSaveLoading) {
+      return;
+    }
+    setInitialSaveNameModalOpen(false);
+  }, [initialSaveLoading]);
 
   const handleSaveFile = () => {
     const fileContent = sqlEditorRef.current?.getValue() ?? '';
@@ -975,6 +1028,14 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         onCancelExecution={handleCancelRoutineExecution}
         onConfirmMigration={handleConfirmRoutineMigration}
         onCancelMigration={handleCancelRoutineMigration}
+      />
+      <InitialSaveNameModal
+        open={initialSaveNameModalOpen}
+        name={initialSaveName}
+        loading={initialSaveLoading}
+        onNameChange={setInitialSaveName}
+        onConfirm={handleConfirmInitialSave}
+        onCancel={handleCancelInitialSave}
       />
     </div>
   );
