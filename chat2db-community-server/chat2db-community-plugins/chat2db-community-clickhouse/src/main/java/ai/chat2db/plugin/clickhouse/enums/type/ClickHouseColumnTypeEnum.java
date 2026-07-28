@@ -186,15 +186,13 @@ public enum ClickHouseColumnTypeEnum implements IColumnBuilder {
 
 
         if (Arrays.asList(Decimal).contains(type)) {
-            if (column.getColumnSize() == null || column.getDecimalDigits() == null) {
+            if (column.getColumnSize() == null) {
                 return columnType;
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() == null) {
-                return StringUtils.join(columnType, "(", column.getColumnSize() + ")");
+            if (column.getDecimalDigits() == null) {
+                return StringUtils.join(columnType, "(", column.getColumnSize(), ",0)");
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() != null) {
-                return StringUtils.join(columnType, "(", column.getColumnSize() + "," + column.getDecimalDigits() + ")");
-            }
+            return StringUtils.join(columnType, "(", column.getColumnSize(), ",", column.getDecimalDigits(), ")");
         }
 
         return columnType;
