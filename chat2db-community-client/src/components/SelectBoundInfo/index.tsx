@@ -258,8 +258,8 @@ const SelectBoundInfo = memo(
 
     return (
       <div className={styles.selectBoundInfo}>
-        {selectedList.map((item, index) => {
-          return <DropdownItem eachOption={item} key={index} handleOptionChange={handleOptionChange} />;
+        {selectedList.map((item) => {
+          return <DropdownItem eachOption={item} key={item.treeNodeType} handleOptionChange={handleOptionChange} />;
         })}
       </div>
     );
