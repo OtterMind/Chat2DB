@@ -105,7 +105,7 @@ export function saveFileToDesktop({
   a.download = `${fileName || 'chat2db-sql'}.${fileType}`;
   a.click();
   URL.revokeObjectURL(url);
-  return Promise.resolve(null);
+  return Promise.resolve({ path: a.download, size: blob.size });
 }
 
 export const customRequestOSS = async ({
