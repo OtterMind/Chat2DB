@@ -76,6 +76,7 @@ export default {
   'common.button.copyName': 'Copy name',
   'common.button.copySuccessfully': 'Copy Successfully',
   'common.button.createConsole': 'Create Console',
+  'common.button.openInNewConsole': 'Open in new console',
   'common.button.exportWord': 'Export to Word',
   'common.button.exportExcel': 'Export to Excel',
   'common.button.exportHtml': 'Export to Html',

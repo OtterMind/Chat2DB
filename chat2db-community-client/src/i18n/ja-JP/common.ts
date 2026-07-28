@@ -76,6 +76,7 @@ export default {
   'common.button.copyName': '名前をコピー',
   'common.button.copySuccessfully': 'コピー成功',
   'common.button.createConsole': '新しいコンソールを作成',
+  'common.button.openInNewConsole': '新しいコンソールで開く',
   'common.button.exportWord': 'Wordにエクスポート',
   'common.button.exportExcel': 'Excelにエクスポート',
   'common.button.exportHtml': 'Htmlにエクスポート',

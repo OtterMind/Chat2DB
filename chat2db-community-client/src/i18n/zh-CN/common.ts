@@ -76,6 +76,7 @@ export default {
   'common.button.copyName': '复制名称',
   'common.button.copySuccessfully': '复制成功',
   'common.button.createConsole': '新建控制台',
+  'common.button.openInNewConsole': '在新控制台中打开',
   'common.button.exportWord': '导出到Word',
   'common.button.exportExcel': '导出到Excel',
   'common.button.exportHtml': '导出到Html',

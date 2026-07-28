@@ -11,6 +11,7 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { copyToClipboard, getTemporaryId } from '@/utils';
 import { useTreeStore } from '@/store/tree';
 import { TreeNodeData } from '@/typings';
+import { SquareArrowOutUpRight } from 'lucide-react';
 
 interface IProps {
   className?: string;
@@ -150,10 +151,10 @@ export default memo<IProps>((props) => {
     getHistoryList();
   }, [getHistoryList]);
 
-  const openHistoryTab = useCallback(
-    async (item: IDatasource) => {
+  const openHistoryConsole = useCallback(
+    async (item: IDatasource, readOnly: boolean) => {
       const detail = await getFullHistoryRecord(item);
-      const tabId = getTemporaryId(`execution-log-${item.id || Date.now()}`);
+      const tabId = getTemporaryId(`${readOnly ? 'execution-log' : 'execution-log-copy'}-${item.id || Date.now()}`);
       const sourceInfo =
         dataSourceInfoMap[getHistorySourceKey(detail)] || dataSourceInfoMap[getHistorySourceKey(item)];
       const cachedSourceName =
@@ -167,7 +168,7 @@ export default memo<IProps>((props) => {
         type: WorkspaceTabType.CONSOLE,
         title,
         uniqueData: {
-          consoleId: tabId,
+          consoleId: readOnly ? tabId : undefined,
           dataSourceId: detail.dataSourceId || undefined,
           dataSourceName: dataSourceName === '-' ? undefined : dataSourceName,
           databaseType: detail.type || sourceInfo?.extraParams?.databaseType || undefined,
@@ -177,11 +178,24 @@ export default memo<IProps>((props) => {
           ddl: detail.ddl || '',
           connectable: detail.connectable ?? undefined,
           popoverContent,
-          readOnly: true,
+          readOnly,
         },
       });
     },
     [addWorkspaceTab, dataSourceInfoMap, dataSourceNameMap, getFullHistoryRecord],
+  );
+
+  const openHistoryTab = useCallback(
+    (item: IDatasource) => openHistoryConsole(item, true),
+    [openHistoryConsole],
+  );
+
+  const openEditableHistoryTab = useCallback(
+    (event: React.MouseEvent, item: IDatasource) => {
+      event.stopPropagation();
+      return openHistoryConsole(item, false);
+    },
+    [openHistoryConsole],
   );
 
   const copyHistorySql = useCallback(
@@ -280,6 +294,13 @@ export default memo<IProps>((props) => {
                     </div>
                   </div>
                   <div className={classnames(styles.recordActions, 'output-record-actions')}>
+                    <IconButton
+                      className={styles.actionButton}
+                      icon={SquareArrowOutUpRight}
+                      size="sm"
+                      title={i18n('common.button.openInNewConsole')}
+                      onClick={(event) => openEditableHistoryTab(event, item)}
+                    />
                     <IconButton
                       className={styles.actionButton}
                       code="icon-copy"

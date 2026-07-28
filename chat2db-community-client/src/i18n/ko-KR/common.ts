@@ -76,6 +76,7 @@ export default {
   'common.button.copyName': '이름 복사',
   'common.button.copySuccessfully': '복사되었습니다',
   'common.button.createConsole': '콘솔 만들기',
+  'common.button.openInNewConsole': '새 콘솔에서 열기',
   'common.button.exportWord': 'Word로 내보내기',
   'common.button.exportExcel': 'Excel로 내보내기',
   'common.button.exportHtml': 'HTML로 내보내기',
