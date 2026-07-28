@@ -49,7 +49,7 @@ export default memo<IProps>(
   (props) => {
     const { viewTable } = props;
     const { styles, cx } = useStyles();
-    const { executeSQL, stopExecuteSQL, executing } = useSqlExecutor();
+    const { executeSQL, stopExecuteSQL, executing, canExecuteSQL } = useSqlExecutor();
     const [resultData, setResultData] = useState<IManageResultData>(props.resultData);
     const resultSetToolbarRef = useRef<ResultSetToolbarRef>(null);
     const screenResultRef = useRef<IScreeningResultRef>(null);
@@ -146,6 +146,7 @@ export default memo<IProps>(
     // Only resultData changes here. Database metadata is stable, and the toolbar controls pagination.
     const handleExecuteSQL = useCallback(
       ({ pageNo: _pageNo }: { pageNo?: number } = {}) => {
+        if (!canExecuteSQL()) return;
         // Clear operation records
         resultSetTableRef.current?.operationRecordUtils?.clearOperationRecord?.();
         // Do not execute before the result toolbar is mounted.
@@ -181,7 +182,7 @@ export default memo<IProps>(
           }
         });
       },
-      [resultData],
+      [canExecuteSQL, executeSQL, resultData, viewTable],
     );
 
     const handleSearch = useCallback(() => {

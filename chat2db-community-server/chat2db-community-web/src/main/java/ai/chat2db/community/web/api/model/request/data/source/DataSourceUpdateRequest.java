@@ -74,6 +74,15 @@ public class DataSourceUpdateRequest {
     private String serviceType;
 
 
+    private String email;
+
+
+    private String keyfile;
+
+
+    private String project;
+
+
     private Long organizationId;
 
 

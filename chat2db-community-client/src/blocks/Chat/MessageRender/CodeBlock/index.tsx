@@ -40,11 +40,14 @@ const CodeBlock: FC<CodeBlockProps> = memo((props) => {
 
   const { styles } = useStyles();
   const [resultDataList, setResultDataList] = useState<IManageResultData[] | null>();
-  const { executeSQL } = useSqlExecutor();
+  const { executeSQL, canExecuteSQL, executing } = useSqlExecutor();
   const isResultVisible = true;
   const [openConfirm, setOpenConfirm] = useState(false);
 
   const handleExecuteSQL = useCallback(async () => {
+    if (!canExecuteSQL()) {
+      return;
+    }
     setResultDataList(null);
 
     const executeSqlParams = {
@@ -64,7 +67,7 @@ const CodeBlock: FC<CodeBlockProps> = memo((props) => {
 
     setResultDataList(_resultDataList);
     setOpenConfirm(false);
-  }, [databaseInfo, codeContent]);
+  }, [canExecuteSQL, codeContent, databaseInfo, executeSQL]);
 
   // Mock function to check if confirmation is needed
   const checkNeedConfirm = async (sql: string) => {
@@ -109,7 +112,7 @@ const CodeBlock: FC<CodeBlockProps> = memo((props) => {
               size={buttonSize}
               title={i18n('common.button.execute')}
               onClick={handleExecuteClick}
-              disabled={!databaseInfo?.dataSourceId}
+              disabled={!databaseInfo?.dataSourceId || executing}
             />
           </Popconfirm>
           <IconButton

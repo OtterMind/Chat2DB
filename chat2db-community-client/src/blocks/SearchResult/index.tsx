@@ -11,27 +11,41 @@ import {
   useRef,
 } from 'react';
 import classnames from 'classnames';
+import { Dropdown, type MenuProps } from 'antd';
+import { ArrowDownUp, Check, SlidersHorizontal } from 'lucide-react';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
 import { IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
 import i18n from '@/i18n';
 import { useStyles } from './style';
-import { Empty, EmptyImage, IconfontSvg } from '@chat2db/ui';
+import { Empty, EmptyImage, IconButton, IconfontSvg } from '@chat2db/ui';
 import SQLPreview from '@/components/SQLPreview';
 import ExecutionConsole from './components/ExecutionConsole';
 import ExecutionMessages, { IExecutionMessageItem } from './components/ExecutionMessages';
 import type { SqlExecutionLogRecord } from '@/service/sqlExecutionLog';
+import type { SqlExecutionResultIdentity } from '@/service/sqlExecutionStream';
+import {
+  createResultTabOrderStorageKey,
+  getResultTabPreferenceStorage,
+  orderExecutionResultsByBatch,
+  persistResultTabOrder,
+  readResultTabOrder,
+  subscribeResultTabOrder,
+  type ResultTabOrder,
+} from './resultTabPreferences';
 import {
   ABSTRACT_TAB_ID,
   CONSOLE_TAB_ID,
   MESSAGES_TAB_ID,
+  getConsoleResultTabLabel,
   getPreferredActiveTabId,
   getResultIdentity,
   hasLegacyResultTab,
   hasTabularResult,
   reduceActiveTabSelection,
 } from './tabSelection';
+import { ShortcutAction } from '@/constants/shortcut';
 
 interface IProps {
   className?: string;
@@ -41,14 +55,21 @@ interface IProps {
   resultBatchKey?: number;
   forceOutputTab?: boolean;
   keepExecutionLogHistory?: boolean;
+  keepResultHistory?: boolean;
+  showExecutionResultCoordinates?: boolean;
+  closeActiveResultShortcutEnabled?: boolean;
   viewTable?: boolean;
   onClearExecutionLog?: () => void;
   onKeepExecutionLogHistoryChange?: (keepHistory: boolean) => void;
+  onKeepResultHistoryChange?: (keepHistory: boolean) => void;
   onResultDataListChange?: (params: {
     resultDataList: IManageResultData[];
     historyResultDataList: IManageResultData[];
+    closedResultIdentities: SqlExecutionResultIdentity[];
   }) => void;
 }
+
+const RESULT_TAB_ORDER_STORAGE_KEY = createResultTabOrderStorageKey('community', __RUNTIME_ENV__);
 
 export interface ISearchResultRef {
   handleDemo: () => void;
@@ -82,6 +103,14 @@ function getLatestTerminalLogVersion(records?: SqlExecutionLogRecord[]) {
   return undefined;
 }
 
+function getSqlExecutionResultIdentity(result: IManageResultData): SqlExecutionResultIdentity | undefined {
+  const executionId = result.extra?.executionId;
+  const resultKey = result.extra?.resultKey;
+  return typeof executionId === 'string' && executionId && typeof resultKey === 'string' && resultKey
+    ? { executionId, resultKey }
+    : undefined;
+}
+
 const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultRef>) => {
   const { className, viewTable = false } = props;
   const consoleMode = props.executionLogRecords !== undefined;
@@ -91,14 +120,26 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     props.historyResultDataList || [],
   );
   const [showHistory, setShowHistory] = useState(false);
+  const consoleResultDataList = useMemo(
+    () => [...(resultDataList || []), ...historyResultDataList],
+    [resultDataList, historyResultDataList],
+  );
+  const [resultTabOrder, setResultTabOrder] = useState<ResultTabOrder>(() =>
+    readResultTabOrder(getResultTabPreferenceStorage(), RESULT_TAB_ORDER_STORAGE_KEY),
+  );
+  const orderedConsoleResultDataList = useMemo(
+    () => orderExecutionResultsByBatch(consoleResultDataList, resultTabOrder),
+    [consoleResultDataList, resultTabOrder],
+  );
   const [tabSelection, dispatchTabSelection] = useReducer(reduceActiveTabSelection, {
     activeTabId: getPreferredActiveTabId(props.resultDataList[props.resultDataList.length - 1], consoleMode),
+    followPreferredTabs: true,
   });
   const activeTabId = tabSelection.activeTabId;
   const knownResultVersionMapRef = useRef<Map<string, string>>(new Map());
   const latestTerminalLogVersion = getLatestTerminalLogVersion(props.executionLogRecords);
   const visibleHistoryResultDataList = useMemo(
-    () => (consoleMode ? historyResultDataList.filter(hasTabularResult) : historyResultDataList),
+    () => (consoleMode ? [] : historyResultDataList),
     [consoleMode, historyResultDataList],
   );
 
@@ -106,10 +147,24 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     handleDemo: () => {},
   }));
 
+  useEffect(
+    () =>
+      subscribeResultTabOrder((storageKey, order) => {
+        if (storageKey === RESULT_TAB_ORDER_STORAGE_KEY) {
+          setResultTabOrder(order);
+        }
+      }),
+    [],
+  );
+
   useEffect(() => {
-    dispatchTabSelection({ type: 'resetPreference' });
-    setShowHistory(false);
-  }, [props.resultBatchKey]);
+    if (consoleMode) {
+      dispatchTabSelection({ type: 'startAutoFollow', tabId: CONSOLE_TAB_ID });
+    } else {
+      dispatchTabSelection({ type: 'resetPreference' });
+      setShowHistory(false);
+    }
+  }, [props.resultBatchKey, consoleMode]);
 
   useEffect(() => {
     const nextResultDataList = props.resultDataList || [];
@@ -151,24 +206,29 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   useEffect(() => {
     if (consoleMode && latestTerminalLogVersion) {
-      dispatchTabSelection({ type: 'activate', tabId: CONSOLE_TAB_ID });
+      dispatchTabSelection({ type: 'activateAutomatically', tabId: CONSOLE_TAB_ID });
     }
   }, [consoleMode, latestTerminalLogVersion]);
 
   useEffect(() => {
     if (consoleMode && props.forceOutputTab) {
-      dispatchTabSelection({ type: 'activate', tabId: CONSOLE_TAB_ID });
+      dispatchTabSelection({ type: 'activateAutomatically', tabId: CONSOLE_TAB_ID });
     }
   }, [consoleMode, props.forceOutputTab, props.resultBatchKey]);
 
-  const onChange = useCallback((uuid) => {
-    dispatchTabSelection({ type: 'activate', tabId: uuid });
-  }, []);
+  const onChange = useCallback(
+    (uuid) => {
+      dispatchTabSelection({ type: consoleMode ? 'activateByUser' : 'activate', tabId: uuid });
+    },
+    [consoleMode],
+  );
 
   const tabsList = useMemo(() => {
-    const visibleResultDataList = showHistory
-      ? [...(resultDataList || []), ...visibleHistoryResultDataList]
-      : resultDataList || [];
+    const visibleResultDataList = consoleMode
+      ? orderedConsoleResultDataList
+      : showHistory
+        ? [...(resultDataList || []), ...visibleHistoryResultDataList]
+        : resultDataList || [];
     if (!visibleResultDataList?.length) return [];
     const newResultDataList = visibleResultDataList?.filter(consoleMode ? hasTabularResult : hasLegacyResultTab);
 
@@ -184,8 +244,16 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               }${queryResultData.originalSql?.replaceAll('\r\n', '\n')}`}
             />
           ),
-          label:
-            queryResultData.displayName || queryResultData.comment || i18n('common.text.executionResult', index + 1),
+          label: consoleMode
+            ? getConsoleResultTabLabel(
+                queryResultData.displayName ||
+                  queryResultData.comment ||
+                  i18n('common.text.executionResult', index + 1),
+                props.showExecutionResultCoordinates ?? true,
+              )
+            : queryResultData.displayName ||
+              queryResultData.comment ||
+              i18n('common.text.executionResult', index + 1),
           key: queryResultData.uuid!,
           children: (
             <SearchResultItem
@@ -198,7 +266,35 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       }) || [];
 
     return tabsListRes;
-  }, [activeTabId, resultDataList, visibleHistoryResultDataList, showHistory, consoleMode]);
+  }, [
+    activeTabId,
+    resultDataList,
+    visibleHistoryResultDataList,
+    showHistory,
+    consoleMode,
+    orderedConsoleResultDataList,
+    props.showExecutionResultCoordinates,
+    styles.resultTabIcon,
+    viewTable,
+  ]);
+
+  const handleResultTabOrderChange = useCallback((nextOrder: ResultTabOrder) => {
+    setResultTabOrder(nextOrder);
+    persistResultTabOrder(getResultTabPreferenceStorage(), RESULT_TAB_ORDER_STORAGE_KEY, nextOrder);
+  }, []);
+
+  const handleResultSettingsClick = useCallback<NonNullable<MenuProps['onClick']>>(
+    ({ key }) => {
+      if (key === 'toggle-result-tab-order') {
+        handleResultTabOrderChange(
+          resultTabOrder === 'oldest-first' ? 'newest-first' : 'oldest-first',
+        );
+      } else if (key === 'keep-result-history') {
+        props.onKeepResultHistoryChange?.(!(props.keepResultHistory ?? true));
+      }
+    },
+    [handleResultTabOrderChange, props.keepResultHistory, props.onKeepResultHistoryChange, resultTabOrder],
+  );
 
   const executionMessages = useMemo<IExecutionMessageItem[]>(() => {
     if (consoleMode || !resultDataList?.length) {
@@ -272,10 +368,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   const isResultAvailable = useCallback(
     (resultKey: string) =>
-      [...(resultDataList || []), ...historyResultDataList].some(
+      consoleResultDataList.some(
         (item) => hasTabularResult(item) && item.extra?.resultKey === resultKey,
       ),
-    [resultDataList, historyResultDataList],
+    [consoleResultDataList],
   );
 
   const handleOpenResult = useCallback(
@@ -284,18 +380,20 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         (item) => hasTabularResult(item) && item.extra?.resultKey === resultKey,
       );
       if (currentResult?.uuid) {
-        dispatchTabSelection({ type: 'activate', tabId: currentResult.uuid });
+        dispatchTabSelection({ type: consoleMode ? 'activateByUser' : 'activate', tabId: currentResult.uuid });
         return;
       }
       const historyResult = historyResultDataList.find(
         (item) => hasTabularResult(item) && item.extra?.resultKey === resultKey,
       );
       if (historyResult?.uuid) {
-        setShowHistory(true);
-        dispatchTabSelection({ type: 'activate', tabId: historyResult.uuid });
+        if (!consoleMode) {
+          setShowHistory(true);
+        }
+        dispatchTabSelection({ type: consoleMode ? 'activateByUser' : 'activate', tabId: historyResult.uuid });
       }
     },
-    [resultDataList, historyResultDataList],
+    [resultDataList, historyResultDataList, consoleMode],
   );
 
   const consoleTab = useMemo(() => {
@@ -331,21 +429,13 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   ]);
 
   const onEdit = useCallback(
-    (type: 'add' | 'remove', data: ITabItem[], list?: ITabItem[]) => {
+    (type: 'add' | 'remove', data: ITabItem[]) => {
       if (type === 'remove') {
-        const isCloseAll = list === undefined;
-        if (isCloseAll) {
-          const nextResultDataList: IManageResultData[] = [];
-          const nextHistoryResultDataList: IManageResultData[] = [];
-          setResultDataList(nextResultDataList);
-          setHistoryResultDataList(nextHistoryResultDataList);
-          props.onResultDataListChange?.({
-            resultDataList: nextResultDataList,
-            historyResultDataList: nextHistoryResultDataList,
-          });
-          return;
-        }
         const closedKeys = new Set((data || []).map((item) => item.key));
+        const closedResultIdentities = [...(resultDataList || []), ...historyResultDataList]
+          .filter((result) => closedKeys.has(result.uuid || ''))
+          .map(getSqlExecutionResultIdentity)
+          .filter((identity): identity is SqlExecutionResultIdentity => identity !== undefined);
         const newResultDataList = resultDataList?.filter((d) => {
           return data.findIndex((item) => item.key === d.uuid) === -1;
         });
@@ -358,6 +448,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         props.onResultDataListChange?.({
           resultDataList: nextResultDataList,
           historyResultDataList: nextHistoryResultDataList,
+          closedResultIdentities,
         });
       }
     },
@@ -376,7 +467,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   return (
     <div className={classnames(className, styles.searchResult)}>
-      {!!visibleHistoryResultDataList.length && !viewTable && (
+      {!consoleMode && !!visibleHistoryResultDataList.length && !viewTable && (
         <div className={styles.historyBar}>
           <button
             className={styles.historyButton}
@@ -384,7 +475,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               setShowHistory((value) => !value);
               if (showHistory && visibleHistoryResultDataList.some((item) => item.uuid === activeTabId)) {
                 dispatchTabSelection({
-                  type: 'activate',
+                  type: 'activateByUser',
                   tabId: consoleMode ? CONSOLE_TAB_ID : ABSTRACT_TAB_ID,
                 });
               }
@@ -407,6 +498,54 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
           concealTabHeader={viewTable}
           height={30}
           tabMaxWidth="200px"
+          uniformTabWidth
+          tabBarExtraContent={
+            consoleMode ? (
+              <Dropdown
+                menu={{
+                  selectable: true,
+                  selectedKeys: (props.keepResultHistory ?? true) ? ['keep-result-history'] : [],
+                  items: [
+                    {
+                      key: 'toggle-result-tab-order',
+                      icon: <ArrowDownUp size={14} />,
+                      label: `${i18n('common.text.order')}: ${i18n(
+                        resultTabOrder === 'oldest-first'
+                          ? 'common.text.oldestFirst'
+                          : 'common.text.newestFirst',
+                      )}`,
+                    },
+                    {
+                      key: 'keep-result-history',
+                      icon: <Check opacity={(props.keepResultHistory ?? true) ? 1 : 0} size={14} />,
+                      label: i18n('common.button.keepHistoryResult'),
+                    },
+                  ],
+                  onClick: handleResultSettingsClick,
+                }}
+                placement="bottomRight"
+                trigger={['click']}
+              >
+                <button
+                  type="button"
+                  className={styles.iconButtonTrigger}
+                  aria-label={i18n('common.text.resultSettings')}
+                >
+                  <IconButton
+                    aria-hidden
+                    icon={SlidersHorizontal}
+                    size={{ boxSize: 24, iconSize: 14, borderRadius: 4 }}
+                    title={i18n('common.text.resultSettings')}
+                    tooltipPlacement="top"
+                  />
+                </button>
+              </Dropdown>
+            ) : undefined
+          }
+          activateOnContextMenu={consoleMode}
+          activeTabScrollKey={consoleMode ? resultTabOrder : undefined}
+          closeActiveTabOnCloseShortcut={consoleMode && props.closeActiveResultShortcutEnabled}
+          closeShortcutAction={consoleMode ? ShortcutAction.CloseCurrentConsole : undefined}
         />
       ) : (
         <div className={styles.noData}>

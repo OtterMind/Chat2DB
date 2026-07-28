@@ -40,7 +40,7 @@ const SchemaSync = forwardRef((props: IProps, ref: ForwardedRef<SchemaSyncRef>) 
   const [diffSql, setDiffSql] = useState<string>('');
   const [buttonLoading, setButtonLoading] = useState<boolean>(false);
   const consoleId = useMemo(() => uuidv4(), []);
-  const { executeSQL } = useSqlExecutor();
+  const { executeSQL, canExecuteSQL } = useSqlExecutor();
   const [executeResult, setExecuteResult] = useState<any>();
 
   useImperativeHandle(ref, () => ({
@@ -73,6 +73,9 @@ const SchemaSync = forwardRef((props: IProps, ref: ForwardedRef<SchemaSyncRef>) 
   };
 
   const handleSqlExecutor = () => {
+    if (!canExecuteSQL()) {
+      return;
+    }
     setButtonLoading(true);
     executeSQL({
       sql: monacoEditorRef.current?.getValue() || '',

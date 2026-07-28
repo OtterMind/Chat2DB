@@ -17,7 +17,7 @@
         </dependency>
         <dependency>
             <groupId>ai.chat2db</groupId>
-            <artifactId>chat2db-community-mysql</artifactId>
+            <artifactId>chat2db-community-oracle</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

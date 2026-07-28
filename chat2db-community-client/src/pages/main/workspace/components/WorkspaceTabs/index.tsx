@@ -55,11 +55,13 @@ import { getDatabaseSupport } from '@/utils/database';
 import ConsoleERModal from '@/blocks/ERModal/ConsoleERModal';
 import { getLocalTextFileIcon, SQL_FILE_EXTENSION_NAME } from '../../utils/localTextFile';
 import { EditorType } from '@/components/SQLEditor';
+import { ShortcutAction } from '@/constants/shortcut';
 
 const SplitPaneAny = SplitPane as any;
 const MAIN_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'main';
 const SPLIT_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'split';
 const WORKSPACE_TAB_PANE_DROPPABLE_PREFIX = 'workspace-tab-pane:';
+const WORKSPACE_TAB_WIDTH = 200;
 type WorkspaceTabSplitNodePath = Array<'first' | 'second'>;
 
 function getWorkspaceTabPaneDroppableId(paneId: WorkspaceTabPaneId) {
@@ -1504,6 +1506,12 @@ const WorkspaceTabs = memo(() => {
         key: item.id,
         editableName: item.type === WorkspaceTabType.CONSOLE,
         pinned: item.pinned,
+        styles: {
+          width: WORKSPACE_TAB_WIDTH,
+          maxWidth: WORKSPACE_TAB_WIDTH,
+          flexShrink: 0,
+          boxSizing: 'border-box' as const,
+        },
         children: <Fragment key={item.id}>{workspaceTabConnectionMap(item)}</Fragment>,
       };
     });
@@ -1622,6 +1630,7 @@ const WorkspaceTabs = memo(() => {
           draggingTabKey={draggingWorkspaceTabKey}
           onDraggingTabKeyChange={setDraggingWorkspaceTabKey}
           tabPaneDroppableId={workspaceTabSplitLayout ? getWorkspaceTabPaneDroppableId(paneId) : undefined}
+          closeShortcutAction={ShortcutAction.CloseCurrentConsole}
         />
       </div>
     );
@@ -1680,6 +1689,7 @@ const WorkspaceTabs = memo(() => {
         contextActions={commonWorkspaceTabContextActions}
         contextActionAvailability={getWorkspaceTabContextActionAvailability}
         contextActionHandlers={commonWorkspaceTabContextActionHandlers}
+        closeShortcutAction={ShortcutAction.CloseCurrentConsole}
       />
     )
   ) : (

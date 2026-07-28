@@ -57,6 +57,9 @@ public class MariaDBValueProcessor extends MysqlValueProcessor {
 
     @Override
     public String convertSQLValueByType(SQLDataValue dataValue) {
+        if (FUNCTION_SET.contains(dataValue.getValue().toLowerCase())) {
+            return dataValue.getValue();
+        }
         try {
             DefaultValueProcessor valueProcessor = MariaDBValueProcessorFactory.getValueProcessor(dataValue.getDateTypeName());
             if (Objects.isNull(valueProcessor)) {
@@ -90,7 +93,7 @@ public class MariaDBValueProcessor extends MysqlValueProcessor {
         try {
             DefaultValueProcessor valueProcessor = MariaDBValueProcessorFactory.getValueProcessor(type);
             if (Objects.isNull(valueProcessor)) {
-                return super.convertJDBCValueByType(dataValue);
+                return super.convertJDBCValueStrByType(dataValue);
             }
             return valueProcessor.convertJDBCValueStrByType(dataValue);
         } catch (Exception e) {

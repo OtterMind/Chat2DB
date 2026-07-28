@@ -7,11 +7,15 @@ export const MESSAGES_TAB_ID = 'messages';
 export interface ActiveTabSelectionState {
   activeTabId: string;
   pendingPreferredTabId?: string;
+  followPreferredTabs: boolean;
 }
 
 export type ActiveTabSelectionAction =
   | { type: 'prefer'; tabId: string }
   | { type: 'activate'; tabId: string }
+  | { type: 'activateAutomatically'; tabId: string }
+  | { type: 'activateByUser'; tabId: string }
+  | { type: 'startAutoFollow'; tabId: string }
   | { type: 'resetPreference' }
   | { type: 'tabsChanged'; availableTabIds: string[] };
 
@@ -25,6 +29,13 @@ export function hasTabularResult(item: IManageResultData) {
 
 export function hasLegacyResultTab(item: IManageResultData) {
   return hasTabularResult(item) || !item.success;
+}
+
+export function getConsoleResultTabLabel(displayName: string, showCoordinates: boolean) {
+  if (showCoordinates) {
+    return displayName;
+  }
+  return displayName.replace(/^#\d+-\d+\s*/, '');
 }
 
 export function shouldOpenLegacyMessagesTab(item: IManageResultData) {
@@ -77,11 +88,22 @@ export function reduceActiveTabSelection(
 ): ActiveTabSelectionState {
   switch (action.type) {
     case 'prefer':
+      if (!state.followPreferredTabs) {
+        return state;
+      }
       return { ...state, pendingPreferredTabId: action.tabId };
     case 'activate':
-      return { activeTabId: action.tabId };
+      return { ...state, activeTabId: action.tabId, pendingPreferredTabId: undefined };
+    case 'activateAutomatically':
+      return state.followPreferredTabs
+        ? { ...state, activeTabId: action.tabId, pendingPreferredTabId: undefined }
+        : state;
+    case 'activateByUser':
+      return { activeTabId: action.tabId, followPreferredTabs: false };
+    case 'startAutoFollow':
+      return { activeTabId: action.tabId, followPreferredTabs: true };
     case 'resetPreference':
-      return state.pendingPreferredTabId === undefined ? state : { activeTabId: state.activeTabId };
+      return state.pendingPreferredTabId === undefined ? state : { ...state, pendingPreferredTabId: undefined };
     case 'tabsChanged': {
       const activeTabId = resolveAvailableActiveTabId(
         state.activeTabId,
@@ -93,7 +115,7 @@ export function reduceActiveTabSelection(
       if (activeTabId === state.activeTabId && pendingPreferredTabId === state.pendingPreferredTabId) {
         return state;
       }
-      return { activeTabId, pendingPreferredTabId };
+      return { ...state, activeTabId, pendingPreferredTabId };
     }
     default:
       return state;

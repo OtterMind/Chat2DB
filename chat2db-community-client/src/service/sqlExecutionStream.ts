@@ -32,6 +32,40 @@ export interface SqlExecutionStartResult {
   executionId: string;
 }
 
+export interface SqlExecutionResultIdentity {
+  executionId: string;
+  resultKey: string;
+}
+
+export type ClosedSqlExecutionResults = Map<string, Set<string>>;
+
+export function markSqlExecutionResultsClosed(
+  closedResults: ClosedSqlExecutionResults,
+  identities: SqlExecutionResultIdentity[],
+) {
+  identities.forEach(({ executionId, resultKey }) => {
+    const resultKeys = closedResults.get(executionId) || new Set<string>();
+    resultKeys.add(resultKey);
+    closedResults.set(executionId, resultKeys);
+  });
+}
+
+export function isSqlExecutionResultClosed(
+  closedResults: ClosedSqlExecutionResults,
+  executionId: string,
+  resultKey: string,
+) {
+  return closedResults.get(executionId)?.has(resultKey) === true;
+}
+
+export function clearClosedSqlExecutionResults(closedResults: ClosedSqlExecutionResults, executionId?: string) {
+  if (executionId) {
+    closedResults.delete(executionId);
+    return;
+  }
+  closedResults.clear();
+}
+
 export interface SqlExecutionMessage {
   level?: 'INFO' | 'WARN' | 'ERROR';
   message: string;
@@ -54,6 +88,24 @@ export function startSqlExecution(params: IExecuteSqlParams, requestUuid: string
 
 export function cancelSqlExecution(executionId: string) {
   return createJcefApi<boolean>('sql-cancel', { executionId });
+}
+
+export async function cancelSqlExecutionWithReconciliation(
+  executionId: string,
+  handlers: {
+    onExecutionMissing: () => void;
+    onError: (error: unknown) => void;
+  },
+  cancelRequest: (targetExecutionId: string) => Promise<boolean> = cancelSqlExecution,
+) {
+  try {
+    const cancelled = await cancelRequest(executionId);
+    if (!cancelled) {
+      handlers.onExecutionMissing();
+    }
+  } catch (error) {
+    handlers.onError(error);
+  }
 }
 
 export function onSqlExecutionEvent(requestUuid: string, callback: (event: SqlExecutionEvent) => void) {
@@ -105,15 +157,19 @@ function mergeResultStartedWithMode(
 }
 
 export function mergeRows(current: IManageResultData[], chunk: IManageResultData) {
-  return current.map((item) => {
+  const normalizedChunk = ensureResultData(chunk);
+  let matched = false;
+  const next = current.map((item) => {
     if (!isSameResult(item, chunk)) {
       return item;
     }
+    matched = true;
     return {
       ...item,
-      dataList: [...(item.dataList || []), ...(chunk.dataList || [])],
+      dataList: [...(item.dataList || []), ...(normalizedChunk.dataList || [])],
     };
   });
+  return matched ? next : [...next, normalizedChunk];
 }
 
 export function mergeResultFinished(current: IManageResultData[], result: IManageResultData) {

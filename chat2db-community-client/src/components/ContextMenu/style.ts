@@ -11,6 +11,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     .ant-menu-item,
     .ant-menu-submenu-title {
       display: flex;
+      align-items: center;
       height: 30px;
       margin: 0;
       padding: 0 10px;
@@ -23,6 +24,12 @@ export const useStyles = createStyles(({ css, token }) => ({
     .ant-menu-title-content {
       flex: 1 1 auto;
       min-width: 0;
+    }
+
+    .ant-menu-item-icon {
+      width: 14px;
+      min-width: 14px;
+      height: 14px;
     }
 
     .ant-menu-item:hover,
@@ -45,5 +52,9 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
   defaultMenuWidth: css`
     min-width: 160px;
+  `,
+  menuIconPlaceholder: css`
+    display: inline-block;
+    visibility: hidden;
   `,
 }));

@@ -11,6 +11,7 @@ import {
 } from '@/constants/shortcut';
 import { useAIStore } from '@/store/ai';
 import jcefApi from '@/jcef';
+import { requestCloseActiveResultTab } from '@/service/resultTabShortcut';
 
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
@@ -83,6 +84,9 @@ class ShortcutManager {
     const { mainPageActiveTab, setMainPageActiveTab, setSettingPageActiveTab } = useGlobalStore.getState();
     const { deleteActiveWorkspaceTab } = useWorkspaceStore.getState();
     if (action === 'delete') {
+      if (requestCloseActiveResultTab()) {
+        return;
+      }
       if (mainPageActiveTab !== 'workspace') {
         setMainPageActiveTab({ page: 'workspace' });
         setSettingPageActiveTab(false);
