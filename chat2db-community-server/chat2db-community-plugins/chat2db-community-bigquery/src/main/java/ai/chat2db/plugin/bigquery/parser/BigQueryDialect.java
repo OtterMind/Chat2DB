@@ -17,10 +17,12 @@ public class BigQueryDialect extends AbstractSQLDialect {
     private static final Set<Integer> BIGQUERY_COMMENT_TOKENS =
             Set.of(MySqlLexer.SPEC_MYSQL_COMMENT, MySqlLexer.COMMENT_INPUT, MySqlLexer.LINE_COMMENT);
 
+    // Only statement starters the underlying grammar can actually parse are listed;
+    // MERGE/DECLARE/EXPORT/LOAD are BigQuery-specific and would fail to parse here.
     private static final Set<String> BIGQUERY_SQL_START_KEYWORDS = Set.of(
-            ";", "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "DROP", "ALTER",
+            ";", "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER",
             "WITH", "TRUNCATE", "GRANT", "REVOKE", "CALL", "BEGIN", "COMMIT", "ROLLBACK",
-            "DECLARE", "SET", "EXPORT", "LOAD", "EXPLAIN", "ANALYZE"
+            "SET", "EXPLAIN", "ANALYZE"
     );
 
     @Override
