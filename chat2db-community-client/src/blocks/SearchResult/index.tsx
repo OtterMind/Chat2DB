@@ -12,7 +12,6 @@ import {
 } from 'react';
 import classnames from 'classnames';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
-import Iconfont from '@/components/Iconfont';
 import { IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
@@ -176,13 +175,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     const tabsListRes =
       newResultDataList?.map((queryResultData, index) => {
         return {
-          prefixIcon: (
-            <Iconfont
-              key={index}
-              className={classnames(styles[queryResultData.success ? 'successIcon' : 'failIcon'], styles.statusIcon)}
-              code={queryResultData.success ? '\ue605' : '\ue87c'}
-            />
-          ),
+          prefixIcon: <IconfontSvg key={index} className={styles.resultTabIcon} size="sm" code="icon-table" />,
           popover: (
             <SQLPreview
               source="search-result-tab-popover"

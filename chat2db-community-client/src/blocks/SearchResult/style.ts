@@ -38,15 +38,9 @@ export const useStyles = createStyles(({ css, token }) => {
       font-size: 16px;
       margin-right: 4px;
     `,
-    statusIcon: css`
-      margin-right: 6px;
-      font-size: 12px;
-    `,
-    successIcon: css`
-      color: ${token.colorPrimary};
-    `,
-    failIcon: css`
-      color: ${token.colorError};
+    resultTabIcon: css`
+      margin-right: 4px;
+      color: inherit;
     `,
     tableIndex: css`
       width: 50px;

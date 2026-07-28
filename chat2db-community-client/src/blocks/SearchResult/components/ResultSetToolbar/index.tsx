@@ -11,6 +11,7 @@ import sqlService from '@/service/sql';
 import _ from 'lodash';
 import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/EditorChartModal';
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
+import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
 import { useGlobalStore } from '@/store/global';
 
@@ -214,7 +215,7 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
             }}
             size="sm"
             className={styles.createChartIcon}
-            code="icon-combo-chart"
+            icon={ChartNoAxesCombined}
           />
           <EditorChartModal
             submitEditorChartCallback={(data) => {
