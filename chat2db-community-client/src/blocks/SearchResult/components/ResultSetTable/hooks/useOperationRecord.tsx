@@ -170,9 +170,9 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     const cells = tableInstance.getSelectedCellInfos() || [];
     if (cells.length === 0) return;
     runWithCellValueTrackingPaused(() => {
-      const _createRowRecordList = createRowRecordListRef.current;
-      const _deleteRowRecordList = deleteRowRecordListRef.current;
-      const _cellChangeRecordList = cellChangeRecordLisLRef.current;
+      const _createRowRecordList = [...createRowRecordListRef.current];
+      const _deleteRowRecordList = [...deleteRowRecordListRef.current];
+      const _cellChangeRecordList = [...cellChangeRecordLisLRef.current];
       // records the rows that need to be deleted
       const deleteRows: string[] = [];
 
@@ -254,34 +254,25 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
       tableInstance.deleteRecords(rowsToDeleteRows);
     }
 
-    runWithCellValueTrackingPaused(() => {
-      let _cellChangeRecordList = cellChangeRecordLisLRef.current;
+    const deletedRowIds = new Set(curDeleteRows);
+    const revokedCellRecords = cellChangeRecordLisLRef.current.filter((record) => deletedRowIds.has(record.rowId));
+    const remainingCellRecords = cellChangeRecordLisLRef.current.filter((record) => !deletedRowIds.has(record.rowId));
+    handleDeleteRowRecord(curDeleteRows);
+    if (revokedCellRecords.length > 0) {
+      cellChangeRecordLisLRef.current = remainingCellRecords;
+      setCellChangeRecordList(remainingCellRecords);
+    }
 
-      // If there are edited cells in the deleted row, you need to undo the styles of these cells and record them.
-      cells.forEach((cell) => {
-        const rowId = cell?.[0]?.originData?.CHAT2DB_ROW_NUMBER;
-        if (rowId === undefined) return;
-        _cellChangeRecordList = _cellChangeRecordList.filter((_item) => {
-          const flag = _item.rowId === rowId;
-          if (flag) {
-            handleRevocationCellStyle({
-              field: _item.field,
-              rowId: _item.rowId,
-              value: _item.restoreValue !== undefined ? _item.restoreValue : _item.currentValue,
-              cellMeta: _item.restoreCellMeta,
-            });
-          }
-          return !flag;
+    runWithCellValueTrackingPaused(() => {
+      revokedCellRecords.forEach((_item) => {
+        handleRevocationCellStyle({
+          field: _item.field,
+          rowId: _item.rowId,
+          value: _item.restoreValue !== undefined ? _item.restoreValue : _item.currentValue,
+          cellMeta: _item.restoreCellMeta,
         });
       });
-      // If the deleted row contains modified cells, these records need to be deleted
-      if (_cellChangeRecordList.length !== cellChangeRecordLisLRef.current.length) {
-        cellChangeRecordLisLRef.current = _cellChangeRecordList;
-        setCellChangeRecordList(_cellChangeRecordList);
-      }
     });
-
-    handleDeleteRowRecord(curDeleteRows);
   }, [tableInstance, runWithCellValueTrackingPaused]);
 
   // clone line

@@ -3,9 +3,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import useOperationRecord, { OperationRecordUtils } from './useOperationRecord';
 
-const createChangeRecord = (field: string, currentValue: string, changedValue: string) => ({
+const createChangeRecord = (field: string, currentValue: string, changedValue: string, rowId = 'row-1') => ({
   field,
-  rowId: 'row-1',
+  rowId,
   rawValue: currentValue,
   currentValue,
   changedValue,
@@ -126,8 +126,126 @@ function testRevertFailureRestoresTracking() {
   assert.equal(operations[0].dataList[2], 'after-2');
 }
 
+function testNestedPauseStaysActiveUntilRevertCompletes() {
+  const row = {
+    CHAT2DB_ROW_NUMBER: 'row-1',
+    1: 'before-1',
+    2: 'before-2',
+  };
+  const newRow = {
+    CHAT2DB_ROW_NUMBER: 'new-row',
+    1: null,
+    2: null,
+  };
+  const records: any[] = [row];
+  const dataSource = { currentIndexedData: [0] };
+  const operationRecordUtilsRef: { current?: OperationRecordUtils } = {};
+  const tableInstance = {
+    columns: [{ field: '1' }, { field: '2' }],
+    records,
+    dataSource,
+    getSelectedCellInfos: () => [[{ field: '1', originData: row }], [{ field: '1', originData: newRow }]],
+    arrangeCustomCellStyle: () => undefined,
+    changeCellValue: () => undefined,
+    deleteRecords: () => {
+      assert.ok(operationRecordUtilsRef.current);
+      operationRecordUtilsRef.current.handleCellValueChange(createChangeRecord('2', 'before-2', 'unexpected'));
+    },
+    addRecords: (newRecords: any[]) => {
+      records.push(...newRecords);
+      dataSource.currentIndexedData = records.map((_, index) => index);
+    },
+    scrollToCell: () => undefined,
+    clearSelected: () => undefined,
+  };
+  const operationRecordUtils = renderOperationRecord(tableInstance);
+  operationRecordUtilsRef.current = operationRecordUtils;
+  operationRecordUtils.handleCellValueChange(createChangeRecord('1', 'before-1', 'after-1'));
+  operationRecordUtils.handleAddBlankRow(newRow, 'new-row');
+
+  operationRecordUtils.handleRevocation();
+
+  assert.deepEqual(operationRecordUtils.getOperationChangeDetail(), []);
+}
+
+function testFailedCreateRowRevertKeepsCreateRecord() {
+  const newRow = {
+    CHAT2DB_ROW_NUMBER: 'new-row',
+    1: null,
+  };
+  const records: any[] = [];
+  const dataSource = { currentIndexedData: [] as number[] };
+  const tableInstance = {
+    columns: [{ field: '1' }],
+    records,
+    dataSource,
+    getSelectedCellInfos: () => [[{ field: '1', originData: newRow }]],
+    arrangeCustomCellStyle: () => undefined,
+    deleteRecords: () => {
+      throw new Error('delete failed');
+    },
+    addRecords: (newRecords: any[]) => {
+      records.push(...newRecords);
+      dataSource.currentIndexedData = records.map((_, index) => index);
+    },
+    scrollToCell: () => undefined,
+    clearSelected: () => undefined,
+  };
+  const operationRecordUtils = renderOperationRecord(tableInstance);
+  operationRecordUtils.handleAddBlankRow(newRow, 'new-row');
+
+  assert.throws(() => operationRecordUtils.handleRevocation(), /delete failed/);
+  assert.equal(operationRecordUtils.isCreateRow('new-row'), true);
+}
+
+function testDeleteFailureAfterPhysicalRemovalKeepsBookkeepingConsistent() {
+  const row = {
+    CHAT2DB_ROW_NUMBER: 'row-1',
+    1: 'before-1',
+  };
+  const newRow = {
+    CHAT2DB_ROW_NUMBER: 'new-row',
+    1: null,
+  };
+  const records: any[] = [row];
+  const dataSource = { currentIndexedData: [0] };
+  const tableInstance = {
+    columns: [{ field: '1' }],
+    records,
+    dataSource,
+    getSelectedCellInfos: () => [
+      [{ field: '1', originData: newRow, row: 2 }],
+      [{ field: '1', originData: row, row: 1 }],
+    ],
+    arrangeCustomCellStyle: () => undefined,
+    changeCellValue: () => {
+      throw new Error('restore failed');
+    },
+    deleteRecords: () => undefined,
+    addRecords: (newRecords: any[]) => {
+      records.push(...newRecords);
+      dataSource.currentIndexedData = records.map((_, index) => index);
+    },
+    scrollToCell: () => undefined,
+    clearSelected: () => undefined,
+  };
+  const operationRecordUtils = renderOperationRecord(tableInstance);
+  operationRecordUtils.handleAddBlankRow(newRow, 'new-row');
+  operationRecordUtils.handleCellValueChange(createChangeRecord('1', 'before-1', 'after-1'));
+
+  assert.throws(() => operationRecordUtils.handleDeleteRow(), /restore failed/);
+  assert.equal(operationRecordUtils.isCreateRow('new-row'), false);
+  assert.deepEqual(
+    operationRecordUtils.getOperationChangeDetail().map((operation) => operation.type),
+    ['DELETE'],
+  );
+}
+
 testNoSelectionRevertKeepsTrackingEnabled();
 testMultiCellRevertDoesNotRecordRestoreCallbacks();
 testRevertFailureRestoresTracking();
+testNestedPauseStaysActiveUntilRevertCompletes();
+testFailedCreateRowRevertKeepsCreateRecord();
+testDeleteFailureAfterPhysicalRemovalKeepsBookkeepingConsistent();
 
 console.log('useOperationRecord tests passed');
