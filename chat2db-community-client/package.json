@@ -32,6 +32,7 @@
     "test:active-tab-locator": "tsx src/pages/main/workspace/utils/activeTabLocator.test.ts",
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
     "test:chat-answer-update": "tsx src/store/chat/slices/chatDetails/answerUpdates.test.ts",
+    "test:chat-info-update": "tsx src/store/chat/slices/common/chatInfoUpdate.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
     "test:export-connections": "tsx src/pages/main/workspace/components/WorkspaceLeftActionBar/components/TreeSetting/exportConnectionsFlow.test.ts",

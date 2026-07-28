@@ -51,6 +51,9 @@ jobs:
       - name: Run active workspace tab locator contract
         run: yarn run test:active-tab-locator
 
+      - name: Run chat metadata update contract
+        run: yarn run test:chat-info-update
+
       - name: Run saved console tree refresh contract
         run: yarn run test:saved-console-tree-refresh
 
