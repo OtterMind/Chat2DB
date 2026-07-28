@@ -1,9 +1,8 @@
 import { Confetti, IconButton, IconfontSvg } from '@chat2db/ui';
 import { Tooltip, type InputRef } from 'antd';
-import { Layers, MessagesSquare } from 'lucide-react';
+import { Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import i18n from '@/i18n';
 import { INavItem } from '@/typings/main';
 import feedback from '@/utils/feedback';
@@ -42,7 +41,7 @@ function CommunityMainPage() {
     () => [
       {
         key: 'stream',
-        icon: MessagesSquare,
+        icon: MessageSquarePlus,
         isLoad: false,
         component: <Stream />,
         name: i18n('stream.nav.title'),
@@ -56,7 +55,7 @@ function CommunityMainPage() {
       },
       {
         key: 'dashboard',
-        icon: ChartNoAxesCombined,
+        icon: LayoutDashboard,
         isLoad: false,
         component: <Dashboard />,
         name: i18n('dashboard.title'),
