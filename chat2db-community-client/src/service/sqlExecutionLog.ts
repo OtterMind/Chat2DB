@@ -41,6 +41,7 @@ export type SqlExecutionLogOutput = SqlExecutionLogMessageOutput | SqlExecutionL
 export interface SqlExecutionLogRecord {
   id: string;
   executionId: string;
+  executionSequence?: number;
   statementSequence: number;
   startedAtEpochMs: number;
   finishedAtEpochMs?: number;
@@ -64,6 +65,7 @@ export interface SqlExecutionLogState {
 
 export interface BeginWebSqlExecutionParams {
   executionId: string;
+  executionSequence?: number;
   sql: string;
   context: SqlExecutionLogContext;
   occurredAtEpochMs?: number;
@@ -210,6 +212,7 @@ export function completeWebSqlExecution(
       first.executionMetrics?.startedAtEpochMs ?? temporary?.startedAtEpochMs ?? completedAt;
     let record = createRecord({
       executionId: params.executionId,
+      executionSequence: params.executionSequence ?? temporary?.executionSequence,
       statementSequence,
       sql: first.originalSql || params.sql,
       comment: first.comment,
@@ -298,6 +301,7 @@ export function reduceDesktopSqlExecutionEventWithHistoryPreference(
   context: SqlExecutionLogContext,
   keepHistory: boolean,
   requestSequence?: number,
+  executionSequence?: number,
 ): SqlExecutionLogState {
   if (
     requestSequence !== undefined &&
@@ -307,19 +311,20 @@ export function reduceDesktopSqlExecutionEventWithHistoryPreference(
     return state;
   }
   if (requestSequence !== undefined) {
-    return reduceDesktopSqlExecutionEvent(state, event, context);
+    return reduceDesktopSqlExecutionEvent(state, event, context, executionSequence);
   }
   const preparedState =
     event.eventType === 'started' || !isSqlExecutionTracked(state, event.executionId)
       ? prepareSqlExecutionLogForExecution(state, event.executionId, keepHistory)
       : state;
-  return reduceDesktopSqlExecutionEvent(preparedState, event, context);
+  return reduceDesktopSqlExecutionEvent(preparedState, event, context, executionSequence);
 }
 
 export function reduceDesktopSqlExecutionEvent(
   state: SqlExecutionLogState,
   event: SqlExecutionEvent,
   context: SqlExecutionLogContext,
+  executionSequence?: number,
 ): SqlExecutionLogState {
   if (isSupersededExecution(state, event.executionId)) return state;
   const trackedState = trackActiveExecution(state, event.executionId);
@@ -334,6 +339,7 @@ export function reduceDesktopSqlExecutionEvent(
       ...trackedState.records,
       createRecord({
         executionId: event.executionId,
+        executionSequence,
         statementSequence,
         sql: text(event.message?.originalSql) || text(event.message?.sql),
         comment: text(event.message?.comment) || undefined,
@@ -351,6 +357,7 @@ export function reduceDesktopSqlExecutionEvent(
   if (!target && (event.eventType === 'failed' || event.eventType === 'cancelled')) {
     const record = createRecord({
       executionId: event.executionId,
+      executionSequence,
       statementSequence,
       sql: '',
       context,
@@ -463,6 +470,7 @@ function mergeContextName(
 
 function createRecord(params: {
   executionId: string;
+  executionSequence?: number;
   statementSequence: number;
   sql: string;
   context: SqlExecutionLogContext;
@@ -473,6 +481,7 @@ function createRecord(params: {
   return {
     id: idFor(params.executionId, params.statementSequence),
     executionId: params.executionId,
+    executionSequence: params.executionSequence,
     statementSequence: params.statementSequence,
     startedAtEpochMs: params.startedAtEpochMs,
     status: 'running',

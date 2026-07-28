@@ -3,10 +3,24 @@ import { createStyles } from 'antd-style';
 export const useStyles = createStyles(
   (
     { css, cx, token },
-    { height, showAddButton, tabMaxWidth }: { height: number; showAddButton: boolean; tabMaxWidth: any },
+    {
+      height,
+      showAddButton,
+      showTabBarExtraContent,
+      tabMaxWidth,
+      uniformTabWidth,
+    }: {
+      height: number;
+      showAddButton: boolean;
+      showTabBarExtraContent: boolean;
+      tabMaxWidth: any;
+      uniformTabWidth: boolean;
+    },
   ) => {
     const { colorBgBase, colorPrimary, colorText } = token;
     const colorBorderLayout = (token as any).colorBorderLayout || token.colorBorderSecondary;
+    const moreTabsWidth = showTabBarExtraContent ? 29 : 34;
+    const tabBarExtraWidth = showTabBarExtraContent ? 29 : 0;
     const activeTab = css`
       &:after {
         content: '';
@@ -96,7 +110,9 @@ export const useStyles = createStyles(
       tabList: css`
         display: flex;
         position: relative;
-        max-width: ${showAddButton ? 'calc(100% - 68px)' : 'calc(100% - 34px)'};
+        max-width: calc(
+          100% - ${moreTabsWidth + (showAddButton ? 34 : 0) + tabBarExtraWidth}px
+        );
         width: fit-content;
         flex-shrink: 0;
         overflow-x: auto;
@@ -140,6 +156,14 @@ export const useStyles = createStyles(
         position: relative;
         display: flex;
         align-items: center;
+        ${uniformTabWidth
+          ? `
+            box-sizing: border-box;
+            flex: 0 0 ${tabMaxWidth};
+            width: ${tabMaxWidth};
+            max-width: ${tabMaxWidth};
+          `
+          : ''}
         padding-left: 10px;
         cursor: pointer;
         user-select: none;
@@ -253,26 +277,38 @@ export const useStyles = createStyles(
         display: block;
       `,
       moreTabs: css`
-        width: 34px;
+        width: ${moreTabsWidth}px;
         flex-shrink: 0;
         height: 100%;
         display: flex;
-        justify-content: center;
+        justify-content: ${showTabBarExtraContent ? 'flex-start' : 'center'};
         align-items: center;
       `,
-      moreTabsButton: css`
+      tabBarExtra: css`
+        width: ${tabBarExtraWidth}px;
+        flex-shrink: 0;
+        height: 100%;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+      `,
+      iconButtonTrigger: css`
+        display: flex;
+        align-items: center;
+        justify-content: center;
         width: 24px;
         height: 24px;
-        border-radius: 8px;
-        background-color: ${token.colorFillSecondary};
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 4px;
+        outline: none;
+        color: inherit;
+        background: transparent;
         cursor: pointer;
-        color: ${token.colorTextTertiary};
-        &:hover {
-          color: #fff;
-          background-color: ${token.colorPrimary};
+
+        &:focus-visible {
+          box-shadow: inset 0 0 0 2px ${token.colorPrimary};
         }
       `,
       moreTabsBox: css`
