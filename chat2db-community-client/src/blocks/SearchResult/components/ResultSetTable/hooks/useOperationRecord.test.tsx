@@ -132,39 +132,35 @@ function testNestedPauseStaysActiveUntilRevertCompletes() {
     1: 'before-1',
     2: 'before-2',
   };
-  const newRow = {
-    CHAT2DB_ROW_NUMBER: 'new-row',
-    1: null,
-    2: null,
-  };
-  const records: any[] = [row];
-  const dataSource = { currentIndexedData: [0] };
   const operationRecordUtilsRef: { current?: OperationRecordUtils } = {};
+  let recordedUnexpectedUpdate = false;
   const tableInstance = {
     columns: [{ field: '1' }, { field: '2' }],
-    records,
-    dataSource,
-    getSelectedCellInfos: () => [[{ field: '1', originData: row }], [{ field: '1', originData: newRow }]],
+    records: [row],
+    dataSource: { currentIndexedData: [0] },
+    getSelectedCellInfos: () => [[{ field: '1', originData: row }]],
     arrangeCustomCellStyle: () => undefined,
     changeCellValue: () => undefined,
-    deleteRecords: () => {
+    getRecordByCell: () => {
       assert.ok(operationRecordUtilsRef.current);
       operationRecordUtilsRef.current.handleCellValueChange(createChangeRecord('2', 'before-2', 'unexpected'));
+      recordedUnexpectedUpdate = operationRecordUtilsRef.current
+        .getOperationChangeDetail()
+        .some((operation) => operation.dataList?.[2] === 'unexpected');
+      return row;
     },
-    addRecords: (newRecords: any[]) => {
-      records.push(...newRecords);
-      dataSource.currentIndexedData = records.map((_, index) => index);
-    },
-    scrollToCell: () => undefined,
     clearSelected: () => undefined,
   };
   const operationRecordUtils = renderOperationRecord(tableInstance);
   operationRecordUtilsRef.current = operationRecordUtils;
-  operationRecordUtils.handleCellValueChange(createChangeRecord('1', 'before-1', 'after-1'));
-  operationRecordUtils.handleAddBlankRow(newRow, 'new-row');
+  operationRecordUtils.handleCellValueChange({
+    ...createChangeRecord('1', 'before-1', 'after-1'),
+    restoreCellMeta: {} as any,
+  });
 
   operationRecordUtils.handleRevocation();
 
+  assert.equal(recordedUnexpectedUpdate, false);
   assert.deepEqual(operationRecordUtils.getOperationChangeDetail(), []);
 }
 
