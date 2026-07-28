@@ -157,10 +157,10 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
   // handles undo operations
   const handleRevocation = useCallback(() => {
     if (!tableInstance) return;
-    // does not monitor cell value changes when undoing operations
-    isListenCellValueChange.current = false;
     const cells = tableInstance.getSelectedCellInfos() || [];
     if (cells.length === 0) return;
+    // does not monitor cell value changes when undoing operations
+    isListenCellValueChange.current = false;
     const _createRowRecordList = createRowRecordListRef.current;
     const _deleteRowRecordList = deleteRowRecordListRef.current;
     const _cellChangeRecordList = cellChangeRecordLisLRef.current;

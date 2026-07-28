@@ -69,6 +69,9 @@ jobs:
       - name: Run result inspector contract
         run: yarn run test:result-inspector
 
+      - name: Run result operation record contract
+        run: yarn run test:result-operation-record
+
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
 

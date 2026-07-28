@@ -37,6 +37,7 @@
     "test:redis-explorer": "tsx src/blocks/RedisAllData/redisExplorer.test.ts",
     "test:result-markdown": "tsx src/blocks/SearchResult/components/ResultSetTable/event/onContextmenuCell/handleCopyAsMarkdown.test.ts",
     "test:result-inspector": "tsx src/store/workspace/utils/resultInspector.test.ts && yarn test:search-result-tab-selection",
+    "test:result-operation-record": "tsx src/blocks/SearchResult/components/ResultSetTable/hooks/useOperationRecord.test.tsx",
     "test:search-result-query-composer": "tsx src/blocks/SearchResult/components/ScreeningResult/queryComposer.test.ts",
     "test:search-result-tab-selection": "tsx src/blocks/SearchResult/tabSelection.test.ts",
     "test:saved-console-tree-refresh": "tsx src/store/tree/savedConsoleTreeRefresh.test.ts",
