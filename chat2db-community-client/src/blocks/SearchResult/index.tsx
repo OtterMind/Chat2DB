@@ -12,7 +12,6 @@ import {
 } from 'react';
 import classnames from 'classnames';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
-import Iconfont from '@/components/Iconfont';
 import { IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
@@ -41,8 +40,10 @@ interface IProps {
   executionLogRecords?: SqlExecutionLogRecord[];
   resultBatchKey?: number;
   forceOutputTab?: boolean;
+  keepExecutionLogHistory?: boolean;
   viewTable?: boolean;
   onClearExecutionLog?: () => void;
+  onKeepExecutionLogHistoryChange?: (keepHistory: boolean) => void;
   onResultDataListChange?: (params: {
     resultDataList: IManageResultData[];
     historyResultDataList: IManageResultData[];
@@ -174,13 +175,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     const tabsListRes =
       newResultDataList?.map((queryResultData, index) => {
         return {
-          prefixIcon: (
-            <Iconfont
-              key={index}
-              className={classnames(styles[queryResultData.success ? 'successIcon' : 'failIcon'], styles.statusIcon)}
-              code={queryResultData.success ? '\ue605' : '\ue87c'}
-            />
-          ),
+          prefixIcon: <IconfontSvg key={index} className={styles.resultTabIcon} size="sm" code="icon-table" />,
           popover: (
             <SQLPreview
               source="search-result-tab-popover"
@@ -315,7 +310,9 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       children: (
         <ExecutionConsole
           records={props.executionLogRecords || []}
+          keepHistory={props.keepExecutionLogHistory ?? true}
           onClear={props.onClearExecutionLog || (() => {})}
+          onKeepHistoryChange={props.onKeepExecutionLogHistoryChange || (() => {})}
           onOpenResult={handleOpenResult}
           isResultAvailable={isResultAvailable}
         />
@@ -325,7 +322,9 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   }, [
     consoleMode,
     props.executionLogRecords,
+    props.keepExecutionLogHistory,
     props.onClearExecutionLog,
+    props.onKeepExecutionLogHistoryChange,
     handleOpenResult,
     isResultAvailable,
     styles.abstractIcon,

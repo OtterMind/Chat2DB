@@ -10,6 +10,13 @@ import {
   useImperativeHandle,
 } from 'react';
 import SearchResult from '@/blocks/SearchResult';
+import {
+  createExecutionConsoleKeepHistoryStorageKey,
+  getExecutionConsolePreferenceStorage,
+  persistExecutionConsoleKeepHistory,
+  readExecutionConsoleKeepHistory,
+  subscribeExecutionConsoleKeepHistory,
+} from '@/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences';
 import { useWorkspaceStore } from '@/store/workspace';
 import { IConsoleReturnExecuteSql, IBoundInfo, IDatabaseBaseInfo, IManageResultData } from '@/typings';
 import { Spin } from 'antd';
@@ -41,7 +48,9 @@ import {
   completeWebSqlExecution,
   createSqlExecutionLogState,
   failWebSqlExecution,
-  reduceDesktopSqlExecutionEvent,
+  prepareDesktopSqlExecutionLogForRequest,
+  prepareSqlExecutionLogForExecution,
+  reduceDesktopSqlExecutionEventWithHistoryPreference,
   rethrowNonCancellationSqlExecutionError,
   SqlExecutionLogContext,
 } from '@/service/sqlExecutionLog';
@@ -50,6 +59,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 const SplitPaneAny = SplitPane as any;
 const HISTORY_RESULT_LIMIT = 30;
+const KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY = createExecutionConsoleKeepHistoryStorageKey(
+  'community',
+  __RUNTIME_ENV__,
+);
 
 interface IProps {
   boundInfo: IBoundInfo;
@@ -190,6 +203,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const editorId = boundInfo.workspaceTabId ?? boundInfo.consoleId;
   const [boxRightConsoleHeight, setBoxRightConsoleHeight] = useState<number | string>(0);
   const executionSequenceRef = useRef(0);
+  const desktopReplacementRequestSequenceRef = useRef(0);
   const executionSequenceByIdRef = useRef<Record<string, number>>({});
   const statementSequenceRef = useRef(0);
   const statementSqlCountsRef = useRef<Record<string, number>>({});
@@ -210,7 +224,30 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const [historyResultDataList, setHistoryResultDataList] = useState<IManageResultData[]>([]);
   const historyResultDataListRef = useRef<IManageResultData[]>([]);
   const [sqlExecutionLogState, setSqlExecutionLogState] = useState(createSqlExecutionLogState);
+  const [keepExecutionLogHistory, setKeepExecutionLogHistory] = useState(() =>
+    readExecutionConsoleKeepHistory(
+      getExecutionConsolePreferenceStorage(),
+      KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY,
+    ),
+  );
   const handleClearExecutionLog = useCallback(() => setSqlExecutionLogState(clearSqlExecutionLog), []);
+  const handleKeepExecutionLogHistoryChange = useCallback((keepHistory: boolean) => {
+    setKeepExecutionLogHistory(keepHistory);
+    persistExecutionConsoleKeepHistory(
+      getExecutionConsolePreferenceStorage(),
+      KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY,
+      keepHistory,
+    );
+  }, []);
+  useEffect(
+    () =>
+      subscribeExecutionConsoleKeepHistory((storageKey, keepHistory) => {
+        if (storageKey === KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY) {
+          setKeepExecutionLogHistory(keepHistory);
+        }
+      }),
+    [],
+  );
   const archivedForExecutionRef = useRef(false);
   const executionSnapshotRef = useRef<{
     resultDataList: IManageResultData[];
@@ -271,10 +308,30 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     archiveCurrentResultDataList();
     resetCurrentExecutionState(false);
   }, [archiveCurrentResultDataList, resetCurrentExecutionState]);
-  const handleSqlExecutionEvent = useCallback(
-    (event: SqlExecutionEvent) => {
+  const handleSqlExecutionRequestStart = useCallback(
+    (requestSequence: number) => {
+      if (!keepExecutionLogHistory) {
+        desktopReplacementRequestSequenceRef.current = requestSequence;
+      }
       setSqlExecutionLogState((state) =>
-        reduceDesktopSqlExecutionEvent(state, event, getExecutionLogContext(boundInfoRef.current)),
+        prepareDesktopSqlExecutionLogForRequest(state, requestSequence, keepExecutionLogHistory),
+      );
+    },
+    [keepExecutionLogHistory],
+  );
+  const handleSqlExecutionEvent = useCallback(
+    (event: SqlExecutionEvent, requestSequence: number) => {
+      if (requestSequence < desktopReplacementRequestSequenceRef.current) {
+        return;
+      }
+      setSqlExecutionLogState((state) =>
+        reduceDesktopSqlExecutionEventWithHistoryPreference(
+          state,
+          event,
+          getExecutionLogContext(boundInfoRef.current),
+          keepExecutionLogHistory,
+          requestSequence,
+        ),
       );
       // Execution always replaces the previous result; use View History to inspect older results.
       const shouldOverwriteResultTabs = true;
@@ -423,9 +480,18 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
     },
-    [archiveCurrentResultDataList, getExecutionSequence, handleRefreshTreeByExecuteSQL, resetCurrentExecutionState],
+    [
+      archiveCurrentResultDataList,
+      getExecutionSequence,
+      handleRefreshTreeByExecuteSQL,
+      keepExecutionLogHistory,
+      resetCurrentExecutionState,
+    ],
   );
-  const { executing, executeSQL, stopExecuteSQL } = useSqlExecutor({ onExecutionEvent: handleSqlExecutionEvent });
+  const { executing, executeSQL, stopExecuteSQL } = useSqlExecutor({
+    onExecutionRequestStart: handleSqlExecutionRequestStart,
+    onExecutionEvent: handleSqlExecutionEvent,
+  });
 
   // Whether to show the split panel.
   const isSplitPane = useMemo(() => {
@@ -527,11 +593,14 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     const executionLogContext = getExecutionLogContext(boundInfo);
     if (webExecutionId) {
       setSqlExecutionLogState((state) =>
-        beginWebSqlExecution(state, {
-          executionId: webExecutionId,
-          sql: params.sql,
-          context: executionLogContext,
-        }),
+        beginWebSqlExecution(
+          prepareSqlExecutionLogForExecution(state, webExecutionId, keepExecutionLogHistory),
+          {
+            executionId: webExecutionId,
+            sql: params.sql,
+            context: executionLogContext,
+          },
+        ),
       );
     }
 
@@ -680,7 +749,6 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           onExecuteSQL={handleExecuteSQL}
           reloadSQL={loadSQL}
           isConsole={isConsole}
-          useAI={isConsole}
           sqlActionEnabled={sqlActionEnabled}
         />
       </div>
@@ -692,9 +760,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
                 resultDataList={resultDataList}
                 historyResultDataList={historyResultDataList}
                 executionLogRecords={sqlExecutionLogState.records}
+                keepExecutionLogHistory={keepExecutionLogHistory}
                 resultBatchKey={resultBatchKey}
                 forceOutputTab={forceOutputTab}
                 onClearExecutionLog={handleClearExecutionLog}
+                onKeepExecutionLogHistoryChange={handleKeepExecutionLogHistoryChange}
                 onResultDataListChange={handleResultDataListChange}
               />
             )}

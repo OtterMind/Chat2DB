@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import executeSqlServer from '@/service/executeSql';
 import useAbortRequest from './useAbortRequest';
@@ -12,18 +12,30 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
+import {
+  beginSqlExecutionRequest,
+  createSqlExecutionRequestTracker,
+  finishSqlExecutionRequest,
+  getActiveSqlExecutionId,
+  setSqlExecutionRequestId,
+  SqlExecutionRequestTracker,
+} from '@/service/sqlExecutionRequestTracker';
 
 interface IUseSqlExecutorProps {
   // Whether to return only one piece of data
   onlyOne?: boolean;
-  onExecutionEvent?: (event: SqlExecutionEvent) => void;
+  onExecutionRequestStart?: (requestSequence: number) => void;
+  onExecutionEvent?: (event: SqlExecutionEvent, requestSequence: number) => void;
 }
 
 const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
-  const { onlyOne, onExecutionEvent } = props || {};
+  const { onlyOne, onExecutionRequestStart, onExecutionEvent } = props || {};
   const defaultPageSize = useGlobalStore((state) => settingSelectors.currentBaseSetting(state).defaultPageSize);
   const [executing, setExecuting] = useState(false);
-  const [executionId, setExecutionId] = useState<string>();
+  const executionRequestTrackerRef = useRef<SqlExecutionRequestTracker>();
+  if (!executionRequestTrackerRef.current) {
+    executionRequestTrackerRef.current = createSqlExecutionRequestTracker();
+  }
   // interrupt request
   const [initSignal, abortRequest] = useAbortRequest();
 
@@ -45,21 +57,26 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
     };
     if (isDesktop && onExecutionEvent) {
       const requestUuid = uuidv4();
+      const executionRequestTracker = executionRequestTrackerRef.current;
+      const requestSequence = beginSqlExecutionRequest(executionRequestTracker);
+      onExecutionRequestStart?.(requestSequence);
       setExecuting(true);
       return new Promise((resolve, reject) => {
         const subscription: { unsubscribe?: () => void } = {};
         subscription.unsubscribe = onSqlExecutionEvent(requestUuid, (event) => {
-          onExecutionEvent(event);
+          onExecutionEvent(event, requestSequence);
           if (event.eventType === 'finished') {
             subscription.unsubscribe?.();
-            setExecuting(false);
-            setExecutionId(undefined);
+            if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
+              setExecuting(false);
+            }
             resolve([]);
           }
           if (event.eventType === 'failed' || event.eventType === 'cancelled') {
             subscription.unsubscribe?.();
-            setExecuting(false);
-            setExecutionId(undefined);
+            if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
+              setExecuting(false);
+            }
             if (event.eventType === 'cancelled') {
               resolve([]);
             } else {
@@ -71,15 +88,19 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
           .then((res) => {
             if (!res?.executionId) {
               subscription.unsubscribe?.();
-              setExecuting(false);
+              if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
+                setExecuting(false);
+              }
               reject(getStartExecutionError(res));
               return;
             }
-            setExecutionId(res.executionId);
+            setSqlExecutionRequestId(executionRequestTracker, requestSequence, res.executionId);
           })
           .catch((err) => {
             subscription.unsubscribe?.();
-            setExecuting(false);
+            if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
+              setExecuting(false);
+            }
             reject(err);
           });
       });
@@ -104,17 +125,18 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
           setExecuting(false);
         });
     });
-  }, [defaultPageSize, onExecutionEvent]);
+  }, [defaultPageSize, onExecutionEvent, onExecutionRequestStart]);
 
   // Stop executing sql
   const stopExecuteSQL = useCallback(() => {
-    if (isDesktop && executionId) {
-      cancelSqlExecution(executionId);
+    const activeExecutionId = getActiveSqlExecutionId(executionRequestTrackerRef.current!);
+    if (isDesktop && activeExecutionId) {
+      cancelSqlExecution(activeExecutionId);
       return;
     }
     abortRequest();
     setExecuting(false);
-  }, [abortRequest, executionId]);
+  }, [abortRequest]);
 
   return {
     executing,

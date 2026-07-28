@@ -1,16 +1,26 @@
 package ai.chat2db.plugin.opengauss;
 
+import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.Schema;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.opengauss.constant.OpenGaussMetaDataConstants.TABLE_DDL_SQL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenGaussMetaDataTest {
 
@@ -47,6 +57,96 @@ class OpenGaussMetaDataTest {
         String ddl = "CREATE TABLE public.test_table (id bigint);";
 
         assertEquals(ddl, OpenGaussMetaData.stripLeadingSearchPath(ddl));
+    }
+
+    @Test
+    void databasesKeepsPostgresAndMarksSystemDatabases() {
+        // template0/template1 are already filtered by the PostgreSQL parent query
+        List<String> rows = List.of("template0", "template1", "template2", "postgres", "appdb");
+        Connection connection = connectionReturningDatnames(rows, "jdbc:opengauss://localhost:5432/postgres");
+
+        List<Database> databases = new OpenGaussMetaData().databases(connection);
+
+        Map<String, Database> byName = databases.stream()
+                .collect(Collectors.toMap(Database::getName, Function.identity()));
+        assertEquals(3, byName.size(), "system databases must be kept, not removed: " + byName.keySet());
+        assertTrue(byName.get("postgres").isSystem());
+        assertTrue(byName.get("template2").isSystem());
+        assertFalse(byName.get("appdb").isSystem());
+    }
+
+    @Test
+    void schemasKeepSystemSchemasAndMarkThem() {
+        List<String> rows = List.of("public", "snapshot", "pg_catalog", "information_schema");
+        Connection connection = connectionReturningSchemaRows(rows);
+
+        List<Schema> schemas = new OpenGaussMetaData().schemas(connection, "postgres");
+
+        Map<String, Schema> byName = schemas.stream()
+                .collect(Collectors.toMap(Schema::getName, Function.identity()));
+        assertEquals(4, byName.size(), "system schemas must be kept, not removed: " + byName.keySet());
+        assertTrue(byName.get("snapshot").isSystem());
+        assertTrue(byName.get("pg_catalog").isSystem());
+        assertTrue(byName.get("information_schema").isSystem());
+        assertFalse(byName.get("public").isSystem());
+    }
+
+    private static Connection connectionReturningDatnames(List<String> rows, String url) {
+        ResultSet resultSet = rowIteratingResultSet(rows);
+        PreparedStatement statement = proxy(PreparedStatement.class, (p, method, args) -> switch (method.getName()) {
+            case "execute" -> true;
+            case "getResultSet" -> resultSet;
+            default -> defaultValue(method.getReturnType());
+        });
+        DatabaseMetaData metaData = proxy(DatabaseMetaData.class, (p, method, args) ->
+                "getURL".equals(method.getName()) ? url : defaultValue(method.getReturnType()));
+        return proxy(Connection.class, (p, method, args) -> switch (method.getName()) {
+            case "prepareStatement" -> statement;
+            case "getMetaData" -> metaData;
+            default -> defaultValue(method.getReturnType());
+        });
+    }
+
+    private static Connection connectionReturningSchemaRows(List<String> rows) {
+        ResultSetMetaData rsMetaData = proxy(ResultSetMetaData.class, (p, method, args) -> switch (method.getName()) {
+            case "getColumnCount" -> 1;
+            case "getColumnLabel", "getColumnName" -> "TABLE_SCHEM";
+            default -> defaultValue(method.getReturnType());
+        });
+        Iterator<String> iterator = rows.iterator();
+        String[] current = new String[1];
+        ResultSet resultSet = proxy(ResultSet.class, (p, method, args) -> switch (method.getName()) {
+            case "next" -> {
+                boolean hasNext = iterator.hasNext();
+                if (hasNext) {
+                    current[0] = iterator.next();
+                }
+                yield hasNext;
+            }
+            case "getObject" -> current[0];
+            case "getMetaData" -> rsMetaData;
+            default -> defaultValue(method.getReturnType());
+        });
+        DatabaseMetaData metaData = proxy(DatabaseMetaData.class, (p, method, args) ->
+                "getSchemas".equals(method.getName()) ? resultSet : defaultValue(method.getReturnType()));
+        return proxy(Connection.class, (p, method, args) ->
+                "getMetaData".equals(method.getName()) ? metaData : defaultValue(method.getReturnType()));
+    }
+
+    private static ResultSet rowIteratingResultSet(List<String> rows) {
+        Iterator<String> iterator = rows.iterator();
+        String[] current = new String[1];
+        return proxy(ResultSet.class, (p, method, args) -> switch (method.getName()) {
+            case "next" -> {
+                boolean hasNext = iterator.hasNext();
+                if (hasNext) {
+                    current[0] = iterator.next();
+                }
+                yield hasNext;
+            }
+            case "getString" -> current[0];
+            default -> defaultValue(method.getReturnType());
+        });
     }
 
     private static final class JdbcFixture {

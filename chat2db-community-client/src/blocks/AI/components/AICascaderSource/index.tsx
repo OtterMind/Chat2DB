@@ -11,6 +11,7 @@ import { findNode } from '@/utils';
 import { IconfontSvg } from '@chat2db/ui';
 import { Cascader, Tooltip } from 'antd';
 import { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
 
 export type IAICascaderData = IDBContextInfo | DataCollectionContextInfo | null;
@@ -298,7 +299,7 @@ const AICascaderSource = (props: IProps) => {
       loadData={loadData}
       onChange={handleChange}
       optionRender={optionRender}
-      suffixIcon={<IconfontSvg code="icon-chevron-bottom" size={12} />}
+      suffixIcon={<ChevronDown size={14} />}
       prefix={
         cascaderValue.length === 0 ? (
           <div className={styles.displayRenderPlus}>

@@ -73,6 +73,7 @@ export interface ConsoleAction {
   setActiveConsoleId: (data: ConsoleState['activeConsoleId']) => void;
   setWorkspaceTabList: (data: ConsoleState['workspaceTabList']) => void;
   updateWorkspaceTabBoundInfo: (data: IBoundInfo) => void;
+  markWorkspaceTabConsoleSaved: (data: { workspaceTabId?: number | string; consoleId: number; name?: string }) => void;
   createConsole: (params: ICreateConsoleParams) => Promise<any>;
   addWorkspaceTab: (params: any) => void;
   setEditorToList: (id: number | string, editorIns: any) => void;
@@ -259,6 +260,31 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
         };
       }
       return item;
+    });
+
+    get().setWorkspaceTabList(newList);
+  },
+  markWorkspaceTabConsoleSaved: ({ workspaceTabId, consoleId, name }) => {
+    const workspaceTabList = get().workspaceTabList;
+    if (!workspaceTabList) {
+      return;
+    }
+
+    const newList = workspaceTabList.map((item) => {
+      const matchedByWorkspaceTabId = workspaceTabId !== undefined && item.id === workspaceTabId;
+      const matchedByConsoleId = item.uniqueData?.consoleId === consoleId || item.id === consoleId;
+      if (!matchedByWorkspaceTabId && !matchedByConsoleId) {
+        return item;
+      }
+      return {
+        ...item,
+        title: name || item.title,
+        uniqueData: {
+          ...item.uniqueData,
+          consoleId,
+          status: ConsoleStatus.RELEASE,
+        },
+      };
     });
 
     get().setWorkspaceTabList(newList);

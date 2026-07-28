@@ -3,6 +3,7 @@ import { createStyles } from 'antd-style';
 export const useStyles = createStyles(({ css, token }) => {
   return {
     wrapper: css`
+      padding-top: 24px;
       display: flex;
       flex-direction: column;
       gap: 16px;

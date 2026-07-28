@@ -9,6 +9,9 @@ export const useStyles = createStyles(({ css, token }) => {
       gap: 36px;
       box-sizing: border-box;
     `,
+    withoutTitle: css`
+      padding-top: 24px;
+    `,
     title: css`
       font-size: 28px;
       line-height: 34px;

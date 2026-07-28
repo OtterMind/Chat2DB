@@ -7,6 +7,7 @@ import { setFocusedContent, getFocusedContent } from '@/store/common/copyFocused
 import { switchIcon, treeConfig } from '../../treeConfig';
 import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { type ThemeAppearance } from 'antd-style';
+import { ChevronRight, User, Users } from 'lucide-react';
 import { ContextMenuRef } from '@/components/ContextMenu';
 import Filtration from '../Filtration';
 import { splitSearchHighlight } from './highlightSearchText';
@@ -101,10 +102,9 @@ const TitleRender = (props: IProps) => {
     }
 
     return (
-      <IconfontSvg
+      <ChevronRight
         className={cx(styles.switcherIcon, { [styles.unfoldSwitcherIcon]: isExpanded })}
         size={13}
-        code="icon-chevron-right"
       />
     );
   };
@@ -140,6 +140,14 @@ const TitleRender = (props: IProps) => {
           code={nodeData?.decorativeParams?.pinned ? pinnedTableIcon : tableIcon}
         />
       );
+    }
+
+    if (nodeData.treeNodeType === TreeNodeType.DATABASE_ACCOUNTS) {
+      return <Users className={styles.customizeIcon} size={19} />;
+    }
+
+    if (nodeData.treeNodeType === TreeNodeType.DATABASE_ACCOUNT) {
+      return <User className={cx(styles.customizeIconIsLeaf, styles.customizeIcon)} size={19} />;
     }
 
     if (isExpanded && switchIcon[nodeData.treeNodeType]!.unfoldIcon) {

@@ -28,7 +28,7 @@ export default function Personal() {
       <PlanBox openActivationCodeModal={modal === 'activationCode'} activationCode={activationCode} />
       <div className={commonStyles.containerBlock}>
         <SettingSubsection
-          title={i18n('setting.nav.personal')}
+          title={i18n('setting.nav.personalInformation')}
           describe={i18n('setting.nav.personalInformationDescribe')}
         />
         <ChangePersonal curUser={curUser} updateUser={updateUser} />

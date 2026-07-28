@@ -55,17 +55,19 @@ export default function McpSetting() {
 
   return (
     <div className={styles.baseSettingBox}>
-      <div>
-        <SettingSubsection title={i18n('setting.title.mcp')} describe={i18n('setting.text.mcpDescribe')} />
+      <div data-setting-search-id="mcp.service">
         <Form className={styles.customFontBox}>
-          <Switch checked={!!enableMcp} onChange={changeMcpEnabled} />
+          <Switch aria-label={i18n('setting.title.mcp')} checked={!!enableMcp} onChange={changeMcpEnabled} />
           <Button onClick={restartApp}>{i18n('setting.button.restartApp')}</Button>
         </Form>
       </div>
-      <div>
-        <SettingSubsection title={i18n('setting.title.mcpToken')} describe={i18n('setting.text.mcpTokenDescribe')} />
+      <div data-setting-search-id="mcp.token">
+        <SettingSubsection
+          title={<span data-setting-search-title="true">{i18n('setting.title.mcpToken')}</span>}
+          describe={i18n('setting.text.mcpTokenDescribe')}
+        />
         <Form className={styles.customFontBox}>
-          <Input.Password readOnly value={token} style={{ width: 420 }} />
+          <Input.Password readOnly value={token} style={{ flex: '1 1 280px', maxWidth: 420, minWidth: 0 }} />
           <Button onClick={copyToken}>{i18n('common.button.copy')}</Button>
           <Popconfirm
             title={i18n('setting.text.mcpTokenResetConfirm')}

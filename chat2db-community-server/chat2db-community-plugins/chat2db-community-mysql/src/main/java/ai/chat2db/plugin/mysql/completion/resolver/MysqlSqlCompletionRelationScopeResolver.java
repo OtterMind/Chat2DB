@@ -53,6 +53,16 @@ public final class MysqlSqlCompletionRelationScopeResolver {
             MySqlLexer.IGNORE,
             MySqlLexer.FORCE);
 
+    private static final Set<Integer> FROM_CLAUSE_TAIL_TOKENS = Set.of(
+            MySqlLexer.WHERE,
+            MySqlLexer.GROUP,
+            MySqlLexer.HAVING,
+            MySqlLexer.WINDOW,
+            MySqlLexer.ORDER,
+            MySqlLexer.LIMIT,
+            MySqlLexer.UNION,
+            MySqlLexer.INTO);
+
     private MysqlSqlCompletionRelationScopeResolver() {
     }
 
@@ -81,7 +91,8 @@ public final class MysqlSqlCompletionRelationScopeResolver {
             relations.addAll(MysqlSqlCompletionLocalResultSetResolver.resolveDerivedTables(tokens, relationScanCursor));
         }
         MysqlSqlCompletionLocalResultSetResolver.resolveCurrentProjection(tokens, cursor).ifPresent(relations::add);
-        for (int index = 0; index < tokens.size(); index++) {
+        boolean[] fromRelationSeparators = fromRelationSeparators(tokens);
+        for (int index = statementStartIndex(tokens, cursor); index < tokens.size(); index++) {
             Token token = tokens.get(index);
             if (activeSelect != null && token.getStartIndex() >= activeSelect.endOffset()) {
                 break;
@@ -98,7 +109,7 @@ public final class MysqlSqlCompletionRelationScopeResolver {
                 }
                 continue;
             }
-            if (!isRelationIntroducer(tokens, index)) {
+            if (!isRelationIntroducer(tokens, index, fromRelationSeparators)) {
                 continue;
             }
             RelationCandidate relationCandidate = relationAfter(tokens, index, true);
@@ -290,23 +301,97 @@ public final class MysqlSqlCompletionRelationScopeResolver {
         return index;
     }
 
-    private static boolean isRelationIntroducer(List<Token> tokens, int index) {
+    private static boolean isRelationIntroducer(List<Token> tokens,
+                                                int index,
+                                                boolean[] fromRelationSeparators) {
         Token token = tokens.get(index);
         return switch (token.getType()) {
             case MySqlLexer.FROM,
                     MySqlLexer.JOIN,
                     MySqlLexer.STRAIGHT_JOIN,
                     MySqlLexer.INTO -> true;
-            case MySqlLexer.UPDATE -> !isOnDuplicateKeyUpdate(tokens, index);
+            case MySqlLexer.COMMA -> fromRelationSeparators[index];
+            case MySqlLexer.UPDATE -> !isOnDuplicateKeyUpdate(tokens, index)
+                    && !isLockingClauseUpdate(tokens, index);
             default -> false;
         };
     }
 
+    private static boolean[] fromRelationSeparators(List<Token> tokens) {
+        boolean[] result = new boolean[tokens.size()];
+        boolean[] insideFromClause = new boolean[tokens.size() + 1];
+        int depth = 0;
+        for (int index = 0; index < tokens.size(); index++) {
+            int tokenType = tokens.get(index).getType();
+            if (tokenType == MySqlLexer.RR_BRACKET) {
+                insideFromClause[depth] = false;
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (tokenType == MySqlLexer.SELECT || tokenType == MySqlLexer.SEMI) {
+                insideFromClause[depth] = false;
+            } else if (tokenType == MySqlLexer.FROM) {
+                insideFromClause[depth] = true;
+            } else if (insideFromClause[depth]
+                    && (FROM_CLAUSE_TAIL_TOKENS.contains(tokenType)
+                    || isOnDuplicateKeyUpdateStart(tokens, index)
+                    || isLockingClauseStart(tokens, index))) {
+                insideFromClause[depth] = false;
+            } else if (tokenType == MySqlLexer.COMMA) {
+                result[index] = insideFromClause[depth];
+            }
+            if (tokenType == MySqlLexer.LR_BRACKET) {
+                depth++;
+                insideFromClause[depth] = false;
+            }
+        }
+        return result;
+    }
+
     private static boolean isOnDuplicateKeyUpdate(List<Token> tokens, int index) {
-        int previousIndex = MysqlSqlCompletionTokenUtil.previousDefaultIndex(tokens, index - 1);
-        return previousIndex >= 0 && tokens.get(previousIndex).getType() == MySqlLexer.KEY
-                && MysqlSqlCompletionTokenUtil.hasTokenBefore(tokens, tokens.get(index).getStartIndex(),
-                MySqlLexer.DUPLICATE);
+        return hasTokenTypes(tokens, index - 3,
+                MySqlLexer.ON, MySqlLexer.DUPLICATE, MySqlLexer.KEY, MySqlLexer.UPDATE);
+    }
+
+    private static boolean isOnDuplicateKeyUpdateStart(List<Token> tokens, int index) {
+        return hasTokenTypes(tokens, index,
+                MySqlLexer.ON, MySqlLexer.DUPLICATE, MySqlLexer.KEY, MySqlLexer.UPDATE);
+    }
+
+    private static boolean isLockingClauseStart(List<Token> tokens, int index) {
+        return hasTokenTypes(tokens, index, MySqlLexer.FOR, MySqlLexer.UPDATE)
+                || hasTokenTypes(tokens, index, MySqlLexer.FOR, MySqlLexer.SHARE)
+                || hasTokenTypes(tokens, index, MySqlLexer.LOCK, MySqlLexer.IN, MySqlLexer.SHARE);
+    }
+
+    private static boolean isLockingClauseUpdate(List<Token> tokens, int index) {
+        return hasTokenTypes(tokens, index - 1, MySqlLexer.FOR, MySqlLexer.UPDATE);
+    }
+
+    private static boolean hasTokenTypes(List<Token> tokens, int start, int... tokenTypes) {
+        if (start < 0 || start + tokenTypes.length > tokens.size()) {
+            return false;
+        }
+        for (int offset = 0; offset < tokenTypes.length; offset++) {
+            if (tokens.get(start + offset).getType() != tokenTypes[offset]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int statementStartIndex(List<Token> tokens, int cursor) {
+        int result = 0;
+        for (int index = 0; index < tokens.size(); index++) {
+            Token token = tokens.get(index);
+            if (token.getStartIndex() >= cursor) {
+                break;
+            }
+            if (token.getType() == MySqlLexer.SEMI) {
+                result = index + 1;
+            }
+        }
+        return result;
     }
 
     private static MysqlSqlCompletionRelationScope resolveDdlFocusedScope(List<Token> tokens, int cursor) {

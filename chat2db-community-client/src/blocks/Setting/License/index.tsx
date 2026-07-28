@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useStyles } from './style';
 import i18n from '@/i18n';
-import SettingSubsection from '../SettingSubsection';
 import { Flex, Button } from 'antd';
 import { useUserStore } from '@/store/user';
 import { useGlobalStore } from '@/store/global';
@@ -150,7 +149,6 @@ const License = () => {
   return (
     <div className={styles.wrapper}>
       <Flex vertical gap={8}>
-        <SettingSubsection title={i18n('setting.license.title')} describe={i18n('setting.license.titleDes')} />
         <div className={styles.colWrapper}>
           <Flex align="center" gap={12}>
             <div className={styles.colTitle}>{i18n('setting.license.title')}</div>

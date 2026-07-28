@@ -9,7 +9,10 @@ import { useIndexDBStore } from '@/store/indexDB';
 import { SQLEditorRef } from '@/components/SQLEditor/editor/SQLEditor';
 import { isTemporaryId } from '@/utils';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
-import { savedConsoleMutationCoordinator } from '@/store/workspace/utils/savedConsoleMutationCoordinator';
+import {
+  savedConsoleMutationCoordinator,
+  type SavedConsoleSaveMode,
+} from '@/store/workspace/utils/savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from '@/store/workspace/utils/savedConsolePersistence';
 
 interface IProps {
@@ -28,6 +31,11 @@ interface IProps {
     | WorkspaceTabType.LocalSQLFile;
 }
 
+interface SaveConsoleOptions {
+  mode?: SavedConsoleSaveMode;
+  initialName?: string;
+}
+
 export const useSaveEditorData = (props: IProps) => {
   const { isActive, source, editorRef, boundInfo, defaultValue, name, type } = props;
 
@@ -41,10 +49,10 @@ export const useSaveEditorData = (props: IProps) => {
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
   const saveStatusRef = useRef<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
-  const { getSavedConsoleList, savedConsoleList, updateWorkspaceTabBoundInfo } = useWorkspaceStore((s) => ({
+  const { getSavedConsoleList, savedConsoleList, markWorkspaceTabConsoleSaved } = useWorkspaceStore((s) => ({
     getSavedConsoleList: s.getSavedConsoleList,
     savedConsoleList: s.savedConsoleList,
-    updateWorkspaceTabBoundInfo: s.updateWorkspaceTabBoundInfo,
+    markWorkspaceTabConsoleSaved: s.markWorkspaceTabConsoleSaved,
   }));
   const hasSavedSqlRecord = Boolean(
     type === WorkspaceTabType.CONSOLE &&
@@ -65,24 +73,29 @@ export const useSaveEditorData = (props: IProps) => {
     };
   });
 
-  const saveConsole = (value?: string, noPrompting?: boolean) => {
+  const saveConsole = (value?: string, options: SaveConsoleOptions = {}) => {
+    const mode = options.mode || 'manual';
+    const initialName = options.initialName?.trim();
     const p: any = {
       id: boundInfo.consoleId,
       status: ConsoleStatus.RELEASE,
       ddl: value,
     };
+    if (initialName) {
+      p.name = initialName;
+    }
 
     if (!storageId) {
-      return;
+      return Promise.resolve();
     }
 
     if (isReadOnly) {
       lastSyncConsole.current = value;
-      return;
+      return Promise.resolve();
     }
 
     if (!isPersistedConsole) {
-      indexDB
+      return indexDB
         .setValue(storageId, {
           ddl: value,
           userId: curUser?.id,
@@ -90,18 +103,16 @@ export const useSaveEditorData = (props: IProps) => {
         .then(() => {
           lastSyncConsole.current = value;
         });
-      return;
     }
 
     const consoleId = boundInfo.consoleId as number;
-    const mode = noPrompting ? 'automatic' : 'manual';
-    savedConsoleMutationCoordinator
+    return savedConsoleMutationCoordinator
       .save(consoleId, mode, () =>
         persistSavedConsoleRecord(historyServer, {
-          manual: !noPrompting,
+          manual: mode === 'manual',
           createParams: {
             id: consoleId,
-            name: name || boundInfo.databaseName || boundInfo.schemaName || '',
+            name: initialName || name || boundInfo.databaseName || boundInfo.schemaName || '',
             ddl: value || '',
             dataSourceId: boundInfo.dataSourceId,
             dataSourceName: boundInfo.dataSourceName,
@@ -115,9 +126,9 @@ export const useSaveEditorData = (props: IProps) => {
           updateParams: p,
         }),
       )
-      .then((result) => {
+      .then(async (result) => {
         if (!result.executed) {
-          indexDB
+          await indexDB
             .setValue(storageId, {
               ddl: value,
               userId: curUser?.id,
@@ -132,16 +143,16 @@ export const useSaveEditorData = (props: IProps) => {
         }
         getSavedConsoleList();
         emitSavedConsoleUpdated(boundInfo);
-        indexDB.deleteValue(storageId);
+        void indexDB.deleteValue(storageId);
         lastSyncConsole.current = value;
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
-        updateWorkspaceTabBoundInfo({
+        markWorkspaceTabConsoleSaved({
           workspaceTabId: boundInfo.workspaceTabId,
-          consoleId: boundInfo.consoleId,
-          status: ConsoleStatus.RELEASE,
+          consoleId,
+          name: initialName,
         });
-        if (noPrompting) {
+        if (mode === 'automatic') {
           return;
         }
         staticMessage.success(i18n('common.tips.saveSuccessfully'));
@@ -159,7 +170,7 @@ export const useSaveEditorData = (props: IProps) => {
         return;
       }
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        saveConsole(curValue, true);
+        void saveConsole(curValue, { mode: 'automatic' });
       } else {
         if (isReadOnly || !storageId) {
           lastSyncConsole.current = curValue;
@@ -192,7 +203,7 @@ export const useSaveEditorData = (props: IProps) => {
         return;
       }
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        saveConsole(curValue, true);
+        void saveConsole(curValue, { mode: 'automatic' });
       } else {
         if (isReadOnly || !storageId) {
           lastSyncConsole.current = curValue;

@@ -1,11 +1,6 @@
 import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, token }) => ({
-  subsection: css`
-    :global(.ant-divider) {
-      display: none;
-    }
-  `,
   titleWithHelp: css`
     display: inline-flex;
     align-items: center;
@@ -25,6 +20,7 @@ export const useStyles = createStyles(({ css, token }) => ({
   modeGroup: css`
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 30px;
 
     :global(.ant-radio-wrapper) {
@@ -41,9 +37,14 @@ export const useStyles = createStyles(({ css, token }) => ({
     display: grid;
     grid-template-columns: minmax(0, 1fr) 160px;
     gap: 16px;
+
+    @container (max-width: 480px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
   `,
   actions: css`
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     align-items: center;
   `,

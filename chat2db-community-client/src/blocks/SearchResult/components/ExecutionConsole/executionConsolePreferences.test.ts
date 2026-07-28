@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import type { SqlExecutionLogRecord } from '@/service/sqlExecutionLog';
 import {
+  createExecutionConsoleKeepHistoryStorageKey,
   createExecutionConsoleOrderStorageKey,
   getLatestExecutionEdgeScrollTop,
   orderExecutionLogRecords,
+  persistExecutionConsoleKeepHistory,
   persistExecutionConsoleOrder,
+  readExecutionConsoleKeepHistory,
   readExecutionConsoleOrder,
+  subscribeExecutionConsoleKeepHistory,
 } from './executionConsolePreferences';
 
 function record(id: string, executionId: string, statementSequence: number): SqlExecutionLogRecord {
@@ -23,6 +27,7 @@ function record(id: string, executionId: string, statementSequence: number): Sql
 }
 
 const storageKey = createExecutionConsoleOrderStorageKey('community', 'community');
+const keepHistoryStorageKey = createExecutionConsoleKeepHistoryStorageKey('community', 'community');
 const values = new Map<string, string>();
 const storage = {
   getItem: (key: string) => values.get(key) ?? null,
@@ -32,6 +37,7 @@ const storage = {
 };
 
 assert.equal(storageKey, 'chat2db.community.community.execution-console.order.v1');
+assert.equal(keepHistoryStorageKey, 'chat2db.community.community.execution-console.keep-history.v1');
 assert.notEqual(
   storageKey,
   createExecutionConsoleOrderStorageKey('community', 'desktop'),
@@ -47,6 +53,35 @@ assert.equal(readExecutionConsoleOrder(storage, storageKey), 'newest-first');
 persistExecutionConsoleOrder(storage, storageKey, 'oldest-first');
 assert.equal(values.get(storageKey), 'oldest-first');
 
+assert.equal(readExecutionConsoleKeepHistory(undefined, keepHistoryStorageKey), true);
+assert.equal(readExecutionConsoleKeepHistory(storage, keepHistoryStorageKey), true);
+values.set(keepHistoryStorageKey, 'invalid');
+assert.equal(readExecutionConsoleKeepHistory(storage, keepHistoryStorageKey), true);
+values.set(keepHistoryStorageKey, 'false');
+assert.equal(readExecutionConsoleKeepHistory(storage, keepHistoryStorageKey), false);
+persistExecutionConsoleKeepHistory(storage, keepHistoryStorageKey, true);
+assert.equal(values.get(keepHistoryStorageKey), 'true');
+
+const keepHistoryUpdates: Array<[string, boolean]> = [];
+const secondKeepHistoryUpdates: Array<[string, boolean]> = [];
+const unsubscribeKeepHistory = subscribeExecutionConsoleKeepHistory((key, keepHistory) => {
+  keepHistoryUpdates.push([key, keepHistory]);
+});
+const unsubscribeSecondKeepHistory = subscribeExecutionConsoleKeepHistory((key, keepHistory) => {
+  secondKeepHistoryUpdates.push([key, keepHistory]);
+});
+persistExecutionConsoleKeepHistory(storage, keepHistoryStorageKey, false);
+assert.deepEqual(keepHistoryUpdates, [[keepHistoryStorageKey, false]]);
+assert.deepEqual(secondKeepHistoryUpdates, [[keepHistoryStorageKey, false]]);
+unsubscribeKeepHistory();
+persistExecutionConsoleKeepHistory(storage, keepHistoryStorageKey, true);
+assert.deepEqual(keepHistoryUpdates, [[keepHistoryStorageKey, false]], 'unsubscribed editors stop receiving updates');
+assert.deepEqual(secondKeepHistoryUpdates, [
+  [keepHistoryStorageKey, false],
+  [keepHistoryStorageKey, true],
+]);
+unsubscribeSecondKeepHistory();
+
 const unavailableStorage = {
   getItem: () => {
     throw new Error('unavailable');
@@ -57,6 +92,8 @@ const unavailableStorage = {
 };
 assert.equal(readExecutionConsoleOrder(unavailableStorage, storageKey), 'oldest-first');
 assert.doesNotThrow(() => persistExecutionConsoleOrder(unavailableStorage, storageKey, 'newest-first'));
+assert.equal(readExecutionConsoleKeepHistory(unavailableStorage, keepHistoryStorageKey), true);
+assert.doesNotThrow(() => persistExecutionConsoleKeepHistory(unavailableStorage, keepHistoryStorageKey, false));
 
 const records = [
   record('execution-1-statement-1', 'execution-1', 1),

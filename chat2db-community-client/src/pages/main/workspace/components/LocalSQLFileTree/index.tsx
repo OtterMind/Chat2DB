@@ -4,8 +4,9 @@ import { useSize } from 'ahooks';
 import { Button, Dropdown, Input, Modal, Tooltip, type InputRef, type MenuProps } from 'antd';
 import {
   ChevronRight,
-  ChevronsUp,
-  FilePlus2,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  FilePlus,
   Folder,
   FolderInput,
   FolderOpen,
@@ -105,7 +106,7 @@ const SQL_FILE_EXTENSION = '.sql';
 const LOCAL_SQL_DIRECTORY_PATH_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathStorageKey;
 const LOCAL_SQL_DIRECTORY_PATHS_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathsStorageKey;
 const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
-const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 18, iconSize: 12 };
+const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 24, iconSize: 16 };
 const LOCAL_SQL_TREE_BASE_INDENT = 0;
 const LOCAL_SQL_TREE_LEVEL_INDENT = 14;
 
@@ -295,6 +296,20 @@ function findTreeNodeWithAncestors(
   return undefined;
 }
 
+function getExpandableDirectoryKeys(nodes: LocalSQLFileTreeNode[]) {
+  const keys: string[] = [];
+
+  nodes.forEach((node) => {
+    if (node.type !== 'directory' || !node.children?.length) {
+      return;
+    }
+    keys.push(node.key);
+    keys.push(...getExpandableDirectoryKeys(node.children));
+  });
+
+  return keys;
+}
+
 function getDefaultCreateName(parent: LocalSQLFileTreeNode, type: LocalSQLFileTreeCreateType) {
   const childNames = new Set((parent.children || []).map((child) => child.name.toLowerCase()));
   const baseName = type === 'file' ? 'untitled' : 'New Folder';
@@ -353,6 +368,8 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     }
     return findTreeNode(rootNodes, (node) => node.key === selectedNodeKey);
   }, [rootNodes, selectedNodeKey]);
+  const expandableDirectoryKeys = useMemo(() => getExpandableDirectoryKeys(rootNodes), [rootNodes]);
+  const shouldExpandAll = expandableDirectoryKeys.some((key) => !expandedKeys.includes(key));
 
   const contextMenuNode = contextMenu
     ? findTreeNode(rootNodes, (node) => node.key === contextMenu.targetSnapshot.nodeKey)?.node
@@ -1443,10 +1460,12 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
         execute: () => refreshDirectory(node),
       }),
       createContextMenuAction({
-        id: 'collapseAll',
-        label: i18n('workspace.localSqlFileTree.collapseAll'),
-        shortcutAction: ShortcutAction.LocalSqlFileTreeCollapseAll,
-        execute: collapseAll,
+        id: shouldExpandAll ? 'expandAll' : 'collapseAll',
+        label: i18n(
+          shouldExpandAll ? 'workspace.localSqlFileTree.expandAll' : 'workspace.localSqlFileTree.collapseAll',
+        ),
+        shortcutAction: shouldExpandAll ? undefined : ShortcutAction.LocalSqlFileTreeCollapseAll,
+        execute: shouldExpandAll ? expandAll : collapseAll,
       }),
       ...mutationItems,
     ];
@@ -1635,13 +1654,21 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     setSelectedNodeKey(rootNodes[0].key);
   }
 
+  function expandAll() {
+    if (!expandableDirectoryKeys.length) {
+      return;
+    }
+    setCreatingNode(null);
+    setExpandedKeys((keys) => Array.from(new Set([...keys, ...expandableDirectoryKeys])));
+  }
+
   const toolbarDisabled = !rootNodes.length || !!creatingNode || !!renamingNode;
   const folderActionMode = rootNodes.length ? 'add' : 'replace';
   const folderActionTitle = rootNodes.length
     ? i18n('workspace.localSqlFileTree.addFolder')
     : i18n('workspace.localSqlFileTree.openFolder');
   const folderActionLoading = rootNodes.length ? addingRoot : selecting;
-  const folderActionIcon = rootNodes.length ? FolderPlus : FolderInput;
+  const folderActionIcon = rootNodes.length ? FolderInput : FolderOpen;
   const showExpandedToolbar = (headerSize?.width || 0) >= LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH;
   const toolbarMoreItems: MenuProps['items'] = [
     {
@@ -1651,10 +1678,12 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
       onClick: () => startCreate('directory'),
     },
     {
-      key: 'collapseAll',
-      label: i18n('workspace.localSqlFileTree.collapseAll'),
+      key: shouldExpandAll ? 'expandAll' : 'collapseAll',
+      label: i18n(
+        shouldExpandAll ? 'workspace.localSqlFileTree.expandAll' : 'workspace.localSqlFileTree.collapseAll',
+      ),
       disabled: !rootNodes.length,
-      onClick: collapseAll,
+      onClick: shouldExpandAll ? expandAll : collapseAll,
     },
   ];
 
@@ -1692,7 +1721,7 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
               size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
               disabled={toolbarDisabled}
               onClick={() => startCreate('file')}
-              icon={FilePlus2}
+              icon={FilePlus}
             />
             <IconButton
               title={i18n('workspace.localSqlFileTree.refresh')}
@@ -1709,14 +1738,18 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
                   size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
                   disabled={toolbarDisabled}
                   onClick={() => startCreate('directory')}
-                  icon={FolderOpen}
+                  icon={FolderPlus}
                 />
                 <IconButton
-                  title={i18n('workspace.localSqlFileTree.collapseAll')}
+                  title={i18n(
+                    shouldExpandAll
+                      ? 'workspace.localSqlFileTree.expandAll'
+                      : 'workspace.localSqlFileTree.collapseAll',
+                  )}
                   size={LOCAL_SQL_TOOLBAR_BUTTON_SIZE}
                   disabled={!rootNodes.length}
-                  onClick={collapseAll}
-                  icon={ChevronsUp}
+                  onClick={shouldExpandAll ? expandAll : collapseAll}
+                  icon={shouldExpandAll ? ChevronsUpDown : ChevronsDownUp}
                 />
               </>
             ) : (

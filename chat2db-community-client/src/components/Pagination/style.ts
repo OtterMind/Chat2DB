@@ -66,6 +66,7 @@ export const useStyles = createStyles(({ css, token }, { inputNumberWidth }: { i
       cursor: pointer;
       margin-left: 10px;
       display: flex;
+      align-items: center;
       gap: 4px;
       &:hover {
         color: ${token.colorPrimaryText};

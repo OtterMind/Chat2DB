@@ -3,6 +3,7 @@ import { useStyles } from './style';
 import { OperationLine, MonacoEditorErrorTips } from '../../components';
 import SQLEditor, { SQLEditorRef } from '../SQLEditor';
 import RoutineOperationModals from './RoutineOperationModals';
+import InitialSaveNameModal from './InitialSaveNameModal';
 import { EditorSetValueType, EditorType, SQLOptType } from '../../type';
 import { staticMessage } from '@chat2db/ui';
 import { IConsoleReturnExecuteSql, IBoundInfo, TreeNodeData } from '@/typings';
@@ -10,14 +11,11 @@ import { saveFileToDesktop, updateFileContent } from '@/utils/file';
 import i18n from '@/i18n';
 import { useSaveEditorData } from '@/components/SQLEditor/hooks/useSaveEditorData';
 import { formatSql } from '../../helper/utils';
-import PlaceholderContent from '../../components/AIPlaceholder/placeholderCmp';
-import AIPlaceholder from '../../components/AIPlaceholder/PlaceholderContentWidget';
 import ContextMenu from '../../components/ContextMenu';
 import * as monaco from 'monaco-editor';
 import { useGlobalStore } from '@/store/global';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
-import useCopilot from '../../hooks/useCopilot';
 import { useAIStore } from '@/store/ai';
 import { useChatStore } from '@/store/chat';
 import ChatService from '@/service/chat';
@@ -44,6 +42,7 @@ import {
   getContentDiffEligibility,
   getContentDiffOpenBlockReason,
 } from '../../helper/contentDiffGuard';
+import { normalizeSavedConsoleName, resolveInitialSavedConsoleName } from '../../helper/savedConsoleName';
 
 interface ISQLEditorWithOperationProps {
   id: string;
@@ -58,8 +57,6 @@ interface ISQLEditorWithOperationProps {
 
   sqlFileName?: string;
   workspaceTabsTitle?: string;
-
-  useAI?: boolean;
 
   isConsole?: boolean;
 
@@ -105,13 +102,6 @@ export interface IContextMenuInfo {
   position: CSSProperties;
 }
 
-const createPlaceholderWidget = (editor: monaco.editor.IStandaloneCodeEditor | null) => {
-  if (!editor) return null;
-  const existingWidget = (editor as any).__chat2dbPlaceholderWidget as AIPlaceholder | undefined;
-  if (existingWidget) return existingWidget;
-  return new AIPlaceholder(<PlaceholderContent />, editor);
-};
-
 const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditorWithOperationProps>((props, ref) => {
   const {
     id,
@@ -122,7 +112,6 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     active,
     sqlFileName,
     workspaceTabsTitle,
-    useAI = true,
     isConsole = true,
     sqlActionEnabled = true,
     reloadSQL,
@@ -136,6 +125,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   const [contextTableIdentifier, setContextTableIdentifier] = useState<EditorTableIdentifier | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasEditorContent, setHasEditorContent] = useState<boolean>(!!defaultSQL?.trim());
+  const [initialSaveNameModalOpen, setInitialSaveNameModalOpen] = useState(false);
+  const [initialSaveName, setInitialSaveName] = useState('');
+  const [initialSaveLoading, setInitialSaveLoading] = useState(false);
+  const handleEditorContentChange = useCallback((value: string) => {
+    setHasEditorContent(!!value.trim());
+  }, []);
   const [routineExecutionModal, setRoutineExecutionModal] = useState({
     open: false,
     title: '',
@@ -156,15 +151,6 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   });
   const sqlEditorRef = useRef<SQLEditorRef>(null);
   const routineExecutionEditorRef = useRef<SQLEditorRef>(null);
-  const { consoleAiInputParams } = useWorkspaceStore((state) => {
-    return {
-      consoleAiInputParams: state.consoleAiInputParams,
-    };
-  });
-
-  const [placeholderWidget, setPlaceholderWidget] = useState<AIPlaceholder | null>(null);
-  const placeholderWidgetRef = useRef<AIPlaceholder | null>(null);
-
   // Preserve the previous edit position.
   const lastPositionRef = useRef<{
     lineNumber: number;
@@ -215,37 +201,10 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   }, [defaultSQL]);
 
   useEffect(() => {
-    if (useAI && active && sqlEditorRef.current) {
-      const editor = sqlEditorRef.current.getInstance();
-      const newWidget = createPlaceholderWidget(editor);
-      placeholderWidgetRef.current = newWidget;
-      setPlaceholderWidget(newWidget);
-    }
-    return () => {
-      if (placeholderWidgetRef.current) {
-        placeholderWidgetRef.current.allDispose();
-        placeholderWidgetRef.current = null;
-        setPlaceholderWidget(null);
-      }
-    };
-  }, [useAI, active]);
-
-  useCopilot({
-    editorRef: sqlEditorRef,
-    placeholderContentWidget: placeholderWidget,
-    canAI: useAI,
-    aiInputParams: consoleAiInputParams,
-    active,
-  });
-
-  useEffect(() => {
     if (!sqlEditorRef.current) return;
     const editor = sqlEditorRef.current.getInstance();
 
     if (active) {
-      if (consoleAiInputParams) {
-        return;
-      }
       if (editor) {
         editor.focus();
         // Use setTimeout so Monaco Editor can finish layout and rendering.
@@ -268,7 +227,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     } else {
       lastPositionRef.current = editor?.getPosition() ?? { lineNumber: 1, column: 1 };
     }
-  }, [active, consoleAiInputParams]);
+  }, [active]);
 
   const { saveConsole, hasSavedSqlRecord } = useSaveEditorData({
     editorRef: sqlEditorRef,
@@ -861,8 +820,56 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     if (type !== WorkspaceTabType.CONSOLE || typeof dbInfo.consoleId !== 'number' || isTemporaryId(dbInfo.consoleId)) {
       return;
     }
-    saveConsole(getValue());
-  }, [dbInfo.consoleId, saveConsole, type]);
+    if (!hasSavedSqlRecord) {
+      if (!initialSaveNameModalOpen) {
+        setInitialSaveName(
+          resolveInitialSavedConsoleName({
+            workspaceTitle: workspaceTabsTitle,
+            databaseName: dbInfo.databaseName,
+            schemaName: dbInfo.schemaName,
+            fallback: i18n('workspace.savedConsole.untitled'),
+          }),
+        );
+        setInitialSaveNameModalOpen(true);
+      }
+      return;
+    }
+    void saveConsole(getValue(), { mode: 'manual' });
+  }, [
+    dbInfo.consoleId,
+    dbInfo.databaseName,
+    dbInfo.schemaName,
+    hasSavedSqlRecord,
+    initialSaveNameModalOpen,
+    getValue,
+    saveConsole,
+    type,
+    workspaceTabsTitle,
+  ]);
+
+  const handleConfirmInitialSave = useCallback(async () => {
+    const name = normalizeSavedConsoleName(initialSaveName);
+    if (!name || initialSaveLoading) {
+      return;
+    }
+
+    setInitialSaveLoading(true);
+    try {
+      await saveConsole(getValue(), { mode: 'manual', initialName: name });
+      setInitialSaveNameModalOpen(false);
+    } catch {
+      // The request layer presents the error. Keep the name dialog open for retry.
+    } finally {
+      setInitialSaveLoading(false);
+    }
+  }, [getValue, initialSaveLoading, initialSaveName, saveConsole]);
+
+  const handleCancelInitialSave = useCallback(() => {
+    if (initialSaveLoading) {
+      return;
+    }
+    setInitialSaveNameModalOpen(false);
+  }, [initialSaveLoading]);
 
   const handleSaveFile = () => {
     const fileContent = sqlEditorRef.current?.getValue() ?? '';
@@ -990,9 +997,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           readOnly={isReadOnly}
           action={handleAction}
           enableContentDiffHints={enableContentDiffHints}
-          onChange={(value) => {
-            setHasEditorContent(!!value?.trim());
-          }}
+          onContentChange={handleEditorContentChange}
           contextMenuInfo={contextMenuInfo}
           onTableIdentifierContextChange={setContextTableIdentifier}
           onContextMenu={isReadOnly ? undefined : handleContextMenu}
@@ -1023,6 +1028,14 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         onCancelExecution={handleCancelRoutineExecution}
         onConfirmMigration={handleConfirmRoutineMigration}
         onCancelMigration={handleCancelRoutineMigration}
+      />
+      <InitialSaveNameModal
+        open={initialSaveNameModalOpen}
+        name={initialSaveName}
+        loading={initialSaveLoading}
+        onNameChange={setInitialSaveName}
+        onConfirm={handleConfirmInitialSave}
+        onCancel={handleCancelInitialSave}
       />
     </div>
   );
