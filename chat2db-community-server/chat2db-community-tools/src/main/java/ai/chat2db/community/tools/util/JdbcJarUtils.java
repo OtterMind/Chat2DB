@@ -122,8 +122,22 @@ public class JdbcJarUtils {
         if(jarPath.endsWith(".zip")){
             return getFullPathZip(jarPath);
         }
+        // Layer-4 defence: reject path traversal in the driver jar filename.
+        // The jar name is attacker-controlled via the custom-driver save API;
+        // without canonicalization an attacker could supply "../evil.jar" or
+        // absolute paths and have the classloader read from anywhere on disk.
+        assertSimpleJarName(jarPath);
         String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
         File file = new File(path);
+        try {
+            String canonicalBase = new File(JdbcDriverConstants.DRIVER_LIB_PATH).getCanonicalPath();
+            String canonicalTarget = file.getCanonicalPath();
+            if (!canonicalTarget.startsWith(canonicalBase + File.separator)) {
+                throw new SecurityException("jarPath escapes DRIVER_LIB_PATH: " + jarPath);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to canonicalize jar path: " + jarPath, e);
+        }
         if (!file.exists()) {
             String url = getDownloadUrl(jarPath);
             try {
@@ -139,7 +153,25 @@ public class JdbcJarUtils {
         return path;
     }
 
+    /**
+     * Rejects any jar name that contains path separators, parent references,
+     * absolute paths, or Windows drive letters. Driver jars must be simple
+     * filenames directly under {@code DRIVER_LIB_PATH}.
+     */
+    private static void assertSimpleJarName(String jarPath) {
+        if (jarPath == null || jarPath.isEmpty()) {
+            throw new IllegalArgumentException("jarPath is empty");
+        }
+        if (jarPath.contains("..") || jarPath.contains("/") || jarPath.contains("\\")) {
+            throw new SecurityException("jarPath must be a simple filename, got: " + jarPath);
+        }
+        if (jarPath.length() >= 2 && jarPath.charAt(1) == ':') {
+            throw new SecurityException("absolute paths not allowed: " + jarPath);
+        }
+    }
+
     private static String getFullPathZip(String jarPath) {
+        assertSimpleJarName(jarPath);
         String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
         File file = new File(path);
         File destDir = FileUtil.file(file.getParentFile(), FileUtil.mainName(file));
