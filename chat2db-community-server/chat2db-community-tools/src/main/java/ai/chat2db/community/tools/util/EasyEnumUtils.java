@@ -16,6 +16,9 @@ public class EasyEnumUtils {
 
 
     public static <T extends IBaseEnum<?>> String getDescription(final Class<T> clazz, final String code) {
+        if (clazz == null || code == null) {
+            return null;
+        }
         IBaseEnum<?> baseEnum = getEnum(clazz, code);
         if (baseEnum == null) {
             return null;
@@ -25,6 +28,9 @@ public class EasyEnumUtils {
 
 
     public static <T extends IBaseEnum<?>> T getEnum(final Class<T> clazz, final String code) {
+        if (clazz == null || code == null) {
+            return null;
+        }
         return getEnumMap(clazz).get(code);
     }
 
@@ -39,16 +45,25 @@ public class EasyEnumUtils {
         if (code == null) {
             return ignoreNull;
         }
+        if (clazz == null) {
+            return false;
+        }
         return getEnumMap(clazz).containsKey(code);
     }
 
 
     public static <T extends IBaseEnum<?>> Map<String, T> getEnumMap(final Class<T> clazz) {
+        if (clazz == null) {
+            return java.util.Collections.emptyMap();
+        }
         String className = clazz.getName();
         Map<?, IBaseEnum<?>> result = ENUM_CACHE.computeIfAbsent(className, value -> {
             T[] baseEnums = clazz.getEnumConstants();
+            if (baseEnums == null) {
+                return java.util.Collections.emptyMap();
+            }
             return Arrays.stream(baseEnums)
-                .collect(Collectors.toMap(IBaseEnum::getCode, Function.identity()));
+                .collect(Collectors.toMap(IBaseEnum::getCode, Function.identity(), (e1, e2) -> e1));
         });
         return (Map)result;
     }
