@@ -191,6 +191,8 @@ export default {
   'setting.shortcut.sqlCut': 'Cortar en el editor SQL',
   'setting.shortcut.sqlCaseConvert': 'Cambiar mayúsculas/minúsculas en SQL',
   'setting.shortcut.sqlFormat': 'Formatear SQL',
+  'setting.shortcut.sqlToggleLineComment': 'Alternar comentario de línea',
+  'setting.shortcut.sqlToggleBlockComment': 'Alternar comentario en bloque',
   'setting.shortcut.sqlSave': 'Guardar SQL',
   'setting.shortcut.sqlSaveToDesktop': 'Guardar SQL en local',
   'setting.shortcut.sqlExecuteCurrent': 'Ejecutar el SQL actual',

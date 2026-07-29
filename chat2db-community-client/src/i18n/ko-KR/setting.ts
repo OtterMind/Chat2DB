@@ -189,6 +189,8 @@ export default {
   'setting.shortcut.sqlCut': 'SQL 편집기 잘라내기',
   'setting.shortcut.sqlCaseConvert': 'SQL 대소문자 변환',
   'setting.shortcut.sqlFormat': 'SQL 서식 지정',
+  'setting.shortcut.sqlToggleLineComment': 'SQL 줄 주석 토글',
+  'setting.shortcut.sqlToggleBlockComment': 'SQL 블록 주석 토글',
   'setting.shortcut.sqlSave': 'SQL 저장',
   'setting.shortcut.sqlSaveToDesktop': 'SQL을 로컬에 저장',
   'setting.shortcut.sqlExecuteCurrent': '현재 SQL 실행',

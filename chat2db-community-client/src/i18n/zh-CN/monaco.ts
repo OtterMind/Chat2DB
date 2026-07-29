@@ -32,6 +32,8 @@ export default {
   'monaco.text.cut': '剪切',
   'monaco.text.caseConvert': '大小写转换',
   'monaco.text.formatSQL': '格式化SQL',
+  'monaco.text.toggleLineComment': '切换行注释',
+  'monaco.text.toggleBlockComment': '切换块注释',
   'monaco.text.saveSQL': '保存',
   'monaco.text.saveFile': '保存',
   'monaco.text.saveFileToDesktop': '另存为',

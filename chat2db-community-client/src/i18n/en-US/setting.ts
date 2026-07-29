@@ -189,6 +189,8 @@ export default {
   'setting.shortcut.sqlCut': 'SQL Editor Cut',
   'setting.shortcut.sqlCaseConvert': 'SQL Case Convert',
   'setting.shortcut.sqlFormat': 'Format SQL',
+  'setting.shortcut.sqlToggleLineComment': 'Toggle Line Comment',
+  'setting.shortcut.sqlToggleBlockComment': 'Toggle Block Comment',
   'setting.shortcut.sqlSave': 'Save SQL',
   'setting.shortcut.sqlSaveToDesktop': 'Save SQL to Local',
   'setting.shortcut.sqlExecuteCurrent': 'Execute Current SQL',

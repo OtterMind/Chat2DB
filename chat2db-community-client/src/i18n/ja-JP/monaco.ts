@@ -33,6 +33,8 @@ export default {
   'monaco.text.cut': '切り取り',
   'monaco.text.caseConvert': '大文字小文字変換',
   'monaco.text.formatSQL': 'SQLをフォーマット',
+  'monaco.text.toggleLineComment': '行 SQL コメントの切り替え',
+  'monaco.text.toggleBlockComment': 'ブロック SQL コメントの切り替え',
   'monaco.text.saveSQL': '保存',
   'monaco.text.saveFile': '保存',
   'monaco.text.saveFileToDesktop': 'ファイルを保存',

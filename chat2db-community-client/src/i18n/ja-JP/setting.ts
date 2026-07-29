@@ -294,6 +294,8 @@ export default {
   'setting.shortcut.sqlCut': 'SQL エディター 切り取り',
   'setting.shortcut.sqlCaseConvert': 'SQL 大文字小文字変換',
   'setting.shortcut.sqlFormat': 'SQL をフォーマット',
+  'setting.shortcut.sqlToggleLineComment': '行 SQL コメントの切り替え',
+  'setting.shortcut.sqlToggleBlockComment': 'ブロック SQL コメントの切り替え',
   'setting.shortcut.sqlSave': 'SQL を保存',
   'setting.shortcut.sqlSaveToDesktop': 'SQL をローカルに保存',
   'setting.shortcut.sqlExecuteCurrent': '現在の SQL を実行',

@@ -313,6 +313,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       case SQLOptType.FORMAT_SQL:
         handleFormat();
         break;
+      case SQLOptType.TOGGLE_LINE_COMMENT:
+        sqlEditorRef.current?.getInstance()?.trigger('keyboard', 'editor.action.commentLine', null);
+        break;
+      case SQLOptType.TOGGLE_BLOCK_COMMENT:
+        sqlEditorRef.current?.getInstance()?.trigger('keyboard', 'editor.action.blockComment', null);
+        break;
       case SQLOptType.EXPLAIN_SQL:
         handleExecuteSQL({
           explain: true,

@@ -170,6 +170,8 @@ export default {
   'setting.shortcut.sqlCut': 'SQL 编辑器剪切',
   'setting.shortcut.sqlCaseConvert': 'SQL 大小写转换',
   'setting.shortcut.sqlFormat': '格式化 SQL',
+  'setting.shortcut.sqlToggleLineComment': '切换行注释',
+  'setting.shortcut.sqlToggleBlockComment': '切换块注释',
   'setting.shortcut.sqlSave': '保存 SQL',
   'setting.shortcut.sqlSaveToDesktop': '保存 SQL 到本地',
   'setting.shortcut.sqlExecuteCurrent': '执行当前 SQL',

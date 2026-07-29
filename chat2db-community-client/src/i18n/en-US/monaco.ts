@@ -33,6 +33,8 @@ export default {
   'monaco.text.cut': 'Cut',
   'monaco.text.caseConvert': 'Case Convert',
   'monaco.text.formatSQL': 'Format SQL',
+  'monaco.text.toggleLineComment': 'Toggle Line Comment',
+  'monaco.text.toggleBlockComment': 'Toggle Block Comment',
   'monaco.text.saveSQL': 'Save',
   'monaco.text.saveFile': 'Save',
   'monaco.text.saveFileToDesktop': 'Save as File',
