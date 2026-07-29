@@ -37,6 +37,11 @@ const SHORTCUT_SCOPE_GROUPS: Array<{
     title: 'setting.shortcut.group.workspace',
   },
   {
+    scope: ShortcutScope.DatabaseTree,
+    targetId: 'shortcut.databaseTree',
+    title: 'setting.shortcut.group.databaseTree',
+  },
+  {
     scope: ShortcutScope.LocalSqlFileTree,
     targetId: 'shortcut.localSqlFileTree',
     title: 'setting.shortcut.group.localSqlFileTree',

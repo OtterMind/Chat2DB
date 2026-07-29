@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { ConsoleOpenedStatus, OperationColumn, TreeNodeType, WorkspaceTabType, databaseTypeList } from '@/constants';
 import { ImportExportType } from '@/constants/importExport';
 import { OrgNavType } from '@/constants/organization';
+import { ShortcutAction } from '@/constants/shortcut';
 import { TreeNodeData } from '@/typings';
 import { canImportExport } from '@/utils/env';
 
@@ -61,6 +62,7 @@ import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 interface IOperationColumnConfigItem {
   text: string;
   icon?: string;
+  shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
   handle?: () => void;
   discard?: boolean;
@@ -71,6 +73,7 @@ interface IRightClickMenu {
   key: number | string;
   onClick?: () => void;
   type: OperationColumn;
+  shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
   labelProps: {
     icon?: string;
@@ -699,6 +702,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.Refresh]: {
         text: i18n('common.button.refresh'),
         icon: 'icon-refresh',
+        shortcutAction: ShortcutAction.DatabaseTreeRefresh,
         handle: () => {
           handleLoadData(treeNodeData, {
             refresh: true,
@@ -781,6 +785,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.CreateTable]: {
         text: i18n('editTable.button.createTable'),
         icon: 'icon-table-add',
+        shortcutAction: ShortcutAction.DatabaseTreeCreateTable,
         handle: () => {
           addWorkspaceTab({
             id: uuid(),
@@ -897,6 +902,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.EditTable]: {
         text: i18n('workspace.menu.editTable'),
         icon: 'icon-table-edit',
+        shortcutAction: ShortcutAction.DatabaseTreeEditTable,
         handle: () => {
           const title = [tableName].filter(Boolean).join('.') + `[${dataSourceName}]`;
           const popoverContent =
@@ -948,6 +954,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.OpenTable]: {
         text: i18n('workspace.menu.openTable'),
         icon: 'icon-table',
+        shortcutAction: ShortcutAction.DatabaseTreeOpenTable,
         doubleClickTrigger: true,
         handle: () => {
           const _tableName = compatibleDataBaseName(tableName!, databaseType!);
@@ -1318,6 +1325,7 @@ export const useCreateRightClickMenu = () => {
             key: `${lastKey}-${i}`,
             onClick: t.handle,
             type,
+            shortcutAction: t.shortcutAction,
             labelProps: {
               icon: t.icon,
               label: t.text,
@@ -1357,6 +1365,7 @@ export const useCreateRightClickMenu = () => {
           key: i,
           onClick: concrete?.handle,
           type: t,
+          shortcutAction: concrete.shortcutAction,
           doubleClickTrigger: concrete.doubleClickTrigger,
           labelProps: {
             icon: concrete?.icon,
