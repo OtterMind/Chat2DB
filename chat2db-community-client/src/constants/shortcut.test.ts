@@ -18,6 +18,7 @@ async function runShortcutTests() {
     DEFAULT_SHORTCUT_CONFIG,
     getEffectiveShortcutConfig,
     getEventShortcutBinding,
+    isShortcutCaptureAllowed,
     shortcutBindingToMonacoKeybinding,
   } = await import('./shortcut');
 
@@ -45,6 +46,13 @@ async function runShortcutTests() {
 
   const bindingFromEvent = getEventShortcutBinding(fakeSlashShiftEvent);
   assert.equal(bindingFromEvent, 'Ctrl + Shift + /');
+
+  // Parsing and capture policy are separate: printable keys need a modifier to be saved from Settings.
+  assert.equal(isShortcutCaptureAllowed(['a']), false);
+  assert.equal(isShortcutCaptureAllowed(['/']), false);
+  assert.equal(isShortcutCaptureAllowed(['control']), false);
+  assert.equal(isShortcutCaptureAllowed(['f5']), true);
+  assert.equal(isShortcutCaptureAllowed(['control', 'shift', '?']), true);
 
   // 3. Test shortcutBindingToMonacoKeybinding with mock Monaco instance
   const mockMonaco = {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
-import { getEventShortcutBinding, normalizeShortcutBinding } from '@/constants/shortcut';
+import { getEventShortcutBinding, isShortcutCaptureAllowed, normalizeShortcutBinding } from '@/constants/shortcut';
 import { i18n } from '@/i18n';
 
 interface IProps {
@@ -48,19 +48,15 @@ const ShortcutInput: React.FC<IProps> = ({ value, onChange, disabled, placeholde
     if (disabled) return;
     e.preventDefault();
 
+    const key = e.key.toLowerCase();
+    keysPressed.current.add(key);
+
     const binding = getEventShortcutBinding(e);
     if (binding) {
       pendingShortcutRef.current = binding;
       setDisplayValue(binding);
-      if (binding !== value) {
-        onChange(binding);
-      }
       return;
     }
-
-    const key = e.key.toLowerCase();
-
-    keysPressed.current.add(key);
 
     const shortcut = Array.from(keysPressed.current)
       .sort((a, b) => {
@@ -78,6 +74,15 @@ const ShortcutInput: React.FC<IProps> = ({ value, onChange, disabled, placeholde
 
   const handleKeyUp = () => {
     if (disabled) return;
+    if (!keysPressed.current.size) return;
+
+    if (!isShortcutCaptureAllowed(keysPressed.current)) {
+      keysPressed.current.clear();
+      setDisplayValue(normalizeShortcutBinding(value) || '');
+      pendingShortcutRef.current = value || '';
+      return;
+    }
+
     const normalizedValue = normalizeShortcutBinding(pendingShortcutRef.current);
     if (normalizedValue && normalizedValue !== value) {
       onChange(normalizedValue);

@@ -476,6 +476,25 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
 
 const MODIFIER_ORDER = isMac ? ['meta', 'ctrl', 'alt', 'shift'] : ['ctrl', 'meta', 'alt', 'shift'];
 const MODIFIER_KEYS = new Set(['control', 'ctrl', 'meta', 'cmd', 'command', '⌘', 'alt', 'option', '⌥', 'shift', '⇧']);
+const SINGLE_KEY_SHORTCUTS = new Set([
+  'enter',
+  'escape',
+  'tab',
+  'backspace',
+  'delete',
+  'f1',
+  'f2',
+  'f3',
+  'f4',
+  'f5',
+  'f6',
+  'f7',
+  'f8',
+  'f9',
+  'f10',
+  'f11',
+  'f12',
+]);
 const NON_PRINTABLE_KEY_LABELS: Record<string, string> = {
   ' ': 'Space',
   spacebar: 'Space',
@@ -618,6 +637,13 @@ export const getEventShortcutBinding = (event: KeyboardEvent | React.KeyboardEve
   keys.push(key);
 
   return normalizeShortcutBinding(keys.join(' + '));
+};
+
+export const isShortcutCaptureAllowed = (pressedKeys: Iterable<string>): boolean => {
+  const keys = Array.from(pressedKeys, (key) => key.toLowerCase());
+  const hasModifierKey = keys.some((key) => MODIFIER_KEYS.has(key));
+  const isAllowedSingleKey = keys.length === 1 && SINGLE_KEY_SHORTCUTS.has(keys[0]);
+  return isAllowedSingleKey || (keys.length > 1 && hasModifierKey);
 };
 
 export const isShortcutBindingEqual = (left?: string | null, right?: string | null): boolean =>
