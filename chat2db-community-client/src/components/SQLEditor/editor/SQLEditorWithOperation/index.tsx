@@ -26,6 +26,7 @@ import { EditorTableIdentifier } from '../../helper/tableIdentifier';
 import { useTreeStore } from '@/store/tree';
 import { isTemporaryId } from '@/utils';
 import { readClipboard } from '@/utils/clipboard';
+import { copyToClipboard } from '@/utils/copy';
 import executeSql from '@/service/executeSql';
 import { parseClipboardTextToSqlInTokens } from '@/utils/sqlInClipboard';
 import {
@@ -656,7 +657,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     const selectedText = sqlEditorRef.current?.getSelectedContent() || '';
 
     if (selectedText) {
-      navigator.clipboard.writeText(selectedText);
+      copyToClipboard(selectedText);
     }
 
     if (editor) {
@@ -751,7 +752,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
 
     if (selectedText && selection && editor) {
       // Copy to the clipboard first.
-      navigator.clipboard.writeText(selectedText);
+      copyToClipboard(selectedText);
 
       // Then delete the selection.
       editor.executeEdits('cut', [
