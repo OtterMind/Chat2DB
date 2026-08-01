@@ -3,7 +3,8 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <springProperty scope="context" name="APP_NAME" source="project.name"/>
-    <property name="LOG_PATH" value="${user.home}/.chat2db/chat2db-community/logs"/>
+    <!-- Community desktop data lives under ~/.chat2db-community (ConfigUtils). Keep logs there. -->
+    <property name="LOG_PATH" value="${user.home}/.chat2db-community/logs"/>
     <property name="LOG_FILE" value="${LOG_PATH}/application.log"/>
     <property name="ERROR_LOG_FILE" value="${LOG_PATH}/error.log"/>
     <property scope="system" name="log.path" value="${LOG_PATH}/application.log"/>

@@ -85,13 +85,16 @@ detect_arch() {
 }
 
 java_options() {
-    cat <<'EOF'
+    cat <<EOF
 -Ddeploy.local=false
 -Dspring.profiles.active=release
 -Dloader.path=lib
 -Dchat2db.mode=DESKTOP
 -Dchat2db.runtime.mode=community
 -Dchat2db.network.status=OFFLINE
+-Dchat2db.ai.subscription.enabled=${CHAT2DB_SUBSCRIPTION_AI_JAVA_ENABLED:-false}
+-Dchat2db.ai.subscription.runtime-manifest=codex-app-server/runtime.properties
+-Dchat2db.ai.secret-import.enabled=${CHAT2DB_SECRET_IMPORT_JAVA_ENABLED:-false}
 -Dfile.encoding=UTF-8
 -Dserver.address=127.0.0.1
 -Dserver.port=10825

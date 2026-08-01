@@ -18,6 +18,12 @@ Environment:
   SKIP_FRONTEND=true            Skip frontend build.
   COMMUNITY_UPDATE_BASE_URL     Metadata base URL.
   MAC_SIGNING_IDENTITY          macOS Developer ID Application identity.
+  CHAT2DB_PACKAGE_SUBSCRIPTION_AI=true
+                                Stage the pinned Codex app-server at package time.
+  CHAT2DB_ENABLE_SUBSCRIPTION_AI=true
+                                Enable it in the packaged JVM (requires staging).
+  CHAT2DB_ENABLE_SECRET_IMPORT=true
+                                Enable the separately gated legacy-key importer.
 
 Examples:
   script/package/package-community-jcef.sh 5.3.0 prepare
@@ -46,6 +52,20 @@ UPDATE_BASE_URL="${COMMUNITY_UPDATE_BASE_URL:-https://cdn.chat2db-ai.com/communi
 JBR_BASE_URL="https://cache-redirector.jetbrains.com/intellij-jbr"
 JBR_WORK_DIR=""
 JBR_EXTRACT_DIR=""
+
+if [ "${CHAT2DB_ENABLE_SUBSCRIPTION_AI:-false}" = "true" ] \
+  && [ "${CHAT2DB_PACKAGE_SUBSCRIPTION_AI:-false}" != "true" ]; then
+  echo "[error] subscription AI cannot be enabled without a staged pinned app-server" >&2
+  exit 1
+fi
+if [ "${TARGET}" = "prepare" ] \
+  && [ "${CHAT2DB_PACKAGE_SUBSCRIPTION_AI:-false}" = "true" ]; then
+  echo "[error] subscription AI staging requires a concrete mac, linux, or win target" >&2
+  exit 1
+fi
+
+export CHAT2DB_SUBSCRIPTION_AI_JAVA_ENABLED="${CHAT2DB_ENABLE_SUBSCRIPTION_AI:-false}"
+export CHAT2DB_SECRET_IMPORT_JAVA_ENABLED="${CHAT2DB_ENABLE_SECRET_IMPORT:-false}"
 
 case "${TARGET}" in
   prepare|mac|linux|win) ;;
@@ -349,6 +369,10 @@ stage_community_input() {
     "${JPACKAGE_INPUT_DIR}/mac" \
     "${JPACKAGE_INPUT_DIR}/win" \
     "${JPACKAGE_INPUT_DIR}/linux"
+  rm -rf \
+    "${JPACKAGE_INPUT_DIR}/mac/codex-app-server" \
+    "${JPACKAGE_INPUT_DIR}/win/codex-app-server" \
+    "${JPACKAGE_INPUT_DIR}/linux/codex-app-server"
   rm -f \
     "${SOURCE_FILE_DIR}"/*.jar \
     "${SOURCE_FILE_DIR}"/*.zip \
@@ -370,6 +394,14 @@ stage_community_input() {
 }
 
 stage_community_input
+
+if [ "${CHAT2DB_PACKAGE_SUBSCRIPTION_AI:-false}" = "true" ]; then
+  bash "${SCRIPT_DIR}/stage-codex-app-server.sh" \
+    "${TARGET}" \
+    "${JPACKAGE_INPUT_DIR}/${TARGET}"
+else
+  echo "[info] subscription AI app-server staging is disabled"
+fi
 
 case "${TARGET}" in
   prepare)
