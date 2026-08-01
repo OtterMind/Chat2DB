@@ -30,6 +30,8 @@ interface AIModelSelectProps {
   onCustomModelClick?: () => void;
   customModelText?: string;
   openToken?: number;
+  /** Optional hook when the dropdown opens (e.g. rebuild model option metadata). */
+  onDropdownOpen?: () => void;
 }
 
 const AIModelSelect = ({
@@ -39,6 +41,7 @@ const AIModelSelect = ({
   onCustomModelClick,
   customModelText,
   openToken = 0,
+  onDropdownOpen,
 }: AIModelSelectProps) => {
   const { styles } = useStyles();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -100,12 +103,18 @@ const AIModelSelect = ({
 
     if (isSubscriptionConnectOption(selectedValue.value)) {
       const provider = parseSubscriptionConnectProvider(selectedValue.value) as AiProviderId | null;
+      // Same entry as API Key model config (product B): open the unified model modal when
+      // provided; fall back to settings only if the host did not wire onCustomModelClick.
       if (provider && connectEntry?.action === 'CONNECT') {
         void startConnect(provider);
-      } else {
-        setSettingPageActiveTab('subscriptionAi');
-        history.push('/settings');
+        return;
       }
+      if (onCustomModelClick) {
+        onCustomModelClick();
+        return;
+      }
+      setSettingPageActiveTab('subscriptionAi');
+      history.push('/settings');
       return;
     }
 
@@ -124,6 +133,7 @@ const AIModelSelect = ({
     setDropdownOpen(open);
     if (open && isCommunityEnv && isDesktop) {
       void refreshSubscriptionSurface();
+      onDropdownOpen?.();
     }
     if (open && (!modelList || modelList.length === 0)) {
       if (options !== undefined) {

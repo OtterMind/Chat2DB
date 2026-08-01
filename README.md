@@ -112,6 +112,12 @@ Chat2DB Community encrypts stored datasource passwords and AI model API keys wit
 
 The key is written to `~/.config/chat2db-community/encryption.key`. **Back this file up separately and keep it across upgrades and container rebuilds** — replacing or losing it makes previously stored datasource passwords and AI model API keys unreadable. Web/headless startup fails when no valid key is provided; only Desktop mode creates a missing key automatically.
 
+### Subscription-backed AI (packaged desktop release gate)
+
+Community desktop includes an evidence-gated ChatGPT subscription integration through a pinned official Codex app-server. Chat2DB never receives or stores ChatGPT OAuth tokens: the managed app-server owns authentication and requires the operating-system keyring. Existing API-key models continue to use the current Spring AI path.
+
+The integration is disabled by default until the pinned build passes the platform-specific live-account and non-disclosure checklist. Release builders stage and enable it explicitly with `CHAT2DB_PACKAGE_SUBSCRIPTION_AI=true` and `CHAT2DB_ENABLE_SUBSCRIPTION_AI=true`; legacy API-key import is separately gated by `CHAT2DB_ENABLE_SECRET_IMPORT=true`. SuperGrok subscription login is not included because xAI does not currently provide the required supported consumer-subscription contract; xAI API-key configurations remain available.
+
 <details>
 <summary>Key configuration reference (custom paths, resolution order, validation)</summary>
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown, Flex, Modal } from 'antd';
 import feedback from '@/utils/feedback';
 import {
@@ -44,7 +44,12 @@ import {
   decideSubscriptionModelRefresh,
   listSelectableSubscriptionModelRefKeys,
 } from '@/blocks/AI/subscription/modelSelectGroups';
-import { resolveReasoningEffortSelection } from '@/blocks/AI/subscription/modelSnapshot';
+import {
+  resolveModelReasoningCapabilities,
+  resolveReadyToUseModelSelection,
+  resolveReasoningEffortSelection,
+} from '@/blocks/AI/subscription/modelSnapshot';
+import { resolveChatModelOption } from '@/blocks/AI/subscription/modelOptionResolve';
 import { hydrateSubscriptionModelOptions } from '@/blocks/AI/subscription/startupHydration';
 import { resolveTerminalAnswerFallback } from '@/blocks/AI/subscription/terminalAnswer';
 import { resolveStreamErrorDisplay } from '@/blocks/AI/subscription/streamErrorMessage';
@@ -758,9 +763,26 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }));
 
   const selectedModelOption = selectedModel?.value ? modelOptionMap[selectedModel.value] : undefined;
+  // Prefer option-map efforts, but fall back to subscription snapshots so remount /
+  // map-rebuild lag cannot hide the effort control until the model dropdown is opened.
+  const modelReasoningCapabilities = useMemo(
+    () =>
+      resolveModelReasoningCapabilities({
+        selectedModelValue: selectedModel?.value,
+        optionSupportedReasoningEfforts: selectedModelOption?.supportedReasoningEfforts,
+        optionDefaultReasoningEffort: selectedModelOption?.defaultReasoningEffort,
+        snapshots: subscriptionSnapshots,
+      }),
+    [
+      selectedModel?.value,
+      selectedModelOption?.supportedReasoningEfforts,
+      selectedModelOption?.defaultReasoningEffort,
+      subscriptionSnapshots,
+    ],
+  );
   const reasoningEffortSelection = resolveReasoningEffortSelection({
-    supportedReasoningEfforts: selectedModelOption?.supportedReasoningEfforts,
-    defaultReasoningEffort: selectedModelOption?.defaultReasoningEffort,
+    supportedReasoningEfforts: modelReasoningCapabilities.supportedReasoningEfforts,
+    defaultReasoningEffort: modelReasoningCapabilities.defaultReasoningEffort,
     previousReasoningEffort: selectedReasoningEffort,
   });
 
@@ -908,21 +930,20 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           isDefault: !!item.defaultOption,
         })),
       );
-      const currentValue = selectedModel?.value;
-      const currentOption = currentValue ? result.find((item) => item.value === currentValue) : undefined;
-      const hasCurrent = !!currentOption;
-      if (currentOption && currentOption.label !== selectedModel?.label) {
+      // Read live store value (not a render-time closure) so persist rehydrate and
+      // concurrent surface refresh still land on a model that can show reasoning effort.
+      const liveSelected = useAIStore.getState().selectedModel;
+      const nextSelection = resolveReadyToUseModelSelection({
+        options: result,
+        currentValue: liveSelected?.value,
+      });
+      if (
+        nextSelection &&
+        (nextSelection.value !== liveSelected?.value || nextSelection.label !== liveSelected?.label)
+      ) {
         setSelectedModel({
-          value: currentOption.value,
-          label: currentOption.label,
-        });
-        return;
-      }
-      if (!hasCurrent && result.length > 0) {
-        const defaultOption = result.find((item) => item.defaultOption) || result[0];
-        setSelectedModel({
-          value: defaultOption.value,
-          label: defaultOption.label,
+          value: nextSelection.value,
+          label: nextSelection.label,
         });
       }
     } catch {
@@ -930,7 +951,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       setModelOptionMap({});
       feedback.error(i18n('stream.error.loadModelList'));
     }
-  }, [selectedModel?.label, selectedModel?.value, setSelectedModel]);
+  }, [setSelectedModel]);
 
   useEffect(() => {
     let active = true;
@@ -942,18 +963,31 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         shouldRetry: () => {
           const state = useSubscriptionAiStore.getState();
           const chatGptState = state.providers.find((item) => item.provider === 'OPENAI')?.state;
-          return (
-            state.surfaceAvailable &&
-            chatGptState === 'CONNECTED' &&
-            listSelectableSubscriptionModelRefKeys(state.snapshots, state.providers).length === 0
+          if (!state.surfaceAvailable || chatGptState !== 'CONNECTED') {
+            return false;
+          }
+          const selectableKeys = listSelectableSubscriptionModelRefKeys(state.snapshots, state.providers);
+          if (selectableKeys.length === 0) {
+            return true;
+          }
+          // Keep recovering while the selected subscription model still lacks effort
+          // metadata — this is the chrome gap users hit until they open the dropdown.
+          const selectedValue = useAIStore.getState().selectedModel?.value?.trim() || '';
+          if (!selectedValue.startsWith('SUBSCRIPTION::')) {
+            return false;
+          }
+          const selectedSnapshot = state.snapshots.find(
+            (item) => (item.modelRefKey || '') === selectedValue,
           );
+          const efforts = selectedSnapshot?.supportedReasoningEfforts || [];
+          return efforts.length === 0;
         },
       },
     );
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadModelOptions, refreshSubscriptionSurface]);
 
   useEffect(() => {
     if (activeConnectAttemptIdByProvider.OPENAI) {
@@ -973,14 +1007,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       postLoginGuidePending: postLoginModelGuidePendingRef.current,
     });
     previousSubscriptionSnapshotsRef.current = subscriptionSnapshots;
-    if (!decision.reloadModelOptions) {
-      return;
-    }
+    // Always rebuild the local option map from the current subscription catalog.
+    // Remounts keep selectedModel in the global store but drop local map state; rebuilding
+    // here (and deriving efforts from snapshots) avoids needing the model dropdown as a
+    // side-effect to make the reasoning control appear.
     void loadModelOptions().then(() => {
       if (decision.showPostLoginGuide) {
         postLoginModelGuidePendingRef.current = false;
         feedback.success(i18n('ai.subscription.onboarding.modelsReady', subscriptionSnapshots.length));
-        setModelSelectOpenToken((token) => token + 1);
       }
     });
   }, [loadModelOptions, subscriptionSnapshots]);
@@ -1555,30 +1589,71 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         feedback.warning(i18n('stream.warning.selectModel'));
         return;
       }
-      const selectedOption = modelOptionMap[selectedValue];
+      // modelOptionMap is local and can lag behind selectedModel / snapshots. Rebuild from
+      // the subscription catalog (or a parseable subscription key) so send works without
+      // re-opening the model dropdown.
+      let selectedOption = resolveChatModelOption({
+        selectedValue,
+        optionMap: modelOptionMap,
+        snapshots: subscriptionSnapshots,
+        connections: subscriptionProviders,
+      });
+      if (!selectedOption) {
+        // One recovery pass: refresh catalog then resolve from live store state.
+        await refreshSubscriptionSurface();
+        const live = useSubscriptionAiStore.getState();
+        selectedOption = resolveChatModelOption({
+          selectedValue,
+          optionMap: modelOptionMap,
+          snapshots: live.snapshots,
+          connections: live.providers,
+        });
+      }
       if (!selectedOption) {
         feedback.warning(i18n('stream.warning.invalidModel'));
         return;
+      }
+      // Keep local map warm for subsequent sends / effort chrome.
+      if (!modelOptionMap[selectedOption.value]) {
+        setModelOptionMap((prev) => ({ ...prev, [selectedOption!.value]: selectedOption! }));
       }
 
       const conversationKey = currentSessionId || 'new';
       const legacyConfirmed = legacyConfirmedModelRefKeyByConversation[conversationKey];
       const conversationHasLegacyMessages = sessionRequiresModelConfirm && !legacyConfirmed;
+      // Re-probe surface on send: boot-time isDesktop false / capability fetch race can leave
+      // surfaceAvailable=false even inside the packaged Preview app.
+      let surfaceAvailable = useSubscriptionAiStore.getState().surfaceAvailable;
+      let liveProviders = useSubscriptionAiStore.getState().providers;
+      let liveSnapshots = useSubscriptionAiStore.getState().snapshots;
+      let liveCapability = useSubscriptionAiStore.getState().capability;
+      let liveError = useSubscriptionAiStore.getState().lastErrorCode;
+      if (!surfaceAvailable) {
+        await refreshSubscriptionSurface();
+        const live = useSubscriptionAiStore.getState();
+        surfaceAvailable = live.surfaceAvailable;
+        liveProviders = live.providers;
+        liveSnapshots = live.snapshots;
+        liveCapability = live.capability;
+        liveError = live.lastErrorCode;
+      }
       const sendGuard = evaluateChatSendGuard({
-        surfaceAvailable: subscriptionSurfaceAvailable,
-        selectedModelValue: selectedValue,
+        surfaceAvailable,
+        selectedModelValue: selectedOption.modelRefKey || selectedOption.value || selectedValue,
         modelOption: selectedOption,
-        connections: subscriptionProviders,
-        snapshots: subscriptionSnapshots,
-        providerBusy: subscriptionProviderBusy,
+        connections: liveProviders.length ? liveProviders : subscriptionProviders,
+        snapshots: liveSnapshots.length ? liveSnapshots : subscriptionSnapshots,
+        providerBusy: useSubscriptionAiStore.getState().providerBusy,
         conversationId: currentSessionId,
         conversationHasLegacyMessages,
         legacyConfirmedModelRefKey: legacyConfirmed,
+        capabilityDisabledReason: liveCapability?.disabledReason,
+        lastErrorCode: liveError,
       });
       if (!sendGuard.allowed) {
         if (sendGuard.needsLegacyModelConfirm) {
           setPendingLegacySend(params);
-          setLegacyConfirmModelRefKey(selectedValue);
+          setLegacyConfirmModelRefKey(selectedOption.value || selectedValue);
           setLegacyConfirmOpen(true);
           return;
         }
@@ -1671,6 +1746,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       legacyConfirmedModelRefKeyByConversation,
       messages,
       modelOptionMap,
+      refreshSubscriptionSurface,
       selectedModel?.value,
       selectedReasoningEffort,
       sessionRequiresModelConfirm,
@@ -2189,6 +2265,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 onCustomModelClick={() => setOpenSettings(true)}
                 customModelText={i18n('setting.modelConfig.entry')}
                 modelSelectOpenToken={modelSelectOpenToken}
+                onModelDropdownOpen={() => {
+                  void loadModelOptions();
+                }}
                 reasoningEffort={selectedReasoningEffort}
                 reasoningEffortOptions={reasoningEffortSelection.options.map((value) => ({
                   value,

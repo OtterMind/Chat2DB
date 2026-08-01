@@ -55,6 +55,133 @@ export function resolveReasoningEffortSelection(params: {
   return { value: options[0], options };
 }
 
+export interface ReadyToUseModelOption {
+  value: string;
+  label: string;
+  selectable?: boolean;
+  defaultOption?: boolean;
+  supportedReasoningEfforts?: readonly string[] | null;
+}
+
+const optionHasReasoningEfforts = (option: ReadyToUseModelOption): boolean =>
+  Array.isArray(option.supportedReasoningEfforts) &&
+  option.supportedReasoningEfforts.some((item) => !!String(item || '').trim());
+
+/** ChatGPT subscription catalog product defaults when provider metadata is still loading. */
+export const CHATGPT_SUBSCRIPTION_DEFAULT_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
+
+function normalizeReasoningEfforts(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => String(item ?? '').trim().toLowerCase()).filter(Boolean))];
+  }
+  if (typeof value === 'string' && value.trim()) {
+    // Some bridge/serialization paths may flatten the list into a comma-separated string.
+    return [
+      ...new Set(
+        value
+          .split(/[,\s|]+/)
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+  }
+  return [];
+}
+
+/**
+ * Resolve reasoning capabilities for the currently selected model.
+ *
+ * Chat chrome keeps `selectedModel` in a global store (survives remounts) while the
+ * detailed option map is local component state. Prefer the option map when present,
+ * then subscription snapshots, then ChatGPT product defaults for subscription models so
+ * the effort control is ready-to-use without opening the model dropdown.
+ */
+export function resolveModelReasoningCapabilities(params: {
+  selectedModelValue?: string | null;
+  optionSupportedReasoningEfforts?: readonly string[] | null;
+  optionDefaultReasoningEffort?: string | null;
+  snapshots?: readonly AiModelSnapshotView[] | null;
+}): {
+  supportedReasoningEfforts: string[];
+  defaultReasoningEffort: string | null;
+} {
+  const fromOption = normalizeReasoningEfforts(params.optionSupportedReasoningEfforts);
+  if (fromOption.length) {
+    return {
+      supportedReasoningEfforts: fromOption,
+      defaultReasoningEffort: params.optionDefaultReasoningEffort?.trim().toLowerCase() || null,
+    };
+  }
+
+  const selected = params.selectedModelValue?.trim() || '';
+  if (!selected) {
+    return { supportedReasoningEfforts: [], defaultReasoningEffort: null };
+  }
+
+  const snapshot = (params.snapshots || []).find((item) => {
+    const key = item.modelRefKey || (item.modelRef ? toModelRefKey(item.modelRef) : '');
+    if (key && key === selected) {
+      return true;
+    }
+    // Tolerate partial keys / display-time mismatches (modelId suffix only).
+    const modelId = item.modelRef?.modelId?.trim();
+    return !!modelId && (selected === modelId || selected.endsWith(`::${modelId}`));
+  });
+  if (snapshot) {
+    const fromSnapshot = normalizeReasoningEfforts(snapshot.supportedReasoningEfforts);
+    if (fromSnapshot.length) {
+      return {
+        supportedReasoningEfforts: fromSnapshot,
+        defaultReasoningEffort: snapshot.defaultReasoningEffort?.trim().toLowerCase() || null,
+      };
+    }
+  }
+
+  // Ready-to-use: any selected ChatGPT subscription model should show an effort control
+  // immediately, even while catalog metadata is still hydrating after app open.
+  if (selected.startsWith('SUBSCRIPTION::') || selected.startsWith('SUBSCRIPTION:')) {
+    return {
+      supportedReasoningEfforts: [...CHATGPT_SUBSCRIPTION_DEFAULT_REASONING_EFFORTS],
+      defaultReasoningEffort: 'high',
+    };
+  }
+
+  return { supportedReasoningEfforts: [], defaultReasoningEffort: null };
+}
+
+/**
+ * Ready-to-use chat chrome: keep a valid selection when possible, otherwise pick a
+ * selectable model. Prefer options that already advertise reasoning efforts so the
+ * effort control can render without forcing the user to open the model dropdown.
+ */
+export function resolveReadyToUseModelSelection(params: {
+  options: readonly ReadyToUseModelOption[];
+  currentValue?: string | null;
+}): { value: string; label: string } | null {
+  const selectable = params.options.filter((item) => item.selectable !== false && !!item.value);
+  if (!selectable.length) {
+    return null;
+  }
+
+  const currentValue = params.currentValue?.trim() || '';
+  const current = currentValue ? selectable.find((item) => item.value === currentValue) : undefined;
+  const withEfforts = selectable.filter(optionHasReasoningEfforts);
+
+  if (current) {
+    // Keep the user's model when it already exposes efforts, or when nothing does.
+    if (optionHasReasoningEfforts(current) || withEfforts.length === 0) {
+      return { value: current.value, label: current.label };
+    }
+  }
+
+  const preferred =
+    withEfforts.find((item) => item.defaultOption) ||
+    withEfforts[0] ||
+    selectable.find((item) => item.defaultOption) ||
+    selectable[0];
+  return { value: preferred.value, label: preferred.label };
+}
+
 /**
  * Stale or failed snapshots remain visible only as disabled historical information.
  * Discovery failure leaves the account connected but no subscription model is selectable.

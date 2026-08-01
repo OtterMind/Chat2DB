@@ -28,6 +28,9 @@ export interface ChatSendGuardInput {
   conversationId?: string | null;
   conversationHasLegacyMessages: boolean;
   legacyConfirmedModelRefKey?: string | null;
+  /** Capability disabledReason when surface is off — improves user-facing copy. */
+  capabilityDisabledReason?: string | null;
+  lastErrorCode?: string | null;
 }
 
 export interface ChatSendGuardResult {
@@ -52,6 +55,27 @@ const BLOCK_I18N: Partial<Record<AiSendBlockReason, string>> = {
   PROVIDER_BUSY: 'ai.subscription.attempt.providerBusy',
   LEGACY_MODEL_UNCONFIRMED: 'ai.subscription.legacy.confirmTitle',
 };
+
+function resolveSurfaceBlockI18nKey(input: ChatSendGuardInput): string {
+  // Prefer a precise capability/runtime reason over the generic packaged-desktop message.
+  const disabled = input.capabilityDisabledReason;
+  if (disabled === 'APP_SERVER_UNAVAILABLE') {
+    return 'ai.subscription.error.appServerUnavailable';
+  }
+  if (disabled === 'FEATURE_DISABLED') {
+    return 'ai.subscription.account.disabled';
+  }
+  if (disabled === 'NOT_COMMUNITY_RUNTIME') {
+    return 'ai.subscription.surface.unavailable';
+  }
+  if (disabled === 'NOT_DESKTOP') {
+    return 'ai.subscription.surface.unavailable';
+  }
+  if (input.lastErrorCode === 'CAPABILITY_FETCH_FAILED') {
+    return 'ai.subscription.error.capabilityFetch';
+  }
+  return BLOCK_I18N.SURFACE_DISABLED || 'ai.subscription.surface.unavailable';
+}
 
 /**
  * Minimal chat integration point for subscription send rules.
@@ -106,10 +130,21 @@ export function evaluateChatSendGuard(input: ChatSendGuardInput): ChatSendGuardR
     legacyGate,
   });
 
+  if (gate.allowed) {
+    return {
+      allowed: true,
+      blockReason: 'NONE',
+      needsLegacyModelConfirm: false,
+    };
+  }
+
   return {
-    allowed: gate.allowed,
+    allowed: false,
     blockReason: gate.blockReason,
     needsLegacyModelConfirm: false,
-    feedbackI18nKey: gate.allowed ? undefined : BLOCK_I18N[gate.blockReason],
+    feedbackI18nKey:
+      gate.blockReason === 'SURFACE_DISABLED'
+        ? resolveSurfaceBlockI18nKey(input)
+        : BLOCK_I18N[gate.blockReason],
   };
 }

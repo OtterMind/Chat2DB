@@ -166,6 +166,22 @@ export function findNewSelectableSubscriptionModelKeys(
   return selectableSnapshotKeys(current).filter((modelRefKey) => !previousKeys.has(modelRefKey));
 }
 
+function reasoningCapabilitySignature(snapshots: readonly AiModelSnapshotView[]): string {
+  return snapshots
+    .map((snapshot) => {
+      const efforts = (snapshot.supportedReasoningEfforts || [])
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter(Boolean)
+        .join(',');
+      const defaultEffort = String(snapshot.defaultReasoningEffort || '')
+        .trim()
+        .toLowerCase();
+      return `${snapshot.modelRefKey || ''}|${efforts}|${defaultEffort}|${snapshot.available ? 1 : 0}`;
+    })
+    .sort()
+    .join(';');
+}
+
 export function decideSubscriptionModelRefresh(params: {
   previousSnapshots: readonly AiModelSnapshotView[];
   currentSnapshots: readonly AiModelSnapshotView[];
@@ -175,9 +191,14 @@ export function decideSubscriptionModelRefresh(params: {
     params.previousSnapshots,
     params.currentSnapshots,
   );
-  const reloadModelOptions = recoveredModelKeys.length > 0;
+  // Also rebuild when the same catalog later fills in supportedReasoningEfforts —
+  // otherwise the effort control stays hidden until the user opens the model dropdown.
+  const reasoningCapabilitiesChanged =
+    reasoningCapabilitySignature(params.previousSnapshots) !==
+    reasoningCapabilitySignature(params.currentSnapshots);
+  const reloadModelOptions = recoveredModelKeys.length > 0 || reasoningCapabilitiesChanged;
   return {
     reloadModelOptions,
-    showPostLoginGuide: reloadModelOptions && params.postLoginGuidePending,
+    showPostLoginGuide: recoveredModelKeys.length > 0 && params.postLoginGuidePending,
   };
 }

@@ -51,6 +51,7 @@ import {
   summarizeMigrationProgress,
 } from './migrationPlan';
 import { evaluateSubscriptionSendGate } from './sendGate';
+import { resolveChatModelOption } from './modelOptionResolve';
 import { evaluateChatSendGuard } from './chatGuards';
 import {
   buildModelSelectSections,
@@ -189,6 +190,144 @@ assert.deepEqual(
   { value: 'low', options: ['low', 'high'] },
   'an existing explicit selection remains stable while supported',
 );
+
+assert.equal(
+  typeof modelSnapshotExports.resolveReadyToUseModelSelection,
+  'function',
+  'ready-to-use selection is exported for chat chrome bootstrap',
+);
+const resolveReadyToUseModelSelection = modelSnapshotExports.resolveReadyToUseModelSelection as (params: {
+  options: Array<{
+    value: string;
+    label: string;
+    selectable?: boolean;
+    defaultOption?: boolean;
+    supportedReasoningEfforts?: string[];
+  }>;
+  currentValue?: string | null;
+}) => { value: string; label: string } | null;
+assert.deepEqual(
+  resolveReadyToUseModelSelection({
+    options: [
+      { value: 'api-key', label: 'Local', defaultOption: true, supportedReasoningEfforts: [] },
+      {
+        value: 'sub-gpt',
+        label: 'GPT',
+        supportedReasoningEfforts: ['low', 'high'],
+      },
+    ],
+    currentValue: null,
+  }),
+  { value: 'sub-gpt', label: 'GPT' },
+  'bootstrap prefers a selectable model that already advertises reasoning efforts',
+);
+assert.deepEqual(
+  resolveReadyToUseModelSelection({
+    options: [
+      {
+        value: 'sub-gpt',
+        label: 'GPT',
+        supportedReasoningEfforts: ['low', 'high'],
+      },
+      {
+        value: 'sub-spark',
+        label: 'Spark',
+        supportedReasoningEfforts: ['low', 'high', 'xhigh'],
+      },
+    ],
+    currentValue: 'sub-spark',
+  }),
+  { value: 'sub-spark', label: 'Spark' },
+  'a valid current selection with efforts is preserved',
+);
+assert.deepEqual(
+  resolveReadyToUseModelSelection({
+    options: [
+      { value: 'api-key', label: 'Local', supportedReasoningEfforts: [] },
+      {
+        value: 'sub-gpt',
+        label: 'GPT',
+        defaultOption: true,
+        supportedReasoningEfforts: ['low', 'high'],
+      },
+    ],
+    currentValue: 'api-key',
+  }),
+  { value: 'sub-gpt', label: 'GPT' },
+  'when the current model has no efforts, prefer a subscription model that does',
+);
+
+const resolveModelReasoningCapabilities = modelSnapshotExports.resolveModelReasoningCapabilities as (params: {
+  selectedModelValue?: string | null;
+  optionSupportedReasoningEfforts?: string[] | null;
+  optionDefaultReasoningEffort?: string | null;
+  snapshots?: Array<{
+    modelRefKey: string;
+    modelRef: ReturnType<typeof createChatGptSubscriptionModelRef>;
+    supportedReasoningEfforts?: string[];
+    defaultReasoningEffort?: string | null;
+  }>;
+}) => { supportedReasoningEfforts: string[]; defaultReasoningEffort: string | null };
+assert.deepEqual(
+  resolveModelReasoningCapabilities({
+    selectedModelValue: modelRefKey,
+    optionSupportedReasoningEfforts: [],
+    snapshots: [
+      {
+        ...availableSnapshot,
+        supportedReasoningEfforts: ['low', 'high', 'xhigh'],
+        defaultReasoningEffort: 'high',
+      },
+    ],
+  }),
+  { supportedReasoningEfforts: ['low', 'high', 'xhigh'], defaultReasoningEffort: 'high' },
+  'effort chrome falls back to subscription snapshots when the local option map is empty',
+);
+assert.deepEqual(
+  resolveModelReasoningCapabilities({
+    selectedModelValue: modelRefKey,
+    optionSupportedReasoningEfforts: ['low'],
+    optionDefaultReasoningEffort: 'low',
+    snapshots: [
+      {
+        ...availableSnapshot,
+        supportedReasoningEfforts: ['low', 'high', 'xhigh'],
+        defaultReasoningEffort: 'high',
+      },
+    ],
+  }),
+  { supportedReasoningEfforts: ['low'], defaultReasoningEffort: 'low' },
+  'option-map efforts win over snapshot fallback when present',
+);
+assert.deepEqual(
+  resolveModelReasoningCapabilities({
+    selectedModelValue: modelRefKey,
+    optionSupportedReasoningEfforts: [],
+    snapshots: [],
+  }),
+  {
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
+    defaultReasoningEffort: 'high',
+  },
+  'subscription models show product-default efforts before catalog metadata hydrates',
+);
+assert.deepEqual(
+  resolveModelReasoningCapabilities({
+    selectedModelValue: modelRefKey,
+    optionSupportedReasoningEfforts: [],
+    snapshots: [
+      {
+        ...availableSnapshot,
+        // Bridge may flatten list fields to a CSV string.
+        supportedReasoningEfforts: 'low,medium,high,xhigh' as unknown as string[],
+        defaultReasoningEffort: 'medium',
+      },
+    ],
+  }),
+  { supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'], defaultReasoningEffort: 'medium' },
+  'CSV effort strings from the desktop bridge are normalized into options',
+);
+
 
 const useSseRequestSource = readFileSync(new URL('../../../hooks/useSSERequest.ts', import.meta.url), 'utf8');
 assert.equal(
@@ -380,6 +519,28 @@ const connected = {
 assert.equal(presentAccountState(connected).canSendWithSubscriptionModels, true);
 assert.equal(presentAccountState(connected).canDisconnect, true);
 
+const resolvedMissingMap = resolveChatModelOption({
+  selectedValue: modelRefKey,
+  optionMap: {},
+  snapshots: [availableSnapshot],
+  connections: [connected],
+});
+assert.equal(resolvedMissingMap?.value, modelRefKey, 'send path rebuilds option from snapshots when map is empty');
+assert.equal(resolvedMissingMap?.subscriptionOption, true);
+assert.equal(resolvedMissingMap?.selectable, true);
+assert.ok((resolvedMissingMap?.supportedReasoningEfforts || []).length > 0);
+const resolvedFromKeyOnly = resolveChatModelOption({
+  selectedValue: modelRefKey,
+  optionMap: {},
+  snapshots: [],
+  connections: [connected],
+});
+assert.equal(
+  resolvedFromKeyOnly?.modelRefKey,
+  modelRefKey,
+  'send path accepts a parseable subscription key before catalog hydration',
+);
+
 const reauth = { ...connected, reauthRequired: true };
 assert.equal(resolveAccountUserFacingState(reauth), 'requires_reauth');
 assert.equal(presentAccountState(reauth).sendBlockReason, 'REQUIRES_REAUTH');
@@ -458,6 +619,15 @@ assert.deepEqual(
   }),
   { reloadModelOptions: true, showPostLoginGuide: true },
   'a user-initiated login keeps the selector guidance while sharing the same reload path',
+);
+assert.deepEqual(
+  decideSubscriptionModelRefresh({
+    previousSnapshots: [{ ...availableSnapshot, supportedReasoningEfforts: [] }],
+    currentSnapshots: [availableSnapshot],
+    postLoginGuidePending: false,
+  }),
+  { reloadModelOptions: true, showPostLoginGuide: false },
+  'filling supportedReasoningEfforts for an existing model still rebuilds chat chrome options',
 );
 
 const postDiscovery = resolvePostDiscoverySelection({

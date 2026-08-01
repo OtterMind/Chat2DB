@@ -109,6 +109,12 @@ Chat2DB Community 使用 AES-256-GCM 加密保存的数据源密码和 AI 模型
 
 密钥会写入 `~/.config/chat2db-community/encryption.key`。**请单独备份该文件,并在升级和容器重建时保留** —— 替换或丢失密钥会导致已保存的数据源密码和 AI 模型 API Key 无法解密。Web/headless 方式启动时缺少合法密钥会直接启动失败;只有 Desktop 模式会自动创建缺失的密钥。
 
+### 订阅式 AI（桌面发行门槛）
+
+Community 桌面端内置了一个受验证门槛控制的 ChatGPT 订阅接入,边界是固定版本的官方 Codex app-server。Chat2DB 不接收或保存 ChatGPT OAuth Token;登录凭证由托管的 app-server 持有,并强制使用操作系统 Keyring。现有 API Key 模型继续走原有 Spring AI 路径。
+
+在固定版本完成各平台真实账号和密钥不泄露验证前,该能力默认关闭。发行构建需要显式设置 `CHAT2DB_PACKAGE_SUBSCRIPTION_AI=true` 和 `CHAT2DB_ENABLE_SUBSCRIPTION_AI=true`;旧 API Key 的迁移入口另由 `CHAT2DB_ENABLE_SECRET_IMPORT=true` 控制。当前不包含 SuperGrok 订阅登录,因为 xAI 尚未提供所需的受支持消费者订阅契约;xAI API Key 配置仍可正常使用。
+
 <details>
 <summary>密钥配置参考(自定义路径、解析优先级、校验规则)</summary>
 

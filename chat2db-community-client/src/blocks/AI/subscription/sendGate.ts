@@ -4,6 +4,7 @@ import type {
   AiSendBlockReason,
 } from '@/typings/aiSubscription';
 import { presentAccountState } from './accountState';
+import { findSnapshotForModelRefKey } from './modelOptionResolve';
 import { presentModelSnapshot } from './modelSnapshot';
 import { isSubscriptionModelRef, parseModelRefKey } from './modelRef';
 import type { LegacySendGate } from './legacyHistory';
@@ -66,8 +67,13 @@ export function evaluateSubscriptionSendGate(input: SendGateInput): SendGateResu
     };
   }
 
-  const snapshot = input.snapshots.find((item) => (item.modelRefKey || '') === modelRefKey);
+  const snapshot = findSnapshotForModelRefKey(modelRefKey, input.snapshots);
   if (!snapshot) {
+    // Connection is ready but catalog is still hydrating — allow send; backend validates
+    // the modelRefKey. Blocking here forces a dead-end "invalid model" after ready-to-use UI.
+    if (account.canSendWithSubscriptionModels) {
+      return { allowed: true, blockReason: 'NONE', createAttempt: true };
+    }
     return { allowed: false, blockReason: 'NO_AVAILABLE_MODEL', createAttempt: false };
   }
 

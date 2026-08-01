@@ -1,5 +1,5 @@
 import type { AiSubscriptionCapability } from '@/typings/aiSubscription';
-import { isCommunityEnv, isDesktop } from '@/utils/env';
+import { isCommunityEnv, isPackagedJcefDesktop } from '@/utils/env';
 import type { SubscriptionSurfaceSignals } from './capability';
 
 /** Live Community packaged-JCEF probe used by components and services. */
@@ -8,7 +8,8 @@ export function readSubscriptionSurfaceSignals(
 ): SubscriptionSurfaceSignals {
   return {
     communityRuntime: isCommunityEnv,
-    packagedJcefDesktop: isDesktop,
+    // Always re-read the bridge — never trust a boot-time isDesktop snapshot.
+    packagedJcefDesktop: isPackagedJcefDesktop(),
     backendCapability: backendCapability ?? null,
   };
 }

@@ -66,6 +66,7 @@ interface ChatInputProps {
   onCustomModelClick?: () => void;
   customModelText?: string;
   modelSelectOpenToken?: number;
+  onModelDropdownOpen?: () => void;
   reasoningEffortOptions?: Array<{ label: string; value: string }>;
   reasoningEffort?: string | null;
   onReasoningEffortChange?: (value: string) => void;
@@ -99,6 +100,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     onCustomModelClick,
     customModelText,
     modelSelectOpenToken,
+    onModelDropdownOpen,
     reasoningEffortOptions,
     reasoningEffort,
     onReasoningEffortChange,
@@ -700,12 +702,12 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               )}
             </div>
             <div className={styles.bottomAddonsRight}>
-              {!!reasoningEffortOptions?.length && reasoningEffort && (
+              {!!reasoningEffortOptions?.length && (
                 <Select
                   size="small"
                   className={styles.reasoningEffortSelect}
                   aria-label={i18n('ai.subscription.reasoning.label')}
-                  value={reasoningEffort}
+                  value={reasoningEffort || reasoningEffortOptions[0]?.value}
                   options={reasoningEffortOptions}
                   onChange={onReasoningEffortChange}
                 />
@@ -716,6 +718,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                 onCustomModelClick={onCustomModelClick}
                 customModelText={customModelText}
                 openToken={modelSelectOpenToken}
+                onDropdownOpen={onModelDropdownOpen}
               />
               {loading ? (
                 <IconButton
