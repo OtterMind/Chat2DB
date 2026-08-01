@@ -17,6 +17,8 @@ export interface MockSubscriptionState {
   providers: AiProviderConnectionView[];
   snapshots: AiModelSnapshotView[];
   preferences: AiModelPreferenceView;
+  /** conversationId -> modelRefKey for preference isolation tests */
+  conversationModels?: Record<string, string>;
   attempts: AiAttemptView[];
   importAttempts: AiSecretImportAttemptView[];
 }
@@ -57,6 +59,7 @@ export function createDefaultMockSubscriptionState(): MockSubscriptionState {
       globalDefaultModelRefKey: null,
       conversationModelRefKey: null,
     },
+    conversationModels: {},
     attempts: [],
     importAttempts: [],
   };
@@ -142,16 +145,32 @@ export function createMockAiSubscriptionClient(
     async refreshModelSnapshots() {
       return client.listModelSnapshots();
     },
-    async getPreferences() {
+    async getPreferences(conversationId) {
+      if (conversationId && conversationId.trim()) {
+        const key = state.conversationModels?.[conversationId.trim()] || null;
+        return {
+          globalDefaultModelRefKey: state.preferences.globalDefaultModelRefKey,
+          conversationModelRefKey: key,
+        };
+      }
       return { ...state.preferences };
     },
     async setGlobalDefaultModel(modelRefKey) {
       state.preferences.globalDefaultModelRefKey = modelRefKey;
       return { ...state.preferences };
     },
-    async setConversationModel({ modelRefKey }) {
+    async setConversationModel({ conversationId, modelRefKey }) {
+      if (!state.conversationModels) {
+        state.conversationModels = {};
+      }
+      if (conversationId) {
+        state.conversationModels[conversationId] = modelRefKey;
+      }
       state.preferences.conversationModelRefKey = modelRefKey;
-      return { ...state.preferences };
+      return {
+        globalDefaultModelRefKey: state.preferences.globalDefaultModelRefKey,
+        conversationModelRefKey: modelRefKey,
+      };
     },
     async listAttempts() {
       return state.attempts.map((item) => ({ ...item }));

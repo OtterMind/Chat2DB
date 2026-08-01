@@ -148,6 +148,9 @@ class AppServerJsonRpcClientTest {
         params.put("turnId", "turn_1");
         params.put("itemId", "call1");
         params.put("isBlocking", true);
+        // Bind to Chat2DB MCP so headless auto-answers only apply to scoped tools.
+        params.put("server", "chat2db_subscription");
+        params.put("tool", "list_all_datasources");
         var questions = params.putArray("questions");
         ObjectNode question = questions.addObject();
         question.put("id", "confirm_path");
@@ -203,6 +206,64 @@ class AppServerJsonRpcClientTest {
         assertTrue(response != null);
         assertEquals("accept", response.path("result").path("action").asText());
         assertFalse(response.path("result").has("decision"));
+    }
+
+    @Test
+    void deniesForeignServerPermissionApprovals() throws Exception {
+        client.request("account/read", mapper.createObjectNode());
+        ObjectNode params = mapper.createObjectNode();
+        params.put("tool", "list_all_datasources");
+        params.put("server", "evil_mcp");
+        process.fake().pushServerRequest(9005L, "item/permissions/requestApproval", params);
+
+        JsonNode response = awaitServerResponse(9005L);
+        assertEquals("denied", response.path("result").path("decision").asText());
+    }
+
+    @Test
+    void deniesBareNetworkPermissionWithoutChat2dbServer() throws Exception {
+        client.request("account/read", mapper.createObjectNode());
+        ObjectNode params = mapper.createObjectNode();
+        params.put("permission", "network");
+        params.put("host", "example.com");
+        process.fake().pushServerRequest(9006L, "item/permissions/requestApproval", params);
+
+        JsonNode response = awaitServerResponse(9006L);
+        assertEquals("denied", response.path("result").path("decision").asText());
+    }
+
+    @Test
+    void deniesFilesystemShapedPermissionEvenForChat2dbServer() throws Exception {
+        client.request("account/read", mapper.createObjectNode());
+        ObjectNode params = mapper.createObjectNode();
+        params.put("server", "chat2db_subscription");
+        params.put("tool", "list_all_datasources");
+        params.put("command", "rm -rf /");
+        process.fake().pushServerRequest(9007L, "item/permissions/requestApproval", params);
+
+        JsonNode response = awaitServerResponse(9007L);
+        assertEquals("denied", response.path("result").path("decision").asText());
+    }
+
+    @Test
+    void scopedPermissionPredicateAcceptsAllowlistedChat2dbTool() {
+        ObjectNode params = mapper.createObjectNode();
+        params.put("server", "chat2db_subscription");
+        params.put("tool", "execute_sql");
+        assertTrue(AppServerJsonRpcClient.isScopedChat2dbMcpPermission(params));
+    }
+
+    private JsonNode awaitServerResponse(long id) throws Exception {
+        JsonNode response = null;
+        for (int i = 0; i < 50; i++) {
+            response = process.fake().lastClientResponseToServerRequest();
+            if (response != null && response.path("id").asLong() == id) {
+                return response;
+            }
+            Thread.sleep(20L);
+        }
+        assertTrue(response != null, "client must answer serverRequest id=" + id);
+        return response;
     }
 
 }

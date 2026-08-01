@@ -140,6 +140,22 @@ class ChatGptSubscriptionLifecycleServiceTest {
     }
 
     @Test
+    void expiredAttemptWithoutRendererIdAllowsRetryAfterTtl() {
+        service.startLogin(LoginType.BROWSER);
+        assertEquals(AiProviderConnectionState.CONNECTING,
+                repository.connection(ChatGptSubscriptionLifecycleService.CHATGPT_PROVIDER).state());
+
+        // Renderer lost the attempt id (reload). Advance past TTL then start again —
+        // purge must roll CONNECTING back so the second start is not PROVIDER_BUSY.
+        clock.advance(ChatGptSubscriptionLifecycleService.LOGIN_ATTEMPT_TTL.plusSeconds(1));
+        SafeLoginStartResponse retry = service.startLogin(LoginType.BROWSER);
+
+        assertNotNull(retry.attemptId());
+        assertEquals(AiProviderConnectionState.CONNECTING,
+                repository.connection(ChatGptSubscriptionLifecycleService.CHATGPT_PROVIDER).state());
+    }
+
+    @Test
     void completeLoginConnectsDiscoversModelsWithoutAutoDefault() {
         SafeLoginStartResponse response = service.startLogin(LoginType.BROWSER);
         appServer.setAuthenticated(true);

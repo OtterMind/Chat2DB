@@ -61,7 +61,7 @@ interface ChatInputProps {
   inputRightAddons?: React.ReactNode;
   // Hide selection database
   hideDatabaseSelect?: boolean;
-  modelOptions?: Array<{ label: string; value: string; isDefault?: boolean }>;
+  modelOptions?: Array<{ label: string; value: string; isDefault?: boolean; disabled?: boolean }>;
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;

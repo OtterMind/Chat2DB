@@ -380,6 +380,18 @@ class SubscriptionSseChatStreamServiceTest {
     }
 
     @Test
+    void turnFailureClassifiersSeparateAuthRateLimitAndGeneric() throws Exception {
+        assertTrue(SubscriptionSseChatStreamService.isAuthFailure(
+                MAPPER.readTree("{\"error\":{\"code\":\"unauthorized\",\"message\":\"token expired\"}}")));
+        assertTrue(SubscriptionSseChatStreamService.isRateLimitFailure(
+                MAPPER.readTree("{\"error\":{\"code\":\"rate_limit\",\"message\":\"retry later\"}}")));
+        assertFalse(SubscriptionSseChatStreamService.isAuthFailure(
+                MAPPER.readTree("{\"error\":{\"code\":\"rate_limit\",\"message\":\"retry later\"}}")));
+        assertFalse(SubscriptionSseChatStreamService.isRateLimitFailure(
+                MAPPER.readTree("{\"error\":{\"code\":\"model_not_allowed\"}}")));
+    }
+
+    @Test
     void providerModelRejectionRefreshesThenDurablyDisablesRejectedModel() {
         SubscriptionAiRuntime runtime = mock(SubscriptionAiRuntime.class);
         IAiSubscriptionStateRepository repository = mock(IAiSubscriptionStateRepository.class);

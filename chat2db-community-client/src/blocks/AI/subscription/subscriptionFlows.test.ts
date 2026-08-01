@@ -253,8 +253,24 @@ assert.deepEqual(
     ],
     currentValue: 'api-key',
   }),
+  { value: 'api-key', label: 'Local' },
+  'an explicit still-selectable API-key model is never replaced by a subscription model',
+);
+assert.deepEqual(
+  resolveReadyToUseModelSelection({
+    options: [
+      { value: 'api-key', label: 'Local', selectable: false, supportedReasoningEfforts: [] },
+      {
+        value: 'sub-gpt',
+        label: 'GPT',
+        defaultOption: true,
+        supportedReasoningEfforts: ['low', 'high'],
+      },
+    ],
+    currentValue: 'api-key',
+  }),
   { value: 'sub-gpt', label: 'GPT' },
-  'when the current model has no efforts, prefer a subscription model that does',
+  'only when the current selection is invalid/unselectable may bootstrap pick another model',
 );
 
 const resolveModelReasoningCapabilities = modelSnapshotExports.resolveModelReasoningCapabilities as (params: {

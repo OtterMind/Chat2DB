@@ -12,6 +12,7 @@ import {
   testAIModelConfig,
 } from '@/service/aiModelConfig';
 import SubscriptionAccountPanel from '@/blocks/AI/subscription/SubscriptionAccountPanel';
+import { isSubscriptionManagementEntryVisible } from '@/blocks/AI/subscription/capability';
 import { useSubscriptionAiStore } from '@/store/aiSubscription';
 import { isCommunityEnv, isPackagedJcefDesktop } from '@/utils/env';
 import { useStyles } from './style';
@@ -59,6 +60,17 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
   /** True when user clicked 新建 or list is empty and form is open for create. */
   const [isCreating, setIsCreating] = useState(false);
   const subscriptionSnapshots = useSubscriptionAiStore((state) => state.snapshots);
+  const {
+    subscriptionHydrated,
+    subscriptionCapability,
+    subscriptionErrorCode,
+    refreshSubscriptionSurface,
+  } = useSubscriptionAiStore((state) => ({
+    subscriptionHydrated: state.hydrated,
+    subscriptionCapability: state.capability,
+    subscriptionErrorCode: state.lastErrorCode,
+    refreshSubscriptionSurface: state.refreshSurface,
+  }));
 
   const currentConfig = useMemo(() => configs.find((item) => item.id === editingId) || null, [configs, editingId]);
   const showForm = isCreating || !!editingId;
@@ -100,8 +112,12 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
   useEffect(() => {
     if (open) {
       void loadConfigs();
+      // Hydrate capability so default-off FEATURE_DISABLED hides the subscription block.
+      if (isCommunityEnv && isPackagedJcefDesktop()) {
+        void refreshSubscriptionSurface();
+      }
     }
-  }, [open]);
+  }, [open, refreshSubscriptionSurface]);
 
   useEffect(() => {
     if (!open || !subscriptionSnapshots.length) {
@@ -198,7 +214,14 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
     }
   };
 
-  const showSubscriptionSection = isCommunityEnv && isPackagedJcefDesktop();
+  // Same management-entry predicate as Settings: hide when capability is FEATURE_DISABLED.
+  const showSubscriptionSection = isSubscriptionManagementEntryVisible({
+    communityRuntime: isCommunityEnv,
+    packagedJcefDesktop: isPackagedJcefDesktop(),
+    hydrated: subscriptionHydrated,
+    backendCapability: subscriptionCapability,
+    lastErrorCode: subscriptionErrorCode,
+  });
 
   return (
     <Modal

@@ -152,7 +152,8 @@ public final class AppServerHomeLayout {
                     .map(tool -> "\"" + escapeToml(tool) + "\"")
                     .collect(java.util.stream.Collectors.joining(", "))
                     + "]");
-            lines.add("supports_parallel_tool_calls = true");
+            // First track serializes tools via TOOL_ACTIVE; advertising parallel races the ledger.
+            lines.add("supports_parallel_tool_calls = false");
             lines.add("startup_timeout_ms = 15000");
             lines.add("");
             lines.add("[mcp_servers." + MCP_SERVER_ID + ".env_http_headers]");

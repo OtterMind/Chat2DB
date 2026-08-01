@@ -4,6 +4,8 @@ export interface ModelSelectOption {
   label: ReactNode;
   value: string;
   isDefault?: boolean;
+  /** Ant Design Select option disabled flag for non-selectable snapshots. */
+  disabled?: boolean;
   className?: string;
 }
 

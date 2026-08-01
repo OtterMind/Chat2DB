@@ -14,7 +14,7 @@ import { isSubscriptionManagementEntryVisible } from '@/blocks/AI/subscription/c
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { useGlobalStore } from '@/store/global';
 import { useSubscriptionAiStore } from '@/store/aiSubscription';
-import { isCommunityEnv, isDesktop } from '@/utils/env';
+import { isCommunityEnv, isPackagedJcefDesktop } from '@/utils/env';
 
 function CommunitySetting() {
   const {
@@ -40,14 +40,14 @@ function CommunitySetting() {
 
   const subscriptionEntryVisible = isSubscriptionManagementEntryVisible({
     communityRuntime: isCommunityEnv,
-    packagedJcefDesktop: isDesktop,
+    packagedJcefDesktop: isPackagedJcefDesktop(),
     hydrated: subscriptionHydrated,
     backendCapability: subscriptionCapability,
     lastErrorCode: subscriptionErrorCode,
   });
 
   useEffect(() => {
-    if (isCommunityEnv && isDesktop) {
+    if (isCommunityEnv && isPackagedJcefDesktop()) {
       void refreshSubscriptionSurface();
     }
   }, [refreshSubscriptionSurface]);

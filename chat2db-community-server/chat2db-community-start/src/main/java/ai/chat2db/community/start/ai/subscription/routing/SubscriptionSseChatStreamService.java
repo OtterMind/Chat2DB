@@ -329,6 +329,36 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
                 || message.contains("access denied") || message.contains("unavailable"));
     }
 
+    static boolean isAuthFailure(JsonNode turn) {
+        JsonNode error = turn == null ? null : turn.path("error");
+        if (error == null || error.isMissingNode() || error.isNull()) {
+            return false;
+        }
+        String code = error.path("code").asText("").toLowerCase(java.util.Locale.ROOT);
+        String message = error.path("message").asText("").toLowerCase(java.util.Locale.ROOT);
+        if (code.contains("auth") || code.contains("unauthorized") || code.contains("unauthenticated")
+                || code.contains("login") || code.contains("token_expired") || code.contains("forbidden")) {
+            return true;
+        }
+        return (message.contains("auth") || message.contains("login") || message.contains("credential")
+                || message.contains("token"))
+                && (message.contains("expired") || message.contains("invalid") || message.contains("revoked")
+                || message.contains("unauthorized") || message.contains("required")
+                || message.contains("refresh"));
+    }
+
+    static boolean isRateLimitFailure(JsonNode turn) {
+        JsonNode error = turn == null ? null : turn.path("error");
+        if (error == null || error.isMissingNode() || error.isNull()) {
+            return false;
+        }
+        String code = error.path("code").asText("").toLowerCase(java.util.Locale.ROOT);
+        String message = error.path("message").asText("").toLowerCase(java.util.Locale.ROOT);
+        return code.contains("rate_limit") || code.contains("ratelimit") || code.contains("quota")
+                || message.contains("rate limit") || message.contains("rate_limit")
+                || message.contains("too many requests") || message.contains("quota");
+    }
+
     void rejectModelAndRefresh(AiModelRef modelRef) {
         try {
             runtime.refreshModels(modelRef.provider());
@@ -526,6 +556,20 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
                             finish(AiAttemptState.INTERRUPTED, "INTERRUPTED");
                         } else if (isModelRejection(turn)) {
                             rejectModelAndRefresh();
+                        } else if (isAuthFailure(turn)) {
+                            try {
+                                runtime.markOpenAiReauthRequired("TURN_AUTH_FAILURE");
+                            } catch (RuntimeException ignored) {
+                                // Still fail the attempt even if reauth flag write fails.
+                            }
+                            finish(AiAttemptState.FAILED, "APP_SERVER_AUTH_REQUIRED");
+                        } else if (isRateLimitFailure(turn)) {
+                            try {
+                                runtime.repository().markModelRejected(modelRef, "RATE_LIMITED");
+                            } catch (RuntimeException ignored) {
+                                // Attempt still fails closed.
+                            }
+                            finish(AiAttemptState.FAILED, "APP_SERVER_RATE_LIMITED");
                         } else {
                             finish(AiAttemptState.FAILED, "APP_SERVER_TURN_FAILED");
                         }

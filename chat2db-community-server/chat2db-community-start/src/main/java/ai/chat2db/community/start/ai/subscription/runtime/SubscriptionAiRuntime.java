@@ -51,7 +51,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Locale;
 
 /** Owns the packaged app-server, dedicated MCP bridge, ledger, and account lifecycle. */
 @Component
@@ -84,6 +86,8 @@ public final class SubscriptionAiRuntime implements SubscriptionAiFacade {
     private volatile DedicatedMcpBridge mcpBridge;
     private volatile ChatGptSubscriptionLifecycleService lifecycle;
     private volatile boolean reasoningCapabilityRefreshAttempted;
+    /** In-memory fence: credentials expired/revoked until a successful re-login. */
+    private final AtomicBoolean openAiReauthRequired = new AtomicBoolean(false);
 
     public SubscriptionAiRuntime(AiToolMcpAdapter toolAdapter) {
         this.toolAdapter = toolAdapter;
@@ -187,9 +191,32 @@ public final class SubscriptionAiRuntime implements SubscriptionAiFacade {
                 AiProviderEnum.XAI, AiProviderConnectionState.DISABLED, null, 0, null, null);
         return List.of(
                 new ProviderView(AiProviderEnum.OPENAI, "ChatGPT", chatGpt,
-                        capability.enabled(), true, capability.disabledReason().name()),
+                        capability.enabled(), true, capability.disabledReason().name(),
+                        openAiReauthRequired.get()),
                 new ProviderView(AiProviderEnum.XAI, "SuperGrok", superGrok,
-                        false, false, "PROVIDER_CONTRACT_UNAVAILABLE"));
+                        false, false, "PROVIDER_CONTRACT_UNAVAILABLE", false));
+    }
+
+    /** Marks ChatGPT as requiring re-auth; send gate/frontend treat CONNECTED as blocked. */
+    public void markOpenAiReauthRequired(String reasonCode) {
+        openAiReauthRequired.set(true);
+        log.warn("ChatGPT subscription requires re-auth reason={}", safeReason(reasonCode));
+        fenceCurrentActiveAttempt();
+    }
+
+    public void clearOpenAiReauthRequired() {
+        openAiReauthRequired.set(false);
+    }
+
+    public boolean isOpenAiReauthRequired() {
+        return openAiReauthRequired.get();
+    }
+
+    private static String safeReason(String reasonCode) {
+        if (reasonCode == null || reasonCode.isBlank()) {
+            return "UNKNOWN";
+        }
+        return reasonCode.replaceAll("[^A-Za-z0-9_\\-\\.]", "_");
     }
 
     @Override
@@ -385,6 +412,8 @@ public final class SubscriptionAiRuntime implements SubscriptionAiFacade {
                     log.warn("ChatGPT login completion was ignored during runtime shutdown");
                 }
             }
+        } else if (method != null && method.startsWith("account/")) {
+            applyAccountLifecycleNotification(method, params);
         }
         for (AppServerEventListener listener : eventListeners) {
             try {
@@ -395,11 +424,53 @@ public final class SubscriptionAiRuntime implements SubscriptionAiFacade {
         }
     }
 
+    private void applyAccountLifecycleNotification(String method, JsonNode params) {
+        String lower = method.toLowerCase(Locale.ROOT);
+        if (lower.contains("logout") || lower.contains("logged_out") || lower.contains("session_expired")) {
+            markOpenAiReauthRequired("ACCOUNT_" + method.replace('/', '_').toUpperCase(Locale.ROOT));
+            return;
+        }
+        if (params == null || params.isNull()) {
+            return;
+        }
+        // account/updated / account/rateLimits/* — inspect auth + rate-limit signals without secrets.
+        boolean requiresAuth = params.path("requiresOpenaiAuth").asBoolean(false)
+                || params.path("requiresAuth").asBoolean(false)
+                || "logged_out".equalsIgnoreCase(params.path("status").asText(""))
+                || "expired".equalsIgnoreCase(params.path("status").asText(""));
+        JsonNode account = params.path("account");
+        if (!account.isMissingNode() && !account.isNull()) {
+            String accountType = account.path("type").asText("");
+            if (accountType.isBlank() && account.path("email").asText("").isBlank()) {
+                requiresAuth = true;
+            }
+        }
+        if (requiresAuth && (lower.contains("updated") || lower.contains("auth") || lower.contains("session"))) {
+            markOpenAiReauthRequired("ACCOUNT_AUTH_SIGNAL");
+        }
+        if (looksLikeRateLimitNode(params)) {
+            // Quota is model-scoped when possible; fall back to reauth-safe send block via model marks.
+            log.warn("ChatGPT subscription rate-limit signal observed method={}", method);
+        }
+    }
+
+    private static boolean looksLikeRateLimitNode(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return false;
+        }
+        String blob = node.toString().toLowerCase(Locale.ROOT);
+        return blob.contains("rate_limit")
+                || blob.contains("ratelimit")
+                || blob.contains("\"quota\"")
+                || blob.contains("tokens_exhausted");
+    }
+
     private void applyLoginCompletion(
             ChatGptSubscriptionLifecycleService currentLifecycle, String loginId, boolean success) {
         try {
             if (success) {
                 currentLifecycle.completeLoginByAppServerLoginId(loginId);
+                clearOpenAiReauthRequired();
             } else {
                 currentLifecycle.failLoginByAppServerLoginId(loginId);
             }

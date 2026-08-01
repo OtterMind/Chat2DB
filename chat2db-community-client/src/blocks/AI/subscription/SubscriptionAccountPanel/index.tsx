@@ -28,6 +28,7 @@ export default function SubscriptionAccountPanel() {
     preferences,
     migrationAttempt,
     migrationResults,
+    secretImportAvailable,
     lastErrorCode,
     refreshSurface,
     refreshProvidersAndModels,
@@ -39,6 +40,7 @@ export default function SubscriptionAccountPanel() {
     beginMigration,
     confirmMigration,
     clearMigration,
+    probeSecretImportAvailability,
   } = useSubscriptionAiStore((state) => ({
     hydrated: state.hydrated,
     surfaceAvailable: state.surfaceAvailable,
@@ -49,6 +51,7 @@ export default function SubscriptionAccountPanel() {
     preferences: state.preferences,
     migrationAttempt: state.migrationAttempt,
     migrationResults: state.migrationResults,
+    secretImportAvailable: state.secretImportAvailable,
     lastErrorCode: state.lastErrorCode,
     refreshSurface: state.refreshSurface,
     refreshProvidersAndModels: state.refreshProvidersAndModels,
@@ -60,11 +63,18 @@ export default function SubscriptionAccountPanel() {
     beginMigration: state.beginMigration,
     confirmMigration: state.confirmMigration,
     clearMigration: state.clearMigration,
+    probeSecretImportAvailability: state.probeSecretImportAvailability,
   }));
 
   useEffect(() => {
     void refreshSurface();
   }, [refreshSurface]);
+
+  useEffect(() => {
+    if (surfaceAvailable && secretImportAvailable === null) {
+      void probeSecretImportAvailability();
+    }
+  }, [surfaceAvailable, secretImportAvailable, probeSecretImportAvailability]);
 
   const manageable = useMemo(() => listManageableProviders(providers), [providers]);
   const anyConnected = useMemo(
@@ -275,41 +285,46 @@ export default function SubscriptionAccountPanel() {
         </div>
       )}
 
-      <details className={styles.advanced}>
-        <summary>{i18n('ai.subscription.config.advancedMigration')}</summary>
-        <div className={styles.advancedBody}>
-          <div className={styles.hint}>{i18n('ai.subscription.migration.desc')}</div>
-          <Button
-            size="small"
-            onClick={() => {
-              setMigrationOpen(true);
-            }}
-          >
-            {i18n('ai.subscription.migration.start')}
-          </Button>
-        </div>
-      </details>
+      {/* Separately gated: only render when secret-import boundary probe succeeds. */}
+      {secretImportAvailable ? (
+        <>
+          <details className={styles.advanced}>
+            <summary>{i18n('ai.subscription.config.advancedMigration')}</summary>
+            <div className={styles.advancedBody}>
+              <div className={styles.hint}>{i18n('ai.subscription.migration.desc')}</div>
+              <Button
+                size="small"
+                onClick={() => {
+                  setMigrationOpen(true);
+                }}
+              >
+                {i18n('ai.subscription.migration.start')}
+              </Button>
+            </div>
+          </details>
 
-      <MigrationWizardModal
-        open={migrationOpen}
-        attempt={migrationAttempt}
-        results={migrationResults}
-        backendHasValidDefault={!!preferences.globalDefaultModelRefKey}
-        backendDefaultModelRefKey={preferences.globalDefaultModelRefKey}
-        onStart={() => {
-          void beginMigration();
-        }}
-        onConfirm={(selectedDefaultItemId) => {
-          void confirmMigration(selectedDefaultItemId);
-        }}
-        onRetryFailed={() => {
-          void beginMigration();
-        }}
-        onClose={() => {
-          setMigrationOpen(false);
-          clearMigration();
-        }}
-      />
+          <MigrationWizardModal
+            open={migrationOpen}
+            attempt={migrationAttempt}
+            results={migrationResults}
+            backendHasValidDefault={!!preferences.globalDefaultModelRefKey}
+            backendDefaultModelRefKey={preferences.globalDefaultModelRefKey}
+            onStart={() => {
+              void beginMigration();
+            }}
+            onConfirm={(selectedDefaultItemId) => {
+              void confirmMigration(selectedDefaultItemId);
+            }}
+            onRetryFailed={() => {
+              void beginMigration();
+            }}
+            onClose={() => {
+              setMigrationOpen(false);
+              clearMigration();
+            }}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

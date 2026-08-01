@@ -29,7 +29,7 @@ export interface AiSubscriptionClient {
   retryDiscovery(provider: AiProviderId): Promise<AiProviderConnectionView>;
   listModelSnapshots(): Promise<AiModelSnapshotView[]>;
   refreshModelSnapshots(provider?: AiProviderId): Promise<AiModelSnapshotView[]>;
-  getPreferences(): Promise<AiModelPreferenceView>;
+  getPreferences(conversationId?: string | null): Promise<AiModelPreferenceView>;
   setGlobalDefaultModel(modelRefKey: string): Promise<AiModelPreferenceView>;
   setConversationModel(params: {
     conversationId: string;

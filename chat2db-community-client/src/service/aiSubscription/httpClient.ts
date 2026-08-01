@@ -38,7 +38,9 @@ const refreshModelSnapshots = createRequest<{ provider?: AiProviderId }, AiModel
   '/api/v3/ai/subscription/models/refresh',
   { method: 'post' },
 );
-const getPreferences = createRequest<void, AiModelPreferenceView>('/api/v3/ai/subscription/preferences');
+const getPreferences = createRequest<{ conversationId?: string } | void, AiModelPreferenceView>(
+  '/api/v3/ai/subscription/preferences',
+);
 const setGlobalDefaultModel = createRequest<{ modelRefKey: string }, AiModelPreferenceView>(
   '/api/v3/ai/subscription/preferences/global-default',
   { method: 'post' },
@@ -74,7 +76,12 @@ export function createHttpAiSubscriptionClient(): AiSubscriptionClient {
     retryDiscovery: (provider) => retryDiscovery({ provider }),
     listModelSnapshots: () => listModelSnapshots(undefined as void).then((items) => items || []),
     refreshModelSnapshots: (provider) => refreshModelSnapshots({ provider }),
-    getPreferences: () => getPreferences(undefined as void),
+    getPreferences: (conversationId) =>
+      getPreferences(
+        conversationId && conversationId.trim()
+          ? { conversationId: conversationId.trim() }
+          : (undefined as void),
+      ),
     setGlobalDefaultModel: (modelRefKey) => setGlobalDefaultModel({ modelRefKey }),
     setConversationModel: (params) => setConversationModel(params),
     listAttempts: (params) => listAttempts(params).then((items) => items || []),

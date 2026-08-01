@@ -7,6 +7,8 @@ import ai.chat2db.community.tools.security.secretimport.SecretImportBoundaryRegi
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.storage.ai.H2AiSubscriptionStateRepository;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,8 @@ import org.springframework.stereotype.Component;
 @Component
 public final class SecretImportBootstrap {
 
+    private static final Logger log = LoggerFactory.getLogger(SecretImportBootstrap.class);
+
     static final String FEATURE_PROPERTY = "chat2db.ai.secret-import.enabled";
 
     private final IAiModelConfigService modelConfigService;
@@ -26,6 +30,8 @@ public final class SecretImportBootstrap {
     public SecretImportBootstrap(IAiModelConfigService modelConfigService) {
         this.modelConfigService = modelConfigService;
     }
+
+    private volatile String disabledReason;
 
     @EventListener(ApplicationReadyEvent.class)
     public synchronized void registerAfterSpringReady() {
@@ -38,13 +44,40 @@ public final class SecretImportBootstrap {
         if (!enabled || importService != null) {
             return;
         }
-        H2AiSubscriptionStateRepository repository = H2AiSubscriptionStateRepository.forCommunityProfile();
-        repository.initialize();
-        importService = new EncryptedApiKeyImportService(
-                new AiModelConfigSecretImportPort(modelConfigService),
-                new H2SecretImportLedgerPort(repository),
-                5 * 60_000L);
-        SecretImportBoundaryRegistry.register(new SecretImportBoundary(importService));
+        // Optional migration surface: ledger/init failures must not fail ApplicationReadyEvent
+        // or bring down the rest of Community desktop startup.
+        try {
+            H2AiSubscriptionStateRepository repository = H2AiSubscriptionStateRepository.forCommunityProfile();
+            repository.initialize();
+            importService = new EncryptedApiKeyImportService(
+                    new AiModelConfigSecretImportPort(modelConfigService),
+                    new H2SecretImportLedgerPort(repository),
+                    5 * 60_000L);
+            SecretImportBoundaryRegistry.register(new SecretImportBoundary(importService));
+            disabledReason = null;
+        } catch (RuntimeException exception) {
+            SecretImportBoundaryRegistry.clear();
+            if (importService != null) {
+                try {
+                    importService.destroyAll();
+                } catch (RuntimeException ignored) {
+                    // best-effort cleanup
+                }
+                importService = null;
+            }
+            disabledReason = "SECRET_IMPORT_LEDGER_UNAVAILABLE";
+            log.warn("Secret import stayed disabled after ledger init failure reason={}",
+                    exception.getClass().getSimpleName());
+        }
+    }
+
+    /** Null when import is registered; non-null diagnostic when gate-on but init failed. */
+    public String disabledReason() {
+        return disabledReason;
+    }
+
+    public boolean isImportServiceRegistered() {
+        return importService != null;
     }
 
     @PreDestroy

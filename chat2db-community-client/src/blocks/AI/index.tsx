@@ -36,7 +36,7 @@ import { keyboardKey } from '@/utils';
 import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
-import { isDesktop } from '@/utils/env';
+import { isDesktop, isPackagedJcefDesktop } from '@/utils/env';
 import { evaluateChatSendGuard } from '@/blocks/AI/subscription/chatGuards';
 import LegacyModelConfirmModal from '@/blocks/AI/subscription/LegacyModelConfirmModal';
 import { useSubscriptionAiStore } from '@/store/aiSubscription';
@@ -504,7 +504,9 @@ function isLikelySameSessionFromPrefix(serverMessages: IChatItem[], snapshotMess
 export default function AI({ variant = 'page', onTableClick, onPinSql, onSessionChange }: IAIProps) {
   const isPanel = variant === 'panel';
   const { styles } = useStyles();
-  const [modelOptions, setModelOptions] = useState<Array<{ label: string; value: string; isDefault?: boolean }>>([]);
+  const [modelOptions, setModelOptions] = useState<
+    Array<{ label: string; value: string; isDefault?: boolean; disabled?: boolean }>
+  >([]);
   const [modelOptionMap, setModelOptionMap] = useState<Record<string, IModelOptionItem>>({});
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
   const [messages, setMessages] = useState<IChatItem[]>([]);
@@ -809,6 +811,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (!currentSessionIdRef.current) {
         currentSessionIdRef.current = chunk.sessionId;
         setCurrentSessionId(chunk.sessionId);
+        // Bind the model used for the first send of a new session so reopening restores it.
+        const modelKey = useAIStore.getState().selectedModel?.value?.trim();
+        if (modelKey) {
+          void useSubscriptionAiStore.getState().persistConversationModel(chunk.sessionId, modelKey);
+        }
       }
       window.dispatchEvent(new CustomEvent('stream:sessionsChanged'));
       return;
@@ -928,6 +935,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           label: item.label,
           value: item.value,
           isDefault: !!item.defaultOption,
+          disabled: item.selectable === false,
         })),
       );
       // Read live store value (not a render-time closure) so persist rehydrate and
@@ -1022,6 +1030,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
+
+  // Persist explicit model selection per conversation (does not force global default).
+  useEffect(() => {
+    const sessionId = currentSessionId?.trim();
+    const modelKey = selectedModel?.value?.trim();
+    if (!sessionId || !modelKey) {
+      return;
+    }
+    void useSubscriptionAiStore.getState().persistConversationModel(sessionId, modelKey);
+  }, [currentSessionId, selectedModel?.value]);
 
   useEffect(() => {
     currentSessionTitleRef.current = currentSessionTitle;
@@ -1515,6 +1533,21 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         // Require explicit model confirmation before the next send; history is not rewritten.
         setSessionRequiresModelConfirm(chatItems.length > 0);
 
+        // Restore conversation-scoped model preference when present (never force global default).
+        try {
+          const prefs = await useSubscriptionAiStore.getState().loadConversationPreferences(sessionId);
+          const preferredKey = prefs?.conversationModelRefKey?.trim();
+          if (preferredKey) {
+            const options = (await listAvailableModelOptions()) || [];
+            const match = options.find((item) => item.value === preferredKey);
+            if (match) {
+              setSelectedModel({ value: match.value, label: match.label });
+            }
+          }
+        } catch {
+          // Preference restore is best-effort; chat history still loads.
+        }
+
         // Fill the title from the session list when opening the URL directly.
         if (!title) {
           try {
@@ -1532,7 +1565,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setSessionLoading(false);
       }
     },
-    [onSessionChange, stop],
+    [onSessionChange, setSelectedModel, stop],
   );
 
   // Restore the conversation from the path when first opening /stream/:chatId.
@@ -2277,7 +2310,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 }))}
                 onReasoningEffortChange={setSelectedReasoningEffort}
                 prefillInputState={prefillInputState}
-                autoFocus={isDesktop}
+                autoFocus={isPackagedJcefDesktop() || isDesktop}
               />
             </div>
           </div>

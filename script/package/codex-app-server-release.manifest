@@ -1,8 +1,7 @@
 # Chat2DB packaging manifest for the official OpenAI Codex app-server.
 # Format: key=value metadata followed by tab-separated target rows:
 # target<TAB>arch<TAB>asset<TAB>archiveSha256<TAB>archiveEntry<TAB>runtimeBinary
-# Host rows use kind=host (7 fields) so GPT-5.6 code_mode_only nested MCP can run:
-# host<TAB>target<TAB>arch<TAB>asset<TAB>archiveSha256<TAB>archiveEntry<TAB>runtimeBinary
+# First DB-tools track ships app-server only (no code-mode-host / GPT-5.6 CodeMode).
 schemaVersion=1
 version=0.144.6
 protocolLabel=codex-app-server-jsonl-v2-0.144.6
@@ -15,8 +14,3 @@ mac	x64	codex-app-server-x86_64-apple-darwin.tar.gz	7363d458e4b26765b228ca69d08c
 linux	arm64	codex-app-server-aarch64-unknown-linux-musl.tar.gz	3539380f431aa72ce1e9ba83cf4d9b2c2a70d12ddf3280bc67c8c59f93bb9eb5	codex-app-server-aarch64-unknown-linux-musl	codex-app-server
 linux	x64	codex-app-server-x86_64-unknown-linux-musl.tar.gz	4920bc21208c38c1fa87add8fe3200a85c03bd2d2304a7a147d3dc9fa9185b99	codex-app-server-x86_64-unknown-linux-musl	codex-app-server
 win	x64	codex-app-server-x86_64-pc-windows-msvc.exe.tar.gz	fa09a1cf422a97dbce08de68d30020574147cfbbcb7f22bbebfd668eefe50b66	codex-app-server-x86_64-pc-windows-msvc.exe	codex-app-server.exe
-host	mac	arm64	codex-code-mode-host-aarch64-apple-darwin.tar.gz	7bfd7b3344625be4aad7f3d2a2ac4202f986412842cae11d194d28ca1ebac586	codex-code-mode-host-aarch64-apple-darwin	codex-code-mode-host
-host	mac	x64	codex-code-mode-host-x86_64-apple-darwin.tar.gz	a7472069c3ee3b9f3afe064af02a72289d8f4baf052d1fe32a799cb43d3d7735	codex-code-mode-host-x86_64-apple-darwin	codex-code-mode-host
-host	linux	arm64	codex-code-mode-host-aarch64-unknown-linux-musl.tar.gz	7fb9dd606784e0cf239d7d461c72cf86edc20bbdc733d7029298e6c48d230ede	codex-code-mode-host-aarch64-unknown-linux-musl	codex-code-mode-host
-host	linux	x64	codex-code-mode-host-x86_64-unknown-linux-musl.tar.gz	37104c43f62719709309d06e69f003e8e8bed1397f4d36476b3b65e25fc04493	codex-code-mode-host-x86_64-unknown-linux-musl	codex-code-mode-host
-host	win	x64	codex-code-mode-host-x86_64-pc-windows-msvc.exe.tar.gz	f7464a0389026bd52161d31e77aac9dca0f7d05c6e14034c95a6fdb43f27d19a	codex-code-mode-host-x86_64-pc-windows-msvc.exe	codex-code-mode-host.exe

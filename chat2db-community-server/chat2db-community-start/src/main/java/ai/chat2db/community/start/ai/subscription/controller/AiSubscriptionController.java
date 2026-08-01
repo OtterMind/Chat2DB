@@ -171,14 +171,14 @@ public class AiSubscriptionController {
                     view.provider(), view.displayName(), connection.state().name(), connection.maskedAccount(),
                     connection.fenceGeneration(),
                     connection.discoveredAt() == null ? null : connection.discoveredAt().toString(),
-                    connection.discoveryErrorCode(), false, view.disabledReason(),
+                    connection.discoveryErrorCode(), view.reauthRequired(), view.disabledReason(),
                     view.eligible(), view.showAccountManagement());
         }
 
         static ProviderResponse chatGpt(AiProviderConnection connection, AiSubscriptionCapability capability) {
             return from(new SubscriptionAiFacade.ProviderView(
                     AiProviderEnum.OPENAI, "ChatGPT", connection, capability.enabled(), true,
-                    capability.disabledReason().name()));
+                    capability.disabledReason().name(), false));
         }
     }
 

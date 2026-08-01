@@ -104,6 +104,8 @@ class AppServerHomeLayoutMcpTest {
         assertTrue(toml.contains("code_mode = false"));
         assertTrue(toml.contains("code_mode_host = false"));
         assertTrue(toml.contains("tool_search_always_defer_mcp_tools = false"));
+        assertTrue(toml.contains("supports_parallel_tool_calls = false"));
+        assertFalse(toml.contains("supports_parallel_tool_calls = true"));
         assertFalse(toml.contains("[code_mode]"));
     }
 

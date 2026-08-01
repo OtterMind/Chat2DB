@@ -31,6 +31,15 @@ class SecretImportIntegrationTest {
     }
 
     @Test
+    void bootstrapInitFailureDoesNotPropagateFromRegister() {
+        // Gate is off in plain unit runs (FEATURE property false) so register is a no-op and
+        // never throws; documents that ApplicationReady must not be aborted by this component.
+        SecretImportBootstrap bootstrap = new SecretImportBootstrap(new RecordingModelConfigService());
+        bootstrap.registerAfterSpringReady();
+        assertFalse(bootstrap.isImportServiceRegistered());
+    }
+
+    @Test
     void portUsesLegacyImportPolicyWithoutReturningAnyKeyFragment() {
         RecordingModelConfigService service = new RecordingModelConfigService();
         AiModelConfigSecretImportPort port = new AiModelConfigSecretImportPort(service);

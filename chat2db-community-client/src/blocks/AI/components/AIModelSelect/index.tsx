@@ -15,7 +15,7 @@ import {
 import { useSubscriptionAiStore } from '@/store/aiSubscription';
 import type { AiProviderId } from '@/typings/aiSubscription';
 import { useGlobalStore } from '@/store/global';
-import { isCommunityEnv, isDesktop } from '@/utils/env';
+import { isCommunityEnv, isPackagedJcefDesktop } from '@/utils/env';
 import { history } from 'umi';
 import {
   appendCustomModelEntryOption,
@@ -69,9 +69,10 @@ const AIModelSelect = ({
     startConnect: state.startConnect,
   }));
   const setSettingPageActiveTab = useGlobalStore((state) => state.setSettingPageActiveTab);
+  const packagedDesktop = isPackagedJcefDesktop();
   const connectEntry = resolveChatGptConnectEntry({
     communityRuntime: isCommunityEnv,
-    packagedJcefDesktop: isDesktop,
+    packagedJcefDesktop: packagedDesktop,
     hydrated: subscriptionHydrated,
     surfaceAvailable: subscriptionSurfaceAvailable,
     backendCapability: subscriptionCapability,
@@ -131,7 +132,7 @@ const AIModelSelect = ({
   // handles the drop-down box opening event
   const handleDropdownVisibleChange = (open: boolean) => {
     setDropdownOpen(open);
-    if (open && isCommunityEnv && isDesktop) {
+    if (open && isCommunityEnv && isPackagedJcefDesktop()) {
       void refreshSubscriptionSurface();
       onDropdownOpen?.();
     }

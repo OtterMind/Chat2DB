@@ -46,6 +46,7 @@ public interface SubscriptionAiFacade {
             AiProviderConnection connection,
             boolean eligible,
             boolean showAccountManagement,
-            String disabledReason) {
+            String disabledReason,
+            boolean reauthRequired) {
     }
 }

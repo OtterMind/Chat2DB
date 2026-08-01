@@ -153,6 +153,9 @@ export function resolveModelReasoningCapabilities(params: {
  * Ready-to-use chat chrome: keep a valid selection when possible, otherwise pick a
  * selectable model. Prefer options that already advertise reasoning efforts so the
  * effort control can render without forcing the user to open the model dropdown.
+ *
+ * Never replace an explicit still-selectable current model (API-key or subscription)
+ * just because another option advertises reasoning efforts — subscription is additive.
  */
 export function resolveReadyToUseModelSelection(params: {
   options: readonly ReadyToUseModelOption[];
@@ -165,15 +168,12 @@ export function resolveReadyToUseModelSelection(params: {
 
   const currentValue = params.currentValue?.trim() || '';
   const current = currentValue ? selectable.find((item) => item.value === currentValue) : undefined;
-  const withEfforts = selectable.filter(optionHasReasoningEfforts);
-
+  // Preserve any still-valid explicit selection regardless of effort metadata.
   if (current) {
-    // Keep the user's model when it already exposes efforts, or when nothing does.
-    if (optionHasReasoningEfforts(current) || withEfforts.length === 0) {
-      return { value: current.value, label: current.label };
-    }
+    return { value: current.value, label: current.label };
   }
 
+  const withEfforts = selectable.filter(optionHasReasoningEfforts);
   const preferred =
     withEfforts.find((item) => item.defaultOption) ||
     withEfforts[0] ||

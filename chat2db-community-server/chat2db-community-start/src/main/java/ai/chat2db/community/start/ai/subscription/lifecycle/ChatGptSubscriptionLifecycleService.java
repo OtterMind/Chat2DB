@@ -524,10 +524,27 @@ public final class ChatGptSubscriptionLifecycleService {
 
     private void purgeExpiredLoginAttempts() {
         long now = clock.millis();
+        boolean removedAny = false;
         for (Map.Entry<String, LoginAttempt> entry : loginAttempts.entrySet()) {
-            if (entry.getValue().expired(now)) {
-                loginAttempts.remove(entry.getKey(), entry.getValue());
+            LoginAttempt attempt = entry.getValue();
+            if (!attempt.expired(now)) {
+                continue;
             }
+            // Best-effort cancel the app-server login so a lost renderer attempt cannot
+            // leave the durable connection CONNECTING forever (PROVIDER_BUSY on retry).
+            try {
+                if (attempt.appServerLoginId() != null) {
+                    appServer.cancelLogin(attempt.appServerLoginId());
+                }
+            } catch (RuntimeException exception) {
+                log.warn("chatgpt expired login cancel failed attempt={}", safeId(entry.getKey()));
+            }
+            if (loginAttempts.remove(entry.getKey(), attempt)) {
+                removedAny = true;
+            }
+        }
+        if (removedAny && loginAttempts.isEmpty()) {
+            rollbackConnectingQuietly();
         }
     }
 

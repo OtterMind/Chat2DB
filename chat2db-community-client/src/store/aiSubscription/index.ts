@@ -33,6 +33,11 @@ export interface SubscriptionAiState {
   providerBusy: boolean;
   migrationAttempt: AiSecretImportAttemptView | null;
   migrationResults: AiSecretImportItemResult[];
+  /**
+   * Separately gated secret-import surface. null = not probed yet; false = backend
+   * boundary unavailable / feature off; true = start+cancel probe succeeded.
+   */
+  secretImportAvailable: boolean | null;
   lastErrorCode: string | null;
   loading: boolean;
 }
@@ -40,6 +45,10 @@ export interface SubscriptionAiState {
 export interface SubscriptionAiActions {
   refreshSurface: () => Promise<void>;
   refreshProvidersAndModels: () => Promise<void>;
+  /** Load global + conversation-scoped model preference (secret-free keys only). */
+  loadConversationPreferences: (conversationId: string) => Promise<AiModelPreferenceView | null>;
+  /** Persist the active chat model for a conversation; no-op without conversation id. */
+  persistConversationModel: (conversationId: string, modelRefKey: string) => Promise<void>;
   startConnect: (provider: AiProviderId) => Promise<void>;
   cancelConnect: (provider: AiProviderId) => Promise<void>;
   disconnect: (provider: AiProviderId) => Promise<void>;
@@ -52,6 +61,8 @@ export interface SubscriptionAiActions {
   beginMigration: () => Promise<void>;
   confirmMigration: (selectedDefaultItemId: string | null | undefined) => Promise<void>;
   clearMigration: () => void;
+  /** Probe the dedicated secret-import boundary without keeping an open attempt. */
+  probeSecretImportAvailability: () => Promise<boolean>;
 }
 
 export type SubscriptionAiStore = SubscriptionAiState & SubscriptionAiActions;
@@ -72,6 +83,7 @@ const initialState: SubscriptionAiState = {
   providerBusy: false,
   migrationAttempt: null,
   migrationResults: [],
+  secretImportAvailable: null,
   lastErrorCode: null,
   loading: false,
 };
@@ -148,6 +160,42 @@ export const useSubscriptionAiStore = createWithEqualityFn<SubscriptionAiStore>(
       set({ lastErrorCode: 'PROVIDER_FETCH_FAILED' });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  loadConversationPreferences: async (conversationId) => {
+    const id = conversationId?.trim();
+    if (!id) {
+      return null;
+    }
+    try {
+      const preferences = await getAiSubscriptionClient().getPreferences(id);
+      if (preferences) {
+        set({ preferences });
+      }
+      return preferences || null;
+    } catch {
+      set({ lastErrorCode: 'PREFERENCE_FETCH_FAILED' });
+      return null;
+    }
+  },
+
+  persistConversationModel: async (conversationId, modelRefKey) => {
+    const id = conversationId?.trim();
+    const key = modelRefKey?.trim();
+    if (!id || !key) {
+      return;
+    }
+    try {
+      const preferences = await getAiSubscriptionClient().setConversationModel({
+        conversationId: id,
+        modelRefKey: key,
+      });
+      if (preferences) {
+        set({ preferences });
+      }
+    } catch {
+      set({ lastErrorCode: 'PREFERENCE_SAVE_FAILED' });
     }
   },
 
@@ -443,6 +491,32 @@ export const useSubscriptionAiStore = createWithEqualityFn<SubscriptionAiStore>(
     }
     set({ migrationAttempt: null, migrationResults: [] });
   },
+
+  probeSecretImportAvailability: async () => {
+    // Only probe on packaged Community desktop after subscription surface is usable.
+    if (!get().surfaceAvailable) {
+      set({ secretImportAvailable: false });
+      return false;
+    }
+    try {
+      const client = getAiSubscriptionClient();
+      const attempt = await client.createSecretImportAttempt();
+      if (!attempt?.attemptId) {
+        set({ secretImportAvailable: false });
+        return false;
+      }
+      try {
+        await client.cancelSecretImportAttempt(attempt.attemptId);
+      } catch {
+        // Cancel is best-effort; a successful start already proves the boundary is live.
+      }
+      set({ secretImportAvailable: true });
+      return true;
+    } catch {
+      set({ secretImportAvailable: false });
+      return false;
+    }
+  },
 }), shallow);
 
 interface LegacyMigrationCandidate {
@@ -452,12 +526,48 @@ interface LegacyMigrationCandidate {
 }
 
 const SECRET_IMPORT_ITEM_ID_FIELD = '__chat2dbSecretImportItemId';
+/** Bound to secret-bearing fields so editing an API key rotates the ledger item id. */
+const SECRET_IMPORT_REVISION_FIELD = '__chat2dbSecretImportRevision';
 
 function newSecretImportItemId(): string {
   if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
   if (typeof crypto?.getRandomValues !== 'function') throw new Error('SECURE_RANDOM_UNAVAILABLE');
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+/** Non-cryptographic revision token; only used to detect secret/config edits for idempotency. */
+function secretImportRevisionToken(config: Record<string, any>): string {
+  const material = [
+    String(config?.provider ?? ''),
+    String(config?.model ?? ''),
+    String(config?.name ?? ''),
+    String(config?.apiKey ?? ''),
+    String(config?.httpHost ?? config?.baseUrl ?? ''),
+  ].join('\u0001');
+  let hash = 2166136261;
+  for (let i = 0; i < material.length; i += 1) {
+    hash ^= material.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function ensureSecretImportItemIdentity(config: Record<string, any>): boolean {
+  const revision = secretImportRevisionToken(config);
+  const existingId = typeof config[SECRET_IMPORT_ITEM_ID_FIELD] === 'string'
+    ? config[SECRET_IMPORT_ITEM_ID_FIELD].trim()
+    : '';
+  const existingRevision = typeof config[SECRET_IMPORT_REVISION_FIELD] === 'string'
+    ? config[SECRET_IMPORT_REVISION_FIELD].trim()
+    : '';
+  if (existingId && existingRevision === revision) {
+    return false;
+  }
+  // Rotate id whenever secret-bearing fields change so ALREADY_IMPORTED cannot delete a new key.
+  config[SECRET_IMPORT_ITEM_ID_FIELD] = newSecretImportItemId();
+  config[SECRET_IMPORT_REVISION_FIELD] = revision;
+  return true;
 }
 
 function readLegacyMigrationCandidates(): LegacyMigrationCandidate[] {
@@ -469,9 +579,7 @@ function readLegacyMigrationCandidates(): LegacyMigrationCandidate[] {
   const candidates = legacyConfigs
     .map((config, storageIndex) => {
       if (!config || typeof config.apiKey !== 'string' || !config.apiKey.trim()) return null;
-      if (typeof config[SECRET_IMPORT_ITEM_ID_FIELD] !== 'string'
-        || !config[SECRET_IMPORT_ITEM_ID_FIELD].trim()) {
-        config[SECRET_IMPORT_ITEM_ID_FIELD] = newSecretImportItemId();
+      if (ensureSecretImportItemIdentity(config)) {
         changed = true;
       }
       return {

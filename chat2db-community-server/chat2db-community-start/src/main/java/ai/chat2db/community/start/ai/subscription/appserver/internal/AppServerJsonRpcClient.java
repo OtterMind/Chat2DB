@@ -4,6 +4,7 @@ import ai.chat2db.community.start.ai.subscription.appserver.AppServerDisabledRea
 import ai.chat2db.community.start.ai.subscription.appserver.AppServerEventListener;
 import ai.chat2db.community.start.ai.subscription.appserver.AppServerException;
 import ai.chat2db.community.start.ai.subscription.appserver.AppServerProtocol;
+import ai.chat2db.community.start.ai.subscription.appserver.Chat2dbMcpToolPolicy;
 import ai.chat2db.community.start.ai.subscription.appserver.SensitivePayloadRedactor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -276,8 +277,9 @@ public final class AppServerJsonRpcClient implements AutoCloseable {
 
     /**
      * Answer app-server server-requests so Codex does not hang after item/started.
-     * Product policy: auto-approve MCP permission prompts; auto-answer headless user-input with
-     * affirmative options; deny shell/file; accept Chat2DB MCP elicitation only.
+     * Product policy: auto-approve only scoped Chat2DB MCP permissions; auto-answer headless
+     * user-input for Chat2DB MCP only; deny shell/file/foreign/network; accept Chat2DB MCP
+     * elicitation only.
      */
     private void handleServerRequest(JsonNode idNode, String method, JsonNode params) {
         String safeMethod = method == null ? "" : method.trim();
@@ -295,7 +297,14 @@ public final class AppServerJsonRpcClient implements AutoCloseable {
 
         // requestUserInput must return {answers:...}, never {decision:...}.
         if (METHOD_REQUEST_USER_INPUT.equals(safeMethod)) {
-            writeServerResult(idNode, buildRequestUserInputResponse(params));
+            if (isScopedChat2dbMcpPermission(params) || isChat2dbMcpContext(params)) {
+                writeServerResult(idNode, buildRequestUserInputResponse(params));
+            } else {
+                // Empty answers cancels the prompt instead of approving foreign tools.
+                ObjectNode empty = mapper.createObjectNode();
+                empty.set("answers", mapper.createObjectNode());
+                writeServerResult(idNode, empty);
+            }
             return;
         }
         // MCP elicitation uses {action, content?}, not decision.
@@ -307,15 +316,18 @@ public final class AppServerJsonRpcClient implements AutoCloseable {
         // Deny shell/file first so broad MCP heuristics cannot approve them.
         if (AUTO_DENY_METHODS.contains(safeMethod)
                 || safeMethod.contains("commandExecution")
-                || safeMethod.contains("fileChange")) {
+                || safeMethod.contains("fileChange")
+                || looksLikeFilesystemOrShellPermission(params)) {
             writeServerResult(idNode, decisionResult("denied"));
             return;
         }
-        if (AUTO_APPROVE_METHODS.contains(safeMethod) || isMcpPermissionRequest(safeMethod, params)) {
+        // Approve only the Chat2DB MCP permission method when server+tool are allowlisted.
+        if (AUTO_APPROVE_METHODS.contains(safeMethod) && isScopedChat2dbMcpPermission(params)) {
             writeServerResult(idNode, decisionResult("approved"));
             return;
         }
-        if (safeMethod.endsWith("/requestApproval")) {
+        if (safeMethod.endsWith("/requestApproval")
+                || safeMethod.toLowerCase(Locale.ROOT).contains("permission")) {
             writeServerResult(idNode, decisionResult("denied"));
             return;
         }
@@ -441,22 +453,102 @@ public final class AppServerJsonRpcClient implements AutoCloseable {
                 || blob.contains("mcp__chat2db_subscription");
     }
 
-    private static boolean isMcpPermissionRequest(String method, JsonNode params) {
-        if (method == null) {
-            return false;
-        }
-        String lower = method.toLowerCase(Locale.ROOT);
-        if (lower.contains("mcp") || lower.contains("permission")) {
-            return true;
-        }
+    /**
+     * Strict Chat2DB MCP permission gate: server must be our loopback MCP registration and the
+     * tool (when present) must be one of the seven database tools or pinned resource metadata.
+     * Foreign servers, bare network grants, filesystem, and unknown tools are denied.
+     */
+    public static boolean isScopedChat2dbMcpPermission(JsonNode params) {
         if (params == null || !params.isObject()) {
             return false;
         }
+        String server = firstNonBlank(
+                textOrEmpty(params.get("server")),
+                textOrEmpty(params.get("serverName")),
+                textOrEmpty(params.path("mcp").path("server")),
+                textOrEmpty(params.path("permission").path("server")));
+        String tool = firstNonBlank(
+                textOrEmpty(params.get("tool")),
+                textOrEmpty(params.get("toolName")),
+                textOrEmpty(params.path("mcp").path("tool")),
+                textOrEmpty(params.path("permission").path("tool")));
+        String namespace = firstNonBlank(
+                textOrEmpty(params.get("namespace")),
+                textOrEmpty(params.path("mcp").path("namespace")));
+
+        boolean chat2dbServer = isChat2dbServerName(server) || isChat2dbServerName(namespace);
+        if (!chat2dbServer) {
+            // Some permission payloads only nest the server id in free-form text — still require
+            // the exact Chat2DB server token, not a bare "mcp__" / "network" substring.
+            String blob = params.toString().toLowerCase(Locale.ROOT);
+            chat2dbServer = blob.contains("\"server\":\"chat2db_subscription\"")
+                    || blob.contains("\"server\": \"chat2db_subscription\"")
+                    || blob.contains("mcp__chat2db_subscription");
+            if (!chat2dbServer) {
+                return false;
+            }
+        }
+        if (looksLikeFilesystemOrShellPermission(params)) {
+            return false;
+        }
+        if (tool == null || tool.isBlank()) {
+            // Network-only grants for our MCP server are allowed only when no foreign tool appears.
+            return true;
+        }
+        String normalizedTool = normalizeToolName(tool);
+        return Chat2dbMcpToolPolicy.DATABASE_TOOLS.contains(normalizedTool)
+                || Chat2dbMcpToolPolicy.PINNED_RESOURCE_METADATA_TOOLS.contains(normalizedTool);
+    }
+
+    private static boolean isChat2dbServerName(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String lower = value.trim().toLowerCase(Locale.ROOT);
+        return "chat2db_subscription".equals(lower)
+                || "mcp__chat2db_subscription".equals(lower)
+                || lower.startsWith("mcp__chat2db_subscription__");
+    }
+
+    private static String normalizeToolName(String tool) {
+        String lower = tool.trim().toLowerCase(Locale.ROOT);
+        // mcp__chat2db_subscription__list_all_datasources → list_all_datasources
+        int idx = lower.lastIndexOf("__");
+        if (idx >= 0 && idx + 2 < lower.length()) {
+            return lower.substring(idx + 2);
+        }
+        int slash = lower.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < lower.length()) {
+            return lower.substring(slash + 1);
+        }
+        return lower;
+    }
+
+    private static boolean looksLikeFilesystemOrShellPermission(JsonNode params) {
+        if (params == null || params.isNull()) {
+            return false;
+        }
         String blob = params.toString().toLowerCase(Locale.ROOT);
-        return blob.contains("chat2db_subscription")
-                || blob.contains("mcp_tool")
-                || blob.contains("mcp__")
-                || blob.contains("network");
+        return blob.contains("commandexecution")
+                || blob.contains("filechange")
+                || blob.contains("\"fs/")
+                || blob.contains("filesystem")
+                || blob.contains("\"shell\"")
+                || blob.contains("\"command\"")
+                || blob.contains("writefile")
+                || blob.contains("readfile");
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private ObjectNode decisionResult(String decision) {
