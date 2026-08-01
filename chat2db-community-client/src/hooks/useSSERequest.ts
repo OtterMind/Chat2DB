@@ -49,27 +49,20 @@ const useSSERequest = <T = string>(
 
   const request = useCallback(
     async (params: SSERequestParams & AnyObject) => {
-      console.log('[useSSERequest] request called, params:', params);
       setStatus(SSERequestStatus.LOADING);
       setError(undefined);
-      const chunks: Record<string, string>[] = [];
       let accumulatedContent = '';
 
       try {
         await instance.create(params, {
           onSuccess: () => {
-            console.log('[useSSERequest] onSuccess, chunks count:', chunks.length);
             setStatus(SSERequestStatus.FINISH);
           },
           onError: (err) => {
-            console.log('[useSSERequest] onError:', err);
             setStatus(SSERequestStatus.ERROR);
             setError(err);
           },
           onUpdate: (chunk) => {
-            console.log('[useSSERequest] onUpdate called, chunk:', chunk);
-            chunks.push(chunk as Record<string, string>);
-
             if (transformer) {
               const parsedData = parseSSEChunkData<IParsedData>(chunk.data);
               if (!parsedData) {
@@ -79,24 +72,19 @@ const useSSERequest = <T = string>(
             } else {
               const parsedData = parseSSEChunkData<IParsedData>(chunk.data);
               if (!parsedData) {
-                console.log('json_parse_error');
                 return;
               }
-              console.log('[useSSERequest] parsedData:', parsedData);
               onChunkRef.current?.(chunk, parsedData);
               const newContent = parsedData?.content || '';
               accumulatedContent += newContent;
-              console.log('[useSSERequest] accumulatedContent length:', accumulatedContent.length);
               setContent(accumulatedContent as unknown as T);
             }
           },
           onStop: () => {
-            console.log('[useSSERequest] onStop');
             setStatus(SSERequestStatus.FINISH);
           },
         });
       } catch (error_) {
-        console.log('[useSSERequest] catch error:', error_);
         setStatus(SSERequestStatus.ERROR);
         setError(error_ instanceof Error ? error_ : new Error('Unknown error'));
       }

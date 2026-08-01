@@ -1,7 +1,7 @@
 import sendClientSSERequest, { IJcefSseRequest } from '@/service/sse';
 import { SSERequestOptions, SSERequestParams, SSERequestCallbacks, AnyObject } from './index';
 import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
-import { handleSSEErrorPayload } from './errorPayload';
+import { handleSSEErrorPayload, isApplicationStreamErrorPayload } from './errorPayload';
 
 export type SSEFields = 'data' | 'event' | 'id' | 'retry';
 export type SSEOutput = Partial<Record<SSEFields, any>>;
@@ -70,6 +70,11 @@ class ClientRequestClass {
             callbacks.onUpdate(doneChunk as Output);
             callbacks.onSuccess([doneChunk] as Output[]);
             this.stop();
+          } else if (isApplicationStreamErrorPayload(sseOutput?.data)) {
+            // Application-level stream errors (subscription idle timeout, model reject, …)
+            // are in-band events. Keep the listener open for the following done payload
+            // so partial finalAnswer can still be recovered before the stream ends.
+            callbacks.onUpdate(sseOutput as Output);
           } else if (handleSSEErrorPayload(sseOutput, params)) {
             callbacks.onSuccess([sseOutput] as Output[]);
             this.stop();

@@ -3,7 +3,7 @@
   "algorithm": "sha256",
   "locales": {
     "es-ES": {
-      "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
+      "ai.ts": "6aa699570c2628d56881354b62f32ee02a0f12390334790b04acd91127aa3723",
       "chat.ts": "0cbe009eacbaa95a9a29bbc69588cb547e90b563667c53edec3e54ee64f5667b",
       "common.ts": "94c74ecece9c1ad0853468ee9b334c8221af9c4c44a73989704dacff4f41e401",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",
@@ -30,7 +30,7 @@
       "workspace.ts": "df144283a0a2d8426f8c465d90a27ecd4b6194e01cee74a427a1e9aa983cc7ca"
     },
     "ko-KR": {
-      "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
+      "ai.ts": "6aa699570c2628d56881354b62f32ee02a0f12390334790b04acd91127aa3723",
       "chat.ts": "0cbe009eacbaa95a9a29bbc69588cb547e90b563667c53edec3e54ee64f5667b",
       "common.ts": "94c74ecece9c1ad0853468ee9b334c8221af9c4c44a73989704dacff4f41e401",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",

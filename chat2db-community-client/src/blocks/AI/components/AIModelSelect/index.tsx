@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -6,6 +6,17 @@ import { useStyles } from './style';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai/store';
 import { SelectedModelOption } from '@/store/ai/slices/model/initialState';
+import {
+  isSubscriptionConnectOption,
+  parseSubscriptionConnectProvider,
+  resolveChatGptConnectEntry,
+  subscriptionConnectOptionValue,
+} from '@/blocks/AI/subscription/modelSelectGroups';
+import { useSubscriptionAiStore } from '@/store/aiSubscription';
+import type { AiProviderId } from '@/typings/aiSubscription';
+import { useGlobalStore } from '@/store/global';
+import { isCommunityEnv, isDesktop } from '@/utils/env';
+import { history } from 'umi';
 import {
   appendCustomModelEntryOption,
   isCustomModelEntryOption,
@@ -18,6 +29,7 @@ interface AIModelSelectProps {
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;
+  openToken?: number;
 }
 
 const AIModelSelect = ({
@@ -26,14 +38,49 @@ const AIModelSelect = ({
   showCustomModelEntry = false,
   onCustomModelClick,
   customModelText,
+  openToken = 0,
 }: AIModelSelectProps) => {
   const { styles } = useStyles();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const { modelList, selectedModel, setSelectedModel, getModelList } = useAIStore((state) => ({
     modelList: state.modelList,
     selectedModel: state.selectedModel,
     setSelectedModel: state.setSelectedModel,
     getModelList: state.getModelList,
   }));
+  const {
+    subscriptionHydrated,
+    subscriptionSurfaceAvailable,
+    subscriptionCapability,
+    subscriptionProviders,
+    subscriptionErrorCode,
+    refreshSubscriptionSurface,
+    startConnect,
+  } = useSubscriptionAiStore((state) => ({
+    subscriptionHydrated: state.hydrated,
+    subscriptionSurfaceAvailable: state.surfaceAvailable,
+    subscriptionCapability: state.capability,
+    subscriptionProviders: state.providers,
+    subscriptionErrorCode: state.lastErrorCode,
+    refreshSubscriptionSurface: state.refreshSurface,
+    startConnect: state.startConnect,
+  }));
+  const setSettingPageActiveTab = useGlobalStore((state) => state.setSettingPageActiveTab);
+  const connectEntry = resolveChatGptConnectEntry({
+    communityRuntime: isCommunityEnv,
+    packagedJcefDesktop: isDesktop,
+    hydrated: subscriptionHydrated,
+    surfaceAvailable: subscriptionSurfaceAvailable,
+    backendCapability: subscriptionCapability,
+    lastErrorCode: subscriptionErrorCode,
+    connections: subscriptionProviders,
+  });
+
+  useEffect(() => {
+    if (openToken > 0) {
+      setDropdownOpen(true);
+    }
+  }, [openToken]);
 
   useEffect(() => {
     if (options !== undefined) {
@@ -51,6 +98,17 @@ const AIModelSelect = ({
       return;
     }
 
+    if (isSubscriptionConnectOption(selectedValue.value)) {
+      const provider = parseSubscriptionConnectProvider(selectedValue.value) as AiProviderId | null;
+      if (provider && connectEntry?.action === 'CONNECT') {
+        void startConnect(provider);
+      } else {
+        setSettingPageActiveTab('subscriptionAi');
+        history.push('/settings');
+      }
+      return;
+    }
+
     const nextValue = {
       value: selectedValue.value,
       label: String(selectedValue.label || ''),
@@ -63,6 +121,10 @@ const AIModelSelect = ({
 
   // handles the drop-down box opening event
   const handleDropdownVisibleChange = (open: boolean) => {
+    setDropdownOpen(open);
+    if (open && isCommunityEnv && isDesktop) {
+      void refreshSubscriptionSurface();
+    }
     if (open && (!modelList || modelList.length === 0)) {
       if (options !== undefined) {
         return;
@@ -72,6 +134,22 @@ const AIModelSelect = ({
   };
 
   const selectOptions = options !== undefined ? options : modelList;
+  const optionsWithSubscriptionEntry = useMemo(
+    () =>
+      connectEntry
+        ? [
+            {
+              label:
+                connectEntry.action === 'CONNECT'
+                  ? i18n('ai.subscription.model.connectChatGpt')
+                  : i18n('ai.subscription.model.openSettingsToRetry'),
+              value: subscriptionConnectOptionValue(connectEntry.provider),
+            },
+            ...(selectOptions || []),
+          ]
+        : selectOptions,
+    [connectEntry?.action, selectOptions],
+  );
   const customModelEntry =
     showCustomModelEntry && onCustomModelClick ? (
       <div className={styles.customModelEntry}>
@@ -86,7 +164,7 @@ const AIModelSelect = ({
       </div>
     ) : null;
   const optionsWithCustomModelEntry = appendCustomModelEntryOption(
-    selectOptions,
+    optionsWithSubscriptionEntry,
     customModelEntry,
     selectOptions?.length ? styles.customModelOption : undefined,
   );
@@ -100,6 +178,7 @@ const AIModelSelect = ({
       labelInValue
       value={selectedModel && selectedModel.label ? selectedModel : undefined}
       onChange={handleChange}
+      open={dropdownOpen}
       options={optionsWithCustomModelEntry}
       size="small"
       placeholder={i18n('ai.select.model')}

@@ -37,6 +37,17 @@ import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
+import { evaluateChatSendGuard } from '@/blocks/AI/subscription/chatGuards';
+import LegacyModelConfirmModal from '@/blocks/AI/subscription/LegacyModelConfirmModal';
+import { useSubscriptionAiStore } from '@/store/aiSubscription';
+import {
+  decideSubscriptionModelRefresh,
+  listSelectableSubscriptionModelRefKeys,
+} from '@/blocks/AI/subscription/modelSelectGroups';
+import { resolveReasoningEffortSelection } from '@/blocks/AI/subscription/modelSnapshot';
+import { hydrateSubscriptionModelOptions } from '@/blocks/AI/subscription/startupHydration';
+import { resolveTerminalAnswerFallback } from '@/blocks/AI/subscription/terminalAnswer';
+import { resolveStreamErrorDisplay } from '@/blocks/AI/subscription/streamErrorMessage';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -179,7 +190,7 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
   const match = /language-(\w+)/.exec(className || '');
 
   const submitEditorChartCallback = (data: any) => {
-    console.log('Chart updated:', data);
+    void data;
   };
 
   if (!match) {
@@ -220,7 +231,6 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
   if (lang === 'chart') {
     try {
       const chartJson = JSON.parse(code);
-      console.log('[AI chart render json]', chartJson);
       const chartDetail = buildChartDetail(chartJson);
       return (
         <div className={styles.chartCard}>
@@ -324,6 +334,8 @@ interface IStreamChunk {
   type?: 'reasoning' | 'tool_call' | 'tool_result' | 'answer' | 'done' | 'error' | 'session';
   messageType?: 'reasoning' | 'tool_call' | 'tool_result' | 'answer' | 'done' | 'error' | 'session';
   content?: string;
+  finalAnswer?: string;
+  errorCode?: string;
   name?: string;
   arguments?: string;
   sessionId?: string;
@@ -489,6 +501,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const { styles } = useStyles();
   const [modelOptions, setModelOptions] = useState<Array<{ label: string; value: string; isDefault?: boolean }>>([]);
   const [modelOptionMap, setModelOptionMap] = useState<Record<string, IModelOptionItem>>({});
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
   const [messages, setMessages] = useState<IChatItem[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamTraceEntries, setStreamTraceEntries] = useState<ITraceEntry[]>([]);
@@ -502,8 +515,33 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
   const [openSettings, setOpenSettings] = useState(false);
+  const [modelSelectOpenToken, setModelSelectOpenToken] = useState(0);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [legacyConfirmOpen, setLegacyConfirmOpen] = useState(false);
+  const [legacyConfirmModelRefKey, setLegacyConfirmModelRefKey] = useState<string | null>(null);
+  const [pendingLegacySend, setPendingLegacySend] = useState<SendParams | null>(null);
+  /** True only for loaded historical sessions that lack model snapshots. */
+  const [sessionRequiresModelConfirm, setSessionRequiresModelConfirm] = useState(false);
   const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
+  const {
+    surfaceAvailable: subscriptionSurfaceAvailable,
+    providers: subscriptionProviders,
+    snapshots: subscriptionSnapshots,
+    providerBusy: subscriptionProviderBusy,
+    activeConnectAttemptIdByProvider,
+    legacyConfirmedModelRefKeyByConversation,
+    confirmLegacyModel,
+    refreshSurface: refreshSubscriptionSurface,
+  } = useSubscriptionAiStore((state) => ({
+    surfaceAvailable: state.surfaceAvailable,
+    providers: state.providers,
+    snapshots: state.snapshots,
+    providerBusy: state.providerBusy,
+    activeConnectAttemptIdByProvider: state.activeConnectAttemptIdByProvider,
+    legacyConfirmedModelRefKeyByConversation: state.legacyConfirmedModelRefKeyByConversation,
+    confirmLegacyModel: state.confirmLegacyModel,
+    refreshSurface: state.refreshSurface,
+  }));
 
   const streamingRef = useRef('');
   const streamTraceEntriesRef = useRef<ITraceEntry[]>([]);
@@ -532,6 +570,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const topAlignmentTimerRef = useRef<number | null>(null);
   const pendingInitialBottomSyncRef = useRef(false);
   const initialBottomSyncTimerRef = useRef<number | null>(null);
+  const previousSubscriptionSnapshotsRef = useRef(subscriptionSnapshots);
+  const postLoginModelGuidePendingRef = useRef(false);
 
   const lockScrollTracking = useCallback((behavior: ScrollBehavior = 'auto') => {
     suppressScrollTrackingRef.current = true;
@@ -717,6 +757,19 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setShowPanel: state.setShowPanel,
   }));
 
+  const selectedModelOption = selectedModel?.value ? modelOptionMap[selectedModel.value] : undefined;
+  const reasoningEffortSelection = resolveReasoningEffortSelection({
+    supportedReasoningEfforts: selectedModelOption?.supportedReasoningEfforts,
+    defaultReasoningEffort: selectedModelOption?.defaultReasoningEffort,
+    previousReasoningEffort: selectedReasoningEffort,
+  });
+
+  useEffect(() => {
+    if (selectedReasoningEffort !== reasoningEffortSelection.value) {
+      setSelectedReasoningEffort(reasoningEffortSelection.value);
+    }
+  }, [reasoningEffortSelection.value, selectedReasoningEffort]);
+
   const handleChunk = useCallback((rawChunk, parsedData) => {
     const chunk = parsedData as unknown as IStreamChunk;
     const messageType =
@@ -745,11 +798,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         inProgressSession.streamingText += delta;
         return;
       }
-      setStreamingText((prev) => {
-        const next = prev + delta;
-        streamingRef.current = next;
-        return next;
-      });
+      const next = streamingRef.current + delta;
+      streamingRef.current = next;
+      setStreamingText(next);
       return;
     }
 
@@ -773,6 +824,19 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
 
     if (messageType === 'done') {
+      const currentText = isHiddenInProgress && inProgressSession
+        ? inProgressSession.streamingText
+        : streamingRef.current;
+      const recoveredDelta = resolveTerminalAnswerFallback(currentText, chunk.finalAnswer);
+      if (recoveredDelta) {
+        if (isHiddenInProgress && inProgressSession) {
+          inProgressSession.streamingText += recoveredDelta;
+        } else {
+          const next = streamingRef.current + recoveredDelta;
+          streamingRef.current = next;
+          setStreamingText(next);
+        }
+      }
       // Server may return sessionId in done event as fallback.
       if (chunk.sessionId) {
         newSessionIdRef.current = chunk.sessionId;
@@ -784,9 +848,25 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
 
     if (messageType === 'error') {
+      const displayMessage = resolveStreamErrorDisplay({
+        errorCode: chunk.errorCode || chunk.content,
+        content: chunk.content,
+        t: (key, fallback) => {
+          try {
+            const translated = i18n(key as any);
+            if (translated && translated !== key) {
+              return translated;
+            }
+          } catch {
+            // Fall through to the provided fallback when the key is missing.
+          }
+          return fallback || key;
+        },
+      });
       const traceEntry = normalizeTraceEntry({
         ...chunk,
         type: 'error',
+        content: displayMessage,
       });
       if (traceEntry) {
         if (isHiddenInProgress && inProgressSession) {
@@ -799,7 +879,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           });
         }
       }
-      feedback.error(chunk.content || 'AI stream error');
+      feedback.error(displayMessage);
     }
   }, []);
 
@@ -853,8 +933,57 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, [selectedModel?.label, selectedModel?.value, setSelectedModel]);
 
   useEffect(() => {
-    loadModelOptions();
+    let active = true;
+    void hydrateSubscriptionModelOptions(
+      refreshSubscriptionSurface,
+      loadModelOptions,
+      () => active,
+      {
+        shouldRetry: () => {
+          const state = useSubscriptionAiStore.getState();
+          const chatGptState = state.providers.find((item) => item.provider === 'OPENAI')?.state;
+          return (
+            state.surfaceAvailable &&
+            chatGptState === 'CONNECTED' &&
+            listSelectableSubscriptionModelRefKeys(state.snapshots, state.providers).length === 0
+          );
+        },
+      },
+    );
+    return () => {
+      active = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (activeConnectAttemptIdByProvider.OPENAI) {
+      postLoginModelGuidePendingRef.current = true;
+      return;
+    }
+    const openAiConnectionState = subscriptionProviders.find((item) => item.provider === 'OPENAI')?.state;
+    if (openAiConnectionState && !['CONNECTED', 'DISCOVERING', 'DISCOVERY_FAILED'].includes(openAiConnectionState)) {
+      postLoginModelGuidePendingRef.current = false;
+    }
+  }, [activeConnectAttemptIdByProvider.OPENAI, subscriptionProviders]);
+
+  useEffect(() => {
+    const decision = decideSubscriptionModelRefresh({
+      previousSnapshots: previousSubscriptionSnapshotsRef.current,
+      currentSnapshots: subscriptionSnapshots,
+      postLoginGuidePending: postLoginModelGuidePendingRef.current,
+    });
+    previousSubscriptionSnapshotsRef.current = subscriptionSnapshots;
+    if (!decision.reloadModelOptions) {
+      return;
+    }
+    void loadModelOptions().then(() => {
+      if (decision.showPostLoginGuide) {
+        postLoginModelGuidePendingRef.current = false;
+        feedback.success(i18n('ai.subscription.onboarding.modelsReady', subscriptionSnapshots.length));
+        setModelSelectOpenToken((token) => token + 1);
+      }
+    });
+  }, [loadModelOptions, subscriptionSnapshots]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1191,6 +1320,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     currentRoundBlockRef.current = null;
     newSessionIdRef.current = null;
     inProgressSessionRef.current = null;
+    setSessionRequiresModelConfirm(false);
+    setLegacyConfirmOpen(false);
+    setPendingLegacySend(null);
     if (!isPanel) {
       clearChatIdFromPath();
     }
@@ -1345,6 +1477,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
         setMessages(chatItems);
         messagesRef.current = [...chatItems];
+        // Pre-upgrade history has no model snapshot fields on IChatMessage yet.
+        // Require explicit model confirmation before the next send; history is not rewritten.
+        setSessionRequiresModelConfirm(chatItems.length > 0);
 
         // Fill the title from the session list when opening the URL directly.
         if (!title) {
@@ -1426,6 +1561,31 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         return;
       }
 
+      const conversationKey = currentSessionId || 'new';
+      const legacyConfirmed = legacyConfirmedModelRefKeyByConversation[conversationKey];
+      const conversationHasLegacyMessages = sessionRequiresModelConfirm && !legacyConfirmed;
+      const sendGuard = evaluateChatSendGuard({
+        surfaceAvailable: subscriptionSurfaceAvailable,
+        selectedModelValue: selectedValue,
+        modelOption: selectedOption,
+        connections: subscriptionProviders,
+        snapshots: subscriptionSnapshots,
+        providerBusy: subscriptionProviderBusy,
+        conversationId: currentSessionId,
+        conversationHasLegacyMessages,
+        legacyConfirmedModelRefKey: legacyConfirmed,
+      });
+      if (!sendGuard.allowed) {
+        if (sendGuard.needsLegacyModelConfirm) {
+          setPendingLegacySend(params);
+          setLegacyConfirmModelRefKey(selectedValue);
+          setLegacyConfirmOpen(true);
+          return;
+        }
+        feedback.warning(i18n((sendGuard.feedbackI18nKey || 'stream.warning.invalidModel') as any));
+        return;
+      }
+
       setStreamTraceEntries([]);
       streamTraceEntriesRef.current = [];
       previousStreamThoughtPreviewRef.current = '';
@@ -1475,33 +1635,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             .filter((item) => item.content?.trim())
             .map((item) => ({ role: item.role, content: item.content }));
 
-      const modelRequestPayload = await resolveModelRequestPayload(selectedOption);
+      const modelRequestPayload = await resolveModelRequestPayload(selectedOption, selectedReasoningEffort);
       if (!modelRequestPayload) {
         feedback.warning(i18n('stream.warning.invalidModel'));
         return;
       }
 
-      console.log('[AI stream] sending request', {
-        inputPreview: content.slice(0, 200),
-        sessionId: currentSessionId || undefined,
-        dataSourceId: params.dataSourceId,
-        dataSourceCollectionId: params.dataSourceCollectionId,
-        databaseName: params.databaseName,
-        schemaName: params.schemaName,
-        attachmentCount: params.attachments?.length || 0,
-        attachments: (params.attachments || []).map((attachment) => ({
-          fileName: attachment.fileName,
-          fileType: attachment.fileType,
-          contentCategory: attachment.contentCategory,
-          contentLength: attachment.contentLength,
-          truncated: attachment.truncated,
-          contentPreview: attachment.content?.slice(0, 120),
-        })),
-      });
-
       const isNewSession = !currentSessionId;
       const requestPromise = request({
         input: content,
+        messageId: userMessageId,
         sessionId: currentSessionId || undefined,
         history: historyPayload,
         enableTools: true,
@@ -1525,9 +1668,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     [
       currentSessionId,
       isCurrentRoundOverflowingViewport,
+      legacyConfirmedModelRefKeyByConversation,
       messages,
       modelOptionMap,
       selectedModel?.value,
+      selectedReasoningEffort,
+      sessionRequiresModelConfirm,
+      subscriptionProviderBusy,
+      subscriptionProviders,
+      subscriptionSnapshots,
+      subscriptionSurfaceAvailable,
       request,
       scrollMessageListToBottom,
     ],
@@ -2038,6 +2188,15 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 showCustomModelEntry
                 onCustomModelClick={() => setOpenSettings(true)}
                 customModelText={i18n('setting.modelConfig.entry')}
+                modelSelectOpenToken={modelSelectOpenToken}
+                reasoningEffort={selectedReasoningEffort}
+                reasoningEffortOptions={reasoningEffortSelection.options.map((value) => ({
+                  value,
+                  label: `${i18n('ai.subscription.reasoning.label')} ${
+                    value === 'xhigh' ? 'xHigh' : value.charAt(0).toUpperCase() + value.slice(1)
+                  }`,
+                }))}
+                onReasoningEffortChange={setSelectedReasoningEffort}
                 prefillInputState={prefillInputState}
                 autoFocus={isDesktop}
               />
@@ -2049,6 +2208,42 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         open={openSettings}
         onClose={() => setOpenSettings(false)}
         onChanged={loadModelOptions}
+      />
+      <LegacyModelConfirmModal
+        open={legacyConfirmOpen}
+        options={modelOptions
+          .filter((item) => {
+            const option = modelOptionMap[item.value];
+            return option?.selectable !== false;
+          })
+          .map((item) => ({ label: item.label, value: item.value }))}
+        preselectedModelRefKey={legacyConfirmModelRefKey}
+        selectedModelRefKey={legacyConfirmModelRefKey}
+        onChange={setLegacyConfirmModelRefKey}
+        onCancel={() => {
+          setLegacyConfirmOpen(false);
+          setPendingLegacySend(null);
+        }}
+        onConfirm={() => {
+          if (!legacyConfirmModelRefKey) {
+            return;
+          }
+          const conversationKey = currentSessionId || 'new';
+          confirmLegacyModel(conversationKey, legacyConfirmModelRefKey);
+          const option = modelOptionMap[legacyConfirmModelRefKey];
+          if (option) {
+            setSelectedModel({ value: option.value, label: option.label });
+          }
+          const pending = pendingLegacySend;
+          setLegacyConfirmOpen(false);
+          setPendingLegacySend(null);
+          if (pending) {
+            void handleSend({
+              ...pending,
+              model: legacyConfirmModelRefKey,
+            });
+          }
+        }}
       />
     </div>
   );

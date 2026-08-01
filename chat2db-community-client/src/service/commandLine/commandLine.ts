@@ -5,6 +5,7 @@ import { ErrorCodesWithoutToast } from '@/constants/request';
 import interceptorsResponse from '../interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
+import { createSafeIpcDebugMetadata } from './safeDebug';
 
 export interface ICommandLineRequest {
   requestUrl: string;
@@ -46,6 +47,7 @@ export interface ICommandLineRequestListItem {
 
 // Interface timeout
 export const TIMEOUT = 300000;
+const pendingRequests = new Map<string, ICommandLineRequestListItem>();
 // TODO: must be deleted
 // window._PRINT_LOGS = true;
 
@@ -74,7 +76,11 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       }),
     );
     if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(res));
+      console.log(
+        '%cCHAT2DB_IPC_REQUEST',
+        'color: #00008B',
+        createSafeIpcDebugMetadata(id, data.method, data.requestUrl, data.message),
+      );
     }
     // Prepare for a cancellation request
     options?.restParams?.signal?.({ id, reject });
@@ -82,23 +88,30 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
 
     if (options.timeout) {
       requestTimeoutTimer = setTimeout(() => {
-        const item = useGlobalStore.getState().commandLineRequestList[id];
+        const item = pendingRequests.get(id);
         if (item) {
-          useGlobalStore.getState().removeCommandLineRequestListItem(id);
+          pendingRequests.delete(id);
           reject?.(`timeout_error:${item.requestData.requestUrl}`);
         }
       }, TIMEOUT);
     }
 
     const commandLineRequestListItem = {
-      requestData: commandLineParams,
+      requestData: {
+        actionType: 'execute',
+        headers: {},
+        uuid: id,
+        requestUrl: data.requestUrl,
+        method: data.method,
+        message: options.permissionError === 'apply' ? data.message : undefined,
+      },
       responseData: null,
       requestTimeoutTimer,
       resolve,
       reject,
       options,
     };
-    useGlobalStore.getState().addCommandLineRequestListItem(commandLineRequestListItem);
+    pendingRequests.set(id, commandLineRequestListItem);
     if (typeof window.javaQuery === 'function') {
       window.javaQuery({
         request: JSON.stringify(res),
@@ -107,13 +120,14 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
           pushMessageFlow(_data);
         },
         onFailure: function (error_code, error_message) {
+          pendingRequests.delete(id);
           alert(error_message);
-          console.log('error', error_message);
           reject(error_message);
         },
       });
     } else {
-      console.error("JCEF's javaQuery is not available!");
+      pendingRequests.delete(id);
+      reject(new Error("JCEF's javaQuery is not available"));
     }
   });
 };
@@ -122,9 +136,13 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
 export const pushMessageFlow = (_data) => {
   const data = JSON.parse(_data);
   if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), data);
+    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', {
+      requestId: typeof data?.uuid === 'string' ? data.uuid : 'service-status',
+      success: data?.message?.success === true,
+      errorCode: data?.message?.errorCode,
+    });
   }
-  const { setServiceStatus, commandLineRequestList, removeCommandLineRequestListItem } = useGlobalStore.getState();
+  const { setServiceStatus } = useGlobalStore.getState();
 
   // Special handling application startup
   if (data === 'CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS') {
@@ -133,12 +151,13 @@ export const pushMessageFlow = (_data) => {
   }
 
   // Only process logged requests
-  if (data?.uuid && commandLineRequestList?.[data.uuid]) {
+  if (data?.uuid && pendingRequests.has(data.uuid)) {
     const { message: messageData, uuid } = data;
 
     const { errorCode, success, errorMessage, errorDetail, solutionLink, eventualUrl } = messageData || {};
 
-    const { resolve, reject, options, requestData, requestTimeoutTimer } = commandLineRequestList[uuid];
+    const { resolve, reject, options, requestData, requestTimeoutTimer } = pendingRequests.get(uuid)!;
+    pendingRequests.delete(uuid);
 
     // Clear timeout timer
     if (requestTimeoutTimer) {
@@ -170,7 +189,10 @@ export const pushMessageFlow = (_data) => {
             errorDetail,
             solutionLink,
             requestUrl: eventualUrl,
-            requestParams: JSON.stringify(requestData),
+            requestParams: JSON.stringify({
+              requestUrl: requestData.requestUrl,
+              method: requestData.method,
+            }),
           });
           break;
         default:
@@ -178,7 +200,6 @@ export const pushMessageFlow = (_data) => {
       }
     }
     // Remove request record
-    removeCommandLineRequestListItem(uuid);
   }
 };
 

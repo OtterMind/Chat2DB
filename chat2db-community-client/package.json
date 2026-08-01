@@ -29,6 +29,7 @@
     "lint:style": "stylelint \"src/**/*.{css,less}\" --max-warnings=0",
     "test:i18n": "node ./scripts/validate-i18n.cjs",
     "test:ai-model-select": "tsx src/blocks/AI/components/AIModelSelect/modelSelectOptions.test.ts",
+    "test:ai-subscription": "tsx src/blocks/AI/subscription/subscriptionFlows.test.ts && tsx src/service/aiSubscription/secretImportTransport.test.ts",
     "test:active-tab-locator": "tsx src/pages/main/workspace/utils/activeTabLocator.test.ts",
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
     "test:chat-answer-update": "tsx src/store/chat/slices/chatDetails/answerUpdates.test.ts",
