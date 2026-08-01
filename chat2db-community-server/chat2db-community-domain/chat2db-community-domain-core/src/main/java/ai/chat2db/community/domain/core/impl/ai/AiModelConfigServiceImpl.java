@@ -157,11 +157,28 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     }
 
     public synchronized AiModelConfigResponse saveCurrentUserConfig(AiModelConfigSaveRequest request) {
+        return saveCurrentUserConfig(request, true, true);
+    }
+
+    @Override
+    public synchronized AiModelConfigResponse importLegacyCurrentUserConfig(
+            AiModelConfigSaveRequest request,
+            boolean confirmDefault) {
+        return saveCurrentUserConfig(request, false, confirmDefault);
+    }
+
+    private AiModelConfigResponse saveCurrentUserConfig(
+            AiModelConfigSaveRequest request,
+            boolean assignFallbackDefault,
+            boolean confirmRequestedDefault) {
         Long userId = identityService.currentUserId();
         List<AiModelConfig> configs = userConfigMap.computeIfAbsent(userId, key -> new ArrayList<>());
 
         AiModelConfig config = findById(configs, request.getId());
         boolean isNew = Objects.isNull(config);
+        boolean configWasDefault = !isNew && Boolean.TRUE.equals(config.getDefaultConfig());
+        boolean backendDefaultExists = configs.stream()
+                .anyMatch(item -> Boolean.TRUE.equals(item.getDefaultConfig()));
         if (isNew) {
             config = new AiModelConfig();
             config.setId(StringUtils.defaultIfBlank(request.getId(), UUID.randomUUID().toString()));
@@ -182,6 +199,13 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
             config.setApiKey(request.getApiKey().trim());
         }
 
+        if (!assignFallbackDefault) {
+            boolean applyConfirmedLegacyDefault = !backendDefaultExists
+                    && confirmRequestedDefault
+                    && Boolean.TRUE.equals(request.getDefaultConfig());
+            config.setDefaultConfig(configWasDefault || applyConfirmedLegacyDefault);
+        }
+
         if (Boolean.TRUE.equals(config.getDefaultConfig())) {
             String currentId = config.getId();
             configs.forEach(item -> {
@@ -189,7 +213,9 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
                     item.setDefaultConfig(Boolean.FALSE);
                 }
             });
-        } else if (CollectionUtils.isNotEmpty(configs) && configs.stream().noneMatch(c -> Boolean.TRUE.equals(c.getDefaultConfig()))) {
+        } else if (assignFallbackDefault
+                && CollectionUtils.isNotEmpty(configs)
+                && configs.stream().noneMatch(c -> Boolean.TRUE.equals(c.getDefaultConfig()))) {
             configs.get(0).setDefaultConfig(Boolean.TRUE);
         }
 

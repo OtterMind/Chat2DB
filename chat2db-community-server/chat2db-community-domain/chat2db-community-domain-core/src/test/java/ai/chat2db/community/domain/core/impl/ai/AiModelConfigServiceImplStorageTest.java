@@ -137,6 +137,41 @@ class AiModelConfigServiceImplStorageTest {
     }
 
     @Test
+    void legacyImportDoesNotCreateDefaultWithoutExplicitConfirmation() throws Exception {
+        AiModelConfigServiceImpl service = service(KEY);
+        AiModelConfigSaveRequest request = saveRequest("legacy", API_KEY);
+        request.setDefaultConfig(Boolean.TRUE);
+
+        AiModelConfigResponse imported = service.importLegacyCurrentUserConfig(request, false);
+
+        assertEquals(Boolean.FALSE, imported.getDefaultConfig());
+        assertEquals(Boolean.TRUE, imported.getHasApiKey());
+        assertFalse(Files.readString(storagePath).contains(API_KEY));
+    }
+
+    @Test
+    void legacyImportCanCreateDefaultOnlyWhenConfirmedAndNoBackendDefaultExists() {
+        AiModelConfigServiceImpl service = service(KEY);
+        AiModelConfigSaveRequest first = saveRequest("legacy-first", API_KEY);
+        first.setDefaultConfig(Boolean.TRUE);
+
+        AiModelConfigResponse confirmed = service.importLegacyCurrentUserConfig(first, true);
+
+        assertEquals(Boolean.TRUE, confirmed.getDefaultConfig());
+
+        AiModelConfigSaveRequest second = saveRequest("legacy-second", "sk-second-1234567890");
+        second.setDefaultConfig(Boolean.TRUE);
+        AiModelConfigResponse preserved = service.importLegacyCurrentUserConfig(second, true);
+
+        assertEquals(Boolean.FALSE, preserved.getDefaultConfig());
+        List<AiModelConfigResponse> configs = service.listCurrentUserConfigs();
+        assertEquals(1, configs.stream().filter(config -> Boolean.TRUE.equals(config.getDefaultConfig())).count());
+        assertEquals(confirmed.getId(), configs.stream()
+                .filter(config -> Boolean.TRUE.equals(config.getDefaultConfig()))
+                .findFirst().orElseThrow().getId());
+    }
+
+    @Test
     void loadFailsWithWrongKey() {
         AiModelConfigServiceImpl writer = service(KEY);
         writer.saveCurrentUserConfig(saveRequest("primary", API_KEY));
