@@ -37,6 +37,11 @@ class AiModelConfigServiceImplBaseUrlTest {
         assertEquals("https://claude.example.com", resolveBaseUrl("CLAUDE", "https://claude.example.com/v1"));
     }
 
+    @Test
+    void minimaxRuntimeBaseUrlToleratesTrailingV1() {
+        assertEquals("https://minimax.example.com", resolveBaseUrl("MINIMAX", "https://minimax.example.com/v1"));
+    }
+
     private String resolveBaseUrl(String provider, String baseUrl) {
         AiChatRuntimeResolveRequest request = new AiChatRuntimeResolveRequest();
         request.setProvider(provider);

@@ -23,6 +23,7 @@ const providerOptions = [
   { label: 'OpenAI', value: 'OPENAI' },
   { label: 'Claude', value: 'CLAUDE' },
   { label: 'Gemini', value: 'GEMINI' },
+  { label: 'MiniMax', value: 'MINIMAX' },
 ];
 
 const emptyFormValues: IAIModelConfigSaveRequest = {
@@ -279,7 +280,11 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               tooltip={currentConfig?.apiKeyMasked || undefined}
               rules={[
                 {
-                  required: (currentProvider === 'OPENAI' || currentProvider === 'CLAUDE') && !currentConfig?.hasApiKey,
+                  required:
+                    (currentProvider === 'OPENAI' ||
+                      currentProvider === 'CLAUDE' ||
+                      currentProvider === 'MINIMAX') &&
+                    !currentConfig?.hasApiKey,
                   message: i18n('setting.modelConfig.validation.apiKey'),
                 },
               ]}
