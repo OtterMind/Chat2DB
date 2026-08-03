@@ -11,6 +11,8 @@ import LogModal, { LogModalRef } from '@/blocks/ImportAndExport/components/LogMo
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import dayjs from 'dayjs';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { openHostArtifact } from '@/utils/hostFileTransfer';
 
 export default memo(() => {
   const { styles } = useStyles();
@@ -32,7 +34,12 @@ export default memo(() => {
   }, []);
 
   const openFileLocation = (downloadUrl) => {
-    jcefApi?.revealInExplorer(downloadUrl);
+    void openHostArtifact(downloadUrl, {
+      desktop: isDesktop,
+      revealInExplorer: jcefApi.revealInExplorer,
+    }).catch((error) => {
+      console.error('Failed to open exported file:', error);
+    });
   };
 
   const handleStopTask = (id) => {

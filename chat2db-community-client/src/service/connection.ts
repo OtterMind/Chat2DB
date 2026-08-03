@@ -92,7 +92,7 @@ const deleteDriver = createRequest<{ dbType: string; jdbcDriver: string[] }, voi
 
 const getEnvList = createRequest<void, IConnectionEnv[]>('/api/common/environment/list_all', { errorLevel: false });
 
-const importConnection = createRequest<{ file: FormData }, void>('/api/converter/upload');
+const importConnection = createRequest<{ file: File | string[] }, void>('/api/converter/upload');
 
 const importCommunitDataSource = createRequest<void, void>('/api/connection/datasource/import_community');
 
@@ -127,17 +127,17 @@ const updatePosition = createRequest<UpdatePositionInTree, void>('/api/namespace
 });
 
 // Import data source
-const importNavicatConnections = createRequest<{ file: FormData }, void>('/api/converter/ncx/upload', {
+const importNavicatConnections = createRequest<{ file: File | string[] }, void>('/api/converter/ncx/upload', {
   method: 'post',
   contentType: 'formData',
 });
 
-const importDBeaverConnections = createRequest<{ file: FormData }, void>('/api/converter/dbp/upload', {
+const importDBeaverConnections = createRequest<{ file: File | string[] }, void>('/api/converter/dbp/upload', {
   method: 'post',
   contentType: 'formData',
 });
 
-const importChat2DBConnections = createRequest<{ file: FormData }, void>('/api/converter/chat2db/upload', {
+const importChat2DBConnections = createRequest<{ file: File | string[] }, void>('/api/converter/chat2db/upload', {
   method: 'post',
   contentType: 'formData',
 });

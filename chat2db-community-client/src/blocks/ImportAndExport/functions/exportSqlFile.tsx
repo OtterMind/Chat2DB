@@ -1,6 +1,8 @@
 import { IDatabaseBaseInfo } from '@/typings/database';
 import importExportServices from '@/service/importExport';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { selectHostExportPath } from '@/utils/hostFileTransfer';
 
 export interface ExportSqlFileProps extends IDatabaseBaseInfo {
   scope: 'ALL' | 'SCHEMA' | 'TABLE';
@@ -11,9 +13,9 @@ export interface ExportSqlFileProps extends IDatabaseBaseInfo {
 }
 
 export const handleExportSqlFile = async (props: ExportSqlFileProps) => {
-  const exportPath = await jcefApi?.selectDirectory();
+  const exportPath = await selectHostExportPath(isDesktop, jcefApi.selectDirectory);
 
-  if (!exportPath) return;
+  if (exportPath === undefined) return;
 
   const getTaskList = props.getTaskList;
   const openLogModal = props.openLogModal;

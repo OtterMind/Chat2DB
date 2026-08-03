@@ -6,8 +6,9 @@ import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import { IconButton } from '@chat2db/ui';
 import { ImportExportType, ImportExportFileType } from '@/constants/importExport';
-import { isDevelopment } from '@/utils/env';
+import { isDesktop, isDevelopment } from '@/utils/env';
 import jcefApi from '@/jcef';
+import { selectedLocalFile, withHostImportFile } from '@/utils/hostFileTransfer';
 
 interface IProps {
   className?: string;
@@ -29,7 +30,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   const { setIsReady } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [fileUrlList, setFileUrlList] = useState<Array<string | File>>([]);
   const [exportLocation, setExportLocation] = useState<string>('');
   const [formValue, setFormValue] = useState<any>({
     exportType: 'CSV',
@@ -69,12 +70,12 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
 
   useEffect(() => {
     if (isExport) {
-      setIsReady && setIsReady(!!exportLocation || formValue.fileUrl);
+      setIsReady && setIsReady(!isDesktop || !!exportLocation || formValue.fileUrl);
     }
   }, [exportLocation, formValue]);
 
   const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+    setFileUrlList(_fileUrlList.map(selectedLocalFile).filter(Boolean));
   };
 
   useImperativeHandle(ref, () => ({
@@ -88,12 +89,12 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       };
       if (isExport) {
         values.tableNames = [tableName];
-        values.exportPath = exportLocation || formValue.fileUrl;
+        values.exportPath = isDesktop ? exportLocation || formValue.fileUrl : '';
         values.exportType = formValue.exportType;
       } else {
         values.tableName = tableName;
-        values.fileName = fileUrlList[0] || formValue.fileUrl;
         values.importType = formValue.exportType;
+        return withHostImportFile(values, fileUrlList[0] || formValue.fileUrl, isDesktop);
       }
       return values;
     },
@@ -127,7 +128,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       <Form.Item label={`${i18n('workspace.importExport.fileType')}:`} name="exportType">
         <Select options={exportTypeOptions} />
       </Form.Item>
-      {isExport && (
+      {isExport && isDesktop && (
         <Form.Item label={`${i18n('workspace.importExport.exportLocation')}:`} name="exportLocation">
           <div className={styles.exportLocationBox}>
             <Input autoComplete="off" disabled value={exportLocation} />

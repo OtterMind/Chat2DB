@@ -3,14 +3,19 @@ import { ImportConnectionType } from '@/constants/database';
 import i18n from '@/i18n';
 import ConnectionServer from '@/service/connection';
 import { isDesktop } from '@/utils/env';
+import {
+  connectionImportContent,
+  hasHostImportContent,
+  type HostImportContent,
+} from '@/utils/hostFileTransfer';
 import { Modal, staticMessage } from '@chat2db/ui';
 import { Input } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 interface IImportConnectionProps {
   open: boolean;
-// Import type: Navicat, DataGrip, Chat2DB, or DBeaver.
+  // Import type: Navicat, DataGrip, Chat2DB, or DBeaver.
   type?: string;
   onClose: () => void;
   onConfirm?: () => void;
@@ -60,7 +65,7 @@ export const importConfigMap = importConfigList.reduce((acc, cur) => {
 
 const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClose, onConfirm }) => {
   const [desktopLoading, setDesktopLoading] = useState(false);
-  const [importContent, setImportContent] = useState<any>();
+  const [importContent, setImportContent] = useState<HostImportContent>();
   const { styles } = useStyles();
 
   const currentConfig = useMemo(() => {
@@ -70,8 +75,15 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     return importConfigMap[type];
   }, [type]);
 
+  useEffect(() => {
+    setImportContent(undefined);
+    setDesktopLoading(false);
+  }, [open, type]);
+
+  const canImport = hasHostImportContent(importContent);
+
   const handleConfirmUpload = () => {
-    if (!type) {
+    if (!type || !canImport) {
       return;
     }
 
@@ -90,6 +102,7 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     importConfigMap[type]
       .api(params)
       .then((res) => {
+        setImportContent(undefined);
         onConfirm && onConfirm();
         setDesktopLoading(false);
         if (res.result) {
@@ -104,10 +117,12 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
   };
 
   const handleFileUrlListChange = (fileUrlList: any) => {
-    if (fileUrlList.length === 0) {
-      return;
-    }
-    setImportContent(fileUrlList[0].filePath ? [fileUrlList[0].filePath] : fileUrlList[0].file);
+    setImportContent(connectionImportContent(fileUrlList));
+  };
+
+  const handleClose = () => {
+    setImportContent(undefined);
+    onClose();
   };
 
   return (
@@ -116,8 +131,9 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
       destroyOnClose
       title={currentConfig?.title}
       open={open}
-      onCancel={onClose}
+      onCancel={handleClose}
       onOk={handleConfirmUpload}
+      okButtonProps={{ disabled: !canImport }}
       confirmLoading={desktopLoading}
       maskClosable={false}
       width={600}
@@ -127,6 +143,7 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
           <>
             <Input.TextArea
               rows={12}
+              value={typeof importContent === 'string' ? importContent : ''}
               onChange={(event) => {
                 setImportContent(event.target.value);
               }}

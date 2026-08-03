@@ -4,11 +4,13 @@ import { IPageResponse } from '@/typings';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 
 export interface ImportSqlFileParams extends IDatabaseBaseInfo {
-  fileName: string;
+  fileName?: string;
+  file?: File;
 }
 
 export interface ImportOtherFileParams extends IDatabaseBaseInfo {
-  fileName: string;
+  fileName?: string;
+  file?: File;
   tableName: string;
   containsHeader: boolean;
 }
@@ -25,8 +27,14 @@ export interface TaskListParams {
   pageSize: number;
 }
 
-const importSqlFile = createRequest<ImportSqlFileParams, number>('/api/import/sql_file', { method: 'post' });
-const importOtherFile = createRequest<ImportOtherFileParams, number>('/api/import/other_file', { method: 'post' });
+const importSqlFile = createRequest<ImportSqlFileParams, number>('/api/import/sql_file', {
+  method: 'post',
+  contentType: 'formData',
+});
+const importOtherFile = createRequest<ImportOtherFileParams, number>('/api/import/other_file', {
+  method: 'post',
+  contentType: 'formData',
+});
 
 const exportSqlFile = createRequest<ExportSqlFileParams, number>('/api/export/sql_file', { method: 'post' });
 const exportOtherFile = createRequest<IDatabaseBaseInfo, number>('/api/export/other_file', { method: 'post' });

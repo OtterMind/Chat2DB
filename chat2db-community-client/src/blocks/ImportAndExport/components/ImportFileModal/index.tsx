@@ -10,6 +10,8 @@ import { ImportExportType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { openHostArtifact } from '@/utils/hostFileTransfer';
 
 interface IProps {
   className?: string;
@@ -22,12 +24,12 @@ export default memo<IProps>((_props) => {
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
-      return {
-        importExportDataBoundInfo: state.importExportDataBoundInfo,
-        setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
-        getTaskList: state.getTaskList,
-      };
-    });
+    return {
+      importExportDataBoundInfo: state.importExportDataBoundInfo,
+      setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
+      getTaskList: state.getTaskList,
+    };
+  });
 
   useEffect(() => {
     if (!importExportDataBoundInfo) {
@@ -70,7 +72,12 @@ export default memo<IProps>((_props) => {
   };
 
   const handleOpenFile = () => {
-    jcefApi.revealInExplorer(taskDetails?.downloadUrl);
+    void openHostArtifact(taskDetails?.downloadUrl, {
+      desktop: isDesktop,
+      revealInExplorer: jcefApi.revealInExplorer,
+    }).catch((error) => {
+      console.error('Failed to open exported file:', error);
+    });
   };
 
   const logRenderFooter = () => (

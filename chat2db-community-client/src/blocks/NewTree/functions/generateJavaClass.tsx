@@ -1,25 +1,34 @@
 import { IDatabaseBaseInfo } from '@/typings/database';
 import importExportServices from '@/service/importExport';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { downloadHttpAttachment, selectHostExportPath } from '@/utils/hostFileTransfer';
 
 export interface ExportSqlFileProps extends IDatabaseBaseInfo {
   tableNames?: string[];
 }
 
 export const generateJavaClass = async (props: ExportSqlFileProps) => {
-  const exportPath: string | undefined = await jcefApi?.selectDirectory();
-
-  // does not pop up the file selection box in the web environment, allowing the backend to take the default path
-  // if (isDevelopment) {
-  //   exportPath = [];
-  // }
-
-  if (!exportPath) return;
+  const exportPath = await selectHostExportPath(isDesktop, jcefApi.selectDirectory);
+  if (exportPath === undefined) return;
 
   const params = {
     ...props,
     exportPath,
   };
 
-  void importExportServices.generateJavaClass(params);
+  if (isDesktop) {
+    void importExportServices.generateJavaClass(params);
+    return;
+  }
+  void downloadHttpAttachment('/api/rdb/table/generate/class', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/zip',
+    },
+    body: JSON.stringify(params),
+  }).catch((error) => {
+    console.error('Failed to download generated Java classes:', error);
+  });
 };

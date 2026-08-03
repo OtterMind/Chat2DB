@@ -2,6 +2,7 @@ import { ErrorCodesWithoutToast } from '@/constants/request';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop } from '@/utils/env';
+import { createMultipartFormData } from '@/utils/hostFileTransfer';
 import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
@@ -151,17 +152,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
         };
 
         if (contentType === 'formData') {
-          // Use FormData to handle file uploads
-          const formData = new FormData();
-
-          // Add files to FormData
-          formData.append('file', params.file);
-
-          Object.keys(params).forEach((key) => {
-            if (key !== 'file') {
-              formData.append(key, params[key]);
-            }
-          });
+          const formData = createMultipartFormData(params as Record<string, unknown>);
 
           // Remove params or data in requestOptions
 

@@ -7,6 +7,8 @@ import { ImportExportTaskDetails } from '@/typings/importExport';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { openHostArtifact } from '@/utils/hostFileTransfer';
 
 interface IProps {
   className?: string;
@@ -25,7 +27,12 @@ const LogModal = forwardRef((_props: IProps, ref: ForwardedRef<LogModalRef>) => 
   });
 
   const handleOpenFile = () => {
-    jcefApi?.revealInExplorer(taskDetails?.downloadUrl);
+    void openHostArtifact(taskDetails?.downloadUrl, {
+      desktop: isDesktop,
+      revealInExplorer: jcefApi.revealInExplorer,
+    }).catch((error) => {
+      console.error('Failed to open exported file:', error);
+    });
   };
 
   const renderFooter = (

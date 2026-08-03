@@ -8,6 +8,7 @@ import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import sqlService from '@/service/sql';
 import { LOCAL_SQL_FILE_SAVED_EVENT } from '@/constants';
+import { downloadHttpAttachment } from './hostFileTransfer';
 
 export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
 
@@ -18,45 +19,15 @@ export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
  * @param params
  */
 export function downloadFile(url: string, params: any) {
-  // Create POST request
-  fetch(url, {
+  void downloadHttpAttachment(url, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json', // Or set other content types according to the requirements of the server
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(params), // Convert parameters to JSON string
-  })
-    .then((response) => {
-      // Get filename from content-disposition header
-      const contentDisposition = response.headers.get('content-disposition');
-      const filename = contentDisposition ? decodeURIComponent(contentDisposition.split("''")[1]) : 'file.text';
-
-      // Get the returned Blob data
-      return response.blob().then((blob) => ({ blob, filename }));
-    })
-    .then(({ blob, filename }) => {
-      // Create a URL that represents a Blob object
-      const blobUrl = URL.createObjectURL(blob);
-
-      // Create a hidden <a> tag and set its href attribute
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = blobUrl;
-
-      // Use filename parsed from response headers
-      a.download = filename;
-
-      // Append <a> tag to DOM and trigger click event
-      document.body.appendChild(a);
-      a.click();
-
-      // Cleanup: Remove the <a> tag from the DOM and release the blob URL
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    })
-    .catch((error) => {
-      console.error('Failed to download file:', error);
-    });
+    body: JSON.stringify(params),
+  }).catch((error) => {
+    console.error('Failed to download file:', error);
+  });
 }
 
 export async function downloadLargeCellValue(largeValueId: string, format: LargeCellDownloadFormat = 'raw') {

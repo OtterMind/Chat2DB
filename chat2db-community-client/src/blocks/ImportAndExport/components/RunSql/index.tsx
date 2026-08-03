@@ -4,7 +4,8 @@ import UploadLocalFile from '@/components/UploadLocalFile';
 import { Form, Input } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
-import { isDevelopment } from '@/utils/env';
+import { isDesktop, isDevelopment } from '@/utils/env';
+import { selectedLocalFile, withHostImportFile } from '@/utils/hostFileTransfer';
 
 interface IProps {
   className?: string;
@@ -30,7 +31,7 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   const { setIsReady } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [fileUrlList, setFileUrlList] = useState<Array<string | File>>([]);
   const [formValues, setFormValues] = useState<any>({});
 
   useEffect(() => {
@@ -62,17 +63,16 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   useImperativeHandle(ref, () => ({
     getValues: () => {
       const { dataSourceId, databaseName, schemaName } = runSqlBoundInfo!;
-      return {
-        dataSourceId,
-        databaseName,
-        schemaName,
-        fileName: fileUrlList[0] || formValues.fileUrl,
-      };
+      return withHostImportFile(
+        { dataSourceId, databaseName, schemaName },
+        fileUrlList[0] || formValues.fileUrl,
+        isDesktop,
+      );
     },
   }));
 
   const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+    setFileUrlList(_fileUrlList.map(selectedLocalFile).filter(Boolean));
   };
 
   return (
