@@ -16,6 +16,8 @@ public class ConsoleSseEmitter extends SseEmitter {
 
     private static final String AI_SSE_MESSAGE = "ai_sse_message";
 
+    private static final String AI_STREAM_ERROR_MESSAGE = "AI stream failed";
+
     private final ConsoleResult consoleResult;
 
     public ConsoleSseEmitter(ConsoleResult consoleResult) {
@@ -50,6 +52,14 @@ public class ConsoleSseEmitter extends SseEmitter {
     @Override
     public void completeWithError(Throwable ex) {
         log.warn("ai stream error via JCEF IPC", ex);
-        complete();
+        try {
+            Map<String, Object> payload = AiChatTraceSupport.payload(AiChatTraceSupport.TYPE_ERROR);
+            payload.put("content", AI_STREAM_ERROR_MESSAGE);
+            sendData(AiChatTraceSupport.TYPE_ERROR, payload);
+        } catch (Exception sendError) {
+            log.warn("failed to send AI stream error via JCEF IPC", sendError);
+        } finally {
+            super.completeWithError(ex);
+        }
     }
 }

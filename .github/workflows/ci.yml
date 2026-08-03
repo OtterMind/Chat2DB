@@ -114,6 +114,9 @@ jobs:
       - name: Run SQL execution stream contract
         run: yarn run test:sql-execution-stream
 
+      - name: Run SSE request ownership contract
+        run: yarn run test:sse-request
+
       - name: Run verification-code countdown lifecycle contract
         run: yarn run test:verification-code-countdown
 
