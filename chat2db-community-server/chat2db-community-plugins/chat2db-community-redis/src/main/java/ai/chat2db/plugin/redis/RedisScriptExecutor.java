@@ -33,6 +33,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static ai.chat2db.plugin.redis.enums.type.RedisDataType.*;
 import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
@@ -287,7 +288,7 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
             return new ExecuteResponse();
         }
         List<String> scripts = new ArrayList<>();
-        boolean typeChanged = oldKey != null && newKey != null && !oldKey.getType().equals(newKey.getType());
+        boolean typeChanged = oldKey != null && newKey != null && !Objects.equals(oldKey.getType(), newKey.getType());
         if (typeChanged) {
             List<String> addScript = RedisDataType.fromCode(newKey.getType()).getScript().createKey(newKey);
             if (CollectionUtils.isEmpty(addScript)) {
