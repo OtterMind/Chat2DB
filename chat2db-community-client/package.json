@@ -32,7 +32,9 @@
     "test:ai-model-select": "tsx src/blocks/AI/components/AIModelSelect/modelSelectOptions.test.ts",
     "test:active-tab-locator": "tsx src/pages/main/workspace/utils/activeTabLocator.test.ts",
     "test:base-table-interaction": "tsx src/components/BaseTable/treeInteraction.test.ts",
+    "test:bi-chart-sorting": "tsx src/blocks/BI/Chart/charts/BarChart/dataTreating.test.ts",
     "test:chat-answer-update": "tsx src/store/chat/slices/chatDetails/answerUpdates.test.ts",
+    "test:combo-axis-actions": "tsx src/blocks/BI/Chart/form/components/ComboAxisSelect/comboAxisSelect.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
     "test:export-connections": "tsx src/pages/main/workspace/components/WorkspaceLeftActionBar/components/TreeSetting/exportConnectionsFlow.test.ts",
@@ -62,7 +64,8 @@
     "start:community:hot": "cross-env UMI_ENV=community cross-env APP_NAME=chat2db-community cross-env DISABLE_MFSU=true cross-env UMI_DEV_SERVER_COMPRESS=none cross-env PORT=8889 umi dev --public_path=/",
     "start:offline:hot": "cross-env UMI_ENV=offline cross-env PORT=8888 umi dev",
     "start:proxy:online": "cross-env HMR=none umi dev --webapp=true --public_path=http://localhost:8000/",
-    "ui": "yarn add @chat2db/ui"
+    "ui": "yarn add @chat2db/ui",
+    "test:create-stream-index": "tsx src/blocks/RedisAllData/CreateStream/mapDisplayedIndex.test.ts"
   },
   "dependencies": {
     "@chat2db/ui": "^1.45.3",

@@ -9,6 +9,7 @@ import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -16,6 +17,7 @@ import java.sql.SQLException;
 import java.sql.PreparedStatement;
 
 import static ai.chat2db.plugin.h2.constant.H2DBManagerConstants.*;
+@Slf4j
 public class H2DBManager extends DefaultDBManager implements IDbManager {
 
 
@@ -56,7 +58,7 @@ public class H2DBManager extends DefaultDBManager implements IDbManager {
             DefaultSQLExecutor.getInstance().execute(connection,
                 String.format(SQL_SET_SCHEMA, H2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)));
         } catch (SQLException e) {
-
+            log.error("Failed to set schema: {}", schemaName, e);
         }
     }
 

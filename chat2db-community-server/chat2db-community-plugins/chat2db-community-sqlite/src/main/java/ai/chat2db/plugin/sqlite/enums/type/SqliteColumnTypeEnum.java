@@ -150,7 +150,7 @@ public enum SqliteColumnTypeEnum implements IColumnBuilder {
     private String buildDataType(TableColumn column, SqliteColumnTypeEnum type) {
         String columnType = type.columnType.getTypeName();
 
-        if (column.getColumnSize() == null || column.getDecimalDigits() == null) {
+        if (column.getColumnSize() == null) {
             return columnType;
         }
         if (column.getColumnSize() != null && column.getDecimalDigits() == null) {

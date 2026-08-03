@@ -25,7 +25,11 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
     protected String filePath;
 
     protected SmallDataStorage(String name, Class<T> clazz) {
-        this.filePath = DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json";
+        this(new File(DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json"), clazz);
+    }
+
+    protected SmallDataStorage(File storageFile, Class<T> clazz) {
+        this.filePath = storageFile.getAbsolutePath();
         if (!FileUtil.exist(filePath)) {
             FileUtil.writeUtf8String("", filePath);
         } else {

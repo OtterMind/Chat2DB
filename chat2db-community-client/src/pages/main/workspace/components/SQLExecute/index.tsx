@@ -10,6 +10,7 @@ import {
   ForwardedRef,
   useImperativeHandle,
 } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import SearchResult from '@/blocks/SearchResult';
 import {
   createExecutionConsoleKeepHistoryStorageKey,
@@ -197,6 +198,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const currentStatementSequenceByExecutionIdRef = useRef<Record<string, number>>({});
   const [resultBatchKey, setResultBatchKey] = useState(0);
   const [forceOutputTab, setForceOutputTab] = useState(false);
+  const requestGenerationRef = useRef(0);
   const { activeConsoleId, setEditorToList, deleteEditor, updateWorkspaceTabBoundInfo } = useWorkspaceStore(
     (state) => ({
       activeConsoleId: state.activeConsoleId,
@@ -592,8 +594,10 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   }, [boundInfo]);
 
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     if (loadSQL) {
       loadSQL().then((sql) => {
+        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
         sqlEditorRef.current?.setValue(sql, 'reset');
         updateWorkspaceTabBoundInfo({
           ...boundInfoRef.current,
@@ -601,6 +605,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         });
       });
     }
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const handleUnfold = () => {

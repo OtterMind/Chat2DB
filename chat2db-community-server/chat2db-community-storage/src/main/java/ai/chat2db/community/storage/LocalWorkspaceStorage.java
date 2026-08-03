@@ -229,12 +229,12 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public String getErPosition(Long dataSourceId, String databaseName, String schemaName) {
-        return ERPositionStorage.INSTANCE.getPosition(dataSourceId, databaseName, schemaName);
+        return ERPositionStorage.getInstance().getPosition(dataSourceId, databaseName, schemaName);
     }
 
     @Override
     public void savePosition(ERPosition request) {
-        ERPositionStorage.INSTANCE.savePosition(request);
+        ERPositionStorage.getInstance().savePosition(request);
     }
 
     private String encryptString(String password) {
