@@ -215,14 +215,14 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     public ModelConfigTestResponse testModelConfig(AiModelConfigSaveRequest request) {
         AiProviderEnum provider = AiProviderEnum.from(request.getProvider());
         if (provider == AiProviderEnum.OPENAI) {
-            return testOpenAiCompatibleConfig(request);
+            return testOpenAiCompatibleConfig(request, DEFAULT_OPENAI_BASE_URL);
         }
         if (provider == AiProviderEnum.MINIMAX) {
             String baseUrl = trimToNull(request.getBaseUrl());
             if (StringUtils.isNotBlank(baseUrl) && StringUtils.containsIgnoreCase(baseUrl, "/anthropic")) {
                 return testAnthropicCompatibleConfig(request);
             }
-            return testOpenAiCompatibleConfig(request);
+            return testOpenAiCompatibleConfig(request, DEFAULT_MINIMAX_BASE_URL);
         }
         return ModelConfigTestResponse.failure(null, null,
                 "Connection test currently supports OpenAI-compatible models only.");
@@ -474,8 +474,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         return presets;
     }
 
-    private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request) {
-        String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), DEFAULT_OPENAI_BASE_URL);
+    private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request, String defaultBaseUrl) {
+        String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), defaultBaseUrl);
         String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/chat/completions");
         String apiKey = resolveTestApiKey(request);
         if (StringUtils.isBlank(apiKey)) {

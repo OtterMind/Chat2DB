@@ -11,6 +11,7 @@ import {
   saveAIModelConfig,
   testAIModelConfig,
 } from '@/service/aiModelConfig';
+import { resolveBaseUrlOnProviderChange, resolveProviderBaseUrl } from './modelConfigDefaults';
 import { useStyles } from './style';
 
 interface AIModelConfigModalProps {
@@ -38,6 +39,18 @@ const emptyFormValues: IAIModelConfigSaveRequest = {
   maxTokens: undefined,
   enabled: true,
   defaultConfig: false,
+};
+
+const toFormValues = (config?: Partial<IAIModelConfigSaveRequest>): IAIModelConfigSaveRequest => {
+  const values = {
+    ...emptyFormValues,
+    ...config,
+    apiKey: '',
+  };
+  return {
+    ...values,
+    baseUrl: resolveProviderBaseUrl(values.provider, values.baseUrl),
+  };
 };
 
 export default function AIModelConfigModal({ open, onClose, onChanged }: AIModelConfigModalProps) {
@@ -71,11 +84,7 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
         const activeId = editingId && list.some((item) => item.id === editingId) ? editingId : list[0].id;
         setEditingId(activeId);
         const activeConfig = list.find((item) => item.id === activeId);
-        form.setFieldsValue({
-          ...emptyFormValues,
-          ...activeConfig,
-          apiKey: '',
-        });
+        form.setFieldsValue(toFormValues(activeConfig));
       } else {
         resetForm();
       }
@@ -92,11 +101,11 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
 
   const handleSelectConfig = (config: IAIModelConfigItem) => {
     setEditingId(config.id);
-    form.setFieldsValue({
-      ...emptyFormValues,
-      ...config,
-      apiKey: '',
-    });
+    form.setFieldsValue(toFormValues(config));
+  };
+
+  const handleProviderChange = (provider: AIProvider) => {
+    form.setFieldValue('baseUrl', resolveBaseUrlOnProviderChange(provider, form.getFieldValue('baseUrl')));
   };
 
   const handleSave = async () => {
@@ -265,7 +274,11 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               label={i18n('setting.modelConfig.provider')}
               rules={[{ required: true, message: i18n('setting.modelConfig.validation.provider') }]}
             >
-              <Select options={providerOptions} placeholder={i18n('setting.modelConfig.placeholder.provider')} />
+              <Select
+                options={providerOptions}
+                placeholder={i18n('setting.modelConfig.placeholder.provider')}
+                onChange={handleProviderChange}
+              />
             </Form.Item>
             <Form.Item
               name="model"
