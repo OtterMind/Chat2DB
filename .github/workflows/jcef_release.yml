@@ -184,6 +184,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fakeroot rpm desktop-file-utils file curl zip
 
+      - name: Verify pinned subscription AI packaging gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n script/package/stage-codex-app-server.sh
+          bash script/package/test-codex-app-server-staging.sh
+
       - name: Import macOS code-signing certificate
         if: ${{ runner.os == 'macOS' }}
         shell: bash

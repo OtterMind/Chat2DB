@@ -4,6 +4,7 @@ import java.util.Locale;
 
 public enum AiProviderEnum {
     OPENAI,
+    XAI,
     CLAUDE,
     GEMINI;
 

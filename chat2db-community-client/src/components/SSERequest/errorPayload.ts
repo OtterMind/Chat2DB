@@ -102,6 +102,19 @@ export const handleSSEErrorPayload = (value: unknown, requestParams?: any) => {
   return true;
 };
 
+/**
+ * Subscription chat failures are valid stream events, not transport/API envelope failures.
+ * They must reach the chat renderer so the current message can show a durable error state.
+ */
+export const isApplicationStreamErrorPayload = (value: unknown) => {
+  const parsedValue = tryParseJson(value);
+  if (!isObject(parsedValue)) {
+    return false;
+  }
+  const messageType = parsedValue.messageType || parsedValue.type;
+  return messageType === 'error' && typeof parsedValue.errorCode === 'string';
+};
+
 export const parseSSEChunkData = <T = unknown>(value: unknown): T | undefined => {
   const parsedValue = tryParseJson(value);
 

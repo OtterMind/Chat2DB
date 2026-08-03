@@ -106,6 +106,13 @@ export const useStyles = createStyles(({ css, token }) => {
         color: ${token.colorPrimary};
       }
     `,
+    reasoningEffortSelect: css`
+      min-width: 88px;
+
+      .ant-select-selector {
+        border-radius: 999px !important;
+      }
+    `,
     sendButton: css`
       border-radius: 50% !important;
       background: transparent !important;

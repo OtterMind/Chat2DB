@@ -19,8 +19,21 @@ export const isHashHistoryEnv = isDesktopEnv || isOfflineEnv || isCommunityEnv;
 
 export const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
 
-/** Whether it is desktop version */
-export const isDesktop = window.javaQuery !== undefined;
+/**
+ * Live packaged-JCEF probe. Must not be a one-shot module constant: the bridge may
+ * appear after early module evaluation, and a stale `false` permanently disables
+ * subscription AI ("only available in packaged Community desktop").
+ */
+export function isPackagedJcefDesktop(): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof (window as any).javaQuery === 'function';
+  } catch {
+    return false;
+  }
+}
+
+/** Whether it is desktop version (live check; prefer isPackagedJcefDesktop for new code). */
+export const isDesktop = isPackagedJcefDesktop();
 
 // Is it a development environment?
 export const isDevelopment = __ENV__ === 'development';

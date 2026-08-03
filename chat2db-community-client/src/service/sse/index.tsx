@@ -1,5 +1,6 @@
 import { useGlobalStore } from '@/store/global';
 import { v4 as uuidv4 } from 'uuid';
+import { createSafeIpcDebugMetadata } from '@/service/commandLine/safeDebug';
 
 export interface IJcefSseRequest {
   requestId: string;
@@ -21,7 +22,11 @@ const sendClientSSERequest = (baseURL, message) => {
   };
 
   if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-    console.log('%cCHAT2DB_IPC_REQUEST-SSE', 'color: #FF0000', new Date().toISOString(), commandLineParams);
+    console.log(
+      '%cCHAT2DB_IPC_REQUEST-SSE',
+      'color: #FF0000',
+      createSafeIpcDebugMetadata(requestId, 'post', baseURL, message),
+    );
   }
 
   // commandLineParams may include functions or circular references that cannot be serialized.

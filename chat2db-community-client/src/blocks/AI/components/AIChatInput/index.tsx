@@ -1,5 +1,5 @@
 import React, { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect, useRef, useCallback } from 'react';
-import { Input } from 'antd';
+import { Input, Select } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
@@ -61,10 +61,15 @@ interface ChatInputProps {
   inputRightAddons?: React.ReactNode;
   // Hide selection database
   hideDatabaseSelect?: boolean;
-  modelOptions?: Array<{ label: string; value: string; isDefault?: boolean }>;
+  modelOptions?: Array<{ label: string; value: string; isDefault?: boolean; disabled?: boolean }>;
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;
+  modelSelectOpenToken?: number;
+  onModelDropdownOpen?: () => void;
+  reasoningEffortOptions?: Array<{ label: string; value: string }>;
+  reasoningEffort?: string | null;
+  onReasoningEffortChange?: (value: string) => void;
   prefillInputState?: { text: string; token: number } | null;
   onChatSend?: (param: SendParams) => void;
   onStop?: () => void;
@@ -94,6 +99,11 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     showCustomModelEntry,
     onCustomModelClick,
     customModelText,
+    modelSelectOpenToken,
+    onModelDropdownOpen,
+    reasoningEffortOptions,
+    reasoningEffort,
+    onReasoningEffortChange,
     prefillInputState,
     onChatSend,
     onContextChange,
@@ -419,19 +429,6 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
           .filter((item): item is PromiseFulfilledResult<IChatAttachment> => item.status === 'fulfilled')
           .map((item) => item.value);
 
-        console.log('[AI attachments] parsed result', {
-          requestedCount: selectedFiles.length,
-          successCount: parsedAttachments.length,
-          attachments: parsedAttachments.map((attachment) => ({
-            fileName: attachment.fileName,
-            fileType: attachment.fileType,
-            contentCategory: attachment.contentCategory,
-            contentLength: attachment.contentLength,
-            truncated: attachment.truncated,
-            contentPreview: attachment.content?.slice(0, 200),
-          })),
-        });
-
         if (parsedAttachments.length) {
           setAttachments((prev) => {
             const next = [...prev];
@@ -705,11 +702,23 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               )}
             </div>
             <div className={styles.bottomAddonsRight}>
+              {!!reasoningEffortOptions?.length && (
+                <Select
+                  size="small"
+                  className={styles.reasoningEffortSelect}
+                  aria-label={i18n('ai.subscription.reasoning.label')}
+                  value={reasoningEffort || reasoningEffortOptions[0]?.value}
+                  options={reasoningEffortOptions}
+                  onChange={onReasoningEffortChange}
+                />
+              )}
               <AIModelSelect
                 options={modelOptions}
                 showCustomModelEntry={showCustomModelEntry}
                 onCustomModelClick={onCustomModelClick}
                 customModelText={customModelText}
+                openToken={modelSelectOpenToken}
+                onDropdownOpen={onModelDropdownOpen}
               />
               {loading ? (
                 <IconButton

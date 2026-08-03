@@ -9,11 +9,21 @@ export interface IModelCatalogItem {
 export interface IModelOptionItem {
   value: string;
   label: string;
-  provider: 'OPENAI' | 'CLAUDE' | 'GEMINI';
+  provider: 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'XAI';
   model: string;
   modelConfigId?: string;
   customOption?: boolean;
   defaultOption?: boolean;
+  /** Backend-issued subscription model identity key; never a secret. */
+  modelRefKey?: string;
+  accessType?: 'API_KEY' | 'SUBSCRIPTION';
+  subscriptionOption?: boolean;
+  /** False for stale/disabled subscription snapshots still shown in the selector. */
+  selectable?: boolean;
+  snapshotDiscoveredAt?: string;
+  disabledReason?: string | null;
+  supportedReasoningEfforts?: string[];
+  defaultReasoningEffort?: string | null;
 }
 
 export interface IChatSession {

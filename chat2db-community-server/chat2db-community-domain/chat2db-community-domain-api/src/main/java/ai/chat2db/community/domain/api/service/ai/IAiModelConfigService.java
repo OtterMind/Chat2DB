@@ -45,6 +45,19 @@ public interface IAiModelConfigService {
     AiModelConfigResponse saveCurrentUserConfig(AiModelConfigSaveRequest aiModelConfigSaveRequest);
 
     /**
+     * Imports one legacy renderer configuration without implicitly choosing a new
+     * global default. An existing backend default always wins; a legacy default is
+     * applied only when the user explicitly confirmed it and no backend default exists.
+     *
+     * @param aiModelConfigSaveRequest legacy model configuration.
+     * @param confirmDefault whether the user explicitly confirmed this legacy default.
+     * @return imported model configuration with masked credential fields.
+     */
+    AiModelConfigResponse importLegacyCurrentUserConfig(
+            AiModelConfigSaveRequest aiModelConfigSaveRequest,
+            boolean confirmDefault);
+
+    /**
      * Deletes a model configuration owned by the current user.
      *
      * @param id model configuration identifier.

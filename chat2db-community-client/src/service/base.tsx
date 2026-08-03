@@ -1,7 +1,7 @@
 import { ErrorCodesWithoutToast } from '@/constants/request';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { useGlobalStore } from '@/store/global';
-import { isDesktop } from '@/utils/env';
+import { isPackagedJcefDesktop } from '@/utils/env';
 import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
@@ -60,7 +60,7 @@ request.interceptors.request.use((url, options) => {
 // response interceptor, handles response
 request.interceptors.response.use(async (response, _options) => {
   try {
-    if (isDesktop) {
+    if (isPackagedJcefDesktop()) {
       const Chat2db = response.headers.get('Chat2db') || '';
       if (Chat2db) {
         localStorage.setItem(runtimeEditionConfig.desktopResponseHeaderStorageKey, Chat2db);
@@ -96,7 +96,8 @@ export default function createRequest<P = void, R = void>(url: string, options?:
       });
     }
 
-    if (isDesktop) {
+    // Live bridge probe — do not use a boot-time isDesktop snapshot.
+    if (isPackagedJcefDesktop()) {
       return commandLineRequest<R>(
         {
           requestUrl: _url,

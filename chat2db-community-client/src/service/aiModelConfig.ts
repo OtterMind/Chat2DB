@@ -1,4 +1,9 @@
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { isSubscriptionAiSurfaceAvailable } from '@/blocks/AI/subscription/capability';
+import { readSubscriptionSurfaceSignals } from '@/blocks/AI/subscription/capabilityRuntime';
+import { groupSubscriptionModels } from '@/blocks/AI/subscription/modelSnapshot';
+import { toModelRefKey } from '@/blocks/AI/subscription/modelRef';
+import { getAiSubscriptionClient } from '@/service/aiSubscription';
 import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
@@ -197,27 +202,112 @@ export const testAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
   return testRemoteModelConfig(nextPayload);
 };
 
+const listSubscriptionModelOptions = async (): Promise<IModelOptionItem[]> => {
+  const surface = readSubscriptionSurfaceSignals();
+  if (
+    !isSubscriptionAiSurfaceAvailable({
+      communityRuntime: surface.communityRuntime,
+      packagedJcefDesktop: surface.packagedJcefDesktop,
+      backendCapability: null,
+    })
+  ) {
+    return [];
+  }
+
+  try {
+    const client = getAiSubscriptionClient();
+    const [capability, providers, snapshots] = await Promise.all([
+      client.getCapability(),
+      client.listProviders(),
+      client.listModelSnapshots(),
+    ]);
+    if (
+      !isSubscriptionAiSurfaceAvailable({
+        communityRuntime: surface.communityRuntime,
+        packagedJcefDesktop: surface.packagedJcefDesktop,
+        backendCapability: capability,
+      })
+    ) {
+      return [];
+    }
+
+    return groupSubscriptionModels(snapshots || [], providers || []).flatMap((group) =>
+      group.models.map((model) => {
+        const modelRefKey = model.modelRefKey || toModelRefKey(model.modelRef);
+        return {
+          value: modelRefKey,
+          label: model.displayName,
+          provider: model.modelRef.provider as IModelOptionItem['provider'],
+          model: model.modelRef.modelId,
+          modelRefKey,
+          accessType: 'SUBSCRIPTION',
+          subscriptionOption: true,
+          selectable: model.selectable,
+          snapshotDiscoveredAt: model.discoveredAt,
+          disabledReason: model.disabledReason,
+          supportedReasoningEfforts: model.supportedReasoningEfforts || [],
+          defaultReasoningEffort: model.defaultReasoningEffort,
+          defaultOption: false,
+          customOption: false,
+        } satisfies IModelOptionItem;
+      }),
+    );
+  } catch {
+    // Backend subscription APIs may not be registered yet; keep API-key path intact.
+    return [];
+  }
+};
+
 export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> => {
   const presetOptions = runtimeEditionConfig.remoteAiModelOptions
     ? (await aiStreamService.getModelOptions(undefined as void)) || []
     : [];
 
+  const subscriptionOptions = await listSubscriptionModelOptions();
+
   if (!runtimeEditionConfig.localPersistence) {
-    return presetOptions;
+    const mergedRemote = [...subscriptionOptions, ...presetOptions];
+    if (!mergedRemote.some((item) => item.defaultOption) && mergedRemote.length > 0) {
+      const firstSelectable = mergedRemote.find((item) => item.selectable !== false) || mergedRemote[0];
+      firstSelectable.defaultOption = true;
+    }
+    return mergedRemote;
   }
 
   const localOptions = loadLocalConfigs()
     .filter((item) => item.enabled !== false)
     .map(createLocalModelOption);
 
-  const merged = [...localOptions, ...presetOptions];
+  // API-key models remain first-class; subscription models are additive and never forced.
+  const merged = [...localOptions, ...subscriptionOptions, ...presetOptions];
   if (!merged.some((item) => item.defaultOption) && merged.length > 0) {
-    merged[0].defaultOption = true;
+    const firstSelectable = merged.find((item) => item.selectable !== false) || merged[0];
+    firstSelectable.defaultOption = true;
   }
   return merged;
 };
 
-export const resolveModelRequestPayload = async (option: IModelOptionItem) => {
+export const resolveModelRequestPayload = async (option: IModelOptionItem, reasoningEffort?: string | null) => {
+  if (option.subscriptionOption || option.accessType === 'SUBSCRIPTION') {
+    if (option.selectable === false) {
+      return null;
+    }
+    return {
+      modelConfigId: undefined,
+      modelRefKey: option.modelRefKey || option.value,
+      accessType: 'SUBSCRIPTION' as const,
+      provider: option.provider,
+      model: option.model,
+      apiKey: undefined,
+      baseUrl: undefined,
+      projectId: undefined,
+      location: undefined,
+      temperature: undefined,
+      maxTokens: undefined,
+      reasoningEffort: reasoningEffort || undefined,
+    };
+  }
+
   if (runtimeEditionConfig.localPersistence && option.customOption && option.modelConfigId) {
     const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);
     if (!config) {

@@ -11,6 +11,7 @@ import ai.chat2db.community.jcef.event.manager.FileOpenEventManager;
 import ai.chat2db.community.jcef.handler.biz.IJcefActionHandler;
 import ai.chat2db.community.jcef.handler.keyboard.KeyboardHandler;
 import ai.chat2db.community.jcef.handler.mouse.CursorHandler;
+import ai.chat2db.community.jcef.handler.secret.SecretImportQueryInterceptor;
 import ai.chat2db.community.jcef.listener.FileManagerService;
 import ai.chat2db.community.jcef.menus.Chat2DBMenuBar;
 import ai.chat2db.community.jcef.utils.*;
@@ -628,6 +629,11 @@ public class MainJFrame extends JFrame {
             public boolean onQuery(CefBrowser browser, CefFrame frame, long queryId, String data,
                                    boolean persistent, CefQueryCallback callback) {
                 executor.submit(() -> {
+                    // Secret-bearing API-key import must never enter generic ConsoleMessage
+                    // retention, request-body logging, doController, or bridge.error paths.
+                    if (SecretImportQueryInterceptor.tryHandle(data, callback)) {
+                        return;
+                    }
                     String action = "unKnow Action";
                     ConsoleMessage wsMessage = new ConsoleMessage();
                     ConsoleResult wsResult;

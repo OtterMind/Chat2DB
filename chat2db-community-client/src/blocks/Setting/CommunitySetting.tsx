@@ -1,5 +1,5 @@
 import i18n from '@/i18n';
-import { ClipboardPen, Info, Keyboard, SlidersHorizontal } from 'lucide-react';
+import { Bot, ClipboardPen, Info, Keyboard, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import About from './About';
 import BaseSetting from './BaseSetting';
@@ -8,9 +8,13 @@ import McpSetting from './McpSetting';
 import NetworkProxySetting from './NetworkProxySetting';
 import SettingLayout, { type SettingMenuItem } from './SettingLayout';
 import ShortcutSetting from './ShortcutSetting';
+import SubscriptionAccountPanel from '@/blocks/AI/subscription/SubscriptionAccountPanel';
+import { isSubscriptionManagementEntryVisible } from '@/blocks/AI/subscription/capability';
 
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { useGlobalStore } from '@/store/global';
+import { useSubscriptionAiStore } from '@/store/aiSubscription';
+import { isCommunityEnv, isPackagedJcefDesktop } from '@/utils/env';
 
 function CommunitySetting() {
   const {
@@ -22,6 +26,31 @@ function CommunitySetting() {
     setSettingPageActiveTab: state.setSettingPageActiveTab,
     language: state.baseSetting.language,
   }));
+  const {
+    subscriptionHydrated,
+    subscriptionCapability,
+    subscriptionErrorCode,
+    refreshSubscriptionSurface,
+  } = useSubscriptionAiStore((state) => ({
+    subscriptionHydrated: state.hydrated,
+    subscriptionCapability: state.capability,
+    subscriptionErrorCode: state.lastErrorCode,
+    refreshSubscriptionSurface: state.refreshSurface,
+  }));
+
+  const subscriptionEntryVisible = isSubscriptionManagementEntryVisible({
+    communityRuntime: isCommunityEnv,
+    packagedJcefDesktop: isPackagedJcefDesktop(),
+    hydrated: subscriptionHydrated,
+    backendCapability: subscriptionCapability,
+    lastErrorCode: subscriptionErrorCode,
+  });
+
+  useEffect(() => {
+    if (isCommunityEnv && isPackagedJcefDesktop()) {
+      void refreshSubscriptionSurface();
+    }
+  }, [refreshSubscriptionSurface]);
 
   const menusList = useMemo(
     () =>
@@ -42,6 +71,18 @@ function CommunitySetting() {
           body: <EditorSetting />,
           code: 'editSetting',
         },
+        ...(subscriptionEntryVisible
+          ? [
+              {
+                title: i18n('ai.subscription.nav.title'),
+                describe: i18n('ai.subscription.nav.describe'),
+                group: 'services' as const,
+                icon: Bot,
+                body: <SubscriptionAccountPanel />,
+                code: 'subscriptionAi',
+              },
+            ]
+          : []),
         ...(runtimeEditionConfig.mcpSetting
           ? [
               {
@@ -84,7 +125,7 @@ function CommunitySetting() {
           code: 'about',
         },
       ] satisfies SettingMenuItem[],
-    [language],
+    [language, subscriptionEntryVisible],
   );
 
   useEffect(() => {
