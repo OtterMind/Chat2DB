@@ -6,6 +6,7 @@ import { ChatVO } from '@/typings/chat';
 import i18n from '@/i18n';
 import { staticMessage } from '@chat2db/ui';
 import { useGlobalStore } from '@/store/global';
+import { applyChatInfoUpdate, type ChatPage } from './chatInfoUpdate';
 
 export interface CommonAction {
   /** Create fake/empty new chat conversation */
@@ -83,16 +84,9 @@ export const createCommonAction: StateCreator<ChatStore, [['zustand/devtools', n
     });
   },
   updateChatInfo: async (chatBasicInfo) => {
+    const page = useGlobalStore.getState().mainPageActiveTab as ChatPage;
     chatService.updateChatInfo(chatBasicInfo).then(() => {
-      const chatList = get().chatList;
-      const index = chatList.findIndex((item) => item.id === chatBasicInfo.id);
-      if (index === -1) return;
-      chatList[index] = {
-        ...chatList[index],
-        ...chatBasicInfo,
-      };
-
-      set({ chatList: chatList, currentChat: { ...get().currentChat, ...chatBasicInfo } });
+      set((state) => applyChatInfoUpdate(state, page, chatBasicInfo));
     });
   },
   queryChatList: async () => {

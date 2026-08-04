@@ -35,6 +35,7 @@
     "test:bi-chart-sorting": "tsx src/blocks/BI/Chart/charts/BarChart/dataTreating.test.ts",
     "test:bi-sql-result": "tsx src/blocks/BI/ChartCardBox/EditorChartSql/executionResult.test.ts",
     "test:chat-answer-update": "tsx src/store/chat/slices/chatDetails/answerUpdates.test.ts",
+    "test:chat-info-update": "tsx src/store/chat/slices/common/chatInfoUpdate.test.ts",
     "test:combo-axis-actions": "tsx src/blocks/BI/Chart/form/components/ComboAxisSelect/comboAxisSelect.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
