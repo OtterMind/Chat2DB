@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 
 
 @Slf4j
@@ -41,6 +42,7 @@ public class JSONImporter extends BaseImporter implements IImportStrategy {
             Iterator<JsonNode> records = jsonNode.elements();
 
             while (records.hasNext()) {
+                context.checkCancelled();
                 JsonNode recordNode = records.next();
                 List<String> tableColumnList = columns.stream().map(TableColumn::getName).toList();
                 List<String> values = getValues(columns, context.getDataTimeFormat(), recordNode, valueProcessor);
@@ -54,13 +56,20 @@ public class JSONImporter extends BaseImporter implements IImportStrategy {
                 sqlCacheList.add(sql);
                 if (sqlCacheList.size() >= BATCH_SIZE) {
                     context.info("import " + BATCH_SIZE + " records");
-                    DefaultSQLExecutor.getInstance().executeBatchInsert(Chat2DBContext.getConnection(), sqlCacheList);
+                    DefaultSQLExecutor.getInstance().executeBatchInsert(
+                            Chat2DBContext.getConnection(), sqlCacheList, context, context::checkCancelled);
+                    context.checkCancelled();
                     sqlCacheList = new ArrayList<>(BATCH_SIZE);
                 }
             }
             if (sqlCacheList.size() > 0) {
-                DefaultSQLExecutor.getInstance().executeBatchInsert(Chat2DBContext.getConnection(), sqlCacheList);
+                context.checkCancelled();
+                DefaultSQLExecutor.getInstance().executeBatchInsert(
+                        Chat2DBContext.getConnection(), sqlCacheList, context, context::checkCancelled);
+                context.checkCancelled();
             }
+        } catch (CancellationException e) {
+            throw e;
         } catch (Exception e) {
             log.error("import JSON data error", e);
             context.error("import JSON data error, " + e.getMessage());
