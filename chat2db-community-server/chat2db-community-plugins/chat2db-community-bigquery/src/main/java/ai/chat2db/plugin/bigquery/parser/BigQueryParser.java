@@ -118,21 +118,29 @@ public class BigQueryParser extends PgsqlSqlParser {
                         }
                     }
                     case DEFAULT -> {
+                        boolean dashCommentStart = current == '-'
+                                && nextCharactersAre(reader, '-', 1);
+                        boolean blockCommentStart = current == '/'
+                                && nextCharactersAre(reader, '*', 1);
+                        boolean commentStart = dashCommentStart || current == '#'
+                                || blockCommentStart;
                         if (isTokenCharacter(current)) {
                             token.append(Character.toUpperCase(current));
                             hasExecutableContent = true;
                         } else {
                             flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
-                            scriptBlocks.acceptDelimiter(current, !closingBrackets.isEmpty());
+                            if (!commentStart) {
+                                scriptBlocks.acceptDelimiter(current, !closingBrackets.isEmpty());
+                            }
                         }
                         if (isTokenCharacter(current)) {
                             // The token is processed when the following delimiter is read.
-                        } else if (current == '-' && nextCharactersAre(reader, '-', 1)) {
+                        } else if (dashCommentStart) {
                             bytesRead += appendNext(reader, statement);
                             state = LexicalState.LINE_COMMENT;
                         } else if (current == '#') {
                             state = LexicalState.LINE_COMMENT;
-                        } else if (current == '/' && nextCharactersAre(reader, '*', 1)) {
+                        } else if (blockCommentStart) {
                             bytesRead += appendNext(reader, statement);
                             state = LexicalState.BLOCK_COMMENT;
                         } else if (current == '\'' || current == '"') {

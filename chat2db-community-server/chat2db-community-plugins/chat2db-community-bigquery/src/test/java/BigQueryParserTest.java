@@ -133,6 +133,25 @@ class BigQueryParserTest {
     }
 
     @Test
+    void keepsLabelsSeparatedFromColonsByCommentsTogether() {
+        String loop = """
+                outer /* block comment */ : LOOP
+                  SELECT 1;
+                  BREAK outer;
+                END LOOP outer
+                """.strip();
+        String guarded = """
+                guarded -- line comment
+                : WHILE FALSE DO
+                  SELECT 2;
+                END WHILE guarded
+                """.strip();
+
+        Assertions.assertEquals(List.of(loop, guarded, "SELECT 3"),
+                sqlOf(parser.parserSqlScript(loop + ";\n" + guarded + ";\nSELECT 3;")));
+    }
+
+    @Test
     void keepsNestedBlockInsideExceptionHandlerTogether() {
         String block = """
                 BEGIN
