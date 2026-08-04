@@ -87,6 +87,8 @@ export interface IBoundInfo {
 
   filePath?: string;
   fileExtension?: string;
+  fileCharset?: string;
+  fileBom?: boolean;
   filePreviewUrl?: string;
   filePreviewMimeType?: string;
   fileRootToken?: string;

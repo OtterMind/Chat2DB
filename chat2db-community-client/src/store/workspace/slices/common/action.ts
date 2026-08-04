@@ -6,6 +6,7 @@ import jcefApi from '@/jcef';
 import { randomLargeLong } from '@/utils';
 import { WorkspaceTabType } from '@/constants';
 import { refreshLocalFileWorkspaceTab } from '../../utils/localFileWorkspaceTab';
+import { normalizeLocalFileReadResult } from '@/utils/localFileEncoding';
 
 export interface CommonAction {
   setCurrentConnectionDetails: (data: CommonState['currentConnectionDetails']) => void;
@@ -38,7 +39,14 @@ export const createCommonAction: StateCreator<WorkspaceStore, [['zustand/devtool
             rootToken: context.rootToken,
             relativePath: context.relativePath || '',
           })
-        : jcefApi.readFile(filePath).then((ddl) => ({ ddl }));
+        : jcefApi.readFile(filePath).then((result) => {
+            const file = normalizeLocalFileReadResult(result);
+            return {
+              ddl: file.content,
+              fileCharset: file.charset,
+              fileBom: file.bom,
+            };
+          });
 
     contentPromise.then((fileContent) => {
       useGlobalStore.getState().setMainPageActiveTab({ page: 'workspace' });
@@ -56,6 +64,8 @@ export const createCommonAction: StateCreator<WorkspaceStore, [['zustand/devtool
             }
           : {
               ddl: 'ddl' in fileContent ? fileContent.ddl : '',
+              fileCharset: 'fileCharset' in fileContent ? fileContent.fileCharset : undefined,
+              fileBom: 'fileBom' in fileContent ? fileContent.fileBom : undefined,
               filePreviewUrl: undefined,
               filePreviewMimeType: undefined,
             }),

@@ -118,11 +118,15 @@ function MermaidDiagram({ source }: { source: string }) {
 function MarkdownSourceEditor({
   source,
   filePath,
+  fileCharset,
+  fileBom,
   onChange,
   onEditorChange,
 }: {
   source: string;
   filePath?: string;
+  fileCharset?: string;
+  fileBom?: boolean;
   onChange: (value: string) => void;
   onEditorChange: (editor?: IEditorIns) => void;
 }) {
@@ -156,8 +160,17 @@ function MarkdownSourceEditor({
         editor.onDidChangeModelContent(() => onChange(editor.getValue()));
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
           if (filePath) {
-            updateFileContent({ filePath, fileContent: editor.getValue() });
-            staticMessage.success(i18n('workspace.text.changeFileSuccess'));
+            void updateFileContent({
+              filePath,
+              fileContent: editor.getValue(),
+              charset: fileCharset,
+              bom: fileBom,
+            })
+              .then(() => staticMessage.success(i18n('workspace.text.changeFileSuccess')))
+              .catch((error) => {
+                console.error('update local file error', error);
+                staticMessage.error(i18n('common.text.failure'));
+              });
           }
         });
       }}
@@ -445,9 +458,11 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
     );
     const source = (
       <MarkdownSourceEditor
-        key={`${workspaceTabId}:${file.filePath || ''}`}
+        key={`${workspaceTabId}:${file.filePath || ''}:${file.fileCharset || ''}:${String(file.fileBom)}`}
         source={markdownContent}
         filePath={file.filePath}
+        fileCharset={file.fileCharset}
+        fileBom={file.fileBom}
         onChange={setMarkdownContent}
         onEditorChange={setEditor}
       />

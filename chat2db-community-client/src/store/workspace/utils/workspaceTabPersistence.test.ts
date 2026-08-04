@@ -8,7 +8,13 @@ const tabs: IWorkspaceTab[] = [
     id: 'markdown',
     type: WorkspaceTabType.LocalSQLFile,
     title: 'README.md',
-    uniqueData: { filePath: '/tmp/README.md', fileExtension: 'md', ddl: '# Hello' },
+    uniqueData: {
+      filePath: '/tmp/README.md',
+      fileExtension: 'md',
+      fileCharset: 'UTF-8',
+      fileBom: true,
+      ddl: '# Hello',
+    },
   },
   {
     id: 'image',
@@ -37,6 +43,11 @@ assert.deepEqual(
   getPersistableWorkspaceTabList(tabs)?.map((tab) => tab.id),
   ['markdown'],
   'ephemeral binary previews and PTY sessions must not be written to workspace storage',
+);
+assert.deepEqual(
+  getPersistableWorkspaceTabList(tabs)?.[0].uniqueData,
+  tabs[0].uniqueData,
+  'local file charset and BOM metadata must survive workspace persistence',
 );
 
 const consoleTabs: IWorkspaceTab[] = Array.from({ length: 101 }, (_, index) => ({

@@ -880,12 +880,20 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     setInitialSaveNameModalOpen(false);
   }, [initialSaveLoading]);
 
-  const handleSaveFile = () => {
+  const handleSaveFile = async () => {
     const fileContent = sqlEditorRef.current?.getValue() ?? '';
-    updateFileContent({
-      filePath: dbInfo.filePath!,
-      fileContent,
-    });
+    try {
+      await updateFileContent({
+        filePath: dbInfo.filePath!,
+        fileContent,
+        charset: dbInfo.fileCharset,
+        bom: dbInfo.fileBom,
+      });
+    } catch (error) {
+      console.error('update local file error', error);
+      staticMessage.error(i18n('common.text.failure'));
+      return;
+    }
     try {
       sqlEditorRef.current?.resetContentDiffBaseline(fileContent);
     } catch {

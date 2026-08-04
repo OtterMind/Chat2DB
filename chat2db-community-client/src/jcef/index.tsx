@@ -1,7 +1,7 @@
 import createJcefApi from './base';
-import { FileConstants } from '@/constants/file';
 import { IUpdateDetail } from '@/typings/settings';
 import { LangType } from '@/constants/settings';
+import type { LocalFileReadResult } from '@/utils/localFileEncoding';
 import { ThemeAppearance } from '@chat2db/ui';
 
 const jcefApi = {
@@ -186,12 +186,12 @@ const jcefApi = {
     return createJcefApi<{ path: string; size: number } | null>('save-file', data);
   },
   // Change file content
-  updateFileContent: (data: { filePath: string; fileContent: string }) => {
-    return createJcefApi('update-file-content', data);
+  updateFileContent: (data: { filePath: string; fileContent: string; charset?: string; bom?: boolean }) => {
+    return createJcefApi<boolean>('update-file-content', data);
   },
   // Open local file
   readFile: (path: string) => {
-    return createJcefApi<FileConstants>('read-file', { path });
+    return createJcefApi<LocalFileReadResult>('read-file', { path });
   },
   // The front-end setting information is synchronized with the back-end
   updateSettings: (data: { appearance: ThemeAppearance; language: LangType; enableMcp?: boolean }) => {

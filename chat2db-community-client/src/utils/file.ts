@@ -8,6 +8,7 @@ import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import sqlService from '@/service/sql';
 import { LOCAL_SQL_FILE_SAVED_EVENT } from '@/constants';
+import type { LocalFileEncodingMetadata } from '@/utils/localFileEncoding';
 
 export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
 
@@ -70,8 +71,21 @@ export async function downloadLargeCellValue(largeValueId: string, format: Large
 }
 
 // Update file content
-export function updateFileContent({ filePath, fileContent }: { filePath: string; fileContent: string }) {
-  jcefApi?.updateFileContent({ filePath, fileContent });
+export function updateFileContent({
+  filePath,
+  fileContent,
+  charset,
+  bom,
+}: {
+  filePath: string;
+  fileContent: string;
+} & LocalFileEncodingMetadata) {
+  return jcefApi.updateFileContent({ filePath, fileContent, charset, bom }).then((updated) => {
+    if (updated !== true) {
+      throw new Error('Failed to update local file');
+    }
+    return updated;
+  });
 }
 
 interface SavedDesktopFile {

@@ -11,7 +11,6 @@ import org.cef.callback.CefQueryCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 public class ResponseBuilder {
@@ -28,8 +27,7 @@ public class ResponseBuilder {
     public static void buildSuccess(ConsoleResult result, CefQueryCallback callback) {
         try {
             String jsonResult = objectMapper.writeValueAsString(result);
-            String res = new String(jsonResult.getBytes(), StandardCharsets.UTF_8);
-            callback.success(res);
+            callback.success(jsonResult);
         } catch (Exception e) {
             log.error("Failed to build success response", e);
         }
@@ -39,8 +37,7 @@ public class ResponseBuilder {
     public static void buildSuccessJcef(Map<String, Object> result, CefQueryCallback callback) {
         try {
             String jsonResult = objectMapper.writeValueAsString(result);
-            String res = new String(jsonResult.getBytes(), StandardCharsets.UTF_8);
-            callback.success(res);
+            callback.success(jsonResult);
         } catch (Exception e) {
             log.error("Failed to build success response", e);
         }
@@ -50,7 +47,7 @@ public class ResponseBuilder {
         try {
             String jsonResult = JSON.toJSONString(result);
             String compressedResult = ConsoleCodec.compress(jsonResult);
-            callback.failure(500, new String(compressedResult.getBytes(), StandardCharsets.UTF_8));
+            callback.failure(500, compressedResult);
         } catch (Exception e) {
             log.error("Failed to build error response", e);
         }
