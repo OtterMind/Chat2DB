@@ -94,8 +94,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
         List<DataSource> dataSources = DataSourceStorage.INSTANCE.getDataList();
         List<WorkspaceDataSource> result = storageConverter.dataSource2workspace(dataSources);
         result.forEach(dataSource -> dataSource.setStorageType(StorageTypeEnum.LOCAL.name()));
-        return PageResponse.of(result, (long) result.size(), dataSourcePageQueryRequest.getPageNo(),
-                dataSourcePageQueryRequest.getPageSize());
+        return page(result, dataSourcePageQueryRequest.getPageNo(), dataSourcePageQueryRequest.getPageSize());
     }
 
     @Override
@@ -154,7 +153,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public PageResponse<Task> taskList(TaskRecordPageRequest taskPageRequest) {
         List<Task> tasks = TaskStorage.INSTANCE.getDataList();
-        return PageResponse.of(tasks, (long) tasks.size(), taskPageRequest.getPageNo(), taskPageRequest.getPageSize());
+        return page(tasks, taskPageRequest.getPageNo(), taskPageRequest.getPageSize());
     }
 
     @Override
@@ -189,8 +188,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public PageResponse<OperationLog> operationLogList(OpsOperationLogPageQueryRequest operationLogPageQueryRequest) {
         List<OperationLog> logs = OperationLogStorage.INSTANCE.getDataList();
-        return PageResponse.of(logs, (long) logs.size(), operationLogPageQueryRequest.getPageNo(),
-                operationLogPageQueryRequest.getPageSize());
+        return page(logs, operationLogPageQueryRequest.getPageNo(), operationLogPageQueryRequest.getPageSize());
     }
 
     @Override
@@ -201,10 +199,8 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public PageResponse<Operation> consoleList(OpsOperationPageQueryRequest operationPageQueryRequest) {
         Operation operation = storageConverter.operationPageParam2model(operationPageQueryRequest);
-        List<Operation> consoles = ConsoleStorage.INSTANCE.getDataList(operation, operationPageQueryRequest.getPageNo(),
-                operationPageQueryRequest.getPageSize());
-        return PageResponse.of(consoles, (long) consoles.size(), operationPageQueryRequest.getPageNo(),
-                operationPageQueryRequest.getPageSize());
+        List<Operation> allConsoles = ConsoleStorage.INSTANCE.getDataList(operation, 1, Integer.MAX_VALUE);
+        return page(allConsoles, operationPageQueryRequest.getPageNo(), operationPageQueryRequest.getPageSize());
     }
 
     @Override
@@ -242,5 +238,26 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
             return password;
         }
         return AesGcmUtil.configured().encrypt(password);
+    }
+
+    private int normalizePageNo(Integer pageNo) {
+        return Math.max(1, pageNo == null ? 1 : pageNo);
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        return Math.max(1, pageSize == null ? 100 : pageSize);
+    }
+
+    private <T> PageResponse<T> page(List<T> data, Integer requestedPageNo, Integer requestedPageSize) {
+        int pageNo = normalizePageNo(requestedPageNo);
+        int pageSize = normalizePageSize(requestedPageSize);
+        long total = data.size();
+        long offset = ((long) pageNo - 1L) * pageSize;
+        if (offset >= total) {
+            return PageResponse.of(List.of(), total, pageNo, pageSize);
+        }
+        int fromIndex = (int) offset;
+        int toIndex = (int) Math.min(offset + (long) pageSize, total);
+        return PageResponse.of(data.subList(fromIndex, toIndex), total, pageNo, pageSize);
     }
 }

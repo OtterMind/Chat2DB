@@ -69,12 +69,14 @@ public class TreeNodeStorage extends SmallDataStorage<TreeNode> {
         try {
             Thread.sleep(10);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         List<Node> nodes = getNodes();
         if (nodes == null) {
             return ActionResult.isSuccess();
         }
         if (dropToNode == null) {
+            removeNode(nodes, dragNode, false);
             nodes.add(dragNode);
             createTree(nodes);
             return ActionResult.isSuccess();

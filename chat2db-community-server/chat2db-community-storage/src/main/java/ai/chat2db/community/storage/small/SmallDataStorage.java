@@ -102,6 +102,9 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 return;
             }
             T before = dataMap.get(id);
+            if (before == null) {
+                return;
+            }
             before = getAfterSave(before, data);
             dataMap.put(id, before);
             saveDataList();
