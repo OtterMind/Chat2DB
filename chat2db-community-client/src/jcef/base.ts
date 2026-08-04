@@ -1,15 +1,19 @@
-const createJcefApi = <T = any> (command: string, params?: any, uuid?: string): Promise<T>=> {
+export const isJcefApiAvailable = (): boolean => {
+  return typeof window !== 'undefined' && typeof window.javaQuery === 'function';
+};
+
+const createJcefApi = <T = any>(command: string, params?: any, uuid?: string): Promise<T> => {
   const request = {
     requestUrl: command,
     method: 'client-command',
     message: params === undefined ? undefined : JSON.stringify(params),
     uuid,
-  }
+  };
 
-  if(!window.javaQuery) {
+  if (!isJcefApiAvailable()) {
     return Promise.reject(new Error('Java Query is not available'));
   }
-  
+
   return new Promise<T>((resolve, reject) => {
     window.javaQuery({
       request: JSON.stringify(request),

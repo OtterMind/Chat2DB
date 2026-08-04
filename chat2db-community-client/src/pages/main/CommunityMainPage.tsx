@@ -1,9 +1,8 @@
 import { Confetti, IconButton, IconfontSvg } from '@chat2db/ui';
 import { Tooltip, type InputRef } from 'antd';
-import { Layers, MessagesSquare } from 'lucide-react';
+import { Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import i18n from '@/i18n';
 import { INavItem } from '@/typings/main';
 import feedback from '@/utils/feedback';
@@ -33,6 +32,7 @@ import aiStreamService, { IChatSession } from '@/service/aiStream';
 import { useChatStore } from '@/store/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
+import { resolveInitialMainPage } from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
 
 function CommunityMainPage() {
@@ -42,7 +42,7 @@ function CommunityMainPage() {
     () => [
       {
         key: 'stream',
-        icon: MessagesSquare,
+        icon: MessageSquarePlus,
         isLoad: false,
         component: <Stream />,
         name: i18n('stream.nav.title'),
@@ -56,7 +56,7 @@ function CommunityMainPage() {
       },
       {
         key: 'dashboard',
-        icon: ChartNoAxesCombined,
+        icon: LayoutDashboard,
         isLoad: false,
         component: <Dashboard />,
         name: i18n('dashboard.title'),
@@ -207,10 +207,10 @@ function CommunityMainPage() {
       const hashPath = window.location.hash.replace(/^#/, '');
       const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
       const hashPage = normalizedHashPath.split('/')[1];
-      page = hashPage || mainPageActiveTab || 'stream';
+      page = resolveInitialMainPage(hashPage, mainPageActiveTab);
       pathName = hashPage ? normalizedHashPath : '';
     } else {
-      page = window.location.pathname.split('/')[1] || mainPageActiveTab;
+      page = resolveInitialMainPage(window.location.pathname.split('/')[1], mainPageActiveTab);
       pathName = window.location.pathname;
     }
 

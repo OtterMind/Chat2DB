@@ -4,6 +4,7 @@ import {
   GlobalBaseSettings,
   ShortcutOverrides,
   DataTableSettings,
+  TerminalSettings,
 } from '@/typings/settings';
 import {
   DEFAULT_AI_SETTINGS,
@@ -12,6 +13,7 @@ import {
   DATA_TABLE_SETTINGS,
 } from '@/constants/settings';
 import { DEFAULT_EDITOR_SETTINGS, EditorSettings } from '@/components/SQLEditor';
+import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
 
 export interface GlobalSettings {
   baseSetting: GlobalBaseSettings;
@@ -20,6 +22,7 @@ export interface GlobalSettings {
   editorSettings: EditorSettings;
   dataTableSettings: DataTableSettings;
   shortcutOverrides: ShortcutOverrides;
+  terminalSettings: TerminalSettings;
 }
 
 export interface GlobalSettingState extends GlobalSettings {}
@@ -31,4 +34,5 @@ export const initialSettingState: GlobalSettingState = {
   editorSettings: DEFAULT_EDITOR_SETTINGS,
   dataTableSettings: DATA_TABLE_SETTINGS,
   shortcutOverrides: {},
+  terminalSettings: DEFAULT_TERMINAL_SETTINGS,
 };

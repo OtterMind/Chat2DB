@@ -31,12 +31,14 @@ public class SQLImporter extends BaseImporter implements IImportStrategy {
 
     @Override
     protected void doImportData(ImportAsyncContext context, List<TableColumn> columns) {
+        context.checkCancelled();
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         String databaseType = connectInfo.getDbType();
         if (StringUtils.equalsAnyIgnoreCase(databaseType, DatabaseTypeEnum.MYSQL.name(), DatabaseTypeEnum.ORACLE.name(), DatabaseTypeEnum.OSCAR.name(), DatabaseTypeEnum.SQLSERVER.name(), DatabaseTypeEnum.POSTGRESQL.name())) {
             ConsoleTaskProgressListener consoleProgressListener = new ConsoleTaskProgressListener(context);
             SyncSqlBatchHandler syncSqlBatchHandler = new SyncSqlBatchHandler(context);
             int statementCount = DefaultSqlSyntaxHandler.parserSqlScript(context.getFile(), databaseType, consoleProgressListener, syncSqlBatchHandler);
+            context.checkCancelled();
             log.info(" parsed {} statements", statementCount);
         } else {
 
@@ -49,6 +51,7 @@ public class SQLImporter extends BaseImporter implements IImportStrategy {
             long s1 = System.currentTimeMillis();
             AtomicInteger n = new AtomicInteger();
             FileUtil.readLines(context.getFile(), Charset.forName("UTF-8"), (LineHandler) line -> {
+                context.checkCancelled();
                 bytesRead.addAndGet(line.getBytes().length + System.lineSeparator().getBytes().length);
                 setProgress(context, bytesRead.get(), totalBytes, processStr);
                 sb.append(line + "\n");

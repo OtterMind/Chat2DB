@@ -22,7 +22,7 @@ class XUGUDBSqlBuilderTest {
     private final XUGUDBSqlBuilder builder = new XUGUDBSqlBuilder();
 
     @Test
-    void shouldSkipUnknownColumnAndIndexTypesWhenCreatingTable() {
+    void shouldKeepSafeUnknownColumnTypesAndSkipUnknownIndexTypesWhenCreatingTable() {
         Table table = Table.builder()
                 .schemaName(SCHEMA)
                 .name(TABLE)
@@ -39,12 +39,12 @@ class XUGUDBSqlBuilderTest {
 
         assertTrue(sql.contains("\"known_column\" INTEGER"), sql);
         assertTrue(sql.contains("\"known_index\""), sql);
-        assertFalse(sql.contains("unknown_column"), sql);
+        assertTrue(sql.contains("\"unknown_column\" UNSUPPORTED_COLUMN_TYPE"), sql);
         assertFalse(sql.contains("unknown_index"), sql);
     }
 
     @Test
-    void shouldSkipUnknownColumnAndIndexTypesWhenAlteringTable() {
+    void shouldKeepSafeUnknownColumnTypesAndSkipUnknownIndexTypesWhenAlteringTable() {
         Table oldTable = table(List.of(), List.of());
         Table newTable = table(
                 List.of(
@@ -58,7 +58,7 @@ class XUGUDBSqlBuilderTest {
 
         assertTrue(sql.contains("ADD (\"known_column\" INTEGER"), sql);
         assertTrue(sql.contains("\"known_index\""), sql);
-        assertFalse(sql.contains("unknown_column"), sql);
+        assertTrue(sql.contains("ADD (\"unknown_column\" UNSUPPORTED_COLUMN_TYPE)"), sql);
         assertFalse(sql.contains("unknown_index"), sql);
     }
 

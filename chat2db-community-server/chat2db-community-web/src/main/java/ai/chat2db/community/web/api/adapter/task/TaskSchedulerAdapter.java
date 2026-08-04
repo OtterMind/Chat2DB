@@ -31,8 +31,8 @@ public class TaskSchedulerAdapter implements ITaskSchedulerService {
     }
 
     @Override
-    public void cancel(Long taskId) {
-        TaskThreadPoolManager.cancelTask(taskId);
+    public boolean cancel(Long taskId) {
+        return TaskThreadPoolManager.cancelTask(taskId);
     }
 
     private void updateTask(Long taskId, Map<String, Object> map) {

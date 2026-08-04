@@ -14,7 +14,7 @@ import java.sql.SQLException;
 
 public final class KingBaseDBManagerConstants {
 
-    public static final String SQL_SET_SEARCH_PATH_USER_PUBLIC = "SET search_path TO \"%s\",\"$user\",\"public\"";
+    public static final String SQL_SET_SEARCH_PATH_USER_PUBLIC = "SET search_path TO %s,\"$user\",\"public\"";
 
     private KingBaseDBManagerConstants() {
     }

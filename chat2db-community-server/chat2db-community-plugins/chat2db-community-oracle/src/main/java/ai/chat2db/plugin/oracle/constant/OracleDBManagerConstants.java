@@ -38,7 +38,7 @@ import java.util.List;
 
 public final class OracleDBManagerConstants {
 
-    public static final String SQL_ALTER_SESSION_SET_CURRENT_SCHEMA = "ALTER SESSION SET CURRENT_SCHEMA = \"";
+    public static final String SQL_ALTER_SESSION_SET_CURRENT_SCHEMA = "ALTER SESSION SET CURRENT_SCHEMA = ";
     public static final String SQL_SELECT_TRIGGER_NAME_ALL_TRIGGERS = "SELECT TRIGGER_NAME FROM all_triggers where OWNER='%s'";
 
     private OracleDBManagerConstants() {

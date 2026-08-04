@@ -429,7 +429,9 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     // TODO: There is a problem here, only as of VTable version 1.10.0
     // bug description: Change the color of a cell to A, then to B, then to A. At this time, the cell has no color.
     // Resetting this undocumented VTable arrangement fixes update colors that cycle A -> B -> A.
-    // Registered create/delete styles remain intact after the reset.
+    // Registered create/delete *style definitions* remain intact after the reset, but the arrangement
+    // (cell -> style) mappings are cleared. Re-apply create/delete arrangements below so a plain cell
+    // edit does not wipe green (new-row) / red (deleted-row) highlights until the next sort/filter.
     if (tableInstance?.customCellStylePlugin) {
       tableInstance.customCellStylePlugin.customCellStyleArrangement = [];
     }
@@ -446,7 +448,20 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
         'custom-update-cell',
       );
     });
-  }, [cellChangeRecordList, tableInstance]);
+
+    findRowNumbersByIds(tableInstance, createRowRecordList).forEach((row) => {
+      tableInstance?.arrangeCustomCellStyle(
+        { range: { start: { row, col: 0 }, end: { row, col: columns.length } } },
+        'custom-create-cell',
+      );
+    });
+    findRowNumbersByIds(tableInstance, deleteRowRecordList)?.forEach((row) => {
+      tableInstance?.arrangeCustomCellStyle(
+        { range: { start: { row, col: 0 }, end: { row, col: columns.length } } },
+        'custom-delete-cell',
+      );
+    });
+  }, [cellChangeRecordList, createRowRecordList, deleteRowRecordList, columns, tableInstance]);
 
   useEffect(() => {
     if (!tableInstance) return;

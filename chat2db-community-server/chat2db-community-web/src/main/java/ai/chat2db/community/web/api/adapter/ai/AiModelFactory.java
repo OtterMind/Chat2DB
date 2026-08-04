@@ -60,6 +60,12 @@ public class AiModelFactory {
         if (provider == AiProviderEnum.OPENAI) {
             return openAiClient(runtimeModel, retryTemplate);
         }
+        if (provider == AiProviderEnum.MINIMAX) {
+            if (StringUtils.containsIgnoreCase(runtimeModel.getBaseUrl(), "/anthropic")) {
+                return claudeClient(runtimeModel, retryTemplate);
+            }
+            return openAiClient(runtimeModel, retryTemplate);
+        }
         if (provider == AiProviderEnum.CLAUDE) {
             return claudeClient(runtimeModel, retryTemplate);
         }

@@ -1,5 +1,6 @@
 package ai.chat2db.spi.util;
 
+import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import org.junit.jupiter.api.Test;
 
@@ -66,5 +67,59 @@ class DBStructUtilsTest {
                 CREATE TABLE orders (
                 \tamount DECIMAL(12)
                 );""", sql);
+    }
+
+    @Test
+    void generateCreateTableSQLToleratesNullColumnType() {
+        TableColumn column = new TableColumn();
+        column.setName("expr");
+        column.setColumnType(null);
+        column.setColumnSize(10);
+
+        assertEquals("""
+                CREATE TABLE users (
+                \texpr VARCHAR(10)
+                );""", DBStructUtils.generateCreateTableSQL("users", List.of(column)));
+    }
+
+    @Test
+    void generateCreateTableSQLEscapesCommentQuotesWithoutChangingBackslashes() {
+        TableColumn column = new TableColumn();
+        column.setName("name");
+        column.setColumnType("VARCHAR");
+        column.setComment("O'Brien\\docs");
+
+        String sql = DBStructUtils.generateCreateTableSQL("users", List.of(column));
+
+        assertEquals("""
+                CREATE TABLE users (
+                \tname VARCHAR COMMENT 'O''Brien\\docs'
+                );""", sql);
+    }
+
+    @Test
+    void buildAlterTableUsesNullToRemoveTableComment() {
+        Table oldTable = table("existing");
+        Table newTable = table(null);
+
+        assertEquals("COMMENT ON TABLE users IS NULL;\n", DBStructUtils.buildAlterTable(oldTable, newTable));
+    }
+
+    @Test
+    void buildAlterTableEscapesTableCommentQuotesWithoutChangingBackslashes() {
+        Table oldTable = table("existing");
+        Table newTable = table("O'Brien\\docs");
+
+        assertEquals("COMMENT ON TABLE users IS 'O''Brien\\docs';\n",
+                DBStructUtils.buildAlterTable(oldTable, newTable));
+    }
+
+    private static Table table(String comment) {
+        Table table = new Table();
+        table.setName("users");
+        table.setComment(comment);
+        table.setColumnList(List.of());
+        table.setIndexList(List.of());
+        return table;
     }
 }

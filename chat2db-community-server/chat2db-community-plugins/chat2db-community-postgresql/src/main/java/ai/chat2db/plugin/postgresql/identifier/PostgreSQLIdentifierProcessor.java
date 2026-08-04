@@ -4,9 +4,19 @@ import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
+/**
+ * PostgreSQL dialect identifier processor: double-quoted identifiers with embedded-quote
+ * doubling, and single-quote doubling for string literals
+ * (standard_conforming_strings=on, so backslash is not an escape character).
+ * Shared stateless instance available via {@link #INSTANCE} for call sites without MetaData access.
+ */
 public class PostgreSQLIdentifierProcessor extends DefaultSQLIdentifierProcessor {
+
+    public static final PostgreSQLIdentifierProcessor INSTANCE = new PostgreSQLIdentifierProcessor();
+
     private static final Set<String> PGSQL_RESERVED_KEYWORDS = new HashSet<>();
 
     static {
@@ -92,45 +102,78 @@ public class PostgreSQLIdentifierProcessor extends DefaultSQLIdentifierProcessor
 
     @Override
     public boolean isReservedKeyword(String identifier, Integer majorVersion, Integer minorVersion) {
-        return PGSQL_RESERVED_KEYWORDS.contains(identifier);
+        return identifier != null && PGSQL_RESERVED_KEYWORDS.contains(identifier.toUpperCase(Locale.ROOT));
     }
 
+    /**
+     * SPI-facing conditional quoting: {@code null} stays {@code null}, blank is returned
+     * unchanged, a valid plain identifier that is not a reserved keyword is returned
+     * unquoted, and anything else is wrapped in double quotes with one surrounding
+     * double quotes doubled as raw identifier content.
+     */
     @Override
     public String quoteIdentifier(String identifier, Integer majorVersion, Integer minorVersion) {
-        if (isValidIdentifier(identifier)) {
-            if (containsUpperCase(identifier) || isReservedKeyword(identifier.toUpperCase(), majorVersion, minorVersion)) {
-                return StringUtils.wrap(identifier, '"');
-            }
-            return identifier;
-        }
-        return StringUtils.wrap(identifier, '"');
-
+        return quoteIdentifier(identifier);
     }
 
 
     @Override
     public String quoteIdentifier(String identifier) {
-        if (isQuoteIdentifier(identifier)) {
+        if (StringUtils.isBlank(identifier)) {
             return identifier;
         }
-        if (isValidIdentifier(identifier)) {
-            if (containsUpperCase(identifier) || isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
-            }
+        // PostgreSQL folds unquoted identifiers to lowercase, so mixed-case names must stay quoted.
+        if (isValidIdentifier(identifier) && !containsUpperCase(identifier)
+                && !isReservedKeyword(identifier, null, null)) {
             return identifier;
         }
-        return StringUtils.wrap(identifier, '"');
+        return quoteIdentifierAlways(identifier);
     }
 
+    /**
+     * Conditional quote variant that preserves the original identifier case.
+     */
     @Override
     public String quoteIdentifierIgnoreCase(String identifier) {
-        if (isValidIdentifier(identifier)) {
-            if (isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
-            }
-            return identifier;
+        return quoteIdentifier(identifier);
+    }
+
+    /**
+     * Unconditionally wraps with double quotes and doubles every embedded double quote.
+     * For DDL-generation call sites that must always emit quoted identifiers. Returns
+     * {@code null} for {@code null}.
+     */
+    @Override
+    public String quoteIdentifierAlways(String identifier) {
+        if (identifier == null) {
+            return null;
         }
-        return StringUtils.wrap(identifier, '"');
+        return "\"" + escapeIdentifierContent(identifier) + "\"";
+    }
+
+    /**
+     * Escapes a value interpolated into a single-quoted SQL string literal by
+     * doubling every single quote. Returns {@code null} for {@code null}.
+     */
+    @Override
+    public String escapeString(String str) {
+        return str == null ? null : StringUtils.replace(str, "'", "''");
+    }
+
+    private static String escapeIdentifierContent(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return StringUtils.replace(identifier, "\"", "\"\"");
+    }
+
+    /**
+     * Escapes identifier content for a position already surrounded by double
+     * quotes by doubling every embedded double quote. Returns {@code null} for
+     * {@code null}.
+     */
+    public static String escapeIdentifier(String identifier) {
+        return escapeIdentifierContent(identifier);
     }
 
     @Override
@@ -138,7 +181,7 @@ public class PostgreSQLIdentifierProcessor extends DefaultSQLIdentifierProcessor
         if (StringUtils.isBlank(identifier)) {
             return identifier;
         } else {
-            return identifier.toLowerCase();
+            return identifier.toLowerCase(Locale.ROOT);
         }
     }
 }

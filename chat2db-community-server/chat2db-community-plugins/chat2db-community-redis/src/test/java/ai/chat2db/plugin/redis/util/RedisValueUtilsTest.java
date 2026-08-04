@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RedisValueUtilsTest {
 
@@ -27,5 +28,12 @@ class RedisValueUtilsTest {
     @Test
     void returnsNullForNullInput() {
         assertNull(getRedisValue(null));
+    }
+
+    @Test
+    void rejectsCharactersThatRedisJdbcSplitsBeforeQuoteParsing() {
+        assertThrows(IllegalArgumentException.class, () -> getRedisValue("first\nDEL other"));
+        assertThrows(IllegalArgumentException.class, () -> getRedisValue("first\rDEL other"));
+        assertThrows(IllegalArgumentException.class, () -> getRedisValue("first\0second"));
     }
 }

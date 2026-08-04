@@ -1,6 +1,6 @@
 package ai.chat2db.plugin.sqlserver.constant;
 
-import ai.chat2db.community.tools.util.EasyStringUtils;
+import ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierProcessor;
 
 
 public class SQLConstant {
@@ -10,19 +10,19 @@ public class SQLConstant {
     public static final String CONSTRAINT_COMMENT_TEMPLATE = "exec sp_addextendedproperty 'MS_Description',N'%s','SCHEMA',N'%s','TABLE',N'%s','CONSTRAINT',N'%s' \ngo\n";
 
     public static String buildTableComment(String tableComment, String schemaName, String tableName) {
-        return String.format(TABLE_COMMENT_TEMPLATE, EasyStringUtils.escapeString(tableComment), schemaName, tableName);
+        return String.format(TABLE_COMMENT_TEMPLATE, SqlServerIdentifierProcessor.INSTANCE.escapeString(tableComment), SqlServerIdentifierProcessor.INSTANCE.escapeString(schemaName), SqlServerIdentifierProcessor.INSTANCE.escapeString(tableName));
     }
 
     public static String buildIndexComment(String indexComment, String schemaName, String tableName, String indexName) {
-        return String.format(INDEX_COMMENT_TEMPLATE, EasyStringUtils.escapeString(indexComment), schemaName, tableName, indexName);
+        return String.format(INDEX_COMMENT_TEMPLATE, SqlServerIdentifierProcessor.INSTANCE.escapeString(indexComment), SqlServerIdentifierProcessor.INSTANCE.escapeString(schemaName), SqlServerIdentifierProcessor.INSTANCE.escapeString(tableName), SqlServerIdentifierProcessor.INSTANCE.escapeString(indexName));
     }
 
     public static String buildColumnComment(String columnComment, String schemaName, String tableName, String columnName) {
-        return String.format(COLUMN_COMMENT_TEMPLATE, EasyStringUtils.escapeString(columnComment), schemaName, tableName, columnName);
+        return String.format(COLUMN_COMMENT_TEMPLATE, SqlServerIdentifierProcessor.INSTANCE.escapeString(columnComment), SqlServerIdentifierProcessor.INSTANCE.escapeString(schemaName), SqlServerIdentifierProcessor.INSTANCE.escapeString(tableName), SqlServerIdentifierProcessor.INSTANCE.escapeString(columnName));
     }
 
     public static String buildConstraintComment(String constraintComment, String schemaName, String tableName, String constraintName) {
-        return String.format(CONSTRAINT_COMMENT_TEMPLATE, EasyStringUtils.escapeString(constraintComment), schemaName, tableName, constraintName);
+        return String.format(CONSTRAINT_COMMENT_TEMPLATE, SqlServerIdentifierProcessor.INSTANCE.escapeString(constraintComment), SqlServerIdentifierProcessor.INSTANCE.escapeString(schemaName), SqlServerIdentifierProcessor.INSTANCE.escapeString(tableName), SqlServerIdentifierProcessor.INSTANCE.escapeString(constraintName));
     }
     public static final String VIEWS_DDL_SQL = "SELECT TABLE_NAME, VIEW_DEFINITION FROM INFORMATION_SCHEMA.VIEWS " +
             "WHERE TABLE_SCHEMA = ? AND TABLE_CATALOG = ?; ";
@@ -30,17 +30,18 @@ public class SQLConstant {
 
     public static final String ROUTINES_DDL_SQL
             = "SELECT type_desc, OBJECT_NAME(object_id) AS FunctionName, OBJECT_DEFINITION(object_id) AS "
-            + "definition FROM sys.objects WHERE type_desc IN(%s) and name = '%s' ;";
+            + "definition FROM sys.objects WHERE type_desc IN(%s) and name = '%s' "
+            + "and schema_id = SCHEMA_ID('%s') ;";
 
     public static final String DROP_FUNCTION_SQL = """
-                                                   IF EXISTS (SELECT * FROM sys.all_objects WHERE object_id = OBJECT_ID(N'[%s]') AND type IN ('FN', 'FS', 'FT', 'IF', 'TF'))
-                                                   DROP FUNCTION [%s]
+                                                   IF EXISTS (SELECT * FROM sys.all_objects WHERE object_id = OBJECT_ID(N'%s') AND type IN ('FN', 'FS', 'FT', 'IF', 'TF'))
+                                                   DROP FUNCTION %s
                                                    GO
                                                    """;
 
     public static final String DROP_PROCEDURE_SQL = """
-                                                    IF EXISTS (SELECT * FROM sys.all_objects WHERE object_id = OBJECT_ID(N'[%s]') AND type IN ('P', 'PC', 'RF', 'X'))
-                                                    DROP PROCEDURE [%s]
+                                                    IF EXISTS (SELECT * FROM sys.all_objects WHERE object_id = OBJECT_ID(N'%s') AND type IN ('P', 'PC', 'RF', 'X'))
+                                                    DROP PROCEDURE %s
                                                     GO
                                                     """;
 

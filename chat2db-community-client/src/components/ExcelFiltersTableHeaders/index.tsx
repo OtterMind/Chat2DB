@@ -1,4 +1,5 @@
-import React, { memo, useState, useEffect, useMemo } from 'react';
+import React, { memo, useState, useEffect, useMemo, useRef } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import { useStyles } from './style';
 import { Radio, Space, Form, Button, Tabs, InputNumber, Checkbox } from 'antd';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
@@ -41,6 +42,8 @@ export default memo<IProps>((props) => {
   const [activeSheet, setActiveSheet] = useState<ExcelData | null>(null);
   const [filePath, setFilePath] = useState<string>('');
 
+  const requestGenerationRef = useRef(0);
+
   useEffect(() => {
     if (!activeSheet) return;
     form.setFieldsValue({
@@ -51,12 +54,17 @@ export default memo<IProps>((props) => {
   }, [activeSheet]);
 
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     chatServices.excelCheck(fileUrl).then((res) => {
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       const _excelData = handleExcelData(res.sheetList);
       setFilePath(res.filePath);
       setActiveSheet(_excelData[0]);
       setSheetList(_excelData);
     });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const { columns, dataSource, highlightRows, highlightColumns } = useMemo(() => {

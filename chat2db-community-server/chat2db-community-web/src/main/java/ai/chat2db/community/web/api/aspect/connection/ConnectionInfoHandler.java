@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.web.api.model.request.data.source.DataSourceBaseRequest;
 import ai.chat2db.community.web.api.model.request.data.source.IDataSourceBaseRequestInfo;
 import ai.chat2db.community.web.api.model.request.data.source.IDataSourceConsoleRequestInfo;
+import ai.chat2db.community.web.api.model.request.data.source.IDataSourceSchemaRequestInfo;
 import ai.chat2db.community.web.api.util.ApplicationContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -40,6 +41,15 @@ public class ConnectionInfoHandler {
                         if (dataSourceId != null && dataSourceId >1L) {
                             bind(dataSourceId, database, null, schemaName);
                         }else {
+                            customConnectionInfo(dataSourceId, database, null, schemaName);
+                        }
+                    } else if (param instanceof IDataSourceSchemaRequestInfo) {
+                        Long dataSourceId = ((IDataSourceSchemaRequestInfo) param).getDataSourceId();
+                        String schemaName = ((IDataSourceSchemaRequestInfo) param).getSchemaName();
+                        String database = ((IDataSourceSchemaRequestInfo) param).getDatabaseName();
+                        if (dataSourceId != null && dataSourceId > 1L) {
+                            bind(dataSourceId, database, null, schemaName);
+                        } else {
                             customConnectionInfo(dataSourceId, database, null, schemaName);
                         }
                     } else if (param instanceof IDataSourceConsoleRequestInfo) {
@@ -81,12 +91,22 @@ public class ConnectionInfoHandler {
             return;
         }
         try {
-            ICustomConnection connection = ApplicationContextUtil.getBean(ICustomConnection.class);
-            DbConnectionContextRequest param = connection.getConnectionInfo(dataSourceId,database,schemaName,consoleId);
+            if (ApplicationContextUtil.getApplicationContext() == null) {
+                return;
+            }
+            ICustomConnection connection = ApplicationContextUtil.getApplicationContext()
+                    .getBeanProvider(ICustomConnection.class)
+                    .getIfAvailable();
+            if (connection == null) {
+                return;
+            }
+            DbConnectionContextRequest param = connection.getConnectionInfo(dataSourceId, database, schemaName, consoleId);
             if (param != null) {
                 connectionContextService.bind(param);
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
+            log.warn("Failed to resolve custom connection info for dataSourceId={}, database={}, schemaName={}, consoleId={}",
+                    dataSourceId, database, schemaName, consoleId, e);
         }
     }
 

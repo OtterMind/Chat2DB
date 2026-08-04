@@ -57,6 +57,7 @@ public class JsonDataExporter extends BaseExporter {
             int n = 0;
             boolean hasNext = resultSet.next();
             while (hasNext) {
+                asyncContext.checkCancelled();
                 Map<String, Object> row = new LinkedHashMap<>();
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     row.put(metaData.getColumnName(i), valueProcessor.getJdbcValue(new JDBCDataValue(resultSet, metaData, i, false)));
@@ -74,7 +75,7 @@ public class JsonDataExporter extends BaseExporter {
                 }
             }
             writer.println("]");
-        });
+        }, asyncContext, asyncContext::checkCancelled);
     }
 
     private void writeBatch(PrintWriter writer, ObjectMapper objectMapper, List<Map<String, Object>> dataBatch) {

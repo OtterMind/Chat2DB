@@ -88,7 +88,7 @@ class MysqlSqlBuilderTest {
 
         String sql = builder.ddl().table().buildCreateTable(table, TableBuilderConfig.defaultConfig());
 
-        assertTrue(sql.contains("`amount` DECIMAL(10,4)UNSIGNED "));
+        assertTrue(sql.contains("`amount` DECIMAL(10,4) UNSIGNED "));
     }
 
     @Test

@@ -1,15 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import classnames from 'classnames';
 import i18n from '@/i18n';
 import { extendConfig } from '../config';
-import { IconButton } from '@chat2db/ui';
+import { IconButton, staticMessage } from '@chat2db/ui';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useImportExportStore } from '@/store/importExport';
 import { useStyles } from './style';
-import { canImportExport } from '@/utils/env';
+import { canImportExport, isDesktop } from '@/utils/env';
 import { Divider } from 'antd';
 import { useAIStore } from '@/store/ai';
 import AIButton from '@/blocks/AI/components/AIButton';
+import { Terminal } from 'lucide-react';
+import { useGlobalStore } from '@/store/global';
+import jcefApi from '@/jcef';
+import { createQuickTerminalTab } from './quickTerminal';
+import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
 
 interface IToolbar {
   code: string;
@@ -25,8 +30,14 @@ interface IProps {
 export default (props: IProps) => {
   const { className } = props;
   const { styles } = useStyles();
-  const { currentWorkspaceExtend, setCurrentWorkspaceExtend } = useWorkspaceStore((state) => {
+  const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const terminalShellId = useGlobalStore((state) => state.terminalSettings.shellId);
+  const terminalOpenPosition = useGlobalStore(
+    (state) => state.terminalSettings.openPosition || DEFAULT_TERMINAL_SETTINGS.openPosition,
+  );
+  const { addWorkspaceTab, currentWorkspaceExtend, setCurrentWorkspaceExtend } = useWorkspaceStore((state) => {
     return {
+      addWorkspaceTab: state.addWorkspaceTab,
       currentWorkspaceExtend: state.currentWorkspaceExtend,
       setCurrentWorkspaceExtend: state.setCurrentWorkspaceExtend,
     };
@@ -47,6 +58,28 @@ export default (props: IProps) => {
       return;
     }
     setCurrentWorkspaceExtend(item.code);
+  };
+
+  const createTerminal = async () => {
+    if (creatingTerminal) {
+      return;
+    }
+    setCreatingTerminal(true);
+    try {
+      const terminal = await jcefApi.createTerminal({
+        columns: 100,
+        rows: 30,
+        shellId: terminalShellId,
+      });
+      addWorkspaceTab(
+        createQuickTerminalTab(terminal, i18n('workspace.terminal.title'), terminalOpenPosition),
+      );
+    } catch (error) {
+      console.error('create terminal error', error);
+      staticMessage.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
+    } finally {
+      setCreatingTerminal(false);
+    }
   };
 
   useEffect(() => {
@@ -74,6 +107,18 @@ export default (props: IProps) => {
         })}
         <Divider style={{ margin: '8px 0px' }} />
 
+        {isDesktop && (
+          <IconButton
+            type="primary"
+            size={{ boxSize: 28, iconSize: 18, borderRadius: 6, strokeWidth: 2 }}
+            title={i18n('workspace.terminal.title')}
+            tooltipPlacement="left"
+            icon={Terminal}
+            spin={creatingTerminal}
+            disabled={creatingTerminal}
+            onClick={createTerminal}
+          />
+        )}
         <AIButton
           onClick={() => {
             setCurrentWorkspaceExtend(null);

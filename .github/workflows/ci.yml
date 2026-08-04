@@ -42,6 +42,9 @@ jobs:
       - name: Run Stylelint
         run: yarn lint:style
 
+      - name: Run shortcut contract
+        run: yarn run test:shortcut
+
       - name: Run SQL clipboard test
         run: yarn run test:sql-in-clipboard
 
@@ -53,6 +56,9 @@ jobs:
 
       - name: Run chat metadata update contract
         run: yarn run test:chat-info-update
+
+      - name: Run local file tab title contract
+        run: yarn run test:local-file-tab-title
 
       - name: Run saved console tree refresh contract
         run: yarn run test:saved-console-tree-refresh
@@ -66,8 +72,23 @@ jobs:
       - name: Run database object sorting contract
         run: yarn run test:database-object-sorting
 
+      - name: Run BI chart sorting contract
+        run: yarn run test:bi-chart-sorting
+
+      - name: Run BI chart SQL execution result contract
+        run: yarn run test:bi-sql-result
+
+      - name: Run ComboAxisSelect action filter contract
+        run: yarn run test:combo-axis-actions
+
+      - name: Run BI label rotation contract
+        run: yarn run test:label-rotation
+
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
+
+      - name: Run CreateStream index mapping contract
+        run: yarn run test:create-stream-index
 
       - name: Run result inspector contract
         run: yarn run test:result-inspector

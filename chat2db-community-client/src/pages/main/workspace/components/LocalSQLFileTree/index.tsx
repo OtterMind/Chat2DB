@@ -20,6 +20,7 @@ import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuEntry, ContextMenuIntent } from '@/components/ContextMenu/core';
 import { LOCAL_SQL_FILE_SAVED_EVENT, LOCAL_SQL_SESSION_DRAG_TYPE, WorkspaceTabType } from '@/constants';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
 import {
   getEffectiveShortcutConfigMap,
   isShortcutEventMatch,
@@ -30,6 +31,7 @@ import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
+import { getFileManagerLabelKey } from '@/utils/fileManagerLabel';
 import { getLocalTextFileIcon, LOCAL_TEXT_FILE_ICON_MAP, SQL_FILE_EXTENSION_NAME } from '../../utils/localTextFile';
 import { useStyles } from './style';
 import { LocalSQLFileTreeCreateType, LocalSQLFileTreeNode, LocalSQLFileTreeNodeType } from './type';
@@ -109,6 +111,7 @@ const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
 const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 24, iconSize: 16 };
 const LOCAL_SQL_TREE_BASE_INDENT = 0;
 const LOCAL_SQL_TREE_LEVEL_INDENT = 14;
+const LOCAL_SQL_FILE_TREE_REVEAL_LABEL = getFileManagerLabelKey('workspace');
 
 const normalizeComparablePath = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '');
 
@@ -348,6 +351,10 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
   const [dropTargetKey, setDropTargetKey] = useState<string>();
   const selectedRowRef = React.useRef<HTMLDivElement | null>(null);
   const shortcutOverrides = useGlobalStore((state) => state.shortcutOverrides);
+  const terminalShellId = useGlobalStore((state) => state.terminalSettings.shellId);
+  const terminalOpenPosition = useGlobalStore(
+    (state) => state.terminalSettings.openPosition || DEFAULT_TERMINAL_SETTINGS.openPosition,
+  );
   const shortcutConfig = useMemo(
     () => getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides),
     [shortcutOverrides],
@@ -1095,10 +1102,31 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
 
   async function openNodeTerminal(node: LocalSQLFileTreeNode) {
     try {
-      await jcefApi.openSqlDirectoryTerminal({
+      const terminal = await jcefApi.createSqlDirectoryTerminal({
         rootToken: node.rootToken,
         relativePath: node.relativePath,
+        columns: 100,
+        rows: 30,
+        shellId: terminalShellId,
       });
+      const id = `${WorkspaceTabType.Terminal}:${terminal.sessionId}`;
+      const nextTabs = [
+        ...(workspaceTabList || []),
+        {
+          id,
+          type: WorkspaceTabType.Terminal,
+          title: `${i18n('workspace.terminal.title')}: ${node.type === 'directory' ? node.name : terminal.cwd}`,
+          uniqueData: {
+            terminalSessionId: terminal.sessionId,
+            terminalCwd: terminal.cwd,
+            terminalShell: terminal.shell,
+            terminalShellId: terminal.shellId,
+            terminalOpenPosition,
+          },
+        },
+      ];
+      setWorkspaceTabList(nextTabs);
+      setActiveConsoleId(id);
     } catch (error) {
       console.error('open sql directory terminal error', error);
       feedback.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
@@ -1130,11 +1158,15 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
   }
 
   function openFile(node: LocalSQLFileTreeNode) {
-    if (node.type !== 'file' || node.disabled || (!node.textFile && !node.sqlFile)) {
+    if (node.type !== 'file' || node.disabled || (!node.textFile && !node.sqlFile && !node.previewFile)) {
       return;
     }
     setSelectedNodeKey(node.key);
-    readFile(node.path, node.fileExtension);
+    readFile(node.path, node.fileExtension, {
+      rootToken: node.rootToken,
+      relativePath: node.relativePath,
+      previewFile: node.previewFile,
+    });
   }
 
   function handleSelectedNodeOpen() {
@@ -1355,7 +1387,7 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     const commonItems: ContextMenuEntry<LocalSQLFileTreeContextIntent>[] = [
       createContextMenuAction({
         id: 'reveal',
-        label: i18n('workspace.localSqlFileTree.revealInFinder'),
+        label: i18n(LOCAL_SQL_FILE_TREE_REVEAL_LABEL),
         shortcutAction: ShortcutAction.LocalSqlFileTreeRevealInFinder,
         execute: () => revealNode(node),
       }),
@@ -1415,11 +1447,13 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
         ];
 
     if (node.type === 'file') {
+      const canOpen = node.textFile || node.sqlFile || node.previewFile;
       return [
         createContextMenuAction({
           id: 'open',
           label: i18n('workspace.localSqlFileTree.open'),
           shortcutAction: ShortcutAction.LocalSqlFileTreeOpen,
+          disabled: !canOpen,
           execute: () => openFile(node),
         }),
         {

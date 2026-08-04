@@ -42,6 +42,7 @@ export interface ITabItem {
   canClosed?: boolean;
   styles?: React.CSSProperties;
   pinned?: boolean;
+  destroyOnHide?: boolean;
 }
 
 export interface ITabContextActions {
@@ -85,6 +86,7 @@ interface IProps {
   height?: number;
   onChange: (key: string | number | null) => void;
   onEdit?: (action: 'add' | 'remove', data?: ITabItem[], list?: ITabItem[]) => void;
+  beforeRemove?: (tabs: ITabItem[]) => boolean | Promise<boolean>;
   hideAdd?: boolean;
   editableNameOnBlur?: (option: ITabItem) => void;
   concealTabHeader?: boolean;
@@ -206,6 +208,7 @@ export default memo<IProps>((props) => {
     items,
     onChange,
     onEdit,
+    beforeRemove,
     activeKey,
     hideAdd,
     lastTabCannotClosed,
@@ -344,8 +347,11 @@ export default memo<IProps>((props) => {
   //   }
   // }, [internalTabs]);
 
-  const deleteTab = (data: ITabItem) => {
+  const deleteTab = async (data: ITabItem) => {
     if (!showClosed(data)) {
+      return;
+    }
+    if (beforeRemove && !(await beforeRemove([data]))) {
       return;
     }
     const newInternalTabs = internalTabs?.filter((t) => t.key !== data.key);
@@ -366,18 +372,24 @@ export default memo<IProps>((props) => {
     onEdit?.('remove', [data], newInternalTabs);
   };
 
-  const deleteOtherTab = (data: ITabItem) => {
+  const deleteOtherTab = async (data: ITabItem) => {
     const newInternalTabs = internalTabs?.filter((t) => t.key === data.key || t.pinned || t.canClosed === false);
     const deleteTabs = internalTabs?.filter((t) => t.key !== data.key && !t.pinned && t.canClosed !== false);
+    if (beforeRemove && !(await beforeRemove(deleteTabs))) {
+      return;
+    }
     changeTab(data.key);
     setInternalTabs(newInternalTabs);
     onEdit?.('remove', deleteTabs, newInternalTabs);
   };
 
   // Close all tabs.
-  const deleteAllTab = () => {
+  const deleteAllTab = async () => {
     const deleteTabs = internalTabs.filter((tab) => !tab.pinned && tab.canClosed !== false);
     const newInternalTabs = internalTabs.filter((tab) => tab.pinned || tab.canClosed === false);
+    if (beforeRemove && !(await beforeRemove(deleteTabs))) {
+      return;
+    }
     changeTab(newInternalTabs[0]?.key ?? null);
     setInternalTabs(newInternalTabs);
     onEdit?.('remove', deleteTabs, newInternalTabs);
@@ -972,6 +984,9 @@ export default memo<IProps>((props) => {
       {!destroyInactiveTabPane ? (
         <div className={styles.tabsContent}>
           {internalTabs?.map((t) => {
+            if (t.destroyOnHide && t.key !== activeKey) {
+              return null;
+            }
             return (
               <div
                 key={t.key}

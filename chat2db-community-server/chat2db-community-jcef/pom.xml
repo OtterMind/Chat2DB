@@ -29,6 +29,10 @@
             <artifactId>jcef</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.jetbrains.pty4j</groupId>
+            <artifactId>pty4j</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.github.classgraph</groupId>
             <artifactId>classgraph</artifactId>
         </dependency>

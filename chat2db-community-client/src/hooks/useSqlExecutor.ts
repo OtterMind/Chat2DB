@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import executeSqlServer from '@/service/executeSql';
+import type { ISqlEditorExecuteRequest } from '@/service/dmlRequest';
 import useAbortRequest from './useAbortRequest';
 import { isDesktop } from '@/utils/env';
 import {
@@ -102,12 +103,24 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
 
   // execute sql
   const executeSQL = useCallback((params: IExecuteSqlParams): Promise<IManageResultData[]> => {
-    const executeSqlParams = {
-      ...params,
+    if (params.dataSourceId == null) {
+      return Promise.reject(new Error('dataSourceId is required'));
+    }
+    const executeSqlParams: ISqlEditorExecuteRequest = {
+      dataSourceId: params.dataSourceId,
+      databaseName: params.databaseName,
+      schemaName: params.schemaName,
+      sql: params.sql,
+      consoleId: params.consoleId,
+      applyId: params.applyId,
+      single: params.single,
       pageNo: params.pageNo ?? 1,
       pageSize: params.pageSize ?? defaultPageSize,
+      resultSetId: params.resultSetId,
+      errorContinue: params.errorContinue,
+      explain: params.explain,
     };
-    const executionRequestTracker = executionRequestTrackerRef.current;
+    const executionRequestTracker = executionRequestTrackerRef.current!;
     const requestSequence = beginSqlExecutionRequest(executionRequestTracker);
     if (requestSequence === undefined) {
       return Promise.reject(new SqlExecutionBusyError());
@@ -131,7 +144,7 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
           if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
             setExecuting(false);
             try {
-              onExecutionRequestStartError?.(error, requestSequence, executeSqlParams);
+              onExecutionRequestStartError?.(error, requestSequence, params);
             } catch (callbackError) {
               rejection = callbackError;
             }

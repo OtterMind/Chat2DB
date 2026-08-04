@@ -13,7 +13,7 @@ const jcefApi = {
   handleJavaMessageIsReady: () => {
     return createJcefApi('handle-java-message-is-ready');
   },
-  // Open file in finder
+  // Reveal a file in the system file manager
   revealInExplorer: (path: string) => {
     return createJcefApi('reveal-in-explorer', { path });
   },
@@ -32,6 +32,13 @@ const jcefApi = {
   // Get SQL file directory subnodes
   getSqlDirectoryChildren: (params: { rootToken: string; relativePath: string }) => {
     return createJcefApi('get-sql-directory-children', params);
+  },
+  // Read a binary preview file from an opened directory
+  readSqlDirectoryPreview: (params: { rootToken: string; relativePath: string }) => {
+    return createJcefApi<{ url: string; mimeType: string; size: number; etag: string }>(
+      'read-sql-directory-preview',
+      params,
+    );
   },
   // Create a new SQL file directory subnode
   createSqlDirectoryChild: (params: {
@@ -57,6 +64,63 @@ const jcefApi = {
   // Open the SQL file directory in the terminal
   openSqlDirectoryTerminal: (params: { rootToken: string; relativePath: string }) => {
     return createJcefApi('open-sql-directory-terminal', params);
+  },
+  createSqlDirectoryTerminal: (params: {
+    rootToken: string;
+    relativePath: string;
+    columns: number;
+    rows: number;
+    shellId?: string;
+  }) => {
+    return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>(
+      'create-sql-directory-terminal',
+      params,
+    );
+  },
+  createTerminal: (params: { columns: number; rows: number; shellId?: string }) => {
+    return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>(
+      'create-terminal',
+      params,
+    );
+  },
+  duplicateTerminal: (params: { sessionId: string; columns: number; rows: number }) => {
+    return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>(
+      'duplicate-terminal',
+      params,
+    );
+  },
+  getTerminalCapabilities: () => {
+    return createJcefApi<{
+      os: 'mac' | 'windows' | 'linux';
+      shells: Array<{ id: string; label: string; available: boolean }>;
+    }>('get-terminal-capabilities');
+  },
+  writeTerminal: (params: { sessionId: string; data: string }) => {
+    return createJcefApi('write-terminal', params);
+  },
+  attachTerminal: (params: { sessionId: string; consumerId: string }) => {
+    return createJcefApi('attach-terminal', params);
+  },
+  detachTerminal: (params: { sessionId: string; consumerId: string }) => {
+    return createJcefApi('detach-terminal', params);
+  },
+  acknowledgeTerminalOutput: (params: { sessionId: string; sequence: number }) => {
+    return createJcefApi('ack-terminal-output', params);
+  },
+  resizeTerminal: (params: { sessionId: string; columns: number; rows: number }) => {
+    return createJcefApi('resize-terminal', params);
+  },
+  getTerminalStatus: (params: { sessionId: string }) => {
+    return createJcefApi<{ alive: boolean; busy: boolean }>('get-terminal-status', params);
+  },
+  getTerminalStatuses: (params: { sessionIds: string[] }) => {
+    return createJcefApi<Record<string, { alive: boolean; busy: boolean }>>('get-terminal-statuses', params);
+  },
+  killTerminal: (params: { sessionId: string }) => {
+    return createJcefApi('kill-terminal', params);
+  },
+  killTerminals: (params: { sessionIds: string[] }) => {
+    return createJcefApi('kill-terminals', params);
   },
   // Select file
   selectFile: (params: { fileTypeList: string[]; fileSize?: number; multiple?: boolean }) => {
@@ -101,6 +165,9 @@ const jcefApi = {
   // Set zoom
   webFrameSetZoom: (data: { action: 'zoomIn' | 'zoomOut' | 'zoomReset' }) => {
     return createJcefApi('web-frame-set-zoom', data);
+  },
+  setWorkspaceResizeCursor: (cursor: 'ns-resize' | 'ew-resize' | 'default', sequence: number) => {
+    return createJcefApi('set-workspace-resize-cursor', { cursor, sequence });
   },
   // Open log
   openLog: () => {

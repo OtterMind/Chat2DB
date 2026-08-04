@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.tools.model.Context;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.CancellationException;
+
 @Slf4j
 public class TaskThread extends Thread {
 
@@ -23,20 +25,31 @@ public class TaskThread extends Thread {
         this.runnable = runnable;
     }
 
-    public void cancel() {
-        asyncContext.stop();
+    public boolean cancel() {
+        boolean cancelled = asyncContext.stop();
+        if (cancelled) {
+            interrupt();
+        }
+        return cancelled;
     }
 
     @Override
     public void run() {
         try {
             runnable.run();
-        } catch (Exception e){
-            log.error("task error", e);
-            asyncContext.error(e.getMessage());
-        }finally {
-            TaskThreadPoolManager.remove(taskId);
-            asyncContext.finish();
+        } catch (CancellationException e) {
+            log.debug("task cancelled: {}", taskId);
+        } catch (Exception e) {
+            if (!asyncContext.isStopped()) {
+                log.error("task error", e);
+                asyncContext.error(e.getMessage());
+            }
+        } finally {
+            try {
+                asyncContext.finish();
+            } finally {
+                TaskThreadPoolManager.remove(taskId, this);
+            }
         }
     }
 }

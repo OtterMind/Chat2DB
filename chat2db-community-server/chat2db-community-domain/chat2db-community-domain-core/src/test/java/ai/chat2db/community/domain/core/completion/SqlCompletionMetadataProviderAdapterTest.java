@@ -41,6 +41,15 @@ class SqlCompletionMetadataProviderAdapterTest {
     private final SqlCompletionConverter converter = new SqlCompletionConverterImpl();
 
     @Test
+    void legacyIdentifierProcessorUsesCompatibleAlwaysQuoteDefault() {
+        BacktickIdentifierProcessor processor = new BacktickIdentifierProcessor();
+
+        Assertions.assertEquals("`a``b`", processor.quoteIdentifierAlways("a`b"));
+        Assertions.assertEquals("a`b",
+                processor.removeIdentifierQuote(processor.quoteIdentifierAlways("a`b")));
+    }
+
+    @Test
     void listTablesUsesConverterAndPrefixFilter() {
         FakeMetaData metaData = new FakeMetaData();
         SqlCompletionMetadataProviderAdapter provider = newProvider(metaData);
@@ -245,12 +254,16 @@ class SqlCompletionMetadataProviderAdapterTest {
 
         @Override
         public String quoteIdentifier(String identifier) {
-            return identifier == null ? null : "`" + identifier + "`";
+            return identifier == null ? null : "`" + identifier.replace("`", "``") + "`";
         }
 
         @Override
         public String removeIdentifierQuote(String identifier) {
-            return identifier == null ? null : identifier.replace("`", "");
+            if (identifier == null || identifier.length() < 2
+                    || !identifier.startsWith("`") || !identifier.endsWith("`")) {
+                return identifier;
+            }
+            return identifier.substring(1, identifier.length() - 1).replace("``", "`");
         }
 
         @Override

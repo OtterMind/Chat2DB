@@ -9,6 +9,8 @@ export enum JavaPushActionType {
   IS_WINDOW_MAXIMIZED = 'is_window_maximized', // Whether the window is maximized
   OSS_LOGIN = 'oss_login', // OSS login requires jumping to the homepage
   SQL_EXECUTION_EVENT = 'sql_execution_event', // SQL execution events
+  TERMINAL_OUTPUT = 'terminal_output', // Integrated terminal output
+  TERMINAL_EXIT = 'terminal_exit', // Integrated terminal exit
 }
 
 export const JcefEventBus = {
@@ -19,8 +21,15 @@ export const JcefEventBus = {
     listeners[eventType].push(callback);
   },
 
-  off(eventType) {
-    delete listeners[eventType];
+  off(eventType, callback?) {
+    if (!callback) {
+      delete listeners[eventType];
+      return;
+    }
+    listeners[eventType] = listeners[eventType]?.filter((listener) => listener !== callback);
+    if (!listeners[eventType]?.length) {
+      delete listeners[eventType];
+    }
   },
 
   publish(eventType, data) {

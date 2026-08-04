@@ -28,6 +28,7 @@
 }
 
 .splitPaneItem {
+  position: relative;
   height: 100%;
   width: 100%;
   min-height: 0;
@@ -35,6 +36,126 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.workspacePaneDropOverlay {
+  position: absolute;
+  z-index: 12;
+  inset: 36px 0 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.workspacePaneDropZone {
+  position: absolute;
+  pointer-events: none;
+}
+
+.dropZoneTop {
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 25%;
+}
+
+.dropZoneRight {
+  top: 25%;
+  right: 0;
+  bottom: 25%;
+  width: 25%;
+}
+
+.dropZoneBottom {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 25%;
+}
+
+.dropZoneLeft {
+  top: 25%;
+  bottom: 25%;
+  left: 0;
+  width: 25%;
+}
+
+.workspacePaneDropPreview {
+  position: absolute;
+  z-index: 1;
+  border-radius: 6px;
+  opacity: 0.9;
+  transition:
+    inset 120ms ease,
+    width 120ms ease,
+    height 120ms ease;
+  pointer-events: none;
+}
+
+.dropPreviewTop {
+  top: 6px;
+  right: 6px;
+  left: 6px;
+  height: calc(50% - 9px);
+}
+
+.dropPreviewRight {
+  top: 6px;
+  right: 6px;
+  bottom: 6px;
+  width: calc(50% - 9px);
+}
+
+.dropPreviewBottom {
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  height: calc(50% - 9px);
+}
+
+.dropPreviewLeft {
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc(50% - 9px);
+}
+
+.workspaceTabDragOverlay {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 260px;
+  height: 34px;
+  padding: 0 12px;
+  overflow: hidden;
+  font-size: 13px;
+  border: 1px solid;
+  border-radius: 6px;
+  opacity: 0.96;
+  transform: translateY(2px) rotate(1deg);
+  cursor: grabbing;
+
+}
+
+.workspaceTabDragOverlayIcon {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+
+  :global(.chat2db-iconfont),
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.workspaceTabDragOverlayLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .splitPaneInner {

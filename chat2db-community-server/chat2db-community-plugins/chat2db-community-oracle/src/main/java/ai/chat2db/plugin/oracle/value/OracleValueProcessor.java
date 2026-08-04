@@ -1,8 +1,8 @@
 package ai.chat2db.plugin.oracle.value;
 
 import ai.chat2db.plugin.oracle.enums.type.OracleColumnTypeEnum;
+import ai.chat2db.plugin.oracle.identifier.OracleIdentifierProcessor;
 import ai.chat2db.plugin.oracle.value.factory.OracleValueProcessorFactory;
-import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
@@ -48,7 +48,7 @@ public class OracleValueProcessor extends DefaultValueProcessor {
         }
         if (value instanceof String stringValue) {
             if (StringUtils.isBlank(stringValue)) {
-                return EasyStringUtils.quoteString(stringValue);
+                return OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(stringValue);
             }
         }
         return convertJDBCValueStrByType(dataValue);
@@ -63,9 +63,9 @@ public class OracleValueProcessor extends DefaultValueProcessor {
             }
         } catch (Exception e) {
             log.warn("convertSQLValueByType error", e);
-            return super.convertSQLValueByType(dataValue);
+            return OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(dataValue.getValue());
         }
-        return super.convertSQLValueByType(dataValue);
+        return OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(dataValue.getValue());
     }
 
 
@@ -95,9 +95,14 @@ public class OracleValueProcessor extends DefaultValueProcessor {
             }
         } catch (Exception e) {
             log.warn("convertJDBCValueStrByType error", e);
-            return super.convertJDBCValueStrByType(dataValue);
+            return quoteJdbcString(dataValue);
         }
-        return super.convertJDBCValueStrByType(dataValue);
+        return quoteJdbcString(dataValue);
+    }
+
+    private static String quoteJdbcString(JDBCDataValue dataValue) {
+        String value = dataValue.getString();
+        return value == null ? "NULL" : OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(value);
     }
 
     @Override

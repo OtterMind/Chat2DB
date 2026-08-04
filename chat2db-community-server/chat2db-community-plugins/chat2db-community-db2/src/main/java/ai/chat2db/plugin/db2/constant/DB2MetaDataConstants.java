@@ -31,7 +31,8 @@ import java.util.stream.Collectors;
 
 public final class DB2MetaDataConstants {
 
-    public static final String GET_DDL_TOKEN = "call SYSPROC.DB2LK_GENERATE_DDL('-e -x -xd -td \"%s\" -t \"%s\"',?)";
+    public static final String GET_DDL_TOKEN = "call SYSPROC.DB2LK_GENERATE_DDL(?,?)";
+    public static final String DB2LOOK_OPTIONS = "-e -x -xd -td \"%s\" -t \"%s\"";
     public static final String GET_DDL_SQL = "select SQL_STMT from SYSTOOLS.DB2LOOK_INFO where OP_TOKEN =  ? order by OP_SEQUENCE ASC";
     public static final String CLEAN_DDL_TOKEN = "CALL SYSPROC.DB2LK_CLEAN_TABLE(?)";
     public static final String IDX_SQL = "SELECT i.INDNAME, i.UNIQUERULE, i.REMARKS, ic.COLNAME, ic.COLSEQ, ic.COLORDER FROM SYSCAT.INDEXES i JOIN SYSCAT.INDEXCOLUSE ic ON i.INDNAME = ic.INDNAME AND i.INDSCHEMA = ic.INDSCHEMA WHERE i.TABNAME = '%s' AND i.INDSCHEMA = '%s' ORDER BY i.INDNAME, ic.COLSEQ";

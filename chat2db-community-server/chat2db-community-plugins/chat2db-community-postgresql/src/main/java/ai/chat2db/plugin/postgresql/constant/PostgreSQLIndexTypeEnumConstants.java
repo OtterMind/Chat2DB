@@ -17,8 +17,8 @@ public final class PostgreSQLIndexTypeEnumConstants {
     public static final String SQL_COMMENT_CONSTRAINT = "COMMENT ON CONSTRAINT";
     public static final String SQL_COMMENT_INDEX = "COMMENT ON INDEX";
     public static final String SQL_CREATE = "CREATE";
-    public static final String SQL_DROP_CONSTRAINT = "DROP CONSTRAINT \"";
-    public static final String SQL_DROP_INDEX = "DROP INDEX \"";
+    public static final String SQL_DROP_CONSTRAINT = "DROP CONSTRAINT ";
+    public static final String SQL_DROP_INDEX = "DROP INDEX ";
     public static final String SQL_ON = "ON ";
 
     private PostgreSQLIndexTypeEnumConstants() {

@@ -31,8 +31,8 @@ import java.util.stream.Collectors;
 public final class HiveMetaDataConstants {
 
     public static final String SQL_SHOW_DATABASES = "show databases";
-    public static final String SELECT_TAB_COLS = "DESCRIBE FORMATTED `%s`.`%s`";
-    public static final String VIEW_SQL = "SHOW CREATE TABLE `%s`.`%s`";
+    public static final String SELECT_TAB_COLS = "DESCRIBE FORMATTED %s.%s";
+    public static final String VIEW_SQL = "SHOW CREATE TABLE %s.%s";
 
 
     private HiveMetaDataConstants() {

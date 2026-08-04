@@ -3,9 +3,17 @@ package ai.chat2db.plugin.oscar.identifier;
 import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Oscar dialect identifier processor: double-quoted identifiers with embedded-quote
+ * doubling, and single-quote doubling for string literals. Shared stateless
+ * instance available via {@link #INSTANCE} for call sites without MetaData access.
+ */
 public class OscarIdentifierProcessor extends DefaultSQLIdentifierProcessor {
+
+    public static final OscarIdentifierProcessor INSTANCE = new OscarIdentifierProcessor();
 
     private static final Set<String> RESERVED_KEYWORDS = Set.of(
             "ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "BEGIN", "BETWEEN", "BY", "CHAR", "CHECK",
@@ -19,22 +27,52 @@ public class OscarIdentifierProcessor extends DefaultSQLIdentifierProcessor {
 
     @Override
     public boolean isReservedKeyword(String identifier, Integer majorVersion, Integer minorVersion) {
-        return RESERVED_KEYWORDS.contains(identifier);
+        return identifier != null && RESERVED_KEYWORDS.contains(identifier.toUpperCase(Locale.ROOT));
     }
 
     @Override
     public String quoteIdentifier(String identifier, Integer majorVersion, Integer minorVersion) {
-        return quote(identifier, true);
+        return quoteIdentifier(identifier);
     }
 
+    /**
+     * SPI-facing conditional quoting: {@code null} passes through and blank
+     * returns unchanged; a valid plain identifier that is not a reserved keyword
+     * returns unquoted; anything else is wrapped via {@link #quoteIdentifierAlways}.
+     */
     @Override
     public String quoteIdentifier(String identifier) {
-        return quote(identifier, true);
+        if (StringUtils.isBlank(identifier)) {
+            return identifier;
+        }
+        if (isValidQuotedIdentifier(identifier)) {
+            return identifier;
+        }
+        if (isValidIdentifier(identifier)
+                && !isReservedKeyword(identifier.toUpperCase(), null, null)) {
+            return identifier;
+        }
+        return quoteIdentifierAlways(identifier);
     }
 
+    /**
+     * Always-quote variant for DDL-generation paths: {@code null} passes through,
+     * everything else is treated as raw identifier content and wrapped in double
+     * quotes after doubling every embedded double quote.
+     */
+    public String quoteIdentifierAlways(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return "\"" + escapeIdentifier(identifier) + "\"";
+    }
+
+    /**
+     * Always-quote SPI variant that preserves case (used by DDL-generation paths).
+     */
     @Override
     public String quoteIdentifierIgnoreCase(String identifier) {
-        return quote(identifier, false);
+        return quoteIdentifierAlways(identifier);
     }
 
     @Override
@@ -45,20 +83,42 @@ public class OscarIdentifierProcessor extends DefaultSQLIdentifierProcessor {
         return identifier.toUpperCase();
     }
 
-    private String quote(String identifier, boolean quoteLowerCase) {
-        if (StringUtils.isBlank(identifier)) {
-            return identifier;
+    /**
+     * Escapes a value interpolated into a single-quoted SQL string literal by
+     * doubling every single quote (surrounding quotes NOT added).
+     */
+    @Override
+    public String escapeString(String str) {
+        if (str == null) {
+            return null;
         }
-        if (isQuoteIdentifier(identifier)) {
-            return identifier;
+        return StringUtils.replace(str, "'", "''");
+    }
+
+    /**
+     * Escapes raw identifier content for a position already surrounded by double
+     * quotes by doubling every embedded double quote.
+     */
+    public static String escapeIdentifier(String identifier) {
+        if (identifier == null) {
+            return "";
         }
-        if (isValidIdentifier(identifier)) {
-            if ((quoteLowerCase && containsLowerCase(identifier))
-                    || isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
+        return StringUtils.replace(identifier, "\"", "\"\"");
+    }
+
+    private static boolean isValidQuotedIdentifier(String identifier) {
+        if (identifier.length() < 2 || identifier.charAt(0) != '"'
+                || identifier.charAt(identifier.length() - 1) != '"') {
+            return false;
+        }
+        for (int i = 1; i < identifier.length() - 1; i++) {
+            if (identifier.charAt(i) == '"') {
+                if (i + 1 >= identifier.length() - 1 || identifier.charAt(i + 1) != '"') {
+                    return false;
+                }
+                i++;
             }
-            return identifier;
         }
-        return StringUtils.wrap(identifier, '"');
+        return true;
     }
 }

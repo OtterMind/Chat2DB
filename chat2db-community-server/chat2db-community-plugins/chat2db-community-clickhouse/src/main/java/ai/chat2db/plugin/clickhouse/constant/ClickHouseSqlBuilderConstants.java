@@ -21,7 +21,7 @@ public final class ClickHouseSqlBuilderConstants {
     public static final String SQL_SEMICOLON_ALTER_DATABASE = ";ALTER DATABASE ";
     public static final String SQL_ALTER_TABLE = "ALTER TABLE ";
     public static final String SQL_COMMENT = " COMMENT '";
-    public static final String SQL_CREATE_DATABASE = "CREATE DATABASE `";
+    public static final String SQL_CREATE_DATABASE = "CREATE DATABASE ";
     public static final String SQL_CREATE_TABLE = "CREATE TABLE ";
 
     private ClickHouseSqlBuilderConstants() {

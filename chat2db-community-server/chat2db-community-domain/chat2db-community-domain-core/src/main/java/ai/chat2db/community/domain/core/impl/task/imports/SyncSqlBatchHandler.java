@@ -22,6 +22,7 @@ public class SyncSqlBatchHandler implements ISqlBatchHandler {
         List<String> batchInsertSqls = new ArrayList<>();
 
         for (Statement stmt : statements) {
+            context.checkCancelled();
             String sql = stmt.getSql().trim();
 
             if (sql.toUpperCase().startsWith("INSERT")) {
@@ -35,12 +36,14 @@ public class SyncSqlBatchHandler implements ISqlBatchHandler {
             }
         }
         if (!batchInsertSqls.isEmpty()) {
+            context.checkCancelled();
             context.execute(batchInsertSqls);
         }
     }
 
     @Override
     public void handle(Statement statement) {
+        context.checkCancelled();
         statements.add(statement);
         if (statements.size() >= BATCH_SIZE) {
             executeBatch(statements);
@@ -51,6 +54,7 @@ public class SyncSqlBatchHandler implements ISqlBatchHandler {
 
     @Override
     public void flush() {
+        context.checkCancelled();
         executeBatch(statements);
         statements.clear();
     }

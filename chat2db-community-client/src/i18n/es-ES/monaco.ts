@@ -36,6 +36,8 @@ export default {
   'monaco.text.cut': 'Cortar',
   'monaco.text.caseConvert': 'Cambiar mayúsculas/minúsculas',
   'monaco.text.formatSQL': 'Formatear SQL',
+  'monaco.text.toggleLineComment': 'Alternar comentario de línea',
+  'monaco.text.toggleBlockComment': 'Alternar comentario en bloque',
   'monaco.text.saveSQL': 'Guardar',
   'monaco.text.saveFile': 'Guardar',
   'monaco.text.saveFileToDesktop': 'Guardar como archivo',

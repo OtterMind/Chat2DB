@@ -1,6 +1,8 @@
 package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
+import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePreConnectRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.db.IDbDataSourceService;
@@ -27,6 +29,8 @@ class DbWorkspaceDataSourceServiceImplTest {
             "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8));
 
     private final List<String> calls = new ArrayList<>();
+    private List<WorkspaceDataSource> listedDataSources;
+    private DbDataSourcePageQueryRequest capturedListRequest;
     private WorkspaceDataSource queriedDataSource;
     private DbDataSourcePreConnectRequest forwardedPreConnectRequest;
     private DbWorkspaceDataSourceServiceImpl service;
@@ -121,6 +125,21 @@ class DbWorkspaceDataSourceServiceImplTest {
         assertEquals("constructor-only datasource", result.getAlias());
     }
 
+    @Test
+    void exportAllDataSourcesRequestsEveryRecord() {
+        listedDataSources = new ArrayList<>();
+        for (long id = 1; id <= 101; id++) {
+            listedDataSources.add(dataSource(id, "datasource " + id, null));
+        }
+        queriedDataSource = listedDataSources.get(0);
+
+        List<WorkspaceDataSource> result = service.exportDataSources(List.of());
+
+        assertEquals(101, result.size());
+        assertEquals(1, capturedListRequest.getPageNo());
+        assertEquals(Integer.MAX_VALUE, capturedListRequest.getPageSize());
+    }
+
     private IWorkspaceStorageFacade storageFacade() {
         return (IWorkspaceStorageFacade) Proxy.newProxyInstance(
                 IWorkspaceStorageFacade.class.getClassLoader(),
@@ -142,6 +161,14 @@ class DbWorkspaceDataSourceServiceImplTest {
                     case "queryDataSourceById" -> {
                         calls.add("storage.query:" + args[0] + ":" + args[1]);
                         yield queriedDataSource;
+                    }
+                    case "listDataSources" -> {
+                        capturedListRequest = (DbDataSourcePageQueryRequest) args[0];
+                        List<WorkspaceDataSource> dataSources = listedDataSources == null
+                                ? List.of()
+                                : listedDataSources;
+                        yield PageResponse.of(dataSources, (long) dataSources.size(),
+                                capturedListRequest.getPageNo(), capturedListRequest.getPageSize());
                     }
                     default -> defaultValue(method.getReturnType());
                 });

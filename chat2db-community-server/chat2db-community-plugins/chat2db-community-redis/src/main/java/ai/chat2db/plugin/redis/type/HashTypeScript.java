@@ -89,7 +89,9 @@ public class HashTypeScript extends BaseTypeScript implements ITypeScript {
         // so reconcile against the full old field list.
         Map<String, String> desired = fieldValues(newKey.getHashValues(), true);
         if (desired.isEmpty()) {
-            return new ArrayList<>();
+            // Every row was deleted in the editor: remove the key itself,
+            // mirroring the newKey == null path, instead of silently keeping old data.
+            return Lists.newArrayList(delete(newKey.getName()));
         }
         Map<String, String> existing = fieldValues(oldKey.getHashValues(), false);
         List<String> scripts = new ArrayList<>();

@@ -10,6 +10,7 @@ import { IconButton } from '@chat2db/ui';
 import { keyboardKey } from '../../helper/utils';
 import { useZoerStore } from '@/store/zoer';
 import { isTemporaryId } from '@/utils';
+import { buildConsoleDefaultTabName } from '@/store/workspace/utils/consoleTabName';
 
 interface OperationLineProps {
   active: boolean;
@@ -97,17 +98,24 @@ const OperationLine = ({
   }, [type]);
 
   const handleChangeDBInfo = (_dbInfo: IDBInfo) => {
-    setDBInfo(_dbInfo);
-    if (!_dbInfo.consoleId || isTemporaryId(_dbInfo.consoleId)) {
+    const nameCustomized = _dbInfo.nameCustomized ?? dbInfo.nameCustomized ?? false;
+    const nextDBInfo = {
+      ..._dbInfo,
+      nameCustomized,
+    };
+    setDBInfo(nextDBInfo);
+    if (!nextDBInfo.consoleId || isTemporaryId(nextDBInfo.consoleId)) {
       return;
     }
     historyService.updateSavedConsole({
-      id: _dbInfo.consoleId!,
-      dataSourceId: _dbInfo.dataSourceId,
-      dataSourceName: _dbInfo.dataSourceName,
-      databaseName: _dbInfo.databaseName,
-      schemaName: _dbInfo.schemaName,
-      type: _dbInfo.databaseType,
+      id: nextDBInfo.consoleId,
+      dataSourceId: nextDBInfo.dataSourceId,
+      dataSourceName: nextDBInfo.dataSourceName,
+      databaseName: nextDBInfo.databaseName,
+      schemaName: nextDBInfo.schemaName,
+      type: nextDBInfo.databaseType,
+      name: nameCustomized ? undefined : buildConsoleDefaultTabName(nextDBInfo),
+      nameCustomized,
     });
   };
 

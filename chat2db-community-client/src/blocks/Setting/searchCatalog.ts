@@ -48,6 +48,16 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
         settingItem('editor.tableDDLTriggerMode', 'monaco.tableDDLTriggerMode', ['ddl', 'hover', 'click']),
         settingItem('editor.errorContinue', 'monaco.errorContinue', ['continue on error', 'execution']),
       ];
+    case 'terminal':
+      return [
+        settingItem('terminal.position', 'setting.terminal.openPosition', ['terminal position', 'panel']),
+        settingItem('terminal.confirmBeforeClose', 'setting.terminal.confirmBeforeClose', [
+          'close terminal',
+          'confirmation',
+        ]),
+        settingItem('terminal.shell', 'setting.terminal.shell', ['shell', 'command environment']),
+        settingItem('terminal.theme', 'setting.terminal.theme', ['terminal theme', 'color']),
+      ];
     case 'shortcut':
       return [
         settingItem('shortcut.global', 'setting.shortcut.group.global', ['application', 'app']),

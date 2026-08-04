@@ -80,7 +80,8 @@ public class OscarMetaData extends OscarBaseMetaData {
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
         String owner = normalizeSchema(schemaName);
-        String sql = String.format(OscarConstants.VIEW_DDL_SQL, owner, normalizeIdentifier(viewName));
+        String sql = String.format(OscarConstants.VIEW_DDL_SQL, getSQLIdentifierProcessor().escapeString(owner),
+                getSQLIdentifierProcessor().escapeString(normalizeIdentifier(viewName)));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -170,7 +171,8 @@ public class OscarMetaData extends OscarBaseMetaData {
     public Function function(Connection connection, String databaseName, String schemaName, String functionName) {
         String owner = normalizeSchema(schemaName);
         String normalizedFunctionName = normalizeIdentifier(functionName);
-        String sql = String.format(OscarConstants.ROUTINES_SQL, owner, normalizedFunctionName);
+        String sql = String.format(OscarConstants.ROUTINES_SQL, getSQLIdentifierProcessor().escapeString(owner),
+                getSQLIdentifierProcessor().escapeString(normalizedFunctionName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Function function = new Function();
             function.setDatabaseName(databaseName);
@@ -206,7 +208,8 @@ public class OscarMetaData extends OscarBaseMetaData {
     public Procedure procedure(Connection connection, String databaseName, String schemaName, String procedureName) {
         String owner = normalizeSchema(schemaName);
         String normalizedProcedureName = normalizeIdentifier(procedureName);
-        String sql = String.format(OscarConstants.ROUTINES_SQL, owner, normalizedProcedureName);
+        String sql = String.format(OscarConstants.ROUTINES_SQL, getSQLIdentifierProcessor().escapeString(owner),
+                getSQLIdentifierProcessor().escapeString(normalizedProcedureName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Procedure procedure = new Procedure();
             procedure.setDatabaseName(databaseName);
@@ -223,7 +226,7 @@ public class OscarMetaData extends OscarBaseMetaData {
     @Override
     public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
         String owner = normalizeSchema(schemaName);
-        String sql = String.format(OscarConstants.TRIGGER_LIST_SQL, owner);
+        String sql = String.format(OscarConstants.TRIGGER_LIST_SQL, getSQLIdentifierProcessor().escapeString(owner));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             List<Trigger> triggers = new ArrayList<>();
             while (resultSet.next()) {
@@ -241,7 +244,8 @@ public class OscarMetaData extends OscarBaseMetaData {
     public Trigger trigger(Connection connection, String databaseName, String schemaName, String triggerName) {
         String owner = normalizeSchema(schemaName);
         String normalizedTriggerName = normalizeIdentifier(triggerName);
-        String sql = String.format(OscarConstants.TRIGGER_DETAIL_SQL, owner, normalizedTriggerName);
+        String sql = String.format(OscarConstants.TRIGGER_DETAIL_SQL, getSQLIdentifierProcessor().escapeString(owner),
+                getSQLIdentifierProcessor().escapeString(normalizedTriggerName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
             trigger.setDatabaseName(databaseName);

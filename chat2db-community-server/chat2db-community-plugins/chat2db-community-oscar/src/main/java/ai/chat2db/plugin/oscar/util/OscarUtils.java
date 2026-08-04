@@ -8,7 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 
 public class OscarUtils {
 
-    public static final ISQLIdentifierProcessor OSCAR_SQL_IDENTIFIER_PROCESSOR = new OscarIdentifierProcessor();
+    public static final ISQLIdentifierProcessor OSCAR_SQL_IDENTIFIER_PROCESSOR = OscarIdentifierProcessor.INSTANCE;
 
     private OscarUtils() {
     }

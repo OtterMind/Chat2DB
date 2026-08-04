@@ -64,6 +64,7 @@ interface ISQLEditorWithOperationProps {
   reloadSQL?: () => Promise<string>;
 
   onExecuteSQL: (props: IConsoleReturnExecuteSql) => Promise<any>;
+  onChange?: (value: string) => void;
 }
 
 export interface ISQLEditorWithOperationRef extends SQLEditorRef {
@@ -115,6 +116,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     isConsole = true,
     sqlActionEnabled = true,
     reloadSQL,
+    onChange,
   } = props;
   const isReadOnly = !!dbInfo.readOnly;
   const isSupportedRoutineEditor =
@@ -237,6 +239,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     // defaultValue:  getValue(),
     defaultValue: defaultSQL,
     name: workspaceTabsTitle,
+    onBoundInfoChange: setDBInfo,
     type,
   });
 
@@ -312,6 +315,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         break;
       case SQLOptType.FORMAT_SQL:
         handleFormat();
+        break;
+      case SQLOptType.TOGGLE_LINE_COMMENT:
+        sqlEditorRef.current?.getInstance()?.trigger('keyboard', 'editor.action.commentLine', null);
+        break;
+      case SQLOptType.TOGGLE_BLOCK_COMMENT:
+        sqlEditorRef.current?.getInstance()?.trigger('keyboard', 'editor.action.blockComment', null);
         break;
       case SQLOptType.EXPLAIN_SQL:
         handleExecuteSQL({
@@ -998,6 +1007,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           action={handleAction}
           enableContentDiffHints={enableContentDiffHints}
           onContentChange={handleEditorContentChange}
+          onChange={onChange}
           contextMenuInfo={contextMenuInfo}
           onTableIdentifierContextChange={setContextTableIdentifier}
           onContextMenu={isReadOnly ? undefined : handleContextMenu}

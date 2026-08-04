@@ -18,7 +18,7 @@ import java.sql.PreparedStatement;
 public final class H2DBManagerConstants {
 
     public static final String SQL_DROP_TABLE = "DROP TABLE %s";
-    public static final String SQL_SET_SCHEMA = "SET SCHEMA \"%s\"";
+    public static final String SQL_SET_SCHEMA = "SET SCHEMA %s";
 
     private H2DBManagerConstants() {
     }

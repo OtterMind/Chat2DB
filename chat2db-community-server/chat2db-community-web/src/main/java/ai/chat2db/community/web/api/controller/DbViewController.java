@@ -53,7 +53,11 @@ public class DbViewController {
     public WebPageResult<TableResponse> list(@Valid TableBriefQueryRequest request) {
         List<Table> tableDTOPageResult = viewService.views(request.getDatabaseName(), request.getSchemaName());
         List<TableResponse> tableResponses = dbWebConverter.tableDto2response(tableDTOPageResult);
-        return WebPageResult.of(tableResponses, Long.valueOf(tableResponses.size()), 1, tableResponses.size());
+        if (tableResponses == null) {
+            tableResponses = List.of();
+        }
+        int size = tableResponses.size();
+        return WebPageResult.of(tableResponses, Long.valueOf(size), 1, size);
     }
 
 
@@ -113,9 +117,16 @@ public class DbViewController {
      * @return operation result for the request.
      */
     @PostMapping("/delete")
-    public ActionResult delete(@Valid TableDeleteRequest request) {
-        DbTableQueryRequest param = dbWebConverter.tableRequest2param(request);
-        tableService.dropTable(param);
+    public ActionResult delete(@RequestBody @Valid TableDeleteRequest request) {
+        // The /delete endpoint deletes a VIEW, not a table. Build a DbViewDeleteRequest
+        // (mapping tableName -> viewName, since a view's object name is carried in tableName
+        // on this request type) and delegate to viewService.drop, mirroring the /drop endpoint.
+        DbViewDeleteRequest param = new DbViewDeleteRequest(
+                request.getDataSourceId(),
+                request.getDatabaseName(),
+                request.getSchemaName(),
+                request.getTableName());
+        viewService.drop(param);
         return ActionResult.isSuccess();
     }
 

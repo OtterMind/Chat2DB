@@ -53,9 +53,7 @@ public class ContextUtils {
     }
 
     public static void setHeaderAndCookies(Long orgId, HeaderAndCookies headerAndCookies) {
-        if (!headerAndCookiesMap.containsKey(orgId)) {
-            headerAndCookiesMap.put(orgId, headerAndCookies);
-        }
+        headerAndCookiesMap.put(orgId, headerAndCookies);
     }
 
     public static HeaderAndCookies getHeaderAndCookies(Long orgId) {

@@ -1,6 +1,6 @@
 import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import createJcefApi from '@/jcef/base';
-import { IExecuteSqlParams } from '@/service/executeSql';
+import type { ISqlEditorExecuteRequest } from '@/service/dmlRequest';
 import { IManageResultData } from '@/typings';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 
@@ -26,6 +26,16 @@ export interface SqlExecutionEvent<T = any> {
   resultSequence?: number;
   resultKey?: string;
   message: T;
+}
+
+export function appendCompletedQueryResult(
+  current: IManageResultData[],
+  event: SqlExecutionEvent,
+): IManageResultData[] {
+  if (event.eventType !== 'resultFinished' || !Array.isArray(event.message?.dataList)) {
+    return current;
+  }
+  return [...current, event.message as IManageResultData];
 }
 
 export interface SqlExecutionStartResult {
@@ -82,7 +92,7 @@ export interface SqlExecutionStatement {
   historySequence?: number;
 }
 
-export function startSqlExecution(params: IExecuteSqlParams, requestUuid: string) {
+export function startSqlExecution(params: ISqlEditorExecuteRequest, requestUuid: string) {
   return createJcefApi<SqlExecutionStartResult>('sql-execute', params, requestUuid);
 }
 

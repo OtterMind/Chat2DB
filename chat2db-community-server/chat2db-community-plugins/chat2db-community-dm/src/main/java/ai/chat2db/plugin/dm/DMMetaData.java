@@ -39,10 +39,6 @@ import static ai.chat2db.plugin.dm.constant.DMMetaDataConstants.*;
 @Slf4j
 public class DMMetaData extends DefaultMetaService implements IDbMetaData {
 
-
-
-    private static final ISQLIdentifierProcessor DM_IDENTIFIER_PROCESSOR = new DMIdentifierProcessor();
-
     @Override
     public List<Schema> schemas(Connection connection, String databaseName) {
         List<Schema> schemas = DefaultSQLExecutor.getInstance().schemas(connection, databaseName, null);
@@ -50,13 +46,13 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     private String format(String tableName) {
-        return "\"" + tableName + "\"";
+        return DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
     protected static String tableDDL = "SELECT dbms_metadata.get_ddl('TABLE', '%s','%s') as ddl FROM dual ;";
 
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
-        String tableDDLSql = String.format(tableDDL, tableName, schemaName);
+        String tableDDLSql = String.format(tableDDL, getSQLIdentifierProcessor().escapeString(tableName), getSQLIdentifierProcessor().escapeString(schemaName));
         StringBuilder ddlBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().execute(connection, tableDDLSql, resultSet -> {
             if (resultSet.next()) {
@@ -69,7 +65,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
             String tableComment = tables.get(0).getComment();
             if (StringUtils.isNotBlank(tableComment)) {
                 ddlBuilder.append(SQL_COMMENT_TABLE).append(format(schemaName)).append(".").append(format(tableName))
-                        .append(" IS '").append(tableComment.replace("'", "''")).append("'").append(";").append("\n");
+                        .append(" IS '").append(getSQLIdentifierProcessor().escapeString(tableComment)).append("'").append(";").append("\n");
             }
         }
         List<TableColumn> columns = this.columns(connection, databaseName, schemaName, tableName);
@@ -80,7 +76,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
                 if (StringUtils.isNotBlank(comment)) {
                     ddlBuilder.append(SQL_COMMENT_COLUMN).append(format(schemaName)).append(".").append(format(tableName))
                             .append(".").append(format(columnName)).append(" IS ")
-                            .append("'").append(comment.replace("'", "''"))
+                            .append("'").append(getSQLIdentifierProcessor().escapeString(comment))
                             .append("';").append("\n");
                 }
             }
@@ -115,7 +111,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
             if (StringUtils.isNotBlank(indexName) && !isPrimaryKey && !isUniqueConstraint) {
                 String sql = "select DBMS_METADATA.GET_DDL('INDEX','%s') as INDEX_DDL";
                 try {
-                    DefaultSQLExecutor.getInstance().execute(connection, String.format(sql, indexName), resultSet -> {
+                    DefaultSQLExecutor.getInstance().execute(connection, String.format(sql, getSQLIdentifierProcessor().escapeString(indexName)), resultSet -> {
                         if (resultSet.next()) {
                             ddlBuilder.append(resultSet.getString("INDEX_DDL")).append("\n");
                         }
@@ -138,7 +134,8 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
         List<TableColumn> columns = super.columns(connection, databaseName, schemaName, tableName);
         for (TableColumn column : columns) {
             String columnType = column.getColumnType();
-            if (StringUtils.equals(columnType.toUpperCase(), DMColumnTypeEnum.TIMESTAMP.name())) {
+            if (columnType != null
+                    && StringUtils.equals(columnType.toUpperCase(Locale.ROOT), DMColumnTypeEnum.TIMESTAMP.name())) {
                 column.setColumnSize(column.getDecimalDigits());
             }
         }
@@ -151,7 +148,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
     public Function function(Connection connection, @NotEmpty String databaseName, String schemaName,
                              String functionName) {
 
-        String sql = String.format(ROUTINES_SQL, "PROC", schemaName, functionName);
+        String sql = String.format(ROUTINES_SQL, "PROC", getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(functionName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             StringBuilder sb = new StringBuilder();
             while (resultSet.next()) {
@@ -171,7 +168,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public Procedure procedure(Connection connection, @NotEmpty String databaseName, String schemaName,
                                String procedureName) {
-        String sql = String.format(ROUTINES_SQL, "PROC", schemaName, procedureName);
+        String sql = String.format(ROUTINES_SQL, "PROC", getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(procedureName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             StringBuilder sb = new StringBuilder();
             while (resultSet.next()) {
@@ -193,7 +190,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
         List<Trigger> triggers = new ArrayList<>();
-        String sql = String.format(TRIGGER_SQL_LIST, schemaName);
+        String sql = String.format(TRIGGER_SQL_LIST, getSQLIdentifierProcessor().escapeString(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 Trigger trigger = new Trigger();
@@ -210,7 +207,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
     public Trigger trigger(Connection connection, @NotEmpty String databaseName, String schemaName,
                            String triggerName) {
 
-        String sql = String.format(TRIGGER_SQL, schemaName, triggerName);
+        String sql = String.format(TRIGGER_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(triggerName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
             trigger.setDatabaseName(databaseName);
@@ -227,7 +224,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_SQL, schemaName, viewName);
+        String sql = String.format(VIEW_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -244,7 +241,7 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(INDEX_SQL, schemaName, tableName);
+        String sql = String.format(INDEX_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             LinkedHashMap<String, TableIndex> map = new LinkedHashMap();
             while (resultSet.next()) {
@@ -319,12 +316,16 @@ public class DMMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
-        return DM_IDENTIFIER_PROCESSOR;
+        return DMIdentifierProcessor.INSTANCE;
     }
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "\"" + name + "\"").collect(Collectors.joining("."));
+        if (names.length == 3) {
+            String qualifier = StringUtils.isNotBlank(names[1]) ? names[1] : names[0];
+            return getMetaDataName(qualifier, names[2]);
+        }
+        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(DMIdentifierProcessor.INSTANCE::quoteIdentifierAlways).collect(Collectors.joining("."));
     }
 
 

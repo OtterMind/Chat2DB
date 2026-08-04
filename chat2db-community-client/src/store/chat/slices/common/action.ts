@@ -139,11 +139,10 @@ export const createCommonAction: StateCreator<ChatStore, [['zustand/devtools', n
   setCurrentChat: (chat) => {
     const page = useGlobalStore.getState().mainPageActiveTab;
     get().resetChatDetails(page);
-    const { currentChat } = get();
 
     if (chat[page]?.id) {
       const { id } = chat[page];
-      set({ currentChat: { ...currentChat, [page]: chat } });
+      set((state) => ({ currentChat: { ...state.currentChat, [page]: chat[page] } }));
       return chatService
         .getChatDetailById({
           pageSize: 5,
@@ -151,18 +150,18 @@ export const createCommonAction: StateCreator<ChatStore, [['zustand/devtools', n
         })
         .then((res) => {
           if (res) {
-            set({
+            set((state) => ({
               currentChat: {
-                ...currentChat,
+                ...state.currentChat,
                 [page]: res,
               },
-            });
+            }));
             get().initChatDetails(res.chatDetails);
             return res;
           }
         });
     } else {
-      set({ currentChat: { ...currentChat, [page]: chat[page] } });
+      set((state) => ({ currentChat: { ...state.currentChat, [page]: chat[page] } }));
       get().initChatDetails([]);
       return Promise.resolve(undefined);
     }

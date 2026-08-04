@@ -808,6 +808,8 @@ const MonacoSQLEditor = forwardRef<MonacoEditorRef, MonacoSQLEditorProps>(
         });
         wrapperRef.current?.dispatchEvent(event);
       });
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash, () => {});
+      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyA, () => {});
     };
 
     const handleHover = useCallback(

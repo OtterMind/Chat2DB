@@ -2,6 +2,7 @@ package ai.chat2db.plugin.mysql;
 
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.plugin.mysql.builder.MysqlSqlBuilder;
+import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
@@ -19,10 +20,13 @@ import java.sql.PreparedStatement;
 import java.util.Date;
 
 import static cn.hutool.core.date.DatePattern.NORM_DATETIME_PATTERN;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COPY_TABLE_DATA_TEMPLATE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COPY_TABLE_STRUCTURE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_PROCEDURE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_TABLE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_VIEW_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SELECT_DATABASE_TEMPLATE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_TRUNCATE_TABLE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SET_FOREIGN_KEY_CHECKS_DISABLED;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SET_FOREIGN_KEY_CHECKS_ENABLED;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_FUNCTION_TEMPLATE;
@@ -66,12 +70,12 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportFunction(Connection connection, String functionName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SHOW_CREATE_FUNCTION_TEMPLATE, functionName);
+        String sql = String.format(SQL_SHOW_CREATE_FUNCTION_TEMPLATE, format(functionName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
-                asyncContext.write(String.format(FUNCTION_TITLE, functionName));
+                asyncContext.write(String.format(FUNCTION_TITLE, formatExportTitleValue(functionName)));
                 StringBuilder sqlBuilder = new StringBuilder();
-                sqlBuilder.append(SQLConstants.DROP_FUNCTION_IF_EXISTS_SQL_PREFIX).append(functionName).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR);
+                sqlBuilder.append(SQLConstants.DROP_FUNCTION_IF_EXISTS_SQL_PREFIX).append(format(functionName)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR);
 
                 sqlBuilder.append(DELIMITER_BLOCK_START).append(SQLConstants.LINE_SEPARATOR).append(resultSet.getString(CREATE_FUNCTION_COLUMN))
                         .append(ROUTINE_DELIMITER)
@@ -95,12 +99,12 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
 
 
     public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SHOW_CREATE_TABLE_TEMPLATE, tableName);
+        String sql = String.format(SQL_SHOW_CREATE_TABLE_TEMPLATE, format(tableName));
         asyncContext.info(DateUtil.formatDateTime(new Date()) + EXPORTING_TABLE_MESSAGE + tableName);
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
-                asyncContext.write(String.format(TABLE_TITLE, tableName));
+                asyncContext.write(String.format(TABLE_TITLE, formatExportTitleValue(tableName)));
                 sqlBuilder.append(SQLConstants.DROP_TABLE_IF_EXISTS_SQL_PREFIX).append(format(tableName)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR)
                         .append(resultSet.getString(CREATE_TABLE_COLUMN)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR);
                 asyncContext.write(sqlBuilder.toString());
@@ -130,10 +134,10 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportView(Connection connection, String viewName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SHOW_CREATE_VIEW_TEMPLATE, viewName);
+        String sql = String.format(SQL_SHOW_CREATE_VIEW_TEMPLATE, format(viewName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
-                asyncContext.write(String.format(VIEW_TITLE, viewName));
+                asyncContext.write(String.format(VIEW_TITLE, formatExportTitleValue(viewName)));
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append(SQLConstants.DROP_VIEW_IF_EXISTS_SQL_PREFIX).append(format(viewName)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR)
                         .append(resultSet.getString(CREATE_VIEW_COLUMN)).append(SQLConstants.SEMICOLON).append(SQLConstants.DOUBLE_LINE_SEPARATOR);
@@ -152,10 +156,10 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportProcedure(Connection connection, String procedureName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SHOW_CREATE_PROCEDURE_TEMPLATE, procedureName);
+        String sql = String.format(SQL_SHOW_CREATE_PROCEDURE_TEMPLATE, format(procedureName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
-                asyncContext.write(String.format(PROCEDURE_TITLE, procedureName));
+                asyncContext.write(String.format(PROCEDURE_TITLE, formatExportTitleValue(procedureName)));
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append(SQLConstants.DROP_PROCEDURE_IF_EXISTS_SQL_PREFIX).append(format(procedureName)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR)
                         .append(DELIMITER_BLOCK_START).append(SQLConstants.LINE_SEPARATOR).append(resultSet.getString(CREATE_PROCEDURE_COLUMN))
@@ -177,10 +181,10 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTrigger(Connection connection, String triggerName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SHOW_CREATE_TRIGGER_TEMPLATE, triggerName);
+        String sql = String.format(SQL_SHOW_CREATE_TRIGGER_TEMPLATE, format(triggerName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
-                asyncContext.write(String.format(TRIGGER_TITLE, triggerName));
+                asyncContext.write(String.format(TRIGGER_TITLE, formatExportTitleValue(triggerName)));
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append(SQLConstants.DROP_TRIGGER_IF_EXISTS_SQL_PREFIX).append(format(triggerName)).append(SQLConstants.SEMICOLON).append(SQLConstants.LINE_SEPARATOR)
                         .append(DELIMITER_BLOCK_START).append(SQLConstants.LINE_SEPARATOR).append(resultSet.getString(ORIGINAL_STATEMENT_COLUMN))
@@ -240,13 +244,38 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
         return String.format(SQL_DROP_TABLE_TEMPLATE, format(tableName));
     }
 
+    @Override
+    public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return String.format(SQL_TRUNCATE_TABLE_TEMPLATE, format(tableName));
+    }
+
+    @Override
+    public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) {
+        DefaultSQLExecutor.getInstance().execute(connection, buildCopyTableSql(tableName, newTableName, copyData), resultSet -> null);
+    }
+
+    static String buildCopyTableSql(String tableName, String newTableName, boolean copyData) {
+        String template = copyData ? SQL_COPY_TABLE_DATA_TEMPLATE : SQL_COPY_TABLE_STRUCTURE_TEMPLATE;
+        return String.format(template, format(newTableName), format(tableName));
+    }
+
+    static String formatExportTitleValue(String value) {
+        return value == null ? null : value.replace('\r', ' ').replace('\n', ' ');
+    }
+
     public static String format(String tableName) {
-        return SQLConstants.BACK_QUOTE + tableName + SQLConstants.BACK_QUOTE;
+        return MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
     @Override
     public void dropView(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(SQL_DROP_VIEW_TEMPLATE, format(databaseName), format(viewName));
-        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+        DefaultSQLExecutor.getInstance().execute(connection, buildDropViewSql(databaseName, viewName), resultSet -> null);
+    }
+
+    static String buildDropViewSql(String databaseName, String viewName) {
+        String qualifiedName = StringUtils.isEmpty(databaseName)
+                ? format(viewName)
+                : format(databaseName) + SQLConstants.DOT + format(viewName);
+        return String.format(SQL_DROP_VIEW_TEMPLATE, qualifiedName);
     }
 }

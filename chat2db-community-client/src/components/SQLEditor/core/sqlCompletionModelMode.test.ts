@@ -15,12 +15,22 @@ assert.equal(
   false,
   'non-configured databases keep legacy completion mode',
 );
+assert.equal(
+  isBackendCompletionDatabaseType(DatabaseTypeCode.GAUSSDB),
+  false,
+  'GaussDB keeps legacy completion mode while using backend editor hints',
+);
 assert.equal(isBackendCompletionDatabaseType(undefined), false, 'missing database type keeps legacy completion mode');
 assert.equal(isBackendEditorHintsDatabaseType(DatabaseTypeCode.MYSQL), true, 'MySQL supports backend editor hints');
 assert.equal(
   isBackendEditorHintsDatabaseType(DatabaseTypeCode.POSTGRESQL),
   true,
   'PostgreSQL supports backend editor hints without switching completion mode',
+);
+assert.equal(
+  isBackendEditorHintsDatabaseType(DatabaseTypeCode.GAUSSDB),
+  true,
+  'GaussDB supports PostgreSQL-compatible backend editor hints',
 );
 assert.equal(
   isBackendEditorHintsDatabaseType(DatabaseTypeCode.SQLSERVER),

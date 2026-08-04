@@ -1,5 +1,6 @@
 package ai.chat2db.plugin.gaussdb;
 
+import ai.chat2db.community.domain.api.config.DBConfig;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -11,8 +12,20 @@ import java.util.List;
 
 import static ai.chat2db.plugin.gaussdb.constant.GaussDBMetaDataConstants.TABLE_DDL_SQL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class GaussDBMetaDataTest {
+
+    @Test
+    void gaussdbJsonDoesNotMarkPublicSchemaAsSystem() {
+        DBConfig dbConfig = new GaussPlugin().getDBConfig();
+
+        assertNotNull(dbConfig, "gaussdb.json must deserialize into DBConfig");
+        assertNotNull(dbConfig.getSystemSchemas(), "gaussdb.json must define systemSchemas");
+        assertFalse(dbConfig.getSystemSchemas().contains("public"),
+                "the default user schema 'public' must not be listed in systemSchemas");
+    }
 
     @Test
     void tableDdlUsesTableOidAndRemovesSearchPath() {

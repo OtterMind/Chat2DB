@@ -9,9 +9,9 @@ import org.apache.commons.lang3.StringUtils;
 
 public final class H2SqlBuilderConstants {
 
-    public static final String SQL_COMMENT_ON_SCHEMA_DOUBLE_QUOTE = "\nCOMMENT ON SCHEMA \"";
-    public static final String VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE = "\" IS '";
-    public static final String SQL_CREATE_SCHEMA = "CREATE SCHEMA \"";
+    public static final String SQL_COMMENT_ON_SCHEMA = "\nCOMMENT ON SCHEMA ";
+    public static final String VALUE_IS_SINGLE_QUOTE = " IS '";
+    public static final String SQL_CREATE_SCHEMA = "CREATE SCHEMA ";
 
     private H2SqlBuilderConstants() {
     }

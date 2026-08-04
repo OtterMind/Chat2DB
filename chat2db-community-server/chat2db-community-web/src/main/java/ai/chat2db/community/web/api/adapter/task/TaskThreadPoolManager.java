@@ -12,15 +12,12 @@ public class TaskThreadPoolManager {
         task.start();
     }
 
-    public static void cancelTask(Long taskId) {
+    public static boolean cancelTask(Long taskId) {
         TaskThread thread = taskMap.get(taskId);
-        if (thread != null) {
-            thread.cancel();
-            thread.stop();
-        }
+        return thread != null && thread.cancel();
     }
 
-    public static void remove(Long taskId) {
-        taskMap.remove(taskId);
+    public static void remove(Long taskId, TaskThread task) {
+        taskMap.remove(taskId, task);
     }
 }

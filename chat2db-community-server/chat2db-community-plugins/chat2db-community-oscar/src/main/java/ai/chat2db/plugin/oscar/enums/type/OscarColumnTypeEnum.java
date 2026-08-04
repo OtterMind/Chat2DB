@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.oscar.enums.type;
 
 import ai.chat2db.spi.constant.SQLConstants;
+import ai.chat2db.plugin.oscar.OscarSqlGuards;
 import ai.chat2db.plugin.oscar.constant.OscarConstants;
 import ai.chat2db.plugin.oscar.util.OscarUtils;
 import ai.chat2db.spi.IColumnBuilder;
@@ -94,7 +95,7 @@ public enum OscarColumnTypeEnum implements IColumnBuilder {
     public String buildCreateColumnSql(TableColumn column) {
         OscarColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return OscarUtils.quoteIdentifierIgnoreCase(column.getName()) + SQLConstants.SPACE + column.getColumnType();
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
         script.append(OscarUtils.quoteIdentifierIgnoreCase(column.getName())).append(SQLConstants.SPACE);
@@ -107,6 +108,27 @@ public enum OscarColumnTypeEnum implements IColumnBuilder {
     @Override
     public String buildAICreateColumnSql(TableColumn column) {
         return buildCreateColumnSql(column) + buildAICreateColumnCommentSql(column);
+    }
+
+    private static String buildUnknownColumnSql(TableColumn column) {
+        StringBuilder script = new StringBuilder(OscarUtils.quoteIdentifierIgnoreCase(column.getName()))
+                .append(SQLConstants.SPACE)
+                .append(OscarSqlGuards.requireColumnTypeExpression(column.getColumnType()));
+        if (StringUtils.isNotBlank(column.getDefaultValue())) {
+            String defaultValue = column.getDefaultValue().trim();
+            if (OscarConstants.EMPTY_STRING_TOKEN.equalsIgnoreCase(defaultValue)) {
+                script.append(SQLConstants.SPACE).append(SQLConstants.DEFAULT_EMPTY_STRING_SQL);
+            } else if (OscarConstants.NULL_TOKEN.equalsIgnoreCase(defaultValue)) {
+                script.append(SQLConstants.SPACE).append(SQLConstants.DEFAULT_NULL_SQL);
+            } else {
+                script.append(SQLConstants.SPACE).append(SQLConstants.DEFAULT_SQL_PREFIX)
+                        .append(OscarSqlGuards.requireDefaultValueExpression(defaultValue));
+            }
+        }
+        if (column.getNullable() != null && column.getNullable() != 1) {
+            script.append(SQLConstants.SPACE).append(SQLConstants.NOT_NULL_SQL);
+        }
+        return script.toString();
     }
 
     @Override
@@ -162,7 +184,7 @@ public enum OscarColumnTypeEnum implements IColumnBuilder {
         if (OscarConstants.NULL_TOKEN.equalsIgnoreCase(defaultValue)) {
             return SQLConstants.DEFAULT_NULL_SQL;
         }
-        return SQLConstants.DEFAULT_SQL_PREFIX + defaultValue;
+        return SQLConstants.DEFAULT_SQL_PREFIX + OscarSqlGuards.requireDefaultValueExpression(defaultValue);
     }
 
     private String buildDataType(TableColumn column, OscarColumnTypeEnum type) {
@@ -193,7 +215,7 @@ public enum OscarColumnTypeEnum implements IColumnBuilder {
         if (column.getColumnSize() != null) {
             script.append(SQLConstants.OPEN_PARENTHESIS).append(column.getColumnSize());
             if (StringUtils.isNotBlank(column.getUnit())) {
-                script.append(SQLConstants.SPACE).append(column.getUnit());
+                script.append(SQLConstants.SPACE).append(OscarSqlGuards.requireLengthUnit(column.getUnit()));
             }
             script.append(SQLConstants.CLOSE_PARENTHESIS);
         }

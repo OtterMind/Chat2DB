@@ -51,7 +51,6 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
     @Autowired
     private CommandConverter commandConverter;
 
-    private static final String ROW_COUNT_SQL = "db.%s.find()";
     private static final String LINE_SEPARATOR = "\r|\n|\r\n";
 
     @Override
@@ -120,8 +119,8 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         }
         String dataBaseType = Chat2DBContext.getConnectInfo().getDbType();
         if (DataSourceTypeEnum.MONGODB.getCode().equals(dataBaseType)) {
-            sql = String.format(ROW_COUNT_SQL, param.getTableName());
-            return getCountOfMongodb(sql);
+            ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
+            return getCountOfMongodb(param.getTableName(), executor);
         }
         ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
         try {
@@ -336,17 +335,17 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         return executeResult;
     }
 
-    private static Long getCountOfMongodb(String sql) {
+    static Long getCountOfMongodb(String tableName, ICommandExecutor executor) {
         try {
-            ExecuteResponse executeResult = Chat2DBContext.getDbMetaData().getCommandExecutor()
-                    .execute(SqlStatementExecuteRequest.builder()
-                            .sql(sql)
-                            .connection(Chat2DBContext.getConnection())
-                            .limitRowSize(true)
-                            .build());
-            return (long) executeResult.getDataList().size();
-        } catch (SQLException e) {
-            throw new BusinessException("mongodb count error", new Object[]{sql, e.getMessage()}, e);
+            SqlExecuteRequest command = new SqlExecuteRequest();
+            command.setTableName(tableName);
+            List<ExecuteResponse> results = executor.executeSelectTable(command);
+            if (CollectionUtils.isEmpty(results)) {
+                return 0L;
+            }
+            return (long) CollectionUtils.size(results.get(0).getDataList());
+        } catch (RuntimeException e) {
+            throw new BusinessException("mongodb count error", new Object[]{tableName, e.getMessage()}, e);
         }
     }
 

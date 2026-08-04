@@ -79,7 +79,8 @@ public class MongodbSqlBuilder extends DefaultSqlBuilder {
         if (StringUtils.isEmpty(idValue)) {
             return StringUtils.EMPTY;
         }
-        String sql = String.format(SQL_DB_DOT_FORMAT_DOT_DELETEONE_OPEN_PAREN_OPEN_BRACE, tableName, idValue);
+        String sql = String.format(SQL_DB_DOT_FORMAT_DOT_DELETEONE_OPEN_PAREN_OPEN_BRACE,
+            MongodbSqlGuards.collectionAccessor(tableName), MongodbSqlGuards.escapeJsonString(idValue));
         log.info(LOG_DELETE_SQL, sql);
         return sql;
 
@@ -95,13 +96,14 @@ public class MongodbSqlBuilder extends DefaultSqlBuilder {
         for (int i = 2; i < newDataList.size(); i++) {
             Header header = headerList.get(i);
             String newValue = newDataList.get(i);
-            sql.append(header.getName()).append(SQLConstants.COLON).append(SQLConstants.DOUBLE_QUOTE).append(newValue).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.COMMA);
+            sql.append(MongodbSqlGuards.quoteFieldName(header.getName())).append(SQLConstants.COLON)
+                .append(MongodbSqlGuards.quoteJsonString(newValue)).append(SQLConstants.COMMA);
         }
         if (sql.isEmpty()) {
             return StringUtils.EMPTY;
         }
         StringBuffer insertSql = new StringBuffer();
-        insertSql.append(String.format(SQL_DB_DOT_FORMAT_DOT_INSERTONE, tableName)).append(SQLConstants.OPEN_PARENTHESIS)
+        insertSql.append(String.format(SQL_DB_DOT_FORMAT_DOT_INSERTONE, MongodbSqlGuards.collectionAccessor(tableName))).append(SQLConstants.OPEN_PARENTHESIS)
             .append(SQLConstants.OPEN_CURLY_BRACE)
             .append(sql.deleteCharAt(sql.length() - 1))
             .append(SQLConstants.CLOSE_CURLY_BRACE)
@@ -127,20 +129,21 @@ public class MongodbSqlBuilder extends DefaultSqlBuilder {
             if (_idValue.isEmpty()) {
                 _idValue.append(oldDataList.get(1));
             }
-            setSql.append(header.getName()).append(SQLConstants.COLON).append(SQLConstants.DOUBLE_QUOTE).append(newValue).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.COMMA);
+            setSql.append(MongodbSqlGuards.quoteFieldName(header.getName())).append(SQLConstants.COLON)
+                .append(MongodbSqlGuards.quoteJsonString(newValue)).append(SQLConstants.COMMA);
         }
         if (_idValue.isEmpty() || setSql.isEmpty()) {
             return StringUtils.EMPTY;
         }
         StringBuffer sql = new StringBuffer();
-        sql.append(String.format(SQL_DB_DOT_FORMAT_DOT_UPDATEONE, tableName)).append(SQLConstants.OPEN_PARENTHESIS)
+        sql.append(String.format(SQL_DB_DOT_FORMAT_DOT_UPDATEONE, MongodbSqlGuards.collectionAccessor(tableName))).append(SQLConstants.OPEN_PARENTHESIS)
             .append(SQLConstants.OPEN_CURLY_BRACE)
             .append(MONGODB_ID_FIELD)
             .append(SQLConstants.COLON)
             .append(MONGODB_OBJECT_ID_TYPE)
             .append(SQLConstants.OPEN_PARENTHESIS)
             .append(SQLConstants.DOUBLE_QUOTE)
-            .append(_idValue.toString())
+            .append(MongodbSqlGuards.escapeJsonString(_idValue.toString()))
             .append(SQLConstants.DOUBLE_QUOTE)
             .append(SQLConstants.CLOSE_PARENTHESIS)
             .append(SQLConstants.CLOSE_CURLY_BRACE)

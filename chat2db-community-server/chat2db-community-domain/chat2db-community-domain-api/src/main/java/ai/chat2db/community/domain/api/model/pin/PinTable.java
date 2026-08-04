@@ -3,6 +3,8 @@ package ai.chat2db.community.domain.api.model.pin;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.Objects;
+
 @Data
 public class PinTable {
 
@@ -34,6 +36,11 @@ public class PinTable {
             return false;
         if (schemaName != null ? !schemaName.equals(pinTable.schemaName) : pinTable.schemaName != null) return false;
         return tableName != null ? tableName.equals(pinTable.tableName) : pinTable.tableName == null;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(dataSourceId, databaseName, schemaName, tableName);
     }
 
     public boolean select(PinTable pinTable) {

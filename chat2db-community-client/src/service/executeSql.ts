@@ -1,20 +1,18 @@
 import createRequest from './base';
 import { IManageResultData, IEditTableInfo, IDatabaseBaseInfo, IResultCell } from '@/typings';
 import { CRUD } from '@/constants';
+import type {
+  IDdlExecuteRequest,
+  ISqlEditorExecuteRequest,
+  ITableBrowseRequest,
+  ITableEditExecuteRequest,
+} from './dmlRequest';
 
 // Modify the sql parameters of the table
 export interface IModifyTableSqlParams extends IDatabaseBaseInfo {
   oldTable?: IEditTableInfo;
   newTable: IEditTableInfo;
   refresh: boolean;
-}
-
-// Execute sql parameters
-export interface IExecuteSqlParams extends IDatabaseBaseInfo {
-  sql?: string;
-  single?: boolean;
-  pageNo?: number;
-  pageSize?: number;
 }
 
 export interface IUpdateDataSql {
@@ -43,7 +41,7 @@ export interface ICopyInValuesSqlParams extends IDatabaseBaseInfo {
 }
 
 /** Execute SQL */
-const executeSql = createRequest<IExecuteSqlParams, IManageResultData[]>('/api/rdb/dml/execute', {
+const executeSql = createRequest<ISqlEditorExecuteRequest, IManageResultData[]>('/api/rdb/dml/execute', {
   method: 'post',
   errorLevel: false,
   timeout: false,
@@ -55,7 +53,7 @@ const getModifyTableSql = createRequest<IModifyTableSqlParams, { sql: string }[]
 });
 
 /** Execute sql for editing tables, specially designed for editing tables */
-const executeDDL = createRequest<IExecuteSqlParams, { success: boolean; message: string; originalSql: string }>(
+const executeDDL = createRequest<IDdlExecuteRequest, { success: boolean; message: string; originalSql: string }>(
   '/api/rdb/dml/execute_ddl',
   { method: 'post' },
 );
@@ -72,12 +70,15 @@ const getCopyInValuesSql = createRequest<ICopyInValuesSqlParams, string>('/api/r
 });
 
 /** Execute sql that modifies table data */
-const executeUpdateDataSql = createRequest<IExecuteSqlParams, { success: boolean; message: string; sql: string }>(
+const executeUpdateDataSql = createRequest<
+  ITableEditExecuteRequest,
+  { success: boolean; message: string; sql: string }
+>(
   '/api/rdb/dml/execute_update',
   { method: 'post', errorLevel: false },
 );
 
-const viewTable = createRequest<IExecuteSqlParams, IManageResultData[]>('/api/rdb/dml/execute_table', {
+const viewTable = createRequest<ITableBrowseRequest, IManageResultData[]>('/api/rdb/dml/execute_table', {
   method: 'post',
   errorLevel: false,
 });

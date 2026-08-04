@@ -216,7 +216,11 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
         script.append(SQL_COMMENT_COLUMN);
         script.append(column.getTableName() + SQLConstants.DOT + column.getName());
         script.append(SQLConstants.SQL_IS_SINGLE_QUOTE);
-        script.append(column.getComment());
+        String comment = column.getComment();
+        // SQL-standard single-quote doubling; avoids breaking DDL on apostrophes
+        // (and prevents literal breakout) without doubling backslashes (which
+        // would corrupt comments on standard-conforming dialects).
+        script.append(comment == null ? "" : comment.replace("'", "''"));
         script.append(SQLConstants.SINGLE_QUOTE_SEMICOLON_LINE_SEPARATOR);
         return script.toString();
     }
@@ -241,8 +245,8 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
     @Override
     public String buildPageLimit(PageLimitRequest request) {
         String sql = request.getSql();
-        int offset = request.getOffset();
-        int pageSize = request.getPageSize();
+        int offset = Math.max(0, request.getOffset());
+        int pageSize = Math.max(1, request.getPageSize());
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 14);
         sqlBuilder.append(sql);
         if (offset == 0) {
@@ -776,6 +780,7 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
             return SQLConstants.EMPTY;
         }
         script.append(SQL_UPDATE).append(tableName).append(SQL_SET);
+        int assignmentsStart = script.length();
         IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
         for (int i = 1; i < row.size(); i++) {
             String newValue = row.get(i);
@@ -796,6 +801,10 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                     .append(SQLConstants.EQUAL_SQL)
                     .append(newSqlValue)
                     .append(SQLConstants.COMMA);
+        }
+        if (script.length() == assignmentsStart) {
+            // no column changed: skip the row instead of emitting 'UPDATE t SET WHERE ...'
+            return SQLConstants.EMPTY;
         }
         script.deleteCharAt(script.length() - 1);
         script.append(buildWhere(headerList, odlRow, metaSchema, keyColumns, valueProcessor));
@@ -909,10 +918,13 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                     return SQLConstants.WHERE_SQL_PREFIX + columnName + SQLConstants.SQL_IS_NULL;
                 } else {
                     sqlDataValue.setValue(singleValue);
-                    if (valueProcessor.isStringDataType(sqlDataValue.getDataType().getDataTypeName())) {
-                        return SQLConstants.WHERE_SQL_PREFIX + columnName + SQLConstants.SQL_LIKE + valueProcessor.getSqlValueString(sqlDataValue);
+                    String columnExpression = copyWhereColumnExpression(
+                            columnName, sqlDataValue.getDataType().getDataTypeName());
+                    if (useLikeForCopyWhere()
+                            && valueProcessor.isStringDataType(sqlDataValue.getDataType().getDataTypeName())) {
+                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.SQL_LIKE + valueProcessor.getSqlValueString(sqlDataValue);
                     } else {
-                        return SQLConstants.WHERE_SQL_PREFIX + columnName + SQLConstants.EQUAL_SQL + valueProcessor.getSqlValueString(sqlDataValue);
+                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.EQUAL_SQL + valueProcessor.getSqlValueString(sqlDataValue);
                     }
                 }
             } else {
@@ -928,11 +940,14 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                         Integer colIndex = selectCols.get(i);
                         SQLDataValue sqlDataValue = dataTypes.get(colIndex);
                         String value = dataList.get(colIndex);
-                        rowConditionBuilder.append(columnNameList.get(colIndex));
+                        String columnName = columnNameList.get(colIndex);
                         if (Objects.isNull(value)) {
-                            rowConditionBuilder.append(SQLConstants.SQL_IS_NULL);
+                            rowConditionBuilder.append(columnName).append(SQLConstants.SQL_IS_NULL);
                         } else {
-                            boolean stringDataType = valueProcessor.isStringDataType(sqlDataValue.getDataType().getDataTypeName());
+                            rowConditionBuilder.append(copyWhereColumnExpression(
+                                    columnName, sqlDataValue.getDataType().getDataTypeName()));
+                            boolean stringDataType = useLikeForCopyWhere()
+                                    && valueProcessor.isStringDataType(sqlDataValue.getDataType().getDataTypeName());
                             if (stringDataType) {
                                 rowConditionBuilder.append(SQLConstants.SQL_LIKE);
                             } else {
@@ -953,6 +968,14 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
         return SQLConstants.WHERE_SQL_PREFIX + whereClause;
     }
 
+    protected boolean useLikeForCopyWhere() {
+        return true;
+    }
+
+    protected String copyWhereColumnExpression(String columnName, String dataTypeName) {
+        return columnName;
+    }
+
     private String buildWhereClauseForSameColumnValues(String columnName, List<String> values, SQLDataValue sqlDataValue,
                                                        IValueProcessor valueProcessor) {
         List<String> conditions = new ArrayList<>();
@@ -968,7 +991,9 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                 })
                 .toList();
         if (CollectionUtils.isNotEmpty(nonNullValues)) {
-            conditions.add(columnName + SQLConstants.SQL_IN_OPEN_PARENTHESIS
+            String columnExpression = copyWhereColumnExpression(
+                    columnName, sqlDataValue.getDataType().getDataTypeName());
+            conditions.add(columnExpression + SQLConstants.SQL_IN_OPEN_PARENTHESIS
                     + String.join(SQLConstants.COMMA_SPACE, nonNullValues)
                     + SQLConstants.CLOSE_PARENTHESIS);
         }

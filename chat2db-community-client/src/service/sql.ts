@@ -15,6 +15,12 @@ import {
 } from '@/typings';
 import { DatabaseTypeCode } from '@/constants';
 import { ExportSizeEnum, ExportTypeEnum } from '@/typings/resultTable';
+import type {
+  IDdlExecuteRequest,
+  ISqlEditorExecuteRequest,
+  ITableBrowseRequest,
+  ITableEditExecuteRequest,
+} from './dmlRequest';
 
 export interface IGetTableListParams extends IPageParams {
   dataSourceId: number;
@@ -23,7 +29,7 @@ export interface IGetTableListParams extends IPageParams {
   databaseType?: DatabaseTypeCode;
 }
 
-export interface IExecuteSqlParams {
+interface IDmlResultRequest {
   sql?: string;
   single?: boolean;
   dataSourceId?: number;
@@ -70,13 +76,13 @@ const getTableList = createRequest<IGetTableListParams, IPageResponse<ITable>>('
   errorLevel: false,
 });
 
-const executeSql = createRequest<IExecuteSqlParams, IManageResultData[]>('/api/rdb/dml/execute', {
+const executeSql = createRequest<ISqlEditorExecuteRequest, IManageResultData[]>('/api/rdb/dml/execute', {
   method: 'post',
   errorLevel: false,
   timeout: false,
 });
 
-const viewTable = createRequest<IExecuteSqlParams, IManageResultData[]>('/api/rdb/dml/execute_table', {
+const viewTable = createRequest<ITableBrowseRequest, IManageResultData[]>('/api/rdb/dml/execute_table', {
   method: 'post',
   errorLevel: false,
 });
@@ -235,9 +241,9 @@ const addTablePin = createRequest<IUniversalTableParams, void>('/api/pin/table/a
 const deleteTablePin = createRequest<IUniversalTableParams, void>('/api/pin/table/delete', { method: 'post' });
 
 /** Get all rows of currently executing SQL */
-const getDMLCount = createRequest<IExecuteSqlParams, number>('/api/rdb/dml/count', { method: 'post' });
+const getDMLCount = createRequest<IDmlResultRequest, number>('/api/rdb/dml/count', { method: 'post' });
 
-export interface IExportParams extends IExecuteSqlParams {
+export interface IExportParams extends IDmlResultRequest {
   originalSql: string;
   exportType: ExportTypeEnum;
   exportSize: ExportSizeEnum;
@@ -384,7 +390,7 @@ const getModifyTableSql = createRequest<IModifyTableSqlParams, { sql: string }[]
 });
 
 /** Execute sql for editing tables, specially designed for editing tables */
-const executeDDL = createRequest<IExecuteSqlParams, { success: boolean; message: string; originalSql: string }>(
+const executeDDL = createRequest<IDdlExecuteRequest, { success: boolean; message: string; originalSql: string }>(
   '/api/rdb/dml/execute_ddl',
   { method: 'post' },
 );
@@ -405,7 +411,10 @@ const executeRoutineMigration = createRequest<IRoutineMigrationParams, { success
 );
 
 // Execute sql that modifies table data
-const executeUpdateDataSql = createRequest<IExecuteSqlParams, { success: boolean; message: string; sql: string }>(
+const executeUpdateDataSql = createRequest<
+  ITableEditExecuteRequest,
+  { success: boolean; message: string; sql: string }
+>(
   '/api/rdb/dml/execute_update',
   { method: 'post', errorLevel: false },
 );

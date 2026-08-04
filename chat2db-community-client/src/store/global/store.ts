@@ -31,6 +31,7 @@ type GlobalPersist = Pick<
   | 'dataTableSettings'
   | 'shortcutOverrides'
   | 'workspaceAiIntroDismissed'
+  | 'terminalSettings'
 >;
 
 // local-storage Options
@@ -45,6 +46,7 @@ const persistOptions: PersistOptions<GlobalStore, GlobalPersist> = {
     dataTableSettings: state.dataTableSettings,
     shortcutOverrides: state.shortcutOverrides,
     workspaceAiIntroDismissed: state.workspaceAiIntroDismissed,
+    terminalSettings: state.terminalSettings,
   }),
 };
 
@@ -70,5 +72,6 @@ export const clearGlobalStore = () => {
     appUrlConfig: useGlobalStore.getState().appUrlConfig,
     editorSettings: useGlobalStore.getState().editorSettings,
     shortcutOverrides: useGlobalStore.getState().shortcutOverrides,
+    terminalSettings: useGlobalStore.getState().terminalSettings,
   });
 };

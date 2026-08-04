@@ -77,6 +77,7 @@ public class SqlDataExporter extends BaseExporter {
             int n = 0;
             boolean hasNext = resultSet.next();
             while (hasNext) {
+                asyncContext.checkCancelled();
                 List<String> rowData = extractRowData(resultSet, valueProcessor);
                 String sql = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
                         .tableName(tableName)
@@ -92,7 +93,7 @@ public class SqlDataExporter extends BaseExporter {
                 }
             }
             writeSqlList(writer, sqlList);
-        });
+        }, asyncContext, asyncContext::checkCancelled);
     }
 
     private void exportMultiInsert(Connection connection, String querySql, Boolean containsHeader,
@@ -102,6 +103,7 @@ public class SqlDataExporter extends BaseExporter {
             List<List<String>> dataList = new ArrayList<>(BATCH_SIZE);
             List<String> header = containsHeader ? ResultSetUtils.getRsHeader(resultSet) : null;
             while (resultSet.next()) {
+                asyncContext.checkCancelled();
                 dataList.add(extractRowData(resultSet, valueProcessor));
             }
             String sql = sqlBuilder.dml().buildBatchInsert(MultiInsertSqlRequest.builder()
@@ -111,7 +113,7 @@ public class SqlDataExporter extends BaseExporter {
                     .build());
             writer.println(sql+";");
             writer.flush();
-        });
+        }, asyncContext, asyncContext::checkCancelled);
     }
 
     private void exportUpdate(Connection connection, String querySql, ISqlBuilder sqlBuilder,
@@ -122,6 +124,7 @@ public class SqlDataExporter extends BaseExporter {
             Map<String, String> primaryKeyMap = getPrimaryKeyMap(connection, databaseName, schemaName, tableName);
             int n = 0;
             while (resultSet.next()) {
+                asyncContext.checkCancelled();
                 Map<String, String> row = extractRowDataAsMap(resultSet, valueProcessor, primaryKeyMap);
                 String sql = sqlBuilder.dml().buildUpdate(UpdateSqlRequest.builder()
                         .databaseName(databaseName)
@@ -138,7 +141,7 @@ public class SqlDataExporter extends BaseExporter {
 
                 }
             }
-        });
+        }, asyncContext, asyncContext::checkCancelled);
     }
 
     private List<String> extractRowData(ResultSet resultSet, IValueProcessor valueProcessor) throws SQLException {

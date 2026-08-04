@@ -71,6 +71,21 @@ class RequestMappingUtilsTest {
                 });
     }
 
+    @Test
+    void initializesWhenControllerDeclaresNoRequestMappingPath() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(BareController.class);
+            context.refresh();
+            new ApplicationContextUtil().setApplicationContext(context);
+
+            RequestMappingInfo mapping = RequestMappingUtils.getRequestMappingInfo("/bare", "GET");
+
+            assertNotNull(mapping);
+            assertEquals(BareController.class, mapping.getController());
+            assertEquals("bare", mapping.getMethod());
+        }
+    }
+
     private void resetRequestMappings() throws Exception {
         Field initialized = RequestMappingUtils.class.getDeclaredField("initialized");
         initialized.setAccessible(true);
@@ -87,6 +102,16 @@ class RequestMappingUtilsTest {
 
         @GetMapping("/value")
         public String value() {
+            return "ok";
+        }
+    }
+
+    @RestController
+    @RequestMapping
+    static class BareController {
+
+        @GetMapping("/bare")
+        public String bare() {
             return "ok";
         }
     }

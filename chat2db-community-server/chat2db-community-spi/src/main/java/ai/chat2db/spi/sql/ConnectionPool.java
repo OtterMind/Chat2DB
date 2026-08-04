@@ -32,7 +32,10 @@ public class ConnectionPool {
 
 
     static {
-        new Thread(() -> {
+        // Daemon + named so the periodic cleanup loop never blocks JVM exit and is
+        // attributable in thread dumps/monitoring. A user (non-daemon) thread here
+        // would hang the process on shutdown once the pool class is loaded.
+        Thread cleanupThread = new Thread(() -> {
             while (true) {
                 try {
                     Thread.sleep(1000 * 60 * 1);
@@ -41,7 +44,9 @@ public class ConnectionPool {
                     log.error("close connection error", e);
                 }
             }
-        }).start();
+        }, "chat2db-conn-pool-cleanup");
+        cleanupThread.setDaemon(true);
+        cleanupThread.start();
     }
 
     static void cleanupConnections() {

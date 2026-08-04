@@ -1,5 +1,5 @@
 import i18n from '@/i18n';
-import { ClipboardPen, Info, Keyboard, SlidersHorizontal } from 'lucide-react';
+import { ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import About from './About';
 import BaseSetting from './BaseSetting';
@@ -8,9 +8,11 @@ import McpSetting from './McpSetting';
 import NetworkProxySetting from './NetworkProxySetting';
 import SettingLayout, { type SettingMenuItem } from './SettingLayout';
 import ShortcutSetting from './ShortcutSetting';
+import TerminalSetting from './TerminalSetting';
 
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { useGlobalStore } from '@/store/global';
+import { isDesktop } from '@/utils/env';
 
 function CommunitySetting() {
   const {
@@ -42,6 +44,18 @@ function CommunitySetting() {
           body: <EditorSetting />,
           code: 'editSetting',
         },
+        ...(isDesktop
+          ? [
+              {
+                title: i18n('setting.nav.terminal'),
+                describe: i18n('setting.nav.terminalDescribe'),
+                group: 'general' as const,
+                icon: Terminal,
+                body: <TerminalSetting />,
+                code: 'terminal',
+              },
+            ]
+          : []),
         ...(runtimeEditionConfig.mcpSetting
           ? [
               {

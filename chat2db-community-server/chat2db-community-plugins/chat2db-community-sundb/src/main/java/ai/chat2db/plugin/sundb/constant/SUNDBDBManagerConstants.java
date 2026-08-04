@@ -18,8 +18,8 @@ public final class SUNDBDBManagerConstants {
     public static final String SQL_COMMENT_COLUMN = "COMMENT ON COLUMN ";
     public static final String SQL_COPY_TABLE_DATA = "CREATE TABLE %s AS SELECT * FROM %s";
     public static final String SQL_COPY_TABLE_STRUCTURE = "CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0";
-    public static final String SQL_DROP_TABLE_EXISTS = "DROP TABLE IF EXISTS \"%s\".\"%s\"";
-    public static final String SQL_SET_SCHEMA = "SET SCHEMA \"%s\"";
+    public static final String SQL_DROP_TABLE_EXISTS = "DROP TABLE IF EXISTS %s.%s";
+    public static final String SQL_SET_SCHEMA = "SET SCHEMA %s";
     public static final String SQL_SELECT_COLNAME_COMMENT_SYS_SYSCOLUMNCOMMENTS = "select COLNAME,COMMENT$ from SYS.SYSCOLUMNCOMMENTS\n";
     public static final String SQL_SELECT_TABLE_NAME_ALL_TABLES = "SELECT TABLE_NAME FROM ALL_TABLES where OWNER='%s' and TABLESPACE_NAME='MEM_DATA_TBS'";
     public static final String ROUTINES_SQL = "SELECT OWNER, NAME, TEXT FROM ALL_SOURCE WHERE TYPE = '%s' AND OWNER = '%s' AND NAME = '%s' ORDER BY LINE";

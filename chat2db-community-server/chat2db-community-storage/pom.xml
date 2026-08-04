@@ -12,6 +12,22 @@
 
     <artifactId>chat2db-community-storage</artifactId>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Storage classes resolve their data directory from user.home in
+                         static initializers; keep tests off the developer's real home. -->
+                    <systemPropertyVariables>
+                        <user.home>${project.build.directory}/test-home</user.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>ai.chat2db</groupId>

@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.plugin.clickhouse.identifier.ClickHouseIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -89,7 +90,7 @@ public enum ClickHouseIndexTypeEnum {
         script.append("(");
         for (TableIndexColumn column : tableIndex.getColumnList()) {
             if (StringUtils.isNotBlank(column.getColumnName())) {
-                script.append("`").append(column.getColumnName()).append("`");
+                script.append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getColumnName()));
                 script.append(",");
             }
         }
@@ -102,7 +103,7 @@ public enum ClickHouseIndexTypeEnum {
         if (this.equals(PRIMARY)) {
             return "";
         } else {
-            return "`" + tableIndex.getName() + "`";
+            return ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getName());
         }
     }
 
@@ -111,11 +112,11 @@ public enum ClickHouseIndexTypeEnum {
             return "";
         }
         if (EditStatusEnum.DELETE.name().equals(tableIndex.getEditStatus())) {
-            return StringUtils.join(SQL_DROP_INDEX, tableIndex.getOldName(), "`");
+            return StringUtils.join("DROP INDEX ", ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getOldName()));
         }
         if (EditStatusEnum.MODIFY.name().equals(tableIndex.getEditStatus())) {
-            return StringUtils.join(SQL_DROP_INDEX, tableIndex.getOldName(),
-                    "`,\n ADD ", buildIndexScript(tableIndex));
+            return StringUtils.join("DROP INDEX ", ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getOldName()),
+                    ",\n ADD ", buildIndexScript(tableIndex));
         }
         if (EditStatusEnum.ADD.name().equals(tableIndex.getEditStatus())) {
             return StringUtils.join("ADD ", buildIndexScript(tableIndex));

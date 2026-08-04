@@ -405,6 +405,11 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       popover: i18n('common.text.output'),
       label: i18n('common.text.output'),
       key: CONSOLE_TAB_ID,
+      styles: {
+        flex: '0 0 96px',
+        width: '96px',
+        maxWidth: '96px',
+      },
       children: (
         <ExecutionConsole
           records={props.executionLogRecords || []}

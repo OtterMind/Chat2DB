@@ -123,6 +123,8 @@ const ContextMenu = memo((props: IProps) => {
         createMenuItem(SQLOptType.PASTE_AS_SQL_IN_VALUES, 'monaco.text.pasteAsSqlInValues'),
         createMenuItem(SQLOptType.CASE_CONVERT, 'monaco.text.caseConvert', ShortcutAction.SqlCaseConvert),
         createMenuItem(SQLOptType.FORMAT_SQL, 'monaco.text.formatSQL', ShortcutAction.SqlFormat),
+        createMenuItem(SQLOptType.TOGGLE_LINE_COMMENT, 'monaco.text.toggleLineComment', ShortcutAction.SqlToggleLineComment),
+        createMenuItem(SQLOptType.TOGGLE_BLOCK_COMMENT, 'monaco.text.toggleBlockComment', ShortcutAction.SqlToggleBlockComment),
         { isSeparator: true },
         createMenuItem(SQLOptType.EXECUTE_SHORTCUT_SQL, 'monaco.text.executeSingleSQL', ShortcutAction.SqlExecuteCurrent),
         createMenuItem(SQLOptType.EXECUTE_SQL, 'monaco.text.executeSQL', ShortcutAction.SqlExecuteAll),

@@ -9,7 +9,7 @@ public class CockRoachSyntaxPlugin implements ISqlSyntaxPlugin {
 
     @Override
     public String getDatabaseType() {
-        return DatabaseTypeEnum.COCKROACH.name();
+        return DatabaseTypeEnum.COCKROACHDB.name();
     }
 
     @Override

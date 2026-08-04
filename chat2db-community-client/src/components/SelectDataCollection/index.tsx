@@ -1,4 +1,5 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import i18n from '@/i18n';
 import { useStyles } from './style';
 import { IconfontSvg, ToolbarBtn } from '@chat2db/ui';
@@ -40,8 +41,12 @@ export default memo<IProps>((props) => {
     defaultDataCollectionList: state.defaultDataCollectionList,
   }));
 
+  const requestGenerationRef = useRef(0);
+
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     aiDataCollectionService.getAiDataCollectionList({ pageNo: 1, pageSize: 1000, dataSourceId }).then((res) => {
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       if (res) {
         const _options = res.data.map((item) => ({
           label: item.title,
@@ -50,6 +55,9 @@ export default memo<IProps>((props) => {
         setOptions(_options);
       }
     });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, [dataSourceId, open]);
 
   useEffect(() => {

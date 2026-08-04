@@ -11,6 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -25,7 +31,11 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
     protected String filePath;
 
     protected SmallDataStorage(String name, Class<T> clazz) {
-        this.filePath = DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json";
+        this(new File(DB_STORAGE_PATH + File.separator + name + File.separator + name + ".json"), clazz);
+    }
+
+    protected SmallDataStorage(File storageFile, Class<T> clazz) {
+        this.filePath = storageFile.getAbsolutePath();
         if (!FileUtil.exist(filePath)) {
             FileUtil.writeUtf8String("", filePath);
         } else {
@@ -92,6 +102,9 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 return;
             }
             T before = dataMap.get(id);
+            if (before == null) {
+                return;
+            }
             before = getAfterSave(before, data);
             dataMap.put(id, before);
             saveDataList();
@@ -109,9 +122,42 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
     protected synchronized void saveDataList() {
         List<T> dataList = getDataList();
-        FileUtil.writeUtf8String("", filePath);
+        StringBuilder content = new StringBuilder();
         for (T data : dataList) {
-            FileUtil.appendUtf8String(JSON.toJSONString(data) + "\n", filePath);
+            content.append(JSON.toJSONString(data)).append('\n');
+        }
+
+        Path target = Path.of(filePath).toAbsolutePath();
+        Path parent = target.getParent();
+        Path temp = null;
+        try {
+            Files.createDirectories(parent);
+            temp = Files.createTempFile(parent, target.getFileName() + ".", ".tmp");
+            Files.writeString(temp, content, StandardCharsets.UTF_8);
+            replaceStorageFile(temp, target);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to persist storage file: " + target, e);
+        } finally {
+            deleteTempFile(temp);
+        }
+    }
+
+    protected void replaceStorageFile(Path temp, Path target) throws IOException {
+        try {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException notAtomic) {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void deleteTempFile(Path temp) {
+        if (temp == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(temp);
+        } catch (IOException e) {
+            log.warn("Failed to clean up temporary storage file: {}", temp, e);
         }
     }
 

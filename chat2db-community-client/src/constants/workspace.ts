@@ -35,6 +35,7 @@ export enum WorkspaceTabType {
   RedisAllData = 'redisAllData',
   AccountPrivileges = 'accountPrivileges',
   ContentDiff = 'contentDiff',
+  Terminal = 'terminal',
 }
 
 // Some configurations corresponding to the type of workbench Tab
@@ -93,6 +94,9 @@ export const workspaceTabConfig: {
   },
   [WorkspaceTabType.ContentDiff]: {
     icon: 'icon-switch-horizontal',
+  },
+  [WorkspaceTabType.Terminal]: {
+    icon: 'icon-terminal',
   },
   [WorkspaceTabType.ViewERModal]: {
     icon: 'icon-er-modal',

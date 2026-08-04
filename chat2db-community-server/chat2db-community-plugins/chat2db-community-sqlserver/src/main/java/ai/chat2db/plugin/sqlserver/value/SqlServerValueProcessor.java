@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Locale;
 
 
 public class SqlServerValueProcessor extends DefaultValueProcessor {
@@ -51,7 +52,8 @@ public class SqlServerValueProcessor extends DefaultValueProcessor {
     @Override
     public String convertSQLValueByType(SQLDataValue dataValue) {
         try {
-            DefaultValueProcessor valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(dataValue.getDateTypeName().toUpperCase());
+            DefaultValueProcessor valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(
+                    dataValue.getDateTypeName().toUpperCase(Locale.ROOT));
             if (Objects.nonNull(valueProcessor)) {
                 return valueProcessor.convertSQLValueByType(dataValue);
             }
@@ -66,7 +68,8 @@ public class SqlServerValueProcessor extends DefaultValueProcessor {
     public String convertJDBCValueByType(JDBCDataValue dataValue) {
         String type = dataValue.getType();
         try {
-            DefaultValueProcessor valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(type.toUpperCase());
+            DefaultValueProcessor valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(
+                    type.toUpperCase(Locale.ROOT));
             if (Objects.nonNull(valueProcessor)) {
                 return valueProcessor.convertJDBCValueByType(dataValue);
             }
@@ -83,7 +86,7 @@ public class SqlServerValueProcessor extends DefaultValueProcessor {
         String type = dataValue.getType();
         DefaultValueProcessor valueProcessor;
         try {
-            valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(type.toUpperCase());
+            valueProcessor = SqlServerValueProcessorFactory.getValueProcessor(type.toUpperCase(Locale.ROOT));
             if (Objects.nonNull(valueProcessor)) {
                 return valueProcessor.convertJDBCValueStrByType(dataValue);
             }

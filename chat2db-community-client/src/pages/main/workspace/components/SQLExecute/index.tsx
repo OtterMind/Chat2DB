@@ -10,6 +10,7 @@ import {
   ForwardedRef,
   useImperativeHandle,
 } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import SearchResult from '@/blocks/SearchResult';
 import {
   createExecutionConsoleKeepHistoryStorageKey,
@@ -49,6 +50,7 @@ import {
   ClosedSqlExecutionResults,
   SqlExecutionEvent,
   SqlExecutionResultIdentity,
+  appendCompletedQueryResult,
   attachExecutionIdentity,
   clearClosedSqlExecutionResults,
   isSqlExecutionResultClosed,
@@ -104,6 +106,12 @@ interface IProps {
   onExecuteSQLCallback?: (params: { databaseInfo: IDatabaseBaseInfo; data: any }) => void;
   isConsole?: boolean;
   sqlActionEnabled?: boolean;
+  onEditorChange?: (value: string) => void;
+}
+
+interface DesktopExecutionCallbackState {
+  databaseInfo: IDatabaseBaseInfo;
+  data: IManageResultData[];
 }
 
 export interface SQLExecuteRef {
@@ -179,6 +187,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     onExecuteSQLCallback,
     isConsole = true,
     sqlActionEnabled = true,
+    onEditorChange,
   } = props;
   const { styles, cx } = useStyles();
   const sqlEditorRef = useRef<ISQLEditorWithOperationRef>(null);
@@ -194,9 +203,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const executionSequenceByIdRef = useRef<Record<string, number>>({});
   const executionSequenceByRequestRef = useRef<Record<number, number>>({});
   const keepExistingOutputByExecutionSequenceRef = useRef<Record<number, boolean>>({});
+  const desktopExecutionCallbackBySequenceRef = useRef<Record<number, DesktopExecutionCallbackState>>({});
   const currentStatementSequenceByExecutionIdRef = useRef<Record<string, number>>({});
   const [resultBatchKey, setResultBatchKey] = useState(0);
   const [forceOutputTab, setForceOutputTab] = useState(false);
+  const requestGenerationRef = useRef(0);
   const { activeConsoleId, setEditorToList, deleteEditor, updateWorkspaceTabBoundInfo } = useWorkspaceStore(
     (state) => ({
       activeConsoleId: state.activeConsoleId,
@@ -334,6 +345,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     if (executionSequence !== undefined) {
       delete keepExistingOutputByExecutionSequenceRef.current[executionSequence];
       delete resultDisplayBatchSequenceByExecutionRef.current[executionSequence];
+      delete desktopExecutionCallbackBySequenceRef.current[executionSequence];
     }
   }, []);
   const handleSqlExecutionRequestStart = useCallback(
@@ -492,6 +504,12 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
       if (event.eventType === 'updateCount' || event.eventType === 'resultFinished') {
+        if (event.eventType === 'resultFinished') {
+          const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
+          if (callbackState) {
+            callbackState.data = appendCompletedQueryResult(callbackState.data, event);
+          }
+        }
         const statementSequence =
           getEventStatementSequence(event, currentStatementSequenceByExecutionIdRef.current[event.executionId]) || 1;
         const result = processResultDataList([event.message], {
@@ -539,7 +557,14 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
       if (event.eventType === 'finished' || event.eventType === 'failed' || event.eventType === 'cancelled') {
-        cleanupTerminalExecution();
+        try {
+          const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
+          if (event.eventType === 'finished' && callbackState?.data.length) {
+            onExecuteSQLCallback?.(callbackState);
+          }
+        } finally {
+          cleanupTerminalExecution();
+        }
       }
     },
     [
@@ -548,6 +573,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       getExecutionSequence,
       handleRefreshTreeByExecuteSQL,
       keepExecutionLogHistory,
+      onExecuteSQLCallback,
     ],
   );
   const { executing, canExecuteSQL, executeSQL, stopExecuteSQL } = useSqlExecutor({
@@ -592,8 +618,10 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   }, [boundInfo]);
 
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     if (loadSQL) {
       loadSQL().then((sql) => {
+        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
         sqlEditorRef.current?.setValue(sql, 'reset');
         updateWorkspaceTabBoundInfo({
           ...boundInfoRef.current,
@@ -601,6 +629,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         });
       });
     }
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const handleUnfold = () => {
@@ -675,6 +706,15 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
     const webExecutionId = isDesktop ? undefined : uuidv4();
     const executionLogContext = getExecutionLogContext(boundInfo);
+    if (isDesktop && onExecuteSQLCallback) {
+      desktopExecutionCallbackBySequenceRef.current[executionSequence] = {
+        databaseInfo: {
+          ...boundInfo,
+          ...params,
+        },
+        data: [],
+      };
+    }
     if (webExecutionId) {
       executionSequenceByIdRef.current[webExecutionId] = executionSequence;
       setSqlExecutionLogState((state) =>
@@ -797,6 +837,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         }
         delete keepExistingOutputByExecutionSequenceRef.current[executionSequence];
         delete resultDisplayBatchSequenceByExecutionRef.current[executionSequence];
+        delete desktopExecutionCallbackBySequenceRef.current[executionSequence];
       });
   };
 
@@ -846,6 +887,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           reloadSQL={loadSQL}
           isConsole={isConsole}
           sqlActionEnabled={sqlActionEnabled}
+          onChange={onEditorChange}
         />
       </div>
       <SplitPaneUnpack onUnfold={handleUnfold} onPackUp={handlePackUp} className={styles.boxRightResult}>

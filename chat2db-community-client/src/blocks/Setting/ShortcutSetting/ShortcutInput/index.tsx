@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
-import { normalizeShortcutBinding } from '@/constants/shortcut';
+import { getEventShortcutBinding, isShortcutCaptureAllowed, normalizeShortcutBinding } from '@/constants/shortcut';
 import { i18n } from '@/i18n';
 
 interface IProps {
@@ -24,27 +24,6 @@ const modifierOrder = {
   shift: 3,
 };
 
-const modifierKeys = new Set(['meta', 'control', 'alt', 'shift']);
-const singleKeyShortcuts = new Set([
-  'enter',
-  'escape',
-  'tab',
-  'backspace',
-  'delete',
-  'f1',
-  'f2',
-  'f3',
-  'f4',
-  'f5',
-  'f6',
-  'f7',
-  'f8',
-  'f9',
-  'f10',
-  'f11',
-  'f12',
-]);
-
 const getShortcutKeys = (shortcut?: string | null) => {
   const normalizedShortcut = normalizeShortcutBinding(shortcut);
   if (!normalizedShortcut) {
@@ -65,13 +44,19 @@ const ShortcutInput: React.FC<IProps> = ({ value, onChange, disabled, placeholde
     pendingShortcutRef.current = value || '';
   }, [value]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
     e.preventDefault();
 
     const key = e.key.toLowerCase();
-
     keysPressed.current.add(key);
+
+    const binding = getEventShortcutBinding(e);
+    if (binding) {
+      pendingShortcutRef.current = binding;
+      setDisplayValue(binding);
+      return;
+    }
 
     const shortcut = Array.from(keysPressed.current)
       .sort((a, b) => {
@@ -91,23 +76,18 @@ const ShortcutInput: React.FC<IProps> = ({ value, onChange, disabled, placeholde
     if (disabled) return;
     if (!keysPressed.current.size) return;
 
-    // Restore the original value for incomplete shortcuts without a supported single key or modifier.
-    const pressedKeys = Array.from(keysPressed.current);
-    const hasModifierKey = pressedKeys.some((key) => modifierKeys.has(key));
-    const isAllowedSingleKey = pressedKeys.length === 1 && singleKeyShortcuts.has(pressedKeys[0]);
-
-    if (!isAllowedSingleKey && (keysPressed.current.size <= 1 || !hasModifierKey)) {
+    if (!isShortcutCaptureAllowed(keysPressed.current)) {
       keysPressed.current.clear();
       setDisplayValue(normalizeShortcutBinding(value) || '');
+      pendingShortcutRef.current = value || '';
       return;
     }
 
-    keysPressed.current.clear();
-    // only updates shortcut keys when out of focus
     const normalizedValue = normalizeShortcutBinding(pendingShortcutRef.current);
     if (normalizedValue && normalizedValue !== value) {
       onChange(normalizedValue);
     }
+    keysPressed.current.clear();
   };
 
   const shortcutKeys = getShortcutKeys(displayValue);

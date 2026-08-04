@@ -9,13 +9,33 @@ import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
+import ai.chat2db.spi.model.request.UpdateSqlRequest;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public abstract class OscarBaseSqlBuilder extends DefaultSqlBuilder {
+
+    @Override
+    public String quoteIdentifier(String identifier) {
+        return quoteIdentifierIgnoreCase(identifier);
+    }
+
+    @Override
+    public String quoteQualifiedIdentifier(String... identifiers) {
+        if (identifiers.length == 3) {
+            String qualifier = StringUtils.isNotBlank(identifiers[1]) ? identifiers[1] : identifiers[0];
+            return quoteQualifiedIdentifier(qualifier, identifiers[2]);
+        }
+        return Arrays.stream(identifiers)
+                .filter(StringUtils::isNotBlank)
+                .map(this::quoteIdentifierIgnoreCase)
+                .collect(Collectors.joining(SQLConstants.DOT));
+    }
 
     @Override
     public String buildAITableSchema(Table table) {
@@ -35,10 +55,7 @@ public abstract class OscarBaseSqlBuilder extends DefaultSqlBuilder {
 
     @Override
     protected void buildTableName(String databaseName, String schemaName, String tableName, StringBuilder script) {
-        if (StringUtils.isNotBlank(schemaName)) {
-            script.append(quoteIdentifierIgnoreCase(schemaName)).append(SQLConstants.DOT);
-        }
-        script.append(quoteIdentifierIgnoreCase(tableName));
+        script.append(quoteQualifiedIdentifier(databaseName, schemaName, tableName));
     }
 
     @Override
@@ -51,6 +68,23 @@ public abstract class OscarBaseSqlBuilder extends DefaultSqlBuilder {
                     .append(SQLConstants.CLOSE_PARENTHESIS)
                     .append(SQLConstants.SPACE);
         }
+    }
+
+    @Override
+    public String buildUpdate(UpdateSqlRequest request) {
+        StringBuilder script = new StringBuilder(SQLConstants.UPDATE_KEYWORD).append(SQLConstants.SPACE);
+        buildTableName(request.getDatabaseName(), request.getSchemaName(), request.getTableName(), script);
+        script.append(" SET ").append(request.getRow().entrySet().stream()
+                .map(entry -> quoteIdentifierIgnoreCase(entry.getKey())
+                        + SQLConstants.EQUAL_SQL + entry.getValue())
+                .collect(Collectors.joining(SQLConstants.COMMA)));
+        if (MapUtils.isNotEmpty(request.getPrimaryKeyMap())) {
+            script.append(" WHERE ").append(request.getPrimaryKeyMap().entrySet().stream()
+                    .map(entry -> quoteIdentifierIgnoreCase(entry.getKey())
+                            + SQLConstants.EQUAL_SQL + entry.getValue())
+                    .collect(Collectors.joining(SQLConstants.SQL_AND)));
+        }
+        return script.toString();
     }
 
     @Override

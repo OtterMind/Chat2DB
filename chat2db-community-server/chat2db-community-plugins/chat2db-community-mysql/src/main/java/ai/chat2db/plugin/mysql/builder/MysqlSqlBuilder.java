@@ -1,5 +1,10 @@
 package ai.chat2db.plugin.mysql.builder;
 
+import ai.chat2db.plugin.mysql.MysqlSqlGuards;
+import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
+import ai.chat2db.plugin.mysql.enums.MysqlViewAlgorithmOptionEnum;
+import ai.chat2db.plugin.mysql.enums.MysqlViewCheckOptionEnum;
+import ai.chat2db.plugin.mysql.enums.MysqlViewSqlSecurityOptionEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlIndexTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
@@ -105,15 +110,15 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
 
         if (StringUtils.isNotBlank(table.getEngine())) {
-            script.append(SQLConstants.ENGINE_SQL).append(table.getEngine());
+            script.append(SQLConstants.ENGINE_SQL).append(MysqlSqlGuards.requireMysqlName(table.getEngine(), "engine"));
         }
 
         if (StringUtils.isNotBlank(table.getCharset())) {
-            script.append(SQLConstants.DEFAULT_CHARACTER_SET_SQL).append(table.getCharset());
+            script.append(SQLConstants.DEFAULT_CHARACTER_SET_SQL).append(MysqlSqlGuards.requireMysqlName(table.getCharset(), "charset"));
         }
 
         if (StringUtils.isNotBlank(table.getCollate())) {
-            script.append(SQLConstants.COLLATE_SQL).append(table.getCollate());
+            script.append(SQLConstants.COLLATE_SQL).append(MysqlSqlGuards.requireMysqlName(table.getCollate(), "collation"));
         }
 
         if (table.getIncrementValue() != null) {
@@ -121,7 +126,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         }
 
         if (StringUtils.isNotBlank(table.getComment())) {
-            script.append(SQL_COMMENT_WITH_SINGLE_QUOTE).append(table.getComment()).append(SQLConstants.SINGLE_QUOTE);
+            script.append(SQL_COMMENT_WITH_SINGLE_QUOTE).append(MysqlIdentifierProcessor.INSTANCE.escapeString(table.getComment())).append(SQLConstants.SINGLE_QUOTE);
         }
 
         if (StringUtils.isNotBlank(table.getPartition())) {
@@ -152,17 +157,17 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             script.append(SQLConstants.TAB).append(SQL_RENAME).append(quoteMysqlIdentifier(newTable.getName())).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getComment(), newTable.getComment())) {
-            script.append(SQLConstants.TAB).append(SQL_COMMENT).append(SQLConstants.SINGLE_QUOTE).append(newTable.getComment()).append(SQLConstants.SINGLE_QUOTE)
+            script.append(SQLConstants.TAB).append(SQL_COMMENT).append(SQLConstants.SINGLE_QUOTE).append(MysqlIdentifierProcessor.INSTANCE.escapeString(newTable.getComment())).append(SQLConstants.SINGLE_QUOTE)
                     .append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getEngine(), newTable.getEngine()) && StringUtils.isNotBlank(newTable.getEngine())) {
-            script.append(SQLConstants.TAB).append(SQL_ENGINE_ASSIGNMENT).append(newTable.getEngine()).append(SQLConstants.COMMA_LINE_SEPARATOR);
+            script.append(SQLConstants.TAB).append(SQL_ENGINE_ASSIGNMENT).append(MysqlSqlGuards.requireMysqlName(newTable.getEngine(), "engine")).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getCharset(), newTable.getCharset()) && StringUtils.isNotBlank(newTable.getCharset())) {
-            script.append(SQLConstants.TAB).append(SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT).append(newTable.getCharset()).append(SQLConstants.COMMA_LINE_SEPARATOR);
+            script.append(SQLConstants.TAB).append(SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT).append(MysqlSqlGuards.requireMysqlName(newTable.getCharset(), "charset")).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getCollate(), newTable.getCollate()) && StringUtils.isNotBlank(newTable.getCollate())) {
-            script.append(SQLConstants.TAB).append(SQL_COLLATE_ASSIGNMENT).append(newTable.getCollate()).append(SQLConstants.COMMA_LINE_SEPARATOR);
+            script.append(SQLConstants.TAB).append(SQL_COLLATE_ASSIGNMENT).append(MysqlSqlGuards.requireMysqlName(newTable.getCollate(), "collation")).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         if (!Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
             script.append(SQLConstants.TAB).append(SQL_AUTO_INCREMENT_ASSIGNMENT).append(newTable.getIncrementValue()).append(SQLConstants.COMMA_LINE_SEPARATOR);
@@ -256,10 +261,10 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(SQLConstants.CREATE_DATABASE_SQL_PREFIX).append(quoteMysqlIdentifier(database.getName()));
         if (StringUtils.isNotBlank(database.getCharset())) {
-            sqlBuilder.append(SQLConstants.DEFAULT_CHARACTER_SET_SQL).append(database.getCharset());
+            sqlBuilder.append(SQLConstants.DEFAULT_CHARACTER_SET_SQL).append(MysqlSqlGuards.requireMysqlName(database.getCharset(), "charset"));
         }
         if (StringUtils.isNotBlank(database.getCollation())) {
-            sqlBuilder.append(SQLConstants.COLLATE_SQL).append(database.getCollation());
+            sqlBuilder.append(SQLConstants.COLLATE_SQL).append(MysqlSqlGuards.requireMysqlName(database.getCollation(), "collation"));
         }
         return sqlBuilder.toString();
     }
@@ -362,7 +367,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             MysqlColumnTypeEnum typeEnum = MysqlColumnTypeEnum.getByType(column.getColumnType());
             sql.append(typeEnum.buildColumn(column));
             sql.append(SQL_AFTER);
-            sql.append(oldTable.getColumnList().get(max).getName());
+            sql.append(quoteMysqlIdentifier(oldTable.getColumnList().get(max).getName()));
             sql.append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
             n++;
             if (Arrays.equals(newArray, targetArray)) {
@@ -394,9 +399,9 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                 AtomicInteger continuousDataCount = new AtomicInteger(0);
                 String[] newArray = moveElement(originalArray, i, a, targetArray, continuousDataCount);
                 if (i < a) {
-                    sql.append(originalArray[a + continuousDataCount.get()]);
+                    sql.append(quoteMysqlIdentifier(originalArray[a + continuousDataCount.get()]));
                 } else {
-                    sql.append(originalArray[a - 1]);
+                    sql.append(quoteMysqlIdentifier(originalArray[a - 1]));
                 }
 
                 sql.append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
@@ -487,15 +492,15 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         }
         String algorithm = modifyView.getAlgorithm();
         if (StringUtils.isNotBlank(algorithm)) {
-            createViewSqlBuilder.append(SQL_ALGORITHM).append(algorithm).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(SQL_ALGORITHM).append(MysqlSqlGuards.requireEnumConstant(algorithm, MysqlViewAlgorithmOptionEnum.values(), "algorithm")).append(SQLConstants.SPACE);
         }
         String definer = modifyView.getDefiner();
         if (StringUtils.isNotBlank(definer)) {
-            createViewSqlBuilder.append(SQL_DEFINER).append(definer).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(SQL_DEFINER).append(MysqlSqlGuards.requireDefiner(definer)).append(SQLConstants.SPACE);
         }
         String security = modifyView.getSecurity();
         if (StringUtils.isNotBlank(security)) {
-            createViewSqlBuilder.append(SQL_SECURITY).append(security).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(SQL_SECURITY).append(MysqlSqlGuards.requireEnumConstant(security, MysqlViewSqlSecurityOptionEnum.values(), "security")).append(SQLConstants.SPACE);
         }
         createViewSqlBuilder.append(SQLConstants.VIEW_KEYWORD);
         String databaseName = modifyView.getDatabaseName();
@@ -519,24 +524,14 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         }
         String checkOption = modifyView.getCheckOption();
         if (StringUtils.isNotBlank(checkOption)) {
-            createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR_SQL_WITH).append(checkOption).append(SQLConstants.CHECK_OPTION_SQL);
+            createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR_SQL_WITH).append(MysqlSqlGuards.requireEnumConstant(checkOption, MysqlViewCheckOptionEnum.values(), "check option")).append(SQLConstants.CHECK_OPTION_SQL);
         }
 
         return createViewSqlBuilder + SQLConstants.SEMICOLON;
     }
 
     private static String quoteMysqlIdentifier(String name) {
-        if (StringUtils.isBlank(name)) {
-            return name;
-        }
-        String identifier = name;
-        if (identifier.length() >= 2 && identifier.startsWith(SQLConstants.BACK_QUOTE)
-                && identifier.endsWith(SQLConstants.BACK_QUOTE)) {
-            identifier = identifier.substring(1, identifier.length() - 1);
-        }
-        return SQLConstants.BACK_QUOTE
-                + identifier.replace(SQLConstants.BACK_QUOTE, SQLConstants.BACK_QUOTE + SQLConstants.BACK_QUOTE)
-                + SQLConstants.BACK_QUOTE;
+        return MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(name);
     }
 
 }

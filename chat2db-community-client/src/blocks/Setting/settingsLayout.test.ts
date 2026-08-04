@@ -6,6 +6,7 @@ const communitySettingSource = readFileSync('src/blocks/Setting/CommunitySetting
 const settingSource = readFileSync('src/blocks/Setting/index.tsx', 'utf8');
 const baseSettingSource = readFileSync('src/blocks/Setting/BaseSetting/index.tsx', 'utf8');
 const editorSettingSource = readFileSync('src/blocks/Setting/EditorSetting/index.tsx', 'utf8');
+const terminalSettingSource = readFileSync('src/blocks/Setting/TerminalSetting/index.tsx', 'utf8');
 const mcpSettingSource = readFileSync('src/blocks/Setting/McpSetting/index.tsx', 'utf8');
 const networkProxySettingSource = readFileSync('src/blocks/Setting/NetworkProxySetting/index.tsx', 'utf8');
 const shortcutSettingSource = readFileSync('src/blocks/Setting/ShortcutSetting/index.tsx', 'utf8');
@@ -56,6 +57,10 @@ const settingSearchTargetIds = [
   'editor.completion',
   'editor.tableDDLTriggerMode',
   'editor.errorContinue',
+  'terminal.position',
+  'terminal.confirmBeforeClose',
+  'terminal.shell',
+  'terminal.theme',
   'shortcut.global',
   'shortcut.workspace',
   'shortcut.localSqlFileTree',
@@ -69,6 +74,7 @@ const settingSearchTargetIds = [
 const searchableSettingSources = [
   baseSettingSource,
   editorSettingSource,
+  terminalSettingSource,
   mcpSettingSource,
   networkProxySettingSource,
   shortcutSettingSource,
@@ -140,6 +146,12 @@ assert.match(editorSettingSource, /<Palette\b/, 'editor appearance uses a Lucide
 assert.match(editorSettingSource, /<Monitor\b/, 'editor display uses a Lucide icon');
 assert.match(editorSettingSource, /<Braces\b/, 'editor completion uses a Lucide icon');
 assert.match(editorSettingSource, /<Play\b/, 'editor execution uses a Lucide icon');
+assert.match(terminalSettingSource, /<Switch\b/, 'terminal close confirmation uses a binary switch');
+assert.match(
+  terminalSettingSource,
+  /checked=\{terminalSettings\.confirmBeforeClose\}/,
+  'terminal close confirmation reflects the persisted preference',
+);
 for (const tooltipKey of editorTooltipKeys) {
   assert.ok(editorSettingSource.includes(`i18n('${tooltipKey}'`), `${tooltipKey} is exposed as contextual help`);
 }

@@ -33,6 +33,8 @@ export default {
   'monaco.text.cut': '잘라내기',
   'monaco.text.caseConvert': '대소문자 변환',
   'monaco.text.formatSQL': 'SQL 서식 지정',
+  'monaco.text.toggleLineComment': 'SQL 줄 주석 토글',
+  'monaco.text.toggleBlockComment': 'SQL 블록 주석 토글',
   'monaco.text.saveSQL': '저장',
   'monaco.text.saveFile': '저장',
   'monaco.text.saveFileToDesktop': '파일로 저장',

@@ -13,6 +13,7 @@ export interface LocalSQLFileTreeNode {
   disabled?: boolean;
   sqlFile?: boolean;
   textFile?: boolean;
+  previewFile?: boolean;
   fileExtension?: string;
   hasChildren?: boolean;
   loaded?: boolean;

@@ -3,6 +3,8 @@ package ai.chat2db.community.domain.core.impl.db;
 import ai.chat2db.community.domain.api.model.parser.statement.insert.InsertValueMapping;
 import ai.chat2db.community.domain.api.enums.parser.InsertValueMappingStatusEnum;
 import ai.chat2db.community.domain.api.model.db.SimpleInsertValueMapping;
+import ai.chat2db.community.domain.api.model.metadata.Table;
+import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
 import org.antlr.v4.runtime.CommonToken;
 import org.antlr.v4.runtime.Token;
 import org.junit.jupiter.api.Assertions;
@@ -10,8 +12,34 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 class SqlParserServiceImplTest {
+
+    @Test
+    void normalizeIdentifierTokenPreservesEmbeddedQuotes() {
+        DefaultSQLIdentifierProcessor processor = new DefaultSQLIdentifierProcessor();
+
+        Assertions.assertEquals("A\"B",
+                DbSqlParserServiceImpl.normalizeIdentifierToken(processor, "\"A\"\"B\""));
+        Assertions.assertEquals("A\"B",
+                DbSqlParserServiceImpl.normalizeIdentifierToken(processor, "A\"B"));
+        Assertions.assertEquals("Order",
+                DbSqlParserServiceImpl.normalizeIdentifierToken(processor, ".\"Order\""));
+    }
+
+    @Test
+    void toTableMapKeepsTheFirstDuplicateTable() {
+        Table first = new Table();
+        first.setName("orders");
+        Table duplicate = new Table();
+        duplicate.setName("orders");
+
+        Map<String, Table> tableMap = DbSqlParserServiceImpl.toTableMap(List.of(first, duplicate));
+
+        Assertions.assertEquals(1, tableMap.size());
+        Assertions.assertSame(first, tableMap.get("orders"));
+    }
 
     @Test
     @SuppressWarnings("unchecked")

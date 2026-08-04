@@ -34,7 +34,7 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
                 }
                 OscarColumnTypeEnum typeEnum = OscarColumnTypeEnum.getByType(column.getColumnType());
                 if (typeEnum == null) {
-                    continue;
+                    typeEnum = OscarColumnTypeEnum.VARCHAR;
                 }
                 script.append(SQLConstants.TAB)
                         .append(typeEnum.buildCreateColumnSql(column))
@@ -77,7 +77,7 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
                 }
                 OscarColumnTypeEnum typeEnum = OscarColumnTypeEnum.getByType(tableColumn.getColumnType());
                 if (typeEnum == null) {
-                    continue;
+                    typeEnum = OscarColumnTypeEnum.VARCHAR;
                 }
                 script.append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 if (StringUtils.isNotBlank(tableColumn.getComment())
