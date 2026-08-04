@@ -76,14 +76,27 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
     public void export(DbDmlExportRequest param, OutputStream outputStream) throws IOException {
         ExportTypeEnum exportType = ExportTypeEnum.from(param.getExportType());
         if (ExportTypeEnum.CSV == exportType) {
+            requireSelectSql(param.getSql());
             exportCsv(param.getSql(), outputStream, param.getResultSetId());
             return;
         }
         if (ExportTypeEnum.EXCEL == exportType) {
+            requireSelectSql(param.getSql());
             exportExcel(param.getSql(), outputStream, param.getResultSetId());
             return;
         }
         exportInsert(param, outputStream);
+    }
+
+    private void requireSelectSql(String sql) {
+        DbType dbType = currentDruidDbType();
+        if (dbType == null) {
+            return;
+        }
+        SQLStatement sqlStatement = SQLUtils.parseSingleStatement(sql, dbType);
+        if (!(sqlStatement instanceof SQLSelectStatement)) {
+            throw new BusinessException("dataSource.sqlAnalysisError");
+        }
     }
 
     private DbType currentDruidDbType() {
