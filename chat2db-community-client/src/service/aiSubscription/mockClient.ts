@@ -117,6 +117,12 @@ export function createMockAiSubscriptionClient(
     async cancelConnect({ provider }) {
       updateProvider(provider, { state: 'DISCONNECTED', discoveredAt: null, maskedAccount: null });
     },
+    async interruptActiveTurn(params) {
+      return {
+        interrupted: false,
+        provider: params?.provider || 'OPENAI',
+      };
+    },
     async disconnect(provider) {
       updateProvider(provider, { state: 'DISCONNECTING' });
       // Mock durable credential deletion success path.

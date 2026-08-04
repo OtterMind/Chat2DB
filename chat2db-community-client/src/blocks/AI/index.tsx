@@ -53,6 +53,7 @@ import { resolveChatModelOption } from '@/blocks/AI/subscription/modelOptionReso
 import { hydrateSubscriptionModelOptions } from '@/blocks/AI/subscription/startupHydration';
 import { resolveTerminalAnswerFallback } from '@/blocks/AI/subscription/terminalAnswer';
 import { resolveStreamErrorDisplay } from '@/blocks/AI/subscription/streamErrorMessage';
+import { getAiSubscriptionClient } from '@/service/aiSubscription';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -327,7 +328,14 @@ interface IChatItem {
   content: string;
   attachments?: IChatAttachment[];
   traceEntries?: ITraceEntry[];
+  /** Ordered answer/tool/reasoning segments for CLI-style interleaved rendering. */
+  streamSegments?: IStreamSegment[];
 }
+
+/** One step in the live assistant body (answer text and tool/reasoning events mixed by arrival order). */
+type IStreamSegment =
+  | { kind: 'answer'; content: string }
+  | { kind: 'trace'; entry: ITraceEntry };
 
 interface IChatRound {
   key: string;
@@ -354,6 +362,7 @@ interface IInProgressSessionSnapshot {
   messages: IChatItem[];
   streamingText: string;
   traceEntries: ITraceEntry[];
+  streamSegments: IStreamSegment[];
   currentRoundUserMessageId: string | null;
 }
 
@@ -441,6 +450,64 @@ function mergeTraceEntries(prev: ITraceEntry[], nextEntry: ITraceEntry): ITraceE
   return [...prev, nextEntry];
 }
 
+function appendAnswerSegment(segments: IStreamSegment[], delta: string): IStreamSegment[] {
+  if (!delta) {
+    return segments;
+  }
+  if (!segments.length) {
+    return [{ kind: 'answer', content: delta }];
+  }
+  const last = segments[segments.length - 1];
+  if (last.kind === 'answer') {
+    return [...segments.slice(0, -1), { kind: 'answer', content: `${last.content}${delta}` }];
+  }
+  return [...segments, { kind: 'answer', content: delta }];
+}
+
+function appendTraceSegment(segments: IStreamSegment[], nextEntry: ITraceEntry): IStreamSegment[] {
+  if (!segments.length) {
+    return [{ kind: 'trace', entry: nextEntry }];
+  }
+  const last = segments[segments.length - 1];
+  if (
+    last.kind === 'trace'
+    && last.entry.type === 'reasoning'
+    && nextEntry.type === 'reasoning'
+  ) {
+    return [
+      ...segments.slice(0, -1),
+      {
+        kind: 'trace',
+        entry: {
+          ...last.entry,
+          content: `${last.entry.content || ''}${nextEntry.content || ''}`,
+          ts: nextEntry.ts || last.entry.ts,
+        },
+      },
+    ];
+  }
+  return [...segments, { kind: 'trace', entry: nextEntry }];
+}
+
+/** History without ordered segments falls back to tools/reasoning first, then final answer. */
+function segmentsFromLegacy(content: string, traceEntries?: ITraceEntry[]): IStreamSegment[] {
+  const segments: IStreamSegment[] = [];
+  for (const entry of traceEntries || []) {
+    segments.push({ kind: 'trace', entry });
+  }
+  if (content) {
+    segments.push({ kind: 'answer', content });
+  }
+  return segments;
+}
+
+function resolveMessageSegments(message: IChatItem): IStreamSegment[] {
+  if (message.streamSegments?.length) {
+    return message.streamSegments;
+  }
+  return segmentsFromLegacy(message.content, message.traceEntries);
+}
+
 function getLatestMeaningfulLine(text?: string) {
   if (!text) {
     return '';
@@ -512,6 +579,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [messages, setMessages] = useState<IChatItem[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamTraceEntries, setStreamTraceEntries] = useState<ITraceEntry[]>([]);
+  const [streamSegments, setStreamSegments] = useState<IStreamSegment[]>([]);
   const [expandedTraceMap, setExpandedTraceMap] = useState<Record<string, boolean>>({});
   const [streamThoughtPulse, setStreamThoughtPulse] = useState(false);
   const [prefillInputState, setPrefillInputState] = useState<{ text: string; token: number } | null>(null);
@@ -529,7 +597,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [pendingLegacySend, setPendingLegacySend] = useState<SendParams | null>(null);
   /** True only for loaded historical sessions that lack model snapshots. */
   const [sessionRequiresModelConfirm, setSessionRequiresModelConfirm] = useState(false);
-  const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
+  const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length && !streamSegments.length;
   const {
     surfaceAvailable: subscriptionSurfaceAvailable,
     providers: subscriptionProviders,
@@ -552,6 +620,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const streamingRef = useRef('');
   const streamTraceEntriesRef = useRef<ITraceEntry[]>([]);
+  const streamSegmentsRef = useRef<IStreamSegment[]>([]);
   const previousStatusRef = useRef<SSERequestStatus>(SSERequestStatus.IDLE);
   const previousStreamThoughtPreviewRef = useRef('');
   const streamThoughtPulseTimerRef = useRef<number | null>(null);
@@ -825,11 +894,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const delta = chunk.content || '';
       if (isHiddenInProgress && inProgressSession) {
         inProgressSession.streamingText += delta;
+        inProgressSession.streamSegments = appendAnswerSegment(inProgressSession.streamSegments, delta);
         return;
       }
       const next = streamingRef.current + delta;
       streamingRef.current = next;
       setStreamingText(next);
+      setStreamSegments((prev) => {
+        const nextSegments = appendAnswerSegment(prev, delta);
+        streamSegmentsRef.current = nextSegments;
+        return nextSegments;
+      });
       return;
     }
 
@@ -841,12 +916,18 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (traceEntry) {
         if (isHiddenInProgress && inProgressSession) {
           inProgressSession.traceEntries = mergeTraceEntries(inProgressSession.traceEntries, traceEntry);
+          inProgressSession.streamSegments = appendTraceSegment(inProgressSession.streamSegments, traceEntry);
           return;
         }
         setStreamTraceEntries((prev) => {
           const next = mergeTraceEntries(prev, traceEntry);
           streamTraceEntriesRef.current = next;
           return next;
+        });
+        setStreamSegments((prev) => {
+          const nextSegments = appendTraceSegment(prev, traceEntry);
+          streamSegmentsRef.current = nextSegments;
+          return nextSegments;
         });
       }
       return;
@@ -860,10 +941,19 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (recoveredDelta) {
         if (isHiddenInProgress && inProgressSession) {
           inProgressSession.streamingText += recoveredDelta;
+          inProgressSession.streamSegments = appendAnswerSegment(
+            inProgressSession.streamSegments,
+            recoveredDelta,
+          );
         } else {
           const next = streamingRef.current + recoveredDelta;
           streamingRef.current = next;
           setStreamingText(next);
+          setStreamSegments((prev) => {
+            const nextSegments = appendAnswerSegment(prev, recoveredDelta);
+            streamSegmentsRef.current = nextSegments;
+            return nextSegments;
+          });
         }
       }
       // Server may return sessionId in done event as fallback.
@@ -900,11 +990,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (traceEntry) {
         if (isHiddenInProgress && inProgressSession) {
           inProgressSession.traceEntries = mergeTraceEntries(inProgressSession.traceEntries, traceEntry);
+          inProgressSession.streamSegments = appendTraceSegment(inProgressSession.streamSegments, traceEntry);
         } else {
           setStreamTraceEntries((prev) => {
             const next = mergeTraceEntries(prev, traceEntry);
             streamTraceEntriesRef.current = next;
             return next;
+          });
+          setStreamSegments((prev) => {
+            const nextSegments = appendTraceSegment(prev, traceEntry);
+            streamSegmentsRef.current = nextSegments;
+            return nextSegments;
           });
         }
       }
@@ -919,6 +1015,22 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     },
     undefined,
   );
+
+  /**
+   * Desktop JCEF Stop only detaches the renderer listener — it does not abort the Java turn.
+   * Always call the subscription control-plane interrupt so the provider lease is released.
+   */
+  const stopStreaming = useCallback(() => {
+    void getAiSubscriptionClient()
+      .interruptActiveTurn({ provider: 'OPENAI' })
+      .catch(() => {
+        // Local stop still runs; lease release is best-effort.
+      })
+      .finally(() => {
+        useSubscriptionAiStore.getState().setProviderBusy(false);
+      });
+    stop();
+  }, [stop]);
 
   // Load the model list.
 
@@ -1212,6 +1324,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         ? inProgressSession
         : null;
     const finalTraceEntries = streamTraceEntriesRef.current;
+    const finalSegments = streamSegmentsRef.current;
 
     if (hiddenInProgress) {
       if (hiddenInProgress.streamingText.trim() || hiddenInProgress.traceEntries.length) {
@@ -1222,13 +1335,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             role: 'assistant',
             content: hiddenInProgress.streamingText,
             traceEntries: hiddenInProgress.traceEntries,
+            streamSegments: hiddenInProgress.streamSegments.length
+              ? hiddenInProgress.streamSegments
+              : segmentsFromLegacy(hiddenInProgress.streamingText, hiddenInProgress.traceEntries),
           },
         ];
       }
       hiddenInProgress.streamingText = '';
       hiddenInProgress.traceEntries = [];
+      hiddenInProgress.streamSegments = [];
       hiddenInProgress.currentRoundUserMessageId = null;
-    } else if (streamingRef.current.trim() || finalTraceEntries.length) {
+    } else if (streamingRef.current.trim() || finalTraceEntries.length || finalSegments.length) {
       const content = streamingRef.current;
       setMessages((prev) => [
         ...prev,
@@ -1237,6 +1354,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           role: 'assistant',
           content,
           traceEntries: finalTraceEntries,
+          streamSegments: finalSegments.length
+            ? finalSegments
+            : segmentsFromLegacy(content, finalTraceEntries),
         },
       ]);
     }
@@ -1263,6 +1383,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setStreamingText('');
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamSegmentsRef.current = [];
+    setStreamSegments([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setCurrentRoundUserMessageId(null);
@@ -1326,6 +1448,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     messages,
     streamingText,
     streamTraceEntries.length,
+    streamSegments.length,
     currentRoundUserMessageId,
     messageListContentHeight,
     isCurrentRoundOverflowingViewport,
@@ -1336,7 +1459,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Start a new conversation.
 
   const handleNewChat = useCallback(() => {
-    stop();
+    stopStreaming();
     setAutoFollow(true);
     chatInputRef.current?.resetAttachments();
     pendingViewportAnchorRef.current = null;
@@ -1360,6 +1483,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     streamingRef.current = '';
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamSegmentsRef.current = [];
+    setStreamSegments([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setExpandedTraceMap({});
@@ -1379,7 +1504,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       clearChatIdFromPath();
     }
     onSessionChange?.();
-  }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
+  }, [isPanel, clearChatIdFromPath, onSessionChange, stopStreaming]);
 
   const handleDeleteHistorySession = useCallback(
     async (sessionId: string) => {
@@ -1428,12 +1553,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             messages: [...messagesRef.current],
             streamingText: streamingRef.current,
             traceEntries: [...streamTraceEntriesRef.current],
+            streamSegments: [...streamSegmentsRef.current],
             currentRoundUserMessageId: currentRoundUserMessageIdRef.current,
           };
         }
       } else {
         // Stop the historical stream when switching outside generation to avoid stale events.
-        stop();
+        stopStreaming();
       }
 
       setAutoFollow(true);
@@ -1461,6 +1587,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       streamingRef.current = '';
       streamTraceEntriesRef.current = [];
       setStreamTraceEntries([]);
+      streamSegmentsRef.current = [];
+      setStreamSegments([]);
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1480,6 +1608,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         streamingRef.current = inProgressSession.streamingText;
         setStreamTraceEntries(inProgressSession.traceEntries);
         streamTraceEntriesRef.current = [...inProgressSession.traceEntries];
+        setStreamSegments(inProgressSession.streamSegments);
+        streamSegmentsRef.current = [...inProgressSession.streamSegments];
         setCurrentRoundUserMessageId(inProgressSession.currentRoundUserMessageId);
         currentRoundUserMessageIdRef.current = inProgressSession.currentRoundUserMessageId;
         if (!title && inProgressSession.title) {
@@ -1517,6 +1647,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           streamingRef.current = latestInProgressSession.streamingText;
           setStreamTraceEntries(latestInProgressSession.traceEntries);
           streamTraceEntriesRef.current = [...latestInProgressSession.traceEntries];
+          setStreamSegments(latestInProgressSession.streamSegments);
+          streamSegmentsRef.current = [...latestInProgressSession.streamSegments];
           setCurrentRoundUserMessageId(latestInProgressSession.currentRoundUserMessageId);
           currentRoundUserMessageIdRef.current = latestInProgressSession.currentRoundUserMessageId;
           if (!title && latestInProgressSession.title) {
@@ -1565,7 +1697,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setSessionLoading(false);
       }
     },
-    [onSessionChange, setSelectedModel, stop],
+    [onSessionChange, setSelectedModel, stopStreaming],
   );
 
   // Restore the conversation from the path when first opening /stream/:chatId.
@@ -1696,6 +1828,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
       setStreamTraceEntries([]);
       streamTraceEntriesRef.current = [];
+      setStreamSegments([]);
+      streamSegmentsRef.current = [];
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1971,77 +2105,138 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }));
   }, []);
 
-  const renderTraceEntry = (entry: ITraceEntry, index: number) => {
+  /** Compact CLI-style tool/reasoning rows interleaved inside the assistant body. */
+  const renderInlineTraceEntry = (entry: ITraceEntry, key: string) => {
     if (entry.type === 'reasoning') {
+      const preview = getLatestMeaningfulLine(entry.content);
+      const expanded = !!expandedTraceMap[key];
+      if (!preview && !entry.content) {
+        return null;
+      }
       return (
-        <div key={`${entry.type}-${index}`} className={styles.traceEntry}>
-          <div className={styles.traceEntryTitle}>{getLatestMeaningfulLine(entry.content)}</div>
-          {entry.content && <div className={styles.traceEntryText}>{entry.content}</div>}
+        <div key={key} className={styles.inlineReasoning}>
+          <button
+            type="button"
+            className={styles.inlineReasoningToggle}
+            onClick={() => toggleTraceExpanded(key)}
+          >
+            <span className={cx(styles.inlineReasoningLabel, streamThoughtPulse && styles.thoughtPulse)}>
+              {truncateCollapsedThoughtPreview(preview) || i18n('stream.thought.toggle')}
+            </span>
+            <span className={cx(styles.thoughtArrow, expanded && styles.thoughtArrowExpanded)}>⌃</span>
+          </button>
+          {expanded && entry.content ? (
+            <div className={styles.inlineReasoningBody}>{entry.content}</div>
+          ) : null}
         </div>
       );
     }
 
     if (entry.type === 'tool_call') {
       return (
-        <div key={`${entry.type}-${entry.id || index}`} className={styles.traceEntry}>
-          <div className={styles.traceEntryTag}>{i18n('stream.trace.toolCall')}</div>
-          <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.unknownTool')}</div>
-          {entry.arguments && <pre className={styles.traceCodeBlock}>{entry.arguments}</pre>}
+        <div key={key} className={styles.inlineToolRow} data-tool-state="call">
+          <span className={styles.inlineToolGlyph}>›</span>
+          <span className={styles.inlineToolKind}>{i18n('stream.trace.toolCall')}</span>
+          <span className={styles.inlineToolName}>{entry.name || i18n('stream.trace.unknownTool')}</span>
         </div>
       );
     }
 
     if (entry.type === 'tool_result') {
+      const statusText = getLatestMeaningfulLine(entry.content) || 'ok';
       return (
-        <div key={`${entry.type}-${index}`} className={styles.traceEntry}>
-          <div className={styles.traceEntryTag}>{i18n('stream.trace.toolResult')}</div>
-          <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.defaultToolResult')}</div>
-          <pre className={styles.traceCodeBlock}>{entry.content}</pre>
+        <div key={key} className={styles.inlineToolRow} data-tool-state="result">
+          <span className={styles.inlineToolGlyph}>✓</span>
+          <span className={styles.inlineToolKind}>{i18n('stream.trace.toolResult')}</span>
+          <span className={styles.inlineToolName}>{entry.name || i18n('stream.trace.defaultToolResult')}</span>
+          <span className={styles.inlineToolStatus}>{statusText}</span>
         </div>
       );
     }
 
     return (
-      <div key={`${entry.type}-${index}`} className={styles.traceEntry}>
-        <div className={styles.traceEntryTag}>{i18n('stream.trace.error')}</div>
-        <div className={styles.traceEntryText}>{entry.content || i18n('stream.trace.unknownError')}</div>
+      <div key={key} className={styles.inlineToolRow} data-tool-state="error">
+        <span className={styles.inlineToolGlyph}>!</span>
+        <span className={styles.inlineToolKind}>{i18n('stream.trace.error')}</span>
+        <span className={styles.inlineToolStatus}>{entry.content || i18n('stream.trace.unknownError')}</span>
       </div>
     );
   };
 
-  const renderThoughtStrip = (
-    traceEntries: ITraceEntry[],
-    traceKey: string,
-    active = false,
-    pulse = false,
+  const renderAnswerSegment = (
+    content: string,
+    key: string,
+    options?: { incompleteChart?: boolean },
   ) => {
-    const hasEntries = traceEntries.length > 0;
-    const expanded = !!expandedTraceMap[traceKey];
-    const previewText = getTracePreview(traceEntries[traceEntries.length - 1]);
-    const collapsedPreviewText = truncateCollapsedThoughtPreview(previewText);
-    const buttonText = active ? collapsedPreviewText || i18n('stream.thought.toggle') : i18n('stream.thought.toggle');
-
-    if (!active && !previewText) {
+    if (!content && !options?.incompleteChart) {
       return null;
     }
+    if (options?.incompleteChart) {
+      const { textBeforeChart } = splitIncompleteChartBlock(content);
+      return (
+        <div key={key} className={styles.inlineAnswerSegment}>
+          {textBeforeChart ? renderMarkdown(textBeforeChart) : null}
+          <div className={styles.chartLoadingWrap}>
+            <div className={styles.chartLoadingIcon}>
+              <span className={styles.chartLoadingBar} />
+              <span className={styles.chartLoadingBar} />
+              <span className={styles.chartLoadingBar} />
+            </div>
+            <span className={styles.chartLoadingText}>{i18n('stream.chart.generating')}</span>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div key={key} className={styles.inlineAnswerSegment}>
+        {renderMarkdown(content)}
+      </div>
+    );
+  };
+
+  /**
+   * Renders answer text and tool/reasoning events in arrival order (Traycer/CLI style),
+   * not as a single thought strip stacked above the full reply.
+   */
+  const renderInterleavedSegments = (
+    segments: IStreamSegment[],
+    keyPrefix: string,
+    options?: { active?: boolean; liveAnswer?: string },
+  ) => {
+    if (!segments.length && !options?.liveAnswer) {
+      return null;
+    }
+    // If live answer is tracked only in streamingText (legacy path), append as final answer segment.
+    const effectiveSegments =
+      options?.liveAnswer && !segments.some((segment) => segment.kind === 'answer')
+        ? [...segments, { kind: 'answer' as const, content: options.liveAnswer }]
+        : segments;
+
+    const lastAnswerIndex = (() => {
+      for (let i = effectiveSegments.length - 1; i >= 0; i -= 1) {
+        if (effectiveSegments[i].kind === 'answer') {
+          return i;
+        }
+      }
+      return -1;
+    })();
+    const incompleteChart =
+      !!options?.active
+      && lastAnswerIndex >= 0
+      && splitIncompleteChartBlock(
+        (effectiveSegments[lastAnswerIndex] as { kind: 'answer'; content: string }).content,
+      ).hasIncompleteChart;
 
     return (
-      <div className={cx(styles.thoughtWrap, active && styles.thoughtWrapActive)}>
-        {active && renderAssistantBadge(true)}
-        <div className={styles.thoughtMain}>
-          <button className={styles.thoughtToggle} type="button" onClick={() => toggleTraceExpanded(traceKey)}>
-            <span className={cx(styles.thoughtLabel, pulse && styles.thoughtPulse)} title={previewText || undefined}>
-              {buttonText}
-            </span>
-            <span className={cx(styles.thoughtArrow, expanded && styles.thoughtArrowExpanded)}>⌃</span>
-          </button>
-          {expanded ? (
-            <div className={styles.thoughtExpanded}>
-              {!active && previewText ? <div className={styles.thoughtPreviewStatic}>{previewText}</div> : null}
-              {hasEntries ? traceEntries.map((entry, index) => renderTraceEntry(entry, index)) : null}
-            </div>
-          ) : null}
-        </div>
+      <div className={styles.interleavedStream}>
+        {effectiveSegments.map((segment, index) => {
+          if (segment.kind === 'answer') {
+            return renderAnswerSegment(segment.content, `${keyPrefix}-answer-${index}`, {
+              incompleteChart: incompleteChart && index === lastAnswerIndex,
+            });
+          }
+          return renderInlineTraceEntry(segment.entry, `${keyPrefix}-trace-${index}-${segment.entry.type}`);
+        })}
       </div>
     );
   };
@@ -2116,45 +2311,27 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 <div className={styles.assistantRow}>
                   {renderAssistantBadge(false)}
                   <div className={styles.assistantContent}>
-                    {renderThoughtStrip(round.assistant.traceEntries || [], `trace-${round.assistant.id}`)}
-                    {renderMarkdown(round.assistant.content)}
+                    {renderInterleavedSegments(
+                      resolveMessageSegments(round.assistant),
+                      `msg-${round.assistant.id}`,
+                    )}
                   </div>
                 </div>
               )}
-              {isCurrentRound &&
-                renderThoughtStrip(
-                  streamTraceEntries,
-                  `stream-trace-${round.user?.id || round.key}`,
-                  true,
-                  streamThoughtPulse,
-                )}
-              {isCurrentRound &&
-                streamingText &&
-                (() => {
-                  const { textBeforeChart, hasIncompleteChart } = splitIncompleteChartBlock(streamingText);
-                  return (
-                    <div className={styles.assistantRow}>
-                      <div className={styles.assistantBadgeSpacer} aria-hidden="true" />
-                      <div className={styles.assistantContent}>
-                        {hasIncompleteChart ? (
-                          <>
-                            {textBeforeChart && renderMarkdown(textBeforeChart)}
-                            <div className={styles.chartLoadingWrap}>
-                              <div className={styles.chartLoadingIcon}>
-                                <span className={styles.chartLoadingBar} />
-                                <span className={styles.chartLoadingBar} />
-                                <span className={styles.chartLoadingBar} />
-                              </div>
-                              <span className={styles.chartLoadingText}>{i18n('stream.chart.generating')}</span>
-                            </div>
-                          </>
-                        ) : (
-                          renderMarkdown(streamingText)
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
+              {isCurrentRound && (streamSegments.length > 0 || streamingText) && (
+                <div className={styles.assistantRow}>
+                  {renderAssistantBadge(true)}
+                  <div className={styles.assistantContent}>
+                    {renderInterleavedSegments(
+                      streamSegments.length
+                        ? streamSegments
+                        : segmentsFromLegacy(streamingText, streamTraceEntries),
+                      `stream-${round.user?.id || round.key}`,
+                      { active: true, liveAnswer: streamingText },
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -2285,7 +2462,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   handleNewChat();
                 }}
                 onChatSend={handleSend}
-                onStop={stop}
+                onStop={stopStreaming}
                 autoSize={
                   isPanel
                     ? { minRows: 2, maxRows: 4 }

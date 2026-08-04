@@ -722,6 +722,85 @@ class SubscriptionSseChatStreamServiceTest {
         }
     }
 
+    @Test
+    void clientDisconnectInterruptsTurnAndReleasesProviderLease() throws Exception {
+        SubscriptionAiRuntime runtime = mock(SubscriptionAiRuntime.class);
+        IAiSubscriptionStateRepository repository = mock(IAiSubscriptionStateRepository.class);
+        IAiChatHistoryService history = mock(IAiChatHistoryService.class);
+        IIdentityService identity = mock(IIdentityService.class);
+        CodexAppServerPort appServer = mock(CodexAppServerPort.class);
+        DedicatedMcpBridge bridge = mock(DedicatedMcpBridge.class);
+        AiModelRef modelRef = new AiModelRef(AiAccessType.SUBSCRIPTION, AiProviderEnum.OPENAI,
+                AiRouteKind.CHATGPT_CODEX_APP_SERVER, "gpt-test");
+        AtomicReference<String> attemptId = new AtomicReference<>();
+        AtomicReference<ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState> state =
+                new AtomicReference<>();
+
+        when(runtime.capability()).thenReturn(AiSubscriptionCapability.enabledCapability());
+        when(runtime.repository()).thenReturn(repository);
+        when(runtime.appServer()).thenReturn(appServer);
+        when(runtime.mcpBridge()).thenReturn(bridge);
+        when(repository.connection(AiProviderEnum.OPENAI)).thenReturn(new AiProviderConnection(
+                AiProviderEnum.OPENAI, AiProviderConnectionState.CONNECTED, "account", 7, Instant.now(), null));
+        when(repository.listCurrentModels(AiProviderEnum.OPENAI)).thenReturn(List.of(
+                new AiModelSnapshot(modelRef, "GPT Test", Instant.now(), true, null)));
+        when(repository.tryCreateAttemptAndAcquireProviderLease(
+                anyString(), anyString(), any(), any(), anyLong())).thenAnswer(invocation -> {
+                    attemptId.set(invocation.getArgument(0));
+                    state.set(invocation.getArgument(3));
+                    return true;
+                });
+        doAnswer(invocation -> {
+            var expected = invocation.getArgument(1,
+                    ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState.class);
+            var target = invocation.getArgument(2,
+                    ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState.class);
+            assertEquals(expected, state.get());
+            state.set(target);
+            return null;
+        }).when(repository).transitionAttempt(anyString(), any(), any(), any(), any());
+        when(repository.findAttempt(anyString())).thenAnswer(invocation -> Optional.of(
+                new ai.chat2db.community.domain.api.model.ai.subscription.AiAttempt(
+                        attemptId.get(), "message-1", AiProviderEnum.OPENAI, state.get(),
+                        "thread-1", "turn-1", Instant.now(), Instant.now())));
+        when(appServer.startThread("gpt-test")).thenReturn(new AppServerThreadView("thread-1", "session-1"));
+        when(appServer.startTurn(anyString(), anyString(), any()))
+                .thenReturn(new AppServerTurnView("turn-1", "thread-1", "active"));
+        when(identity.currentUserId()).thenReturn(1L);
+        when(bridge.activeAttemptId()).thenAnswer(invocation -> Optional.ofNullable(attemptId.get()));
+        doAnswer(invocation -> {
+            attemptId.set(null);
+            return null;
+        }).when(bridge).clearActiveAttempt();
+
+        SubscriptionSseChatStreamService service = new SubscriptionSseChatStreamService(
+                mock(AiChatStreamAdapter.class), runtime, history, identity);
+        ChatRequest request = new ChatRequest();
+        request.setAccessType(AiAccessType.SUBSCRIPTION);
+        request.setProvider(AiProviderEnum.OPENAI);
+        request.setModel("gpt-test");
+        request.setMessageId("message-1");
+        request.setSessionId("session-1");
+        request.setInput("long running");
+
+        ArgumentCaptor<AppServerEventListener> listenerCaptor = ArgumentCaptor.forClass(AppServerEventListener.class);
+        service.stream(request);
+        assertEquals(ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState.ACTIVE, state.get());
+        verify(runtime).addEventListener(listenerCaptor.capture());
+
+        // Simulate SSE client abort: TurnContext.onClientDisconnected (wired to emitter onCompletion/onError).
+        AppServerEventListener listener = listenerCaptor.getValue();
+        var disconnect = listener.getClass().getDeclaredMethod("onClientDisconnected");
+        disconnect.setAccessible(true);
+        disconnect.invoke(listener);
+
+        assertEquals(ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState.INTERRUPTED, state.get());
+        verify(appServer).interruptTurn("thread-1", "turn-1");
+        verify(repository, atLeastOnce()).releaseProviderLease(eq(AiProviderEnum.OPENAI), anyString());
+        verify(bridge).clearActiveAttempt();
+        verify(runtime).removeEventListener(any());
+    }
+
     private static boolean awaitState(
             AtomicReference<ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState> state,
             ai.chat2db.community.domain.api.model.ai.subscription.AiAttemptState expected,

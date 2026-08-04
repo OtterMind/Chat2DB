@@ -5,12 +5,26 @@ import ai.chat2db.community.web.api.mcp.adapter.AiToolMcpAdapter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Adapts the existing Community database tools to the dedicated subscription MCP bridge. */
 public final class SubscriptionMcpToolExecutor implements Chat2dbToolExecutor {
+
+    /**
+     * Hard cap for metadata discovery tools so a single unreachable datasource cannot stall
+     * the whole subscription turn for minutes (observed ~150s hangs on list_all_databases).
+     */
+    static final long METADATA_TOOL_TIMEOUT_MS = 15_000L;
 
     private final AiToolMcpAdapter adapter;
     private final ObjectMapper mapper;
@@ -28,20 +42,79 @@ public final class SubscriptionMcpToolExecutor implements Chat2dbToolExecutor {
         }
         return switch (toolName) {
             case "list_all_datasources" -> adapter.listAllDataSourcesStrict();
-            case "list_all_tables" -> adapter.listAllTablesStrict(
-                    requiredLong(args, "dataSourceId"), requiredText(args, "databaseName"), text(args, "schemaName"));
-            case "list_all_databases" -> adapter.listAllDatabasesStrict(requiredLong(args, "dataSourceId"));
-            case "list_all_schemas" -> adapter.listAllSchemasStrict(
-                    requiredText(args, "targetDatabaseName"), requiredLong(args, "dataSourceId"));
+            case "list_all_tables" -> {
+                // Validate args before timeout wrap so client/schema errors still throw.
+                Long dataSourceId = requiredLong(args, "dataSourceId");
+                String databaseName = requiredText(args, "databaseName");
+                String schemaName = text(args, "schemaName");
+                yield withMetadataTimeout(toolName, args,
+                        () -> adapter.listAllTablesStrict(dataSourceId, databaseName, schemaName));
+            }
+            case "list_all_databases" -> {
+                Long dataSourceId = requiredLong(args, "dataSourceId");
+                yield withMetadataTimeout(toolName, args,
+                        () -> adapter.listAllDatabasesStrict(dataSourceId));
+            }
+            case "list_all_schemas" -> {
+                String targetDatabaseName = requiredText(args, "targetDatabaseName");
+                Long dataSourceId = requiredLong(args, "dataSourceId");
+                yield withMetadataTimeout(toolName, args,
+                        () -> adapter.listAllSchemasStrict(targetDatabaseName, dataSourceId));
+            }
             case "execute_sql" -> adapter.executeSqlStrict(
                     requiredText(args, "sql"), integer(args, "pageSize"), requiredLong(args, "dataSourceId"),
                     requiredText(args, "databaseName"), text(args, "schemaName"));
-            case "get_tables_schema" -> adapter.getTablesSchemaStrict(
-                    requiredTextList(args, "tableNames"),
-                    requiredLong(args, "dataSourceId"), requiredText(args, "databaseName"), text(args, "schemaName"));
+            case "get_tables_schema" -> {
+                List<String> tableNames = requiredTextList(args, "tableNames");
+                Long dataSourceId = requiredLong(args, "dataSourceId");
+                String databaseName = requiredText(args, "databaseName");
+                String schemaName = text(args, "schemaName");
+                yield withMetadataTimeout(toolName, args,
+                        () -> adapter.getTablesSchemaStrict(tableNames, dataSourceId, databaseName, schemaName));
+            }
             case "text2sql" -> executeText2Sql(args);
             default -> throw new IllegalArgumentException("tool is not allowlisted");
         };
+    }
+
+    /**
+     * Soft-timeout metadata tools: return an ERROR string so the model can pivot instead of
+     * fencing the whole attempt. Also lowers DriverManager login timeout for the call window.
+     */
+    static String withMetadataTimeout(String toolName, JsonNode args, Callable<String> call) {
+        Long dataSourceId = longValue(args, "dataSourceId");
+        int previousLoginTimeout = DriverManager.getLoginTimeout();
+        ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "subscription-mcp-metadata-" + toolName);
+            thread.setDaemon(true);
+            return thread;
+        });
+        try {
+            DriverManager.setLoginTimeout((int) Math.max(1L, METADATA_TOOL_TIMEOUT_MS / 1000L));
+            Future<String> future = executor.submit(call);
+            return future.get(METADATA_TOOL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException timedOut) {
+            return "ERROR: " + toolName + " timed out after "
+                    + (METADATA_TOOL_TIMEOUT_MS / 1000L) + "s"
+                    + (dataSourceId == null ? "" : " for dataSourceId=" + dataSourceId)
+                    + ". Prefer the UI-selected datasource if different, or report the connection is slow/unreachable.";
+        } catch (ExecutionException execution) {
+            Throwable cause = execution.getCause() == null ? execution : execution.getCause();
+            // Argument / contract errors should still surface as exceptions to callers/tests.
+            if (cause instanceof IllegalArgumentException illegalArgument) {
+                throw illegalArgument;
+            }
+            return "ERROR: " + toolName + " failed (" + cause.getClass().getSimpleName() + ")"
+                    + (dataSourceId == null ? "" : " dataSourceId=" + dataSourceId)
+                    + ". Prefer another approach or the UI-selected datasource.";
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return "ERROR: " + toolName + " interrupted"
+                    + (dataSourceId == null ? "" : " dataSourceId=" + dataSourceId) + ".";
+        } finally {
+            DriverManager.setLoginTimeout(previousLoginTimeout);
+            executor.shutdownNow();
+        }
     }
 
     /**

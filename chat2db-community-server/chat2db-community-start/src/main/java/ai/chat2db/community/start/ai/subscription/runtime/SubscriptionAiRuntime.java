@@ -343,6 +343,63 @@ public final class SubscriptionAiRuntime implements SubscriptionAiFacade {
                 ? List.of() : stateRepository().listAttemptsByMessageId(messageId);
     }
 
+    @Override
+    public boolean interruptActiveTurn(AiProviderEnum provider) {
+        requireChatGpt(provider);
+        ensureLedger();
+        IAiSubscriptionStateRepository repository = stateRepository();
+        Set<String> attemptIds = new LinkedHashSet<>();
+        try {
+            repository.currentLease(provider).ifPresent(lease -> attemptIds.add(lease.attemptId()));
+        } catch (RuntimeException ignored) {
+            // Still collect in-process attempt ids below.
+        }
+        DedicatedMcpBridge bridge = mcpBridge;
+        if (bridge != null) {
+            try {
+                bridge.activeAttemptId().ifPresent(attemptIds::add);
+            } catch (RuntimeException ignored) {
+                // Lease release remains the durable recovery path.
+            }
+        }
+        for (AppServerEventListener listener : eventListeners) {
+            if (listener instanceof SubscriptionAttemptFenceListener scoped) {
+                attemptIds.add(scoped.attemptId());
+            }
+        }
+        if (attemptIds.isEmpty()) {
+            log.info("subscription interruptActiveTurn: no active attempt provider={}", provider);
+            return false;
+        }
+        log.info("subscription interruptActiveTurn provider={} attempts={}", provider, attemptIds.size());
+        for (String attemptId : attemptIds) {
+            try {
+                fenceAttempt(attemptId, AiAttemptState.INTERRUPTED, "CLIENT_CANCELLED");
+            } catch (RuntimeException exception) {
+                log.warn("subscription interrupt fence failed attemptId={} reason={}",
+                        attemptId, exception.getClass().getSimpleName());
+            }
+            // Finish path usually releases the lease; force-clear if the stream listener is gone
+            // (desktop Stop only detaches the renderer — the Java turn would otherwise stay leased).
+            try {
+                repository.findAttempt(attemptId).ifPresent(attempt -> {
+                    if (attempt.state().canTransitionTo(AiAttemptState.INTERRUPTED)) {
+                        repository.transitionAttempt(attemptId, attempt.state(), AiAttemptState.INTERRUPTED,
+                                attempt.externalThreadId(), attempt.externalTurnId());
+                    }
+                });
+            } catch (RuntimeException ignored) {
+                // Lease release still runs.
+            }
+            try {
+                repository.releaseProviderLease(provider, attemptId);
+            } catch (RuntimeException ignored) {
+                // Best-effort; next send will still fail closed if lease remains.
+            }
+        }
+        return true;
+    }
+
     public CodexAppServerPort appServer() {
         return requireLifecyclePort();
     }

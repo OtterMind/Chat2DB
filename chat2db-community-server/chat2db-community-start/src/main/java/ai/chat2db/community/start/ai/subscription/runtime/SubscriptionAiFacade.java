@@ -40,6 +40,15 @@ public interface SubscriptionAiFacade {
 
     List<AiAttempt> attempts(String messageId, String conversationId);
 
+    /**
+     * User Stop on the renderer: interrupt the active subscription turn and release the
+     * single-provider lease. Desktop JCEF does not abort the Java-side stream, so this
+     * explicit control-plane call is required for Stop to free the next send.
+     *
+     * @return true when at least one active attempt/lease was found and interrupted
+     */
+    boolean interruptActiveTurn(AiProviderEnum provider);
+
     record ProviderView(
             AiProviderEnum provider,
             String displayName,

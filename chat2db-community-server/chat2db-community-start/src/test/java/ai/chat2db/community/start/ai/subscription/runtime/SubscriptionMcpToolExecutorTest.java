@@ -57,4 +57,19 @@ class SubscriptionMcpToolExecutorTest {
         org.junit.jupiter.api.Assertions.assertTrue(result.contains("daily order volume"), result);
         verifyNoInteractions(adapter);
     }
+
+    @Test
+    void metadataToolTimeoutReturnsSoftErrorInsteadOfHanging() {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode args = mapper.createObjectNode().put("dataSourceId", 9);
+        String result = SubscriptionMcpToolExecutor.withMetadataTimeout(
+                "list_all_databases",
+                args,
+                () -> {
+                    Thread.sleep(SubscriptionMcpToolExecutor.METADATA_TOOL_TIMEOUT_MS + 5_000L);
+                    return "should-not-return";
+                });
+        org.junit.jupiter.api.Assertions.assertTrue(result.startsWith("ERROR: list_all_databases timed out"), result);
+        org.junit.jupiter.api.Assertions.assertTrue(result.contains("dataSourceId=9"), result);
+    }
 }

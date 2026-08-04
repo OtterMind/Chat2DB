@@ -48,6 +48,12 @@ public final class Chat2dbMcpToolPolicy {
                     + "get_tables_schema, execute_sql, text2sql. "
                     + "Call these tools only as direct MCP/function tool calls against server "
                     + "chat2db_subscription (or namespace mcp__chat2db_subscription). "
+                    + "UI selection priority: when the user message includes a Current UI selection block with "
+                    + "dataSourceId and/or databaseName, use those ids first for list_all_tables / "
+                    + "get_tables_schema / execute_sql / list_all_databases. Do not call list_all_datasources "
+                    + "first unless the selection is missing. Only expand to other datasources if the selected "
+                    + "one is unreachable, empty, or clearly lacks the needed tables/data — and say briefly "
+                    + "why you are expanding. "
                     + "Prefer writing SQL yourself after list_all_tables/get_tables_schema, then execute_sql. "
                     + "Avoid text2sql on subscription turns: you are already the NL2SQL model; text2sql is a "
                     + "legacy nested API-key helper and may return TEXT2SQL_UNAVAILABLE_ON_SUBSCRIPTION. "
@@ -59,6 +65,32 @@ public final class Chat2dbMcpToolPolicy {
                     + "Never call list_mcp_resources, list_mcp_resource_templates, or read_mcp_resource; "
                     + "this isolated server intentionally exposes no MCP resources. "
                     + "Do not load external skills or agent instructions for tool routing.";
+
+    /**
+     * Appends a machine-readable UI selection block for the model prompt when the renderer
+     * provided a cascader selection. Safe: ids and names only, never credentials.
+     */
+    public static String formatUiSelectionContext(Long dataSourceId, String databaseName, String schemaName) {
+        if (dataSourceId == null
+                && (databaseName == null || databaseName.isBlank())
+                && (schemaName == null || schemaName.isBlank())) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Current UI selection (priority target — use first, expand only if needed):\n");
+        if (dataSourceId != null) {
+            sb.append("dataSourceId=").append(dataSourceId).append('\n');
+        }
+        if (databaseName != null && !databaseName.isBlank()) {
+            sb.append("databaseName=").append(databaseName.trim()).append('\n');
+        }
+        if (schemaName != null && !schemaName.isBlank()) {
+            sb.append("schemaName=").append(schemaName.trim()).append('\n');
+        }
+        sb.append("Prefer tools with these identifiers. Avoid listing other datasources unless the ")
+                .append("selected one cannot answer the question.\n");
+        return sb.toString();
+    }
 
     /**
      * Native item types that must never run unless they are the allowlisted Chat2DB MCP surface.

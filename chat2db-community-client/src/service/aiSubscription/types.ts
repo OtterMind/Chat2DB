@@ -36,6 +36,8 @@ export interface AiSubscriptionClient {
     modelRefKey: string;
   }): Promise<AiModelPreferenceView>;
   listAttempts(params: { messageId?: string; conversationId?: string }): Promise<AiAttemptView[]>;
+  /** User Stop: interrupt in-flight subscription turn and free provider lease (JCEF desktop). */
+  interruptActiveTurn(params?: { provider?: AiProviderId }): Promise<{ interrupted: boolean; provider: AiProviderId }>;
   createSecretImportAttempt(): Promise<AiSecretImportAttemptView>;
   /**
    * Dedicated encrypted import channel. Implementations must not log envelope ciphertext

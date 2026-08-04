@@ -52,6 +52,10 @@ const setConversationModel = createRequest<
 const listAttempts = createRequest<{ messageId?: string; conversationId?: string }, AiAttemptView[]>(
   '/api/v3/ai/subscription/attempts',
 );
+const interruptActiveTurn = createRequest<
+  { provider?: AiProviderId } | void,
+  { interrupted: boolean; provider: AiProviderId }
+>('/api/v3/ai/subscription/turns/interrupt', { method: 'post' });
 interface SecretImportStartRaw {
   attemptId: string;
   publicKeySpkiBase64: string;
@@ -85,6 +89,10 @@ export function createHttpAiSubscriptionClient(): AiSubscriptionClient {
     setGlobalDefaultModel: (modelRefKey) => setGlobalDefaultModel({ modelRefKey }),
     setConversationModel: (params) => setConversationModel(params),
     listAttempts: (params) => listAttempts(params).then((items) => items || []),
+    interruptActiveTurn: (params) =>
+      interruptActiveTurn(
+        params?.provider ? { provider: params.provider } : (undefined as void),
+      ).then((result) => result || { interrupted: false, provider: 'OPENAI' as AiProviderId }),
     createSecretImportAttempt: async () => {
       const start = await secretImportRequest<SecretImportStartRaw>('/api/ai/secret-import/start', {});
       return { ...start, items: [], completed: false };

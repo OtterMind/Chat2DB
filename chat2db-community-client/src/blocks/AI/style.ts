@@ -859,6 +859,123 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       padding: 4px 10px;
     `,
 
+    interleavedStream: css`
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+    `,
+
+    inlineAnswerSegment: css`
+      min-width: 0;
+      width: 100%;
+    `,
+
+    inlineToolRow: css`
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid ${token.colorBorderSecondary};
+      background: ${token.colorFillTertiary};
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      color: ${token.colorTextSecondary};
+      max-width: 100%;
+
+      &[data-tool-state='call'] {
+        border-color: color-mix(in srgb, ${token.colorPrimary} 28%, ${token.colorBorderSecondary});
+      }
+
+      &[data-tool-state='result'] {
+        border-color: color-mix(in srgb, ${token.colorSuccess} 30%, ${token.colorBorderSecondary});
+      }
+
+      &[data-tool-state='error'] {
+        border-color: color-mix(in srgb, ${token.colorError} 35%, ${token.colorBorderSecondary});
+        color: ${token.colorError};
+      }
+    `,
+
+    inlineToolGlyph: css`
+      flex-shrink: 0;
+      width: 12px;
+      text-align: center;
+      color: ${token.colorTextTertiary};
+      font-weight: 600;
+    `,
+
+    inlineToolKind: css`
+      flex-shrink: 0;
+      color: ${token.colorTextTertiary};
+      text-transform: lowercase;
+      letter-spacing: 0.01em;
+    `,
+
+    inlineToolName: css`
+      color: ${token.colorText};
+      font-weight: 600;
+      word-break: break-all;
+    `,
+
+    inlineToolStatus: css`
+      color: ${token.colorTextSecondary};
+      opacity: 0.9;
+      word-break: break-word;
+    `,
+
+    inlineReasoning: css`
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      color: ${token.colorTextSecondary};
+    `,
+
+    inlineReasoningToggle: css`
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: left;
+
+      &:hover {
+        color: ${token.colorText};
+      }
+    `,
+
+    inlineReasoningLabel: css`
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-style: italic;
+    `,
+
+    inlineReasoningBody: css`
+      padding: 0 0 0 12px;
+      border-left: 1px solid ${token.colorBorderSecondary};
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: ${token.colorTextSecondary};
+    `,
+
     inputWrap: css`
       flex-shrink: 0;
       display: flex;

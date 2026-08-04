@@ -169,6 +169,9 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
 
         String sessionId = prepareSession(request);
         TurnContext context = new TurnContext(attemptId, messageId, modelRef, sessionId, emitter);
+        // Client stop/abort only closes the SSE; without these hooks the Codex turn and
+        // provider lease keep running and the next send hits PROVIDER_BUSY.
+        context.attachClientDisconnectHandlers();
         try {
             runtime.addEventListener(context);
             runtime.mcpBridge().bindActiveAttempt(attemptId);
@@ -409,6 +412,12 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isBlank()) {
             prompt.append("System instructions:\n").append(request.getSystemPrompt()).append("\n\n");
         }
+        // Pin the renderer cascader selection so the model prioritizes the chosen datasource.
+        String selection = Chat2dbMcpToolPolicy.formatUiSelectionContext(
+                request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName());
+        if (!selection.isBlank()) {
+            prompt.append(selection).append('\n');
+        }
         if (!history.isEmpty()) {
             prompt.append("Conversation history:\n");
             for (ChatMessage message : history) {
@@ -462,7 +471,12 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
                 emitter.send(SseEmitter.event().name(event).data(data));
             }
         } catch (IOException exception) {
-            emitter.completeWithError(exception);
+            // Broken pipe after Stop: completeWithError triggers onError → client-disconnect cleanup.
+            try {
+                emitter.completeWithError(exception);
+            } catch (RuntimeException ignored) {
+                // Emitter may already be completed by the disconnect handler.
+            }
         }
     }
 
@@ -492,6 +506,30 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
             this.modelRef = modelRef;
             this.sessionId = sessionId;
             this.emitter = emitter;
+        }
+
+        /**
+         * When the renderer aborts the SSE (Stop), interrupt the app-server turn and release
+         * the single-provider lease so a new send can start immediately.
+         * {@link #finish} is idempotent; normal completion also fires onCompletion harmlessly.
+         */
+        private void attachClientDisconnectHandlers() {
+            Runnable clientGone = this::onClientDisconnected;
+            emitter.onCompletion(clientGone);
+            emitter.onTimeout(clientGone);
+            emitter.onError(error -> clientGone.run());
+        }
+
+        private void onClientDisconnected() {
+            synchronized (eventGate) {
+                if (terminal.get()) {
+                    return;
+                }
+                LOG.info("subscription stream client disconnected attemptId={} threadId={} turnId={}",
+                        attemptId, threadId, turnId);
+                interruptBestEffort();
+                finish(AiAttemptState.INTERRUPTED, "CLIENT_DISCONNECTED");
+            }
         }
 
         private void armWatchdogs() {
@@ -538,11 +576,16 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
                     } else if (Chat2dbMcpToolPolicy.isDirectChat2dbMcpToolCall(item)) {
                         // Direct MCP must reach Chat2DB's journal promptly; code-mode wrappers hang here.
                         armMcpStartWatchdog();
+                        emitToolLifecycle("tool_call", item, null);
                     }
                 } else if ("item/completed".equals(method) || "item/agentMessage/delta".equals(method)
                         || "item/reasoning/summaryTextDelta".equals(method)
                         || "turn/completed".equals(method)) {
                     clearMcpStartWatchdog();
+                    if ("item/completed".equals(method)
+                            && Chat2dbMcpToolPolicy.isDirectChat2dbMcpToolCall(params.path("item"))) {
+                        emitToolLifecycle("tool_result", params.path("item"), "ok");
+                    }
                     if ("item/agentMessage/delta".equals(method)) {
                         appendDelta(params.path("delta").asText(""), false);
                     } else if ("item/reasoning/summaryTextDelta".equals(method)) {
@@ -660,6 +703,51 @@ public final class SubscriptionSseChatStreamService implements IAiChatStreamServ
             }
             return (threadId == null || eventThread == null || threadId.equals(eventThread))
                     && (turnId == null || eventTurn == null || turnId.equals(eventTurn));
+        }
+
+        /**
+         * Surfaces MCP tool start/finish in the renderer thought strip (name only; no SQL/args).
+         */
+        private void emitToolLifecycle(String messageType, JsonNode item, String statusHint) {
+            if (terminal.get() || item == null || !item.isObject()) {
+                return;
+            }
+            String toolName = extractMcpToolName(item);
+            if (toolName == null || toolName.isBlank()) {
+                toolName = "mcp_tool";
+            }
+            String content = "tool_result".equals(messageType)
+                    ? (statusHint == null || statusHint.isBlank() ? "returned" : statusHint)
+                    : "";
+            sendEvent(emitter, messageType, Map.of(
+                    "type", messageType,
+                    "messageType", messageType,
+                    "name", toolName,
+                    "content", content,
+                    "ts", Instant.now().toEpochMilli()));
+        }
+
+        private static String extractMcpToolName(JsonNode item) {
+            String tool = textOrBlank(item.path("tool"));
+            if (!tool.isBlank()) {
+                return tool;
+            }
+            String name = textOrBlank(item.path("name"));
+            if (name.startsWith("mcp__chat2db_subscription__")) {
+                return name.substring("mcp__chat2db_subscription__".length());
+            }
+            if (name.startsWith("mcp__chat2db_subscription")) {
+                String rest = name.substring("mcp__chat2db_subscription".length());
+                return rest.startsWith("__") ? rest.substring(2) : rest;
+            }
+            return name;
+        }
+
+        private static String textOrBlank(JsonNode node) {
+            if (node == null || node.isNull() || !node.isTextual()) {
+                return "";
+            }
+            return node.asText("").trim();
         }
 
         private void appendDelta(String delta, boolean reasoningDelta) {

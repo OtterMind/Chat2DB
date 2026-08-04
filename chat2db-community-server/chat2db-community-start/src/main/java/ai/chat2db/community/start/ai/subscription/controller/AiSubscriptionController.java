@@ -118,6 +118,19 @@ public class AiSubscriptionController {
         return DataResult.of(facade.attempts(messageId, conversationId).stream().map(AttemptResponse::from).toList());
     }
 
+    /**
+     * Renderer Stop: interrupt the in-flight subscription turn and free the provider lease.
+     * Required for JCEF/desktop where aborting the UI stream does not complete the Java SseEmitter.
+     */
+    @PostMapping("/turns/interrupt")
+    public DataResult<InterruptTurnResponse> interruptActiveTurn(
+            @RequestBody(required = false) ProviderRequest request) {
+        AiProviderEnum provider = request == null || request.provider() == null
+                ? AiProviderEnum.OPENAI : requireChatGpt(request.provider());
+        boolean interrupted = facade.interruptActiveTurn(provider);
+        return DataResult.of(new InterruptTurnResponse(interrupted, provider));
+    }
+
     private static AiProviderEnum requireChatGpt(AiProviderEnum provider) {
         if (provider != AiProviderEnum.OPENAI) {
             throw new IllegalArgumentException("provider is not eligible for subscription login");
@@ -141,6 +154,9 @@ public class AiSubscriptionController {
     }
 
     public record CancelConnectRequest(AiProviderEnum provider, String attemptId) {
+    }
+
+    public record InterruptTurnResponse(boolean interrupted, AiProviderEnum provider) {
     }
 
     public record ModelPreferenceRequest(String conversationId, String modelRefKey) {
