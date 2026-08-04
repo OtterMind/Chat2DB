@@ -177,7 +177,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const backendEditorHintsRequestRef = useRef(0);
     const backendEditorHintsEpochRef = useRef(0);
     const autoFillEditInProgressRef = useRef(false);
-    const cursorPositionRef = useRef<HTMLDivElement | null>(null);
+    const cursorPositionRef = useRef<HTMLSpanElement | null>(null);
 
     const sqlStatementListRef = useRef<SqlStatement[]>([]);
     const markMessageListRef = useRef<MarkMessage[]>([]);
