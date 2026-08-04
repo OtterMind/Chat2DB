@@ -38,7 +38,10 @@ public class RequestMappingUtils {
         for (Object bean : beansWithAnnotation.values()) {
             Class<?> beanClass = AopProxyUtils.ultimateTargetClass(bean);
             RequestMapping restController = beanClass.getAnnotation(RequestMapping.class);
-            String prefixUrl = restController.value()[0];
+            String prefixUrl = "";
+            if (restController != null && restController.value().length > 0) {
+                prefixUrl = restController.value()[0];
+            }
             Method[] methods = beanClass.getDeclaredMethods();
             for (Method method : methods) {
                 if (method.isAnnotationPresent(RequestMapping.class)) {

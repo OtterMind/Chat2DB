@@ -51,10 +51,17 @@ public class TaskRecordServiceImpl implements ITaskRecordService {
 
     @Override
     public void stopTask(Long id) {
+        if (!taskSchedulerService.cancel(id)) {
+            Task task = getTask(id);
+            if (task == null || StringUtils.equalsAnyIgnoreCase(
+                    task.getTaskStatus(), "FINISHED", STATUS_STOP, "ERROR")) {
+                return;
+            }
+        }
         TaskRecordUpdateRequest request = new TaskRecordUpdateRequest();
         request.setId(id);
         request.setTaskStatus(STATUS_STOP);
-        taskSchedulerService.cancel(id);
+        request.setDownloadUrl("");
         updateTask(request);
     }
 

@@ -240,38 +240,52 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         boolean limitRowSize = request.isLimitRowSize();
         Integer offset = request.getOffset();
         Integer count = request.getCount();
+        ISqlExecutionStatementListener statementListener = request.getStatementListener();
+        Runnable cancellationChecker = request.getCancellationChecker();
         Assert.notNull(sql, "SQL must not be null");
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
+        checkTaskCancellation(cancellationChecker);
+        PreparedStatement statementToNotify = null;
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
-            if (sql.toLowerCase().startsWith("select")) {
-                if (offset != null && count != null) {
-                    stmt.setMaxRows(offset + count);
+            statementToNotify = stmt;
+            notifyStatementCreated(statementListener, stmt);
+            try {
+                checkTaskCancellation(cancellationChecker);
+                stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+                if (sql.toLowerCase().startsWith("select")) {
+                    if (offset != null && count != null) {
+                        stmt.setMaxRows(offset + count);
+                    }
                 }
+                long startedAtEpochMs = System.currentTimeMillis();
+                TimeInterval timeInterval = new TimeInterval();
+                ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
+                long executeStartedNanos = System.nanoTime();
+                boolean query = stmt.execute();
+                long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+                executionContext = executionContextAfterExecute(
+                        new SimpleSqlStatement(sql), connection, executionContext);
+                long fetchDurationNanos = 0L;
+                executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
+                if (query) {
+                    long fetchStartedNanos = System.nanoTime();
+                    executeResult = generateQueryExecuteResponse(stmt, limitRowSize, offset, count);
+                    fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
+                } else {
+                    executeResult.setUpdateCount(stmt.getUpdateCount());
+                }
+                executeResult.setDuration(timeInterval.interval());
+                executeResult.setStatementSequence(1);
+                executeResult.setExecutionContext(executionContext);
+                executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                        ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
+                        CollectionUtils.size(executeResult.getDataList())));
+            } catch (SQLException e) {
+                checkTaskCancellation(cancellationChecker);
+                throw e;
             }
-            long startedAtEpochMs = System.currentTimeMillis();
-            TimeInterval timeInterval = new TimeInterval();
-            ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
-            long executeStartedNanos = System.nanoTime();
-            boolean query = stmt.execute();
-            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
-            executionContext = executionContextAfterExecute(
-                    new SimpleSqlStatement(sql), connection, executionContext);
-            long fetchDurationNanos = 0L;
-            executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
-            if (query) {
-                long fetchStartedNanos = System.nanoTime();
-                executeResult = generateQueryExecuteResponse(stmt, limitRowSize, offset, count);
-                fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
-            } else {
-                executeResult.setUpdateCount(stmt.getUpdateCount());
-            }
-            executeResult.setDuration(timeInterval.interval());
-            executeResult.setStatementSequence(1);
-            executeResult.setExecutionContext(executionContext);
-            executeResult.setExecutionMetrics(ExecutionTiming.complete(
-                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
-                    CollectionUtils.size(executeResult.getDataList())));
+        } finally {
+            notifyStatementClosed(statementListener, statementToNotify);
         }
         return executeResult;
     }
@@ -415,11 +429,24 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
 
     public ExecuteResponse execute(Connection connection, String sql) throws SQLException {
-        return execute(SqlStatementExecuteRequest.builder()
-                .sql(sql)
-                .connection(connection)
-                .limitRowSize(true)
-                .build());
+        return execute(connection, sql, null, null);
+    }
+
+    public ExecuteResponse execute(Connection connection, String sql,
+                                   ISqlExecutionStatementListener statementListener,
+                                   Runnable cancellationChecker) throws SQLException {
+        try {
+            return execute(SqlStatementExecuteRequest.builder()
+                    .sql(sql)
+                    .connection(connection)
+                    .limitRowSize(true)
+                    .statementListener(statementListener)
+                    .cancellationChecker(cancellationChecker)
+                    .build());
+        } catch (SQLException e) {
+            checkTaskCancellation(cancellationChecker);
+            throw e;
+        }
     }
 
 
@@ -1483,15 +1510,31 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     public void execute(Connection connection, String sql, int batchSize, IResultSetConsumer consumer) {
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setFetchSize(batchSize);
-            boolean query = stmt.execute();
-            if (query) {
-                try (ResultSet rs = stmt.getResultSet()) {
-                    consumer.accept(rs);
+        execute(connection, sql, batchSize, consumer, null, null);
+    }
+
+    public void execute(Connection connection, String sql, int batchSize, IResultSetConsumer consumer,
+                        ISqlExecutionStatementListener statementListener, Runnable cancellationChecker) {
+        checkTaskCancellation(cancellationChecker);
+        try {
+            PreparedStatement stmt = connection.prepareStatement(sql);
+            notifyStatementCreated(statementListener, stmt);
+            try {
+                try (stmt) {
+                    checkTaskCancellation(cancellationChecker);
+                    stmt.setFetchSize(batchSize);
+                    boolean query = stmt.execute();
+                    if (query) {
+                        try (ResultSet rs = stmt.getResultSet()) {
+                            consumer.accept(rs);
+                        }
+                    }
                 }
+            } finally {
+                notifyStatementClosed(statementListener, stmt);
             }
         } catch (Exception e) {
+            checkTaskCancellation(cancellationChecker);
             log.error("execute error:{}", sql, e);
             throw new RuntimeException(e);
         }
@@ -1503,6 +1546,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String sql = request.getSql();
         int batchSize = request.getBatchSize();
         IResultSetConsumer consumer = request.getConsumer();
+        ISqlExecutionStatementListener statementListener = request.getStatementListener();
+        Runnable cancellationChecker = request.getCancellationChecker();
         final boolean manageTransaction;
         try {
             manageTransaction = connection.getAutoCommit();
@@ -1513,21 +1558,30 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         boolean transactionResolved = false;
         boolean discardRequired = false;
         Exception failure = null;
-        try (PreparedStatement stmt = connection.prepareStatement(sql,
-                ResultSet.TYPE_FORWARD_ONLY,
-                ResultSet.CONCUR_READ_ONLY
-        )) {
-            if (manageTransaction) {
-                transactionStarted = true;
-                connection.setAutoCommit(false);
-            }
-            stmt.setFetchSize(batchSize);
-            try (ResultSet rs = stmt.executeQuery()) {
-                consumer.accept(rs);
-            }
-            if (transactionStarted) {
-                connection.commit();
-                transactionResolved = true;
+        try {
+            checkTaskCancellation(cancellationChecker);
+            PreparedStatement stmt = connection.prepareStatement(
+                    sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+            notifyStatementCreated(statementListener, stmt);
+            try {
+                try (stmt) {
+                    if (manageTransaction) {
+                        transactionStarted = true;
+                        connection.setAutoCommit(false);
+                    }
+                    checkTaskCancellation(cancellationChecker);
+                    stmt.setFetchSize(batchSize);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        consumer.accept(rs);
+                    }
+                    checkTaskCancellation(cancellationChecker);
+                    if (transactionStarted) {
+                        connection.commit();
+                        transactionResolved = true;
+                    }
+                }
+            } finally {
+                notifyStatementClosed(statementListener, stmt);
             }
         } catch (Exception e) {
             failure = e;
@@ -1560,6 +1614,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             discardConnection(connection, failure);
         }
         if (failure != null) {
+            checkTaskCancellation(cancellationChecker);
             log.error("Failed to fetch table records. Query: {}", sql, failure);
             throw new RuntimeException(failure);
         }
@@ -1589,14 +1644,45 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList) {
+        executeBatchInsert(connection, sqlCacheList, null, null);
+    }
+
+    public void executeBatchInsert(Connection connection, List<String> sqlCacheList,
+                                   ISqlExecutionStatementListener statementListener,
+                                   Runnable cancellationChecker) {
         try {
             for (String sql : sqlCacheList) {
-                try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                checkTaskCancellation(cancellationChecker);
+                PreparedStatement stmt = connection.prepareStatement(sql);
+                try (stmt) {
+                    notifyStatementCreated(statementListener, stmt);
+                    checkTaskCancellation(cancellationChecker);
                     stmt.executeUpdate();
+                } finally {
+                    notifyStatementClosed(statementListener, stmt);
                 }
             }
         } catch (SQLException e) {
+            checkTaskCancellation(cancellationChecker);
             throw new RuntimeException(e);
+        }
+    }
+
+    private void checkTaskCancellation(Runnable cancellationChecker) {
+        if (cancellationChecker != null) {
+            cancellationChecker.run();
+        }
+    }
+
+    private void notifyStatementCreated(ISqlExecutionStatementListener statementListener, Statement statement) {
+        if (statementListener != null && statement != null) {
+            statementListener.onStatementCreated(statement);
+        }
+    }
+
+    private void notifyStatementClosed(ISqlExecutionStatementListener statementListener, Statement statement) {
+        if (statementListener != null && statement != null) {
+            statementListener.onStatementClosed(statement);
         }
     }
 

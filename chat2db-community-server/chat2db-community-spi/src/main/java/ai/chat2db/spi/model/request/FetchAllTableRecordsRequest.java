@@ -1,5 +1,6 @@
 package ai.chat2db.spi.model.request;
 
+import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.spi.IResultSetConsumer;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,4 +29,8 @@ public class FetchAllTableRecordsRequest {
 
     @NotNull
     private IResultSetConsumer consumer;
+
+    private ISqlExecutionStatementListener statementListener;
+
+    private Runnable cancellationChecker;
 }

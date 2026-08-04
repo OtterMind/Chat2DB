@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 
 @Slf4j
 @Service
@@ -36,6 +37,8 @@ public class TaskExportServiceImpl implements ITaskExportService {
                 default:
                     break;
             }
+        } catch (CancellationException e) {
+            throw e;
         } catch (Exception e) { // impl-contract: fallback - async export reports failure through AsyncContext.error.
             log.error("exportSqlFile error", e);
             asyncContext.error(e.getMessage());
@@ -50,6 +53,7 @@ public class TaskExportServiceImpl implements ITaskExportService {
                 return;
             }
             for (String tableName : param.getTableNames()) {
+                asyncContext.checkCancelled();
                 Chat2DBContext.getDbManager()
                     .exportTable(Chat2DBContext.getConnection(), param.getDatabaseName(), param.getSchemaName(),
                             tableName, asyncContext);
@@ -69,6 +73,7 @@ public class TaskExportServiceImpl implements ITaskExportService {
             }
         }
         for (String table : tables) {
+            asyncContext.checkCancelled();
             Chat2DBContext.getDbManager()
                     .exportTableData(Chat2DBContext.getConnection(), param.getDatabaseName(), param.getSchemaName(),
                             table, asyncContext);

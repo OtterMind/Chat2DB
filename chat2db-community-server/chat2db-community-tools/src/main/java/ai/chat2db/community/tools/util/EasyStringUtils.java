@@ -3,7 +3,6 @@ package ai.chat2db.community.tools.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import jakarta.validation.constraints.NotNull;
-import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
@@ -40,7 +39,7 @@ public class EasyStringUtils {
         if (StringUtils.isBlank(workNo) || StringUtils.isBlank(name)) {
             return name;
         }
-        String cutName = RegExUtils.removeFirst(name, workNo);
+        String cutName = StringUtils.removeStart(name, workNo);
         int lastIndex = cutName.length();
         for (int i = cutName.length() - 1; i >= 0; i--) {
             char c = cutName.charAt(i);
@@ -145,18 +144,19 @@ public class EasyStringUtils {
     }
 
     public static String getBitString(byte[] bytes, final int precision) {
-        if (bytes == null || bytes.length == 0) {
+        if (bytes == null || bytes.length == 0 || precision <= 0) {
             return "";
         }
 
         StringBuilder builder = new StringBuilder(precision);
         for (byte b : bytes) {
-            builder.append(Integer.toBinaryString(b & 0xFF));
+            builder.append(Strings.padStart(Integer.toBinaryString(b & 0xFF), 8, '0'));
         }
         String bitString = builder.toString();
-        bitString = Strings.padStart(bitString, precision, '0');
-
-        return bitString;
+        if (bitString.length() > precision) {
+            return bitString.substring(bitString.length() - precision);
+        }
+        return Strings.padStart(bitString, precision, '0');
     }
 
 

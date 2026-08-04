@@ -23,12 +23,14 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
 import java.util.*;
+import java.util.concurrent.CancellationException;
 
 
 @Slf4j
 public abstract class BaseExcelImporter extends BaseImporter {
     @Override
     protected void doImportData(ImportAsyncContext context, List<TableColumn> columns) {
+        context.checkCancelled();
         ExcelTypeEnum excelType = getExcelType();
         NoModelDataListener noModelDataListener = new NoModelDataListener(context, columns);
         EasyExcel.read(context.getFile(), noModelDataListener)
@@ -36,6 +38,7 @@ public abstract class BaseExcelImporter extends BaseImporter {
                 .sheet()
                 .headRowNumber(1)
                 .doRead();
+        context.checkCancelled();
 
     }
 
@@ -79,6 +82,7 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         @Override
         public void invokeHead(Map<Integer, ReadCellData<?>> headMap, AnalysisContext context) {
+            this.context.checkCancelled();
             Map<Integer, String> map = ConverterUtils.convertToStringMap(headMap, context);
             this.headMap = invertMap(map);
             this.tableColumns = getTableColumns(columns, this.headMap);
@@ -111,6 +115,7 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         @Override
         public void invoke(Map<Integer, String> data, AnalysisContext context) {
+            this.context.checkCancelled();
             if (data == null || data.isEmpty()) {
                 return;
             }
@@ -174,15 +179,21 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         @Override
         public void doAfterAllAnalysed(AnalysisContext context) {
+            this.context.checkCancelled();
             executeBatchInsert();
         }
 
         private void executeBatchInsert() {
             try {
+                context.checkCancelled();
                 if (CollectionUtils.isNotEmpty(sqlList)) {
                     context.info(String.format("Executing batch insert: %s", sqlList.size()));
-                    DefaultSQLExecutor.getInstance().executeBatchInsert(connection, sqlList);
+                    DefaultSQLExecutor.getInstance().executeBatchInsert(
+                            connection, sqlList, context, context::checkCancelled);
+                    context.checkCancelled();
                 }
+            } catch (CancellationException e) {
+                throw e;
             } catch (Exception e) {
                 log.error("Error executing batch insert", e);
                 context.error(String.format("Error executing batch insert: %s,%s", e.getMessage(), sqlList.toString()));

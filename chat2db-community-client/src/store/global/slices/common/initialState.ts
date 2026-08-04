@@ -1,6 +1,7 @@
 import React from 'react';
 import { IframeType, ServiceStatus } from '@/constants/common';
 import { APP_URL_CONFIG_OVERSEAS } from '@/constants/appConfig';
+import { DEFAULT_MAIN_PAGE_ACTIVE_TAB } from '@/utils/mainPageNavigation';
 import { isDesktop } from '@/utils/env';
 export interface CommonState {
   /**
@@ -57,7 +58,7 @@ export interface CommonState {
 
 export const initialCommonState: CommonState = {
   appTitleBarRightComponent: null,
-  mainPageActiveTab: 'stream',
+  mainPageActiveTab: DEFAULT_MAIN_PAGE_ACTIVE_TAB,
   focusedContent: null,
   serviceStatus: isDesktop ? ServiceStatus.PENDING : ServiceStatus.SUCCESS,
   systemErrorMessageApi: null,

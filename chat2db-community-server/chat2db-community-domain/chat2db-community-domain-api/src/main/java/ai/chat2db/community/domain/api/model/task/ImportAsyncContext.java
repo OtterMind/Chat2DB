@@ -39,10 +39,12 @@ public class ImportAsyncContext extends AsyncContext {
     }
 
     public void execute(List<String> sqls) {
+        checkCancelled();
         if (CollectionUtils.isEmpty(sqls) || sqlExecutor == null) {
             return;
         }
-        String message = sqlExecutor.executeBatch(nextBatch(), sqls);
+        String message = sqlExecutor.executeBatch(nextBatch(), sqls, this, this::checkCancelled);
+        checkCancelled();
         if ("success".equals(message)) {
             info("batch execute success :" + batch);
         } else {
@@ -51,10 +53,12 @@ public class ImportAsyncContext extends AsyncContext {
     }
 
     public void execute(String sql) {
+        checkCancelled();
         if (sqlExecutor == null) {
             return;
         }
-        String message = sqlExecutor.executeSql(nextBatch(), sql);
+        String message = sqlExecutor.executeSql(nextBatch(), sql, this, this::checkCancelled);
+        checkCancelled();
         if ("success".equals(message)) {
             info("batch execute success :" + batch);
         } else {
