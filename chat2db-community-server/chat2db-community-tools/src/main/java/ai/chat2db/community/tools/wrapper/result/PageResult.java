@@ -115,7 +115,7 @@ public class PageResult<T> implements IResult<List<T>> {
 
     public Boolean calculateHasNextPage() {
         if (total > 0) {
-            return (long)pageSize * pageNo <= total;
+            return (long)pageSize * pageNo < total;
         }
         if (data == null || data.isEmpty()) {
             return false;
