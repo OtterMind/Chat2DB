@@ -4,8 +4,13 @@ export function refreshLocalFileWorkspaceTab(
   workspaceTabList: IWorkspaceTab[] | null | undefined,
   filePath: string,
   nextUniqueData: IBoundInfo,
+  targetWorkspaceTabId?: string | number,
 ) {
-  const existingTab = workspaceTabList?.find((tab) => tab.uniqueData?.filePath === filePath);
+  const existingTab = workspaceTabList?.find(
+    (tab) =>
+      tab.uniqueData?.filePath === filePath &&
+      (targetWorkspaceTabId === undefined || tab.id === targetWorkspaceTabId),
+  );
   if (!workspaceTabList || !existingTab) {
     return undefined;
   }

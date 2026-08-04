@@ -60,6 +60,7 @@ import {
   shortcutBindingToMonacoKeybinding,
 } from '@/constants/shortcut';
 import { useStyles } from './style';
+import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
 
 const INSERT_VALUE_HINT_ACTION_ID = 'chat2db-insert-value-hints';
 const EDITOR_ESCAPE_KEY_CODE = 'Escape';
@@ -77,6 +78,7 @@ export interface SQLEditorProps {
   onChange?: (value: string) => void;
   /** Immediate editor value change callback for lightweight UI state. */
   onContentChange?: (value: string) => void;
+  onFileEncodingChange?: (charset?: string) => Promise<void>;
 
   dbInfo: IBoundInfo;
   active?: boolean;
@@ -135,6 +137,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       active,
       onChange,
       onContentChange,
+      onFileEncodingChange,
       onContextMenu,
       className,
       readOnly,
@@ -1005,8 +1008,15 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             canShow={() => !contextMenuInfo?.open}
           />
         </div>
-        <div ref={cursorPositionRef} className={styles.cursorStatus}>
-          Ln 1, Col 1
+        <div className={styles.cursorStatus}>
+          <span ref={cursorPositionRef}>Ln 1, Col 1</span>
+          {dbInfo.filePath && onFileEncodingChange && (
+            <LocalFileEncodingSelect
+              charset={dbInfo.fileCharset}
+              bom={dbInfo.fileBom}
+              onEncodingChange={onFileEncodingChange}
+            />
+          )}
         </div>
       </div>
     );

@@ -198,6 +198,31 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     sqlEditorRef.current?.setValue(value, _type);
   }, []);
 
+  const handleFileEncodingChange = useCallback(
+    async (charset?: string) => {
+      if (!dbInfo.filePath) {
+        return;
+      }
+      const file = await useWorkspaceStore.getState().readFile(dbInfo.filePath, dbInfo.fileExtension, {
+        rootToken: dbInfo.fileRootToken,
+        relativePath: dbInfo.fileRelativePath,
+        charset,
+        workspaceTabId: dbInfo.workspaceTabId,
+      });
+      if (!file) {
+        return;
+      }
+      setValue(file.content, 'reset');
+      setDBInfo({
+        ...dbInfo,
+        ddl: file.content,
+        fileCharset: file.charset,
+        fileBom: file.bom,
+      });
+    },
+    [dbInfo, setDBInfo, setValue],
+  );
+
   useEffect(() => {
     setHasEditorContent(!!defaultSQL?.trim());
   }, [defaultSQL]);
@@ -1016,6 +1041,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           enableContentDiffHints={enableContentDiffHints}
           onContentChange={handleEditorContentChange}
           onChange={onChange}
+          onFileEncodingChange={handleFileEncodingChange}
           contextMenuInfo={contextMenuInfo}
           onTableIdentifierContextChange={setContextTableIdentifier}
           onContextMenu={isReadOnly ? undefined : handleContextMenu}

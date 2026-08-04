@@ -20,13 +20,14 @@ export const useStyles = createStyles(({ css, token }) => ({
     flex-shrink: 0;
     align-items: center;
     justify-content: flex-end;
-    height: 22px;
+    gap: 8px;
+    height: 24px;
     padding: 0 10px;
     color: ${token.colorTextSecondary};
     background: ${token.colorBgContainer};
     font-family: ${token.fontFamilyCode};
     font-size: 12px;
-    line-height: 22px;
+    line-height: 24px;
     letter-spacing: 0;
     user-select: none;
   `,

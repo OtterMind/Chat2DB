@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { normalizeLocalFileReadResult } from './localFileEncoding';
+import {
+  LOCAL_FILE_CHARSETS,
+  formatLocalFileEncoding,
+  normalizeLocalFileReadResult,
+} from './localFileEncoding';
 
 assert.deepEqual(
   normalizeLocalFileReadResult({
@@ -16,5 +20,10 @@ assert.deepEqual(
   },
   'detected encoding metadata should follow the local file into workspace state',
 );
+
+assert.equal(formatLocalFileEncoding('UTF-8', true), 'UTF-8 BOM');
+assert.equal(formatLocalFileEncoding('GB18030', false), 'GB18030');
+assert.equal(formatLocalFileEncoding(), '');
+assert.equal(new Set(LOCAL_FILE_CHARSETS).size, LOCAL_FILE_CHARSETS.length, 'encoding choices should be unique');
 
 console.log('local file encoding tests passed');

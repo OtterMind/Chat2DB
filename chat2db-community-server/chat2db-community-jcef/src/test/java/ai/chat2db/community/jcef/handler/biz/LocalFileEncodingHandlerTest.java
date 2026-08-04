@@ -63,6 +63,26 @@ class LocalFileEncodingHandlerTest {
     }
 
     @Test
+    void shouldReadFileWithRequestedCharset() throws Exception {
+        Charset windows1252 = Charset.forName("windows-1252");
+        Path file = tempDir.resolve("western.sql");
+        String content = "select 'caf\u00e9';";
+        Files.write(file, content.getBytes(windows1252));
+        AtomicReference<String> response = new AtomicReference<>();
+
+        new ReadFileHandler().handle(
+                message(Map.of("path", file.toString(), "charsets", windows1252.name())),
+                new ConsoleResult(),
+                callback(response)
+        );
+
+        JSONObject data = JSON.parseObject(response.get()).getJSONObject("data");
+        assertEquals(content, data.getString("content"));
+        assertEquals("windows-1252", data.getString("charset"));
+        assertEquals(false, data.getBooleanValue("bom"));
+    }
+
+    @Test
     void shouldFailWithoutReplacingFileWhenContentCannotUseRequestedCharset() throws Exception {
         Path file = tempDir.resolve("ascii.sql");
         byte[] original = "select 'original';".getBytes(Charset.forName("US-ASCII"));

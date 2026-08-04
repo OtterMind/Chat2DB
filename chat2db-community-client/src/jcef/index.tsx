@@ -190,8 +190,8 @@ const jcefApi = {
     return createJcefApi<boolean>('update-file-content', data);
   },
   // Open local file
-  readFile: (path: string) => {
-    return createJcefApi<LocalFileReadResult>('read-file', { path });
+  readFile: (path: string, charset?: string) => {
+    return createJcefApi<LocalFileReadResult>('read-file', { path, charsets: charset });
   },
   // The front-end setting information is synchronized with the back-end
   updateSettings: (data: { appearance: ThemeAppearance; language: LangType; enableMcp?: boolean }) => {

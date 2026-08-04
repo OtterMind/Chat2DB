@@ -42,4 +42,27 @@ assert.equal(result.workspaceTabList[1], otherTab, 'unmatched tabs should retain
 assert.equal(originalUniqueData.filePreviewUrl, 'chat2db-resource://preview/root/old', 'the frozen source must not change');
 assert.equal(refreshLocalFileWorkspaceTab(frozenTabs, '/tmp/missing.sql', nextUniqueData), undefined);
 
+const duplicateTab = Object.freeze({
+  ...existingTab,
+  id: 'pdf-tab-copy',
+  uniqueData: Object.freeze({ ...originalUniqueData }),
+});
+const duplicateTabs = Object.freeze([existingTab, duplicateTab]) as unknown as IWorkspaceTab[];
+const targetedResult = refreshLocalFileWorkspaceTab(
+  duplicateTabs,
+  '/tmp/report.pdf',
+  nextUniqueData,
+  'pdf-tab-copy',
+);
+
+assert.ok(targetedResult, 'a targeted duplicate tab should be refreshed');
+assert.equal(targetedResult.activeTabId, 'pdf-tab-copy');
+assert.equal(targetedResult.workspaceTabList[0], existingTab, 'the first tab with the same path must stay unchanged');
+assert.equal(targetedResult.workspaceTabList[1].uniqueData?.filePreviewUrl, 'chat2db-resource://preview/root/new');
+assert.equal(
+  refreshLocalFileWorkspaceTab(duplicateTabs, '/tmp/report.pdf', nextUniqueData, 'closed-tab'),
+  undefined,
+  'a closed target tab must not fall back to another tab with the same path',
+);
+
 console.log('local file workspace tab tests passed');

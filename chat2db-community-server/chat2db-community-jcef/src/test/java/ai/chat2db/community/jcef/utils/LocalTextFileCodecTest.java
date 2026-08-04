@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.Charset;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,10 +12,14 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalTextFileCodecTest {
 
     private static final Charset GB18030 = Charset.forName("GB18030");
+    private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
     private static final byte[] UTF_8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
     private static final byte[] UTF_16_LE_BOM = {(byte) 0xFF, (byte) 0xFE};
     private static final byte[] UTF_16_BE_BOM = {(byte) 0xFE, (byte) 0xFF};
@@ -61,6 +66,40 @@ class LocalTextFileCodecTest {
         assertRoundTrip("utf16le.sql", original, updated, StandardCharsets.UTF_16LE, UTF_16_LE_BOM);
         assertRoundTrip("utf16be.sql", original, updated, StandardCharsets.UTF_16BE, UTF_16_BE_BOM);
         assertRoundTrip("gb18030.sql", original, updated, GB18030, new byte[0]);
+    }
+
+    @Test
+    void shouldUseRequestedCharsetInsteadOfBomCharset() throws Exception {
+        String content = "select 'caf\u00e9';";
+        Path file = tempDir.resolve("manual-windows-1252.sql");
+        Files.write(file, withBom(UTF_8_BOM, content.getBytes(WINDOWS_1252)));
+
+        LocalTextFileCodec.DecodedText decoded = LocalTextFileCodec.read(file, WINDOWS_1252);
+
+        assertEquals(content, decoded.content());
+        assertEquals("windows-1252", decoded.charset());
+        assertFalse(decoded.bom());
+    }
+
+    @Test
+    void shouldPreserveBomWhenItMatchesRequestedCharset() throws Exception {
+        String content = "select '\u4e2d\u6587';";
+        Path file = tempDir.resolve("manual-utf8-bom.sql");
+        Files.write(file, withBom(UTF_8_BOM, content.getBytes(StandardCharsets.UTF_8)));
+
+        LocalTextFileCodec.DecodedText decoded = LocalTextFileCodec.read(file, StandardCharsets.UTF_8);
+
+        assertEquals(content, decoded.content());
+        assertEquals("UTF-8", decoded.charset());
+        assertTrue(decoded.bom());
+    }
+
+    @Test
+    void shouldRejectBytesThatCannotBeDecodedWithRequestedCharset() throws Exception {
+        Path file = tempDir.resolve("invalid-utf8.sql");
+        Files.write(file, new byte[]{(byte) 0x80});
+
+        assertThrows(CharacterCodingException.class, () -> LocalTextFileCodec.read(file, StandardCharsets.UTF_8));
     }
 
     @Test

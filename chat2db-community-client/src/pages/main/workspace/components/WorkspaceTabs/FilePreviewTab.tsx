@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Segmented, Tooltip } from 'antd';
 import { staticMessage } from '@chat2db/ui';
@@ -15,6 +15,8 @@ import { updateFileContent } from '@/utils/file';
 import 'katex/dist/katex.min.css';
 import styles from './FilePreviewTab.less';
 import { getSqlDirectoryPreviewUrl } from '@/utils/previewResource';
+import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
+import { useWorkspaceStore } from '@/store/workspace';
 
 interface FilePreviewTabProps {
   file: IBoundInfo;
@@ -122,6 +124,7 @@ function MarkdownSourceEditor({
   fileBom,
   onChange,
   onEditorChange,
+  onCursorPositionChange,
 }: {
   source: string;
   filePath?: string;
@@ -129,6 +132,7 @@ function MarkdownSourceEditor({
   fileBom?: boolean;
   onChange: (value: string) => void;
   onEditorChange: (editor?: IEditorIns) => void;
+  onCursorPositionChange: (position: monaco.IPosition) => void;
 }) {
   const reactId = useId();
   const editorId = useMemo(() => `markdown-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`, [reactId]);
@@ -157,6 +161,11 @@ function MarkdownSourceEditor({
       }}
       didMount={(editor) => {
         onEditorChange(editor);
+        const initialPosition = editor.getPosition();
+        if (initialPosition) {
+          onCursorPositionChange(initialPosition);
+        }
+        editor.onDidChangeCursorPosition(({ position }) => onCursorPositionChange(position));
         editor.onDidChangeModelContent(() => onChange(editor.getValue()));
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
           if (filePath) {
@@ -235,6 +244,33 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
   const scrollSyncOwnerRef = useRef<ScrollSyncOwner>(null);
   const scrollSyncFrameRef = useRef<number | undefined>(undefined);
   const pdfLoadTimeoutRef = useRef<number | undefined>(undefined);
+  const markdownCursorPositionRef = useRef<HTMLSpanElement>(null);
+
+  const handleFileEncodingChange = useCallback(
+    async (charset?: string) => {
+      if (!file.filePath) {
+        return;
+      }
+      const reloadedFile = await useWorkspaceStore.getState().readFile(file.filePath, file.fileExtension, {
+        rootToken: file.fileRootToken,
+        relativePath: file.fileRelativePath,
+        charset,
+        workspaceTabId,
+      });
+      if (!reloadedFile) {
+        return;
+      }
+      setMarkdownContent(reloadedFile.content);
+      setMarkdownPreviewContent(reloadedFile.content);
+    },
+    [file.fileExtension, file.filePath, file.fileRelativePath, file.fileRootToken, workspaceTabId],
+  );
+
+  const handleMarkdownCursorPositionChange = useCallback((position: monaco.IPosition) => {
+    if (markdownCursorPositionRef.current) {
+      markdownCursorPositionRef.current.textContent = `Ln ${position.lineNumber}, Col ${position.column}`;
+    }
+  }, []);
 
   useEffect(() => {
     setMarkdownContent(file.ddl || '');
@@ -465,6 +501,7 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
         fileBom={file.fileBom}
         onChange={setMarkdownContent}
         onEditorChange={setEditor}
+        onCursorPositionChange={handleMarkdownCursorPositionChange}
       />
     );
 
@@ -518,6 +555,16 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
               <div className={styles.reviewPane}>{review}</div>
             </div>
           )}
+        </div>
+        <div className={styles.markdownStatus}>
+          {markdownViewMode !== 'review' && (
+            <span ref={markdownCursorPositionRef}>Ln 1, Col 1</span>
+          )}
+          <LocalFileEncodingSelect
+            charset={file.fileCharset}
+            bom={file.fileBom}
+            onEncodingChange={handleFileEncodingChange}
+          />
         </div>
       </div>
     );

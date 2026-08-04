@@ -31,8 +31,8 @@ public final class LocalTextFileCodec {
     public static DecodedText read(Path path, Charset requestedCharset) throws IOException {
         byte[] bytes = Files.readAllBytes(path);
         Encoding encoding = detectEncoding(bytes, requestedCharset);
-        String content = decode(bytes, encoding.bomLength(), encoding.charset());
-        return new DecodedText(content, encoding.charset().name(), encoding.bomLength() > 0);
+        String content = decode(bytes, encoding.contentOffset(), encoding.charset());
+        return new DecodedText(content, encoding.charset().name(), encoding.bom());
     }
 
     public static void write(Path path, String content, Charset charset, boolean includeBom) throws IOException {
@@ -59,24 +59,34 @@ public final class LocalTextFileCodec {
     }
 
     private static Encoding detectEncoding(byte[] bytes, Charset requestedCharset) throws CharacterCodingException {
-        if (startsWith(bytes, UTF_8_BOM)) {
-            return new Encoding(StandardCharsets.UTF_8, UTF_8_BOM.length);
-        }
-        if (startsWith(bytes, UTF_16_LE_BOM)) {
-            return new Encoding(StandardCharsets.UTF_16LE, UTF_16_LE_BOM.length);
-        }
-        if (startsWith(bytes, UTF_16_BE_BOM)) {
-            return new Encoding(StandardCharsets.UTF_16BE, UTF_16_BE_BOM.length);
-        }
+        Encoding bomEncoding = detectBomEncoding(bytes);
         if (requestedCharset != null) {
-            decode(bytes, 0, requestedCharset);
-            return new Encoding(requestedCharset, 0);
+            int contentOffset = bomEncoding == null ? 0 : bomEncoding.contentOffset();
+            decode(bytes, contentOffset, requestedCharset);
+            boolean preserveBom = bomEncoding != null && requestedCharset.equals(bomEncoding.charset());
+            return new Encoding(requestedCharset, contentOffset, preserveBom);
+        }
+        if (bomEncoding != null) {
+            return bomEncoding;
         }
         if (canDecode(bytes, StandardCharsets.UTF_8)) {
-            return new Encoding(StandardCharsets.UTF_8, 0);
+            return new Encoding(StandardCharsets.UTF_8, 0, false);
         }
         decode(bytes, 0, WINDOWS_CHINESE_CHARSET);
-        return new Encoding(WINDOWS_CHINESE_CHARSET, 0);
+        return new Encoding(WINDOWS_CHINESE_CHARSET, 0, false);
+    }
+
+    private static Encoding detectBomEncoding(byte[] bytes) {
+        if (startsWith(bytes, UTF_8_BOM)) {
+            return new Encoding(StandardCharsets.UTF_8, UTF_8_BOM.length, true);
+        }
+        if (startsWith(bytes, UTF_16_LE_BOM)) {
+            return new Encoding(StandardCharsets.UTF_16LE, UTF_16_LE_BOM.length, true);
+        }
+        if (startsWith(bytes, UTF_16_BE_BOM)) {
+            return new Encoding(StandardCharsets.UTF_16BE, UTF_16_BE_BOM.length, true);
+        }
+        return null;
     }
 
     private static boolean canDecode(byte[] bytes, Charset charset) {
@@ -120,7 +130,7 @@ public final class LocalTextFileCodec {
         return true;
     }
 
-    private record Encoding(Charset charset, int bomLength) {
+    private record Encoding(Charset charset, int contentOffset, boolean bom) {
     }
 
     public record DecodedText(String content, String charset, boolean bom) {
