@@ -36,6 +36,7 @@ import { useStyles } from './style';
 
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { isDesktop, isHashHistoryEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
+import { resolveInitialMainPage } from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
 // import { refreshPage } from '@/utils';
 import { SubscriptionType } from '@/constants/subscriptionType';
@@ -280,15 +281,15 @@ function MainPage() {
 
     let page = '';
     let pathName = '';
-    // Navigate to stream by default.
+    // Prefer the explicit route, then the persisted selection, then workspace.
     if (isHashHistoryEnv || isDesktop) {
       const hashPath = window.location.hash.replace(/^#/, '');
       const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
       const hashPage = normalizedHashPath.split('/')[1];
-      page = hashPage || mainPageActiveTab || 'stream';
+      page = resolveInitialMainPage(hashPage, mainPageActiveTab);
       pathName = hashPage ? normalizedHashPath : '';
     } else {
-      page = window.location.pathname.split('/')[1] || mainPageActiveTab;
+      page = resolveInitialMainPage(window.location.pathname.split('/')[1], mainPageActiveTab);
       pathName = window.location.pathname;
     }
 
