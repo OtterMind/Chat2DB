@@ -31,7 +31,9 @@ public final class LocalTextFileCodec {
     public static DecodedText read(Path path, Charset requestedCharset) throws IOException {
         byte[] bytes = Files.readAllBytes(path);
         Encoding encoding = detectEncoding(bytes, requestedCharset);
-        String content = decode(bytes, encoding.contentOffset(), encoding.charset());
+        String content = requestedCharset == null
+                ? decode(bytes, encoding.contentOffset(), encoding.charset())
+                : new String(bytes, encoding.contentOffset(), bytes.length - encoding.contentOffset(), encoding.charset());
         return new DecodedText(content, encoding.charset().name(), encoding.bom());
     }
 
@@ -62,7 +64,6 @@ public final class LocalTextFileCodec {
         Encoding bomEncoding = detectBomEncoding(bytes);
         if (requestedCharset != null) {
             int contentOffset = bomEncoding == null ? 0 : bomEncoding.contentOffset();
-            decode(bytes, contentOffset, requestedCharset);
             boolean preserveBom = bomEncoding != null && requestedCharset.equals(bomEncoding.charset());
             return new Encoding(requestedCharset, contentOffset, preserveBom);
         }

@@ -43,9 +43,14 @@ const LocalFileEncodingSelect = ({
   };
 
   const label = i18n('workspace.fileEncoding.label');
+  const autoDetectLabel = i18n('workspace.fileEncoding.autoDetect');
+  const selectedLabel = charset ? currentLabel : autoDetectLabel;
   return (
     <Tooltip title={label}>
       <span className={styles.wrapper}>
+        <span className={styles.sizer} aria-hidden="true">
+          {selectedLabel}
+        </span>
         <Select<string>
           className={styles.selector}
           size="small"
@@ -56,7 +61,7 @@ const LocalFileEncodingSelect = ({
           aria-label={label}
           popupMatchSelectWidth={180}
           options={[
-            { value: AUTO_DETECT_VALUE, label: i18n('workspace.fileEncoding.autoDetect') },
+            { value: AUTO_DETECT_VALUE, label: autoDetectLabel },
             ...charsetOptions,
           ]}
           onChange={handleChange}

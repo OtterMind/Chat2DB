@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.Charset;
-import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,7 +12,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalTextFileCodecTest {
@@ -95,11 +93,16 @@ class LocalTextFileCodecTest {
     }
 
     @Test
-    void shouldRejectBytesThatCannotBeDecodedWithRequestedCharset() throws Exception {
+    void shouldDecodeDirectlyWithRequestedCharset() throws Exception {
+        byte[] bytes = {(byte) 0x80};
         Path file = tempDir.resolve("invalid-utf8.sql");
-        Files.write(file, new byte[]{(byte) 0x80});
+        Files.write(file, bytes);
 
-        assertThrows(CharacterCodingException.class, () -> LocalTextFileCodec.read(file, StandardCharsets.UTF_8));
+        LocalTextFileCodec.DecodedText decoded = LocalTextFileCodec.read(file, StandardCharsets.UTF_8);
+
+        assertEquals(new String(bytes, StandardCharsets.UTF_8), decoded.content());
+        assertEquals("UTF-8", decoded.charset());
+        assertFalse(decoded.bom());
     }
 
     @Test

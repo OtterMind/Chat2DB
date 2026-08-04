@@ -34,6 +34,7 @@
 
 .markdownStatus {
   display: flex;
+  min-width: 0;
   height: 24px;
   flex-shrink: 0;
   align-items: center;
@@ -47,6 +48,12 @@
   line-height: 24px;
   letter-spacing: 0;
   user-select: none;
+  overflow: hidden;
+}
+
+.markdownCursorPosition {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .splitPane {

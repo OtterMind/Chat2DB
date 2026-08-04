@@ -17,6 +17,7 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
   cursorStatus: css`
     display: flex;
+    min-width: 0;
     flex-shrink: 0;
     align-items: center;
     justify-content: flex-end;
@@ -30,5 +31,10 @@ export const useStyles = createStyles(({ css, token }) => ({
     line-height: 24px;
     letter-spacing: 0;
     user-select: none;
+    overflow: hidden;
+  `,
+  cursorPosition: css`
+    flex: 0 0 auto;
+    white-space: nowrap;
   `,
 }));

@@ -557,14 +557,16 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
           )}
         </div>
         <div className={styles.markdownStatus}>
-          {markdownViewMode !== 'review' && (
-            <span ref={markdownCursorPositionRef}>Ln 1, Col 1</span>
-          )}
           <LocalFileEncodingSelect
             charset={file.fileCharset}
             bom={file.fileBom}
             onEncodingChange={handleFileEncodingChange}
           />
+          {markdownViewMode !== 'review' && (
+            <span ref={markdownCursorPositionRef} className={styles.markdownCursorPosition}>
+              Ln 1, Col 1
+            </span>
+          )}
         </div>
       </div>
     );

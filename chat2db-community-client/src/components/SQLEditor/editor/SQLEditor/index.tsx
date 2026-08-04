@@ -1009,7 +1009,6 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
           />
         </div>
         <div className={styles.cursorStatus}>
-          <span ref={cursorPositionRef}>Ln 1, Col 1</span>
           {dbInfo.filePath && onFileEncodingChange && (
             <LocalFileEncodingSelect
               charset={dbInfo.fileCharset}
@@ -1017,6 +1016,9 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
               onEncodingChange={onFileEncodingChange}
             />
           )}
+          <span ref={cursorPositionRef} className={styles.cursorPosition}>
+            Ln 1, Col 1
+          </span>
         </div>
       </div>
     );
