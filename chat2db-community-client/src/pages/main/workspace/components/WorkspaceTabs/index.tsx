@@ -95,16 +95,23 @@ const WORKSPACE_TAB_HORIZONTAL_RESIZE_CLASS = 'WorkspaceTabHorizontalResizing';
 const WORKSPACE_TAB_VERTICAL_RESIZE_CLASS = 'WorkspaceTabVerticalResizing';
 const WORKSPACE_TAB_RESIZE_OVERLAY_ID = 'WorkspaceTabResizeOverlay';
 const WORKSPACE_TAB_RESIZER_CLASS = 'WorkspaceTabResizer';
+const WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE = 1000;
 let workspaceTabResizeCursor: 'ns-resize' | 'ew-resize' | 'default' = 'default';
-let workspaceTabResizeCursorSequence = Date.now();
+let workspaceTabResizeCursorSequence = Date.now() * WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE;
 
-function notifyWorkspaceTabResizeCursor(cursor: 'ns-resize' | 'ew-resize' | 'default') {
-  if (workspaceTabResizeCursor === cursor) {
+function notifyWorkspaceTabResizeCursor(
+  cursor: 'ns-resize' | 'ew-resize' | 'default',
+  force = false,
+) {
+  if (!force && workspaceTabResizeCursor === cursor) {
     return;
   }
   workspaceTabResizeCursor = cursor;
   if (typeof window.javaQuery === 'function') {
-    workspaceTabResizeCursorSequence = Math.max(workspaceTabResizeCursorSequence + 1, Date.now());
+    workspaceTabResizeCursorSequence = Math.max(
+      workspaceTabResizeCursorSequence + 1,
+      Date.now() * WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE,
+    );
     void jcefApi.setWorkspaceResizeCursor(cursor, workspaceTabResizeCursorSequence).catch(() => undefined);
   }
 }
@@ -715,6 +722,8 @@ const workspaceTabCollisionDetection: CollisionDetection = (args) => {
 
 const WorkspaceTabs = memo(() => {
   useEffect(() => {
+    notifyWorkspaceTabResizeCursor('default', true);
+
     const handleResizerMouseOver = (event: MouseEvent) => {
       const resizer = getWorkspaceTabResizer(event.target);
       if (!resizer || resizer.classList.contains('disabled')) {

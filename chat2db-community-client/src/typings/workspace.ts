@@ -83,7 +83,7 @@ export interface IBoundInfo {
   connectable?: boolean;
   supportDatabase?: boolean;
   supportSchema?: boolean;
-  nameCustomized?: boolean;
+  nameCustomized?: boolean | null;
 
   filePath?: string;
   fileExtension?: string;

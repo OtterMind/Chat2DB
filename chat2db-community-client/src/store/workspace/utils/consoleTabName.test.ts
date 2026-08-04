@@ -37,6 +37,24 @@ assertEqual(
   true,
   'legacy renamed tab is inferred as customized',
 );
+assertEqual(
+  isConsoleTabNameCustomized('monthly report', {
+    dataSourceName: 'local',
+    databaseName: 'orders',
+    nameCustomized: null,
+  }),
+  true,
+  'nullable legacy marker still infers a customized name',
+);
+assertEqual(
+  isConsoleTabNameCustomized('orders[local]', {
+    dataSourceName: 'local',
+    databaseName: 'orders',
+    nameCustomized: null,
+  }),
+  false,
+  'nullable legacy marker still infers an automatic name',
+);
 
 const automaticTab: IWorkspaceTab = {
   id: 1,

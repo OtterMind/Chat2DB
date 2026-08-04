@@ -23,7 +23,7 @@ export interface IConsole {
   type?: DatabaseTypeCode; // Database type
   databaseName?: string; // Database name
   schemaName?: string; // schema name
-  nameCustomized?: boolean; // Whether the console tab name was manually customized
+  nameCustomized?: boolean | null; // Whether the console tab name was manually customized
   status: ConsoleStatus; // Console status
   connectable: boolean; // Is it connectable?
   tabOpened?: ConsoleOpenedStatus; // Is the console tab open?

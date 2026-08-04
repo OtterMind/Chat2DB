@@ -18,7 +18,7 @@ export const isConsoleTabNameCustomized = (
   title: string,
   boundInfo: ConsoleTabNameContext & Pick<IBoundInfo, 'nameCustomized'>,
 ): boolean => {
-  if (boundInfo.nameCustomized !== undefined) {
+  if (typeof boundInfo.nameCustomized === 'boolean') {
     return boundInfo.nameCustomized;
   }
   return title !== buildConsoleDefaultTabName(boundInfo);

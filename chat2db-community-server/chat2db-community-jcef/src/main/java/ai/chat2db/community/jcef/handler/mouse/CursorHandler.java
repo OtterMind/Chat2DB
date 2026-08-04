@@ -5,35 +5,56 @@ import org.cef.handler.CefDisplayHandlerAdapter;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class CursorHandler extends CefDisplayHandlerAdapter {
 
+    private static final Object FORCED_CURSOR_LOCK = new Object();
     private static volatile Integer forcedCursorType;
-    private static final AtomicLong forcedCursorSequence = new AtomicLong();
+    private static long forcedCursorSequence;
 
     @Override
     public boolean onCursorChange(CefBrowser browser, int cursorType) {
-        Integer forcedType = forcedCursorType;
-        int effectiveCursorType = forcedType == null ? cursorType : forcedType;
+        int effectiveCursorType = effectiveCursorType(cursorType);
         if (!isPredefinedCursorType(effectiveCursorType)) {
             return false;
         }
-        applyCursor(browser, effectiveCursorType);
+        applyCursor(browser, cursorType);
         return true;
     }
 
     public static void setForcedCursor(CefBrowser browser, String cssCursor, long sequence) {
-        long currentSequence;
-        do {
-            currentSequence = forcedCursorSequence.get();
-            if (sequence <= currentSequence) {
-                return;
+        if (!updateForcedCursor(cssCursor, sequence)) {
+            return;
+        }
+        applyCursor(browser, Cursor.DEFAULT_CURSOR);
+    }
+
+    static boolean updateForcedCursor(String cssCursor, long sequence) {
+        synchronized (FORCED_CURSOR_LOCK) {
+            if (sequence <= forcedCursorSequence) {
+                return false;
             }
-        } while (!forcedCursorSequence.compareAndSet(currentSequence, sequence));
-        Integer cursorType = toAwtCursorType(cssCursor);
-        forcedCursorType = cursorType;
-        applyCursor(browser, cursorType == null ? Cursor.DEFAULT_CURSOR : cursorType);
+            forcedCursorSequence = sequence;
+            forcedCursorType = toAwtCursorType(cssCursor);
+            return true;
+        }
+    }
+
+    static long currentForcedCursorSequence() {
+        synchronized (FORCED_CURSOR_LOCK) {
+            return forcedCursorSequence;
+        }
+    }
+
+    static Integer currentForcedCursorType() {
+        return forcedCursorType;
+    }
+
+    static void resetForcedCursorState() {
+        synchronized (FORCED_CURSOR_LOCK) {
+            forcedCursorSequence = 0;
+            forcedCursorType = null;
+        }
     }
 
     static Integer toAwtCursorType(String cssCursor) {
@@ -48,14 +69,26 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
     }
 
     private static void applyCursor(CefBrowser browser, int cursorType) {
-        Cursor awtCursor = Cursor.getPredefinedCursor(cursorType);
+        if (browser == null) {
+            return;
+        }
         SwingUtilities.invokeLater(() -> {
+            int effectiveCursorType = effectiveCursorType(cursorType);
+            if (!isPredefinedCursorType(effectiveCursorType)) {
+                return;
+            }
+            Cursor awtCursor = Cursor.getPredefinedCursor(effectiveCursorType);
             Component component = browser.getUIComponent();
             while (component != null) {
                 component.setCursor(awtCursor);
                 component = component.getParent();
             }
         });
+    }
+
+    static int effectiveCursorType(int cursorType) {
+        Integer forcedType = forcedCursorType;
+        return forcedType == null ? cursorType : forcedType;
     }
 
     static boolean isPredefinedCursorType(int cursorType) {
