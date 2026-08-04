@@ -21,6 +21,7 @@ public class CorsFilter implements Filter {
     private static final Set<String> COMMUNITY_ALLOWED_ORIGINS = Set.of(
             "http://127.0.0.1:8888",
             "http://localhost:8888",
+            "http://127.0.0.1:8889",
             "http://127.0.0.1:10825",
             "http://localhost:10825"
     );
