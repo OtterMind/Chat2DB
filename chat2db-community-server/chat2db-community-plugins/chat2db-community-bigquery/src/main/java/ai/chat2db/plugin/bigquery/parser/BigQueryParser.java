@@ -1,189 +1,250 @@
 package ai.chat2db.plugin.bigquery.parser;
 
-import ai.chat2db.community.domain.api.enums.parser.FileSizeUnitEnum;
-import ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum;
 import ai.chat2db.community.domain.api.model.parser.statement.Statement;
-import ai.chat2db.community.domain.api.model.parser.statement.StatementContext;
 import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
 import ai.chat2db.community.domain.api.service.task.ITaskProgressListener;
-import ai.chat2db.mysql.parser.base.MySqlLexer;
-import ai.chat2db.mysql.parser.base.MySqlParser;
-import ai.chat2db.mysql.parser.base.MySqlParserBaseVisitor;
-import ai.chat2db.plugin.mysql.parser.error.strategy.MysqlErrorStrategy;
-import ai.chat2db.plugin.mysql.parser.visitor.MysqlCreateTableVisitor;
-import ai.chat2db.plugin.mysql.parser.visitor.MysqlParserVisitor;
-import ai.chat2db.plugin.mysql.parser.visitor.MysqlSimpleParserVisitor;
-import ai.chat2db.plugin.mysql.parser.visitor.MysqlValidTableVisitor;
-import ai.chat2db.spi.DefaultSQLFileSplitter;
-import ai.chat2db.spi.ISQLFileSplitter;
-import ai.chat2db.spi.constant.SQLConstants;
-import ai.chat2db.spi.parser.AbstractSqlParser;
-import ai.chat2db.spi.util.TokenUtil;
-import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.Lexer;
-import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.UnbufferedTokenStream;
-import org.antlr.v4.runtime.tree.ParseTree;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
+import ai.chat2db.plugin.postgresql.parser.PgsqlSqlParser;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.PushbackReader;
+import java.io.Reader;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
- * SQL parser for BigQuery. BigQuery quotes identifiers with backticks
- * (e.g. `my-project.dataset.table`, mandatory for project ids containing dashes), so this parser
- * is built on a grammar whose lexer recognizes backtick-quoted identifiers, combined with a
- * BigQuery-specific {@link BigQueryDialect}, instead of reusing another engine's dialect rules.
+ * BigQuery SQL parser.
+ *
+ * <p>The existing PostgreSQL parser still provides the shared statement-analysis behavior. BigQuery
+ * script splitting is handled here because PostgreSQL's lexer does not understand BigQuery
+ * backtick identifiers or triple-quoted strings.</p>
  */
-public class BigQueryParser extends AbstractSqlParser<MySqlParser, BigQueryDialect> {
+public class BigQueryParser extends PgsqlSqlParser {
 
-    public BigQueryParser() {
-        super(new MySqlParser(null), new BigQueryDialect());
+    @Override
+    public List<Statement> parserSqlScript(String sql) {
+        List<Statement> statements = new ArrayList<>();
+        try {
+            splitScript(new StringReader(sql), (statementSql, bytesRead) ->
+                    statements.add(createStatement(statementSql)));
+            return statements;
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read SQL string", e);
+        }
     }
 
     @Override
-    protected Lexer createLexer(CharStream charStream) {
-        return new MySqlLexer(charStream);
+    public int parserSqlScript(File file, ITaskProgressListener progressListener,
+                               ISqlBatchHandler sqlBatchHandler) {
+        int[] statementCount = {0};
+        try {
+            splitScript(Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8),
+                    (statementSql, bytesRead) -> {
+                        sqlBatchHandler.handle(createStatement(statementSql));
+                        statementCount[0]++;
+                        progressListener.onProgress(bytesRead, statementCount[0]);
+                    });
+            sqlBatchHandler.flush();
+            return statementCount[0];
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to parse SQL file " + file, e);
+        }
     }
 
-    @Override
-    protected ParseTree parserRoot(MySqlParser parser) {
-        return parser.root();
-    }
+    private static void splitScript(Reader source, StatementConsumer consumer) throws IOException {
+        try (PushbackReader reader = new PushbackReader(source, 3)) {
+            StringBuilder statement = new StringBuilder();
+            Deque<Character> closingBrackets = new ArrayDeque<>();
+            LexicalState state = LexicalState.DEFAULT;
+            boolean hasExecutableContent = false;
+            long bytesRead = 0L;
 
-    @Override
-    protected StatementContext createStatementContext(CommonTokenStream tokenStream, SqlTypeEnum sqlTypeEnum) {
-        StatementContext statementContext = new StatementContext(tokenStream);
-        statementContext.setRecoverSet(MysqlErrorStrategy.recoverSet);
-        MySqlParserBaseVisitor visitor = createVisitor(statementContext, sqlTypeEnum);
-        statementContext.setVisitor(visitor);
-        return statementContext;
-    }
+            int value;
+            while ((value = reader.read()) != -1) {
+                char current = (char) value;
+                statement.append(current);
+                bytesRead += utf8Length(current);
 
-    private MySqlParserBaseVisitor createVisitor(StatementContext statementContext, SqlTypeEnum sqlTypeEnum) {
-        return switch (sqlTypeEnum) {
-            case SIMPLE -> new MysqlSimpleParserVisitor(statementContext);
-            case CREATE_TABLE -> new MysqlCreateTableVisitor(statementContext);
-            case VALID_TABLE -> new MysqlValidTableVisitor(statementContext);
-            default -> new MysqlParserVisitor(statementContext);
-        };
-    }
-
-    @Override
-    public int parserSqlScript(File file, ITaskProgressListener progressListener, ISqlBatchHandler sqlBatchHandler) {
-        long bytesRead = 0L;
-        int statementCount = 0;
-        String content = null;
-        Lexer lexer = new MySqlLexer(null);
-        CharStream charStream = null;
-        List<Token> currentTokens = new ArrayList<>(50);
-        try (ISQLFileSplitter sqlFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, StandardCharsets.UTF_8)) {
-            while (StringUtils.isNotBlank(content = sqlFileSplitter.nextContent())) {
-                if (CollectionUtils.isNotEmpty(currentTokens)) {
-                    String leftTokens = currentTokens.stream().map(Token::getText).collect(Collectors.joining());
-                    charStream = CharStreams.fromString(leftTokens + content);
-                    currentTokens.clear();
-                } else {
-                    charStream = CharStreams.fromString(content);
-                }
-                lexer.setInputStream(charStream);
-                UnbufferedTokenStream<Token> tokenStream = createUnbufferedTokenStream(lexer);
-                Token firstToken = null;
-                Token lastToken = null;
-                Token firstKeyword = null;
-                Token lastKeyword = null;
-                SqlScriptBlockContext curBlock = null;
-                while (true) {
-                    Token token = tokenStream.LT(1);
-                    int tokenType = token.getType();
-                    if (tokenType == Token.EOF) {
-                        break;
-                    }
-                    String text = token.getText();
-                    bytesRead += text.getBytes().length;
-                    String currentTokenText = text.trim();
-                    if (!TokenUtil.hasValuableText(token)
-                            || dialect.isComment(tokenType)) {
-                        if (Objects.nonNull(firstToken)) {
-                            currentTokens.add(token);
-                        }
-                        tokenStream.consume();
-                        continue;
-                    }
-                    if (dialect.isStatementDelimiter(currentTokenText) && Objects.isNull(curBlock)) {
-                        if (Objects.isNull(firstToken)) {
-                            tokenStream.consume();
-                            continue;
-                        }
-                        Statement statement = getStatement(currentTokens);
-                        sqlBatchHandler.handle(statement);
-                        firstToken = null;
-                        lastToken = null;
-                        firstKeyword = null;
-                        lastKeyword = null;
-                        curBlock = null;
-                        currentTokens.clear();
-                        tokenStream.consume();
-                        statementCount++;
-                        progressListener.onProgress(bytesRead, statementCount);
-                        continue;
-                    }
-                    if (Objects.isNull(firstToken)) {
-                        firstToken = token;
-                    }
-                    currentTokens.add(token);
-                    if (currentTokenText.length() == 1) {
-                        if (StringUtils.equalsAnyIgnoreCase(currentTokenText,
-                                SQLConstants.OPEN_PARENTHESIS,
-                                SQLConstants.OPEN_CURLY_BRACE,
-                                SQLConstants.OPEN_SQUARE_BRACKET)) {
-                            curBlock = new SqlScriptBlockContext(curBlock);
-                        }
-                        if (StringUtils.equalsAnyIgnoreCase(currentTokenText,
-                                SQLConstants.CLOSE_PARENTHESIS,
-                                SQLConstants.CLOSE_CURLY_BRACE,
-                                SQLConstants.CLOSE_SQUARE_BRACKET)) {
-                            if (Objects.nonNull(curBlock)) {
-                                curBlock = curBlock.parent;
+                switch (state) {
+                    case SINGLE_QUOTE, DOUBLE_QUOTE -> {
+                        char quote = state == LexicalState.SINGLE_QUOTE ? '\'' : '"';
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == quote) {
+                            if (nextCharactersAre(reader, quote, 1)) {
+                                bytesRead += appendNext(reader, statement);
+                            } else {
+                                state = LexicalState.DEFAULT;
                             }
                         }
                     }
-                    if (dialect.isBlockToggleSymbol(currentTokenText)) {
-                        if (Objects.nonNull(curBlock) && currentTokenText.equals(curBlock.togglePattern)) {
-                            curBlock = curBlock.parent;
-                        } else {
-                            curBlock = new SqlScriptBlockContext(curBlock, currentTokenText);
+                    case TRIPLE_SINGLE_QUOTE, TRIPLE_DOUBLE_QUOTE -> {
+                        char quote = state == LexicalState.TRIPLE_SINGLE_QUOTE ? '\'' : '"';
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == quote && nextCharactersAre(reader, quote, 2)) {
+                            bytesRead += appendNext(reader, statement);
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.DEFAULT;
                         }
                     }
-
-                    lastToken = token;
-                    if (dialect.isKeyword(currentTokenText)) {
-                        if (Objects.isNull(firstKeyword)) {
-                            firstKeyword = token;
+                    case BACKTICK -> {
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == '`') {
+                            if (nextCharactersAre(reader, '`', 1)) {
+                                bytesRead += appendNext(reader, statement);
+                            } else {
+                                state = LexicalState.DEFAULT;
+                            }
                         }
-                        lastKeyword = token;
                     }
-                    tokenStream.consume();
+                    case LINE_COMMENT -> {
+                        if (current == '\n' || current == '\r') {
+                            state = LexicalState.DEFAULT;
+                        }
+                    }
+                    case BLOCK_COMMENT -> {
+                        if (current == '*' && nextCharactersAre(reader, '/', 1)) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.DEFAULT;
+                        }
+                    }
+                    case DEFAULT -> {
+                        if (current == '-' && nextCharactersAre(reader, '-', 1)) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.LINE_COMMENT;
+                        } else if (current == '#') {
+                            state = LexicalState.LINE_COMMENT;
+                        } else if (current == '/' && nextCharactersAre(reader, '*', 1)) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.BLOCK_COMMENT;
+                        } else if (current == '\'' || current == '"') {
+                            hasExecutableContent = true;
+                            if (nextCharactersAre(reader, current, 2)) {
+                                bytesRead += appendNext(reader, statement);
+                                bytesRead += appendNext(reader, statement);
+                                state = current == '\''
+                                        ? LexicalState.TRIPLE_SINGLE_QUOTE
+                                        : LexicalState.TRIPLE_DOUBLE_QUOTE;
+                            } else {
+                                state = current == '\''
+                                        ? LexicalState.SINGLE_QUOTE
+                                        : LexicalState.DOUBLE_QUOTE;
+                            }
+                        } else if (current == '`') {
+                            hasExecutableContent = true;
+                            state = LexicalState.BACKTICK;
+                        } else if (isOpeningBracket(current)) {
+                            hasExecutableContent = true;
+                            closingBrackets.push(matchingCloseBracket(current));
+                        } else if (!closingBrackets.isEmpty() && current == closingBrackets.peek()) {
+                            hasExecutableContent = true;
+                            closingBrackets.pop();
+                        } else if (current == ';' && closingBrackets.isEmpty()) {
+                            statement.setLength(statement.length() - 1);
+                            if (hasExecutableContent) {
+                                consumer.accept(statement.toString().strip(), bytesRead);
+                            }
+                            statement.setLength(0);
+                            hasExecutableContent = false;
+                        } else if (!Character.isWhitespace(current)) {
+                            hasExecutableContent = true;
+                        }
+                    }
                 }
             }
-            if (CollectionUtils.isNotEmpty(currentTokens)) {
-                Statement statement = getStatement(currentTokens);
-                sqlBatchHandler.handle(statement);
-                statementCount++;
-                currentTokens.clear();
-                progressListener.onProgress(bytesRead, statementCount);
+
+            if (hasExecutableContent) {
+                consumer.accept(statement.toString().strip(), bytesRead);
             }
-            sqlBatchHandler.flush();
-            return statementCount;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
+    }
+
+    private static Statement createStatement(String sql) {
+        Statement statement = new Statement();
+        statement.setSql(sql);
+        statement.setOriginalSql(sql);
+        return statement;
+    }
+
+    private static boolean nextCharactersAre(PushbackReader reader, char expected, int count)
+            throws IOException {
+        char[] characters = new char[count];
+        int readCount = 0;
+        while (readCount < count) {
+            int value = reader.read();
+            if (value == -1) {
+                break;
+            }
+            characters[readCount++] = (char) value;
+        }
+        for (int i = readCount - 1; i >= 0; i--) {
+            reader.unread(characters[i]);
+        }
+        if (readCount != count) {
+            return false;
+        }
+        for (char character : characters) {
+            if (character != expected) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int appendNext(PushbackReader reader, StringBuilder target) throws IOException {
+        int value = reader.read();
+        if (value == -1) {
+            return 0;
+        }
+        char character = (char) value;
+        target.append(character);
+        return utf8Length(character);
+    }
+
+    private static int utf8Length(char character) {
+        if (character <= 0x7F) {
+            return 1;
+        }
+        if (character <= 0x7FF) {
+            return 2;
+        }
+        // A valid supplementary code point is decoded as a surrogate pair: two bytes per code unit.
+        return Character.isSurrogate(character) ? 2 : 3;
+    }
+
+    private static boolean isOpeningBracket(char character) {
+        return character == '(' || character == '[' || character == '{';
+    }
+
+    private static char matchingCloseBracket(char character) {
+        return switch (character) {
+            case '(' -> ')';
+            case '[' -> ']';
+            case '{' -> '}';
+            default -> throw new IllegalArgumentException("Unsupported bracket: " + character);
+        };
+    }
+
+    private enum LexicalState {
+        DEFAULT,
+        SINGLE_QUOTE,
+        DOUBLE_QUOTE,
+        TRIPLE_SINGLE_QUOTE,
+        TRIPLE_DOUBLE_QUOTE,
+        BACKTICK,
+        LINE_COMMENT,
+        BLOCK_COMMENT
+    }
+
+    @FunctionalInterface
+    private interface StatementConsumer {
+        void accept(String sql, long bytesRead);
     }
 }

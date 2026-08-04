@@ -20,7 +20,7 @@
         </dependency>
         <dependency>
             <groupId>ai.chat2db</groupId>
-            <artifactId>chat2db-community-mysql</artifactId>
+            <artifactId>chat2db-community-postgresql</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
