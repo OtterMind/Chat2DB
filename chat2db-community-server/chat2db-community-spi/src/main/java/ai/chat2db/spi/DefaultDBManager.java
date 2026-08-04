@@ -310,6 +310,8 @@ public class DefaultDBManager implements IDbManager {
                     .connection(connection)
                     .sql(pageSql)
                     .batchSize(batchSize)
+                    .statementListener(asyncContext)
+                    .cancellationChecker(asyncContext::checkCancelled)
                     .consumer(resultSet -> {
                 ResultSetMetaData metaData = resultSet.getMetaData();
                 List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
@@ -348,6 +350,8 @@ public class DefaultDBManager implements IDbManager {
                 .connection(connection)
                 .sql(tableQuerySql)
                 .batchSize(batchSize)
+                .statementListener(asyncContext)
+                .cancellationChecker(asyncContext::checkCancelled)
                 .consumer(resultSet -> {
             ResultSetMetaData metaData = resultSet.getMetaData();
             List<String> columnList = ResultSetUtils.getRsHeader(resultSet);

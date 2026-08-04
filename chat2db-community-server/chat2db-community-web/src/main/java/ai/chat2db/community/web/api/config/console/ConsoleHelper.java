@@ -352,13 +352,7 @@ public class ConsoleHelper {
         if (message.getHeaders() != null) {
             String language = (String) message.getHeaders().get(CookieUtil.ACCEPT_LANGUAGE);
             if (com.dtflys.forest.utils.StringUtils.isNotEmpty(language)) {
-                if (language.startsWith("zh")) {
-                    LocaleContextHolder.setLocale(Locale.CHINA);
-                } else if (language.startsWith("jp")) {
-                    LocaleContextHolder.setLocale(Locale.JAPAN);
-                } else {
-                    LocaleContextHolder.setLocale(Locale.US);
-                }
+                LocaleContextHolder.setLocale(resolveLocale(language));
             }
             for (Map.Entry<String, Object> entry : message.getHeaders().entrySet()) {
                 LocalCookie.setHeader(entry.getKey(), (String) entry.getValue());
@@ -368,6 +362,16 @@ public class ConsoleHelper {
             LogUtils.setTraceId(message.getUuid().replaceAll("-", ""));
             MDC.put(LogUtils.TRACE_ID, message.getUuid().replaceAll("-", ""));
         }
+    }
+
+    static Locale resolveLocale(String language) {
+        if (language.startsWith("zh")) {
+            return Locale.CHINA;
+        }
+        if (language.startsWith("ja")) {
+            return Locale.JAPAN;
+        }
+        return Locale.US;
     }
 
 

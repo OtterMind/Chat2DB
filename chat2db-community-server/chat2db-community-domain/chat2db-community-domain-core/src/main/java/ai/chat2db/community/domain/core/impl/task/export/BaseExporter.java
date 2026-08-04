@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 
 
 @Slf4j
@@ -25,6 +26,7 @@ public abstract class BaseExporter implements IExportStrategy {
 
     @Override
     public void run(ExportAsyncContext asyncContext) {
+        asyncContext.checkCancelled();
         List<String> tableNames = asyncContext.getTableNames();
         if (CollectionUtils.isEmpty(tableNames)) {
             throw new IllegalArgumentException("tableNames should not be null or empty");
@@ -36,6 +38,8 @@ public abstract class BaseExporter implements IExportStrategy {
             } else {
                 multi(asyncContext);
             }
+        } catch (CancellationException e) {
+            throw e;
         } catch (Exception e) {
             asyncContext.error("export data error, " + e.getMessage());
             log.error("export data error", e);
@@ -54,6 +58,7 @@ public abstract class BaseExporter implements IExportStrategy {
         String[] paths = new String[n];
         InputStream[] inputStreams = new InputStream[n];
         for (int i = 0; i < n; i++) {
+            asyncContext.checkCancelled();
             String tableName = asyncContext.getTableNames().get(i);
             if (StringUtils.isEmpty(tableName)) {
                 throw new IllegalArgumentException("tableName should not be null or empty");
@@ -64,6 +69,7 @@ public abstract class BaseExporter implements IExportStrategy {
             paths[i] = tableName + suffix;
             inputStreams[i] = FileUtil.getInputStream(file);
         }
+        asyncContext.checkCancelled();
         ZipUtil.zip(asyncContext.getWriteFile(), paths, inputStreams);
     }
     protected String getQuerySql(String tableName) {

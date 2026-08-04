@@ -20,10 +20,12 @@ public abstract class BaseImporter implements IImportStrategy {
 
     @Override
     public void run(ImportAsyncContext context) {
+        context.checkCancelled();
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         IDbMetaData metadata = Chat2DBContext.getDbMetaData();
         List<TableColumn> tableColumns = metadata.columns(Chat2DBContext.getConnection(),
                 new TableMetadataRequest(connectInfo.getDatabaseName(), connectInfo.getSchemaName(), context.getTableName()));
+        context.checkCancelled();
         context.setProgress(20);
         context.info("Get table columns success.");
         doImportData(context, tableColumns);

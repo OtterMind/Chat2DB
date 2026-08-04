@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.stream.Collectors;
 
 
@@ -61,7 +62,8 @@ public abstract class BaseExcelExporter extends BaseExporter {
         Connection connection = Chat2DBContext.getConnection();
         asyncContext.info(String.format("Exporting data from table %s to %s", tableName, file.getAbsolutePath()));
         DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet ->
-                writeExcelData(resultSet, excelType, file, tableName, asyncContext));
+                writeExcelData(resultSet, excelType, file, tableName, asyncContext),
+                asyncContext, asyncContext::checkCancelled);
     }
 
     public static int BATCH_SIZE = 500;
@@ -79,6 +81,7 @@ public abstract class BaseExcelExporter extends BaseExporter {
             int n = 0;
             boolean hasNext = resultSet.next();
             while (hasNext) {
+                asyncContext.checkCancelled();
                 List<Object> rowDataList = new ArrayList<>();
                 for (int i = 1; i <= columnCount; i++) {
                     JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
@@ -91,6 +94,8 @@ public abstract class BaseExcelExporter extends BaseExporter {
                     asyncContext.info(DateUtil.formatTime(new Date()) + ":" + String.format("Exported %d rows", n));
                 }
             }
+        } catch (CancellationException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error writing Excel data", e);
             asyncContext.error(String.format("Error writing Excel data: %s", e.getMessage()));
@@ -100,4 +105,3 @@ public abstract class BaseExcelExporter extends BaseExporter {
 
     protected abstract ExcelTypeEnum getExcelType();
 }
-

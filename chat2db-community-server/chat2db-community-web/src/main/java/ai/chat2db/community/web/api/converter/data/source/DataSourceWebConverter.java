@@ -24,7 +24,9 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.datasource.KeyValue;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
+import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import com.alibaba.fastjson2.JSON;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -33,6 +35,7 @@ import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
 
+@Slf4j
 @Mapper(componentModel = "spring", imports = {DataSourceKindEnum.class})
 public abstract class DataSourceWebConverter {
 
@@ -112,15 +115,28 @@ public abstract class DataSourceWebConverter {
         request.setHost(host);
         request.setPort(port);
         request.setSsh(StringUtils.isBlank(ssh) ? null : JSON.parseObject(ssh, SSHInfo.class));
+        request.setSsl(StringUtils.isBlank(ssl) ? null : JSON.parseObject(ssl, SSLInfo.class));
         request.setSid(sid);
         request.setDriver(driver);
         request.setJdbc(jdbcUrl);
         request.setDriverConfig(StringUtils.isBlank(driverConfig) ? null : JSON.parseObject(driverConfig, DriverConfig.class));
-        request.setEnvironmentId(Long.parseLong(env));
+        request.setEnvironmentId(parseEnvironmentId(env));
         request.setServiceName(serviceName);
         request.setServiceType(serviceType);
         request.setExtendInfo(StringUtils.isBlank(extendInfo) ? null : JSON.parseArray(extendInfo, KeyValue.class));
         return request;
+    }
+
+    private static Long parseEnvironmentId(String env) {
+        if (StringUtils.isBlank(env)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(env.trim());
+        } catch (NumberFormatException e) {
+            log.warn("Ignoring invalid environment_id '{}' from legacy datasource row", env);
+            return null;
+        }
     }
 
 }
