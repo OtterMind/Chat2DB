@@ -32,6 +32,7 @@ import aiStreamService, { IChatSession } from '@/service/aiStream';
 import { useChatStore } from '@/store/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
+import { resolveInitialMainPage } from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
 
 function CommunityMainPage() {
@@ -206,10 +207,10 @@ function CommunityMainPage() {
       const hashPath = window.location.hash.replace(/^#/, '');
       const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
       const hashPage = normalizedHashPath.split('/')[1];
-      page = hashPage || mainPageActiveTab || 'stream';
+      page = resolveInitialMainPage(hashPage, mainPageActiveTab);
       pathName = hashPage ? normalizedHashPath : '';
     } else {
-      page = window.location.pathname.split('/')[1] || mainPageActiveTab;
+      page = resolveInitialMainPage(window.location.pathname.split('/')[1], mainPageActiveTab);
       pathName = window.location.pathname;
     }
 
