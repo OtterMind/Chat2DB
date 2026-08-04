@@ -146,9 +146,15 @@ class BigQueryParserTest {
                   SELECT 2;
                 END WHILE guarded
                 """.strip();
+        String items = """
+                items # hash comment
+                : FOR item IN (SELECT 3 AS value) DO
+                  SELECT item.value;
+                END FOR items
+                """.strip();
 
-        Assertions.assertEquals(List.of(loop, guarded, "SELECT 3"),
-                sqlOf(parser.parserSqlScript(loop + ";\n" + guarded + ";\nSELECT 3;")));
+        Assertions.assertEquals(List.of(loop, guarded, items, "SELECT 4"),
+                sqlOf(parser.parserSqlScript(loop + ";\n" + guarded + ";\n" + items + ";\nSELECT 4;")));
     }
 
     @Test
@@ -232,6 +238,15 @@ class BigQueryParserTest {
         Assertions.assertTrue(statements.get(2).getSql().contains("/* block; comment */"));
         Assertions.assertTrue(statements.get(3).getSql().contains("-- leading; comment"));
         Assertions.assertTrue(statements.get(3).getSql().contains("# trailing; comment"));
+    }
+
+    @Test
+    void distinguishesCommentMarkersFromQuotedTextAndOperators() {
+        String quoted = "SELECT '-- text', '# text', '/* text */', `project.--dataset./*table*/`";
+        String arithmetic = "SELECT 8 / 2, 5 - -1";
+
+        Assertions.assertEquals(List.of(quoted, arithmetic, "SELECT 3"),
+                sqlOf(parser.parserSqlScript(quoted + "; " + arithmetic + "; SELECT 3;")));
     }
 
     @Test
