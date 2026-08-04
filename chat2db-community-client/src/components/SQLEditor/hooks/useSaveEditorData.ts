@@ -76,6 +76,7 @@ export const useSaveEditorData = (props: IProps) => {
   const saveConsole = (value?: string, options: SaveConsoleOptions = {}) => {
     const mode = options.mode || 'manual';
     const initialName = options.initialName?.trim();
+    const nameCustomized = boundInfo.nameCustomized === true || Boolean(initialName && initialName !== name);
     const consoleId = effectiveConsoleIdRef.current;
     const p: any = {
       id: consoleId,
@@ -84,6 +85,7 @@ export const useSaveEditorData = (props: IProps) => {
     };
     if (initialName) {
       p.name = initialName;
+      p.nameCustomized = nameCustomized;
     }
 
     if (!storageId) {
@@ -121,6 +123,7 @@ export const useSaveEditorData = (props: IProps) => {
             type: boundInfo.databaseType,
             databaseName: boundInfo.databaseName,
             schemaName: boundInfo.schemaName,
+            nameCustomized,
             status: ConsoleStatus.RELEASE,
             tabOpened: ConsoleOpenedStatus.IS_OPEN,
             operationType: WorkspaceTabType.CONSOLE,
@@ -152,6 +155,7 @@ export const useSaveEditorData = (props: IProps) => {
           ...boundInfo,
           consoleId: persistedConsoleId,
           status: ConsoleStatus.RELEASE,
+          nameCustomized: initialName ? nameCustomized : boundInfo.nameCustomized,
         };
         if (persistedConsoleId !== consoleId || saveStatusRef.current !== ConsoleStatus.RELEASE) {
           onBoundInfoChange?.(savedBoundInfo);
@@ -166,6 +170,7 @@ export const useSaveEditorData = (props: IProps) => {
           workspaceTabId: boundInfo.workspaceTabId,
           consoleId: persistedConsoleId,
           name: initialName,
+          nameCustomized: initialName ? nameCustomized : undefined,
         });
         if (mode === 'automatic') {
           return;

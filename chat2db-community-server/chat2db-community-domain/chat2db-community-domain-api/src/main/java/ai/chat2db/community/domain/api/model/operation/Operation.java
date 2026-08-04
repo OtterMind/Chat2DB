@@ -35,6 +35,9 @@ public class Operation {
     private String schemaName;
 
 
+    private Boolean nameCustomized;
+
+
     private String type;
 
 
