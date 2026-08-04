@@ -203,6 +203,8 @@ export default {
   'setting.shortcut.localSqlFileTreeRefresh': 'Refresh Text Files',
   'setting.shortcut.localSqlFileTreeCollapseAll': 'Collapse Folders',
   'setting.shortcut.localSqlFileTreeRevealInFinder': 'Reveal in Finder',
+  'setting.shortcut.localSqlFileTreeRevealInFileExplorer': 'Reveal in File Explorer',
+  'setting.shortcut.localSqlFileTreeRevealInFileManager': 'Reveal in File Manager',
   'setting.shortcut.localSqlFileTreeOpenTerminal': 'Open in Terminal',
   'setting.shortcut.localSqlFileTreeCopyPath': 'Copy Path',
   'setting.shortcut.localSqlFileTreeCopyRelativePath': 'Copy Relative Path',

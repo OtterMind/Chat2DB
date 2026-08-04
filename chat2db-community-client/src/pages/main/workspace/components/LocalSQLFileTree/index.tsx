@@ -31,6 +31,7 @@ import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
+import { getFileManagerLabelKey } from '@/utils/fileManagerLabel';
 import { getLocalTextFileIcon, LOCAL_TEXT_FILE_ICON_MAP, SQL_FILE_EXTENSION_NAME } from '../../utils/localTextFile';
 import { useStyles } from './style';
 import { LocalSQLFileTreeCreateType, LocalSQLFileTreeNode, LocalSQLFileTreeNodeType } from './type';
@@ -110,6 +111,7 @@ const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
 const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 24, iconSize: 16 };
 const LOCAL_SQL_TREE_BASE_INDENT = 0;
 const LOCAL_SQL_TREE_LEVEL_INDENT = 14;
+const LOCAL_SQL_FILE_TREE_REVEAL_LABEL = getFileManagerLabelKey('workspace');
 
 const normalizeComparablePath = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '');
 
@@ -1385,7 +1387,7 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
     const commonItems: ContextMenuEntry<LocalSQLFileTreeContextIntent>[] = [
       createContextMenuAction({
         id: 'reveal',
-        label: i18n('workspace.localSqlFileTree.revealInFinder'),
+        label: i18n(LOCAL_SQL_FILE_TREE_REVEAL_LABEL),
         shortcutAction: ShortcutAction.LocalSqlFileTreeRevealInFinder,
         execute: () => revealNode(node),
       }),

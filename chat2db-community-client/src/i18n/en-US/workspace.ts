@@ -235,6 +235,8 @@ export default {
   'workspace.localSqlFileTree.moreActions': 'More actions',
   'workspace.localSqlFileTree.open': 'Open',
   'workspace.localSqlFileTree.revealInFinder': 'Reveal in Finder',
+  'workspace.localSqlFileTree.revealInFileExplorer': 'Reveal in File Explorer',
+  'workspace.localSqlFileTree.revealInFileManager': 'Reveal in File Manager',
   'workspace.localSqlFileTree.openTerminal': 'Open in Integrated Terminal',
   'workspace.localSqlFileTree.copyPath': 'Copy Path',
   'workspace.localSqlFileTree.copyRelativePath': 'Copy Relative Path',

@@ -13,7 +13,7 @@ const jcefApi = {
   handleJavaMessageIsReady: () => {
     return createJcefApi('handle-java-message-is-ready');
   },
-  // Open file in finder
+  // Reveal a file in the system file manager
   revealInExplorer: (path: string) => {
     return createJcefApi('reveal-in-explorer', { path });
   },

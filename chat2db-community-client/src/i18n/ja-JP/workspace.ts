@@ -235,6 +235,8 @@ export default {
   'workspace.localSqlFileTree.moreActions': 'その他の操作',
   'workspace.localSqlFileTree.open': '開く',
   'workspace.localSqlFileTree.revealInFinder': 'Finderで表示',
+  'workspace.localSqlFileTree.revealInFileExplorer': 'エクスプローラーで表示',
+  'workspace.localSqlFileTree.revealInFileManager': 'ファイルマネージャーで表示',
   'workspace.localSqlFileTree.openTerminal': '統合ターミナルで開く',
   'workspace.localSqlFileTree.copyPath': 'パスをコピー',
   'workspace.localSqlFileTree.copyRelativePath': '相対パスをコピー',

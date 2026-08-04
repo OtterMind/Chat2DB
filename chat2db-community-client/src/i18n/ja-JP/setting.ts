@@ -308,6 +308,8 @@ export default {
   'setting.shortcut.localSqlFileTreeRefresh': 'テキストファイルを更新',
   'setting.shortcut.localSqlFileTreeCollapseAll': 'フォルダーを折りたたむ',
   'setting.shortcut.localSqlFileTreeRevealInFinder': 'Finderで表示',
+  'setting.shortcut.localSqlFileTreeRevealInFileExplorer': 'エクスプローラーで表示',
+  'setting.shortcut.localSqlFileTreeRevealInFileManager': 'ファイルマネージャーで表示',
   'setting.shortcut.localSqlFileTreeOpenTerminal': 'ターミナルで開く',
   'setting.shortcut.localSqlFileTreeCopyPath': 'パスをコピー',
   'setting.shortcut.localSqlFileTreeCopyRelativePath': '相対パスをコピー',

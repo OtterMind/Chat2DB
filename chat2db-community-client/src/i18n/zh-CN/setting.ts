@@ -319,6 +319,8 @@ export default {
   'setting.shortcut.localSqlFileTreeRefresh': '刷新文本文件',
   'setting.shortcut.localSqlFileTreeCollapseAll': '折叠所有文件夹',
   'setting.shortcut.localSqlFileTreeRevealInFinder': '在 Finder 中显示',
+  'setting.shortcut.localSqlFileTreeRevealInFileExplorer': '在文件资源管理器中显示',
+  'setting.shortcut.localSqlFileTreeRevealInFileManager': '在文件管理器中显示',
   'setting.shortcut.localSqlFileTreeOpenTerminal': '在终端中打开',
   'setting.shortcut.localSqlFileTreeCopyPath': '复制路径',
   'setting.shortcut.localSqlFileTreeCopyRelativePath': '复制相对路径',

@@ -1,4 +1,5 @@
 import { isMac } from '@/utils/env';
+import { getFileManagerLabelKey } from '@/utils/fileManagerLabel';
 
 export enum ShortcutScope {
   Global = 'global',
@@ -86,6 +87,7 @@ export interface EffectiveShortcutConfig extends ShortcutDefinition {
 
 const modifierKey = isMac ? '⌘' : 'Ctrl';
 const deleteKey = isMac ? 'Backspace' : 'Delete';
+const localSqlFileTreeRevealLabel = getFileManagerLabelKey('shortcut');
 
 export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition> = {
   [ShortcutAction.OpenSetting]: {
@@ -308,7 +310,7 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
   },
   [ShortcutAction.LocalSqlFileTreeRevealInFinder]: {
     key: ShortcutAction.LocalSqlFileTreeRevealInFinder,
-    label: 'setting.shortcut.localSqlFileTreeRevealInFinder',
+    label: localSqlFileTreeRevealLabel,
     action: ShortcutAction.LocalSqlFileTreeRevealInFinder,
     defaultBinding: `${modifierKey} + Alt + R`,
     scope: ShortcutScope.LocalSqlFileTree,

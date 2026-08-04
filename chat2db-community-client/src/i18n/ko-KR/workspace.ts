@@ -234,6 +234,8 @@ export default {
   'workspace.localSqlFileTree.moreActions': '추가 작업',
   'workspace.localSqlFileTree.open': '열기',
   'workspace.localSqlFileTree.revealInFinder': 'Finder에서 보기',
+  'workspace.localSqlFileTree.revealInFileExplorer': '파일 탐색기에서 보기',
+  'workspace.localSqlFileTree.revealInFileManager': '파일 관리자에서 보기',
   'workspace.localSqlFileTree.openTerminal': '통합 터미널에서 열기',
   'workspace.localSqlFileTree.copyPath': '경로 복사',
   'workspace.localSqlFileTree.copyRelativePath': '상대 경로 복사',

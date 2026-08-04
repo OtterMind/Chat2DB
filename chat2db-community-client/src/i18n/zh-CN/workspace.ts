@@ -229,6 +229,8 @@ export default {
   'workspace.localSqlFileTree.moreActions': '更多操作',
   'workspace.localSqlFileTree.open': '打开',
   'workspace.localSqlFileTree.revealInFinder': '在 Finder 中显示',
+  'workspace.localSqlFileTree.revealInFileExplorer': '在文件资源管理器中显示',
+  'workspace.localSqlFileTree.revealInFileManager': '在文件管理器中显示',
   'workspace.localSqlFileTree.openTerminal': '在终端中打开',
   'workspace.localSqlFileTree.copyPath': '复制路径',
   'workspace.localSqlFileTree.copyRelativePath': '复制相对路径',

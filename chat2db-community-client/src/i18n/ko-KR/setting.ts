@@ -203,6 +203,8 @@ export default {
   'setting.shortcut.localSqlFileTreeRefresh': '텍스트 파일 새로 고침',
   'setting.shortcut.localSqlFileTreeCollapseAll': '폴더 모두 접기',
   'setting.shortcut.localSqlFileTreeRevealInFinder': 'Finder에서 보기',
+  'setting.shortcut.localSqlFileTreeRevealInFileExplorer': '파일 탐색기에서 보기',
+  'setting.shortcut.localSqlFileTreeRevealInFileManager': '파일 관리자에서 보기',
   'setting.shortcut.localSqlFileTreeOpenTerminal': '터미널에서 열기',
   'setting.shortcut.localSqlFileTreeCopyPath': '경로 복사',
   'setting.shortcut.localSqlFileTreeCopyRelativePath': '상대 경로 복사',

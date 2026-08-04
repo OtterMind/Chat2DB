@@ -205,6 +205,8 @@ export default {
   'setting.shortcut.localSqlFileTreeRefresh': 'Actualizar archivos de texto',
   'setting.shortcut.localSqlFileTreeCollapseAll': 'Contraer carpetas',
   'setting.shortcut.localSqlFileTreeRevealInFinder': 'Mostrar en Finder',
+  'setting.shortcut.localSqlFileTreeRevealInFileExplorer': 'Mostrar en el Explorador de archivos',
+  'setting.shortcut.localSqlFileTreeRevealInFileManager': 'Mostrar en el gestor de archivos',
   'setting.shortcut.localSqlFileTreeOpenTerminal': 'Abrir en Terminal',
   'setting.shortcut.localSqlFileTreeCopyPath': 'Copiar ruta',
   'setting.shortcut.localSqlFileTreeCopyRelativePath': 'Copiar ruta relativa',
