@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { isCurrentTableInstance, releaseTableInstance, releaseTableInstanceSafely } from './lifecycle';
+import {
+  getActiveTableInstance,
+  isCurrentTableInstance,
+  releaseTableInstance,
+  releaseTableInstanceSafely,
+} from './lifecycle';
 
 let releaseCount = 0;
 let notificationCount = 0;
@@ -123,6 +128,13 @@ assert.deepEqual(releaseTableInstanceSafely(safeFailureRef), {
 const activeInstance = { release: () => undefined };
 const replacementInstance = { release: () => undefined };
 const activeInstanceRef = { current: activeInstance };
+assert.equal(getActiveTableInstance(true, activeInstance), activeInstance);
+assert.equal(
+  getActiveTableInstance(false, activeInstance),
+  null,
+  'parents must detach effects before an inactive child releases the table',
+);
+assert.equal(getActiveTableInstance(true, null), null);
 assert.equal(isCurrentTableInstance(true, activeInstance, activeInstanceRef), true);
 assert.equal(
   isCurrentTableInstance(false, activeInstance, activeInstanceRef),

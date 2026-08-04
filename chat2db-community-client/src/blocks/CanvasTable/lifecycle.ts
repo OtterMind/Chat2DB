@@ -20,6 +20,10 @@ export interface SafeTableReleaseResult {
   error: unknown | null;
 }
 
+export function getActiveTableInstance<T>(active: boolean, instance: T | null): T | null {
+  return active ? instance : null;
+}
+
 export function isCurrentTableInstance<T extends ReleasableTableInstance>(
   active: boolean,
   instance: T | null,

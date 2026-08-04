@@ -20,6 +20,7 @@ import { getBlankCreateCellValue, transformOperations } from '@/blocks/SearchRes
 import MonacoEditorErrorTips from '@/components/SQLEditor/components/MonacoEditorErrorTips';
 import { v4 as uuidv4 } from 'uuid';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
+import { getActiveTableInstance } from '@/blocks/CanvasTable/lifecycle';
 import {
   ShortcutAction,
   ShortcutOverrides,
@@ -62,6 +63,8 @@ export default memo<IProps>(
     const [executeErrorMessage, setExecuteErrorMessage] = useState<string | null>(null);
     const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
     const tableInstanceRef = useRef<ITableInstance | null>(null);
+    const tableResourceActive = props.active || hasOperationRecord;
+    const activeTableInstance = getActiveTableInstance(tableResourceActive, tableInstance);
     const [showFESearch, setShowFESearch] = useState(true);
     const [activeFilterCount, setActiveFilterCount] = useState(0);
     const resultSetRef = useRef<HTMLDivElement>(null);
@@ -86,6 +89,10 @@ export default memo<IProps>(
     useEffect(() => {
       setResultData(props.resultData);
     }, [props.resultData]);
+
+    useLayoutEffect(() => {
+      tableInstanceRef.current = activeTableInstance;
+    }, [activeTableInstance]);
 
     useEffect(() => {
       setSelectedValues([]);
@@ -520,18 +527,18 @@ export default memo<IProps>(
     }, [activateInspector]);
 
     useEffect(() => {
-      if (!tableInstance) {
+      if (!activeTableInstance) {
         return;
       }
 
       const resizeTimer = window.setTimeout(() => {
-        if (resultSetTableRef.current?.tableInstance === tableInstance) {
-          tableInstance.resize?.();
+        if (resultSetTableRef.current?.tableInstance === activeTableInstance) {
+          activeTableInstance.resize?.();
         }
       }, 0);
 
       return () => window.clearTimeout(resizeTimer);
-    }, [inspectorOpen, tableInstance]);
+    }, [activeTableInstance, inspectorOpen]);
 
     return (
       <>
@@ -570,13 +577,13 @@ export default memo<IProps>(
                 ref={feSearchRef}
                 searchAreaId={searchAreaId}
                 onClose={handleCloseFESearch}
-                tableInstance={tableInstance}
+                tableInstance={activeTableInstance}
               />
             )}
             <div className={styles.resultSetContent}>
               <div className={styles.resultSetTableContainer}>
                 <ResultSetTable
-                  active={props.active || hasOperationRecord}
+                  active={tableResourceActive}
                   tableInstance={tableInstance}
                   setTableInstance={handleTableInstanceChange}
                   ref={resultSetTableRef}

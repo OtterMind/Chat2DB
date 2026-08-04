@@ -10,6 +10,7 @@ import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
 import { QuestionType } from '@/constants/chat';
+import ResultSetErrorBoundary from './ResultSetErrorBoundary';
 
 interface IProps {
   resultData: IManageResultData;
@@ -52,7 +53,20 @@ export default memo<IProps>(
       return (
         <div className={styles.successResult}>
           {needTable ? (
-            <ResultSet active={active} viewTable={viewTable} resultData={resultData} />
+            <ResultSetErrorBoundary
+              resetKey={`${resultData.uuid}:${active}`}
+              fallback={(error, retry) => (
+                <div className={styles.errorResult}>
+                  <Iconfont className={styles.errorIcon} code={''} />
+                  <div className={styles.errorMessage}>{error.message || i18n('stream.trace.unknownError')}</div>
+                  <Button type="primary" onClick={retry}>
+                    {i18n('common.button.refresh')}
+                  </Button>
+                </div>
+              )}
+            >
+              <ResultSet active={active} viewTable={viewTable} resultData={resultData} />
+            </ResultSetErrorBoundary>
           ) : (
             <div className={styles.updateCountBox}>
               <div className={styles.updateCount}>{i18n('common.text.affectedRows', resultData.updateCount)}</div>

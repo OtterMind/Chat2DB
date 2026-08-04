@@ -13,6 +13,7 @@ import useFilterAndSort from './hooks/useFilterAndSort';
 import useHeaderTooltip from './hooks/useHeaderTooltip';
 import { ITableOperationUtils } from './typings';
 import { useGlobalStore } from '@/store/global';
+import { getActiveTableInstance } from '@/blocks/CanvasTable/lifecycle';
 
 interface IProps {
   className?: string;
@@ -50,9 +51,11 @@ export interface ResultSetTableRef {
 const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTableRef>) => {
   const { active, resultData, onOperationChange, onTableOperationUtils, tableInstance, setTableInstance } = props;
   const { styles, theme } = useStyles();
+  const activeTableInstance = getActiveTableInstance(active, tableInstance);
 
   // Registry data manipulation method
   const { operationRecordUtils, hasOperationRecord, reCalculateCellStyle } = useOperationRecord({
+    // Keep edit tracking attached until CanvasTable completes the active editor during release.
     tableInstance,
     theme,
   });
@@ -64,13 +67,13 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   // Filter and sort
   const { activeFilterCount, clearAllFilters } = useFilterAndSort({
     theme,
-    tableInstance,
+    tableInstance: activeTableInstance,
     resultData,
     sortAfter: reCalculateCellStyle,
     filterAfter: reCalculateCellStyle,
     setOrderByText: props.setOrderByText,
   });
-  const headerTooltip = useHeaderTooltip({ tableInstance });
+  const headerTooltip = useHeaderTooltip({ tableInstance: activeTableInstance });
 
   const [columns, records] = useMemo(() => {
     return dataTreating({ data: resultData, theme, dataTableSettings });
@@ -85,25 +88,29 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   }, [activeFilterCount]);
 
   useEffect(() => {
-    if (!tableInstance || !operationRecordUtils) return;
+    if (!activeTableInstance || !operationRecordUtils) return;
     // monitors the right mouse click on a cell
     const { id: onContextmenuCellId } = onContextmenuCell({
       resultData,
-      tableInstance,
+      tableInstance: activeTableInstance,
       operationRecordUtils,
       onTableOperationUtils,
     });
-    // monitors cell value changes
-    const onChangeCellValueId = onChangeCellValue(tableInstance, operationRecordUtils.handleCellValueChange);
-    // monitors copied data
     return () => {
-      tableInstance?.off(onContextmenuCellId);
-      tableInstance?.off(onChangeCellValueId);
+      activeTableInstance.off(onContextmenuCellId);
+    };
+  }, [activeTableInstance, operationRecordUtils]);
+
+  useEffect(() => {
+    if (!tableInstance || !operationRecordUtils) return;
+    const onChangeCellValueId = onChangeCellValue(tableInstance, operationRecordUtils.handleCellValueChange);
+    return () => {
+      tableInstance.off(onChangeCellValueId);
     };
   }, [tableInstance, operationRecordUtils]);
 
   useEffect(() => {
-    if (!tableInstance || !props.onSelectionChange) {
+    if (!activeTableInstance || !props.onSelectionChange) {
       return;
     }
 
@@ -111,19 +118,21 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     let latestActiveCell: { col: number; row: number } | undefined;
     const emitSelection = () => {
       frameId = null;
-      const cells = (tableInstance.getSelectedCellInfos() || [])
+      const cells = (activeTableInstance.getSelectedCellInfos() || [])
         .flat()
-        .filter((cell) => cell.col > 0 && !tableInstance.isHeader(cell.col, cell.row));
+        .filter((cell) => cell.col > 0 && !activeTableInstance.isHeader(cell.col, cell.row));
       const fallbackCell = cells[cells.length - 1];
       const activeCell =
         latestActiveCell || (fallbackCell ? { col: fallbackCell.col, row: fallbackCell.row } : undefined);
-      const activeRecord = activeCell ? tableInstance.getRecordByCell(activeCell.col, activeCell.row) : undefined;
+      const activeRecord = activeCell
+        ? activeTableInstance.getRecordByCell(activeCell.col, activeCell.row)
+        : undefined;
       props.onSelectionChange?.({
         values: cells.map((cell) => (cell.dataValue !== undefined ? cell.dataValue : cell.value)),
         rowCount: new Set(cells.map((cell) => cell.row)).size,
         activeCell: activeCell
           ? {
-              tableInstance,
+              tableInstance: activeTableInstance,
               col: activeCell.col,
               row: activeCell.row,
               rowId: activeRecord?.CHAT2DB_ROW_NUMBER,
@@ -136,7 +145,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
         event?.col !== undefined &&
         event?.row !== undefined &&
         event.col > 0 &&
-        !tableInstance.isHeader(event.col, event.row)
+        !activeTableInstance.isHeader(event.col, event.row)
       ) {
         latestActiveCell = { col: event.col, row: event.row };
       }
@@ -151,10 +160,10 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     };
 
     const eventIds = [
-      tableInstance.on('selected_cell', scheduleSelection),
-      tableInstance.on('drag_select_end', scheduleSelection),
-      tableInstance.on('selected_clear', clearSelection),
-      tableInstance.on('change_cell_value', scheduleSelection),
+      activeTableInstance.on('selected_cell', scheduleSelection),
+      activeTableInstance.on('drag_select_end', scheduleSelection),
+      activeTableInstance.on('selected_clear', clearSelection),
+      activeTableInstance.on('change_cell_value', scheduleSelection),
     ];
     scheduleSelection();
 
@@ -162,9 +171,9 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
       if (frameId !== null) {
         cancelAnimationFrame(frameId);
       }
-      eventIds.forEach((eventId) => tableInstance.off(eventId));
+      eventIds.forEach((eventId) => activeTableInstance.off(eventId));
     };
-  }, [tableInstance, props.onSelectionChange]);
+  }, [activeTableInstance, props.onSelectionChange]);
 
   // callback after initialization is completed
   const onInit = useCallback(
@@ -182,21 +191,21 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   useImperativeHandle(ref, () => {
     return {
       operationRecordUtils,
-      tableInstance,
+      tableInstance: activeTableInstance,
       activeFilterCount,
       clearAllFilters,
     };
-  }, [operationRecordUtils, tableInstance, activeFilterCount, clearAllFilters]);
+  }, [operationRecordUtils, activeTableInstance, activeFilterCount, clearAllFilters]);
 
   const onCopy = useCallback(() => {
-    if (!tableInstance) return;
-    onCopyData(tableInstance);
-  }, [tableInstance]);
+    if (!activeTableInstance) return;
+    onCopyData(activeTableInstance);
+  }, [activeTableInstance]);
 
   const onPaste = useCallback(() => {
-    if (!tableInstance) return;
-    onPasteData(tableInstance, operationRecordUtils);
-  }, [tableInstance, operationRecordUtils]);
+    if (!activeTableInstance) return;
+    onPasteData(activeTableInstance, operationRecordUtils);
+  }, [activeTableInstance, operationRecordUtils]);
 
   return (
     <>
