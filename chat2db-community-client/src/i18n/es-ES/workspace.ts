@@ -257,6 +257,10 @@ export default {
   'workspace.fileEncoding.label': 'Codificación del archivo',
   'workspace.fileEncoding.autoDetect': 'Detectar automáticamente',
   'workspace.fileEncoding.reloadFailed': 'No se pudo abrir el archivo con la codificación seleccionada',
+  'workspace.fileEncoding.unsavedTitle': '¿Descartar los cambios sin guardar?',
+  'workspace.fileEncoding.unsavedContent':
+    'Cambiar la codificación vuelve a cargar el archivo desde el disco y descarta los cambios sin guardar.',
+  'workspace.fileEncoding.reloadConfirm': 'Cambiar codificación',
   'workspace.terminal.title': 'Terminal',
   'workspace.terminal.stop': 'Detener',
   'workspace.terminal.exited': 'El proceso terminó con el código',

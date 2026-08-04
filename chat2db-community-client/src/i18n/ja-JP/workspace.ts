@@ -257,6 +257,10 @@ export default {
   'workspace.fileEncoding.label': 'ファイルの文字コード',
   'workspace.fileEncoding.autoDetect': '自動検出',
   'workspace.fileEncoding.reloadFailed': '選択した文字コードでファイルを開けませんでした',
+  'workspace.fileEncoding.unsavedTitle': '未保存の変更を破棄しますか？',
+  'workspace.fileEncoding.unsavedContent':
+    'ファイルの文字コードを変更すると、ディスクからファイルが再読み込みされ、未保存の変更は破棄されます。',
+  'workspace.fileEncoding.reloadConfirm': '文字コードを変更',
   'workspace.terminal.title': 'ターミナル',
   'workspace.terminal.stop': '終了',
   'workspace.terminal.exited': 'プロセス終了コード',

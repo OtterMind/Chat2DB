@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   LOCAL_FILE_CHARSETS,
   formatLocalFileEncoding,
+  hasUnsavedLocalFileChanges,
   normalizeLocalFileReadResult,
 } from './localFileEncoding';
 
@@ -24,6 +25,8 @@ assert.deepEqual(
 assert.equal(formatLocalFileEncoding('UTF-8', true), 'UTF-8 BOM');
 assert.equal(formatLocalFileEncoding('GB18030', false), 'GB18030');
 assert.equal(formatLocalFileEncoding(), '');
+assert.equal(hasUnsavedLocalFileChanges('select 2;', 'select 1;'), true);
+assert.equal(hasUnsavedLocalFileChanges('select 1;\r\n', 'select 1;\r\n'), false);
 assert.equal(new Set(LOCAL_FILE_CHARSETS).size, LOCAL_FILE_CHARSETS.length, 'encoding choices should be unique');
 
 console.log('local file encoding tests passed');

@@ -256,6 +256,10 @@ export default {
   'workspace.fileEncoding.label': '파일 인코딩',
   'workspace.fileEncoding.autoDetect': '자동 감지',
   'workspace.fileEncoding.reloadFailed': '선택한 인코딩으로 파일을 열 수 없습니다',
+  'workspace.fileEncoding.unsavedTitle': '저장하지 않은 변경 사항을 버리시겠습니까?',
+  'workspace.fileEncoding.unsavedContent':
+    '파일 인코딩을 변경하면 디스크에서 파일을 다시 불러오며 저장하지 않은 변경 사항이 삭제됩니다.',
+  'workspace.fileEncoding.reloadConfirm': '인코딩 변경',
   'workspace.terminal.title': '터미널',
   'workspace.terminal.stop': '종료',
   'workspace.terminal.exited': '프로세스 종료 코드',

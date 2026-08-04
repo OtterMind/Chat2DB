@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { MinusOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Segmented, Tooltip } from 'antd';
+import { Button, Modal, Segmented, Tooltip } from 'antd';
 import { staticMessage } from '@chat2db/ui';
 import { Code, Columns2, Eye } from 'lucide-react';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
@@ -17,6 +17,7 @@ import styles from './FilePreviewTab.less';
 import { getSqlDirectoryPreviewUrl } from '@/utils/previewResource';
 import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
 import { useWorkspaceStore } from '@/store/workspace';
+import { hasUnsavedLocalFileChanges } from '@/utils/localFileEncoding';
 
 interface FilePreviewTabProps {
   file: IBoundInfo;
@@ -123,6 +124,7 @@ function MarkdownSourceEditor({
   fileCharset,
   fileBom,
   onChange,
+  onSave,
   onEditorChange,
   onCursorPositionChange,
 }: {
@@ -131,6 +133,7 @@ function MarkdownSourceEditor({
   fileCharset?: string;
   fileBom?: boolean;
   onChange: (value: string) => void;
+  onSave: (value: string) => void;
   onEditorChange: (editor?: IEditorIns) => void;
   onCursorPositionChange: (position: monaco.IPosition) => void;
 }) {
@@ -169,13 +172,17 @@ function MarkdownSourceEditor({
         editor.onDidChangeModelContent(() => onChange(editor.getValue()));
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
           if (filePath) {
+            const fileContent = editor.getValue();
             void updateFileContent({
               filePath,
-              fileContent: editor.getValue(),
+              fileContent,
               charset: fileCharset,
               bom: fileBom,
             })
-              .then(() => staticMessage.success(i18n('workspace.text.changeFileSuccess')))
+              .then(() => {
+                onSave(fileContent);
+                staticMessage.success(i18n('workspace.text.changeFileSuccess'));
+              })
               .catch((error) => {
                 console.error('update local file error', error);
                 staticMessage.error(i18n('common.text.failure'));
@@ -233,6 +240,7 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
   const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>('review');
   const [markdownContent, setMarkdownContent] = useState(file.ddl || '');
   const [markdownPreviewContent, setMarkdownPreviewContent] = useState(file.ddl || '');
+  const [markdownPersistedContent, setMarkdownPersistedContent] = useState(file.ddl || '');
   const [editor, setEditor] = useState<IEditorIns>();
   const [imageZoom, setImageZoom] = useState(1);
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
@@ -245,10 +253,33 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
   const scrollSyncFrameRef = useRef<number | undefined>(undefined);
   const pdfLoadTimeoutRef = useRef<number | undefined>(undefined);
   const markdownCursorPositionRef = useRef<HTMLSpanElement>(null);
+  const [modal, modalContextHolder] = Modal.useModal();
+
+  const confirmDiscardUnsavedChanges = useCallback(
+    () =>
+      new Promise<boolean>((resolve) => {
+        modal.confirm({
+          title: i18n('workspace.fileEncoding.unsavedTitle'),
+          content: i18n('workspace.fileEncoding.unsavedContent'),
+          okText: i18n('workspace.fileEncoding.reloadConfirm'),
+          okButtonProps: { danger: true },
+          cancelText: i18n('common.button.cancel'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      }),
+    [modal],
+  );
 
   const handleFileEncodingChange = useCallback(
     async (charset?: string) => {
       if (!file.filePath) {
+        return;
+      }
+      if (
+        hasUnsavedLocalFileChanges(markdownContent, markdownPersistedContent) &&
+        !(await confirmDiscardUnsavedChanges())
+      ) {
         return;
       }
       const reloadedFile = await useWorkspaceStore.getState().readFile(file.filePath, file.fileExtension, {
@@ -262,8 +293,18 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
       }
       setMarkdownContent(reloadedFile.content);
       setMarkdownPreviewContent(reloadedFile.content);
+      setMarkdownPersistedContent(reloadedFile.content);
     },
-    [file.fileExtension, file.filePath, file.fileRelativePath, file.fileRootToken, workspaceTabId],
+    [
+      confirmDiscardUnsavedChanges,
+      file.fileExtension,
+      file.filePath,
+      file.fileRelativePath,
+      file.fileRootToken,
+      markdownContent,
+      markdownPersistedContent,
+      workspaceTabId,
+    ],
   );
 
   const handleMarkdownCursorPositionChange = useCallback((position: monaco.IPosition) => {
@@ -275,6 +316,7 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
   useEffect(() => {
     setMarkdownContent(file.ddl || '');
     setMarkdownPreviewContent(file.ddl || '');
+    setMarkdownPersistedContent(file.ddl || '');
     setMarkdownViewMode('review');
     setImageZoom(1);
     setImageNaturalSize({ width: 0, height: 0 });
@@ -500,6 +542,7 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
         fileCharset={file.fileCharset}
         fileBom={file.fileBom}
         onChange={setMarkdownContent}
+        onSave={setMarkdownPersistedContent}
         onEditorChange={setEditor}
         onCursorPositionChange={handleMarkdownCursorPositionChange}
       />
@@ -507,6 +550,7 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
 
     return (
       <div className={styles.markdownWorkspace}>
+        {modalContextHolder}
         <div className={styles.markdownToolbar}>
           <Segmented
             size="small"

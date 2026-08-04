@@ -31,6 +31,10 @@ export function formatLocalFileEncoding(charset?: string, bom?: boolean) {
   return bom ? `${charset} BOM` : charset;
 }
 
+export function hasUnsavedLocalFileChanges(currentContent: string, persistedContent: string) {
+  return currentContent !== persistedContent;
+}
+
 export function normalizeLocalFileReadResult(result: LocalFileReadResult) {
   return {
     content: result.content,
