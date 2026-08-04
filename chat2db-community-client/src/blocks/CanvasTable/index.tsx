@@ -108,7 +108,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   const tableRef = useRef<HTMLDivElement>(null);
   const tableTheme = useTableTheme({ antdTheme: theme, options, customOptions });
   const contextMenuRef = useRef<ContextMenuRef>(null);
-  const tooltipTongs = useTooltip({ tableInstance, tooltip });
+  const tooltipTongs = useTooltip({ active, tableInstance, tooltip });
   const containerRef = React.useRef<HTMLDivElement>(null);
   const shortcutOverrides = useGlobalStore((s) => s.shortcutOverrides);
   const shortcutConfig = useMemo(
@@ -279,6 +279,9 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isCurrentTableInstance(active, tableInstance, tableInstanceRef)) {
+        return;
+      }
       if (isEditableElement(e.target)) {
         return;
       }
@@ -327,11 +330,11 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
       // clean up event monitoring
       containerRef.current?.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onCopy, onPaste, shortcutConfig, tableInstance]);
+  }, [active, onCopy, onPaste, shortcutConfig, tableInstance]);
 
   useImperativeHandle(ref, () => ({
     getInstance: () => {
-      return tableInstance;
+      return tableInstanceRef.current;
     },
   }));
 
