@@ -59,7 +59,9 @@ public class BigQueryParser extends PgsqlSqlParser {
     private static void splitScript(Reader source, StatementConsumer consumer) throws IOException {
         try (PushbackReader reader = new PushbackReader(source, 3)) {
             StringBuilder statement = new StringBuilder();
+            StringBuilder token = new StringBuilder();
             Deque<Character> closingBrackets = new ArrayDeque<>();
+            ScriptBlockTracker scriptBlocks = new ScriptBlockTracker();
             LexicalState state = LexicalState.DEFAULT;
             boolean hasExecutableContent = false;
             long bytesRead = 0L;
@@ -116,7 +118,15 @@ public class BigQueryParser extends PgsqlSqlParser {
                         }
                     }
                     case DEFAULT -> {
-                        if (current == '-' && nextCharactersAre(reader, '-', 1)) {
+                        if (isTokenCharacter(current)) {
+                            token.append(Character.toUpperCase(current));
+                            hasExecutableContent = true;
+                        } else {
+                            flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
+                        }
+                        if (isTokenCharacter(current)) {
+                            // The token is processed when the following delimiter is read.
+                        } else if (current == '-' && nextCharactersAre(reader, '-', 1)) {
                             bytesRead += appendNext(reader, statement);
                             state = LexicalState.LINE_COMMENT;
                         } else if (current == '#') {
@@ -146,7 +156,8 @@ public class BigQueryParser extends PgsqlSqlParser {
                         } else if (!closingBrackets.isEmpty() && current == closingBrackets.peek()) {
                             hasExecutableContent = true;
                             closingBrackets.pop();
-                        } else if (current == ';' && closingBrackets.isEmpty()) {
+                        } else if (current == ';' && closingBrackets.isEmpty()
+                                && scriptBlocks.shouldSplitAtSemicolon()) {
                             statement.setLength(statement.length() - 1);
                             if (hasExecutableContent) {
                                 consumer.accept(statement.toString().strip(), bytesRead);
@@ -160,6 +171,8 @@ public class BigQueryParser extends PgsqlSqlParser {
                 }
             }
 
+            flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
+            scriptBlocks.finishInput();
             if (hasExecutableContent) {
                 consumer.accept(statement.toString().strip(), bytesRead);
             }
@@ -219,6 +232,19 @@ public class BigQueryParser extends PgsqlSqlParser {
         return Character.isSurrogate(character) ? 2 : 3;
     }
 
+    private static boolean isTokenCharacter(char character) {
+        return Character.isLetterOrDigit(character) || character == '_';
+    }
+
+    private static void flushToken(StringBuilder token, ScriptBlockTracker scriptBlocks,
+                                   boolean insideBrackets) {
+        if (token.isEmpty()) {
+            return;
+        }
+        scriptBlocks.acceptToken(token.toString(), insideBrackets);
+        token.setLength(0);
+    }
+
     private static boolean isOpeningBracket(char character) {
         return character == '(' || character == '[' || character == '{';
     }
@@ -241,6 +267,158 @@ public class BigQueryParser extends PgsqlSqlParser {
         BACKTICK,
         LINE_COMMENT,
         BLOCK_COMMENT
+    }
+
+    private enum ScriptBlock {
+        BEGIN,
+        IF,
+        LOOP,
+        WHILE,
+        FOR,
+        REPEAT,
+        CASE_EXPRESSION,
+        CASE_STATEMENT
+    }
+
+    private static final class ScriptBlockTracker {
+
+        private final Deque<ScriptBlock> blocks = new ArrayDeque<>();
+        private boolean atStatementStart = true;
+        private boolean pendingBegin;
+        private boolean pendingEnd;
+
+        void acceptToken(String token, boolean insideBrackets) {
+            if (insideBrackets) {
+                return;
+            }
+            if (pendingEnd) {
+                pendingEnd = false;
+                if (closeSuffixedBlock(token)) {
+                    atStatementStart = false;
+                    return;
+                }
+                closeBareEnd();
+            }
+            if (pendingBegin) {
+                pendingBegin = false;
+                if ("TRANSACTION".equals(token) || "WORK".equals(token)) {
+                    atStatementStart = false;
+                    return;
+                }
+                blocks.push(ScriptBlock.BEGIN);
+                atStatementStart = true;
+            }
+
+            switch (token) {
+                case "BEGIN" -> {
+                    pendingBegin = true;
+                    atStatementStart = false;
+                }
+                case "END" -> {
+                    pendingEnd = true;
+                    atStatementStart = false;
+                }
+                case "CASE" -> {
+                    blocks.push(atStatementStart
+                            ? ScriptBlock.CASE_STATEMENT
+                            : ScriptBlock.CASE_EXPRESSION);
+                    atStatementStart = false;
+                }
+                case "IF" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.IF);
+                    }
+                    atStatementStart = false;
+                }
+                case "LOOP" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.LOOP);
+                        atStatementStart = true;
+                    } else {
+                        atStatementStart = false;
+                    }
+                }
+                case "WHILE" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.WHILE);
+                    }
+                    atStatementStart = false;
+                }
+                case "FOR" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.FOR);
+                    }
+                    atStatementStart = false;
+                }
+                case "REPEAT" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.REPEAT);
+                        atStatementStart = true;
+                    } else {
+                        atStatementStart = false;
+                    }
+                }
+                case "THEN" -> atStatementStart = isTop(ScriptBlock.IF)
+                        || isTop(ScriptBlock.CASE_STATEMENT);
+                case "DO" -> atStatementStart = isTop(ScriptBlock.WHILE)
+                        || isTop(ScriptBlock.FOR);
+                case "ELSE" -> atStatementStart = isTop(ScriptBlock.IF)
+                        || isTop(ScriptBlock.CASE_STATEMENT);
+                case "ELSEIF" -> atStatementStart = false;
+                case "WHEN" -> atStatementStart = false;
+                case "UNTIL" -> atStatementStart = false;
+                default -> atStatementStart = false;
+            }
+        }
+
+        boolean shouldSplitAtSemicolon() {
+            finishPending();
+            boolean shouldSplit = blocks.isEmpty();
+            atStatementStart = true;
+            return shouldSplit;
+        }
+
+        void finishInput() {
+            finishPending();
+        }
+
+        private void finishPending() {
+            if (pendingBegin) {
+                pendingBegin = false;
+                blocks.push(ScriptBlock.BEGIN);
+            }
+            if (pendingEnd) {
+                pendingEnd = false;
+                closeBareEnd();
+            }
+        }
+
+        private boolean closeSuffixedBlock(String token) {
+            ScriptBlock expected = switch (token) {
+                case "IF" -> ScriptBlock.IF;
+                case "LOOP" -> ScriptBlock.LOOP;
+                case "WHILE" -> ScriptBlock.WHILE;
+                case "FOR" -> ScriptBlock.FOR;
+                case "REPEAT" -> ScriptBlock.REPEAT;
+                case "CASE" -> ScriptBlock.CASE_STATEMENT;
+                default -> null;
+            };
+            if (expected == null || !isTop(expected)) {
+                return false;
+            }
+            blocks.pop();
+            return true;
+        }
+
+        private void closeBareEnd() {
+            if (isTop(ScriptBlock.BEGIN) || isTop(ScriptBlock.CASE_EXPRESSION)) {
+                blocks.pop();
+            }
+        }
+
+        private boolean isTop(ScriptBlock block) {
+            return !blocks.isEmpty() && blocks.peek() == block;
+        }
     }
 
     @FunctionalInterface

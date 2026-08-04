@@ -44,6 +44,79 @@ class BigQueryParserTest {
     }
 
     @Test
+    void keepsNestedBigQueryScriptingBlocksTogether() {
+        String block = """
+                BEGIN
+                  DECLARE counter INT64 DEFAULT 0;
+                  IF counter = 0 THEN
+                    SET counter = 1;
+                  END IF;
+                  LOOP
+                    SET counter = counter + 1;
+                    BREAK;
+                  END LOOP;
+                  WHILE counter < 3 DO
+                    SET counter = counter + 1;
+                  END WHILE;
+                  FOR item IN (SELECT 1 AS value) DO
+                    SET counter = counter + item.value;
+                  END FOR;
+                  REPEAT
+                    SET counter = counter - 1;
+                  UNTIL counter = 0
+                  END REPEAT;
+                END
+                """.strip();
+
+        List<Statement> statements = parser.parserSqlScript(block + ";\nSELECT 1;");
+
+        Assertions.assertEquals(List.of(block, "SELECT 1"), sqlOf(statements));
+    }
+
+    @Test
+    void caseExpressionDoesNotCloseOuterBeginBlock() {
+        String block = """
+                BEGIN
+                  SELECT CASE WHEN TRUE THEN 1 ELSE 0 END AS value;
+                  SELECT 2;
+                END
+                """.strip();
+
+        List<Statement> statements = parser.parserSqlScript(block + ";\nSELECT 3;");
+
+        Assertions.assertEquals(List.of(block, "SELECT 3"), sqlOf(statements));
+    }
+
+    @Test
+    void beginTransactionRemainsATopLevelStatement() {
+        String script = """
+                BEGIN TRANSACTION;
+                UPDATE `project.dataset.table` SET value = 1 WHERE id = 1;
+                COMMIT TRANSACTION;
+                SELECT 1;
+                """;
+
+        Assertions.assertEquals(List.of(
+                "BEGIN TRANSACTION",
+                "UPDATE `project.dataset.table` SET value = 1 WHERE id = 1",
+                "COMMIT TRANSACTION",
+                "SELECT 1"), sqlOf(parser.parserSqlScript(script)));
+    }
+
+    @Test
+    void keepsCreateProcedureBodyTogether() {
+        String procedure = """
+                CREATE PROCEDURE `project.dataset.increment`(value INT64)
+                BEGIN
+                  SELECT value + 1;
+                END
+                """.strip();
+
+        Assertions.assertEquals(List.of(procedure, "SELECT 2"),
+                sqlOf(parser.parserSqlScript(procedure + ";\nSELECT 2;")));
+    }
+
+    @Test
     void ignoresSemicolonsInsideBigQueryQuotesAndComments() {
         String script = "SELECT 'single;quote', \"double;quote\", "
                 + "'''triple;single''', \"\"\"triple;double\"\"\";\n"
