@@ -9,10 +9,12 @@ import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
 import ai.chat2db.community.web.api.converter.db.DbWebConverter;
 import ai.chat2db.community.web.api.model.request.db.DdlCountRequest;
-import ai.chat2db.community.web.api.model.request.db.DmlRequest;
-import ai.chat2db.community.web.api.model.request.db.DmlTableRequest;
+import ai.chat2db.community.web.api.model.request.db.DdlExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.CopyInValuesRequest;
 import ai.chat2db.community.web.api.model.request.db.SelectResultUpdateRequest;
+import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
+import ai.chat2db.community.web.api.model.request.db.TableBrowseRequest;
+import ai.chat2db.community.web.api.model.request.db.TableEditExecuteRequest;
 import ai.chat2db.community.web.api.model.response.db.ExecuteResultResponse;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import jakarta.validation.Valid;
@@ -50,9 +52,9 @@ public class DbDmlController {
      * @return list result containing execute result response.
      */
     @RequestMapping(value = "/execute", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ListResult<ExecuteResultResponse> manage(@Valid @RequestBody DmlRequest request) {
+    public ListResult<ExecuteResultResponse> manage(@Valid @RequestBody SqlEditorExecuteRequest request) {
         return ListResult.of(dbWebConverter.dto2response(
-                dmlExecutionService.execute(dbWebConverter.dmlExecutionRequest(request))));
+                dmlExecutionService.execute(dbWebConverter.sqlEditorExecutionRequest(request))));
     }
 
 
@@ -65,9 +67,9 @@ public class DbDmlController {
      * @return list result containing execute result response.
      */
     @RequestMapping(value = "/execute_table", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ListResult<ExecuteResultResponse> executeTable(@Valid @RequestBody DmlTableRequest request) {
+    public ListResult<ExecuteResultResponse> executeTable(@Valid @RequestBody TableBrowseRequest request) {
         return ListResult.of(dbWebConverter.dto2response(
-                dmlExecutionService.executeTable(dbWebConverter.tableExecutionRequest(request))));
+                dmlExecutionService.executeTable(dbWebConverter.tableBrowseExecutionRequest(request))));
     }
 
     /**
@@ -79,7 +81,8 @@ public class DbDmlController {
      * @return data result containing execute result response.
      */
     @RequestMapping(value = "/execute_update", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<ExecuteResultResponse> executeSelectResultUpdate(@Valid @RequestBody DmlRequest request) {
+    public DataResult<ExecuteResultResponse> executeSelectResultUpdate(
+            @Valid @RequestBody TableEditExecuteRequest request) {
         ExecuteResponse result = dmlExecutionService.executeUpdate(dbWebConverter.tableEditExecutionRequest(request));
         return DataResult.of(dbWebConverter.dto2response(result));
     }
@@ -137,8 +140,8 @@ public class DbDmlController {
      * @return data result containing execute result response.
      */
     @RequestMapping(value = "/execute_ddl", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<ExecuteResultResponse> executeDDL(@Valid @RequestBody DmlRequest request) {
-        ExecuteResponse result = dmlExecutionService.executeDdl(dbWebConverter.dmlExecutionRequest(request));
+    public DataResult<ExecuteResultResponse> executeDDL(@Valid @RequestBody DdlExecuteRequest request) {
+        ExecuteResponse result = dmlExecutionService.executeDdl(dbWebConverter.ddlExecutionRequest(request));
         return DataResult.of(dbWebConverter.dto2response(result));
     }
 

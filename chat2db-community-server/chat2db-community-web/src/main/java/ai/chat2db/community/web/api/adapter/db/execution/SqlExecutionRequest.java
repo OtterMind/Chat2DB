@@ -3,7 +3,7 @@ package ai.chat2db.community.web.api.adapter.db.execution;
 import ai.chat2db.community.tools.console.ConsoleMessage;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
-import ai.chat2db.community.web.api.model.request.db.DmlRequest;
+import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
 import ai.chat2db.community.tools.model.Context;
 import lombok.Builder;
 import lombok.Data;
@@ -20,7 +20,7 @@ public class SqlExecutionRequest {
 
     private String laneId;
 
-    private DmlRequest dmlRequest;
+    private SqlEditorExecuteRequest sqlEditorRequest;
 
     private ConsoleMessage consoleMessage;
 

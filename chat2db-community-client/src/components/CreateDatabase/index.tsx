@@ -11,6 +11,7 @@ import { canSetCreateDatabaseCharset, canSetCreateDatabaseCollation } from '@/ut
 import type { ICharset, ICollation } from '@/typings';
 import { buildCharsetOptions, buildCollationOptions } from './options';
 import { useStyles } from './style';
+import type { IDdlExecuteRequest } from '@/service/dmlRequest';
 
 // TODO: This can warn that the `useForm` instance is not connected to a Form element.
 // The !!relyOnParams && condition can prevent the form from being created.
@@ -199,10 +200,12 @@ const CreateDatabase = () => {
   }, [schedulePreview]);
 
   const executeUpdateDataSql = (sql: string) => {
-    const params: any = {
-      dataSourceId: relyOnParams?.dataSourceId,
-      databaseType: relyOnParams?.databaseType,
-      databaseName: relyOnParams?.databaseName,
+    if (relyOnParams == null) {
+      return;
+    }
+    const params: IDdlExecuteRequest = {
+      dataSourceId: relyOnParams.dataSourceId,
+      databaseName: relyOnParams.databaseName,
       sql,
     };
     setConfirmLoading(true);

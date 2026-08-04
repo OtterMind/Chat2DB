@@ -2,7 +2,8 @@ import { memo, useRef, useState, useMemo, useEffect, forwardRef, useImperativeHa
 import MonacoEditor, { IExportRefFunction } from '@/components/MonacoEditor';
 import i18n from '@/i18n';
 import { formatSql } from '@/utils/sql/formatSql';
-import sqlService, { IExecuteSqlParams } from '@/service/sql';
+import sqlService from '@/service/sql';
+import type { IDdlExecuteRequest, ITableEditExecuteRequest } from '@/service/dmlRequest';
 import { useStyles } from './style';
 import { v4 as uuid } from 'uuid';
 import { IconButton } from '@chat2db/ui';
@@ -61,13 +62,17 @@ const ExecuteSQL = forwardRef((props: IProps, ref) => {
   }));
 
   const executeSql = () => {
-    const executeSQLParams: IExecuteSqlParams = {
+    if (dataSourceId == null) {
+      return;
+    }
+    const baseRequest: ITableEditExecuteRequest = {
       sql: monacoEditorRef.current?.getAllContent() || '',
       dataSourceId,
       databaseName,
       schemaName,
-      tableName,
     };
+    const executeSQLParams: ITableEditExecuteRequest | IDdlExecuteRequest =
+      executeSqlApi === 'executeUpdateDataSql' ? baseRequest : { ...baseRequest, tableName };
     setExecuteLoading(true);
     monacoEditorRef.current?.arouseErrorTips(null);
     setExecuteSqlResult(null);

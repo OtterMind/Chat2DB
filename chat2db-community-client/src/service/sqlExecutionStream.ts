@@ -1,6 +1,6 @@
 import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import createJcefApi from '@/jcef/base';
-import { IExecuteSqlParams } from '@/service/executeSql';
+import type { ISqlEditorExecuteRequest } from '@/service/dmlRequest';
 import { IManageResultData } from '@/typings';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 
@@ -92,7 +92,7 @@ export interface SqlExecutionStatement {
   historySequence?: number;
 }
 
-export function startSqlExecution(params: IExecuteSqlParams, requestUuid: string) {
+export function startSqlExecution(params: ISqlEditorExecuteRequest, requestUuid: string) {
   return createJcefApi<SqlExecutionStartResult>('sql-execute', params, requestUuid);
 }
 

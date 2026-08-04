@@ -86,7 +86,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             }
             bindConnectionContext();
             sink.send("started", Map.of("executionId", request.getExecutionId()));
-            DbDlExecuteRequest param = dbWebConverter.request2param(request.getDmlRequest());
+            DbDlExecuteRequest param = dbWebConverter.request2param(request.getSqlEditorRequest());
             logConsumer = new SqlExecutionLogConsumer(
                     new SqlExecutionConsumer(request, sink, dbWebConverter, largeValueTokenService,
                             executeResultEnhanceService, eventContext),
@@ -99,7 +99,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             executeStreamingRequest.setCancellation(canceled::get);
             sqlExecutionService.executeStreaming(executeStreamingRequest);
             if (canceled.get()) {
-                logConsumer.finishCancelled(request.getDmlRequest().getSql(), null);
+                logConsumer.finishCancelled(request.getSqlEditorRequest().getSql(), null);
             } else {
                 logConsumer.finishSuccess();
             }
@@ -214,7 +214,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
     }
 
     private String requestSql() {
-        return request.getDmlRequest() == null ? null : request.getDmlRequest().getSql();
+        return request.getSqlEditorRequest() == null ? null : request.getSqlEditorRequest().getSql();
     }
 
     private void restoreLocalHeaders() {
