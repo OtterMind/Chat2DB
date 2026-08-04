@@ -40,7 +40,9 @@ const ResultTableOwner = ({ active }: { active: boolean }) => {
   useEffect(() => {
     if (!activeInstance) return;
     lifecycleEvents.push('observer-attach');
-    return () => lifecycleEvents.push('observer-cleanup');
+    return () => {
+      lifecycleEvents.push('observer-cleanup');
+    };
   }, [activeInstance]);
 
   useEffect(() => {
