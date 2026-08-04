@@ -117,6 +117,57 @@ class BigQueryParserTest {
     }
 
     @Test
+    void keepsFirstLabeledLoopInsideBeginTogether() {
+        String block = """
+                BEGIN
+                  first_loop: LOOP
+                    SELECT 1;
+                    BREAK first_loop;
+                  END LOOP first_loop;
+                  SELECT 2;
+                END
+                """.strip();
+
+        Assertions.assertEquals(List.of(block, "SELECT 3"),
+                sqlOf(parser.parserSqlScript(block + ";\nSELECT 3;")));
+    }
+
+    @Test
+    void keepsNestedBlockInsideExceptionHandlerTogether() {
+        String block = """
+                BEGIN
+                  SELECT ERROR('failure');
+                EXCEPTION WHEN ERROR THEN
+                  IF TRUE THEN
+                    SELECT 1;
+                  END IF;
+                  SELECT 2;
+                END
+                """.strip();
+
+        Assertions.assertEquals(List.of(block, "SELECT 3"),
+                sqlOf(parser.parserSqlScript(block + ";\nSELECT 3;")));
+    }
+
+    @Test
+    void keepsLoopInsideExceptionHandlerTogether() {
+        String block = """
+                BEGIN
+                  SELECT ERROR('failure');
+                EXCEPTION WHEN ERROR THEN
+                  LOOP
+                    SELECT 1;
+                    BREAK;
+                  END LOOP;
+                  SELECT 2;
+                END
+                """.strip();
+
+        Assertions.assertEquals(List.of(block, "SELECT 3"),
+                sqlOf(parser.parserSqlScript(block + ";\nSELECT 3;")));
+    }
+
+    @Test
     void beginTransactionRemainsATopLevelStatement() {
         String script = """
                 BEGIN TRANSACTION;

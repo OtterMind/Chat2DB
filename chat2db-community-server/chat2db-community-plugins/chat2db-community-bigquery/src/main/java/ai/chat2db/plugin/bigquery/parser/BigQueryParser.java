@@ -288,12 +288,12 @@ public class BigQueryParser extends PgsqlSqlParser {
         private boolean pendingLabel;
         private boolean pendingBegin;
         private boolean pendingEnd;
+        private boolean pendingExceptionHandler;
 
         void acceptToken(String token, boolean insideBrackets) {
             if (insideBrackets) {
                 return;
             }
-            boolean tokenStartsStatement = atStatementStart;
             pendingLabel = false;
             if (pendingEnd) {
                 pendingEnd = false;
@@ -312,6 +312,7 @@ public class BigQueryParser extends PgsqlSqlParser {
                 blocks.push(ScriptBlock.BEGIN);
                 atStatementStart = true;
             }
+            boolean tokenStartsStatement = atStatementStart;
 
             switch (token) {
                 case "BEGIN" -> {
@@ -362,8 +363,16 @@ public class BigQueryParser extends PgsqlSqlParser {
                         atStatementStart = false;
                     }
                 }
-                case "THEN" -> atStatementStart = isTop(ScriptBlock.IF)
-                        || isTop(ScriptBlock.CASE_STATEMENT);
+                case "EXCEPTION" -> {
+                    pendingExceptionHandler = atStatementStart && isTop(ScriptBlock.BEGIN);
+                    atStatementStart = false;
+                }
+                case "THEN" -> {
+                    atStatementStart = isTop(ScriptBlock.IF)
+                            || isTop(ScriptBlock.CASE_STATEMENT)
+                            || pendingExceptionHandler;
+                    pendingExceptionHandler = false;
+                }
                 case "DO" -> atStatementStart = isTop(ScriptBlock.WHILE)
                         || isTop(ScriptBlock.FOR);
                 case "ELSE" -> atStatementStart = isTop(ScriptBlock.IF)
@@ -393,6 +402,7 @@ public class BigQueryParser extends PgsqlSqlParser {
             boolean shouldSplit = blocks.isEmpty();
             atStatementStart = true;
             pendingLabel = false;
+            pendingExceptionHandler = false;
             return shouldSplit;
         }
 
