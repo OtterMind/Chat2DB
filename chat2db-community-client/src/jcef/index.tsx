@@ -166,6 +166,9 @@ const jcefApi = {
   webFrameSetZoom: (data: { action: 'zoomIn' | 'zoomOut' | 'zoomReset' }) => {
     return createJcefApi('web-frame-set-zoom', data);
   },
+  setWorkspaceResizeCursor: (cursor: 'ns-resize' | 'ew-resize' | 'default', sequence: number) => {
+    return createJcefApi('set-workspace-resize-cursor', { cursor, sequence });
+  },
   // Open log
   openLog: () => {
     return createJcefApi('open-log');

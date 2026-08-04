@@ -117,9 +117,9 @@ public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
         }
         DbExecuteResultEnhanceRequest enhanceExecuteResultRequest = new DbExecuteResultEnhanceRequest();
         enhanceExecuteResultRequest.setExecuteResult(result);
-        enhanceExecuteResultRequest.setDataSourceId(request.getDmlRequest().getDataSourceId());
-        enhanceExecuteResultRequest.setDatabaseName(request.getDmlRequest().getDatabaseName());
-        enhanceExecuteResultRequest.setSchemaName(request.getDmlRequest().getSchemaName());
+        enhanceExecuteResultRequest.setDataSourceId(request.getSqlEditorRequest().getDataSourceId());
+        enhanceExecuteResultRequest.setDatabaseName(request.getSqlEditorRequest().getDatabaseName());
+        enhanceExecuteResultRequest.setSchemaName(request.getSqlEditorRequest().getSchemaName());
         executeResultEnhanceService.enhance(enhanceExecuteResultRequest);
     }
 
@@ -128,9 +128,9 @@ public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
             return;
         }
         DbLargeValueTokensAttachRequest attachLargeValueTokensRequest = new DbLargeValueTokensAttachRequest();
-        attachLargeValueTokensRequest.setDataSourceId(request.getDmlRequest().getDataSourceId());
-        attachLargeValueTokensRequest.setDatabaseName(request.getDmlRequest().getDatabaseName());
-        attachLargeValueTokensRequest.setSchemaName(request.getDmlRequest().getSchemaName());
+        attachLargeValueTokensRequest.setDataSourceId(request.getSqlEditorRequest().getDataSourceId());
+        attachLargeValueTokensRequest.setDatabaseName(request.getSqlEditorRequest().getDatabaseName());
+        attachLargeValueTokensRequest.setSchemaName(request.getSqlEditorRequest().getSchemaName());
         attachLargeValueTokensRequest.setTableName(result.getTableName());
         attachLargeValueTokensRequest.setHeaders(result.getHeaderList());
         attachLargeValueTokensRequest.setDataList(result.getDataList());

@@ -106,7 +106,7 @@ const GlobalStyle = createGlobalStyle(({ theme: token }) => {
       margin: -2px 0;
       border-top: 2px solid transparent;
       border-bottom: 2px solid transparent;
-      cursor: row-resize;
+      cursor: ns-resize !important;
       width: 100%;
     }
 
@@ -126,7 +126,7 @@ const GlobalStyle = createGlobalStyle(({ theme: token }) => {
       margin: 0 -2px;
       border-left: 2px solid transparent;
       border-right: 2px solid transparent;
-      cursor: col-resize;
+      cursor: ew-resize !important;
     }
 
     /* When dragging the vertical drag bar */
@@ -140,11 +140,21 @@ const GlobalStyle = createGlobalStyle(({ theme: token }) => {
     }
 
     .Resizer.disabled {
-      cursor: default;
+      cursor: default !important;
     }
 
     .Resizer.disabled:hover {
       border-color: transparent;
+    }
+
+    html.WorkspaceTabHorizontalResizing,
+    html.WorkspaceTabHorizontalResizing * {
+      cursor: ns-resize !important;
+    }
+
+    html.WorkspaceTabVerticalResizing,
+    html.WorkspaceTabVerticalResizing * {
+      cursor: ew-resize !important;
     }
   `;
 

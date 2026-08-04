@@ -4,6 +4,7 @@ import executeSqlServer from '@/service/executeSql';
 import useAbortRequest from './useAbortRequest';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
+import type { ITableBrowseRequest } from '@/service/dmlRequest';
 
 const useViewTable = () => {
   const defaultPageSize = useGlobalStore((state) => settingSelectors.currentBaseSetting(state).defaultPageSize);
@@ -13,11 +14,18 @@ const useViewTable = () => {
 
   // execute sql
   const executeSQL = useCallback((params: IViewTableParams): Promise<IManageResultData[]> => {
+    const { dataSourceId, tableName } = params;
+    if (dataSourceId == null || !tableName) {
+      return Promise.reject(new Error('dataSourceId and tableName are required'));
+    }
 
     return new Promise((resolve, reject) => {
       // Parameters for executing sql
-      const viewTableParams = {
-        ...params,
+      const viewTableParams: ITableBrowseRequest = {
+        dataSourceId,
+        databaseName: params.databaseName,
+        schemaName: params.schemaName,
+        tableName,
         pageNo: params.pageNo ?? 1,
         pageSize: params.pageSize ?? defaultPageSize,
       };

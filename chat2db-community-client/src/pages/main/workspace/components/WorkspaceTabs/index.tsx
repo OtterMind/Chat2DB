@@ -47,6 +47,7 @@ import TerminalTab from './TerminalTab';
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
 import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
+import { isConsoleTabNameCustomized } from '@/store/workspace/utils/consoleTabName';
 import { useTreeStore } from '@/store/tree';
 
 // ----- services -----
@@ -90,6 +91,74 @@ const MAIN_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'main';
 const SPLIT_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'split';
 const WORKSPACE_TAB_PANE_DROPPABLE_PREFIX = 'workspace-tab-pane:';
 const WORKSPACE_TAB_WIDTH = 200;
+const WORKSPACE_TAB_HORIZONTAL_RESIZE_CLASS = 'WorkspaceTabHorizontalResizing';
+const WORKSPACE_TAB_VERTICAL_RESIZE_CLASS = 'WorkspaceTabVerticalResizing';
+const WORKSPACE_TAB_RESIZE_OVERLAY_ID = 'WorkspaceTabResizeOverlay';
+const WORKSPACE_TAB_RESIZER_CLASS = 'WorkspaceTabResizer';
+const WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE = 1000;
+let workspaceTabResizeCursor: 'ns-resize' | 'ew-resize' | 'default' = 'default';
+let workspaceTabResizeCursorSequence = Date.now() * WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE;
+
+function notifyWorkspaceTabResizeCursor(
+  cursor: 'ns-resize' | 'ew-resize' | 'default',
+  force = false,
+) {
+  if (!force && workspaceTabResizeCursor === cursor) {
+    return;
+  }
+  workspaceTabResizeCursor = cursor;
+  if (typeof window.javaQuery === 'function') {
+    workspaceTabResizeCursorSequence = Math.max(
+      workspaceTabResizeCursorSequence + 1,
+      Date.now() * WORKSPACE_TAB_RESIZE_SEQUENCE_SCALE,
+    );
+    void jcefApi.setWorkspaceResizeCursor(cursor, workspaceTabResizeCursorSequence).catch(() => undefined);
+  }
+}
+
+function setWorkspaceTabResizeClass(direction: WorkspaceTabSplitDirection) {
+  document.documentElement.classList.remove(
+    WORKSPACE_TAB_HORIZONTAL_RESIZE_CLASS,
+    WORKSPACE_TAB_VERTICAL_RESIZE_CLASS,
+  );
+  document.documentElement.classList.add(
+    direction === 'horizontal' ? WORKSPACE_TAB_HORIZONTAL_RESIZE_CLASS : WORKSPACE_TAB_VERTICAL_RESIZE_CLASS,
+  );
+  notifyWorkspaceTabResizeCursor(direction === 'horizontal' ? 'ns-resize' : 'ew-resize');
+}
+
+function clearWorkspaceTabResizeCursor(resetNativeCursor = true) {
+  document.getElementById(WORKSPACE_TAB_RESIZE_OVERLAY_ID)?.remove();
+  document.documentElement.classList.remove(
+    WORKSPACE_TAB_HORIZONTAL_RESIZE_CLASS,
+    WORKSPACE_TAB_VERTICAL_RESIZE_CLASS,
+  );
+  if (resetNativeCursor) {
+    notifyWorkspaceTabResizeCursor('default');
+  }
+}
+
+function setWorkspaceTabResizeCursor(direction: WorkspaceTabSplitDirection) {
+  clearWorkspaceTabResizeCursor(false);
+  const cursor = direction === 'horizontal' ? 'ns-resize' : 'ew-resize';
+  const overlay = document.createElement('div');
+  overlay.id = WORKSPACE_TAB_RESIZE_OVERLAY_ID;
+  overlay.setAttribute('aria-hidden', 'true');
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    inset: '0',
+    zIndex: '2147483647',
+    cursor,
+    background: 'transparent',
+    userSelect: 'none',
+  });
+  document.body.appendChild(overlay);
+  setWorkspaceTabResizeClass(direction);
+}
+
+function getWorkspaceTabResizer(target: EventTarget | null) {
+  return target instanceof Element ? target.closest(`.${WORKSPACE_TAB_RESIZER_CLASS}`) : null;
+}
 
 function getWorkspaceTabPaneDroppableId(paneId: WorkspaceTabPaneId) {
   return `${WORKSPACE_TAB_PANE_DROPPABLE_PREFIX}${paneId}`;
@@ -652,6 +721,38 @@ const workspaceTabCollisionDetection: CollisionDetection = (args) => {
 };
 
 const WorkspaceTabs = memo(() => {
+  useEffect(() => {
+    notifyWorkspaceTabResizeCursor('default', true);
+
+    const handleResizerMouseOver = (event: MouseEvent) => {
+      const resizer = getWorkspaceTabResizer(event.target);
+      if (!resizer || resizer.classList.contains('disabled')) {
+        return;
+      }
+      setWorkspaceTabResizeClass(resizer.classList.contains('horizontal') ? 'horizontal' : 'vertical');
+    };
+    const handleResizerMouseOut = (event: MouseEvent) => {
+      const resizer = getWorkspaceTabResizer(event.target);
+      const relatedTarget = event.relatedTarget;
+      if (!resizer || (relatedTarget instanceof Node && resizer.contains(relatedTarget))) {
+        return;
+      }
+      if (!document.getElementById(WORKSPACE_TAB_RESIZE_OVERLAY_ID)) {
+        clearWorkspaceTabResizeCursor();
+      }
+    };
+
+    window.addEventListener('blur', clearWorkspaceTabResizeCursor);
+    document.addEventListener('mouseover', handleResizerMouseOver);
+    document.addEventListener('mouseout', handleResizerMouseOut);
+    return () => {
+      window.removeEventListener('blur', clearWorkspaceTabResizeCursor);
+      document.removeEventListener('mouseover', handleResizerMouseOver);
+      document.removeEventListener('mouseout', handleResizerMouseOut);
+      clearWorkspaceTabResizeCursor();
+    };
+  }, []);
+
   const {
     activeConsoleId,
     consoleList,
@@ -767,6 +868,10 @@ const WorkspaceTabs = memo(() => {
     }
 
     let openConsoleWorkspaceTabItems = consoleList.map((item) => {
+      const nameCustomized =
+        item.operationType === WorkspaceTabType.CONSOLE
+          ? isConsoleTabNameCustomized(item.name, item)
+          : item.nameCustomized;
       return {
         id: item.id,
         type: item.operationType,
@@ -778,6 +883,7 @@ const WorkspaceTabs = memo(() => {
           databaseType: item.type,
           databaseName: item.databaseName,
           schemaName: item.schemaName,
+          nameCustomized,
           status: item.status,
           ddl: item.ddl,
           connectable: item.connectable,
@@ -1004,6 +1110,7 @@ const WorkspaceTabs = memo(() => {
   // Edit the name.
   const editableNameOnBlur = (t: ITabItem) => {
     const workspaceTab = getWorkspaceTabByKey(t.key);
+    const nameChanged = workspaceTab?.title !== t.label;
     const savedConsoleId = workspaceTab?.uniqueData?.consoleId ?? workspaceTab?.id ?? t.key;
     if (
       workspaceTab &&
@@ -1014,6 +1121,10 @@ const WorkspaceTabs = memo(() => {
       const _params: any = {
         id: savedConsoleId,
         name: t.label,
+        nameCustomized:
+          workspaceTab.type === WorkspaceTabType.CONSOLE && nameChanged
+            ? true
+            : workspaceTab.uniqueData?.nameCustomized,
       };
       historyService.updateSavedConsole(_params);
     }
@@ -1024,6 +1135,13 @@ const WorkspaceTabs = memo(() => {
           return {
             ...item,
             title: t.label,
+            uniqueData:
+              item.type === WorkspaceTabType.CONSOLE && nameChanged
+                ? {
+                    ...item.uniqueData,
+                    nameCustomized: true,
+                  }
+                : item.uniqueData,
           };
         }
         return item;
@@ -1851,7 +1969,12 @@ const WorkspaceTabs = memo(() => {
         size={node.size ?? '50%'}
         minSize={180}
         paneClassName={styles.splitPaneInner}
-        onDragFinished={(size: number | string) => updateSplitPaneSize(node.nodeId!, size)}
+        resizerClassName={WORKSPACE_TAB_RESIZER_CLASS}
+        onDragStarted={() => setWorkspaceTabResizeCursor(node.direction)}
+        onDragFinished={(size: number | string) => {
+          clearWorkspaceTabResizeCursor();
+          updateSplitPaneSize(node.nodeId!, size);
+        }}
       >
         {renderWorkspaceTabPaneNode(node.first)}
         {renderWorkspaceTabPaneNode(node.second)}

@@ -50,16 +50,53 @@ import java.util.List;
 public abstract class DbWebConverter {
 
 
-    public abstract DbDlExecuteRequest request2param(DmlRequest request);
+    @Mappings({
+            @Mapping(target = "tableName", ignore = true),
+            @Mapping(target = "pageSizeAll", ignore = true)
+    })
+    public abstract DbDlExecuteRequest request2param(SqlEditorExecuteRequest request);
+
+    @Mappings({
+            @Mapping(target = "consoleId", ignore = true),
+            @Mapping(target = "applyId", ignore = true),
+            @Mapping(target = "sql", ignore = true),
+            @Mapping(target = "pageSizeAll", ignore = true),
+            @Mapping(target = "single", ignore = true),
+            @Mapping(target = "resultSetId", ignore = true),
+            @Mapping(target = "errorContinue", ignore = true),
+            @Mapping(target = "explain", ignore = true)
+    })
+    public abstract DbDlExecuteRequest request2param(TableBrowseRequest request);
+
+    @Mappings({
+            @Mapping(target = "consoleId", ignore = true),
+            @Mapping(target = "applyId", ignore = true),
+            @Mapping(target = "tableName", ignore = true),
+            @Mapping(target = "pageNo", ignore = true),
+            @Mapping(target = "pageSize", ignore = true),
+            @Mapping(target = "pageSizeAll", ignore = true),
+            @Mapping(target = "single", ignore = true),
+            @Mapping(target = "resultSetId", ignore = true),
+            @Mapping(target = "errorContinue", ignore = true),
+            @Mapping(target = "explain", ignore = true)
+    })
+    public abstract DbDlExecuteRequest request2param(TableEditExecuteRequest request);
+
+    @Mappings({
+            @Mapping(target = "consoleId", ignore = true),
+            @Mapping(target = "applyId", ignore = true),
+            @Mapping(target = "pageNo", ignore = true),
+            @Mapping(target = "pageSize", ignore = true),
+            @Mapping(target = "pageSizeAll", ignore = true),
+            @Mapping(target = "single", ignore = true),
+            @Mapping(target = "resultSetId", ignore = true),
+            @Mapping(target = "errorContinue", ignore = true),
+            @Mapping(target = "explain", ignore = true)
+    })
+    public abstract DbDlExecuteRequest request2param(DdlExecuteRequest request);
 
 
-    public abstract DbDlExecuteRequest request2param(DmlTableRequest request);
-
-    public abstract DmlRequest req2req(DdlCountRequest request);
-
-    public abstract DmlRequest param2req(DbDlExecuteRequest request);
-
-
+    @Mapping(target = "applyId", ignore = true)
     public abstract DbDlExecuteRequest tableManageRequest2param(DdlRequest request);
 
 
@@ -171,24 +208,31 @@ public abstract class DbWebConverter {
 
     public abstract DbCopyInValuesRequest request2param(CopyInValuesRequest request);
 
-    public DbDmlExecutionRequest dmlExecutionRequest(DmlRequest request) {
+    public DbDmlExecutionRequest sqlEditorExecutionRequest(SqlEditorExecuteRequest request) {
         DbDmlExecutionRequest param = new DbDmlExecutionRequest();
         param.setExecuteRequest(request2param(request));
         param.setSource(SqlOperationLogSourceEnum.SQL_EDITOR_HTTP.name());
         return param;
     }
 
-    public DbDmlExecutionRequest tableExecutionRequest(DmlTableRequest request) {
+    public DbDmlExecutionRequest tableBrowseExecutionRequest(TableBrowseRequest request) {
         DbDmlExecutionRequest param = new DbDmlExecutionRequest();
         param.setExecuteRequest(request2param(request));
         param.setSource(SqlOperationLogSourceEnum.TABLE_BROWSE.name());
         return param;
     }
 
-    public DbDmlExecutionRequest tableEditExecutionRequest(DmlRequest request) {
+    public DbDmlExecutionRequest tableEditExecutionRequest(TableEditExecuteRequest request) {
         DbDmlExecutionRequest param = new DbDmlExecutionRequest();
         param.setExecuteRequest(request2param(request));
         param.setSource(SqlOperationLogSourceEnum.TABLE_EDIT.name());
+        return param;
+    }
+
+    public DbDmlExecutionRequest ddlExecutionRequest(DdlExecuteRequest request) {
+        DbDmlExecutionRequest param = new DbDmlExecutionRequest();
+        param.setExecuteRequest(request2param(request));
+        param.setSource(SqlOperationLogSourceEnum.SQL_EDITOR_HTTP.name());
         return param;
     }
 
@@ -325,6 +369,7 @@ public abstract class DbWebConverter {
     public abstract DbViewDeleteRequest request2param(
             ai.chat2db.community.web.api.model.request.db.DeleteViewRequest request);
 
+    @Mapping(target = "applyId", ignore = true)
     public abstract DbDlExecuteRequest request2param(McpExecuteSqlRequest request);
 
     public abstract AccountOperationRequest request2command(AccountCommandRequest request);
