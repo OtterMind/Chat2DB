@@ -88,6 +88,35 @@ class BigQueryParserTest {
     }
 
     @Test
+    void keepsCaseStatementAndLabeledBlocksTogether() {
+        String block = """
+                BEGIN
+                  CASE
+                    WHEN TRUE THEN SELECT 1;
+                    ELSE SELECT 2;
+                  END CASE;
+                  outer_loop: LOOP
+                    SELECT 3;
+                    BREAK outer_loop;
+                  END LOOP outer_loop;
+                  guarded: WHILE FALSE DO
+                    SELECT 4;
+                  END WHILE guarded;
+                  items: FOR item IN (SELECT 5 AS value) DO
+                    SELECT item.value;
+                  END FOR items;
+                  retry: REPEAT
+                    SELECT 6;
+                  UNTIL TRUE
+                  END REPEAT retry;
+                END
+                """.strip();
+
+        Assertions.assertEquals(List.of(block, "SELECT 7"),
+                sqlOf(parser.parserSqlScript(block + ";\nSELECT 7;")));
+    }
+
+    @Test
     void beginTransactionRemainsATopLevelStatement() {
         String script = """
                 BEGIN TRANSACTION;

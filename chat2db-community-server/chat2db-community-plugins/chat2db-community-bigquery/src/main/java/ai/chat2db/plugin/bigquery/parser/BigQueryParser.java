@@ -123,6 +123,7 @@ public class BigQueryParser extends PgsqlSqlParser {
                             hasExecutableContent = true;
                         } else {
                             flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
+                            scriptBlocks.acceptDelimiter(current, !closingBrackets.isEmpty());
                         }
                         if (isTokenCharacter(current)) {
                             // The token is processed when the following delimiter is read.
@@ -284,6 +285,7 @@ public class BigQueryParser extends PgsqlSqlParser {
 
         private final Deque<ScriptBlock> blocks = new ArrayDeque<>();
         private boolean atStatementStart = true;
+        private boolean pendingLabel;
         private boolean pendingBegin;
         private boolean pendingEnd;
 
@@ -291,6 +293,8 @@ public class BigQueryParser extends PgsqlSqlParser {
             if (insideBrackets) {
                 return;
             }
+            boolean tokenStartsStatement = atStatementStart;
+            pendingLabel = false;
             if (pendingEnd) {
                 pendingEnd = false;
                 if (closeSuffixedBlock(token)) {
@@ -367,14 +371,28 @@ public class BigQueryParser extends PgsqlSqlParser {
                 case "ELSEIF" -> atStatementStart = false;
                 case "WHEN" -> atStatementStart = false;
                 case "UNTIL" -> atStatementStart = false;
-                default -> atStatementStart = false;
+                default -> {
+                    atStatementStart = false;
+                    pendingLabel = tokenStartsStatement;
+                }
             }
+        }
+
+        void acceptDelimiter(char delimiter, boolean insideBrackets) {
+            if (insideBrackets || Character.isWhitespace(delimiter)) {
+                return;
+            }
+            if (delimiter == ':' && pendingLabel) {
+                atStatementStart = true;
+            }
+            pendingLabel = false;
         }
 
         boolean shouldSplitAtSemicolon() {
             finishPending();
             boolean shouldSplit = blocks.isEmpty();
             atStatementStart = true;
+            pendingLabel = false;
             return shouldSplit;
         }
 
