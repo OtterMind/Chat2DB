@@ -46,6 +46,7 @@ export const useSaveEditorData = (props: IProps) => {
   // Console data from the previous synchronization.
   const lastSyncConsole = useRef<any>(defaultValue);
   const storageId = boundInfo?.workspaceTabId ?? boundInfo?.consoleId;
+  const storageKey = storageId === undefined ? undefined : String(storageId);
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
   const saveStatusRef = useRef<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
@@ -86,7 +87,7 @@ export const useSaveEditorData = (props: IProps) => {
       p.name = initialName;
     }
 
-    if (!storageId) {
+    if (!storageKey) {
       return Promise.resolve();
     }
 
@@ -99,7 +100,7 @@ export const useSaveEditorData = (props: IProps) => {
       type === WorkspaceTabType.CONSOLE && typeof consoleId === 'number' && !isTemporaryId(consoleId);
     if (!isPersistedConsole) {
       return indexDB
-        .setValue(storageId, {
+        .setValue(storageKey, {
           ddl: value,
           userId: curUser?.id,
         })
@@ -131,7 +132,7 @@ export const useSaveEditorData = (props: IProps) => {
       .then(async (result) => {
         if (!result.executed) {
           await indexDB
-            .setValue(storageId, {
+            .setValue(storageKey, {
               ddl: value,
               userId: curUser?.id,
             })
@@ -158,7 +159,7 @@ export const useSaveEditorData = (props: IProps) => {
         }
         getSavedConsoleList();
         emitSavedConsoleUpdated(savedBoundInfo);
-        void indexDB.deleteValue(storageId);
+        void indexDB.deleteValue(storageKey);
         lastSyncConsole.current = value;
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
@@ -187,12 +188,12 @@ export const useSaveEditorData = (props: IProps) => {
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
         void saveConsole(curValue, { mode: 'automatic' });
       } else {
-        if (isReadOnly || !storageId) {
+        if (isReadOnly || !storageKey) {
           lastSyncConsole.current = curValue;
           return;
         }
         indexDB
-          .setValue(storageId, {
+          .setValue(storageKey, {
             ddl: curValue,
             userId: curUser?.id,
           })
@@ -220,12 +221,12 @@ export const useSaveEditorData = (props: IProps) => {
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
         void saveConsole(curValue, { mode: 'automatic' });
       } else {
-        if (isReadOnly || !storageId) {
+        if (isReadOnly || !storageKey) {
           lastSyncConsole.current = curValue;
           return;
         }
         indexDB
-          .setValue(storageId, {
+          .setValue(storageKey, {
             ddl: curValue,
             userId: curUser?.id,
           })
@@ -258,11 +259,11 @@ export const useSaveEditorData = (props: IProps) => {
     if (saveStatus === ConsoleStatus.RELEASE) {
       editorRef?.current?.setValue(defaultValue || '', 'reset');
     } else {
-      if (isReadOnly || !storageId) {
+      if (isReadOnly || !storageKey) {
         editorRef?.current?.setValue(defaultValue || '', 'reset');
         return;
       }
-      indexDB.getValue(storageId).then((res: any) => {
+      indexDB.getValue(storageKey).then((res: any) => {
         // oldValue handles functions and views that already carry values and do not need a database lookup.
         const oldValue = editorRef?.current?.getValue();
         if (!oldValue) {
