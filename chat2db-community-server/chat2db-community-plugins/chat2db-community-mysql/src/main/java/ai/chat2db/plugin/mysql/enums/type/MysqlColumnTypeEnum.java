@@ -1,5 +1,7 @@
 package ai.chat2db.plugin.mysql.enums.type;
 
+import ai.chat2db.plugin.mysql.MysqlSqlGuards;
+import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
 import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
@@ -15,7 +17,6 @@ import java.util.Map;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_KEYWORD;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_SPACE_SINGLE_QUOTE;
-import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_COLUMN_BACK_QUOTE;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlColumnTypeEnumConstants.*;
 @Getter
@@ -141,6 +142,21 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
     }
 
+    @Override
+    public String buildDefaultColumn(TableColumn column, boolean comment) {
+        StringBuilder script = new StringBuilder();
+        script.append(MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()))
+                .append(" ")
+                .append(MysqlSqlGuards.requireColumnType(column.getColumnType()));
+        if (comment && StringUtils.isNotBlank(column.getComment())) {
+            script.append(" ")
+                    .append(SQL_COMMENT_SPACE_SINGLE_QUOTE)
+                    .append(MysqlIdentifierProcessor.INSTANCE.escapeString(column.getComment()))
+                    .append("'");
+        }
+        return script.toString();
+    }
+
 
     @Override
     public String buildCreateColumnSql(TableColumn column) {
@@ -150,7 +166,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("`").append(column.getName()).append("`").append(" ");
+        script.append(MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -181,7 +197,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("`").append(column.getName()).append("`").append(" ");
+        script.append(MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -209,28 +225,28 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (!type.getColumnType().isSupportCharset() || StringUtils.isEmpty(column.getCharSetName())) {
             return "";
         }
-        return StringUtils.join("CHARACTER SET ", column.getCharSetName());
+        return StringUtils.join("CHARACTER SET ", MysqlSqlGuards.requireMysqlName(column.getCharSetName(), "charset"));
     }
 
     private String buildCollation(TableColumn column, MysqlColumnTypeEnum type) {
         if (!type.getColumnType().isSupportCollation() || StringUtils.isEmpty(column.getCollationName())) {
             return "";
         }
-        return StringUtils.join("COLLATE ", column.getCollationName());
+        return StringUtils.join("COLLATE ", MysqlSqlGuards.requireMysqlName(column.getCollationName(), "collation"));
     }
 
     @Override
     public String buildModifyColumn(TableColumn tableColumn) {
 
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
-            return StringUtils.join(SQL_DROP_COLUMN_BACK_QUOTE, tableColumn.getName() + "`");
+            return StringUtils.join("DROP COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn));
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
-                return StringUtils.join("CHANGE COLUMN `", tableColumn.getOldName(), "` ", buildCreateColumnSql(tableColumn));
+                return StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn));
             } else {
                 return StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn));
             }
@@ -240,14 +256,14 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
     public String buildModifyColumn(TableColumn tableColumn, boolean isMove, String columnName) {
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
-            return StringUtils.join(SQL_DROP_COLUMN_BACK_QUOTE, tableColumn.getName() + "`");
+            return StringUtils.join("DROP COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             if (isMove) {
                 if (columnName.equals("-1")) {
                     return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn), " FIRST");
                 } else {
-                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn), " AFTER ", "`"+columnName+"`");
+                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn), " AFTER ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName));
                 }
             }
             return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn));
@@ -255,7 +271,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             String sql;
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
-                sql = StringUtils.join("CHANGE COLUMN `", tableColumn.getOldName(), "` ", buildCreateColumnSql(tableColumn));
+                sql = StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn));
             } else {
                 sql = StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn));
             }
@@ -275,7 +291,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (columnName.equals("-1")) {
             return StringUtils.join(sql, " FIRST");
         }
-        return StringUtils.join(sql, " AFTER ", "`" + columnName + "`");
+        return StringUtils.join(sql, " AFTER ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName));
     }
 
     private String buildAutoIncrement(TableColumn column, MysqlColumnTypeEnum type) {
@@ -292,14 +308,14 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (!type.columnType.isSupportComments() || StringUtils.isEmpty(column.getComment())) {
             return "";
         }
-        return StringUtils.join(SQL_COMMENT_SPACE_SINGLE_QUOTE, column.getComment(), "'");
+        return StringUtils.join(SQL_COMMENT_SPACE_SINGLE_QUOTE, MysqlIdentifierProcessor.INSTANCE.escapeString(column.getComment()), "'");
     }
 
     private String buildExt(TableColumn column, MysqlColumnTypeEnum type) {
         if (!type.columnType.isSupportExtent() || StringUtils.isEmpty(column.getExtent())) {
             return "";
         }
-        return column.getExtent();
+        return MysqlSqlGuards.quoteEnumValues(column.getExtent());
     }
 
     private String buildDefaultValue(TableColumn column, MysqlColumnTypeEnum type) {
@@ -316,11 +332,11 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
 
         if (Arrays.asList(CHAR, VARCHAR, BINARY, VARBINARY, SET, ENUM).contains(type)) {
-            return StringUtils.join("DEFAULT '", column.getDefaultValue(), "'");
+            return StringUtils.join("DEFAULT '", MysqlIdentifierProcessor.INSTANCE.escapeString(column.getDefaultValue()), "'");
         }
 
         if (Arrays.asList(DATE, TIME, YEAR).contains(type)) {
-            return StringUtils.join("DEFAULT '", column.getDefaultValue(), "'");
+            return StringUtils.join("DEFAULT '", MysqlIdentifierProcessor.INSTANCE.escapeString(column.getDefaultValue()), "'");
         }
 
         if (Arrays.asList(DATETIME, TIMESTAMP).contains(type)) {
@@ -328,10 +344,10 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
                 return StringUtils.join("DEFAULT ", column.getDefaultValue());
 
             }
-            return StringUtils.join("DEFAULT '", column.getDefaultValue(), "'");
+            return StringUtils.join("DEFAULT '", MysqlIdentifierProcessor.INSTANCE.escapeString(column.getDefaultValue()), "'");
         }
 
-        return StringUtils.join("DEFAULT ", column.getDefaultValue());
+        return StringUtils.join("DEFAULT ", MysqlSqlGuards.requireNumericDefault(column.getDefaultValue()));
     }
 
     private String OnUpdateCurrentTimestamp(TableColumn column, MysqlColumnTypeEnum type) {
@@ -372,39 +388,49 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
 
 
-        if (Arrays.asList(DECIMAL, FLOAT, DOUBLE).contains(type)) {
-            if (Arrays.asList(DECIMAL).contains(type) && column.getColumnSize() == null && column.getDecimalDigits() != null) {
+        if (DECIMAL == type) {
+            if (column.getColumnSize() == null && column.getDecimalDigits() != null) {
                 return StringUtils.join(columnType, "(", DEFAULT_DECIMAL_COLUMN_SIZE + "," + column.getDecimalDigits() + ")");
             }
-            if (column.getColumnSize() == null || column.getDecimalDigits() == null) {
+            if (column.getColumnSize() == null) {
                 return columnType;
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() == null) {
+            if (column.getDecimalDigits() == null) {
                 return StringUtils.join(columnType, "(", column.getColumnSize() + ")");
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() != null) {
-                return StringUtils.join(columnType, "(", column.getColumnSize() + "," + column.getDecimalDigits() + ")");
-            }
+            return StringUtils.join(columnType, "(", column.getColumnSize() + "," + column.getDecimalDigits() + ")");
         }
 
-        if (Arrays.asList(DECIMAL_UNSIGNED, FLOAT_UNSIGNED, DOUBLE_UNSIGNED).contains(type)) {
-            if (Arrays.asList(DECIMAL_UNSIGNED).contains(type) && column.getColumnSize() == null && column.getDecimalDigits() != null) {
-                return unsignedDataType(columnType, "(" + DEFAULT_DECIMAL_COLUMN_SIZE + "," + column.getDecimalDigits() + ")");
-            }
+        if (Arrays.asList(FLOAT, DOUBLE).contains(type)) {
             if (column.getColumnSize() == null || column.getDecimalDigits() == null) {
                 return columnType;
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() == null) {
+            return StringUtils.join(columnType, "(", column.getColumnSize() + "," + column.getDecimalDigits() + ")");
+        }
+
+        if (DECIMAL_UNSIGNED == type) {
+            if (column.getColumnSize() == null && column.getDecimalDigits() != null) {
+                return unsignedDataType(columnType, "(" + DEFAULT_DECIMAL_COLUMN_SIZE + "," + column.getDecimalDigits() + ")");
+            }
+            if (column.getColumnSize() == null) {
+                return columnType;
+            }
+            if (column.getDecimalDigits() == null) {
                 return unsignedDataType(columnType, "(" + column.getColumnSize() + ")");
             }
-            if (column.getColumnSize() != null && column.getDecimalDigits() != null) {
-                return unsignedDataType(columnType, "(" + column.getColumnSize() + "," + column.getDecimalDigits() + ")");
+            return unsignedDataType(columnType, "(" + column.getColumnSize() + "," + column.getDecimalDigits() + ")");
+        }
+
+        if (Arrays.asList(FLOAT_UNSIGNED, DOUBLE_UNSIGNED).contains(type)) {
+            if (column.getColumnSize() == null || column.getDecimalDigits() == null) {
+                return columnType;
             }
+            return unsignedDataType(columnType, "(" + column.getColumnSize() + "," + column.getDecimalDigits() + ")");
         }
 
         if (Arrays.asList(SET, ENUM).contains(type)) {
             if (!StringUtils.isEmpty(column.getValue())) {
-                return StringUtils.join(columnType, "(", column.getValue(), ")");
+                return StringUtils.join(columnType, "(", MysqlSqlGuards.quoteEnumValues(column.getValue()), ")");
             }
         }
 
@@ -418,10 +444,10 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("`").append(column.getName()).append("`").append(" ");
+        script.append(MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
         script.append(buildDataType(column, type)).append(" ");
         if (StringUtils.isNoneBlank(column.getComment())) {
-            script.append(SQL_COMMENT_KEYWORD).append(" ").append("'").append(column.getComment()).append("'").append(" ");
+            script.append(SQL_COMMENT_KEYWORD).append(" ").append("'").append(MysqlIdentifierProcessor.INSTANCE.escapeString(column.getComment())).append("'").append(" ");
         }
         return script.toString();
     }
@@ -429,7 +455,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
     private String unsignedDataType(String dataTypeName, String middle) {
         String[] split = dataTypeName.split(" ");
         if (split.length == 2) {
-            return StringUtils.join(split[0], middle, split[1]);
+            return StringUtils.join(split[0], middle, " ", split[1]);
         }
         return StringUtils.join(dataTypeName, middle);
     }

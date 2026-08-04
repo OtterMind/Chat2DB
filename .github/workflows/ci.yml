@@ -51,6 +51,9 @@ jobs:
       - name: Run active workspace tab locator contract
         run: yarn run test:active-tab-locator
 
+      - name: Run local file tab title contract
+        run: yarn run test:local-file-tab-title
+
       - name: Run saved console tree refresh contract
         run: yarn run test:saved-console-tree-refresh
 
@@ -63,17 +66,53 @@ jobs:
       - name: Run database object sorting contract
         run: yarn run test:database-object-sorting
 
+      - name: Run BI chart sorting contract
+        run: yarn run test:bi-chart-sorting
+
+      - name: Run BI chart SQL execution result contract
+        run: yarn run test:bi-sql-result
+
+      - name: Run ComboAxisSelect action filter contract
+        run: yarn run test:combo-axis-actions
+
+      - name: Run BI label rotation contract
+        run: yarn run test:label-rotation
+
       - name: Run Redis explorer contract
         run: yarn run test:redis-explorer
+
+      - name: Run CreateStream index mapping contract
+        run: yarn run test:create-stream-index
 
       - name: Run result inspector contract
         run: yarn run test:result-inspector
 
+      - name: Run result operation record contract
+        run: yarn run test:result-operation-record
+
+      - name: Run result tab preference contract
+        run: yarn run test:result-tab-preferences
+
+      - name: Run execution console preference contract
+        run: yarn run test:execution-console
+
       - name: Run SQL execution log contract
         run: yarn run test:sql-execution-log
 
+      - name: Run SQL execution batch contract
+        run: yarn run test:sql-execution-batch
+
+      - name: Run SQL execution request tracker contract
+        run: yarn run test:sql-execution-request-tracker
+
+      - name: Run SQL execution stream contract
+        run: yarn run test:sql-execution-stream
+
       - name: Run verification-code countdown lifecycle contract
         run: yarn run test:verification-code-countdown
+
+      - name: Run settings layout contract
+        run: yarn run test:settings-layout
 
       - name: Build Community web client
         run: yarn run build:web:community --app_version=5.3.0

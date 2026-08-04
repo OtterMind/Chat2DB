@@ -4,12 +4,14 @@ import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.spi.util.SqlUtils;
+import ai.chat2db.plugin.kingbase.KingBaseSqlGuards;
+import ai.chat2db.plugin.kingbase.identifier.KingBaseSQLIdentifierProcessor;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static ai.chat2db.plugin.kingbase.constant.KingBaseColumnTypeEnumConstants.*;
@@ -77,11 +79,11 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
 
 
 
-    private static Map<String, KingBaseColumnTypeEnum> COLUMN_TYPE_MAP = Maps.newHashMap();
+    private static final Map<String, KingBaseColumnTypeEnum> COLUMN_TYPE_MAP = Maps.newHashMap();
 
     static {
         for (KingBaseColumnTypeEnum value : KingBaseColumnTypeEnum.values()) {
-            COLUMN_TYPE_MAP.put(value.getColumnType().getTypeName(), value);
+            COLUMN_TYPE_MAP.put(value.getColumnType().getTypeName().toUpperCase(Locale.ROOT), value);
         }
     }
 
@@ -93,7 +95,20 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
     }
 
     public static KingBaseColumnTypeEnum getByType(String dataType) {
-        return COLUMN_TYPE_MAP.get(SqlUtils.removeDigits(dataType.toUpperCase()));
+        if (StringUtils.isBlank(dataType)) {
+            return null;
+        }
+        String typeExpression = KingBaseSqlGuards.requireColumnTypeExpression(dataType);
+        String baseType = typeExpression;
+        int argumentsStart = baseType.indexOf('(');
+        if (argumentsStart >= 0) {
+            baseType = baseType.substring(0, argumentsStart);
+        }
+        while (baseType.stripTrailing().endsWith("[]")) {
+            baseType = baseType.stripTrailing();
+            baseType = baseType.substring(0, baseType.length() - 2);
+        }
+        return COLUMN_TYPE_MAP.get(baseType.trim().toUpperCase(Locale.ROOT));
     }
 
     public static List<ColumnType> getTypes() {
@@ -106,15 +121,40 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
         return columnType;
     }
 
+    public static String buildCreateColumnSqlSafely(TableColumn column) {
+        KingBaseColumnTypeEnum type = getByType(column.getColumnType());
+        return type == null ? buildSafeFallbackColumn(column) : type.buildCreateColumnSql(column);
+    }
+
+    public static String buildModifyColumnSafely(TableColumn column) {
+        KingBaseColumnTypeEnum type = getByType(column.getColumnType());
+        if (type != null) {
+            return type.buildModifyColumn(column);
+        }
+        if (EditStatusEnum.DELETE.name().equals(column.getEditStatus())) {
+            return SQL_DROP_COLUMN + KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName());
+        }
+        if (EditStatusEnum.ADD.name().equals(column.getEditStatus())) {
+            return "ADD COLUMN " + buildSafeFallbackColumn(column);
+        }
+        if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus())) {
+            String columnName = KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName());
+            String dataType = KingBaseSqlGuards.requireColumnTypeExpression(column.getColumnType());
+            return SQL_ALTER_COLUMN + columnName + " TYPE " + dataType
+                    + " USING " + columnName + "::" + dataType;
+        }
+        return "";
+    }
+
     @Override
     public String buildCreateColumnSql(TableColumn column) {
-        KingBaseColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        KingBaseColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return buildDefaultColumn(column, false);
+            return buildSafeFallbackColumn(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("\"").append(column.getName()).append("\"").append(" ");
+        script.append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -132,30 +172,30 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
         if (!type.getColumnType().isSupportCollation() || StringUtils.isEmpty(column.getCollationName())) {
             return "";
         }
-        return StringUtils.join("\"", column.getCollationName(), "\"");
+        return KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getCollationName());
     }
 
     @Override
     public String buildModifyColumn(TableColumn column) {
 
         if (EditStatusEnum.DELETE.name().equals(column.getEditStatus())) {
-            return StringUtils.join(SQL_DROP_COLUMN, column.getName() + "`");
+            return StringUtils.join(SQL_DROP_COLUMN, KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()));
         }
         if (EditStatusEnum.ADD.name().equals(column.getEditStatus())) {
             return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(column));
         }
         if (EditStatusEnum.MODIFY.name().equals(column.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_COLUMN).append(column.getName()).append("\" TYPE ").append(buildDataType(column, this)).append(",\n");
+            script.append(SQL_ALTER_COLUMN).append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" TYPE ").append(buildDataType(column, this)).append(",\n");
             if (column.getNullable() != null && 1 == column.getNullable()) {
-                script.append("\t").append(SQL_ALTER_COLUMN).append(column.getName()).append("\" DROP NOT NULL ,\n");
+                script.append("\t").append(SQL_ALTER_COLUMN).append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" DROP NOT NULL ,\n");
             } else {
-                script.append("\t").append(SQL_ALTER_COLUMN).append(column.getName()).append("\" SET NOT NULL ,\n");
+                script.append("\t").append(SQL_ALTER_COLUMN).append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" SET NOT NULL ,\n");
 
             }
             String defaultValue = buildDefaultValue(column, this);
             if (StringUtils.isNotBlank(defaultValue)) {
-                script.append(SQL_ALTER_COLUMN).append(column.getName()).append("\" SET ").append(defaultValue).append(",\n");
+                script.append(SQL_ALTER_COLUMN).append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" SET ").append(defaultValue).append(",\n");
             }
             script = new StringBuilder(script.substring(0, script.length() - 2));
             return script.toString();
@@ -168,8 +208,16 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
                 || EditStatusEnum.DELETE.name().equals(column.getEditStatus())) {
             return "";
         }
-        return StringUtils.join(SQL_COMMENT_COLUMN, " \"", column.getTableName(),
-                "\".\"", column.getName(), "\" IS '", column.getComment(), "';");
+        return StringUtils.join(SQL_COMMENT_COLUMN, " ", qualifiedName(column.getSchemaName(), column.getTableName()),
+                ".", KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()), " IS '", KingBaseSQLIdentifierProcessor.INSTANCE.escapeString(column.getComment()), "';");
+    }
+
+    private static String qualifiedName(String schemaName, String objectName) {
+        String quotedName = KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(objectName);
+        if (StringUtils.isBlank(schemaName)) {
+            return quotedName;
+        }
+        return KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "." + quotedName;
     }
 
     private String buildDefaultValue(TableColumn column, KingBaseColumnTypeEnum type) {
@@ -186,17 +234,41 @@ public enum KingBaseColumnTypeEnum implements IColumnBuilder {
         }
 
         if (Arrays.asList(CHAR, VARCHAR).contains(type)) {
-            return StringUtils.join("DEFAULT '", column.getDefaultValue(), "'");
+            if (KingBaseSqlGuards.isFunctionOrCastExpression(column.getDefaultValue())) {
+                return StringUtils.join("DEFAULT ",
+                        KingBaseSqlGuards.requireDefaultExpression(column.getDefaultValue()));
+            }
+            return StringUtils.join("DEFAULT '", KingBaseSQLIdentifierProcessor.INSTANCE.escapeString(column.getDefaultValue()), "'");
         }
 
         if (Arrays.asList(TIMESTAMP, TIME, TIMETZ, TIMESTAMPTZ, DATE).contains(type)) {
-            if ("CURRENT_TIMESTAMP".equalsIgnoreCase(column.getDefaultValue().trim())) {
-                return StringUtils.join("DEFAULT ", column.getDefaultValue());
+            if (KingBaseSqlGuards.isTemporalExpression(column.getDefaultValue())) {
+                return StringUtils.join("DEFAULT ",
+                        KingBaseSqlGuards.requireDefaultExpression(column.getDefaultValue()));
             }
-            return StringUtils.join("DEFAULT '", column.getDefaultValue(), "'");
+            return StringUtils.join("DEFAULT '", KingBaseSQLIdentifierProcessor.INSTANCE.escapeString(column.getDefaultValue()), "'");
         }
 
-        return StringUtils.join("DEFAULT ", column.getDefaultValue());
+        return StringUtils.join("DEFAULT ", KingBaseSqlGuards.requireDefaultExpression(column.getDefaultValue()));
+    }
+
+    private static String buildSafeFallbackColumn(TableColumn column) {
+        StringBuilder script = new StringBuilder();
+        script.append(KingBaseSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()))
+                .append(" ")
+                .append(KingBaseSqlGuards.requireColumnTypeExpression(column.getColumnType()));
+        if (column.getNullable() != null) {
+            script.append(column.getNullable() == 1 ? " NULL" : " NOT NULL");
+        }
+        if (StringUtils.isNotEmpty(column.getDefaultValue())) {
+            if ("EMPTY_STRING".equalsIgnoreCase(column.getDefaultValue().trim())) {
+                script.append(" DEFAULT ''");
+            } else {
+                script.append(" DEFAULT ")
+                        .append(KingBaseSqlGuards.requireDefaultExpression(column.getDefaultValue()));
+            }
+        }
+        return script.toString();
     }
 
     private String buildNullable(TableColumn column, KingBaseColumnTypeEnum type) {

@@ -30,6 +30,7 @@ import org.springframework.util.Assert;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -65,8 +66,11 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         RedisKey redisKey = RedisKey.builder()
                 .name(command.getTableName())
                 .build();
-        Map<String, Object> extra = Map.of(RedisConstants.FIELD_KEY_TYPE, keyType, RedisConstants.FIELD_KEY,
-                command.getTableName(), RedisConstants.FIELD_TTL, getTtl(command.getTableName()));
+        // getKeyType/getTtl yield null on empty driver result sets; Map.of would NPE on null values.
+        Map<String, Object> extra = new HashMap<>();
+        extra.put(RedisConstants.FIELD_KEY_TYPE, keyType);
+        extra.put(RedisConstants.FIELD_KEY, command.getTableName());
+        extra.put(RedisConstants.FIELD_TTL, getTtl(command.getTableName()));
         String script = typeScript.getKey(redisKey);
         command.setScript(script);
         List<ExecuteResponse> results = execute(command);

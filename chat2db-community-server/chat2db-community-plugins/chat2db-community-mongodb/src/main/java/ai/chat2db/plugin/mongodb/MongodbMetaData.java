@@ -19,8 +19,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.mongodb.constant.MongodbMetaDataConstants.*;
 @Slf4j
@@ -82,14 +80,12 @@ public class MongodbMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List columns(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(SELECT_TABLE_COLUMNS, tableName);
+        String sql = String.format(SELECT_TABLE_COLUMNS, MongodbSqlGuards.collectionAccessor(tableName));
         List<TableColumn> tableColumns = new ArrayList();
         return (List) DefaultSQLExecutor.getInstance().execute(connection, sql, (resultSet) -> {
             while (resultSet.next()) {
                 Object o = resultSet.getObject(1);
-                LinkedHashMap<String, Object> map = DocumentConverter.object2map(o);
-                Map<String, Object> objectMap = map.entrySet().stream()
-                    .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+                Map<String, Object> objectMap = copyDocumentMap(DocumentConverter.object2map(o));
                 TableColumn tableColumn = new TableColumn();
                 Object columName = objectMap.get("key");
                 if (Objects.nonNull(columName)) {
@@ -106,14 +102,12 @@ public class MongodbMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(SELECT_TABLE_INDEX, tableName);
+        String sql = String.format(SELECT_TABLE_INDEX, MongodbSqlGuards.collectionAccessor(tableName));
         List<TableIndex> tableIndexes = new ArrayList<>();
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 Object o = resultSet.getObject(1);
-                LinkedHashMap<String, Object> map = DocumentConverter.object2map(o);
-                Map<String, Object> objectMap = map.entrySet().stream()
-                    .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+                Map<String, Object> objectMap = copyDocumentMap(DocumentConverter.object2map(o));
                 Object indexName = objectMap.get("name");
                 TableIndex tableIndex = new TableIndex();
                 if (Objects.nonNull(indexName)) {
@@ -136,12 +130,16 @@ public class MongodbMetaData extends DefaultMetaService implements IDbMetaData {
         return MongodbSqlBuilder.getInstance();
     }
 
+    static Map<String, Object> copyDocumentMap(Map<String, Object> map) {
+        return new HashMap<>(map);
+    }
+
     private void executeUse(String schemaName) {
         if (StringUtils.isEmpty(schemaName)) {
             return;
         }
         Connection connection = Chat2DBContext.getConnection();
-        String sql = String.format(SCRIPT_USE_SCHEMA, schemaName);
+        String sql = String.format(SCRIPT_USE_SCHEMA, MongodbSqlGuards.requireDatabaseName(schemaName));
         try {
             DefaultSQLExecutor.getInstance().execute(connection, sql);
         } catch (SQLException e) {

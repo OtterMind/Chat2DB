@@ -20,6 +20,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
 
 import com.alibaba.druid.sql.parser.SQLParserUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -45,9 +47,10 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
 
     private static final MongodbScriptExecutor INSTANCE = new MongodbScriptExecutor();
 
-    private static final Pattern pattern = Pattern.compile("db\\.(\\w+)", Pattern.CASE_INSENSITIVE);
-    private static final String regex = "db\\.\\w+\\.find\\(.*\\)";
-    private static final Pattern queryPattern = Pattern.compile(regex);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final Pattern EDITABLE_QUERY_PATTERN = Pattern.compile(
+        "db\\.(?:([A-Za-z_$][\\w$]*)|getCollection\\((\"(?:\\\\.|[^\"\\\\])*\")\\))\\.find\\(.*\\)",
+        Pattern.CASE_INSENSITIVE);
 
     public static MongodbScriptExecutor getInstance() {
         return INSTANCE;
@@ -62,13 +65,17 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         if (StringUtils.isEmpty(command.getTableName())) {
             return Collections.emptyList();
         }
-        String sql = String.format(EXECUTE_SQL, command.getTableName());
+        String sql = selectTableCommand(command.getTableName());
         command.setScript(sql);
         return execute(command);
     }
 
+    static String selectTableCommand(String tableName) {
+        return String.format(EXECUTE_SQL, MongodbSqlGuards.collectionAccessor(tableName));
+    }
 
-    private String getTableName(String tableName, String sql) {
+
+    String getTableName(String tableName, String sql) {
 
         if (StringUtils.isEmpty(tableName) && StringUtils.isEmpty(sql)) {
             return StringUtils.EMPTY;
@@ -76,11 +83,25 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         if (StringUtils.isNotEmpty(tableName)) {
             return tableName;
         }
-        Matcher matcher = pattern.matcher(sql);
-        if (matcher.find()) {
-            return matcher.group(1);
+        return editableCollectionName(sql).orElse(StringUtils.EMPTY);
+    }
+
+    static Optional<String> editableCollectionName(String sql) {
+        if (StringUtils.isEmpty(sql)) {
+            return Optional.empty();
         }
-        return StringUtils.EMPTY;
+        Matcher matcher = EDITABLE_QUERY_PATTERN.matcher(sql);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        if (matcher.group(1) != null) {
+            return Optional.of(matcher.group(1));
+        }
+        try {
+            return Optional.ofNullable(JSON_MAPPER.readValue(matcher.group(2), String.class));
+        } catch (JsonProcessingException e) {
+            return Optional.empty();
+        }
     }
 
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
@@ -243,12 +264,8 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         return Integer.toString(command.getPageSize()) + "+";
     }
 
-    private boolean canEdit(String sql) {
-        Matcher matcher = queryPattern.matcher(sql);
-        if (matcher.find()) {
-            return Boolean.TRUE;
-        }
-        return Boolean.FALSE;
+    boolean canEdit(String sql) {
+        return editableCollectionName(sql).isPresent();
     }
 
     private static List<String> parseSql(String sql) {

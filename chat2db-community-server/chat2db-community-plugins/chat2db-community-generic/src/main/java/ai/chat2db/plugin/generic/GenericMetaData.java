@@ -1,8 +1,11 @@
 package ai.chat2db.plugin.generic;
 
+import ai.chat2db.plugin.generic.identifier.GenericIdentifierProcessor;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.community.domain.api.config.DBConfig;
+import ai.chat2db.community.domain.api.constant.DBConfigConstants;
 import ai.chat2db.spi.DefaultMetaService;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
@@ -24,9 +27,23 @@ import java.util.List;
 public class GenericMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return GenericIdentifierProcessor.INSTANCE;
+    }
+
+    @Override
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
         DBConfig dbConfig = Chat2DBContext.getDBConfig();
-        String sql = dbConfig.getTableDdl(databaseName, schemaName, tableName);
+        String template = dbConfig.getSql(DBConfigConstants.SQL_TABLE_DDL);
+        String templateDatabaseName = databaseName;
+        String templateSchemaName = schemaName;
+        String templateTableName = tableName;
+        if (template != null) {
+            templateDatabaseName = GenericSqlGuards.sanitizeTemplateValue(template, "{database}", databaseName);
+            templateSchemaName = GenericSqlGuards.sanitizeTemplateValue(template, "{schema}", schemaName);
+            templateTableName = GenericSqlGuards.sanitizeTemplateValue(template, "{table}", tableName);
+        }
+        String sql = dbConfig.getTableDdl(templateDatabaseName, templateSchemaName, templateTableName);
         String sqlResult = dbConfig.getTableDdlResult();
         String ddl = null;
         if (sql != null && sqlResult!=null) {

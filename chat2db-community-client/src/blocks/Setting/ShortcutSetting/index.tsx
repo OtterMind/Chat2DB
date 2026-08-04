@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Button, Table, Tag, type TableProps } from 'antd';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { staticMessage } from '@chat2db/ui';
 import { useStyles } from './style';
 import { useGlobalStore } from '@/store/global';
-import SettingSubsection from '../SettingSubsection';
 import ShortcutInput from './ShortcutInput';
 import { i18n } from '@/i18n';
 import {
@@ -23,30 +23,42 @@ type I18nKey = Parameters<typeof i18n>[0];
 
 const SHORTCUT_SCOPE_GROUPS: Array<{
   scope: ShortcutScope;
+  targetId: string;
   title: I18nKey;
 }> = [
   {
     scope: ShortcutScope.Global,
+    targetId: 'shortcut.global',
     title: 'setting.shortcut.group.global',
   },
   {
     scope: ShortcutScope.Workspace,
+    targetId: 'shortcut.workspace',
     title: 'setting.shortcut.group.workspace',
   },
   {
+    scope: ShortcutScope.DatabaseTree,
+    targetId: 'shortcut.databaseTree',
+    title: 'setting.shortcut.group.databaseTree',
+  },
+  {
     scope: ShortcutScope.LocalSqlFileTree,
+    targetId: 'shortcut.localSqlFileTree',
     title: 'setting.shortcut.group.localSqlFileTree',
   },
   {
     scope: ShortcutScope.SqlEditor,
+    targetId: 'shortcut.sqlEditor',
     title: 'setting.shortcut.group.sqlEditor',
   },
   {
     scope: ShortcutScope.ResultSet,
+    targetId: 'shortcut.resultSet',
     title: 'setting.shortcut.group.resultSet',
   },
   {
     scope: ShortcutScope.Table,
+    targetId: 'shortcut.table',
     title: 'setting.shortcut.group.table',
   },
 ];
@@ -174,11 +186,6 @@ export default function ShortcutSetting() {
 
   return (
     <div className={styles.container}>
-      <SettingSubsection
-        className={styles.subsectionWithoutDivider}
-        title={i18n('setting.nav.shortcut')}
-        describe={i18n('setting.nav.shortcutDescribe')}
-      />
       <div className={styles.toolbar}>
         <Button onClick={resetAllShortcutConfig}>{i18n('setting.shortcut.table.resetAll')}</Button>
       </div>
@@ -192,9 +199,20 @@ export default function ShortcutSetting() {
 
           return (
             <section key={group.scope} className={styles.groupSection}>
-              <Button type="text" className={styles.groupHeader} onClick={() => toggleGroup(group.scope)}>
-                <span className={styles.groupArrow}>{collapsed ? '>' : 'v'}</span>
-                <span className={styles.groupTitle}>{i18n(group.title)}</span>
+              <Button
+                aria-expanded={!collapsed}
+                className={styles.groupHeader}
+                data-setting-search-expandable="true"
+                data-setting-search-id={group.targetId}
+                onClick={() => toggleGroup(group.scope)}
+                type="text"
+              >
+                <span className={styles.groupArrow}>
+                  {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </span>
+                <span className={styles.groupTitle} data-setting-search-title="true">
+                  {i18n(group.title)}
+                </span>
               </Button>
               {!collapsed && (
                 <Table

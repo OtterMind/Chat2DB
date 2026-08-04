@@ -4,8 +4,10 @@ import ai.chat2db.plugin.clickhouse.builder.ClickHouseSqlBuilder;
 import ai.chat2db.plugin.clickhouse.enums.type.ClickHouseColumnTypeEnum;
 import ai.chat2db.plugin.clickhouse.enums.type.ClickHouseEngineTypeEnum;
 import ai.chat2db.plugin.clickhouse.enums.type.ClickHouseIndexTypeEnum;
+import ai.chat2db.plugin.clickhouse.identifier.ClickHouseIdentifierProcessor;
 import ai.chat2db.spi.ICommandExecutor;
 import ai.chat2db.spi.IDbMetaData;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
@@ -38,8 +40,13 @@ import static ai.chat2db.plugin.clickhouse.constant.ClickHouseMetaDataConstants.
 public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaData {
     private static final Logger log = LoggerFactory.getLogger(ClickHouseMetaData.class);
 
+    @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return ClickHouseIdentifierProcessor.INSTANCE;
+    }
+
     public static String format(String tableName) {
-        return "`" + tableName + "`";
+        return ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
     @Override
@@ -86,7 +93,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public List<Table> views(Connection connection, String databaseName, String schemaName) {
-        String sql = "select name from system.`tables` WHERE `database`='" + schemaName + "' and engine='View'";
+        String sql = "select name from system.`tables` WHERE `database`='" + getSQLIdentifierProcessor().escapeString(schemaName) + "' and engine='View'";
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             List<Table> tables = new ArrayList<>();
             try {
@@ -108,8 +115,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public String tableDDL(Connection connection, @NotEmpty String databaseName, String schemaName,
                            @NotEmpty String tableName) {
-        String sql = "SHOW CREATE TABLE " + format(schemaName) + "."
-                + format(tableName);
+        String sql = "SHOW CREATE TABLE " + getMetaDataName(schemaName, tableName);
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             if (resultSet.next()) {
                 return resultSet.getString("statement");
@@ -139,7 +145,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
         List<Trigger> triggers = new ArrayList<>();
-        String sql = String.format(TRIGGER_SQL_LIST, schemaName);
+        String sql = String.format(TRIGGER_SQL_LIST, getSQLIdentifierProcessor().escapeString(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 Trigger trigger = new Trigger();
@@ -156,7 +162,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
     public Trigger trigger(Connection connection, @NotEmpty String databaseName, String schemaName,
                            String triggerName) {
 
-        String sql = String.format(TRIGGER_SQL, schemaName, triggerName);
+        String sql = String.format(TRIGGER_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(triggerName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
             trigger.setDatabaseName(databaseName);
@@ -172,7 +178,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public Procedure procedure(Connection connection, @NotEmpty String databaseName, String schemaName,
                                String procedureName) {
-        String sql = String.format(ROUTINES_SQL, "PROCEDURE", schemaName, procedureName);
+        String sql = String.format(ROUTINES_SQL, "PROCEDURE", getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(procedureName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Procedure procedure = new Procedure();
             procedure.setDatabaseName(databaseName);
@@ -189,7 +195,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public List<TableColumn> columns(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(SELECT_TABLE_COLUMNS, tableName, schemaName);
+        String sql = String.format(SELECT_TABLE_COLUMNS, getSQLIdentifierProcessor().escapeString(tableName), getSQLIdentifierProcessor().escapeString(schemaName));
         List<TableColumn> tableColumns = new ArrayList<>();
 
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
@@ -245,7 +251,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_SQL, schemaName, viewName);
+        String sql = String.format(VIEW_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -298,7 +304,7 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "`" + name + "`").collect(Collectors.joining("."));
+        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(ClickHouseIdentifierProcessor.INSTANCE::quoteIdentifierAlways).collect(Collectors.joining("."));
 
     }
 

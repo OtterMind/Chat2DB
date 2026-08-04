@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ListTypeScriptTest {
 
@@ -42,15 +41,25 @@ class ListTypeScriptTest {
 
         List<String> scripts = typeScript.updateKey(oldKey, newKey);
 
-        assertEquals(List.of("DEL 'k'\n", "RPUSH 'k' 'a' 'edited' "), scripts);
+        // DEL + RPUSH are wrapped in MULTI/EXEC so a connection drop cannot leave the
+        // key deleted without its replacement values.
+        assertEquals(List.of("MULTI", "DEL 'k'\n", "RPUSH 'k' 'a' 'edited' ", "EXEC"), scripts);
     }
 
     @Test
-    void updateKeySkipsRewriteWhenNoDesiredValues() {
+    void updateKeyDeletesKeyWhenEveryElementIsRemoved() {
         RedisKey oldKey = key("k", item("a", null));
         RedisKey newKey = RedisKey.builder().name("k").type("LIST").build();
 
-        assertTrue(typeScript.updateKey(oldKey, newKey).isEmpty());
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
+    }
+
+    @Test
+    void updateKeyDeletesKeyWhenAllElementsAreFlaggedDeleted() {
+        RedisKey oldKey = key("k", item("a", null));
+        RedisKey newKey = key("k", item("a", ActionConstants.DELETE));
+
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
     }
 
     @Test

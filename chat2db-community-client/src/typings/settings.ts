@@ -92,6 +92,17 @@ export interface DataTableSettings {
   selectionMetrics?: [SelectionMetricId, SelectionMetricId, SelectionMetricId];
 }
 
+export type TerminalShellId = 'system' | 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd';
+export type TerminalThemeId = 'chat2db-dark' | 'one-dark' | 'dracula' | 'solarized-dark' | 'solarized-light';
+export type TerminalOpenPosition = 'tab' | 'bottom' | 'right';
+
+export interface TerminalSettings {
+  shellId: TerminalShellId;
+  themeId: TerminalThemeId;
+  openPosition: TerminalOpenPosition;
+  confirmBeforeClose: boolean;
+}
+
 export type SelectionMetricId =
   | 'none'
   | 'rowCount'

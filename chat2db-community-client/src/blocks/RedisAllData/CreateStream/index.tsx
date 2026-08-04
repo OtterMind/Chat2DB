@@ -14,6 +14,7 @@ import BaseTable, { BaseTableRef } from '@/components/BaseTable';
 import { ToolbarBtn } from '@chat2db/ui';
 import { Flex } from 'antd';
 import { ActionType } from '@/constants/redis';
+import { mapDisplayedIndexToValueListIndex } from './mapDisplayedIndex';
 // import { v4 as uuid } from 'uuid';
 import lodash from 'lodash';
 import { StreamValue } from '@/typings/redis';
@@ -173,9 +174,8 @@ const CreateStream = forwardRef((props: IProps, ref: ForwardedRef<CreateStreamRe
 
   // Handle cell edits.
   const handleCellChange = (index, columnName, value) => {
-    // Count deleted rows before this index.
-    const deleteCount = valueList.slice(0, index + 1).filter((item) => item.action === ActionType.DELETE).length;
-    const realIndex = index + deleteCount;
+    const realIndex = mapDisplayedIndexToValueListIndex(valueList, index);
+    if (realIndex === -1) return;
     setValueList((prevTableData) => {
       const newData = [...prevTableData];
       newData[realIndex][columnName] = value;

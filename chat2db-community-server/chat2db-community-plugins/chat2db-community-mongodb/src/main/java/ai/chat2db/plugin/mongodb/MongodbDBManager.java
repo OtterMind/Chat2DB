@@ -29,7 +29,8 @@ public class MongodbDBManager extends DefaultDBManager implements IDbManager {
             return;
         }
         try {
-            DefaultSQLExecutor.getInstance().execute(connection, String.format(SCRIPT_USE_SCHEMA, schemaName));
+            DefaultSQLExecutor.getInstance().execute(connection,
+                    String.format(SCRIPT_USE_SCHEMA, MongodbSqlGuards.requireDatabaseName(schemaName)));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -37,17 +38,18 @@ public class MongodbDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return String.format(SCRIPT_DROP_COLLECTION, tableName);
+        return String.format(SCRIPT_DROP_COLLECTION, MongodbSqlGuards.collectionAccessor(tableName));
     }
 
     @Override
     public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) throws SQLException {
-        return String.format(SCRIPT_TRUNCATE_COLLECTION, tableName);
+        return String.format(SCRIPT_TRUNCATE_COLLECTION, MongodbSqlGuards.collectionAccessor(tableName));
     }
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName,boolean copyData) throws SQLException {
-        String sql = String.format(SCRIPT_COPY_COLLECTION, newTableName, tableName);
+        String sql = String.format(SCRIPT_COPY_COLLECTION, MongodbSqlGuards.collectionAccessor(newTableName),
+            MongodbSqlGuards.collectionAccessor(tableName));
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
     }
 

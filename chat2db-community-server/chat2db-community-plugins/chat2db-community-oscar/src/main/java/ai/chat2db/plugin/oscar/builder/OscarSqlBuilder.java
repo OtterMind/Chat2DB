@@ -34,7 +34,7 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
                 }
                 OscarColumnTypeEnum typeEnum = OscarColumnTypeEnum.getByType(column.getColumnType());
                 if (typeEnum == null) {
-                    continue;
+                    typeEnum = OscarColumnTypeEnum.VARCHAR;
                 }
                 script.append(SQLConstants.TAB)
                         .append(typeEnum.buildCreateColumnSql(column))
@@ -77,7 +77,7 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
                 }
                 OscarColumnTypeEnum typeEnum = OscarColumnTypeEnum.getByType(tableColumn.getColumnType());
                 if (typeEnum == null) {
-                    continue;
+                    typeEnum = OscarColumnTypeEnum.VARCHAR;
                 }
                 script.append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 if (StringUtils.isNotBlank(tableColumn.getComment())
@@ -112,20 +112,15 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
     public String buildPageLimit(PageLimitRequest request) {
         String sql = request.getSql();
         int startRow = request.getOffset();
-        int pageNo = request.getPageNo();
         int pageSize = request.getPageSize();
         int endRow = startRow + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
+        sqlBuilder.append(OscarConstants.PAGE_OUTER_SELECT_PREFIX);
         if (startRow > 0) {
-            sqlBuilder.append(OscarConstants.PAGE_OUTER_SELECT_PREFIX);
-        }
-        if (endRow > 0) {
             sqlBuilder.append(OscarConstants.PAGE_INNER_SELECT_PREFIX);
         }
         sqlBuilder.append(SQLConstants.LINE_SEPARATOR).append(sql).append(SQLConstants.LINE_SEPARATOR);
-        if (endRow > 0) {
-            sqlBuilder.append(OscarConstants.PAGE_ROWNUM_FILTER_SQL).append(endRow);
-        }
+        sqlBuilder.append(OscarConstants.PAGE_ROWNUM_FILTER_SQL).append(endRow);
         if (startRow > 0) {
             sqlBuilder.append(OscarConstants.PAGE_AUTO_ROW_ID_FILTER_SQL).append(startRow);
         }

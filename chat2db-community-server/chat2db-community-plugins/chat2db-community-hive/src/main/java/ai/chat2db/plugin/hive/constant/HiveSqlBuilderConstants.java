@@ -22,7 +22,7 @@ public final class HiveSqlBuilderConstants {
     public static final String SQL_COMMENT_SINGLE_QUOTE = "\r\n COMMENT '";
     public static final String SQL_ALTER_TABLE = "ALTER TABLE ";
     public static final String SQL_COMMENT = " COMMENT '";
-    public static final String SQL_CREATE_DATABASE = "CREATE DATABASE `";
+    public static final String SQL_CREATE_DATABASE = "CREATE DATABASE ";
     public static final String SQL_CREATE_TABLE = "CREATE TABLE ";
     public static final String SQL_RENAME = "RENAME TO ";
     public static final String SQL_SET_TBLPROPERTIES_COMMENT = "SET TBLPROPERTIES ('comment' = ";

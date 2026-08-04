@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZSetTypeScriptTest {
 
@@ -28,26 +27,26 @@ class ZSetTypeScriptTest {
     }
 
     @Test
-    void updateKeyOverwritesScoreWithoutRemoval() {
-        RedisKey oldKey = key("k", member("a", 1.0, null), member("b", 2.0, null));
-        RedisKey newKey = key("k", member("a", 1.0, "original"), member("b", 3.0, ActionConstants.UPDATE));
-
-        assertEquals(List.of("ZADD 'k' 3.0 'b' "), typeScript.updateKey(oldKey, newKey));
-    }
-
-    @Test
     void updateKeyRemovesOldMemberWhenValueIsEdited() {
-        RedisKey oldKey = key("k", member("a", 1.0, null));
-        RedisKey newKey = key("k", member("b", 1.0, ActionConstants.UPDATE));
+        RedisKey oldKey = key("k", member("a", 1.0, null), member("b", 2.0, null));
+        RedisKey newKey = key("k", member("a", 1.0, "original"), member("c", 3.0, ActionConstants.UPDATE));
 
-        assertEquals(List.of("ZREM 'k' 'a' ", "ZADD 'k' 1.0 'b' "), typeScript.updateKey(oldKey, newKey));
+        assertEquals(List.of("ZREM 'k' 'b' ", "ZADD 'k' 3.0 'c' "), typeScript.updateKey(oldKey, newKey));
     }
 
     @Test
-    void updateKeyEmitsNothingWhenMembersAreUnchanged() {
+    void updateKeyDeletesKeyWhenEveryMemberIsRemoved() {
         RedisKey oldKey = key("k", member("a", 1.0, null));
-        RedisKey newKey = key("k", member("a", 1.0, "original"));
+        RedisKey newKey = RedisKey.builder().name("k").type("ZSET").build();
 
-        assertTrue(typeScript.updateKey(oldKey, newKey).isEmpty());
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
+    }
+
+    @Test
+    void updateKeyDeletesKeyWhenAllMembersAreFlaggedDeleted() {
+        RedisKey oldKey = key("k", member("a", 1.0, null));
+        RedisKey newKey = key("k", member("a", 1.0, ActionConstants.DELETE));
+
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
     }
 }

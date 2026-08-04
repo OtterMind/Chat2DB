@@ -6,7 +6,8 @@ import _ from 'lodash';
 import { IconButton, ToolbarBtn } from '@chat2db/ui';
 import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { useStyles } from './style';
-import { CheckOutlined, DownOutlined } from '@ant-design/icons';
+import { CheckOutlined } from '@ant-design/icons';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { RESULT_PAGE_SIZE_OPTIONS } from '@/constants/pagination';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
@@ -224,13 +225,13 @@ export default function Pagination(props: IProps) {
   return (
     <div className={styles.paginationWrapper}>
       <IconButton
-        code="icon-paging-start"
+        icon={ChevronsLeft}
         disabled={handleIsDisabled('first')}
         size="sm"
         onClick={() => handleClickIcon('first')}
       />
       <IconButton
-        code="icon-paging-left"
+        icon={ChevronLeft}
         disabled={handleIsDisabled('pre')}
         size="sm"
         onClick={() => handleClickIcon('pre')}
@@ -246,13 +247,13 @@ export default function Pagination(props: IProps) {
         onChange={onInputNumberChange}
       />
       <IconButton
-        code="icon-paging-right"
+        icon={ChevronRight}
         disabled={handleIsDisabled('next')}
         size="sm"
         onClick={() => handleClickIcon('next')}
       />
       <IconButton
-        code="icon-paging-end"
+        icon={ChevronsRight}
         disabled={handleIsDisabled('last')}
         size="sm"
         onClick={() => handleClickIcon('last')}
@@ -266,7 +267,7 @@ export default function Pagination(props: IProps) {
       >
         <div className={styles.selectSize}>
           {paginationConfig?.pageSize ?? 200}
-          <DownOutlined />
+          <ChevronDown size={14} />
         </div>
       </Dropdown>
       {props.onClickTotalBtn ? (

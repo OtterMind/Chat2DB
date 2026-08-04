@@ -25,7 +25,8 @@ const SQLPreviewExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLPrevie
   const [updateDataSql, setUpdateDataSql] = useState<string | null>(null);
   const [executeSqlParams, setExecuteSqlParams] = useState<any>(null);
   const executeSQLRef = useRef<IExecuteSQLRef>();
-  const { executeSQL } = useSqlExecutor();
+  const executePendingRef = useRef(false);
+  const { executeSQL, canExecuteSQL } = useSqlExecutor();
 
   const getUpdateDataSql = ({ operations, resultData }) => {
     if (!operations.length) {
@@ -51,28 +52,28 @@ const SQLPreviewExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLPrevie
   };
 
   const handleExecuteSql = ({ operations, resultData, callback }) => {
+    if (executePendingRef.current || !canExecuteSQL()) {
+      return;
+    }
+    executePendingRef.current = true;
     callback?.(true);
-    getUpdateDataSql({ operations, resultData })
-      .then((res) => {
-        executeSQL(res)
-          .then((_res) => {
-            if (_res?.[0]?.success === true) {
-              onExecuteSuccess?.();
-              setViewUpdateDataSqlModal(false);
-              setUpdateDataSql('');
-            } else {
-              onExecuteError?.(_res?.[0]?.message || '');
-            }
-          })
-          .catch((error) => {
-            onExecuteError?.(getRequestErrorMessage(error));
-          })
-          .finally(() => {
-            callback?.(false);
-          });
+    Promise.resolve()
+      .then(() => getUpdateDataSql({ operations, resultData }))
+      .then((res) => executeSQL(res))
+      .then((_res) => {
+        if (_res?.[0]?.success === true) {
+          onExecuteSuccess?.();
+          setViewUpdateDataSqlModal(false);
+          setUpdateDataSql('');
+        } else {
+          onExecuteError?.(_res?.[0]?.message || '');
+        }
       })
       .catch((error) => {
         onExecuteError?.(getRequestErrorMessage(error));
+      })
+      .finally(() => {
+        executePendingRef.current = false;
         callback?.(false);
       });
   };

@@ -7,9 +7,10 @@ import ai.chat2db.community.domain.api.service.ops.IOpsOperationLogQueryService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
-import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class OpsOperationLogQueryServiceImpl implements IOpsOperationLogQueryService {
@@ -31,7 +32,7 @@ public class OpsOperationLogQueryServiceImpl implements IOpsOperationLogQuerySer
     public PageResponse<OperationLog> operationLogPreviewList(OpsOperationLogPageQueryRequest request) {
         PageResponse<OperationLog> page = operationLogList(request);
         if (CollectionUtils.isNotEmpty(page.getData())) {
-            page.getData().stream().filter(Objects::nonNull).forEach(this::preparePreview);
+            page.setData(page.getData().stream().map(this::preparePreview).collect(Collectors.toList()));
         }
         return page;
     }
@@ -46,13 +47,17 @@ public class OpsOperationLogQueryServiceImpl implements IOpsOperationLogQuerySer
         return workspaceStorageFacade.createOperationLog(request);
     }
 
-    private void preparePreview(OperationLog operationLog) {
-        if (StringUtils.isBlank(operationLog.getDdl())) {
-            return;
+    private OperationLog preparePreview(OperationLog operationLog) {
+        if (operationLog == null) {
+            return null;
         }
-        if (operationLog.getDdl().length() > DDL_PREVIEW_LENGTH) {
-            operationLog.setDdl(operationLog.getDdl().substring(0, DDL_PREVIEW_LENGTH) + "...");
-            operationLog.setMore(Boolean.TRUE);
+
+        OperationLog preview = new OperationLog();
+        BeanUtils.copyProperties(operationLog, preview);
+        if (StringUtils.isNotBlank(preview.getDdl()) && preview.getDdl().length() > DDL_PREVIEW_LENGTH) {
+            preview.setDdl(preview.getDdl().substring(0, DDL_PREVIEW_LENGTH) + "...");
+            preview.setMore(Boolean.TRUE);
         }
+        return preview;
     }
 }

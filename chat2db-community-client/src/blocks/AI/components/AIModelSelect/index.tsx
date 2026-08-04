@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Select } from 'antd';
-import { PlusOutlined, RightOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai/store';
@@ -81,7 +82,7 @@ const AIModelSelect = ({
           <span className={styles.customModelTitle}>{customModelText || i18n('setting.modelConfig.entry')}</span>
           <span className={styles.customModelHint}>{i18n('setting.modelConfig.entryHint')}</span>
         </span>
-        <RightOutlined className={styles.customModelArrow} />
+        <ChevronRight className={styles.customModelArrow} size={14} />
       </div>
     ) : null;
   const optionsWithCustomModelEntry = appendCustomModelEntryOption(
@@ -102,6 +103,7 @@ const AIModelSelect = ({
       options={optionsWithCustomModelEntry}
       size="small"
       placeholder={i18n('ai.select.model')}
+      suffixIcon={<ChevronDown size={14} />}
       onDropdownVisibleChange={handleDropdownVisibleChange}
     />
   );

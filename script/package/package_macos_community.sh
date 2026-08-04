@@ -146,7 +146,6 @@ package_application() {
         "-Dfile.encoding=UTF-8"
         "-Dserver.address=127.0.0.1"
         "-Dserver.port=10825"
-        "-noverify"
         "-Xms128M"
     )
 

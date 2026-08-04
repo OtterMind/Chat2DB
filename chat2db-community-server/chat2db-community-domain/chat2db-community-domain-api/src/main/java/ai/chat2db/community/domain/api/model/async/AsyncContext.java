@@ -24,13 +24,13 @@ public class AsyncContext {
 
     protected ITaskAsyncCall call;
 
-    protected boolean finish;
+    protected volatile boolean finish;
 
-    protected Integer progress;
+    protected volatile Integer progress;
 
-    private StringBuffer info = new StringBuffer();
+    private volatile StringBuffer info = new StringBuffer();
 
-    private StringBuffer error = new StringBuffer();
+    private volatile StringBuffer error = new StringBuffer();
 
     public AsyncContext(ITaskAsyncCall call, Context context, File writeFile, boolean containsData) {
         this.call = call;

@@ -325,7 +325,7 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
                             new TablesRequest(databaseName, schemaName, null));
                     return new ArrayList<>(tables);
                 });
-                tableMap = allTables.stream().collect(Collectors.toMap(Table::getName, table -> table));
+                tableMap = toTableMap(allTables);
             }
 
             for (Statement statement : statements) {
@@ -362,10 +362,7 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
                     }
                     for (Token token : tokensOnDefault) {
                         String text = token.getText();
-                        if (text.startsWith(".")) {
-                            text = text.substring(1);
-                        }
-                        text = sqlIdentifierProcessor.removeIdentifierQuote(text);
+                        text = normalizeIdentifierToken(sqlIdentifierProcessor, text);
                         if (tableMap.containsKey(text)) {
                             SimpleTableColumnMapping simpleTableColumnMapping = new SimpleTableColumnMapping();
                             Table table = tableMap.get(text);
@@ -502,6 +499,18 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
             fallback.setMarkMessageList(List.of());
             return fallback;
         }
+    }
+
+    static String normalizeIdentifierToken(ISQLIdentifierProcessor processor, String tokenText) {
+        if (tokenText == null) {
+            return null;
+        }
+        String identifier = tokenText.startsWith(".") ? tokenText.substring(1) : tokenText;
+        return processor.removeIdentifierQuote(identifier);
+    }
+
+    static Map<String, Table> toTableMap(List<Table> tables) {
+        return tables.stream().collect(Collectors.toMap(Table::getName, table -> table, (first, ignored) -> first));
     }
 
     @Override

@@ -1,20 +1,12 @@
 package ai.chat2db.plugin.kingbase.identifier;
 
-import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
-import org.apache.commons.lang3.StringUtils;
+import ai.chat2db.plugin.postgresql.identifier.PostgreSQLIdentifierProcessor;
 
-public class KingBaseSQLIdentifierProcessor  extends DefaultSQLIdentifierProcessor {
+/**
+ * KingBase uses PostgreSQL-compatible identifier folding, delimiters, reserved
+ * words, and string literal escaping.
+ */
+public class KingBaseSQLIdentifierProcessor extends PostgreSQLIdentifierProcessor {
 
-
-    @Override
-    public String quoteIdentifier(String identifier) {
-        if (isValidIdentifier(identifier)) {
-            if (containsUpperCase(identifier) || isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
-            }
-            return identifier;
-        }
-        return StringUtils.wrap(identifier, '"');
-    }
-
+    public static final KingBaseSQLIdentifierProcessor INSTANCE = new KingBaseSQLIdentifierProcessor();
 }

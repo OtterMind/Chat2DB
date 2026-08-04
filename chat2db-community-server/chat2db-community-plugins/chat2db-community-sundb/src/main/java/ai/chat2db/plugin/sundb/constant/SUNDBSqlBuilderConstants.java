@@ -19,12 +19,10 @@ import java.util.Objects;
 
 public final class SUNDBSqlBuilderConstants {
 
-    public static final String VALUE_DOUBLE_QUOTE_OPEN_PAREN = "\" (";
-    public static final String VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE = "\" IS '";
     public static final String SQL_ALTER_TABLE = "ALTER TABLE ";
     public static final String SQL_COMMENT_COLUMN = "COMMENT ON COLUMN ";
     public static final String SQL_COMMENT_TABLE = "COMMENT ON TABLE ";
-    public static final String SQL_CREATE_SCHEMA = "CREATE SCHEMA \"";
+    public static final String SQL_CREATE_SCHEMA = "CREATE SCHEMA ";
     public static final String SQL_CREATE_TABLE = "CREATE TABLE ";
     public static final String SQL_LIMIT = " LIMIT ";
     public static final String SQL_OFFSET = " OFFSET ";

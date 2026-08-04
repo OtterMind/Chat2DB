@@ -15,6 +15,12 @@ const initializeMonacoEditor = () => {
 
   // Register languages.
   monaco.languages.register({ id: 'sql' });
+  monaco.languages.setLanguageConfiguration('sql', {
+    comments: {
+      lineComment: '--',
+      blockComment: ['/*', '*/'],
+    },
+  });
   // TODO: Define more detailed rules.
   // monaco.languages.setMonarchTokensProvider('sql', {});
 

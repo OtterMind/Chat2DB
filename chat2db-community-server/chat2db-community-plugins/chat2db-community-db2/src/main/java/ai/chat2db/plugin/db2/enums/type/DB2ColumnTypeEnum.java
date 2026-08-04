@@ -4,7 +4,8 @@ import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.spi.util.SqlUtils;
+import ai.chat2db.plugin.db2.Db2SqlGuards;
+import ai.chat2db.plugin.db2.identifier.Db2IdentifierProcessor;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 
@@ -111,7 +112,15 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
     private ColumnType columnType;
 
     public static DB2ColumnTypeEnum getByType(String dataType) {
-       return COLUMN_TYPE_MAP.get(SqlUtils.removeDigits(dataType.toUpperCase()));
+        if (dataType == null) {
+            return null;
+        }
+        String normalized = dataType.trim();
+        int paren = normalized.indexOf('(');
+        if (paren >= 0) {
+            normalized = normalized.substring(0, paren);
+        }
+        return COLUMN_TYPE_MAP.get(normalized.toUpperCase());
     }
 
     private static Map<String, DB2ColumnTypeEnum> COLUMN_TYPE_MAP = Maps.newHashMap();
@@ -135,11 +144,11 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
     public String buildCreateColumnSql(TableColumn column) {
         DB2ColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
         if (type == null) {
-            return buildDefaultColumn(column,false);
+            return buildSafeFallbackColumn(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("\"").append(column.getName()).append("\"").append(" ");
+        script.append("\"").append(Db2IdentifierProcessor.escapeIdentifier(column.getName())).append("\"").append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -162,6 +171,16 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
         }
     }
 
+    /**
+     * Fallback for column types that are not exact enum matches (e.g. {@code VARCHAR(10)}).
+     * The type name is validated against a strict shape and the column name is escaped as a
+     * delimited identifier, so neither value can break out of the column definition.
+     */
+    private static String buildSafeFallbackColumn(TableColumn column) {
+        String columnType = Db2SqlGuards.requireColumnTypeExpression(column.getColumnType());
+        return "\"" + Db2IdentifierProcessor.escapeIdentifier(column.getName()) + "\" " + columnType;
+    }
+
     private String buildDefaultValue(TableColumn column, DB2ColumnTypeEnum type) {
         if (!type.getColumnType().isSupportDefaultValue() || StringUtils.isEmpty(column.getDefaultValue())) {
             return "";
@@ -175,7 +194,7 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
             return StringUtils.join("DEFAULT NULL");
         }
 
-        return StringUtils.join("DEFAULT ", column.getDefaultValue());
+        return StringUtils.join("DEFAULT ", Db2SqlGuards.requireDefaultExpression(column.getDefaultValue()));
     }
 
     private String buildDataType(TableColumn column, DB2ColumnTypeEnum type) {
@@ -186,7 +205,7 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
             if (column.getColumnSize() != null && StringUtils.isEmpty(column.getUnit())) {
                 script.append("(").append(column.getColumnSize()).append(")");
             } else if (column.getColumnSize() != null && !StringUtils.isEmpty(column.getUnit())) {
-                script.append("(").append(column.getColumnSize()).append(" ").append(column.getUnit()).append(")");
+                script.append("(").append(column.getColumnSize()).append(" ").append(Db2SqlGuards.requireUnit(column.getUnit())).append(")");
             }
             return script.toString();
         }
@@ -211,25 +230,25 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
 
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-            script.append(" ").append(SQL_DROP_COLUMN).append("\"").append(tableColumn.getName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getTableName())).append("\"");
+            script.append(" ").append(SQL_DROP_COLUMN).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getName())).append("\"");
             return script.toString();
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getTableName())).append("\"");
             script.append(" ").append("ADD (").append(buildCreateColumnSql(tableColumn)).append(")");
             return script.toString();
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getTableName())).append("\"");
             script.append(" ").append("MODIFY (").append(buildCreateColumnSql(tableColumn)).append(") \n");
 
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
                 script.append(";");
-                script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-                script.append(" ").append(SQL_RENAME_COLUMN).append("\"").append(tableColumn.getOldName()).append("\"").append(" TO ").append("\"").append(tableColumn.getName()).append("\"");
+                script.append(SQL_ALTER_TABLE).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getTableName())).append("\"");
+                script.append(" ").append(SQL_RENAME_COLUMN).append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getOldName())).append("\"").append(" TO ").append("\"").append(Db2IdentifierProcessor.escapeIdentifier(tableColumn.getName())).append("\"");
 
             }
             return script.toString();

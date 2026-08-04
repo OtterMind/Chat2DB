@@ -10,6 +10,7 @@ import { useIndexDBStore } from '@/store/indexDB';
 import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
+import { confirmAndKillTerminalTabs } from '@/utils/terminalSession';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
 
@@ -73,12 +74,13 @@ export interface ConsoleAction {
   setActiveConsoleId: (data: ConsoleState['activeConsoleId']) => void;
   setWorkspaceTabList: (data: ConsoleState['workspaceTabList']) => void;
   updateWorkspaceTabBoundInfo: (data: IBoundInfo) => void;
+  markWorkspaceTabConsoleSaved: (data: { workspaceTabId?: number | string; consoleId: number; name?: string }) => void;
   createConsole: (params: ICreateConsoleParams) => Promise<any>;
   addWorkspaceTab: (params: any) => void;
   setEditorToList: (id: number | string, editorIns: any) => void;
   deleteEditor: (id: number | string) => void;
   appendConsole: (params: { id: number | string; content: string; type?: EditorSetValueType; space?: boolean }) => void;
-  deleteActiveWorkspaceTab: () => void;
+  deleteActiveWorkspaceTab: () => Promise<void>;
 }
 
 export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtools', never]], [], ConsoleAction> = (
@@ -263,6 +265,31 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
 
     get().setWorkspaceTabList(newList);
   },
+  markWorkspaceTabConsoleSaved: ({ workspaceTabId, consoleId, name }) => {
+    const workspaceTabList = get().workspaceTabList;
+    if (!workspaceTabList) {
+      return;
+    }
+
+    const newList = workspaceTabList.map((item) => {
+      const matchedByWorkspaceTabId = workspaceTabId !== undefined && item.id === workspaceTabId;
+      const matchedByConsoleId = item.uniqueData?.consoleId === consoleId || item.id === consoleId;
+      if (!matchedByWorkspaceTabId && !matchedByConsoleId) {
+        return item;
+      }
+      return {
+        ...item,
+        title: name || item.title,
+        uniqueData: {
+          ...item.uniqueData,
+          consoleId,
+          status: ConsoleStatus.RELEASE,
+        },
+      };
+    });
+
+    get().setWorkspaceTabList(newList);
+  },
   deleteActiveWorkspaceTab: async () => {
     const { activeConsoleId, workspaceTabList, workspaceTabSplitLayout, editorList } = get();
     if (!activeConsoleId || !workspaceTabList) {
@@ -271,6 +298,12 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
 
     const activeWorkspaceTab = workspaceTabList.find((item) => item?.id === activeConsoleId);
     if (activeWorkspaceTab?.pinned) {
+      return;
+    }
+    if (
+      activeWorkspaceTab &&
+      !(await confirmAndKillTerminalTabs([activeWorkspaceTab], workspaceTabList))
+    ) {
       return;
     }
 

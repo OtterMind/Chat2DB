@@ -1,0 +1,287 @@
+.markdownWorkspace {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--color-bg-base);
+}
+
+.markdownToolbar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  opacity: 0.3;
+  transition: opacity 160ms ease;
+
+  &:hover,
+  &:focus-within {
+    opacity: 1;
+  }
+}
+
+.markdownContent {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+}
+
+.splitPane {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.sourcePane,
+.reviewPane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.splitPane > .sourcePane {
+  border-right: 1px solid var(--color-border);
+}
+
+.viewModeIcon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.mermaidRenderHost {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 1000px;
+  height: 1px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.markdownScroller {
+  height: 100%;
+  overflow: auto;
+  background: var(--color-bg-base);
+}
+
+.markdown {
+  box-sizing: border-box;
+  max-width: 980px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 32px 48px 80px;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+
+  h1,
+  h2 {
+    margin-top: 1.6em;
+    padding-bottom: 0.35em;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  h1:first-child,
+  h2:first-child,
+  h3:first-child {
+    margin-top: 0;
+  }
+
+  blockquote {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    color: var(--color-text-secondary);
+    border-left: 4px solid var(--color-primary);
+    background: var(--color-bg-subtle);
+  }
+
+  table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow: auto;
+    border-spacing: 0;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+  }
+
+  th {
+    font-weight: 600;
+    background: var(--color-bg-subtle);
+  }
+
+  pre {
+    overflow: auto;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: #161b22;
+    color: #e6edf3;
+  }
+
+  :not(pre) > code {
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    background: var(--color-bg-subtle);
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 16px auto;
+    border-radius: 8px;
+  }
+
+  input[type='checkbox'] {
+    margin-right: 0.45em;
+  }
+}
+
+.diagram {
+  overflow: auto;
+  padding: 18px;
+  border-radius: 8px;
+  background: #fff;
+  text-align: center;
+
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+.diagramLoading,
+.diagramError,
+.brokenImage {
+  color: var(--color-text-secondary);
+}
+
+.diagramError {
+  white-space: pre-wrap;
+}
+
+.imagePreview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.imageScroller {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+    linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+}
+
+.imageCanvas {
+  display: grid;
+  min-width: 100%;
+  min-height: 100%;
+  place-items: center;
+
+  img {
+    display: block;
+    flex: none;
+    object-fit: contain;
+  }
+}
+
+.imageToolbar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-base);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  opacity: 0.3;
+  transition: opacity 160ms ease;
+
+  &:hover,
+  &:focus-within {
+    opacity: 1;
+  }
+}
+
+.imageZoomValue {
+  min-width: 52px;
+  padding-inline: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdfPreview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-base);
+}
+
+.pdfObject {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.pdfStatus {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-base);
+  pointer-events: none;
+}
+
+.previewFallback {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 760px) {
+  .markdown {
+    padding: 24px 20px 64px;
+  }
+}

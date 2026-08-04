@@ -1,16 +1,19 @@
 import React, { memo, useEffect, useMemo, Fragment, useState } from 'react';
 import styles from './index.less';
 import i18n from '@/i18n';
-import { Button } from 'antd';
-import { staticMessage } from '@chat2db/ui';
+import { Button, theme } from 'antd';
+import { IconfontSvg, staticMessage } from '@chat2db/ui';
 import SplitPane from 'react-split-pane';
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   pointerWithin,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -38,6 +41,8 @@ import Iconfont from '@/components/Iconfont';
 import { useZoerStore } from '@/store/zoer';
 import AccountPrivilegePanel from '../AccountPrivilegePanel';
 import ContentDiffTab from './ContentDiffTab';
+import FilePreviewTab from './FilePreviewTab';
+import TerminalTab from './TerminalTab';
 
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
@@ -47,20 +52,44 @@ import { useTreeStore } from '@/store/tree';
 // ----- services -----
 import historyService from '@/service/history';
 import sqlService from '@/service/sql';
+import jcefApi from '@/jcef';
 
 import { copyToClipboard, getTemporaryId, isTemporaryId } from '@/utils';
 
 import { useIndexDBStore } from '@/store/indexDB';
 import { getDatabaseSupport } from '@/utils/database';
 import ConsoleERModal from '@/blocks/ERModal/ConsoleERModal';
-import { getLocalTextFileIcon, SQL_FILE_EXTENSION_NAME } from '../../utils/localTextFile';
+import {
+  getLocalTextFileIcon,
+  getLocalTextFileTabPresentation,
+  SQL_FILE_EXTENSION_NAME,
+} from '../../utils/localTextFile';
+import { confirmAndKillTerminalTabs } from '@/utils/terminalSession';
 import { EditorType } from '@/components/SQLEditor';
+import { ShortcutAction } from '@/constants/shortcut';
+import {
+  createWorkspaceTabEdgeSplitLayout,
+  getWorkspaceTabDropPlacement,
+  getWorkspaceTabEdgeDropId,
+  getWorkspaceTabEdgeDropTarget,
+  WorkspaceTabDropPosition,
+} from './workspaceTabDrop';
+import { applyTerminalTabOpenPositions } from './terminalTabPlacement';
+import {
+  areWorkspaceTabSplitLayoutsEqual,
+  collectWorkspaceTabPaneIds,
+  createWorkspaceTabSplitNode,
+  ensureWorkspaceTabSplitNodeIds,
+  pruneWorkspaceTabPaneNode,
+  replaceWorkspaceTabPaneNode,
+  updateWorkspaceTabSplitNodeSize,
+} from './workspaceTabLayout';
 
 const SplitPaneAny = SplitPane as any;
 const MAIN_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'main';
 const SPLIT_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'split';
 const WORKSPACE_TAB_PANE_DROPPABLE_PREFIX = 'workspace-tab-pane:';
-type WorkspaceTabSplitNodePath = Array<'first' | 'second'>;
+const WORKSPACE_TAB_WIDTH = 200;
 
 function getWorkspaceTabPaneDroppableId(paneId: WorkspaceTabPaneId) {
   return `${WORKSPACE_TAB_PANE_DROPPABLE_PREFIX}${paneId}`;
@@ -86,23 +115,50 @@ function createPaneNode(id: WorkspaceTabPaneId): IWorkspaceTabPaneNode {
   };
 }
 
-function createDefaultSplitRoot(direction: WorkspaceTabSplitDirection): IWorkspaceTabPaneNode {
-  return {
-    type: 'split',
-    direction,
-    first: createPaneNode(MAIN_WORKSPACE_TAB_PANE),
-    second: createPaneNode(SPLIT_WORKSPACE_TAB_PANE),
-  };
+function WorkspaceTabPaneDropOverlay({
+  paneId,
+  previewPosition,
+  previewStyle,
+}: {
+  paneId: WorkspaceTabPaneId;
+  previewPosition?: WorkspaceTabDropPosition;
+  previewStyle: React.CSSProperties;
+}) {
+  const top = useDroppable({ id: getWorkspaceTabEdgeDropId(paneId, 'top') });
+  const right = useDroppable({ id: getWorkspaceTabEdgeDropId(paneId, 'right') });
+  const bottom = useDroppable({ id: getWorkspaceTabEdgeDropId(paneId, 'bottom') });
+  const left = useDroppable({ id: getWorkspaceTabEdgeDropId(paneId, 'left') });
+  const previewClassName = previewPosition
+    ? {
+        top: styles.dropPreviewTop,
+        right: styles.dropPreviewRight,
+        bottom: styles.dropPreviewBottom,
+        left: styles.dropPreviewLeft,
+      }[previewPosition]
+    : undefined;
+
+  return (
+    <div className={styles.workspacePaneDropOverlay}>
+      <div ref={top.setNodeRef} className={`${styles.workspacePaneDropZone} ${styles.dropZoneTop}`} />
+      <div ref={right.setNodeRef} className={`${styles.workspacePaneDropZone} ${styles.dropZoneRight}`} />
+      <div ref={bottom.setNodeRef} className={`${styles.workspacePaneDropZone} ${styles.dropZoneBottom}`} />
+      <div ref={left.setNodeRef} className={`${styles.workspacePaneDropZone} ${styles.dropZoneLeft}`} />
+      {previewPosition && (
+        <div
+          style={previewStyle}
+          className={`${styles.workspacePaneDropPreview} ${previewClassName}`}
+        />
+      )}
+    </div>
+  );
 }
 
-function collectWorkspaceTabPaneIds(node?: IWorkspaceTabPaneNode | null): WorkspaceTabPaneId[] {
-  if (!node) {
-    return [];
-  }
-  if (node.type === 'pane') {
-    return [node.id];
-  }
-  return [...collectWorkspaceTabPaneIds(node.first), ...collectWorkspaceTabPaneIds(node.second)];
+function createDefaultSplitRoot(direction: WorkspaceTabSplitDirection): IWorkspaceTabPaneNode {
+  return createWorkspaceTabSplitNode(
+    direction,
+    createPaneNode(MAIN_WORKSPACE_TAB_PANE),
+    createPaneNode(SPLIT_WORKSPACE_TAB_PANE),
+  );
 }
 
 function findWorkspaceTabPaneNode(node: IWorkspaceTabPaneNode | undefined, paneId: WorkspaceTabPaneId) {
@@ -113,68 +169,6 @@ function findWorkspaceTabPaneNode(node: IWorkspaceTabPaneNode | undefined, paneI
     return node.id === paneId;
   }
   return findWorkspaceTabPaneNode(node.first, paneId) || findWorkspaceTabPaneNode(node.second, paneId);
-}
-
-function replaceWorkspaceTabPaneNode(
-  node: IWorkspaceTabPaneNode,
-  paneId: WorkspaceTabPaneId,
-  replacement: IWorkspaceTabPaneNode,
-): IWorkspaceTabPaneNode {
-  if (node.type === 'pane') {
-    return node.id === paneId ? replacement : node;
-  }
-  return {
-    ...node,
-    first: replaceWorkspaceTabPaneNode(node.first, paneId, replacement),
-    second: replaceWorkspaceTabPaneNode(node.second, paneId, replacement),
-  };
-}
-
-function updateWorkspaceTabSplitNodeSize(
-  node: IWorkspaceTabPaneNode,
-  path: WorkspaceTabSplitNodePath,
-  size: number | string,
-): IWorkspaceTabPaneNode {
-  if (node.type === 'pane') {
-    return node;
-  }
-
-  if (!path.length) {
-    return {
-      ...node,
-      size,
-    };
-  }
-
-  const [nextPathItem, ...restPath] = path;
-  return nextPathItem === 'first'
-    ? {
-        ...node,
-        first: updateWorkspaceTabSplitNodeSize(node.first, restPath, size),
-      }
-    : {
-        ...node,
-        second: updateWorkspaceTabSplitNodeSize(node.second, restPath, size),
-      };
-}
-
-function pruneWorkspaceTabPaneNode(
-  node: IWorkspaceTabPaneNode,
-  validPaneIds: Set<WorkspaceTabPaneId>,
-): IWorkspaceTabPaneNode | null {
-  if (node.type === 'pane') {
-    return validPaneIds.has(node.id) ? node : null;
-  }
-  const first = pruneWorkspaceTabPaneNode(node.first, validPaneIds);
-  const second = pruneWorkspaceTabPaneNode(node.second, validPaneIds);
-  if (first && second) {
-    return {
-      ...node,
-      first,
-      second,
-    };
-  }
-  return first || second;
 }
 
 function getSnapshotDDL(uniqueData: IWorkspaceTab['uniqueData']) {
@@ -348,7 +342,7 @@ function createWorkspaceTabSnapshot(
 }
 
 function createPersistableWorkspaceTabSnapshot(item: IWorkspaceTab, ddl?: string): IWorkspaceTab | null {
-  if (hasFunctionValue(item.uniqueData)) {
+  if (item.type === WorkspaceTabType.Terminal || hasFunctionValue(item.uniqueData)) {
     return null;
   }
   return createWorkspaceTabSnapshot(item, ddl, { stripFunctions: true });
@@ -373,6 +367,37 @@ function createTemporaryWorkspaceTabCopy(
     uniqueData: {
       ...snapshot.uniqueData,
       consoleId: undefined,
+    },
+  };
+}
+
+async function createIndependentWorkspaceTabCopy(
+  item: IWorkspaceTab,
+  ddl: string | undefined,
+  idPrefix: string,
+  title: string,
+) {
+  const copy = createTemporaryWorkspaceTabCopy(item, ddl, idPrefix, title);
+  if (item.type !== WorkspaceTabType.Terminal) {
+    return copy;
+  }
+  const sourceSessionId = item.uniqueData?.terminalSessionId;
+  if (!sourceSessionId) {
+    throw new Error('Terminal session is not available');
+  }
+  const terminal = await jcefApi.duplicateTerminal({
+    sessionId: sourceSessionId,
+    columns: 100,
+    rows: 30,
+  });
+  return {
+    ...copy,
+    uniqueData: {
+      ...copy.uniqueData,
+      terminalSessionId: terminal.sessionId,
+      terminalCwd: terminal.cwd,
+      terminalShell: terminal.shell,
+      terminalShellId: terminal.shellId,
     },
   };
 }
@@ -435,17 +460,20 @@ function getPaneIdForTab(
 }
 
 function normalizeWorkspaceTabSplitLayout(
-  layout: IWorkspaceTabSplitLayout | null | undefined,
+  currentLayout: IWorkspaceTabSplitLayout | null | undefined,
   workspaceTabList: IWorkspaceTab[],
   activeConsoleId?: string | number | null,
 ) {
+  const layout = applyTerminalTabOpenPositions(currentLayout, workspaceTabList, activeConsoleId);
   if (!layout || !workspaceTabList.length) {
     return null;
   }
 
   const workspaceTabMap = getWorkspaceTabMap(workspaceTabList);
   const assignedIds = new Set<string | number>();
-  const root = layout.root || createDefaultSplitRoot(layout.direction || 'vertical');
+  const root = ensureWorkspaceTabSplitNodeIds(
+    layout.root || createDefaultSplitRoot(layout.direction || 'vertical'),
+  );
   const paneIdsFromRoot = collectWorkspaceTabPaneIds(root);
   const paneIds = paneIdsFromRoot.length ? paneIdsFromRoot : [MAIN_WORKSPACE_TAB_PANE, SPLIT_WORKSPACE_TAB_PANE];
   const nextPaneTabIds = paneIds.reduce(
@@ -523,13 +551,6 @@ function normalizeWorkspaceTabSplitLayout(
       {} as Partial<Record<WorkspaceTabPaneId, number | string | null>>,
     ),
   } as IWorkspaceTabSplitLayout;
-}
-
-function areWorkspaceTabSplitLayoutsEqual(
-  a: IWorkspaceTabSplitLayout | null | undefined,
-  b: IWorkspaceTabSplitLayout | null | undefined,
-) {
-  return JSON.stringify(a || null) === JSON.stringify(b || null);
 }
 
 function getWorkspaceTabListByPane(
@@ -615,9 +636,19 @@ function getWorkspaceTabIdFromDndId(id: string, workspaceTabList: IWorkspaceTab[
 
 const workspaceTabCollisionDetection: CollisionDetection = (args) => {
   const collisions = pointerWithin(args);
+  const edgeCollisions = collisions.filter(({ id }) => getWorkspaceTabEdgeDropTarget(String(id)));
   const paneCollisions = collisions.filter(({ id }) => getWorkspaceTabPaneIdFromDroppableId(String(id)));
-  const tabCollisions = collisions.filter(({ id }) => !getWorkspaceTabPaneIdFromDroppableId(String(id)));
-  return tabCollisions.length ? tabCollisions : paneCollisions.length ? paneCollisions : collisions;
+  const tabCollisions = collisions.filter(
+    ({ id }) =>
+      !getWorkspaceTabPaneIdFromDroppableId(String(id)) && !getWorkspaceTabEdgeDropTarget(String(id)),
+  );
+  return edgeCollisions.length
+    ? edgeCollisions
+    : tabCollisions.length
+      ? tabCollisions
+      : paneCollisions.length
+        ? paneCollisions
+        : collisions;
 };
 
 const WorkspaceTabs = memo(() => {
@@ -670,7 +701,11 @@ const WorkspaceTabs = memo(() => {
       deleteValue: state.deleteValue,
     };
   });
+  const { token } = theme.useToken();
   const [draggingWorkspaceTabKey, setDraggingWorkspaceTabKey] = useState<string | undefined>();
+  const [workspaceTabDropTarget, setWorkspaceTabDropTarget] = useState<
+    { paneId: WorkspaceTabPaneId; position: WorkspaceTabDropPosition } | undefined
+  >();
   const splitTabDragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Get the console.
@@ -860,6 +895,21 @@ const WorkspaceTabs = memo(() => {
     });
   };
 
+  const confirmWorkspaceTabItemsClose = (tabs: ITabItem[]) => {
+    const closeKeySet = new Set(tabs.map((tab) => tab.key));
+    return confirmAndKillTerminalTabs(
+      (workspaceTabList || []).filter((tab) => closeKeySet.has(tab.id)),
+      workspaceTabList || [],
+    );
+  };
+
+  const requestCloseWorkspaceTabs = async (tabs: IWorkspaceTab[]) => {
+    const closableTabs = tabs.filter((item) => !item.pinned);
+    if (await confirmAndKillTerminalTabs(closableTabs, workspaceTabList || [])) {
+      closeWorkspaceTabs(closableTabs);
+    }
+  };
+
   const createNewConsole = (targetPaneId?: WorkspaceTabPaneId) => {
     const appendNewConsoleToActivePane = (consoleId: string | number) => {
       const currentLayout = useWorkspaceStore.getState().workspaceTabSplitLayout;
@@ -919,11 +969,6 @@ const WorkspaceTabs = memo(() => {
     if (action === 'add') {
       createNewConsole(paneId);
     }
-  };
-
-  // Switch tabs.
-  const onTabChange = (key: string | number | null) => {
-    setActiveConsoleId(key);
   };
 
   const onPaneTabChange = (paneId: WorkspaceTabPaneId, key: string | number | null) => {
@@ -1017,7 +1062,7 @@ const WorkspaceTabs = memo(() => {
       return;
     }
     const closeTabs = currentList.slice(0, currentIndex).filter((item) => !item.pinned);
-    closeWorkspaceTabs(closeTabs);
+    requestCloseWorkspaceTabs(closeTabs);
   };
 
   const closeWorkspaceTabsToRight = (tab: ITabItem) => {
@@ -1027,7 +1072,7 @@ const WorkspaceTabs = memo(() => {
       return;
     }
     const closeTabs = currentList.slice(currentIndex + 1).filter((item) => !item.pinned);
-    closeWorkspaceTabs(closeTabs);
+    requestCloseWorkspaceTabs(closeTabs);
   };
 
   const copyWorkspaceTabReference = (tab: ITabItem) => {
@@ -1039,13 +1084,25 @@ const WorkspaceTabs = memo(() => {
     staticMessage.success(i18n('common.button.copySuccessfully'));
   };
 
-  const duplicateWorkspaceTab = (tab: ITabItem) => {
+  const duplicateWorkspaceTab = async (tab: ITabItem) => {
     const workspaceTab = getWorkspaceTabByKey(tab.key);
     if (!workspaceTab) {
       return;
     }
     const ddl = useWorkspaceStore.getState().editorList?.[workspaceTab.id]?.getValue?.();
-    const duplicateTab = createTemporaryWorkspaceTabCopy(workspaceTab, ddl, 'duplicate', `${workspaceTab.title} copy`);
+    let duplicateTab: IWorkspaceTab;
+    try {
+      duplicateTab = await createIndependentWorkspaceTabCopy(
+        workspaceTab,
+        ddl,
+        'duplicate',
+        `${workspaceTab.title} copy`,
+      );
+    } catch (error) {
+      console.error('duplicate workspace terminal error', error);
+      staticMessage.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
+      return;
+    }
     const nextWorkspaceTabList = [...(workspaceTabList || []), duplicateTab];
     const sourcePaneId = getPaneIdByTabKey(tab.key);
     const nextLayout = workspaceTabSplitLayout
@@ -1219,12 +1276,70 @@ const WorkspaceTabs = memo(() => {
   };
 
   const handleSplitTabDragStart = (event: DragStartEvent) => {
+    setWorkspaceTabDropTarget(undefined);
     setDraggingWorkspaceTabKey(String(event.active.id));
+  };
+
+  const handleSplitTabDragOver = (event: DragOverEvent) => {
+    const nextTarget = event.over ? getWorkspaceTabEdgeDropTarget(String(event.over.id)) : undefined;
+    setWorkspaceTabDropTarget((currentTarget) =>
+      currentTarget?.paneId === nextTarget?.paneId && currentTarget?.position === nextTarget?.position
+        ? currentTarget
+        : nextTarget,
+    );
+  };
+
+  const splitWorkspaceTabByDrop = (
+    sourceTabId: string | number,
+    targetPaneId: WorkspaceTabPaneId,
+    position: WorkspaceTabDropPosition,
+  ) => {
+    const currentList = workspaceTabList || [];
+    const { direction } = getWorkspaceTabDropPlacement(position);
+    const currentLayout =
+      workspaceTabSplitLayout ||
+      ({
+        direction,
+        activePane: MAIN_WORKSPACE_TAB_PANE,
+        root: createPaneNode(MAIN_WORKSPACE_TAB_PANE),
+        paneTabIds: {
+          [MAIN_WORKSPACE_TAB_PANE]: currentList.map((item) => item.id),
+        },
+        activeTabIds: {
+          [MAIN_WORKSPACE_TAB_PANE]: activeConsoleId,
+        },
+      } as IWorkspaceTabSplitLayout);
+    const sourcePaneId = getPaneIdForTab(currentLayout, sourceTabId);
+    const sourcePaneIds = currentLayout.paneTabIds[sourcePaneId] || [];
+    const currentRoot = currentLayout.root || createDefaultSplitRoot(currentLayout.direction || direction);
+
+    if (sourcePaneId === targetPaneId && sourcePaneIds.length <= 1) {
+      staticMessage.warning(i18n('workspace.tips.cannotMoveLastSplitTab'));
+      return;
+    }
+
+    const newPaneId = createWorkspaceTabPaneId();
+    const nextLayout = createWorkspaceTabEdgeSplitLayout({
+      currentLayout,
+      currentRoot,
+      sourcePaneId,
+      sourceTabId,
+      targetPaneId,
+      newPaneId,
+      position,
+    });
+    if (!nextLayout) {
+      return;
+    }
+
+    setWorkspaceTabsState(currentList, nextLayout, sourceTabId);
+    setActiveConsoleId(sourceTabId);
   };
 
   const handleSplitTabDragEnd = (event: DragEndEvent) => {
     setDraggingWorkspaceTabKey(undefined);
-    if (!workspaceTabSplitLayout || !event.over) {
+    setWorkspaceTabDropTarget(undefined);
+    if (!event.over) {
       return;
     }
 
@@ -1234,8 +1349,30 @@ const WorkspaceTabs = memo(() => {
     }
 
     const overId = String(event.over.id);
+    const edgeDropTarget = getWorkspaceTabEdgeDropTarget(overId);
+    if (edgeDropTarget) {
+      splitWorkspaceTabByDrop(activeTabId, edgeDropTarget.paneId, edgeDropTarget.position);
+      return;
+    }
+
     const overPaneId = getWorkspaceTabPaneIdFromDroppableId(overId);
     const overTabId = getWorkspaceTabIdFromDndId(overId, workspaceTabList || []);
+    if (!workspaceTabSplitLayout) {
+      if (overTabId === undefined || overTabId === activeTabId) {
+        return;
+      }
+      const sourceIndex = (workspaceTabList || []).findIndex((tab) => tab.id === activeTabId);
+      const targetIndex = (workspaceTabList || []).findIndex((tab) => tab.id === overTabId);
+      if (sourceIndex === -1 || targetIndex === -1) {
+        return;
+      }
+      const nextWorkspaceTabList = [...(workspaceTabList || [])];
+      const [sourceTab] = nextWorkspaceTabList.splice(sourceIndex, 1);
+      nextWorkspaceTabList.splice(targetIndex, 0, sourceTab);
+      setWorkspaceTabsState(nextWorkspaceTabList, null, activeTabId);
+      return;
+    }
+
     const targetPaneId =
       overPaneId ||
       (overTabId !== undefined ? getPaneIdForTab(workspaceTabSplitLayout, overTabId) : undefined);
@@ -1246,7 +1383,7 @@ const WorkspaceTabs = memo(() => {
     moveWorkspaceTabInSplitLayout(activeTabId, targetPaneId, overTabId);
   };
 
-  const splitWorkspaceTab = (
+  const splitWorkspaceTab = async (
     tab: ITabItem,
     direction: WorkspaceTabSplitDirection,
     splitMode: 'copy' | 'move',
@@ -1284,7 +1421,19 @@ const WorkspaceTabs = memo(() => {
     let nextTabId = workspaceTab.id;
     if (splitMode === 'copy') {
       const ddl = useWorkspaceStore.getState().editorList?.[workspaceTab.id]?.getValue?.();
-      const splitTab = createTemporaryWorkspaceTabCopy(workspaceTab, ddl, `split_${direction}`, workspaceTab.title);
+      let splitTab: IWorkspaceTab;
+      try {
+        splitTab = await createIndependentWorkspaceTabCopy(
+          workspaceTab,
+          ddl,
+          `split_${direction}`,
+          workspaceTab.title,
+        );
+      } catch (error) {
+        console.error('split workspace terminal error', error);
+        staticMessage.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
+        return;
+      }
       nextWorkspaceTabList.push(splitTab);
       nextTabId = splitTab.id;
     }
@@ -1293,12 +1442,11 @@ const WorkspaceTabs = memo(() => {
     const sourcePaneIds = originalSourcePaneIds.filter((id) => id !== workspaceTab.id);
     const targetPaneIds = [nextTabId];
     const nextRoot = findWorkspaceTabPaneNode(currentRoot, sourcePaneId)
-      ? replaceWorkspaceTabPaneNode(currentRoot, sourcePaneId, {
-          type: 'split',
-          direction,
-          first: createPaneNode(sourcePaneId),
-          second: createPaneNode(targetPaneId),
-        })
+      ? replaceWorkspaceTabPaneNode(
+          currentRoot,
+          sourcePaneId,
+          createWorkspaceTabSplitNode(direction, createPaneNode(sourcePaneId), createPaneNode(targetPaneId)),
+        )
       : currentRoot;
     const nextLayout = {
       ...currentLayout,
@@ -1348,6 +1496,19 @@ const WorkspaceTabs = memo(() => {
 
     delete boundInfo.ddl;
     delete boundInfo.loadSQL;
+
+    const fileExtension = (uniqueData.fileExtension || '').toLowerCase();
+    if (
+      item.type === WorkspaceTabType.LocalSQLFile &&
+      (fileExtension === 'md' || fileExtension === 'markdown' || uniqueData.filePreviewUrl)
+    ) {
+      return (
+        <FilePreviewTab
+          file={uniqueData}
+          workspaceTabId={item.id}
+        />
+      );
+    }
 
     return (
       <SQLExecute
@@ -1455,6 +1616,16 @@ const WorkspaceTabs = memo(() => {
     );
   };
 
+  const renderTerminal = (item: IWorkspaceTab) => {
+    const sessionId = item.uniqueData?.terminalSessionId;
+    if (!sessionId) {
+      return;
+    }
+    return (
+      <TerminalTab sessionId={sessionId} />
+    );
+  };
+
   // Render content according to the tab type.
   const workspaceTabConnectionMap = (item: IWorkspaceTab) => {
     switch (item.type) {
@@ -1486,6 +1657,8 @@ const WorkspaceTabs = memo(() => {
         return renderAccountPrivileges(item);
       case WorkspaceTabType.ContentDiff:
         return renderContentDiff(item);
+      case WorkspaceTabType.Terminal:
+        return renderTerminal(item);
       default:
         return <div>Unknown</div>;
     }
@@ -1493,17 +1666,29 @@ const WorkspaceTabs = memo(() => {
 
   const getWorkspaceTabItems = (tabs: IWorkspaceTab[]) => {
     return tabs.map((item) => {
-      const popoverContent = item.uniqueData?.popoverContent;
+      const localFileTabPresentation =
+        item.type === WorkspaceTabType.LocalSQLFile
+          ? getLocalTextFileTabPresentation(item.uniqueData?.filePath, item.title)
+          : undefined;
+      const popoverContent = localFileTabPresentation?.popover || item.uniqueData?.popoverContent;
       return {
         prefixIcon:
           item.type === WorkspaceTabType.LocalSQLFile
             ? getLocalTextFileIcon(item.uniqueData?.fileExtension)
             : workspaceTabConfig[item.type]?.icon,
-        label: item.title,
+        label: localFileTabPresentation?.label ?? item.title,
         popover: popoverContent ? <div style={{ padding: '4px 6px' }}>{popoverContent}</div> : undefined,
         key: item.id,
-        editableName: item.type === WorkspaceTabType.CONSOLE,
+        editableName:
+          item.type === WorkspaceTabType.CONSOLE || item.type === WorkspaceTabType.Terminal,
         pinned: item.pinned,
+        destroyOnHide: !!item.uniqueData?.filePreviewMimeType,
+        styles: {
+          width: WORKSPACE_TAB_WIDTH,
+          maxWidth: WORKSPACE_TAB_WIDTH,
+          flexShrink: 0,
+          boxSizing: 'border-box' as const,
+        },
         children: <Fragment key={item.id}>{workspaceTabConnectionMap(item)}</Fragment>,
       };
     });
@@ -1577,7 +1762,7 @@ const WorkspaceTabs = memo(() => {
     };
   };
 
-  const updateSplitPaneSize = (path: WorkspaceTabSplitNodePath, size: number | string) => {
+  const updateSplitPaneSize = (nodeId: string, size: number | string) => {
     const currentLayout = useWorkspaceStore.getState().workspaceTabSplitLayout;
     const root = currentLayout?.root;
     if (!currentLayout || !root) {
@@ -1586,7 +1771,7 @@ const WorkspaceTabs = memo(() => {
     useWorkspaceStore.setState({
       workspaceTabSplitLayout: {
         ...currentLayout,
-        root: updateWorkspaceTabSplitNodeSize(root, path, size),
+        root: updateWorkspaceTabSplitNodeSize(root, nodeId, size),
       },
     });
   };
@@ -1596,7 +1781,19 @@ const WorkspaceTabs = memo(() => {
     className?: string,
   ) {
     const items = getWorkspaceTabItems(getPaneWorkspaceTabs(paneId));
-    const activeKey = workspaceTabSplitLayout?.activeTabIds[paneId];
+    const activeKey =
+      workspaceTabSplitLayout?.activeTabIds[paneId] ??
+      (paneId === MAIN_WORKSPACE_TAB_PANE ? activeConsoleId : null);
+    const draggingTabId = draggingWorkspaceTabKey
+      ? getWorkspaceTabIdFromDndId(draggingWorkspaceTabKey, workspaceTabList || [])
+      : undefined;
+    const sourcePaneId =
+      draggingTabId !== undefined ? getPaneIdForTab(workspaceTabSplitLayout, draggingTabId) : undefined;
+    const canSplitDraggedTabHere =
+      draggingTabId !== undefined &&
+      (sourcePaneId !== paneId || getPaneWorkspaceTabs(sourcePaneId).length > 1);
+    const previewPosition =
+      workspaceTabDropTarget?.paneId === paneId ? workspaceTabDropTarget.position : undefined;
     return (
       <div
         className={className}
@@ -1612,76 +1809,108 @@ const WorkspaceTabs = memo(() => {
           className={styles.tabBox}
           onChange={(key) => onPaneTabChange(paneId, key)}
           onEdit={(action, data) => handelTabsEdit(action, data || [], paneId)}
+          beforeRemove={confirmWorkspaceTabItemsClose}
           activeKey={activeKey}
           editableNameOnBlur={editableNameOnBlur}
           items={items}
           contextActions={commonWorkspaceTabContextActions}
           contextActionAvailability={getWorkspaceTabContextActionAvailability}
           contextActionHandlers={commonWorkspaceTabContextActionHandlers}
-          useExternalSortableContext={!!workspaceTabSplitLayout}
+          useExternalSortableContext
           draggingTabKey={draggingWorkspaceTabKey}
           onDraggingTabKeyChange={setDraggingWorkspaceTabKey}
-          tabPaneDroppableId={workspaceTabSplitLayout ? getWorkspaceTabPaneDroppableId(paneId) : undefined}
+          tabPaneDroppableId={getWorkspaceTabPaneDroppableId(paneId)}
+          closeShortcutAction={ShortcutAction.CloseCurrentConsole}
         />
+        {draggingWorkspaceTabKey && canSplitDraggedTabHere && (
+          <WorkspaceTabPaneDropOverlay
+            paneId={paneId}
+            previewPosition={previewPosition}
+            previewStyle={{
+              background: token.colorPrimaryBg,
+              border: `1px solid ${token.colorPrimary}`,
+              boxShadow: `inset 0 0 0 1px ${token.colorPrimaryBorder}`,
+            }}
+          />
+        )}
       </div>
     );
   }
 
-  function renderWorkspaceTabPaneNode(
-    node: IWorkspaceTabPaneNode,
-    path: WorkspaceTabSplitNodePath = [],
-  ): React.ReactNode {
+  function renderWorkspaceTabPaneNode(node: IWorkspaceTabPaneNode): React.ReactNode {
     if (node.type === 'pane') {
       return renderWorkspaceTabPane(node.id, styles.splitPaneItem);
     }
 
     return (
       <SplitPaneAny
-        key={`${node.direction}:${collectWorkspaceTabPaneIds(node).join('|')}`}
+        key={node.nodeId}
         className={styles.splitPane}
         split={node.direction}
         primary="first"
         size={node.size ?? '50%'}
         minSize={180}
         paneClassName={styles.splitPaneInner}
-        onDragFinished={(size: number | string) => updateSplitPaneSize(path, size)}
+        onDragFinished={(size: number | string) => updateSplitPaneSize(node.nodeId!, size)}
       >
-        {renderWorkspaceTabPaneNode(node.first, [...path, 'first'])}
-        {renderWorkspaceTabPaneNode(node.second, [...path, 'second'])}
+        {renderWorkspaceTabPaneNode(node.first)}
+        {renderWorkspaceTabPaneNode(node.second)}
       </SplitPaneAny>
     );
   }
 
+  const draggingWorkspaceTab = draggingWorkspaceTabKey
+    ? workspaceTabItems.find((item) => String(item.key) === draggingWorkspaceTabKey)
+    : undefined;
+
   return workspaceTabItems?.length ? (
-    workspaceTabSplitLayout ? (
-      <DndContext
-        sensors={splitTabDragSensors}
-        collisionDetection={workspaceTabCollisionDetection}
-        onDragStart={handleSplitTabDragStart}
-        onDragEnd={handleSplitTabDragEnd}
-        onDragCancel={() => setDraggingWorkspaceTabKey(undefined)}
-      >
-        <div className={styles.splitTabBox}>
-          {renderWorkspaceTabPaneNode(
-            workspaceTabSplitLayout.root || createDefaultSplitRoot(workspaceTabSplitLayout.direction),
-          )}
-        </div>
-      </DndContext>
-    ) : (
-      <CustomTabs
-        height={36}
-        hideAdd={hideAdd}
-        className={styles.tabBox}
-        onChange={onTabChange as any}
-        onEdit={(action, data) => handelTabsEdit(action, data || [], MAIN_WORKSPACE_TAB_PANE)}
-        activeKey={activeConsoleId}
-        editableNameOnBlur={editableNameOnBlur}
-        items={workspaceTabItems}
-        contextActions={commonWorkspaceTabContextActions}
-        contextActionAvailability={getWorkspaceTabContextActionAvailability}
-        contextActionHandlers={commonWorkspaceTabContextActionHandlers}
-      />
-    )
+    <DndContext
+      sensors={splitTabDragSensors}
+      collisionDetection={workspaceTabCollisionDetection}
+      onDragStart={handleSplitTabDragStart}
+      onDragOver={handleSplitTabDragOver}
+      onDragEnd={handleSplitTabDragEnd}
+      onDragCancel={() => {
+        setDraggingWorkspaceTabKey(undefined);
+        setWorkspaceTabDropTarget(undefined);
+      }}
+    >
+      <div className={styles.splitTabBox}>
+        {workspaceTabSplitLayout ? (
+          renderWorkspaceTabPaneNode(
+            ensureWorkspaceTabSplitNodeIds(
+              workspaceTabSplitLayout.root || createDefaultSplitRoot(workspaceTabSplitLayout.direction),
+            ),
+          )
+        ) : (
+          renderWorkspaceTabPane(MAIN_WORKSPACE_TAB_PANE, styles.splitPaneItem)
+        )}
+      </div>
+      <DragOverlay adjustScale={false}>
+        {draggingWorkspaceTab && (
+          <div
+            className={styles.workspaceTabDragOverlay}
+            style={{
+              color: token.colorText,
+              background: token.colorBgElevated,
+              borderColor: token.colorPrimary,
+              boxShadow: token.boxShadowSecondary,
+            }}
+          >
+            {draggingWorkspaceTab.prefixIcon &&
+              (typeof draggingWorkspaceTab.prefixIcon === 'string' ? (
+                <IconfontSvg
+                  className={styles.workspaceTabDragOverlayIcon}
+                  code={draggingWorkspaceTab.prefixIcon}
+                />
+              ) : (
+                <span className={styles.workspaceTabDragOverlayIcon}>{draggingWorkspaceTab.prefixIcon}</span>
+              ))}
+            <span className={styles.workspaceTabDragOverlayLabel}>{draggingWorkspaceTab.label}</span>
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
   ) : (
     <>
       {showWorkspaceRightEmpty && (

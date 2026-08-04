@@ -1,5 +1,6 @@
 import { CreateTabIntroType, WorkspaceTabType, DatabaseTypeCode, ConsoleStatus } from '@/constants';
 import { ITreeNode } from '@/typings';
+import type { TerminalOpenPosition } from '@/typings/settings';
 
 export interface ICreateTabIntro {
   type: CreateTabIntroType;
@@ -25,6 +26,7 @@ export type IWorkspaceTabPaneNode =
     }
   | {
       type: 'split';
+      nodeId?: string;
       direction: WorkspaceTabSplitDirection;
       size?: number | string;
       first: IWorkspaceTabPaneNode;
@@ -84,6 +86,15 @@ export interface IBoundInfo {
 
   filePath?: string;
   fileExtension?: string;
+  filePreviewUrl?: string;
+  filePreviewMimeType?: string;
+  fileRootToken?: string;
+  fileRelativePath?: string;
+  terminalSessionId?: string;
+  terminalCwd?: string;
+  terminalShell?: string;
+  terminalShellId?: string;
+  terminalOpenPosition?: TerminalOpenPosition;
   viewName?: string;
   functionName?: string;
   procedureName?: string;

@@ -86,11 +86,16 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
         }
     }
 
+    // H2 double-quoted identifier; escape embedded double quotes by doubling.
+    private static String quoteIdentifier(String name) {
+        return "\"" + (name == null ? "" : name.replace("\"", "\"\"")) + "\"";
+    }
+
     private String buildCreateTable(ExcelCheckResponse.Sheet sheet) {
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE IF NOT EXISTS ").append("\"").append(sheet.getTableName()).append("\"").append(" (").append("\n");
+        sb.append("CREATE TABLE IF NOT EXISTS ").append(quoteIdentifier(sheet.getTableName())).append(" (").append("\n");
         for (ExcelCheckResponse.Header header : sheet.getHeaderList()) {
-            sb.append("\"").append(header.getHeaderName()).append("\"").append(" ");
+            sb.append(quoteIdentifier(header.getHeaderName())).append(" ");
             if (StringUtils.isNotBlank(header.getDataType())) {
                 sb.append(header.getDataType());
             } else {
@@ -98,7 +103,7 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
             }
             sb.append(" NULL ");
             if (StringUtils.isNotBlank(header.getComment())) {
-                sb.append(" COMMENT '").append(header.getComment()).append("',");
+                sb.append(" COMMENT '").append(header.getComment().replace("'", "''")).append("',");
             } else {
                 sb.append(",");
             }
@@ -120,7 +125,8 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
             statement = this.connection.createStatement();
             statement.execute(sql);
         } catch (SQLException e) {
-            log.info("SQLException", e);
+            log.error("SQLException", e);
+            throw new IllegalStateException("Failed to create table for excel import: " + e.getMessage(), e);
         } finally {
             try {
                 if (resultSet != null) {
@@ -159,14 +165,20 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
                 valueList.add("null");
             } else {
                 allNull = false;
-                valueList.add(EasyStringUtils.escapeAndQuoteString(v.toString()));
+                // H2 string literals treat backslash as a plain character, so doubling it
+                // (EasyStringUtils.escapeAndQuoteString) would corrupt values like C:\temp.
+                // Quote-double apostrophes only, matching the H2 target of this import path.
+                valueList.add("'" + v.toString().replace("'", "''") + "'");
             }
         }
         if (allNull) {
             return;
         }
-        String tableName = "\"" + currentSheet.getTableName() + "\"";
-        String sql = buildInsert(tableName, currentSheet.getHeaderNameList(), valueList);
+        String tableName = quoteIdentifier(currentSheet.getTableName());
+        List<String> columnList = currentSheet.getHeaderList().stream()
+                .map(header -> quoteIdentifier(header.getHeaderName()))
+                .collect(Collectors.toList());
+        String sql = buildInsert(tableName, columnList, valueList);
         if (sqlList.size() < 500) {
             sqlList.add(sql);
         } else {
@@ -191,7 +203,8 @@ public class ReadHeaderListener implements ReadListener<Map<Integer, Object>> {
             statement.executeBatch();
             statement.clearBatch();
         } catch (SQLException e) {
-            log.info("SQLException", e);
+            log.error("SQLException", e);
+            throw new IllegalStateException("Failed to insert excel import data: " + e.getMessage(), e);
         } finally {
             try {
                 if (resultSet != null) {

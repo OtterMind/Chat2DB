@@ -12,10 +12,10 @@ import java.util.List;
 
 public final class SqlServerIndexTypeEnumConstants {
 
-    public static final String SQL_ALTER_TABLE = "ALTER TABLE [";
+    public static final String SQL_ALTER_TABLE = "ALTER TABLE ";
     public static final String SQL_CREATE = "CREATE ";
     public static final String SQL_DROP_INDEX = "DROP INDEX ";
-    public static final String SQL_ON = " ON [";
+    public static final String SQL_ON = " ON ";
 
     private SqlServerIndexTypeEnumConstants() {
     }

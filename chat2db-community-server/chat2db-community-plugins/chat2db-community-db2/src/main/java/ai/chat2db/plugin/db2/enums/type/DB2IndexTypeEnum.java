@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.plugin.db2.Db2SqlGuards;
+import ai.chat2db.plugin.db2.identifier.Db2IdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -72,14 +74,14 @@ public enum DB2IndexTypeEnum {
     public String buildIndexScript(TableIndex tableIndex) {
         StringBuilder script = new StringBuilder();
         if (PRIMARY_KEY.equals(this)) {
-            script.append(SQL_ALTER_TABLE_2).append(tableIndex.getSchemaName()).append("\".\"").append(tableIndex.getTableName()).append("\" ADD PRIMARY KEY ").append(buildIndexColumn(tableIndex));
+            script.append(SQL_ALTER_TABLE_2).append(Db2IdentifierProcessor.escapeIdentifier(tableIndex.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableIndex.getTableName())).append("\" ADD PRIMARY KEY ").append(buildIndexColumn(tableIndex));
         } else {
             if (UNIQUE.equals(this)) {
                 script.append(SQL_CREATE_UNIQUE_INDEX);
             } else {
                 script.append(SQL_CREATE_INDEX);
             }
-            script.append(buildIndexName(tableIndex)).append(SQL_ON).append(tableIndex.getSchemaName()).append("\".\"").append(tableIndex.getTableName()).append("\" ").append(buildIndexColumn(tableIndex));
+            script.append(buildIndexName(tableIndex)).append(SQL_ON).append(Db2IdentifierProcessor.escapeIdentifier(tableIndex.getSchemaName())).append("\".\"").append(Db2IdentifierProcessor.escapeIdentifier(tableIndex.getTableName())).append("\" ").append(buildIndexColumn(tableIndex));
         }
 
         return script.toString();
@@ -91,9 +93,9 @@ public enum DB2IndexTypeEnum {
         script.append("(");
         for (TableIndexColumn column : tableIndex.getColumnList()) {
             if (StringUtils.isNotBlank(column.getColumnName())) {
-                script.append("\"").append(column.getColumnName()).append("\"");
+                script.append("\"").append(Db2IdentifierProcessor.escapeIdentifier(column.getColumnName())).append("\"");
                 if (!StringUtils.isBlank(column.getAscOrDesc()) && !PRIMARY_KEY.equals(this)) {
-                    script.append(" ").append(column.getAscOrDesc());
+                    script.append(" ").append(Db2SqlGuards.requireSortDirection(column.getAscOrDesc()));
                 }
                 script.append(",");
             }
@@ -108,15 +110,15 @@ public enum DB2IndexTypeEnum {
             return "";
         } else if (NORMAL.equals(this) || UNIQUE.equals(this)) {
             return StringUtils.join(SQL_COMMENT_INDEX, " ",
-                    "\"", tableIndex.getName(), "\" IS '", tableIndex.getComment(), "';");
+                    "\"", Db2IdentifierProcessor.escapeIdentifier(tableIndex.getName()), "\" IS '", Db2IdentifierProcessor.INSTANCE.escapeString(tableIndex.getComment()), "';");
         } else {
-            return StringUtils.join(SQL_COMMENT_CONSTRAINT, " \"", tableIndex.getName(), "\" ON \"", tableIndex.getSchemaName(),
-                    "\".\"", tableIndex.getTableName(), "\" IS '", tableIndex.getComment(), "';");
+            return StringUtils.join(SQL_COMMENT_CONSTRAINT, " \"", Db2IdentifierProcessor.escapeIdentifier(tableIndex.getName()), "\" ON \"", Db2IdentifierProcessor.escapeIdentifier(tableIndex.getSchemaName()),
+                    "\".\"", Db2IdentifierProcessor.escapeIdentifier(tableIndex.getTableName()), "\" IS '", Db2IdentifierProcessor.INSTANCE.escapeString(tableIndex.getComment()), "';");
         }
     }
 
     private String buildIndexName(TableIndex tableIndex) {
-        return "\"" + tableIndex.getSchemaName() + "\"." + "\"" + tableIndex.getName() + "\"";
+        return "\"" + Db2IdentifierProcessor.escapeIdentifier(tableIndex.getSchemaName()) + "\"." + "\"" + Db2IdentifierProcessor.escapeIdentifier(tableIndex.getName()) + "\"";
     }
 
     public String buildModifyIndex(TableIndex tableIndex) {
@@ -134,7 +136,7 @@ public enum DB2IndexTypeEnum {
 
     private String buildDropIndex(TableIndex tableIndex) {
         if (DB2IndexTypeEnum.PRIMARY_KEY.getName().equals(tableIndex.getType())) {
-            String tableName = "\"" + tableIndex.getSchemaName() + "\"." + "\"" + tableIndex.getTableName() + "\"";
+            String tableName = "\"" + Db2IdentifierProcessor.escapeIdentifier(tableIndex.getSchemaName()) + "\"." + "\"" + Db2IdentifierProcessor.escapeIdentifier(tableIndex.getTableName()) + "\"";
             return StringUtils.join(SQL_ALTER_TABLE,tableName,SQL_DROP_PRIMARY_KEY);
         }
         StringBuilder script = new StringBuilder();

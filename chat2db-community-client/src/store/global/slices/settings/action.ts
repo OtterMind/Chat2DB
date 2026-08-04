@@ -20,6 +20,7 @@ import {
   GlobalBaseSettings,
   IUpdateDetail,
   ShortcutOverrides,
+  TerminalSettings,
 } from '@/typings/settings';
 import { getSystemThemeMode } from '@/utils/color';
 import { isDesktop, isDesktopEnv, isOfflineEnv } from '@/utils/env';
@@ -137,6 +138,7 @@ export interface SettingsAction {
    * Update table settings
    */
   updateDataTableSettings: (dataTableSettings: DataTableSettings) => void;
+  updateTerminalSettings: (terminalSettings: Partial<TerminalSettings>) => void;
 }
 
 export const createSettingsAction: StateCreator<GlobalStore, [['zustand/devtools', never]], [], SettingsAction> = (
@@ -353,6 +355,14 @@ export const createSettingsAction: StateCreator<GlobalStore, [['zustand/devtools
   updateDataTableSettings: (dataTableSettings) => {
     set({
       dataTableSettings,
+    });
+  },
+  updateTerminalSettings: (terminalSettings) => {
+    set({
+      terminalSettings: {
+        ...get().terminalSettings,
+        ...terminalSettings,
+      },
     });
   },
 });

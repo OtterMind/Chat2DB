@@ -15,7 +15,7 @@ import org.springframework.util.StringUtils;
 public final class MongodbDBManagerConstants {
 
     public static final String SCRIPT_COPY_COLLECTION = "db.%s.insertMany(db.%s.find({}))";
-    public static final String SCRIPT_DROP_COLLECTION = " db. %s.drop();";
+    public static final String SCRIPT_DROP_COLLECTION = "db.%s.drop()";
     public static final String SCRIPT_TRUNCATE_COLLECTION = "db.%s.deleteMany({})";
     public static final String SCRIPT_USE_SCHEMA = "use %s;";
 

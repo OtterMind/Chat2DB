@@ -20,6 +20,8 @@ public final class MysqlSqlConstants {
     public static final String SQL_COMMENT_KEYWORD = "COMMENT";
     public static final String SQL_COMMENT_SPACE_SINGLE_QUOTE = "COMMENT '";
     public static final String SQL_COMMENT_WITH_SINGLE_QUOTE = " COMMENT='";
+    public static final String SQL_COPY_TABLE_DATA_TEMPLATE = "CREATE TABLE %s AS SELECT * FROM %s";
+    public static final String SQL_COPY_TABLE_STRUCTURE_TEMPLATE = "CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0";
     public static final String SQL_CREATE = "create ";
     public static final String SQL_CREATE_USER = "CREATE USER ";
     public static final String SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT = "DEFAULT CHARACTER SET=";
@@ -32,7 +34,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_PROCEDURE_TEMPLATE = "DROP PROCEDURE %s";
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
-    public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s%s";
+    public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
     public static final String SQL_ENGINE_ASSIGNMENT = "ENGINE=";
     public static final String SQL_FIRST_TERMINATOR = " FIRST;\n";
     public static final String SQL_FROM = " FROM ";
@@ -60,6 +62,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_SHOW_INDEX_FROM = "SHOW INDEX FROM ";
     public static final String SQL_SHOW_PROCEDURE_STATUS = "SHOW PROCEDURE STATUS WHERE Db = DATABASE()";
     public static final String SQL_SHOW_TRIGGERS = "SHOW TRIGGERS";
+    public static final String SQL_TRUNCATE_TABLE_TEMPLATE = "TRUNCATE TABLE %s";
     public static final String SQL_UNDEFINED = "undefined";
     public static final String SQL_WITH_GRANT_OPTION = " WITH GRANT OPTION";
 

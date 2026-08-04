@@ -30,7 +30,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
@@ -201,20 +203,35 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<Table> tables(Connection connection, String databaseName, String schemaName, String tableName) {
-        String query = String.format(RedisCommandTemplates.SCAN_MATCH_COUNT, RedisConstants.SCAN_INITIAL_CURSOR,
-                RedisValueUtils.getRedisValue("*"), RedisScanConfig.DEFAULT.tableScanCount());
-        return DefaultSQLExecutor.getInstance().execute(connection, query, resultSet -> {
-            List<Table> tables = new ArrayList<>();
-            while (resultSet.next()) {
-                List<?> keys = RedisScanUtils.getKeys(resultSet.getObject(2));
-                for (Object object : keys) {
-                    Table table = new Table();
-                    table.setName(object.toString());
-                    tables.add(table);
+        List<Table> tables = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        String cursor = RedisConstants.SCAN_INITIAL_CURSOR;
+        int scanCalls = 0;
+        do {
+            String query = String.format(RedisCommandTemplates.SCAN_MATCH_COUNT, cursor,
+                    RedisValueUtils.getRedisValue("*"), RedisScanConfig.DEFAULT.tableScanCount());
+            cursor = DefaultSQLExecutor.getInstance().execute(connection, query, resultSet -> {
+                String nextCursor = RedisConstants.SCAN_INITIAL_CURSOR;
+                while (resultSet.next()) {
+                    Object cursorValue = resultSet.getObject(1);
+                    if (cursorValue != null) {
+                        nextCursor = RedisScanUtils.normalizeCursor(cursorValue.toString());
+                    }
+                    List<?> keys = RedisScanUtils.getKeys(resultSet.getObject(2));
+                    for (Object object : keys) {
+                        if (names.add(object.toString())) {
+                            Table table = new Table();
+                            table.setName(object.toString());
+                            tables.add(table);
+                        }
+                    }
                 }
-            }
-            return tables;
-        });
+                return nextCursor;
+            });
+            scanCalls++;
+        } while (!RedisConstants.SCAN_INITIAL_CURSOR.equals(cursor)
+                && scanCalls < RedisScanConfig.DEFAULT.maxScanCallsPerRequest());
+        return tables;
     }
 
     public List<RedisKey> keys(Connection connection, String databaseName, String schemaName, String tableName) {
@@ -262,32 +279,39 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     private void match(Connection connection, List<RedisKey> redisKeys, String pattern, String cursor) {
-        String query = String.format(RedisCommandTemplates.SCAN_MATCH_COUNT, cursor,
-                RedisValueUtils.getRedisValue(RedisScanUtils.buildContainsMatchPattern(pattern)),
-                RedisScanConfig.DEFAULT.legacyMatchCount());
-        cursor = DefaultSQLExecutor.getInstance().execute(connection, query, resultSet -> {
-            String nextCursor = RedisConstants.SCAN_INITIAL_CURSOR;
-            while (resultSet.next()) {
-                Object cou = resultSet.getObject(1);
-                if (cou != null) {
-                    nextCursor = RedisScanUtils.normalizeCursor(cou.toString());
+        Set<String> names = new HashSet<>();
+        int scanCalls = 0;
+        do {
+            String query = String.format(RedisCommandTemplates.SCAN_MATCH_COUNT, cursor,
+                    RedisValueUtils.getRedisValue(RedisScanUtils.buildContainsMatchPattern(pattern)),
+                    RedisScanConfig.DEFAULT.legacyMatchCount());
+            cursor = DefaultSQLExecutor.getInstance().execute(connection, query, resultSet -> {
+                String nextCursor = RedisConstants.SCAN_INITIAL_CURSOR;
+                while (resultSet.next()) {
+                    Object cou = resultSet.getObject(1);
+                    if (cou != null) {
+                        nextCursor = RedisScanUtils.normalizeCursor(cou.toString());
+                    }
+                    List<?> keys = RedisScanUtils.getKeys(resultSet.getObject(2));
+                    for (Object object : keys) {
+                        String keyName = object.toString();
+                        if (!names.add(keyName)) {
+                            continue;
+                        }
+                        RedisKey redisKey = new RedisKey();
+                        redisKey.setName(keyName);
+                        String keyType = RedisScriptExecutor.getInstance().getKeyType(keyName);
+                        redisKey.setType(keyType);
+                        ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
+                        redisKeys.add(typeScript.getKeyR(connection, redisKey));
+                    }
                 }
-                List<?> keys = RedisScanUtils.getKeys(resultSet.getObject(2));
-                for (Object object : keys) {
-                    RedisKey redisKey = new RedisKey();
-                    redisKey.setName(object.toString());
-                    String keyType = RedisScriptExecutor.getInstance().getKeyType(object.toString());
-                    redisKey.setType(keyType);
-                    ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
-                    redisKeys.add(typeScript.getKeyR(connection, redisKey));
-                }
-            }
-            return nextCursor;
-        });
-        if (!RedisConstants.SCAN_INITIAL_CURSOR.equals(cursor)
-                && redisKeys.size() < RedisScanConfig.DEFAULT.legacyTopCount()) {
-            match(connection, redisKeys, pattern, cursor);
-        }
+                return nextCursor;
+            });
+            scanCalls++;
+        } while (!RedisConstants.SCAN_INITIAL_CURSOR.equals(cursor)
+                && redisKeys.size() < RedisScanConfig.DEFAULT.legacyTopCount()
+                && scanCalls < RedisScanConfig.DEFAULT.maxScanCallsPerRequest());
     }
 
     private List<RedisKey> findTop(Connection connection) {
@@ -295,9 +319,13 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
                 RedisValueUtils.getRedisValue("*"), RedisScanConfig.DEFAULT.legacyTopCount());
         return DefaultSQLExecutor.getInstance().execute(connection, query, resultSet -> {
             List<RedisKey> redisKeys = new ArrayList<>();
+            Set<String> names = new HashSet<>();
             while (resultSet.next()) {
                 List<?> keys = RedisScanUtils.getKeys(resultSet.getObject(2));
                 for (Object object : keys) {
+                    if (!names.add(object.toString())) {
+                        continue;
+                    }
                     RedisKey redisKey = findKey(connection, object.toString());
                     if (redisKey != null) {
                         redisKeys.add(redisKey);

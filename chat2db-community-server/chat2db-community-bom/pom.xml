@@ -57,6 +57,7 @@
         <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
         <mongodb-bson.version>4.10.1</mongodb-bson.version>
         <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.14</jcef.version>
+        <pty4j.version>0.13.12</pty4j.version>
         <classgraph.version>4.8.168</classgraph.version>
         <flatlaf.version>3.6</flatlaf.version>
         <jackson.version>2.15.3</jackson.version>
@@ -593,6 +594,11 @@
                 <groupId>org.jetbrains.intellij.deps.jcef</groupId>
                 <artifactId>jcef</artifactId>
                 <version>${jcef.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.pty4j</groupId>
+                <artifactId>pty4j</artifactId>
+                <version>${pty4j.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.github.classgraph</groupId>

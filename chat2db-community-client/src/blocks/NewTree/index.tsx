@@ -5,6 +5,12 @@ import { useStyles as renderTitleUseStyles } from './renderTitleStyle';
 
 import { TreeNodeData } from '@/typings';
 import { TreeNodeType } from '@/constants';
+import {
+  ShortcutAction,
+  ShortcutOverrides,
+  getEffectiveShortcutConfigMap,
+  isShortcutEventMatch,
+} from '@/constants/shortcut';
 
 import TreeDropdown, { TreeDropdownRef } from './components/TreeDropdown';
 import ContextMenu, { ContextMenuRef } from '@/components/ContextMenu';
@@ -13,6 +19,7 @@ import TitleRender from './components/TitleRender';
 import useTrimTreeData from './hooks/useTrimTreeData';
 // import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { useTreeStore } from '@/store/tree';
+import { useGlobalStore } from '@/store/global';
 import connectionService from '@/service/connection';
 import { useSize } from 'ahooks';
 
@@ -25,6 +32,20 @@ interface IProps extends TreeProps<TreeNodeData> {
 }
 
 export interface NewTreeRef {}
+
+const DATABASE_TREE_SHORTCUT_ACTIONS = [
+  ShortcutAction.DatabaseTreeOpenTable,
+  ShortcutAction.DatabaseTreeEditTable,
+  ShortcutAction.DatabaseTreeCreateTable,
+  ShortcutAction.DatabaseTreeRefresh,
+];
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return !!target.closest('input, textarea, [contenteditable="true"], [contenteditable=""]');
+};
 
 const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   void ref;
@@ -64,6 +85,11 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     scrollTargetKey: state.scrollTargetKey,
     setScrollTargetKey: state.setScrollTargetKey,
   }));
+  const shortcutOverrides = useGlobalStore((state) => state.shortcutOverrides);
+  const shortcutConfig = useMemo(
+    () => getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides),
+    [shortcutOverrides],
+  );
 
   useEffect(() => {
     if (treeRef.current) {
@@ -190,6 +216,23 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     );
   };
 
+  const handleDatabaseTreeShortcut = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const selectedTreeNode = findTreeNodeByKey(filteredTreeData, selectedKeys[0]);
+    if (!selectedTreeNode || isEditableTarget(event.target)) {
+      return;
+    }
+
+    const action = DATABASE_TREE_SHORTCUT_ACTIONS.find((shortcutAction) =>
+      isShortcutEventMatch(event, shortcutConfig[shortcutAction].binding),
+    );
+    if (!action || !treeDropdownRef.current?.handleShortcut(selectedTreeNode, action)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   const antdTreeProps: TreeProps<TreeNodeData> = useMemo(() => {
     if (treeSize?.height) {
       lastTreeSize.current = treeSize;
@@ -255,7 +298,12 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   }, [selectedKeys, expandedKeys, treeSize?.height, editingTreeNode, filteredTreeData, restProps]);
 
   return (
-    <div ref={treeBoxRef} className={cx('bashful-scroller', styles.treeBox, className)}>
+    <div
+      ref={treeBoxRef}
+      className={cx('bashful-scroller', styles.treeBox, className)}
+      tabIndex={0}
+      onKeyDown={handleDatabaseTreeShortcut}
+    >
       <ConfigProvider
         theme={{
           components: {
@@ -309,4 +357,24 @@ const findVisibleTreeNodeIndex = (
   };
 
   return walk(treeData);
+};
+
+const findTreeNodeByKey = (
+  treeData: TreeNodeData[] | null | undefined,
+  targetKey: React.Key | undefined,
+): TreeNodeData | undefined => {
+  if (!treeData || targetKey === undefined) {
+    return undefined;
+  }
+
+  for (const node of treeData) {
+    if (node.key === targetKey) {
+      return node;
+    }
+    const childNode = findTreeNodeByKey(node.children, targetKey);
+    if (childNode) {
+      return childNode;
+    }
+  }
+  return undefined;
 };

@@ -1,40 +1,104 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import executeSqlServer from '@/service/executeSql';
 import useAbortRequest from './useAbortRequest';
 import { isDesktop } from '@/utils/env';
 import {
   SqlExecutionEvent,
-  cancelSqlExecution,
+  cancelSqlExecutionWithReconciliation,
   onSqlExecutionEvent,
   startSqlExecution,
 } from '@/service/sqlExecutionStream';
 import { v4 as uuidv4 } from 'uuid';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
+import {
+  beginSqlExecutionRequest,
+  canBeginSqlExecutionRequest,
+  createSqlExecutionRequestTracker,
+  finalizeSqlExecutionRequest,
+  finishSqlExecutionRequest,
+  isSqlExecutionCancellationRequested,
+  requestSqlExecutionCancellation,
+  setSqlExecutionRequestId,
+  SqlExecutionBusyError,
+  SqlExecutionRequestTracker,
+} from '@/service/sqlExecutionRequestTracker';
 
 interface IUseSqlExecutorProps {
   // Whether to return only one piece of data
   onlyOne?: boolean;
-  onExecutionEvent?: (event: SqlExecutionEvent) => void;
+  onExecutionRequestStart?: (requestSequence: number) => void;
+  onExecutionRequestStartError?: (
+    error: unknown,
+    requestSequence: number,
+    params: IExecuteSqlParams,
+  ) => void;
+  onExecutionEvent?: (event: SqlExecutionEvent, requestSequence: number) => void;
+  onExecutionCancellationError?: (error: unknown) => void;
+}
+
+interface DesktopExecutionControl {
+  requestSequence: number;
+  unsubscribe?: () => void;
+  resolve: (results: IManageResultData[]) => void;
 }
 
 const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
-  const { onlyOne, onExecutionEvent } = props || {};
+  const {
+    onlyOne,
+    onExecutionRequestStart,
+    onExecutionRequestStartError,
+    onExecutionEvent,
+    onExecutionCancellationError,
+  } = props || {};
   const defaultPageSize = useGlobalStore((state) => settingSelectors.currentBaseSetting(state).defaultPageSize);
   const [executing, setExecuting] = useState(false);
-  const [executionId, setExecutionId] = useState<string>();
+  const executionRequestTrackerRef = useRef<SqlExecutionRequestTracker>();
+  if (!executionRequestTrackerRef.current) {
+    executionRequestTrackerRef.current = createSqlExecutionRequestTracker();
+  }
+  const desktopExecutionControlRef = useRef<DesktopExecutionControl>();
   // interrupt request
   const [initSignal, abortRequest] = useAbortRequest();
+  const canExecuteSQL = useCallback(
+    () => canBeginSqlExecutionRequest(executionRequestTrackerRef.current!),
+    [],
+  );
 
-  // Process data
-  const handleData = (params: { data: any[] }) => {
-    const { data } = params;
-    if (onlyOne) {
-      return data[0] ? [data[0]] : [];
-    }
-    return data;
-  };
+  const requestDesktopCancellation = useCallback(
+    (executionId: string, requestSequence: number) => {
+      void cancelSqlExecutionWithReconciliation(executionId, {
+        onExecutionMissing: () => {
+          const control = desktopExecutionControlRef.current;
+          if (!control || control.requestSequence !== requestSequence) {
+            return;
+          }
+          try {
+            onExecutionEvent?.(
+              {
+                executionId,
+                occurredAtEpochMs: Date.now(),
+                eventType: 'cancelled',
+                message: {},
+              },
+              requestSequence,
+            );
+          } finally {
+            control.unsubscribe?.();
+            finishSqlExecutionRequest(executionRequestTrackerRef.current!, requestSequence);
+            desktopExecutionControlRef.current = undefined;
+            setExecuting(false);
+            control.resolve([]);
+          }
+        },
+        onError: (error) => {
+          onExecutionCancellationError?.(error);
+        },
+      });
+    },
+    [onExecutionCancellationError, onExecutionEvent],
+  );
 
   // execute sql
   const executeSQL = useCallback((params: IExecuteSqlParams): Promise<IManageResultData[]> => {
@@ -43,81 +107,135 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
       pageNo: params.pageNo ?? 1,
       pageSize: params.pageSize ?? defaultPageSize,
     };
+    const executionRequestTracker = executionRequestTrackerRef.current;
+    const requestSequence = beginSqlExecutionRequest(executionRequestTracker);
+    if (requestSequence === undefined) {
+      return Promise.reject(new SqlExecutionBusyError());
+    }
     if (isDesktop && onExecutionEvent) {
       const requestUuid = uuidv4();
       setExecuting(true);
       return new Promise((resolve, reject) => {
         const subscription: { unsubscribe?: () => void } = {};
-        subscription.unsubscribe = onSqlExecutionEvent(requestUuid, (event) => {
-          onExecutionEvent(event);
-          if (event.eventType === 'finished') {
-            subscription.unsubscribe?.();
-            setExecuting(false);
-            setExecutionId(undefined);
-            resolve([]);
+        const control: DesktopExecutionControl = { requestSequence, resolve };
+        desktopExecutionControlRef.current = control;
+        const clearControl = () => {
+          if (desktopExecutionControlRef.current === control) {
+            desktopExecutionControlRef.current = undefined;
           }
-          if (event.eventType === 'failed' || event.eventType === 'cancelled') {
-            subscription.unsubscribe?.();
+        };
+        const rejectStart = (error: unknown) => {
+          subscription.unsubscribe?.();
+          clearControl();
+          let rejection = error;
+          if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
             setExecuting(false);
-            setExecutionId(undefined);
-            if (event.eventType === 'cancelled') {
-              resolve([]);
-            } else {
-              reject(event.message);
+            try {
+              onExecutionRequestStartError?.(error, requestSequence, executeSqlParams);
+            } catch (callbackError) {
+              rejection = callbackError;
             }
           }
-        });
-        startSqlExecution(executeSqlParams, requestUuid)
-          .then((res) => {
-            if (!res?.executionId) {
-              subscription.unsubscribe?.();
-              setExecuting(false);
-              reject(getStartExecutionError(res));
+          reject(rejection);
+        };
+        try {
+          onExecutionRequestStart?.(requestSequence);
+          subscription.unsubscribe = onSqlExecutionEvent(requestUuid, (event) => {
+            const terminalEvent =
+              event.eventType === 'finished' ||
+              event.eventType === 'failed' ||
+              event.eventType === 'cancelled';
+            if (!terminalEvent) {
+              onExecutionEvent(event, requestSequence);
               return;
             }
-            setExecutionId(res.executionId);
+
+            let callbackError: unknown;
+            try {
+              onExecutionEvent(event, requestSequence);
+            } catch (error) {
+              callbackError = error;
+            }
+            subscription.unsubscribe?.();
+            clearControl();
+            if (finishSqlExecutionRequest(executionRequestTracker, requestSequence)) {
+              setExecuting(false);
+            }
+            if (callbackError !== undefined) {
+              reject(callbackError);
+            } else if (event.eventType === 'failed') {
+              reject(event.message);
+            } else {
+              resolve([]);
+            }
+          });
+        } catch (error) {
+          rejectStart(error);
+          return;
+        }
+        control.unsubscribe = subscription.unsubscribe;
+        Promise.resolve()
+          .then(() => startSqlExecution(executeSqlParams, requestUuid))
+          .then((res) => {
+            if (!res?.executionId) {
+              rejectStart(getStartExecutionError(res));
+              return;
+            }
+            const executionIdAttached = setSqlExecutionRequestId(
+              executionRequestTracker,
+              requestSequence,
+              res.executionId,
+            );
+            if (
+              executionIdAttached &&
+              isSqlExecutionCancellationRequested(executionRequestTracker, requestSequence)
+            ) {
+              requestDesktopCancellation(res.executionId, requestSequence);
+            }
           })
           .catch((err) => {
-            subscription.unsubscribe?.();
-            setExecuting(false);
-            reject(err);
+            rejectStart(err);
           });
       });
     }
-    return new Promise((resolve, reject) => {
-      // Parameters for executing sql
-      setExecuting(true);
-
-      // execute sql
-      return executeSqlServer
-        .executeSql(executeSqlParams, {
+    setExecuting(true);
+    const request = Promise.resolve()
+      .then(() =>
+        executeSqlServer.executeSql(executeSqlParams, {
           signal: initSignal(),
-        })
-        .then((res) => {
-          const data = handleData({ data: res });
-          resolve(data);
-        })
-        .catch((err) => {
-          reject(err);
-        })
-        .finally(() => {
-          setExecuting(false);
-        });
+        }),
+      )
+      .then((data) => (onlyOne ? (data[0] ? [data[0]] : []) : data));
+    return finalizeSqlExecutionRequest(executionRequestTracker, requestSequence, request, () => {
+      setExecuting(false);
     });
-  }, [defaultPageSize, onExecutionEvent]);
+  }, [
+    defaultPageSize,
+    initSignal,
+    onlyOne,
+    onExecutionEvent,
+    onExecutionRequestStart,
+    onExecutionRequestStartError,
+    requestDesktopCancellation,
+  ]);
 
   // Stop executing sql
   const stopExecuteSQL = useCallback(() => {
-    if (isDesktop && executionId) {
-      cancelSqlExecution(executionId);
+    const executionRequestTracker = executionRequestTrackerRef.current!;
+    if (isDesktop && onExecutionEvent) {
+      const activeRequestSequence = executionRequestTracker.activeRequestSequence;
+      const activeExecutionId = requestSqlExecutionCancellation(executionRequestTracker);
+      if (activeExecutionId && activeRequestSequence !== undefined) {
+        requestDesktopCancellation(activeExecutionId, activeRequestSequence);
+      }
       return;
     }
     abortRequest();
-    setExecuting(false);
-  }, [abortRequest, executionId]);
+  }, [abortRequest, onExecutionEvent, requestDesktopCancellation]);
 
   return {
     executing,
+    canExecuteSQL,
     executeSQL,
     stopExecuteSQL,
   };

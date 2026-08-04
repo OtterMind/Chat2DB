@@ -3,6 +3,7 @@ package ai.chat2db.plugin.sundb;
 import java.sql.*;
 
 import ai.chat2db.spi.IDbManager;
+import ai.chat2db.plugin.sundb.identifier.SUNDBIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -22,7 +23,7 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
 
 
     private String format(String tableName) {
-        return "\"" + tableName + "\"";
+        return SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
 
@@ -45,7 +46,7 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTables(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql =String.format(SQL_SELECT_TABLE_NAME_ALL_TABLES, schemaName);
+        String sql =String.format(SQL_SELECT_TABLE_NAME_ALL_TABLES, SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
@@ -62,13 +63,13 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
 
     private void exportTableColumnComment(Connection connection, String schemaName, String tableName, StringBuilder sqlBuilder) throws SQLException {
           String sql =String.format(SQL_SELECT_COLNAME_COMMENT_SYS_SYSCOLUMNCOMMENTS +
-                                            "where SCHNAME = '%s' and TVNAME = '%s'and TABLE_TYPE = 'TABLE';", schemaName,tableName);
+                                            "where SCHNAME = '%s' and TVNAME = '%s'and TABLE_TYPE = 'TABLE';", SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName), SUNDBIdentifierProcessor.INSTANCE.escapeString(tableName));
           try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
               while (resultSet.next()) {
                   String columnName = resultSet.getString("COLNAME");
                   String comment = resultSet.getString("COMMENT$");
                       sqlBuilder.append(SQL_COMMENT_COLUMN).append(format(schemaName)).append(".").append(format(tableName))
-                              .append(".").append(format(columnName)).append(" IS ").append("'").append(comment).append("';").append("\n");
+                              .append(".").append(format(columnName)).append(" IS ").append("'").append(SUNDBIdentifierProcessor.INSTANCE.escapeString(comment)).append("';").append("\n");
               }
           }
     }
@@ -98,7 +99,7 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportProcedure(Connection connection, String schemaName, String procedureName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(ROUTINES_SQL,"PROC", schemaName,procedureName);
+        String sql = String.format(ROUTINES_SQL,"PROC", SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName), SUNDBIdentifierProcessor.INSTANCE.escapeString(procedureName));
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -114,7 +115,7 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTrigger(Connection connection, String schemaName, String triggerName, StringBuilder sqlBuilder) throws SQLException {
-        String sql = String.format(TRIGGER_SQL, schemaName,triggerName);
+        String sql = String.format(TRIGGER_SQL, SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName), SUNDBIdentifierProcessor.INSTANCE.escapeString(triggerName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
                 sqlBuilder.append(resultSet.getString("TRIGGER_BODY")).append("\n");
@@ -130,7 +131,8 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
         }
         String schemaName = connectInfo.getSchemaName();
         try {
-            DefaultSQLExecutor.getInstance().execute(connection, String.format(SQL_SET_SCHEMA, schemaName));
+            DefaultSQLExecutor.getInstance().execute(connection,
+                    String.format(SQL_SET_SCHEMA, SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)));
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -138,16 +140,18 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return String.format(SQL_DROP_TABLE_EXISTS, schemaName, tableName);
+        return String.format(SQL_DROP_TABLE_EXISTS,
+                SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName),
+                SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
     }
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName,boolean copyData) throws SQLException {
         String sql;
         if(copyData){
-            sql = String.format(SQL_COPY_TABLE_DATA, newTableName, tableName);
+            sql = String.format(SQL_COPY_TABLE_DATA, SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(newTableName), SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
         }else {
-            sql = String.format(SQL_COPY_TABLE_STRUCTURE, newTableName, tableName);
+            sql = String.format(SQL_COPY_TABLE_STRUCTURE, SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(newTableName), SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
         }
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
     }

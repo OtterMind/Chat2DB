@@ -80,7 +80,9 @@ public class ZSetTypeScript extends BaseTypeScript implements ITypeScript {
         // old member list instead of trusting per-row action flags.
         Map<String, Double> desired = memberScores(newKey.getZsValues(), true);
         if (desired.isEmpty()) {
-            return new ArrayList<>();
+            // Every member was deleted in the editor: remove the key itself,
+            // mirroring the newKey == null path, instead of silently keeping old data.
+            return Lists.newArrayList(delete(newKey.getName()));
         }
         Map<String, Double> existing = memberScores(oldKey.getZsValues(), false);
         List<String> scripts = new ArrayList<>();

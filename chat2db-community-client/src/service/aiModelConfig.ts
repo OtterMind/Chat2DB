@@ -2,7 +2,7 @@ import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
-export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI';
+export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'MINIMAX';
 
 export interface IAIModelConfigItem {
   id: string;

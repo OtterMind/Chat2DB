@@ -26,6 +26,9 @@ const PortalContextMenu = <TIntent extends ContextMenuIntent>(props: PortalConte
 
   const items = useMemo<MenuProps['items']>(() => {
     const renderActions = (entries: ContextMenuEntry<TIntent>[] | undefined): MenuProps['items'] => {
+      const reserveIconSpace = entries?.some(
+        (entry) => isContextMenuAction(entry) && entry.icon !== undefined,
+      );
       return entries?.map((entry, index) => {
         if (!isContextMenuAction(entry)) {
           return {
@@ -37,7 +40,9 @@ const PortalContextMenu = <TIntent extends ContextMenuIntent>(props: PortalConte
         return {
           key: entry.id,
           label: <ShortcutMenuLabel label={entry.label} shortcutAction={entry.shortcutAction} />,
-          icon: entry.icon,
+          icon:
+            entry.icon ||
+            (reserveIconSpace ? <span aria-hidden className={styles.menuIconPlaceholder} /> : undefined),
           danger: entry.danger,
           disabled: entry.disabled,
           children: renderActions(entry.children),
@@ -46,9 +51,9 @@ const PortalContextMenu = <TIntent extends ContextMenuIntent>(props: PortalConte
     };
 
     return renderActions(actions);
-  }, [actions]);
+  }, [actions, styles.menuIconPlaceholder]);
 
-  if (!intent) {
+  if (!intent || !actions.some(isContextMenuAction)) {
     return null;
   }
 

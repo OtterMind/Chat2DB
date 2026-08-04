@@ -46,5 +46,9 @@ export default {
   'connection.import.success': '연결 {1}개를 가져왔습니다',
   'connection.import.unable.password.tips':
     '연결 비밀번호는 가져올 수 없습니다. 가져오기가 완료된 후 연결 비밀번호를 다시 입력해 주세요',
+  'connection.export.exporting': '연결 파일을 준비하는 중...',
+  'connection.export.success': '연결을 내보냈습니다',
+  'connection.export.cancelled': '내보내기를 취소했습니다',
+  'connection.export.failed': '연결을 내보내지 못했습니다. 다시 시도해 주세요',
   'workspace.menu.exportConnections': '연결 내보내기',
 };

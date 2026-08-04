@@ -81,12 +81,22 @@ public class ConnectionInfoHandler {
             return;
         }
         try {
-            ICustomConnection connection = ApplicationContextUtil.getBean(ICustomConnection.class);
-            DbConnectionContextRequest param = connection.getConnectionInfo(dataSourceId,database,schemaName,consoleId);
+            if (ApplicationContextUtil.getApplicationContext() == null) {
+                return;
+            }
+            ICustomConnection connection = ApplicationContextUtil.getApplicationContext()
+                    .getBeanProvider(ICustomConnection.class)
+                    .getIfAvailable();
+            if (connection == null) {
+                return;
+            }
+            DbConnectionContextRequest param = connection.getConnectionInfo(dataSourceId, database, schemaName, consoleId);
             if (param != null) {
                 connectionContextService.bind(param);
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
+            log.warn("Failed to resolve custom connection info for dataSourceId={}, database={}, schemaName={}, consoleId={}",
+                    dataSourceId, database, schemaName, consoleId, e);
         }
     }
 

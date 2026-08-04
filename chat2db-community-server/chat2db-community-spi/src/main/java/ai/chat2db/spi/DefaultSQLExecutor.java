@@ -833,9 +833,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String originalSql = simpleSqlStatement.getSql();
         long startedAtEpochMs = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
-        int pageNo = Optional.ofNullable(param.getPageNo()).orElse(1);
-        int pageSize = Optional.ofNullable(param.getPageSize()).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
-        Integer offset = (pageNo - 1) * pageSize;
+        PageBounds pageBounds = normalizePageBounds(param.getPageNo(), param.getPageSize());
+        int pageNo = pageBounds.pageNo();
+        int pageSize = pageBounds.pageSize();
+        Integer offset = pageBounds.offset();
         Integer count = pageSize;
         SqlTypeEnum sqlType = getSqlType(dbType, originalSql);
         List<ExecuteResponse> executeResults = new ArrayList<>();
@@ -910,9 +911,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String originalSql = simpleSqlStatement.getSql();
         long startedAtEpochMs = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
-        int pageNo = Optional.ofNullable(param.getPageNo()).orElse(1);
-        int pageSize = Optional.ofNullable(param.getPageSize()).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
-        Integer offset = (pageNo - 1) * pageSize;
+        PageBounds pageBounds = normalizePageBounds(param.getPageNo(), param.getPageSize());
+        int pageNo = pageBounds.pageNo();
+        int pageSize = pageBounds.pageSize();
+        Integer offset = pageBounds.offset();
         Integer count = pageSize;
         SqlTypeEnum sqlType = getSqlType(dbType, originalSql);
         List<ExecuteResponse> executeResults = new ArrayList<>();
@@ -977,6 +979,27 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         consumer.statementFinished(originalSql,
                 maximumStatementDuration(executeResults));
         return executeResults;
+    }
+
+    static PageBounds normalizePageBounds(Integer requestedPageNo, Integer requestedPageSize) {
+        int pageNo = Optional.ofNullable(requestedPageNo).orElse(1);
+        int pageSize = Optional.ofNullable(requestedPageSize).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
+        if (pageNo < 1) {
+            pageNo = 1;
+        }
+        if (pageSize < 1 || pageSize > IEasyToolsConstant.MAX_PAGE_SIZE) {
+            pageSize = IEasyToolsConstant.MAX_PAGE_SIZE;
+        }
+
+        long maxPageNo = (long) Integer.MAX_VALUE / pageSize + 1L;
+        if ((long) pageNo > maxPageNo) {
+            pageNo = (int) maxPageNo;
+        }
+        int offset = (int) ((long) (pageNo - 1) * pageSize);
+        return new PageBounds(pageNo, pageSize, offset);
+    }
+
+    record PageBounds(int pageNo, int pageSize, int offset) {
     }
 
     protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,

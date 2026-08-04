@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.mysql;
 
 import ai.chat2db.plugin.mysql.converter.MysqlRoutineConverter;
+import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
 import ai.chat2db.plugin.mysql.model.RoutineParameter;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.I18nUtils;
@@ -362,11 +363,7 @@ public class MysqlRoutineManager implements IRoutineManager {
     }
 
     private String quoteMysqlIdentifier(String name) {
-        String trimmed = StringUtils.trimToEmpty(name);
-        if (trimmed.matches("^`(?:``|[^`])+`$")) {
-            return trimmed;
-        }
-        return "`" + trimmed.replace("`", "``") + "`";
+        return MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(name);
     }
 
     private String routineInvocationName(String name) {

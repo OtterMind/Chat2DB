@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.clickhouse;
 
 import ai.chat2db.spi.IDbManager;
+import ai.chat2db.plugin.clickhouse.identifier.ClickHouseIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
@@ -11,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import static ai.chat2db.plugin.clickhouse.constant.ClickHouseDBManagerConstants.*;
@@ -37,7 +40,7 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
-                sqlBuilder.append(SQL_DROP_FUNCTION_EXISTS).append(resultSet.getString("name")).append(";")
+                sqlBuilder.append(SQL_DROP_FUNCTION_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(resultSet.getString("name"))).append(";")
                         .append("\n")
                         .append(resultSet.getString("create_query")).append(";").append("\n");
                 asyncContext.write(sqlBuilder.toString());
@@ -46,7 +49,7 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
     }
 
     private void exportTablesOrViewsOrDictionaries(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_CREATE_TABLE_QUERY_HAS, databaseName);
+        String sql = String.format(SQL_SELECT_CREATE_TABLE_QUERY_HAS, ClickHouseIdentifierProcessor.INSTANCE.escapeString(databaseName));
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
 
@@ -56,17 +59,17 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
                 String tableOrViewName = resultSet.getString("name");
                 if (Objects.equals("View", tableType)) {
                     StringBuilder sqlBuilder = new StringBuilder();
-                    sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(databaseName).append(".").append(tableOrViewName)
+                    sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
                     asyncContext.write(sqlBuilder.toString());
                 } else if (Objects.equals("Dictionary", tableType)) {
                     StringBuilder sqlBuilder = new StringBuilder();
-                    sqlBuilder.append(SQL_DROP_DICTIONARY_EXISTS).append(databaseName).append(".").append(tableOrViewName)
+                    sqlBuilder.append(SQL_DROP_DICTIONARY_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
                     asyncContext.write(sqlBuilder.toString());
                 } else {
                     StringBuilder sqlBuilder = new StringBuilder();
-                    sqlBuilder.append(SQL_DROP_TABLE_EXISTS).append(databaseName).append(".").append(tableOrViewName)
+                    sqlBuilder.append(SQL_DROP_TABLE_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
                     asyncContext.write(sqlBuilder.toString());
                     if (asyncContext.isContainsData() && dataFlag) {
@@ -112,18 +115,48 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = "DROP TABLE IF EXISTS " + ClickHouseMetaData.format(schemaName) + "." + ClickHouseMetaData.format(tableName);
-        return sql;
+        return "DROP TABLE IF EXISTS " + qualifiedTableName(databaseName, schemaName, tableName, false);
     }
 
+    @Override
+    public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "TRUNCATE TABLE " + qualifiedTableName(databaseName, schemaName, tableName, true);
+    }
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
-        String sql = "CREATE TABLE " + newTableName + " AS " + tableName + "";
-        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
-        if (copyData) {
-            sql = "INSERT INTO " + newTableName + " SELECT * FROM " + tableName;
+        for (String sql : buildCopyTableStatements(databaseName, schemaName, tableName, newTableName, copyData)) {
             DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
         }
+    }
+
+    static List<String> buildCopyTableStatements(String databaseName, String schemaName, String tableName,
+                                                  String newTableName, boolean copyData) {
+        String source = qualifiedTableName(databaseName, schemaName, tableName, true);
+        String target = qualifiedTableName(databaseName, schemaName, newTableName, true);
+        List<String> statements = new ArrayList<>();
+        statements.add("CREATE TABLE " + target + " AS " + source);
+        if (copyData) {
+            statements.add("INSERT INTO " + target + " SELECT * FROM " + source);
+        }
+        return statements;
+    }
+
+    private static String qualifiedTableName(String databaseName, String schemaName, String tableName,
+                                             boolean normalizeQuotedTable) {
+        String qualifier = StringUtils.isNotBlank(schemaName) ? schemaName : databaseName;
+        String normalizedTable = normalizeQuotedTable ? normalizeQuotedIdentifier(tableName) : tableName;
+        if (StringUtils.isBlank(qualifier)) {
+            return ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedTable);
+        }
+        return ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(qualifier)
+                + "." + ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedTable);
+    }
+
+    private static String normalizeQuotedIdentifier(String identifier) {
+        if (ClickHouseIdentifierProcessor.INSTANCE.isQuoteIdentifier(identifier)) {
+            return ClickHouseIdentifierProcessor.INSTANCE.removeIdentifierQuote(identifier);
+        }
+        return identifier;
     }
 }

@@ -96,7 +96,9 @@ public class SetTypeScript extends BaseTypeScript implements ITypeScript {
         // old member list instead of trusting per-row action flags.
         Set<String> desired = memberSet(newKey.getValues(), true);
         if (desired.isEmpty()) {
-            return new ArrayList<>();
+            // Every member was deleted in the editor: remove the key itself,
+            // mirroring the newKey == null path, instead of silently keeping old data.
+            return Lists.newArrayList(delete(newKey.getName()));
         }
         Set<String> existing = memberSet(oldKey.getValues(), false);
         List<String> scripts = new ArrayList<>();

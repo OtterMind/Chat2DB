@@ -1,4 +1,5 @@
 import { memo, Fragment } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { Button } from 'antd';
 import i18n from '@/i18n';
 import { useStyles } from './style';
@@ -95,7 +96,7 @@ export default memo<IProps>((props) => {
           </div>
           <Button type="primary" className={styles.aiCta} onClick={handleGoToAI}>
             {i18n('stream.intro.cta')}
-            <IconfontSvg className={styles.aiCtaArrow} code="icon-right-arrow" size={14} />
+            <ChevronRight className={styles.aiCtaArrow} size={14} />
           </Button>
           <button className={styles.dismissBtn} onClick={handleDismiss}>
             {i18n('stream.intro.dismiss')}

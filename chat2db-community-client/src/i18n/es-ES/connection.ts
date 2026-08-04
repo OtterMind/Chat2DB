@@ -44,5 +44,9 @@ export default {
   'connection.title.importDBeaver': 'Importar conexiones de DBeaver',
   'connection.import.success': 'Se importaron correctamente {1} conexiones',
   'connection.import.unable.password.tips': 'No podemos importar las contraseñas de las conexiones. Cuando termine la importación, vuelva a introducirlas',
+  'connection.export.exporting': 'Preparando el archivo de conexiones...',
+  'connection.export.success': 'Conexiones exportadas correctamente',
+  'connection.export.cancelled': 'Exportación cancelada',
+  'connection.export.failed': 'No se pudieron exportar las conexiones. Inténtelo de nuevo',
   'workspace.menu.exportConnections': 'Exportar conexiones',
 };

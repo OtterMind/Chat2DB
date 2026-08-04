@@ -100,7 +100,6 @@ JAVA_OPTS=(
     "-Dchat2db.network.status=OFFLINE"
     "-Dserver.address=127.0.0.1"
     "-Dserver.port=10825"
-    "-noverify"
     "-Xms128M"
 )
 

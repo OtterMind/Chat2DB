@@ -16,6 +16,10 @@ export interface ContentDiffInlineView {
 }
 
 type DiffLineKind = ContentDiffKind.Deleted | ContentDiffKind.Added;
+type ToolbarIcon = { iconCode: string } | { lucidePath: string };
+
+const LUCIDE_CHEVRON_DOWN_PATH = 'm6 9 6 6 6-6';
+const LUCIDE_CHEVRON_UP_PATH = 'm18 15-6-6-6 6';
 
 export const createContentDiffInlineView = (
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -26,10 +30,26 @@ export const createContentDiffInlineView = (
   const panel = document.createElement('div');
   const toolbar = document.createElement('div');
   const body = document.createElement('div');
-  const revertButton = createToolbarIconButton('content-diff-inline-action', 'icon-huigun', 'Revert this change');
-  const nextButton = createToolbarIconButton('content-diff-inline-action', 'icon-down-arrow', 'Next change');
-  const previousButton = createToolbarIconButton('content-diff-inline-action', 'icon-up-arrow', 'Previous change');
-  const closeButton = createToolbarIconButton('content-diff-inline-close', 'icon-close', 'Close diff');
+  const revertButton = createToolbarIconButton(
+    'content-diff-inline-action',
+    { iconCode: 'icon-huigun' },
+    'Revert this change',
+  );
+  const nextButton = createToolbarIconButton(
+    'content-diff-inline-action',
+    { lucidePath: LUCIDE_CHEVRON_DOWN_PATH },
+    'Next change',
+  );
+  const previousButton = createToolbarIconButton(
+    'content-diff-inline-action',
+    { lucidePath: LUCIDE_CHEVRON_UP_PATH },
+    'Previous change',
+  );
+  const closeButton = createToolbarIconButton(
+    'content-diff-inline-close',
+    { iconCode: 'icon-close' },
+    'Close diff',
+  );
   const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight) || 20;
   const heightInPx = Math.min(Math.max(value.heightInLines * lineHeight + 36, 96), 360);
   const panelWidth = getPanelWidth(editor, value);
@@ -128,19 +148,27 @@ export const createContentDiffInlineView = (
   return { dispose };
 };
 
-const createToolbarIconButton = (className: string, iconCode: string, title: string) => {
+const createToolbarIconButton = (className: string, iconDefinition: ToolbarIcon, title: string) => {
   const button = document.createElement('button');
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
 
   button.type = 'button';
   button.className = className;
   button.title = title;
   icon.classList.add('content-diff-inline-action-icon');
   icon.setAttribute('aria-hidden', 'true');
-  use.setAttribute('href', `#${iconCode}`);
-  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${iconCode}`);
-  icon.appendChild(use);
+  if ('lucidePath' in iconDefinition) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    icon.classList.add('content-diff-inline-action-icon-lucide');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    path.setAttribute('d', iconDefinition.lucidePath);
+    icon.appendChild(path);
+  } else {
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#${iconDefinition.iconCode}`);
+    use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${iconDefinition.iconCode}`);
+    icon.appendChild(use);
+  }
   button.appendChild(icon);
 
   return button;
