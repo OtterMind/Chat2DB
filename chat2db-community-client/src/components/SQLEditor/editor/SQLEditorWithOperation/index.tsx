@@ -237,6 +237,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     // defaultValue:  getValue(),
     defaultValue: defaultSQL,
     name: workspaceTabsTitle,
+    onBoundInfoChange: setDBInfo,
     type,
   });
 

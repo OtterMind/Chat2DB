@@ -7,6 +7,7 @@ import { staticMessage } from '@chat2db/ui';
 import { useUserStore } from '@/store/user';
 import { useIndexDBStore } from '@/store/indexDB';
 import { SQLEditorRef } from '@/components/SQLEditor/editor/SQLEditor';
+import type { IBoundInfo } from '@/typings';
 import { isTemporaryId } from '@/utils';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import {
@@ -19,9 +20,10 @@ interface IProps {
   isActive?: boolean;
   source?: 'workspace';
   editorRef: React.RefObject<SQLEditorRef>;
-  boundInfo: any;
+  boundInfo: IBoundInfo;
   defaultValue?: string;
   name?: string;
+  onBoundInfoChange?: (boundInfo: IBoundInfo) => void;
   type:
     | WorkspaceTabType.CONSOLE
     | WorkspaceTabType.FUNCTION
@@ -37,15 +39,13 @@ interface SaveConsoleOptions {
 }
 
 export const useSaveEditorData = (props: IProps) => {
-  const { isActive, source, editorRef, boundInfo, defaultValue, name, type } = props;
+  const { isActive, source, editorRef, boundInfo, defaultValue, name, onBoundInfoChange, type } = props;
 
   const timerRef = useRef<any>();
+  const effectiveConsoleIdRef = useRef<number | undefined>(boundInfo?.consoleId);
   // Console data from the previous synchronization.
   const lastSyncConsole = useRef<any>(defaultValue);
   const storageId = boundInfo?.workspaceTabId ?? boundInfo?.consoleId;
-  const isTemporaryConsole = isTemporaryId(storageId);
-  const isPersistedConsole =
-    type === WorkspaceTabType.CONSOLE && typeof boundInfo?.consoleId === 'number' && !isTemporaryConsole;
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
   const saveStatusRef = useRef<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
@@ -76,8 +76,9 @@ export const useSaveEditorData = (props: IProps) => {
   const saveConsole = (value?: string, options: SaveConsoleOptions = {}) => {
     const mode = options.mode || 'manual';
     const initialName = options.initialName?.trim();
+    const consoleId = effectiveConsoleIdRef.current;
     const p: any = {
-      id: boundInfo.consoleId,
+      id: consoleId,
       status: ConsoleStatus.RELEASE,
       ddl: value,
     };
@@ -94,6 +95,8 @@ export const useSaveEditorData = (props: IProps) => {
       return Promise.resolve();
     }
 
+    const isPersistedConsole =
+      type === WorkspaceTabType.CONSOLE && typeof consoleId === 'number' && !isTemporaryId(consoleId);
     if (!isPersistedConsole) {
       return indexDB
         .setValue(storageId, {
@@ -105,7 +108,6 @@ export const useSaveEditorData = (props: IProps) => {
         });
     }
 
-    const consoleId = boundInfo.consoleId as number;
     return savedConsoleMutationCoordinator
       .save(consoleId, mode, () =>
         persistSavedConsoleRecord(historyServer, {
@@ -141,15 +143,28 @@ export const useSaveEditorData = (props: IProps) => {
         if (!result.current) {
           return;
         }
+        const persistedConsoleId = result.value?.consoleId;
+        if (persistedConsoleId === undefined) {
+          return;
+        }
+        effectiveConsoleIdRef.current = persistedConsoleId;
+        const savedBoundInfo = {
+          ...boundInfo,
+          consoleId: persistedConsoleId,
+          status: ConsoleStatus.RELEASE,
+        };
+        if (persistedConsoleId !== consoleId || saveStatusRef.current !== ConsoleStatus.RELEASE) {
+          onBoundInfoChange?.(savedBoundInfo);
+        }
         getSavedConsoleList();
-        emitSavedConsoleUpdated(boundInfo);
+        emitSavedConsoleUpdated(savedBoundInfo);
         void indexDB.deleteValue(storageId);
         lastSyncConsole.current = value;
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
         markWorkspaceTabConsoleSaved({
           workspaceTabId: boundInfo.workspaceTabId,
-          consoleId,
+          consoleId: persistedConsoleId,
           name: initialName,
         });
         if (mode === 'automatic') {
@@ -228,6 +243,10 @@ export const useSaveEditorData = (props: IProps) => {
       }
     };
   }, [isActive]);
+
+  useEffect(() => {
+    effectiveConsoleIdRef.current = boundInfo?.consoleId;
+  }, [boundInfo?.consoleId]);
 
   useEffect(() => {
     const nextStatus = boundInfo?.status || ConsoleStatus.DRAFT;

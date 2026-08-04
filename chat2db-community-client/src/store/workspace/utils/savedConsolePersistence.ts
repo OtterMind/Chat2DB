@@ -12,18 +12,40 @@ interface PersistSavedConsoleParams {
   updateParams: Partial<IConsole> & { id: number };
 }
 
+export interface PersistSavedConsoleResult {
+  action: 'created' | 'updated';
+  consoleId: number;
+}
+
+function isSavedConsoleNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'errorCode' in error &&
+    (error as { errorCode?: unknown }).errorCode === 'common.dataNotFound'
+  );
+}
+
 export async function persistSavedConsoleRecord(
   service: SavedConsolePersistenceService,
   params: PersistSavedConsoleParams,
-): Promise<'created' | 'updated'> {
+): Promise<PersistSavedConsoleResult> {
   if (params.manual) {
-    const savedConsole = await service.getSavedConsole({ id: params.updateParams.id });
+    let savedConsole: IConsole | null;
+    try {
+      savedConsole = await service.getSavedConsole({ id: params.updateParams.id });
+    } catch (error) {
+      if (!isSavedConsoleNotFoundError(error)) {
+        throw error;
+      }
+      savedConsole = null;
+    }
     if (!savedConsole) {
-      await service.createConsole(params.createParams);
-      return 'created';
+      const consoleId = await service.createConsole(params.createParams);
+      return { action: 'created', consoleId };
     }
   }
 
   await service.updateSavedConsole(params.updateParams);
-  return 'updated';
+  return { action: 'updated', consoleId: params.updateParams.id };
 }
