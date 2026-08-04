@@ -5,7 +5,8 @@ frontend and backend, and need to test the same checkout in the JCEF Desktop
 shell.
 
 The launcher does not prepare the development environment. It does not install
-dependencies, build the backend, discover Java runtimes, or check ports.
+dependencies, build the backend, or discover Java runtimes. It only refuses to
+start when either required port is already occupied.
 
 ## Prerequisites
 
@@ -14,7 +15,8 @@ Before starting JCEF Desktop:
 1. Install the project dependencies and build the Community backend by following
    the main README.
 2. Download the JBR with JCEF described below and set `JBR_HOME` to it.
-3. Ensure `127.0.0.1:8889` and `127.0.0.1:10825` are free.
+3. Ensure ports `8889` and `10825` are free on all local interfaces. Umi checks
+   every local interface before selecting its development port.
 4. Stop the Web backend, because JCEF Desktop starts its embedded backend on
    `127.0.0.1:10825`.
 
@@ -59,14 +61,17 @@ JBR_HOME=/path/to/jbr ./script/dev-community-jcef.sh
 ```
 
 The script starts the Community Web frontend with
-`yarn run start:community:hot`, waits until `http://127.0.0.1:8889/` responds,
-and then starts the JCEF backend with `-Dchat2db.jcef.web-frontend=true`.
-That parameter tells JCEF to load the Web frontend instead of packaged frontend
-files. The script does not start a separate Web backend.
+`yarn run start:community:hot`, binds it to `127.0.0.1:8889`, waits up to 180
+seconds for Umi to compile and serve `umi.js`, and then starts the JCEF backend
+with `-Dchat2db.jcef.web-frontend=true`. That parameter tells JCEF to load the
+Web frontend instead of packaged frontend files. The script does not start a
+separate Web backend. It waits up to another 120 seconds for the embedded
+backend's `/api/system` health check to succeed on `127.0.0.1:10825`.
 
-Press `Ctrl+C` to stop both processes. Missing dependencies, build artifacts,
-and runtime files are reported by Yarn, curl, or Java. Port availability remains
-a prerequisite and is not diagnosed by the launcher.
+Press `Ctrl+C` to stop both processes. If either child exits, the launcher stops
+the other one. It prints the checkout, JBR, backend jar, child PIDs, listener
+URLs, readiness result, and attached-log location. Missing dependencies, build
+artifacts, and runtime files are still reported directly by Yarn, curl, or Java.
 
 Without `-Dchat2db.jcef.web-frontend=true`, JCEF continues to load the bundled
 `dist/index.html`. Packaged releases do not pass this parameter and are
