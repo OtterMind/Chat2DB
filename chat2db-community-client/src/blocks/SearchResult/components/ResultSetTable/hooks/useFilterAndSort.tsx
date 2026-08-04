@@ -29,6 +29,12 @@ const getRowNumberList = (tableInstance) => {
   return rowNumberList;
 };
 
+interface TableSortState {
+  field: VTable.TYPES.FieldDef;
+  order: 'asc' | 'desc';
+  icon: 'sort-asc' | 'sort-desc';
+}
+
 // Upper bound on VTable render-settling poll iterations (100ms interval * 100 = 10s).
 const MAX_POLL_ITERATIONS = 100;
 
@@ -46,6 +52,7 @@ const useFilterAndSort: IUseFilterAndSort = ({
       filteredValues: string[];
     }[]
   >([]);
+  const sortStateRef = useRef<TableSortState | null>(null);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
 
   // Track active VTable render-settling pollers so they can be cleared on unmount
@@ -163,13 +170,38 @@ const useFilterAndSort: IUseFilterAndSort = ({
     });
   }, [theme]);
 
+  useEffect(() => {
+    if (!tableInstance) {
+      return;
+    }
+
+    const filterFields = new Set(filterRulesRef.current.map((rule) => rule.filterKey));
+    const sortState = sortStateRef.current;
+    const columns = [...tableInstance.columns];
+    columns.forEach((column) => {
+      if (!column.headerIcon) {
+        return;
+      }
+      column.headerIcon[0] = sortState && sortState.field === column.field ? sortState.icon : 'sort';
+      column.headerIcon[1] = filterFields.has(String(column.field)) ? 'filter-active' : 'filter';
+    });
+    tableInstance.updateColumns(columns);
+
+    if (filterRulesRef.current.length) {
+      tableInstance.updateFilterRules(filterRulesRef.current);
+    }
+    if (sortState && !resultData.canEdit) {
+      tableInstance.updateSortState({ field: sortState.field, order: sortState.order });
+    }
+  }, [resultData.canEdit, tableInstance]);
+
   // table sorting
   const handleSort = (col, row, name: 'sort-asc' | 'sort-desc' | 'sort') => {
     if (!tableInstance) return;
     const field = tableInstance.getHeaderField(col, row);
     // const sortState: any = tableInstance.sortState;
-    let order: any = 'desc';
-    let headerSortIcon = 'sort-desc';
+    let order: TableSortState['order'] | 'normal' = 'desc';
+    let headerSortIcon: TableSortState['icon'] | 'sort' = 'sort-desc';
 
     // if (sortState && sortState.field === field) {
     if (name === 'sort-desc') {
@@ -182,6 +214,14 @@ const useFilterAndSort: IUseFilterAndSort = ({
       order = 'desc';
       headerSortIcon = 'sort-desc';
     }
+    sortStateRef.current =
+      order === 'normal'
+        ? null
+        : {
+            field,
+            order,
+            icon: order === 'asc' ? 'sort-asc' : 'sort-desc',
+          };
     // }
 
     const columns = [...tableInstance.columns];

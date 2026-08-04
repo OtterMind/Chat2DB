@@ -10,29 +10,39 @@ import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/
 
 interface IProps {
   className?: string;
+  active?: boolean;
   viewTableParams: IViewTableParams;
 }
 
 const ViewTable = memo<IProps>((props) => {
-  const { viewTableParams } = props;
+  const { active = true, viewTableParams } = props;
   const { styles } = useStyles();
   const [resultDataList, setResultDataList] = useState<IManageResultData[]>();
   const requestGenerationRef = useRef(0);
+  const loadStartedRef = useRef(false);
   const { executing, executeSQL, stopExecuteSQL } = useViewTable();
 
   useEffect(() => {
-    if (viewTableParams) {
-      const requestGeneration = beginLatestRequest(requestGenerationRef);
-      executeSQL(viewTableParams).then((data) => {
-        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
-        const _resultDataList = processResultDataList(data, viewTableParams);
-        setResultDataList(_resultDataList);
-      });
+    if (!active || !viewTableParams || loadStartedRef.current) {
+      return;
     }
-    return () => {
+
+    loadStartedRef.current = true;
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
+    executeSQL(viewTableParams).then((data) => {
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
+      const _resultDataList = processResultDataList(data, viewTableParams);
+      setResultDataList(_resultDataList);
+    });
+  }, [active]);
+
+  useEffect(
+    () => () => {
       invalidateLatestRequest(requestGenerationRef);
-    };
-  }, []);
+      loadStartedRef.current = false;
+    },
+    [],
+  );
 
   return (
     <div className={styles.container}>
@@ -44,7 +54,7 @@ const ViewTable = memo<IProps>((props) => {
           </div>
         </div>
       )}
-      {resultDataList && <SearchResult viewTable resultDataList={resultDataList} />}
+      {resultDataList && <SearchResult active={active} viewTable resultDataList={resultDataList} />}
     </div>
   );
 });

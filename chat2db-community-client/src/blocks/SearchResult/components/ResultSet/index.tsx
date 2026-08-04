@@ -61,6 +61,7 @@ export default memo<IProps>(
     const statusBarRef = useRef<StatusBarRef>(null);
     const [executeErrorMessage, setExecuteErrorMessage] = useState<string | null>(null);
     const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
+    const tableInstanceRef = useRef<ITableInstance | null>(null);
     const [showFESearch, setShowFESearch] = useState(true);
     const [activeFilterCount, setActiveFilterCount] = useState(0);
     const resultSetRef = useRef<HTMLDivElement>(null);
@@ -285,6 +286,11 @@ export default memo<IProps>(
       setHasOperationRecord(_hasOperationRecord);
     }, []);
 
+    const handleTableInstanceChange = useCallback((_tableInstance: ITableInstance | null) => {
+      tableInstanceRef.current = _tableInstance;
+      setTableInstance(_tableInstance);
+    }, []);
+
     const handleViewSQl = () => {
       completeActiveEditor().then(() => {
         const operations = resultSetTableRef.current?.operationRecordUtils?.getOperationChangeDetail();
@@ -345,6 +351,9 @@ export default memo<IProps>(
         });
         activateInspector('value');
         setTimeout(() => {
+          if (tableInstanceRef.current !== params.tableInstance) {
+            return;
+          }
           viewDataRef.current?.openPanel({
             ...nextParams,
             canEdit: !!resultData?.canEdit,
@@ -367,7 +376,11 @@ export default memo<IProps>(
         rowId: params.rowId ?? record?.CHAT2DB_ROW_NUMBER,
       });
       activateInspector('row');
-      setTimeout(() => rowDetailRef.current?.openPanel(params), 0);
+      setTimeout(() => {
+        if (tableInstanceRef.current === params.tableInstance) {
+          rowDetailRef.current?.openPanel(params);
+        }
+      }, 0);
     }, [activateInspector]);
 
     const onTableOperationUtils = useMemo(() => {
@@ -420,6 +433,9 @@ export default memo<IProps>(
 
     const handleRowDetailChangeData = useCallback((params: IChangeDataParams) => {
       const { tableInstance: targetTableInstance, col, row, field, value } = params;
+      if (tableInstanceRef.current !== targetTableInstance) {
+        return;
+      }
       const originData = targetTableInstance.getRecordByCell(col, row);
       if (
         params.rowId !== undefined &&
@@ -472,6 +488,9 @@ export default memo<IProps>(
           return;
         }
         setTimeout(() => {
+          if (tableInstanceRef.current !== lastActiveCell.tableInstance) {
+            return;
+          }
           const record = lastActiveCell.tableInstance.getRecordByCell(lastActiveCell.col, lastActiveCell.row);
           if (
             lastActiveCell.rowId !== undefined &&
@@ -557,8 +576,9 @@ export default memo<IProps>(
             <div className={styles.resultSetContent}>
               <div className={styles.resultSetTableContainer}>
                 <ResultSetTable
+                  active={props.active || hasOperationRecord}
                   tableInstance={tableInstance}
-                  setTableInstance={setTableInstance}
+                  setTableInstance={handleTableInstanceChange}
                   ref={resultSetTableRef}
                   resultData={resultData}
                   setOrderByText={setOrderByText}

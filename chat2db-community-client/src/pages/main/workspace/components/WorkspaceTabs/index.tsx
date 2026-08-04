@@ -40,6 +40,7 @@ import AccountPrivilegePanel from '../AccountPrivilegePanel';
 import ContentDiffTab from './ContentDiffTab';
 
 // ---- store -----
+import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import { useTreeStore } from '@/store/tree';
@@ -60,6 +61,7 @@ import {
 } from '../../utils/localTextFile';
 import { EditorType } from '@/components/SQLEditor';
 import { ShortcutAction } from '@/constants/shortcut';
+import { isWorkspaceTabResourceActive } from '../../utils/resourceActivity';
 
 const SplitPaneAny = SplitPane as any;
 const MAIN_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'main';
@@ -627,6 +629,9 @@ const workspaceTabCollisionDetection: CollisionDetection = (args) => {
 };
 
 const WorkspaceTabs = memo(() => {
+  const workspaceVisible = useGlobalStore(
+    (state) => state.mainPageActiveTab === 'workspace' && state.settingPageActiveTab === false,
+  );
   const {
     activeConsoleId,
     consoleList,
@@ -1331,7 +1336,7 @@ const WorkspaceTabs = memo(() => {
   };
 
   // Render the SQL executor.
-  const renderSQLExecute = (item: IWorkspaceTab) => {
+  const renderSQLExecute = (item: IWorkspaceTab, resourceActive: boolean) => {
     const uniqueData = rebuildSqlExecuteTabData(item);
     if (!uniqueData) {
       return;
@@ -1357,6 +1362,7 @@ const WorkspaceTabs = memo(() => {
 
     return (
       <SQLExecute
+        resourceActive={resourceActive}
         workspaceTabsTitle={item.title}
         boundInfo={boundInfo}
         type={item.type as EditorType}
@@ -1390,13 +1396,14 @@ const WorkspaceTabs = memo(() => {
   };
 
   // Render search results.
-  const renderSearchResult = (item: IWorkspaceTab) => {
+  const renderSearchResult = (item: IWorkspaceTab, resourceActive: boolean) => {
     const { uniqueData } = item;
     if (!uniqueData) {
       return;
     }
     return (
       <ViewTable
+        active={resourceActive}
         viewTableParams={{
           dataSourceId: uniqueData?.dataSourceId,
           databaseName: uniqueData?.databaseName,
@@ -1462,7 +1469,7 @@ const WorkspaceTabs = memo(() => {
   };
 
   // Render content according to the tab type.
-  const workspaceTabConnectionMap = (item: IWorkspaceTab) => {
+  const workspaceTabConnectionMap = (item: IWorkspaceTab, resourceActive: boolean) => {
     switch (item.type) {
       case 'table' as any: // Backward compatibility with legacy data.
       case null as any: // Backward compatibility with legacy data.
@@ -1472,13 +1479,13 @@ const WorkspaceTabs = memo(() => {
       case WorkspaceTabType.PROCEDURE:
       case WorkspaceTabType.TRIGGER:
       case WorkspaceTabType.VIEW:
-        return renderSQLExecute(item);
+        return renderSQLExecute(item, resourceActive);
       case WorkspaceTabType.EditTable:
       case WorkspaceTabType.CreateTable:
         return renderTableEditor(item);
       case WorkspaceTabType.EditTableData:
       case WorkspaceTabType.ViewView:
-        return renderSearchResult(item);
+        return renderSearchResult(item, resourceActive);
       case WorkspaceTabType.ViewAllTable:
       case WorkspaceTabType.ViewAllView:
         return renderViewAllTable(item);
@@ -1497,8 +1504,12 @@ const WorkspaceTabs = memo(() => {
     }
   };
 
-  const getWorkspaceTabItems = (tabs: IWorkspaceTab[]) => {
+  const getWorkspaceTabItems = (
+    tabs: IWorkspaceTab[],
+    activeTabId: string | number | null | undefined,
+  ) => {
     return tabs.map((item) => {
+      const resourceActive = isWorkspaceTabResourceActive(workspaceVisible, item.id, activeTabId);
       const localFileTabPresentation =
         item.type === WorkspaceTabType.LocalSQLFile
           ? getLocalTextFileTabPresentation(item.uniqueData?.filePath, item.title)
@@ -1520,15 +1531,15 @@ const WorkspaceTabs = memo(() => {
           flexShrink: 0,
           boxSizing: 'border-box' as const,
         },
-        children: <Fragment key={item.id}>{workspaceTabConnectionMap(item)}</Fragment>,
+        children: <Fragment key={item.id}>{workspaceTabConnectionMap(item, resourceActive)}</Fragment>,
       };
     });
   };
 
   // Tab list.
   const workspaceTabItems = useMemo(() => {
-    return getWorkspaceTabItems(workspaceTabList || []);
-  }, [workspaceTabList, activeConsoleId]);
+    return getWorkspaceTabItems(workspaceTabList || [], activeConsoleId);
+  }, [workspaceTabList, activeConsoleId, workspaceVisible]);
 
   function renderCreateConsoleButton() {
     if (!canCreateConsole) {
@@ -1611,8 +1622,8 @@ const WorkspaceTabs = memo(() => {
     paneId: WorkspaceTabPaneId,
     className?: string,
   ) {
-    const items = getWorkspaceTabItems(getPaneWorkspaceTabs(paneId));
     const activeKey = workspaceTabSplitLayout?.activeTabIds[paneId];
+    const items = getWorkspaceTabItems(getPaneWorkspaceTabs(paneId), activeKey);
     return (
       <div
         className={className}

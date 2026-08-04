@@ -16,13 +16,14 @@ import { useGlobalStore } from '@/store/global';
 
 interface IProps {
   className?: string;
+  active: boolean;
   resultData: IManageResultData;
   // There are operational changes in the table
   onOperationChange?: (hasOperationRecord: any) => void;
   // table
   onTableOperationUtils: ITableOperationUtils;
   tableInstance: ITableInstance | null;
-  setTableInstance: (tableInstance: ITableInstance) => void;
+  setTableInstance: (tableInstance: ITableInstance | null) => void;
   setOrderByText?: (orderByText: string) => void;
   onFilterCountChange?: (count: number) => void;
   onSelectionChange?: (selection: IResultSetSelection) => void;
@@ -47,7 +48,7 @@ export interface ResultSetTableRef {
 }
 
 const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTableRef>) => {
-  const { resultData, onOperationChange, onTableOperationUtils, tableInstance, setTableInstance } = props;
+  const { active, resultData, onOperationChange, onTableOperationUtils, tableInstance, setTableInstance } = props;
   const { styles, theme } = useStyles();
 
   // Registry data manipulation method
@@ -166,9 +167,17 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   }, [tableInstance, props.onSelectionChange]);
 
   // callback after initialization is completed
-  const onInit = useCallback((_tableInstance) => {
-    setTableInstance(_tableInstance);
-  }, []);
+  const onInit = useCallback(
+    (_tableInstance) => {
+      setTableInstance(_tableInstance);
+    },
+    [setTableInstance],
+  );
+
+  const onRelease = useCallback(() => {
+    setTableInstance(null);
+    props.onSelectionChange?.({ values: [], rowCount: 0 });
+  }, [props.onSelectionChange, setTableInstance]);
 
   useImperativeHandle(ref, () => {
     return {
@@ -192,9 +201,11 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   return (
     <>
       <CanvasTable
+        active={active}
         columns={columns}
         records={records}
         onInit={onInit}
+        onRelease={onRelease}
         className={styles.canvasTable}
         onCopy={onCopy}
         onPaste={onPaste}

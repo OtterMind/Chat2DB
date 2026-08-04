@@ -68,6 +68,7 @@ const useHeaderTooltip = ({ tableInstance }: { tableInstance: ITableInstance | n
 
     return () => {
       clearMouseenterTimeout();
+      contextMenuRef.current?.closeDropdown();
       tableInstance.off(mouseenter_cell_id);
       tableInstance.off(mouseleave_cell_id);
       tableInstance.off(mouseleave_table);

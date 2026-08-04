@@ -34,6 +34,7 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
   const { className, tableInstance, searchAreaId, onClose } = props;
   const { styles, cx } = useStyles();
   const searchRef = useRef<SearchComponent | null>(null);
+  const lastSearchValueRef = useRef('');
   // The value of the last search
   const [searchResult, setSearchResult] = useState<any>(null);
   const [value, setValue] = useState('');
@@ -46,7 +47,7 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
     const highlightCellStyleBgColor = hexToRgba('#ff0', 20);
     const focuseHighlightCellStyleBgColor = hexToRgba('#ff0', 60);
 
-    searchRef.current = new SearchComponent({
+    const search = new SearchComponent({
       table: tableInstance,
       autoJump: true,
       highlightCellStyle: {
@@ -56,6 +57,21 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
         bgColor: focuseHighlightCellStyleBgColor,
       } as any,
     });
+    searchRef.current = search;
+
+    if (lastSearchValueRef.current) {
+      const res = search.search(lastSearchValueRef.current);
+      setSearchResult({
+        index: res.index,
+        count: res.results.length,
+      });
+    }
+
+    return () => {
+      if (searchRef.current === search) {
+        searchRef.current = null;
+      }
+    };
   }, [tableInstance]);
 
   useImperativeHandle(ref, () => ({
@@ -104,11 +120,14 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
       index: res?.index,
       count: res?.results.length,
     });
-    setLastSearchValue(_value || value);
+    const nextSearchValue = _value || value;
+    lastSearchValueRef.current = nextSearchValue;
+    setLastSearchValue(nextSearchValue);
   };
 
   const handleClearSearch = () => {
     searchRef.current?.clear();
+    lastSearchValueRef.current = '';
     setLastSearchValue('');
     setSearchResult(null);
   };

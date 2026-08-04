@@ -18,12 +18,13 @@ const VText = VTable.VText;
 
 interface IProps {
   className?: string;
+  active?: boolean;
   data: any[];
   customOptions?: ICustomOptions;
 }
 
 export default memo<IProps>((props) => {
-  const { className, data, customOptions } = props;
+  const { active = true, className, data, customOptions } = props;
   const { styles, cx, theme } = useStyles();
   const tableRef = useRef<CanvasTableRef>(null);
   const setCurrentWorkspaceExtend = useWorkspaceStore((s) => s.setCurrentWorkspaceExtend);
@@ -261,6 +262,7 @@ export default memo<IProps>((props) => {
     <>
       <div className={cx(styles.abstract, className)}>
         <CanvasTable
+          active={active}
           ref={tableRef}
           records={records}
           columns={columns}

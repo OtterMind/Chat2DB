@@ -101,6 +101,7 @@ interface IProps {
   loadSQL?: () => Promise<string>;
   workspaceTabsTitle?: string;
   isActive?: boolean;
+  resourceActive?: boolean;
   onExecuteSQLCallback?: (params: { databaseInfo: IDatabaseBaseInfo; data: any }) => void;
   isConsole?: boolean;
   sqlActionEnabled?: boolean;
@@ -572,8 +573,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   }, [resultDataList, sqlExecutionLogState.records.length, executing]);
 
   const isActive = useMemo(() => {
-    return activeConsoleId === editorId || !!props.isActive;
+    return props.isActive ?? activeConsoleId === editorId;
   }, [activeConsoleId, editorId, props.isActive]);
+  const resultResourceActive = props.resourceActive ?? isActive;
 
   useEffect(() => {
     if (editorId) {
@@ -853,6 +855,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           <>
             {!!(resultDataList.length || sqlExecutionLogState.records.length) && (
               <SearchResult
+                active={resultResourceActive}
                 resultDataList={resultDataList}
                 executionLogRecords={sqlExecutionLogState.records}
                 keepExecutionLogHistory={keepExecutionLogHistory}

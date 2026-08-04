@@ -46,9 +46,11 @@ import {
   reduceActiveTabSelection,
 } from './tabSelection';
 import { ShortcutAction } from '@/constants/shortcut';
+import { isResultResourceActive } from './resourceActivity';
 
 interface IProps {
   className?: string;
+  active?: boolean;
   resultDataList: IManageResultData[];
   historyResultDataList?: IManageResultData[];
   executionLogRecords?: SqlExecutionLogRecord[];
@@ -112,7 +114,7 @@ function getSqlExecutionResultIdentity(result: IManageResultData): SqlExecutionR
 }
 
 const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultRef>) => {
-  const { className, viewTable = false } = props;
+  const { active = true, className, viewTable = false } = props;
   const consoleMode = props.executionLogRecords !== undefined;
   const { styles } = useStyles();
   const [resultDataList, setResultDataList] = useState<IManageResultData[] | null>(props.resultDataList);
@@ -257,7 +259,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
           key: queryResultData.uuid!,
           children: (
             <SearchResultItem
-              active={activeTabId === queryResultData.uuid}
+              active={isResultResourceActive(active, activeTabId, queryResultData.uuid)}
               viewTable={viewTable || queryResultData.canEdit}
               resultData={queryResultData}
             />
@@ -267,6 +269,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
     return tabsListRes;
   }, [
+    active,
     activeTabId,
     resultDataList,
     visibleHistoryResultDataList,
@@ -333,10 +336,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       popover: i18n('common.text.overview'),
       label: i18n('common.text.overview'),
       key: ABSTRACT_TAB_ID,
-      children: <Abstract data={resultDataList} />,
+      children: <Abstract active={active && activeTabId === ABSTRACT_TAB_ID} data={resultDataList} />,
       canClosed: false,
     };
-  }, [resultDataList, consoleMode, styles.abstractIcon]);
+  }, [active, activeTabId, resultDataList, consoleMode, styles.abstractIcon]);
 
   const messageTab = useMemo(() => {
     if (consoleMode || !executionMessages.length) {

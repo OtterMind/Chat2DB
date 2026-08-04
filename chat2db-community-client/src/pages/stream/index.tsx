@@ -8,6 +8,7 @@ import { IViewTableParams } from '@/typings';
 import { ConsoleStatus, WorkspaceTabType } from '@/constants';
 import { getDatabaseSupport } from '@/utils/database';
 import { useStyles } from './style';
+import { useGlobalStore } from '@/store/global';
 
 interface IRightTab {
   key: string;
@@ -22,6 +23,9 @@ interface IRightTab {
 
 export default function StreamPage() {
   const { styles } = useStyles();
+  const streamVisible = useGlobalStore(
+    (state) => state.mainPageActiveTab === 'stream' && state.settingPageActiveTab === false,
+  );
   const [rightTabs, setRightTabs] = useState<IRightTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState<string | number | null>(null);
   const [sizes, setSizes] = useState<(number | string)[]>(['100%', 0]);
@@ -126,14 +130,19 @@ export default function StreamPage() {
     canClosed: true,
     children:
       tab.type === 'table' && tab.tableParams ? (
-        <ViewTable key={tab.key} viewTableParams={tab.tableParams} />
+        <ViewTable
+          key={tab.key}
+          active={streamVisible && activeTabKey === tab.key}
+          viewTableParams={tab.tableParams}
+        />
       ) : tab.type === 'console' && tab.consoleParams ? (
         <SQLExecute
           key={tab.key}
           boundInfo={tab.consoleParams.boundInfo}
           initDDL={tab.consoleParams.initDDL}
           type={WorkspaceTabType.CONSOLE}
-          isActive={activeTabKey === tab.key}
+          isActive={streamVisible && activeTabKey === tab.key}
+          resourceActive={streamVisible && activeTabKey === tab.key}
           isConsole={false}
         />
       ) : null,

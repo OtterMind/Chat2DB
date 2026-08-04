@@ -80,6 +80,7 @@ const useTooltip = ({ tableInstance, tooltip }: { tableInstance: ITableInstance 
     });
 
     return () => {
+      clearMouseenter();
       tableInstance.off(mouseenter_cell_id);
       tableInstance.off(mouseleave_cell_id);
       tableInstance.off(mouseleave_table);
