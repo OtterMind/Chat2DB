@@ -241,6 +241,34 @@ class BigQueryParserTest {
     }
 
     @Test
+    void keepsSetOptionsValuesTogetherAndRestoresTopLevelSplitting() {
+        String withDescriptionAndLabels = """
+                ALTER TABLE `project.dataset.events`
+                SET OPTIONS (
+                  description = 'owner''s; event table',
+                  labels = [('team', 'data;platform')])
+                """.strip();
+        String clearDescription = """
+                ALTER TABLE `project.dataset.events`
+                SET OPTIONS (description = NULL)
+                """.strip();
+        String emptyDescription = """
+                ALTER TABLE `project.dataset.events`
+                SET OPTIONS (description = '')
+                """.strip();
+        String select = "SELECT * FROM `project.dataset.events`";
+
+        String script = String.join(";\n",
+                withDescriptionAndLabels, clearDescription, emptyDescription, select) + ";";
+
+        Assertions.assertEquals(List.of(
+                withDescriptionAndLabels,
+                clearDescription,
+                emptyDescription,
+                select), sqlOf(parser.parserSqlScript(script)));
+    }
+
+    @Test
     void distinguishesCommentMarkersFromQuotedTextAndOperators() {
         String quoted = "SELECT '-- text', '# text', '/* text */', `project.--dataset./*table*/`";
         String arithmetic = "SELECT 8 / 2, 5 - -1";
