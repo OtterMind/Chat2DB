@@ -93,6 +93,8 @@ public class MainJFrame extends JFrame {
     private static final String CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS =
             ConsoleCodec.CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS;
     private static final String MAC_OS_14_1_VERSION_PREFIX = "14.1";
+    private static final String WEB_FRONTEND_PROPERTY = "chat2db.jcef.web-frontend";
+    private static final String WEB_FRONTEND_URL = "http://127.0.0.1:8889/";
     private JSplitPane splitPane;
     private DevToolsPanel devToolsPanel;
     private boolean isDevToolsVisible = false;
@@ -716,19 +718,24 @@ public class MainJFrame extends JFrame {
     }
     private void initializeBrowserAndUI() {
         log.info("4. Starting CefBrowser and UI component creation...");
-        String currentJarPath = OSOperateUtil.getCurrentJarPath();
         String indexHtmlFile;
-        try {
-            Path indexHtmlPath = Paths.get(currentJarPath, "dist", "index.html").toAbsolutePath().normalize();
-            if (!Files.isRegularFile(indexHtmlPath)) {
-                log.error("JCEF index file not found: {}", indexHtmlPath);
+        if (Boolean.getBoolean(WEB_FRONTEND_PROPERTY)) {
+            indexHtmlFile = WEB_FRONTEND_URL;
+            log.info("Using Community Web frontend for JCEF development: {}", indexHtmlFile);
+        } else {
+            String currentJarPath = OSOperateUtil.getCurrentJarPath();
+            try {
+                Path indexHtmlPath = Paths.get(currentJarPath, "dist", "index.html").toAbsolutePath().normalize();
+                if (!Files.isRegularFile(indexHtmlPath)) {
+                    log.error("JCEF index file not found: {}", indexHtmlPath);
+                    throw new BusinessException("Failed to load frontend files");
+                }
+                indexHtmlFile = indexHtmlPath.toUri().toURL().toString();
+                log.info("Resolved JCEF index file: {}", indexHtmlFile);
+            } catch (MalformedURLException e) {
+                log.error(e.getMessage(), e);
                 throw new BusinessException("Failed to load frontend files");
             }
-            indexHtmlFile = indexHtmlPath.toUri().toURL().toString();
-            log.info("Resolved JCEF index file: {}", indexHtmlFile);
-        } catch (MalformedURLException e) {
-            log.error(e.getMessage(), e);
-            throw new BusinessException("Failed to load frontend files");
         }
         this.browser_ = this.client_.createBrowser(indexHtmlFile, CefRendering.DEFAULT, false);
         this.browserUI_ = browser_.getUIComponent();
