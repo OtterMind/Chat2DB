@@ -288,7 +288,13 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
             return new ExecuteResponse();
         }
         List<String> scripts = new ArrayList<>();
-        boolean typeChanged = oldKey != null && newKey != null && !Objects.equals(oldKey.getType(), newKey.getType());
+        // Only treat as a type change when BOTH types are non-null; otherwise
+        // RedisDataType.fromCode(null) downstream would NPE. A null type means
+        // the key doesn't exist — no type-change script to run, fall through to
+        // the rename path.
+        boolean typeChanged = oldKey != null && newKey != null
+                && oldKey.getType() != null && newKey.getType() != null
+                && !Objects.equals(oldKey.getType(), newKey.getType());
         if (typeChanged) {
             List<String> addScript = RedisDataType.fromCode(newKey.getType()).getScript().createKey(newKey);
             if (CollectionUtils.isEmpty(addScript)) {
