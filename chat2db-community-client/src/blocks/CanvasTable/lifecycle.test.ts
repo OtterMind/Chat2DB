@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { releaseTableInstance } from './lifecycle';
+import { isCurrentTableInstance, releaseTableInstance, releaseTableInstanceSafely } from './lifecycle';
 
 let releaseCount = 0;
 let notificationCount = 0;
@@ -95,5 +95,50 @@ assert.throws(() =>
 assert.equal(viewportFailureRef.current, null);
 assert.equal(releasedAfterViewportFailure, true, 'viewport read failure must not skip releasing the table');
 assert.equal(notifiedAfterViewportFailure, true, 'viewport read failure must still clear the owner reference');
+
+let safelyNotifiedAfterFailure = false;
+const safeFailure = new Error('safe release failed');
+const safeFailureRef = {
+  current: {
+    release: () => {
+      throw safeFailure;
+    },
+  },
+};
+const safeFailureResult = releaseTableInstanceSafely(safeFailureRef, () => {
+  safelyNotifiedAfterFailure = true;
+});
+assert.equal(safeFailureResult.released, true);
+assert.equal(safeFailureResult.viewport, null);
+assert.equal(safeFailureResult.error, safeFailure);
+assert.equal(safeFailureRef.current, null);
+assert.equal(safelyNotifiedAfterFailure, true, 'safe release must still clear the owner reference');
+
+assert.deepEqual(releaseTableInstanceSafely(safeFailureRef), {
+  released: false,
+  viewport: null,
+  error: null,
+});
+
+const activeInstance = { release: () => undefined };
+const replacementInstance = { release: () => undefined };
+const activeInstanceRef = { current: activeInstance };
+assert.equal(isCurrentTableInstance(true, activeInstance, activeInstanceRef), true);
+assert.equal(
+  isCurrentTableInstance(false, activeInstance, activeInstanceRef),
+  false,
+  'inactive tables must not receive updates during the release effect',
+);
+activeInstanceRef.current = replacementInstance;
+assert.equal(
+  isCurrentTableInstance(true, activeInstance, activeInstanceRef),
+  false,
+  'released or replaced table instances must not receive stale updates',
+);
+assert.equal(
+  isCurrentTableInstance(true, replacementInstance, activeInstanceRef),
+  true,
+  'a newly activated table instance must receive updates',
+);
 
 console.log('CanvasTable lifecycle tests passed');

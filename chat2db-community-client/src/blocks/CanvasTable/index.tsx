@@ -24,7 +24,7 @@ import {
   isShortcutEventMatch,
 } from '@/constants/shortcut';
 import { useGlobalStore } from '@/store/global';
-import { releaseTableInstance, type TableViewport } from './lifecycle';
+import { isCurrentTableInstance, releaseTableInstanceSafely, type TableViewport } from './lifecycle';
 
 export interface ICustomOptions {
   // Whether to display the left border
@@ -128,11 +128,14 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
 
   const releaseCurrentTable = useCallback(() => {
     cancelViewportRestore();
-    const viewport = releaseTableInstance(tableInstanceRef, () => onReleaseRef.current?.());
-    if (viewport) {
-      viewportRef.current = viewport;
+    const result = releaseTableInstanceSafely(tableInstanceRef, () => onReleaseRef.current?.());
+    if (result.viewport) {
+      viewportRef.current = result.viewport;
     }
-    return !!viewport;
+    if (result.error) {
+      console.error('Failed to release CanvasTable instance', result.error);
+    }
+    return result.released;
   }, [cancelViewportRestore]);
 
   useEffect(() => {
@@ -156,7 +159,12 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
     registeredEditor();
   }, []);
 
-  useEffect(() => () => releaseCurrentTable(), [releaseCurrentTable]);
+  useEffect(
+    () => () => {
+      releaseCurrentTable();
+    },
+    [releaseCurrentTable],
+  );
 
   // This only takes effect once, subsequent changes in tableTheme and options have special useEffect processing
   const tableOption = useMemo(() => {
@@ -243,19 +251,19 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
 
   // update theme
   useEffect(() => {
-    if (!tableInstance) return;
+    if (!isCurrentTableInstance(active, tableInstance, tableInstanceRef)) return;
     tableInstance.theme = tableTheme;
-  }, [tableTheme]);
+  }, [active, tableInstance, tableTheme]);
 
   // update records
   useEffect(() => {
-    if (!tableInstance) return;
+    if (!isCurrentTableInstance(active, tableInstance, tableInstanceRef)) return;
     tableInstance.setRecords(records);
-  }, [records]);
+  }, [active, records, tableInstance]);
 
   // update columns
   useEffect(() => {
-    if (!tableInstance) return;
+    if (!isCurrentTableInstance(active, tableInstance, tableInstanceRef)) return;
     const oldColumns = tableInstance.columns;
     // Keep the original headerIcon after refreshing
     const resColumns = columns.map((column) => {
@@ -267,7 +275,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
       return column;
     });
     tableInstance.updateColumns(resColumns);
-  }, [columns]);
+  }, [active, columns, tableInstance]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
