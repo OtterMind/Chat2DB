@@ -1026,6 +1026,74 @@ export const useCreateRightClickMenu = () => {
         },
       },
 
+      [OperationColumn.CreateFunction]: {
+        text: i18n('workspace.menu.createFunction'),
+        icon: 'icon-function',
+        handle: () => {
+          openFunction({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.DropFunction]: {
+        text: i18n('workspace.menu.dropFunction'),
+        icon: 'icon-delete',
+        handle: () => {
+          const fnName = treeNodeData.originalTitle;
+          const ep = treeNodeData.extraParams;
+          staticModal.confirm({
+            title: i18n('workspace.menu.dropFunction'),
+            content: `"${fnName}"`,
+            okText: i18n('common.button.confirm'),
+            cancelText: i18n('common.button.cancel'),
+            okType: 'danger',
+            onOk: () => {
+              return sqlService.deleteFunction({
+                dataSourceId: ep.dataSourceId,
+                databaseName: ep.databaseName,
+                schemaName: ep.schemaName,
+                tableName: fnName,
+              }).then(() => {
+                handleLoadData();
+              });
+            },
+          });
+        },
+      },
+
+      [OperationColumn.CreateProcedure]: {
+        text: i18n('workspace.menu.createProcedure'),
+        icon: 'icon-procedure',
+        handle: () => {
+          openProcedure({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.DropProcedure]: {
+        text: i18n('workspace.menu.dropProcedure'),
+        icon: 'icon-delete',
+        handle: () => {
+          const procName = treeNodeData.originalTitle;
+          const ep = treeNodeData.extraParams;
+          staticModal.confirm({
+            title: i18n('workspace.menu.dropProcedure'),
+            content: `"${procName}"`,
+            okText: i18n('common.button.confirm'),
+            cancelText: i18n('common.button.cancel'),
+            okType: 'danger',
+            onOk: () => {
+              return sqlService.deleteProcedure({
+                dataSourceId: ep.dataSourceId,
+                databaseName: ep.databaseName,
+                schemaName: ep.schemaName,
+                tableName: procName,
+              }).then(() => {
+                handleLoadData();
+              });
+            },
+          });
+        },
+      },
+
       // Open the trigger.
       [OperationColumn.OpenTrigger]: {
         text: i18n('workspace.menu.view'),

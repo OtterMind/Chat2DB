@@ -253,12 +253,32 @@ export const dropMenuConfig = {
       OperationColumn.CopyName,
       OperationColumn.Refresh,
     ],
-    [TreeNodeType.FUNCTIONS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
-    [TreeNodeType.PROCEDURES]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
+    [TreeNodeType.FUNCTIONS]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CreateFunction,
+      OperationColumn.CopyName,
+      OperationColumn.Refresh,
+    ],
+    [TreeNodeType.PROCEDURES]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CreateProcedure,
+      OperationColumn.CopyName,
+      OperationColumn.Refresh,
+    ],
     [TreeNodeType.TRIGGERS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
     [TreeNodeType.VIEWCOLUMNS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
-    [TreeNodeType.PROCEDURE]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenProcedure],
-    [TreeNodeType.FUNCTION]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenFunction],
+    [TreeNodeType.PROCEDURE]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CopyName,
+      OperationColumn.OpenProcedure,
+      OperationColumn.DropProcedure,
+    ],
+    [TreeNodeType.FUNCTION]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CopyName,
+      OperationColumn.OpenFunction,
+      OperationColumn.DropFunction,
+    ],
     [TreeNodeType.TRIGGER]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenTrigger],
     [TreeNodeType.VIEW]: [
       // Open & Edit

@@ -28,4 +28,13 @@ public interface IDbProcedureService {
      * @return procedure metadata, or null when no matching procedure exists.
      */
     Procedure detail(String databaseName, String schemaName, String procedureName);
+
+    /**
+     * Drops a database procedure.
+     *
+     * @param databaseName database name that scopes the operation.
+     * @param schemaName schema name that scopes the operation.
+     * @param procedureName procedure name to drop.
+     */
+    void drop(String databaseName, String schemaName, String procedureName);
 }
