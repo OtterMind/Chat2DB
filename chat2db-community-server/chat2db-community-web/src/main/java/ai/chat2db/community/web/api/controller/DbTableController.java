@@ -285,6 +285,22 @@ public class DbTableController {
     }
 
     /**
+     * Generates maintenance SQL for a table operation.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/table/maintenance/sql}.
+     *
+     * @param request request payload containing table info.
+     * @param operationType type of maintenance: ANALYZE, OPTIMIZE, CHECK, or REPAIR.
+     * @return data result containing the generated SQL.
+     */
+    @PostMapping("/maintenance/sql")
+    public DataResult<String> maintenanceSql(@RequestBody TableDetailQueryRequest request,
+                                             @RequestParam String operationType) {
+        DbTableQueryRequest param = dbWebConverter.tableRequest2param(request);
+        return DataResult.of(tableService.maintenanceSql(param, operationType));
+    }
+
+    /**
      * Copies tables.
      * <p>
      * Endpoint: {@code POST /api/rdb/table/copy}.

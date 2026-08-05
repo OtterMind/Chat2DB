@@ -58,6 +58,26 @@ public interface IDbManager {
     String truncateTable(Connection connection, String databaseName, String schemaName, String tableName)
             throws SQLException;
 
+    default String analyzeTable(Connection connection, String databaseName, String schemaName, String tableName)
+            throws SQLException {
+        throw new UnsupportedOperationException("analyzeTable");
+    }
+
+    default String optimizeTable(Connection connection, String databaseName, String schemaName, String tableName)
+            throws SQLException {
+        throw new UnsupportedOperationException("optimizeTable");
+    }
+
+    default String checkTable(Connection connection, String databaseName, String schemaName, String tableName)
+            throws SQLException {
+        throw new UnsupportedOperationException("checkTable");
+    }
+
+    default String repairTable(Connection connection, String databaseName, String schemaName, String tableName)
+            throws SQLException {
+        throw new UnsupportedOperationException("repairTable");
+    }
+
     void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName,
             boolean copyData) throws SQLException;
 

@@ -1259,6 +1259,122 @@ export const useCreateRightClickMenu = () => {
         },
       },
 
+      [OperationColumn.AnalyzeTable]: {
+        text: i18n('workspace.menu.analyzeTable'),
+        icon: 'icon-table',
+        handle: () => {
+          sqlService.maintenanceSql({
+            dataSourceId: dataSourceId!,
+            databaseName: databaseName!,
+            schemaName,
+            tableName: tableName!,
+            operationType: 'ANALYZE',
+          }).then((sql: string) => {
+            staticModal.confirm({
+              title: i18n('workspace.menu.analyzeTable'),
+              content: sql,
+              okText: i18n('common.button.confirm'),
+              cancelText: i18n('common.button.cancel'),
+              onOk: () => {
+                return sqlService.executeDDL({
+                  dataSourceId: dataSourceId!,
+                  databaseName: databaseName!,
+                  schemaName,
+                  sql,
+                });
+              },
+            });
+          });
+        },
+      },
+
+      [OperationColumn.OptimizeTable]: {
+        text: i18n('workspace.menu.optimizeTable'),
+        icon: 'icon-table',
+        handle: () => {
+          sqlService.maintenanceSql({
+            dataSourceId: dataSourceId!,
+            databaseName: databaseName!,
+            schemaName,
+            tableName: tableName!,
+            operationType: 'OPTIMIZE',
+          }).then((sql: string) => {
+            staticModal.confirm({
+              title: i18n('workspace.menu.optimizeTable'),
+              content: sql,
+              okText: i18n('common.button.confirm'),
+              cancelText: i18n('common.button.cancel'),
+              onOk: () => {
+                return sqlService.executeDDL({
+                  dataSourceId: dataSourceId!,
+                  databaseName: databaseName!,
+                  schemaName,
+                  sql,
+                });
+              },
+            });
+          });
+        },
+      },
+
+      [OperationColumn.CheckTable]: {
+        text: i18n('workspace.menu.checkTable'),
+        icon: 'icon-table',
+        handle: () => {
+          sqlService.maintenanceSql({
+            dataSourceId: dataSourceId!,
+            databaseName: databaseName!,
+            schemaName,
+            tableName: tableName!,
+            operationType: 'CHECK',
+          }).then((sql: string) => {
+            staticModal.confirm({
+              title: i18n('workspace.menu.checkTable'),
+              content: sql,
+              okText: i18n('common.button.confirm'),
+              cancelText: i18n('common.button.cancel'),
+              onOk: () => {
+                return sqlService.executeDDL({
+                  dataSourceId: dataSourceId!,
+                  databaseName: databaseName!,
+                  schemaName,
+                  sql,
+                });
+              },
+            });
+          });
+        },
+      },
+
+      [OperationColumn.RepairTable]: {
+        text: i18n('workspace.menu.repairTable'),
+        icon: 'icon-table',
+        handle: () => {
+          sqlService.maintenanceSql({
+            dataSourceId: dataSourceId!,
+            databaseName: databaseName!,
+            schemaName,
+            tableName: tableName!,
+            operationType: 'REPAIR',
+          }).then((sql: string) => {
+            staticModal.confirm({
+              title: i18n('workspace.menu.repairTable'),
+              content: sql,
+              okText: i18n('common.button.confirm'),
+              cancelText: i18n('common.button.cancel'),
+              onOk: () => {
+                return sqlService.executeDDL({
+                  dataSourceId: dataSourceId!,
+                  databaseName: databaseName!,
+                  schemaName,
+                  sql,
+                });
+              },
+            });
+          });
+        },
+      },
+
       // Copy the table.
       [OperationColumn.CopyTable]: {
         text: i18n('workspace.menu.copyTable'),

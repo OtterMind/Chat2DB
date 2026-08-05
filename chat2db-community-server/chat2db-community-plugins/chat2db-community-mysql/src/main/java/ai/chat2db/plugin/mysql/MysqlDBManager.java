@@ -250,6 +250,26 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
     @Override
+    public String analyzeTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "ANALYZE TABLE " + format(tableName);
+    }
+
+    @Override
+    public String optimizeTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "OPTIMIZE TABLE " + format(tableName);
+    }
+
+    @Override
+    public String checkTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "CHECK TABLE " + format(tableName);
+    }
+
+    @Override
+    public String repairTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "REPAIR TABLE " + format(tableName);
+    }
+
+    @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) {
         DefaultSQLExecutor.getInstance().execute(connection, buildCopyTableSql(tableName, newTableName, copyData), resultSet -> null);
     }
