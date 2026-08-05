@@ -207,6 +207,29 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             }
         }
 
+        List<ForeignKeyInfo> foreignKeyList = newTable.getForeignKeyList();
+        if (CollectionUtils.isNotEmpty(foreignKeyList)) {
+            for (ForeignKeyInfo fk : foreignKeyList) {
+                if (StringUtils.isBlank(fk.getEditStatus())) {
+                    continue;
+                }
+                if (EditStatusEnum.DELETE.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append("DROP FOREIGN KEY ")
+                            .append(quoteMysqlIdentifier(fk.getFkName()))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.ADD.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append(buildAddForeignKey(fk))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.MODIFY.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append("DROP FOREIGN KEY ")
+                            .append(quoteMysqlIdentifier(fk.getFkName()))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                    script.append(SQLConstants.TAB).append(buildAddForeignKey(fk))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                }
+            }
+        }
+
         if (script.length() > 2) {
             script = new StringBuilder(script.substring(0, script.length() - 2));
             script.append(SQLConstants.SEMICOLON);
@@ -215,6 +238,38 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             return StringUtils.EMPTY;
         }
 
+    }
+
+    private String buildAddForeignKey(ForeignKeyInfo fk) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("ADD CONSTRAINT ");
+        if (StringUtils.isNotBlank(fk.getFkName())) {
+            sb.append(quoteMysqlIdentifier(fk.getFkName())).append(" ");
+        }
+        sb.append("FOREIGN KEY (");
+        sb.append(quoteMysqlIdentifier(fk.getFkColumnName()));
+        sb.append(") REFERENCES ");
+        sb.append(quoteMysqlIdentifier(fk.getPkTableName()));
+        sb.append("(").append(quoteMysqlIdentifier(fk.getPkColumnName())).append(")");
+        String deleteAction = foreignKeyAction(fk.getDeleteRule());
+        if (StringUtils.isNotBlank(deleteAction)) {
+            sb.append(" ON DELETE ").append(deleteAction);
+        }
+        String updateAction = foreignKeyAction(fk.getUpdateRule());
+        if (StringUtils.isNotBlank(updateAction)) {
+            sb.append(" ON UPDATE ").append(updateAction);
+        }
+        return sb.toString();
+    }
+
+    private static String foreignKeyAction(short rule) {
+        return switch (rule) {
+            case 0 -> "CASCADE";
+            case 1 -> "RESTRICT";
+            case 2 -> "SET NULL";
+            case 3 -> "NO ACTION";
+            default -> null;
+        };
     }
 
     private String findPrevious(TableColumn tableColumn, Table newTable) {

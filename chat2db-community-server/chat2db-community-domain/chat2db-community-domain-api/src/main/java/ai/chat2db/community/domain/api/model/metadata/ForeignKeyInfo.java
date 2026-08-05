@@ -51,4 +51,6 @@ public class ForeignKeyInfo implements Serializable {
     @JsonAlias("DEFERRABILITY")
     private short deferrability;
 
+    private String editStatus;
+
 }
