@@ -22,6 +22,7 @@ BACKEND_PID=""
 case "$(uname -s)" in
     Darwin)
         JAVA_OPTIONS+=(
+            -XstartOnFirstThread
             --add-opens=java.desktop/sun.awt=ALL-UNNAMED
             --add-opens=java.desktop/sun.lwawt=ALL-UNNAMED
             --add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED

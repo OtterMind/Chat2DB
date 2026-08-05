@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { DEFAULT_MAIN_PAGE_ACTIVE_TAB, resolveInitialMainPage } from './mainPageNavigation';
+import {
+  createMainRootRoute,
+  DEFAULT_MAIN_PAGE_ACTIVE_TAB,
+  resolveInitialMainPage,
+} from './mainPageNavigation';
 
 assert.equal(DEFAULT_MAIN_PAGE_ACTIVE_TAB, 'workspace', 'a new user should start on the workspace entry');
 assert.equal(
@@ -16,6 +20,16 @@ assert.equal(
   resolveInitialMainPage('', ''),
   'workspace',
   'workspace should be used when neither a route nor a persisted entry exists',
+);
+assert.deepEqual(
+  createMainRootRoute(true, '@/pages/main/CommunityMainPage'),
+  { path: '/', component: '@/pages/main/CommunityMainPage' },
+  'the Community root route must let persisted navigation choose the initial page',
+);
+assert.deepEqual(
+  createMainRootRoute(false, 'main'),
+  { path: '/', redirect: '/stream' },
+  'commercial routing should keep its existing root redirect',
 );
 
 console.log('Main page navigation tests passed.');

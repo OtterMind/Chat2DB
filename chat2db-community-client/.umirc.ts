@@ -1,5 +1,6 @@
 import { defineConfig } from 'umi';
 import { communityProductConfig } from './product.community';
+import { createMainRootRoute } from './src/utils/mainPageNavigation';
 import { extractYarnConfig, generateBuildTime } from './src/utils/package';
 
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
@@ -263,10 +264,7 @@ export default defineConfig({
               path: '/connections',
               redirect: '/workspace',
             },
-            {
-              path: '/',
-              redirect: '/stream',
-            },
+            createMainRootRoute(buildProfile.isCommunity, MAIN_COMPONENT),
           ],
         },
       ],

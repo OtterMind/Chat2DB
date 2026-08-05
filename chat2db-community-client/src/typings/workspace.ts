@@ -36,6 +36,7 @@ export type IWorkspaceTabPaneNode =
 export interface IWorkspaceTabSplitLayout {
   direction: WorkspaceTabSplitDirection;
   activePane: WorkspaceTabPaneId;
+  lastNonTerminalActiveTabId?: number | string | null;
   paneTabIds: Record<WorkspaceTabPaneId, Array<number | string>>;
   activeTabIds: Partial<Record<WorkspaceTabPaneId, number | string | null>>;
   root?: IWorkspaceTabPaneNode;

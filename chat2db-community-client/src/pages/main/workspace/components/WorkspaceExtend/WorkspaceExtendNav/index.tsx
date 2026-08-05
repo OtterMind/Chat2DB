@@ -73,6 +73,7 @@ export default (props: IProps) => {
       });
       addWorkspaceTab(
         createQuickTerminalTab(terminal, i18n('workspace.terminal.title'), terminalOpenPosition),
+        { activate: terminalOpenPosition === 'tab' },
       );
     } catch (error) {
       console.error('create terminal error', error);

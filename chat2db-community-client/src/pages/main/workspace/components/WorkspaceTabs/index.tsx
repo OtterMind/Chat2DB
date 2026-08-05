@@ -20,6 +20,7 @@ import {
 
 // ----- constants -----
 import { ConsoleOpenedStatus, WorkspaceTabType, workspaceTabConfig } from '@/constants';
+import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
 import {
   IWorkspaceTab,
   IWorkspaceTabPaneNode,
@@ -46,6 +47,7 @@ import TerminalTab from './TerminalTab';
 
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
+import { useGlobalStore } from '@/store/global';
 import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import { isConsoleTabNameCustomized } from '@/store/workspace/utils/consoleTabName';
 import { useTreeStore } from '@/store/tree';
@@ -75,7 +77,13 @@ import {
   getWorkspaceTabEdgeDropTarget,
   WorkspaceTabDropPosition,
 } from './workspaceTabDrop';
-import { applyTerminalTabOpenPositions } from './terminalTabPlacement';
+import {
+  applyTerminalTabOpenPositions,
+  isTerminalDockPaneId,
+  prepareTerminalTabLayout,
+  resolveLastNonTerminalActiveTabId,
+} from './terminalTabPlacement';
+import { getNextActiveWorkspaceTabIdAfterClose } from './workspaceTabSelection';
 import {
   areWorkspaceTabSplitLayoutsEqual,
   collectWorkspaceTabPaneIds,
@@ -572,7 +580,7 @@ function normalizeWorkspaceTabSplitLayout(
 
   const validPaneIds = new Set(
     paneIds.filter((paneId) => {
-      return !!nextPaneTabIds[paneId]?.length;
+      return !!nextPaneTabIds[paneId]?.length || isTerminalDockPaneId(paneId);
     }),
   );
   const normalizedRoot = pruneWorkspaceTabPaneNode(root, validPaneIds);
@@ -607,11 +615,17 @@ function normalizeWorkspaceTabSplitLayout(
           {} as Partial<Record<WorkspaceTabPaneId, number | string | null>>,
         )
       : layout.activeTabIds || {};
+  const lastNonTerminalActiveTabId = resolveLastNonTerminalActiveTabId(
+    workspaceTabList,
+    activeConsoleId,
+    layout.lastNonTerminalActiveTabId,
+  );
 
   return {
     direction: normalizedRoot.direction,
     root: normalizedRoot,
     activePane: normalizedActivePane,
+    lastNonTerminalActiveTabId,
     paneTabIds: normalizedPaneTabIds,
     activeTabIds: normalizedPaneIds.reduce(
       (result, paneId) => {
@@ -658,46 +672,6 @@ function orderSplitLayoutPaneIdsByPinned(layout: IWorkspaceTabSplitLayout | null
 function getWorkspaceTabIdsByLayout(layout: IWorkspaceTabSplitLayout) {
   const paneIds = collectWorkspaceTabPaneIds(layout.root || createDefaultSplitRoot(layout.direction || 'vertical'));
   return paneIds.flatMap((paneId) => layout.paneTabIds[paneId] || []);
-}
-
-function getNextActiveWorkspaceTabIdAfterClose(params: {
-  activeConsoleId?: string | number | null;
-  closeTabIds: Set<string | number>;
-  layout: IWorkspaceTabSplitLayout | null | undefined;
-  orderedNextWorkspaceTabList: IWorkspaceTab[];
-}) {
-  const { activeConsoleId, closeTabIds, layout, orderedNextWorkspaceTabList } = params;
-  if (activeConsoleId === undefined || activeConsoleId === null || !closeTabIds.has(activeConsoleId)) {
-    return activeConsoleId ?? null;
-  }
-
-  if (!orderedNextWorkspaceTabList.length) {
-    return null;
-  }
-
-  const workspaceTabMap = getWorkspaceTabMap(orderedNextWorkspaceTabList);
-  if (layout) {
-    const activePaneId = getPaneIdForTab(layout, activeConsoleId);
-    const paneTabIds = layout.paneTabIds[activePaneId] || [];
-    const activeIndex = paneTabIds.findIndex((id) => id === activeConsoleId);
-    const isAvailableTabId = (id: string | number) => !closeTabIds.has(id) && workspaceTabMap.has(id);
-    const previousTabId = paneTabIds.slice(0, Math.max(activeIndex, 0)).reverse()
-.find(isAvailableTabId);
-    const nextTabId = paneTabIds.slice(activeIndex + 1).find(isAvailableTabId);
-    const fallbackPaneTabId = paneTabIds.find(isAvailableTabId);
-
-    if (previousTabId !== undefined) {
-      return previousTabId;
-    }
-    if (nextTabId !== undefined) {
-      return nextTabId;
-    }
-    if (fallbackPaneTabId !== undefined) {
-      return fallbackPaneTabId;
-    }
-  }
-
-  return orderedNextWorkspaceTabList[orderedNextWorkspaceTabList.length - 1]?.id ?? null;
 }
 
 function getWorkspaceTabIdFromDndId(id: string, workspaceTabList: IWorkspaceTab[]) {
@@ -774,7 +748,7 @@ const WorkspaceTabs = memo(() => {
     activeConsoleId,
     consoleList,
     workspaceTabList,
-    workspaceTabSplitLayout,
+    workspaceTabSplitLayout: storedWorkspaceTabSplitLayout,
     recentlyClosedWorkspaceTabs,
     editorList,
     getOpenConsoleList,
@@ -795,6 +769,18 @@ const WorkspaceTabs = memo(() => {
       createConsole: state.createConsole,
     };
   });
+  const terminalOpenPosition = useGlobalStore(
+    (state) => state.terminalSettings.openPosition || DEFAULT_TERMINAL_SETTINGS.openPosition,
+  );
+  const workspaceTabSplitLayout = useMemo(() => {
+    const preparedLayout = prepareTerminalTabLayout(
+      storedWorkspaceTabSplitLayout,
+      workspaceTabList || [],
+      activeConsoleId,
+      terminalOpenPosition,
+    );
+    return normalizeWorkspaceTabSplitLayout(preparedLayout, workspaceTabList || [], activeConsoleId);
+  }, [storedWorkspaceTabSplitLayout, workspaceTabList, activeConsoleId, terminalOpenPosition]);
 
   // Get the currently selected data source.
   const { zoerBoundInfo } = useZoerStore((state) => {
@@ -859,17 +845,12 @@ const WorkspaceTabs = memo(() => {
   };
 
   useEffect(() => {
-    const normalizedLayout = normalizeWorkspaceTabSplitLayout(
-      workspaceTabSplitLayout,
-      workspaceTabList || [],
-      activeConsoleId,
-    );
-    if (!areWorkspaceTabSplitLayoutsEqual(workspaceTabSplitLayout, normalizedLayout)) {
+    if (!areWorkspaceTabSplitLayoutsEqual(storedWorkspaceTabSplitLayout, workspaceTabSplitLayout)) {
       useWorkspaceStore.setState({
-        workspaceTabSplitLayout: normalizedLayout,
+        workspaceTabSplitLayout,
       });
     }
-  }, [workspaceTabList, workspaceTabSplitLayout, activeConsoleId]);
+  }, [storedWorkspaceTabSplitLayout, workspaceTabSplitLayout]);
 
   useEffect(() => {
     const workspaceStore = useWorkspaceStore.getState();
@@ -1098,10 +1079,18 @@ const WorkspaceTabs = memo(() => {
     if (!key) {
       return;
     }
+    const selectedTab = (workspaceTabList || []).find((tab) => tab.id === key);
+    const currentActiveTab = (workspaceTabList || []).find((tab) => tab.id === activeConsoleId);
+    const lastNonTerminalActiveTabId =
+      selectedTab && selectedTab.type !== WorkspaceTabType.Terminal
+        ? key
+        : workspaceTabSplitLayout?.lastNonTerminalActiveTabId ??
+          (currentActiveTab && currentActiveTab.type !== WorkspaceTabType.Terminal ? activeConsoleId : null);
     const nextLayout = workspaceTabSplitLayout
       ? {
           ...workspaceTabSplitLayout,
           activePane: paneId,
+          lastNonTerminalActiveTabId,
           activeTabIds: {
             ...workspaceTabSplitLayout.activeTabIds,
             [paneId]: key,
@@ -1977,16 +1966,30 @@ const WorkspaceTabs = memo(() => {
       return renderWorkspaceTabPane(node.id, styles.splitPaneItem);
     }
 
+    const firstPaneHidden =
+      node.first.type === 'pane' &&
+      isTerminalDockPaneId(node.first.id) &&
+      !workspaceTabSplitLayout?.paneTabIds[node.first.id]?.length;
+    const secondPaneHidden =
+      node.second.type === 'pane' &&
+      isTerminalDockPaneId(node.second.id) &&
+      !workspaceTabSplitLayout?.paneTabIds[node.second.id]?.length;
+    const hasHiddenTerminalDock = firstPaneHidden || secondPaneHidden;
+
     return (
       <SplitPaneAny
         key={node.nodeId}
         className={styles.splitPane}
         split={node.direction}
         primary="first"
-        size={node.size ?? '50%'}
-        minSize={180}
+        size={firstPaneHidden ? 0 : secondPaneHidden ? '100%' : node.size ?? '50%'}
+        minSize={hasHiddenTerminalDock ? 0 : 180}
+        allowResize={!hasHiddenTerminalDock}
         paneClassName={styles.splitPaneInner}
+        pane1Style={firstPaneHidden ? { display: 'none' } : undefined}
+        pane2Style={secondPaneHidden ? { display: 'none' } : undefined}
         resizerClassName={WORKSPACE_TAB_RESIZER_CLASS}
+        resizerStyle={hasHiddenTerminalDock ? { display: 'none' } : undefined}
         onDragStarted={() => setWorkspaceTabResizeCursor(node.direction)}
         onDragFinished={(size: number | string) => {
           clearWorkspaceTabResizeCursor();

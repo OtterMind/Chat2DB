@@ -1126,7 +1126,9 @@ const LocalSQLFileTree = forwardRef<LocalSQLFileTreeRef, LocalSQLFileTreeProps>(
         },
       ];
       setWorkspaceTabList(nextTabs);
-      setActiveConsoleId(id);
+      if (terminalOpenPosition === 'tab') {
+        setActiveConsoleId(id);
+      }
     } catch (error) {
       console.error('open sql directory terminal error', error);
       feedback.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));

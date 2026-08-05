@@ -155,6 +155,7 @@ export function areWorkspaceTabSplitLayoutsEqual(
   return (
     left.direction === right.direction &&
     left.activePane === right.activePane &&
+    left.lastNonTerminalActiveTabId === right.lastNonTerminalActiveTabId &&
     paneNodesEqual(left.root, right.root) &&
     recordOfIdsEqual(left.paneTabIds, right.paneTabIds) &&
     leftActiveKeys.length === rightActiveKeys.length &&

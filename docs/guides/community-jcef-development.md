@@ -67,6 +67,8 @@ with `-Dchat2db.jcef.web-frontend=true`. That parameter tells JCEF to load the
 Web frontend instead of packaged frontend files. The script does not start a
 separate Web backend. It waits up to another 120 seconds for the embedded
 backend's `/api/system` health check to succeed on `127.0.0.1:10825`.
+On macOS, the launcher also starts Java on the AppKit first thread as required
+by AWT and JCEF.
 
 Press `Ctrl+C` to stop both processes. If either child exits, the launcher stops
 the other one. It prints the checkout, JBR, backend jar, child PIDs, listener

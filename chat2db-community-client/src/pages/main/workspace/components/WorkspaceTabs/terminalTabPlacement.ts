@@ -15,8 +15,14 @@ const TERMINAL_PANE_IDS: Record<Exclude<TerminalOpenPosition, 'tab'>, WorkspaceT
   right: 'terminal-panel:right',
 };
 
-function isDockPosition(value?: TerminalOpenPosition): value is Exclude<TerminalOpenPosition, 'tab'> {
+export function isTerminalDockPosition(
+  value?: TerminalOpenPosition,
+): value is Exclude<TerminalOpenPosition, 'tab'> {
   return value === 'bottom' || value === 'right';
+}
+
+export function isTerminalDockPaneId(paneId: WorkspaceTabPaneId) {
+  return Object.values(TERMINAL_PANE_IDS).includes(paneId);
 }
 
 function createRootFromLayout(layout: IWorkspaceTabSplitLayout): IWorkspaceTabPaneNode {
@@ -37,6 +43,22 @@ function getActiveTabId(tabIds: Array<string | number>, activeTabId?: string | n
     : tabIds[0] ?? null;
 }
 
+export function resolveLastNonTerminalActiveTabId(
+  workspaceTabs: IWorkspaceTab[],
+  activeTabId?: string | number | null,
+  fallbackTabId?: string | number | null,
+) {
+  const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId);
+  if (activeTab && activeTab.type !== WorkspaceTabType.Terminal) {
+    return activeTab.id;
+  }
+
+  const fallbackTab = workspaceTabs.find((tab) => tab.id === fallbackTabId);
+  return fallbackTab && fallbackTab.type !== WorkspaceTabType.Terminal
+    ? fallbackTab.id
+    : workspaceTabs.find((tab) => tab.type !== WorkspaceTabType.Terminal)?.id ?? null;
+}
+
 export function applyTerminalTabOpenPositions(
   layout: IWorkspaceTabSplitLayout | null | undefined,
   workspaceTabs: IWorkspaceTab[],
@@ -46,7 +68,7 @@ export function applyTerminalTabOpenPositions(
   const pendingTerminalTabs = workspaceTabs.filter(
     (tab) =>
       tab.type === WorkspaceTabType.Terminal &&
-      isDockPosition(tab.uniqueData?.terminalOpenPosition) &&
+      isTerminalDockPosition(tab.uniqueData?.terminalOpenPosition) &&
       !assignedTabIds.has(tab.id),
   );
 
@@ -74,6 +96,7 @@ export function applyTerminalTabOpenPositions(
     nextLayout = {
       direction: 'vertical',
       activePane: MAIN_WORKSPACE_TAB_PANE,
+      lastNonTerminalActiveTabId: resolveLastNonTerminalActiveTabId(workspaceTabs, activeTabId),
       root: { type: 'pane', id: MAIN_WORKSPACE_TAB_PANE },
       paneTabIds: { [MAIN_WORKSPACE_TAB_PANE]: mainTabIds },
       activeTabIds: {
@@ -122,4 +145,87 @@ export function applyTerminalTabOpenPositions(
   }
 
   return nextLayout;
+}
+
+export function prepareTerminalTabLayout(
+  layout: IWorkspaceTabSplitLayout | null | undefined,
+  workspaceTabs: IWorkspaceTab[],
+  activeTabId: string | number | null | undefined,
+  preferredOpenPosition: TerminalOpenPosition,
+): IWorkspaceTabSplitLayout | null {
+  let preparedLayout = layout
+    ? {
+        ...layout,
+        lastNonTerminalActiveTabId: resolveLastNonTerminalActiveTabId(
+          workspaceTabs,
+          activeTabId,
+          layout.lastNonTerminalActiveTabId,
+        ),
+      }
+    : null;
+
+  if (isTerminalDockPosition(preferredOpenPosition)) {
+    const dockedTerminalIds = new Set(
+      workspaceTabs
+        .filter(
+          (tab) =>
+            tab.type === WorkspaceTabType.Terminal &&
+            isTerminalDockPosition(tab.uniqueData?.terminalOpenPosition),
+        )
+        .map((tab) => tab.id),
+    );
+    const mainTabIds = workspaceTabs.filter((tab) => !dockedTerminalIds.has(tab.id)).map((tab) => tab.id);
+
+    if (mainTabIds.length) {
+      const paneId = TERMINAL_PANE_IDS[preferredOpenPosition];
+      const direction: WorkspaceTabSplitDirection = preferredOpenPosition === 'right' ? 'vertical' : 'horizontal';
+      const dockSize = preferredOpenPosition === 'right' ? '70%' : '65%';
+
+      if (!preparedLayout) {
+        preparedLayout = {
+          direction,
+          activePane: MAIN_WORKSPACE_TAB_PANE,
+          lastNonTerminalActiveTabId: resolveLastNonTerminalActiveTabId(workspaceTabs, activeTabId),
+          root: createWorkspaceTabSplitNode(
+            direction,
+            { type: 'pane', id: MAIN_WORKSPACE_TAB_PANE },
+            { type: 'pane', id: paneId },
+            dockSize,
+          ),
+          paneTabIds: {
+            [MAIN_WORKSPACE_TAB_PANE]: mainTabIds,
+            [paneId]: [],
+          },
+          activeTabIds: {
+            [MAIN_WORKSPACE_TAB_PANE]: getActiveTabId(mainTabIds, activeTabId),
+            [paneId]: null,
+          },
+        };
+      } else {
+        const root = createRootFromLayout(preparedLayout);
+        if (!collectWorkspaceTabPaneIds(root).includes(paneId)) {
+          preparedLayout = {
+            ...preparedLayout,
+            direction,
+            root: createWorkspaceTabSplitNode(
+              direction,
+              root,
+              { type: 'pane', id: paneId },
+              dockSize,
+            ),
+            paneTabIds: {
+              ...preparedLayout.paneTabIds,
+              [paneId]: [],
+            },
+            activeTabIds: {
+              ...preparedLayout.activeTabIds,
+              [paneId]: null,
+            },
+          };
+        }
+      }
+    }
+  }
+
+  return applyTerminalTabOpenPositions(preparedLayout, workspaceTabs, activeTabId);
 }
