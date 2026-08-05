@@ -72,6 +72,7 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_INDEX_COMMENT = "Index_comment";
     public static final String FIELD_INDEX_COMMENT_FALLBACK = "Comment";
     public static final String FIELD_INDEX_TYPE = "Index_type";
+    public static final String FIELD_EXPRESSION = "Expression";
     public static final String FIELD_IS_NULLABLE = "IS_NULLABLE";
     public static final String FIELD_KEY_NAME = "Key_name";
     public static final String FIELD_NAME = "Name";

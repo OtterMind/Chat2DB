@@ -119,6 +119,13 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
       // width: '45%',
       render: (text: string, record: IIndexIncludeColumnItem) => {
         const editable = isEditing(record);
+        if (record.expression) {
+          return (
+            <div className={styles.editableCell} onClick={() => edit(record)}>
+              {`((${record.expression}))`}
+            </div>
+          );
+        }
         return editable ? (
           <Form.Item name="columnName" style={{ margin: 0 }}>
             <Select options={columnList.map((i) => ({ label: i.name, value: i.name }))} />

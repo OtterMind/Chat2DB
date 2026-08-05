@@ -362,6 +362,14 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         tableIndexColumn.setCollation(resultSet.getString(FIELD_COLLATION));
         tableIndexColumn.setCardinality(resultSet.getLong(FIELD_CARDINALITY));
         tableIndexColumn.setSubPart(resultSet.getLong(FIELD_SUB_PART));
+        try {
+            String expression = resultSet.getString(FIELD_EXPRESSION);
+            if (StringUtils.isNotBlank(expression)) {
+                tableIndexColumn.setExpression(expression);
+            }
+        } catch (SQLException e) {
+            // MySQL 5.7 and 8.0.12 or earlier do not have the Expression column
+        }
         String collation = resultSet.getString(FIELD_COLLATION);
         if (INDEX_COLLATION_ASC.equalsIgnoreCase(collation)) {
             tableIndexColumn.setAscOrDesc(INDEX_ASC);

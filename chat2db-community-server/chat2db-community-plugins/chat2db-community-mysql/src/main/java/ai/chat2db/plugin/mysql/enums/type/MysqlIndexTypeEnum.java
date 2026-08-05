@@ -112,6 +112,9 @@ public enum MysqlIndexTypeEnum {
                     script.append(" ").append(MysqlSqlGuards.requireAscOrDesc(column.getAscOrDesc()));
                 }
                 script.append(",");
+            } else if (StringUtils.isNotBlank(column.getExpression())) {
+                script.append("((").append(column.getExpression()).append("))");
+                script.append(",");
             }
         }
         script.deleteCharAt(script.length() - 1);
