@@ -144,6 +144,8 @@ export default {
   'workspace.menu.openView': 'Open view',
   'workspace.menu.annotationDatabaseTable': 'Data annotation(AI)',
   'workspace.menu.editView': 'Edit view',
+  'workspace.menu.createView': 'Create view',
+  'workspace.menu.dropView': 'Drop view',
   'workspace.menu.openConsole': 'Open console',
   'workspace.menu.removeConsole': 'Remove console',
   'workspace.menu.runSqlFile': 'Run SQL file',

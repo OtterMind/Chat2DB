@@ -138,6 +138,8 @@ export default {
   'workspace.menu.openView': '打开视图',
   'workspace.menu.annotationDatabaseTable': '数据标注(AI)',
   'workspace.menu.editView': '编辑视图',
+  'workspace.menu.createView': '新建视图',
+  'workspace.menu.dropView': '删除视图',
   'workspace.menu.openConsole': '打开控制台',
   'workspace.menu.removeConsole': '删除',
   'workspace.menu.runSqlFile': '运行SQL文件',

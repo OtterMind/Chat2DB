@@ -530,6 +530,54 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         return createViewSqlBuilder + SQLConstants.SEMICOLON;
     }
 
+    @Override
+    public String buildDropView(String databaseName, String schemaName, String viewName) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("DROP VIEW IF EXISTS ");
+        if (StringUtils.isNotBlank(databaseName)) {
+            sql.append(quoteMysqlIdentifier(databaseName)).append(SQLConstants.DOT);
+        }
+        sql.append(quoteMysqlIdentifier(viewName));
+        return sql.toString();
+    }
+
+    @Override
+    public String buildAlterView(ModifyView modifyView) {
+        StringBuilder sql = new StringBuilder();
+        sql.append("ALTER VIEW ");
+        String databaseName = modifyView.getDatabaseName();
+        if (StringUtils.isNotBlank(databaseName)) {
+            sql.append(quoteMysqlIdentifier(databaseName)).append(SQLConstants.DOT);
+        }
+        sql.append(quoteMysqlIdentifier(modifyView.getViewName()));
+        String algorithm = modifyView.getAlgorithm();
+        if (StringUtils.isNotBlank(algorithm)) {
+            sql.append(SQL_ALGORITHM).append(MysqlSqlGuards.requireEnumConstant(algorithm, MysqlViewAlgorithmOptionEnum.values(), "algorithm")).append(SQLConstants.SPACE);
+        }
+        String definer = modifyView.getDefiner();
+        if (StringUtils.isNotBlank(definer)) {
+            sql.append(SQL_DEFINER).append(MysqlSqlGuards.requireDefiner(definer)).append(SQLConstants.SPACE);
+        }
+        String security = modifyView.getSecurity();
+        if (StringUtils.isNotBlank(security)) {
+            sql.append(SQL_SECURITY).append(MysqlSqlGuards.requireEnumConstant(security, MysqlViewSqlSecurityOptionEnum.values(), "security")).append(SQLConstants.SPACE);
+        }
+        sql.append(SQLConstants.LINE_SEPARATOR_SQL_AS);
+        String viewBody = modifyView.getViewBody();
+        if (StringUtils.isNotBlank(viewBody)) {
+            viewBody = viewBody.trim();
+            if (viewBody.endsWith(SQLConstants.SEMICOLON)) {
+                viewBody = viewBody.substring(0, viewBody.length() - 1);
+            }
+            sql.append(SQLConstants.LINE_SEPARATOR).append(viewBody).append(SQLConstants.SPACE);
+        }
+        String checkOption = modifyView.getCheckOption();
+        if (StringUtils.isNotBlank(checkOption)) {
+            sql.append(SQLConstants.LINE_SEPARATOR_SQL_WITH).append(MysqlSqlGuards.requireEnumConstant(checkOption, MysqlViewCheckOptionEnum.values(), "check option")).append(SQLConstants.CHECK_OPTION_SQL);
+        }
+        return sql + SQLConstants.SEMICOLON;
+    }
+
     private static String quoteMysqlIdentifier(String name) {
         return MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(name);
     }

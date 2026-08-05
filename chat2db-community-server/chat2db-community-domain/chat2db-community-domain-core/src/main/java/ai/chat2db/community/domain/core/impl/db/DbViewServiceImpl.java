@@ -70,6 +70,14 @@ public class DbViewServiceImpl implements IDbViewService {
     }
 
     @Override
+    public void create(ModifyView modifyView) {
+        ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
+        String sql = sqlBuilder.ddl().view().buildCreateView(modifyView);
+        ai.chat2db.spi.DefaultSQLExecutor.getInstance().execute(
+                Chat2DBContext.getConnection(), sql, resultSet -> null);
+    }
+
+    @Override
     public String getAIViewDDL(DbTableDdlRequest param) {
         Table table = query(param);
         if (table == null) {

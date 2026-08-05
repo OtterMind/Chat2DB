@@ -248,6 +248,7 @@ export const dropMenuConfig = {
     ],
     [TreeNodeType.VIEWS]: [
       OperationColumn.CreateConsole,
+      OperationColumn.CreateView,
       OperationColumn.ViewAllView,
       OperationColumn.Divider,
       OperationColumn.CopyName,
@@ -269,6 +270,7 @@ export const dropMenuConfig = {
       // AI & Copy
       OperationColumn.ChangeAiTableInfoNodataCollection,
       OperationColumn.CopyName,
+      OperationColumn.DropView,
     ],
     [TreeNodeType.VIEWCOLUMN]: [OperationColumn.CreateConsole, OperationColumn.CopyName],
     [TreeNodeType.COLUMNS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],

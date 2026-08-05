@@ -162,6 +162,21 @@ public class DbViewController {
     }
 
     /**
+     * Creates a database view by executing the generated CREATE VIEW SQL.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/view/create}.
+     *
+     * @param request view creation request payload.
+     * @return operation result for the request.
+     */
+    @PostMapping("/create")
+    public ActionResult create(@RequestBody @Valid ModifyViewRequest request) {
+        ModifyView modifyView = dbWebConverter.request2Param(request);
+        viewService.create(modifyView);
+        return ActionResult.isSuccess();
+    }
+
+    /**
      * Deletes database views.
      * <p>
      * Endpoint: {@code POST /api/rdb/view/drop}.
