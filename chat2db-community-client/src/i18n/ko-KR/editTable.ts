@@ -19,6 +19,7 @@ export default {
   'editTable.label.columnSize': '크기',
   'editTable.label.columnType': '유형',
   'editTable.label.nullable': 'NULL 허용',
+  'editTable.label.columnVisible': '표시',
   'editTable.label.prefixLength': '접두사 길이',
   'editTable.label.defaultValue': '기본값',
   'editTable.label.updateTime': '현재 타임스탬프에 따라 업데이트',

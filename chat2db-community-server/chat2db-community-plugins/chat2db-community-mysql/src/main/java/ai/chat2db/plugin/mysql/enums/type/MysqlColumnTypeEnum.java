@@ -186,6 +186,10 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
         script.append(buildComment(column, type)).append(" ");
 
+        if (column.getVisible() != null && !column.getVisible()) {
+            script.append("INVISIBLE").append(" ");
+        }
+
         return script.toString();
     }
 
