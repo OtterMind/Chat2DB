@@ -136,6 +136,8 @@ export default {
   'workspace.menu.sortDatabaseObjects': '按名称排序数据库对象',
   'workspace.menu.followActiveWorkspaceTab': '自动跟随当前标签',
   'workspace.menu.openView': '打开视图',
+  'workspace.menu.createTrigger': '新建触发器',
+  'workspace.menu.dropTrigger': '删除触发器',
   'workspace.menu.annotationDatabaseTable': '数据标注(AI)',
   'workspace.menu.editView': '编辑视图',
   'workspace.menu.openConsole': '打开控制台',

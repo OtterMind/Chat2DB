@@ -255,11 +255,21 @@ export const dropMenuConfig = {
     ],
     [TreeNodeType.FUNCTIONS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
     [TreeNodeType.PROCEDURES]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
-    [TreeNodeType.TRIGGERS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
+    [TreeNodeType.TRIGGERS]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CreateTrigger,
+      OperationColumn.CopyName,
+      OperationColumn.Refresh,
+    ],
     [TreeNodeType.VIEWCOLUMNS]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
     [TreeNodeType.PROCEDURE]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenProcedure],
     [TreeNodeType.FUNCTION]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenFunction],
-    [TreeNodeType.TRIGGER]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.OpenTrigger],
+    [TreeNodeType.TRIGGER]: [
+      OperationColumn.CreateConsole,
+      OperationColumn.CopyName,
+      OperationColumn.OpenTrigger,
+      OperationColumn.DropTrigger,
+    ],
     [TreeNodeType.VIEW]: [
       // Open & Edit
       OperationColumn.OpenView,

@@ -1036,6 +1036,40 @@ export const useCreateRightClickMenu = () => {
         },
       },
 
+      [OperationColumn.CreateTrigger]: {
+        text: i18n('workspace.menu.createTrigger'),
+        icon: 'icon-trigger',
+        handle: () => {
+          openTrigger({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.DropTrigger]: {
+        text: i18n('workspace.menu.dropTrigger'),
+        icon: 'icon-delete',
+        handle: () => {
+          const trgName = treeNodeData.originalTitle;
+          const ep = treeNodeData.extraParams;
+          staticModal.confirm({
+            title: i18n('workspace.menu.dropTrigger'),
+            content: `"${trgName}"`,
+            okText: i18n('common.button.confirm'),
+            cancelText: i18n('common.button.cancel'),
+            okType: 'danger',
+            onOk: () => {
+              return sqlService.deleteTrigger({
+                dataSourceId: ep.dataSourceId,
+                databaseName: ep.databaseName,
+                schemaName: ep.schemaName,
+                tableName: trgName,
+              }).then(() => {
+                handleLoadData();
+              });
+            },
+          });
+        },
+      },
+
       // Create a database.
       [OperationColumn.CreateDatabase]: {
         text: i18n('workspace.menu.createDatabase'),

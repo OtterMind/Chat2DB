@@ -446,6 +446,9 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// Delete trigger
+const deleteTrigger = createRequest<ITableParams, void>('/api/rdb/trigger/delete', { method: 'post' });
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -467,6 +470,7 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  deleteTrigger,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,

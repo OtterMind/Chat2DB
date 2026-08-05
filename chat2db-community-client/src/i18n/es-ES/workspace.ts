@@ -142,6 +142,8 @@ export default {
   'workspace.menu.sortDatabaseObjects': 'Ordenar objetos de base de datos por nombre',
   'workspace.menu.followActiveWorkspaceTab': 'Seguir automáticamente la pestaña actual',
   'workspace.menu.openView': 'Abrir vista',
+  'workspace.menu.createTrigger': 'Crear trigger',
+  'workspace.menu.dropTrigger': 'Eliminar trigger',
   'workspace.menu.annotationDatabaseTable': 'Anotación de datos (IA)',
   'workspace.menu.editView': 'Editar vista',
   'workspace.menu.openConsole': 'Abrir consola',

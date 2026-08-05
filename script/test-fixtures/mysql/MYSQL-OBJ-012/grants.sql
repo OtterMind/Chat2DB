@@ -1,0 +1,4 @@
+-- MYSQL-OBJ-012: Grants for test user
+
+GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER, ALTER ON *.* TO 'chat2db_test'@'%';
+FLUSH PRIVILEGES;

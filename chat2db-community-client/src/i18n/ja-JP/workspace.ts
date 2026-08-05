@@ -140,6 +140,8 @@ export default {
   'workspace.menu.sortDatabaseObjects': 'データベースオブジェクトを名前順に並べる',
   'workspace.menu.followActiveWorkspaceTab': '現在のタブを自動追従',
   'workspace.menu.openView': 'ビューを開く',
+  'workspace.menu.createTrigger': 'トリガーを作成',
+  'workspace.menu.dropTrigger': 'トリガーを削除',
   'workspace.menu.annotationDatabaseTable': 'データベース表(AI)',
   'workspace.menu.editView': 'ビューを編集',
   'workspace.menu.openConsole': 'コンソールを開く',
