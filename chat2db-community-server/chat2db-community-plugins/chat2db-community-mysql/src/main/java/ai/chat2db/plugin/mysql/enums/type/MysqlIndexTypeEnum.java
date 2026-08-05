@@ -79,6 +79,11 @@ public enum MysqlIndexTypeEnum {
             script.append(" ").append(indexComment);
         }
 
+        if (tableIndex.getVisible() != null && !tableIndex.getVisible()
+                && !PRIMARY_KEY.equals(this)) {
+            script.append(" INVISIBLE");
+        }
+
         return script.toString();
     }
 
@@ -138,6 +143,13 @@ public enum MysqlIndexTypeEnum {
             return StringUtils.join("ADD ", buildIndexScript(tableIndex));
         }
         return "";
+    }
+
+    public String buildAlterIndexVisibility(TableIndex tableIndex) {
+        String visibility = Boolean.FALSE.equals(tableIndex.getVisible()) ? "INVISIBLE" : "VISIBLE";
+        return StringUtils.join("ALTER INDEX ",
+                MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getName()),
+                " ", visibility);
     }
 
     private String buildDropIndex(TableIndex tableIndex) {

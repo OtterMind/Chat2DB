@@ -11,6 +11,7 @@ export default {
   'editTable.label.indexName': '索引名称',
   'editTable.label.indexType': '索引类型',
   'editTable.label.indexMethod': '索引方法',
+  'editTable.label.indexVisible': '可见',
   'editTable.label.includeColumn': '包含列',
   'editTable.button.createTable': '新建表',
   'editTable.button.importTable': '导出表',
