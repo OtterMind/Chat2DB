@@ -10,13 +10,16 @@ import java.sql.Connection;
 @Service
 public class DbExplainServiceImpl implements IDbExplainService {
 
+    private static final String SQL_EXPLAIN_JSON = "EXPLAIN FORMAT=JSON ";
+    private static final String SQL_EXPLAIN_ANALYZE = "EXPLAIN ANALYZE ";
+    private static final String FIELD_EXPLAIN = "EXPLAIN";
+
     @Override
     public String explainJson(String sql) {
         Connection connection = Chat2DBContext.getConnection();
-        String explainSql = "EXPLAIN FORMAT=JSON " + sql;
-        return DefaultSQLExecutor.getInstance().execute(connection, explainSql, resultSet -> {
+        return DefaultSQLExecutor.getInstance().execute(connection, SQL_EXPLAIN_JSON + sql, resultSet -> {
             if (resultSet.next()) {
-                return resultSet.getString("EXPLAIN");
+                return resultSet.getString(FIELD_EXPLAIN);
             }
             return null;
         });
@@ -25,10 +28,9 @@ public class DbExplainServiceImpl implements IDbExplainService {
     @Override
     public String explainAnalyze(String sql) {
         Connection connection = Chat2DBContext.getConnection();
-        String explainSql = "EXPLAIN ANALYZE " + sql;
-        return DefaultSQLExecutor.getInstance().execute(connection, explainSql, resultSet -> {
+        return DefaultSQLExecutor.getInstance().execute(connection, SQL_EXPLAIN_ANALYZE + sql, resultSet -> {
             if (resultSet.next()) {
-                return resultSet.getString("EXPLAIN");
+                return resultSet.getString(FIELD_EXPLAIN);
             }
             return null;
         });
