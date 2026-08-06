@@ -120,7 +120,7 @@
     "localforage": "^1.10.0",
     "lodash": "^4.17.21",
     "lottie-react": "^2.4.0",
-    "lucide-react": "^0.356.0",
+    "lucide-react": "^1.28.0",
     "mermaid": "^11.12.0",
     "monaco-editor": "^0.52.0",
     "node-schedule": "^2.1.1",
