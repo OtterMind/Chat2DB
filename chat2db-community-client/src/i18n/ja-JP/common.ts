@@ -239,6 +239,8 @@ export default {
   'common.text.showFieldType': 'フィールド型を表示',
   'common.text.showFieldComment': 'フィールドコメントを表示',
   'common.text.showHideColumns': '列を管理',
+  'common.text.manageColumns.tooltip':
+    '列を検索し、現在の結果セットに表示する列を選択します。少なくとも 1 列は表示する必要があります。',
   'common.button.hideColumn': 'この列を非表示',
   'common.button.hideSelectedColumns': '選択した列を非表示',
   'common.button.showAllColumns': 'すべての列を表示',

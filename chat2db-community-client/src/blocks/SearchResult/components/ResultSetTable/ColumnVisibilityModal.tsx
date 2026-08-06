@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { Checkbox, Input, Modal } from 'antd';
-import { Search } from 'lucide-react';
+import { Checkbox, Input, Modal, Tooltip } from 'antd';
+import { CircleHelp, Search } from 'lucide-react';
 import i18n from '@/i18n';
 import type { ITableHeaderItem } from '@/typings/database';
 import { formatFieldType } from './headerMetadata';
@@ -55,7 +55,20 @@ const ColumnVisibilityModal = ({ open, columns, hiddenFields, onCancel, onConfir
     <Modal
       open={open}
       width={720}
-      title={i18n('common.text.showHideColumns')}
+      title={
+        <span className={styles.columnVisibilityTitle}>
+          <span>{i18n('common.text.showHideColumns')}</span>
+          <Tooltip title={i18n('common.text.manageColumns.tooltip')} mouseEnterDelay={0.2}>
+            <button
+              type="button"
+              className={styles.columnVisibilityHelp}
+              aria-label={i18n('common.text.manageColumns.tooltip')}
+            >
+              <CircleHelp aria-hidden="true" size={14} />
+            </button>
+          </Tooltip>
+        </span>
+      }
       okText={i18n('common.button.confirm')}
       cancelText={i18n('common.button.cancel')}
       onCancel={onCancel}

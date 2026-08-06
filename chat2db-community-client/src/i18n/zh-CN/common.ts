@@ -237,6 +237,7 @@ export default {
   'common.text.showFieldType': '显示字段类型',
   'common.text.showFieldComment': '显示字段注释',
   'common.text.showHideColumns': '管理列',
+  'common.text.manageColumns.tooltip': '搜索字段并选择当前结果集中要展示的列，至少需要保留一列。',
   'common.button.hideColumn': '隐藏当前列',
   'common.button.hideSelectedColumns': '隐藏选中列',
   'common.button.showAllColumns': '显示全部列',

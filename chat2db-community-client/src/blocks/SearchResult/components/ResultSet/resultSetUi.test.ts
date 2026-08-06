@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { getHeaderMetadataRows } from '../ResultSetTable/headerMetadata';
 import { getResultColumnTitle } from '../ResultSetTable/utils/columnTitle';
@@ -27,6 +28,45 @@ import {
   isResultHeaderContext,
   joinContextMenuGroups,
 } from '../ResultSetTable/event/onContextmenuCell/menuGroups';
+
+const exportBarSource = readFileSync('src/blocks/SearchResult/components/ExportBar/index.tsx', 'utf8');
+const tabsSource = readFileSync('src/components/Tabs/index.tsx', 'utf8');
+const dropdownTriggerSource = readFileSync('src/components/DropdownChevronTrigger/index.tsx', 'utf8');
+const dropdownTriggerStyleSource = readFileSync('src/components/DropdownChevronTrigger/style.ts', 'utf8');
+const resultToolbarStyleSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetToolbar/style.ts',
+  'utf8',
+);
+const columnVisibilityModalSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/ColumnVisibilityModal.tsx',
+  'utf8',
+);
+const resultTableStyleSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/style.ts',
+  'utf8',
+);
+
+test('more-tabs and export chevrons share one aligned trailing slot', () => {
+  assert.match(exportBarSource, /<DropdownChevronTrigger>\{i18n\('common\.text\.export'\)\}/);
+  assert.match(tabsSource, /<DropdownChevronTrigger aria-label=\{i18n\('common\.text\.moreTabs'\)\} \/>/);
+  assert.match(dropdownTriggerSource, /className=\{styles\.chevronSlot\}/);
+  assert.match(
+    dropdownTriggerStyleSource,
+    /chevronSlot:[\s\S]*?width: 29px;[\s\S]*?align-items: center;[\s\S]*?justify-content: center;/,
+  );
+  assert.match(resultToolbarStyleSource, /toolBar:[\s\S]*?padding: 0;/);
+  assert.match(resultToolbarStyleSource, /toolBarRight:[\s\S]*?height: 100%;[\s\S]*?align-items: center;/);
+});
+
+test('manage-columns title exposes an aligned localized help tooltip', () => {
+  assert.match(columnVisibilityModalSource, /<CircleHelp aria-hidden="true" size=\{14\} \/>/);
+  assert.match(columnVisibilityModalSource, /i18n\('common\.text\.manageColumns\.tooltip'\)/);
+  assert.match(columnVisibilityModalSource, /aria-label=\{i18n\('common\.text\.manageColumns\.tooltip'\)\}/);
+  assert.match(
+    resultTableStyleSource,
+    /columnVisibilityTitle:[\s\S]*?display: inline-flex;[\s\S]*?align-items: center;/,
+  );
+});
 
 test('result search stays hidden until explicitly opened', () => {
   assert.equal(RESULT_SEARCH_VISIBLE_BY_DEFAULT, false);

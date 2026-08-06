@@ -7,7 +7,7 @@ export const useStyles = createStyles(({ css, token }) => {
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid ${token.colorBorderLayout};
-      padding: 0px 4px 0px 0px;
+      padding: 0;
       height: 30px;
       flex-shrink: 0;
       overflow-x: auto;
@@ -36,14 +36,11 @@ export const useStyles = createStyles(({ css, token }) => {
     toolBarRight: css`
       flex: 1;
       flex-shrink: 0;
+      height: 100%;
       display: flex;
+      align-items: center;
       justify-content: end;
       min-width: 66px;
-    `,
-    exportBar: css`
-      cursor: pointer;
-      color: ${token.colorTextSecondary};
-      font-size: 13px;
     `,
   };
 });

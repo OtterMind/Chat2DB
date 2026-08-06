@@ -276,6 +276,8 @@ export default {
   'common.text.showFieldType': 'Mostrar tipo de campo',
   'common.text.showFieldComment': 'Mostrar comentario de campo',
   'common.text.showHideColumns': 'Administrar columnas',
+  'common.text.manageColumns.tooltip':
+    'Busca columnas y elige cuáles se muestran en el conjunto de resultados actual. Debe permanecer visible al menos una columna.',
   'common.button.hideColumn': 'Ocultar esta columna',
   'common.button.hideSelectedColumns': 'Ocultar columnas seleccionadas',
   'common.button.showAllColumns': 'Mostrar todas las columnas',

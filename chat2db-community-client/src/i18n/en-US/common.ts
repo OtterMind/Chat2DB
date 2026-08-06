@@ -239,6 +239,8 @@ export default {
   'common.text.showFieldType': 'Show field type',
   'common.text.showFieldComment': 'Show field comment',
   'common.text.showHideColumns': 'Manage Columns',
+  'common.text.manageColumns.tooltip':
+    'Search columns and choose which ones are shown in the current result set. At least one column must remain visible.',
   'common.button.hideColumn': 'Hide This Column',
   'common.button.hideSelectedColumns': 'Hide Selected Columns',
   'common.button.showAllColumns': 'Show All Columns',

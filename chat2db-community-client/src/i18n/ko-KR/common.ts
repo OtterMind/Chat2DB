@@ -276,6 +276,8 @@ export default {
   'common.text.showFieldType': '필드 유형 표시',
   'common.text.showFieldComment': '필드 설명 표시',
   'common.text.showHideColumns': '열 관리',
+  'common.text.manageColumns.tooltip':
+    '열을 검색하고 현재 결과 집합에 표시할 열을 선택합니다. 최소 한 개의 열은 표시되어야 합니다.',
   'common.button.hideColumn': '현재 열 숨기기',
   'common.button.hideSelectedColumns': '선택한 열 숨기기',
   'common.button.showAllColumns': '모든 열 표시',

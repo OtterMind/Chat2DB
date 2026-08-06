@@ -8,6 +8,33 @@ export const useStyles = createStyles(({ css, token }) => {
     columnSearch: css`
       margin-bottom: 12px;
     `,
+    columnVisibilityTitle: css`
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    `,
+    columnVisibilityHelp: css`
+      width: 20px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: ${token.colorTextTertiary};
+      cursor: help;
+
+      &:hover {
+        color: ${token.colorTextSecondary};
+      }
+
+      &:focus-visible {
+        outline: 2px solid ${token.colorPrimaryBorder};
+        outline-offset: -2px;
+      }
+    `,
     columnVisibilityList: css`
       display: flex;
       max-height: min(420px, 55vh);

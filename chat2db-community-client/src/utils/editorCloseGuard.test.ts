@@ -101,6 +101,7 @@ async function run() {
   const workspaceTabsSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/index.tsx', 'utf8');
   const consoleActionSource = readFileSync('src/store/workspace/slices/console/action.ts', 'utf8');
   const editorSource = readFileSync('src/components/SQLEditor/editor/SQLEditorWithOperation/index.tsx', 'utf8');
+  const confirmationSource = readFileSync('src/utils/editorCloseConfirmation.tsx', 'utf8');
   assert.match(
     workspaceTabsSource,
     /beforeRemove=\{confirmWorkspaceTabItemsClose\}/,
@@ -118,6 +119,16 @@ async function run() {
   );
   assert.match(editorSource, /hasUnsavedChangesBeforeClose/, 'editor refs expose dirty-state detection');
   assert.match(editorSource, /saveBeforeClose/, 'editor refs expose a real save operation');
+  assert.match(
+    confirmationSource,
+    /const footerButtonStyle = \{ marginInlineStart: 0 \}/,
+    'the close dialog overrides Ant Design sibling-button indentation',
+  );
+  assert.equal(
+    confirmationSource.match(/style=\{footerButtonStyle\}/g)?.length,
+    3,
+    'all close-dialog actions share the same horizontal alignment',
+  );
 
   console.log('Editor close guard tests passed');
 }

@@ -18,6 +18,8 @@ interface EditorCloseDialogFooterProps {
   onDecision: (decision: EditorCloseDecision) => void;
 }
 
+const footerButtonStyle = { marginInlineStart: 0 };
+
 function EditorCloseDialogFooter({ editor, onDecision }: EditorCloseDialogFooterProps) {
   const [saving, setSaving] = useState(false);
 
@@ -37,13 +39,13 @@ function EditorCloseDialogFooter({ editor, onDecision }: EditorCloseDialogFooter
 
   return (
     <div style={{ display: 'grid', gap: 8, width: '100%' }}>
-      <Button block type="primary" loading={saving} onClick={handleSave}>
+      <Button block type="primary" loading={saving} style={footerButtonStyle} onClick={handleSave}>
         {i18n('common.button.save')}
       </Button>
-      <Button block disabled={saving} onClick={() => onDecision('discard')}>
+      <Button block disabled={saving} style={footerButtonStyle} onClick={() => onDecision('discard')}>
         {i18n('workspace.editorClose.dontSave')}
       </Button>
-      <Button block disabled={saving} onClick={() => onDecision('cancel')}>
+      <Button block disabled={saving} style={footerButtonStyle} onClick={() => onDecision('cancel')}>
         {i18n('common.button.cancel')}
       </Button>
     </div>
