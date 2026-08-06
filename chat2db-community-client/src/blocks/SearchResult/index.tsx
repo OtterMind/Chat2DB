@@ -188,10 +188,12 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
   useEffect(() => {
     const incomingResultDataList = props.resultDataList || [];
+    const incomingHistoryResultDataList = props.historyResultDataList || [];
     const nextResultDataList = retainPinnedResults(
       incomingResultDataList,
       [...(resultDataListRef.current || []), ...historyResultDataListRef.current],
       pinnedResultTabKeysRef.current,
+      incomingHistoryResultDataList,
     );
     const previousResultVersions = knownResultVersionMapRef.current;
     const changedResults = incomingResultDataList.filter((item) => {
@@ -216,7 +218,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         tabId: getPreferredActiveTabId(latestChangedResult, consoleMode, props.forceOutputTab),
       });
     }
-  }, [props.resultDataList, consoleMode, props.forceOutputTab]);
+  }, [props.resultDataList, props.historyResultDataList, consoleMode, props.forceOutputTab]);
 
   useEffect(() => {
     const nextHistoryResultDataList = props.historyResultDataList || [];

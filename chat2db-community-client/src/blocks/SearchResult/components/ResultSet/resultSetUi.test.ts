@@ -230,6 +230,16 @@ test('incoming result replaces a pinned result with the same key', () => {
   assert.deepEqual(retainPinnedResults([updatedResult], [oldResult], new Set(['same'])), [updatedResult]);
 });
 
+test('pinned result already moved into incoming history is not retained in current results', () => {
+  const pinnedResult = { uuid: 'pinned', value: 'pinned result' };
+  const nextResult = { uuid: 'next', value: 'new result' };
+
+  assert.deepEqual(
+    retainPinnedResults([nextResult], [pinnedResult], new Set(['pinned']), [pinnedResult]),
+    [nextResult],
+  );
+});
+
 const resultColumns = ['1', '2', '3', '4'].map((field) => ({ field }));
 
 test('column visibility always keeps at least one data column visible', () => {

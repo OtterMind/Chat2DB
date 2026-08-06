@@ -6,8 +6,13 @@ export function retainPinnedResults<T extends PinnableResult>(
   incomingResults: T[],
   existingResults: T[],
   pinnedKeys: ReadonlySet<string>,
+  incomingHistoryResults: T[] = [],
 ): T[] {
-  const incomingKeys = new Set(incomingResults.map((item) => item.uuid).filter((key): key is string => !!key));
+  const incomingKeys = new Set(
+    [...incomingResults, ...incomingHistoryResults]
+      .map((item) => item.uuid)
+      .filter((key): key is string => !!key),
+  );
   const retainedKeys = new Set<string>();
   const retainedResults = existingResults.filter((item) => {
     const key = item.uuid;
