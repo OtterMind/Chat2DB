@@ -178,7 +178,6 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const backendEditorHintsEpochRef = useRef(0);
     const autoFillEditInProgressRef = useRef(false);
     const cursorPositionRef = useRef<HTMLSpanElement | null>(null);
-
     const sqlStatementListRef = useRef<SqlStatement[]>([]);
     const markMessageListRef = useRef<MarkMessage[]>([]);
     const tableDDLTriggerMode = useGlobalStore((s) => getTableDDLTriggerMode(s.editorSettings));
@@ -1007,18 +1006,20 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             onClose={closeHoverHelp}
             canShow={() => !contextMenuInfo?.open}
           />
-        </div>
-        <div className={styles.cursorStatus}>
-          {dbInfo.filePath && onFileEncodingChange && (
-            <LocalFileEncodingSelect
-              charset={dbInfo.fileCharset}
-              bom={dbInfo.fileBom}
-              onEncodingChange={onFileEncodingChange}
-            />
-          )}
-          <span ref={cursorPositionRef} className={styles.cursorPosition}>
-            Ln 1, Col 1
-          </span>
+          <div className={styles.editorStatusOverlay}>
+            {dbInfo.filePath && onFileEncodingChange && (
+              <div className={styles.fileEncodingControl}>
+                <LocalFileEncodingSelect
+                  charset={dbInfo.fileCharset}
+                  bom={dbInfo.fileBom}
+                  onEncodingChange={onFileEncodingChange}
+                />
+              </div>
+            )}
+            <span ref={cursorPositionRef} className={styles.cursorPosition}>
+              Ln 1, Col 1
+            </span>
+          </div>
         </div>
       </div>
     );

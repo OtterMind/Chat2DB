@@ -15,26 +15,29 @@ export const useStyles = createStyles(({ css, token }) => ({
     flex: 1;
     min-height: 0;
   `,
-  cursorStatus: css`
+  editorStatusOverlay: css`
+    position: absolute;
+    right: 10px;
+    bottom: 4px;
+    z-index: 2;
     display: flex;
-    min-width: 0;
-    flex-shrink: 0;
+    max-width: calc(100% - 20px);
     align-items: center;
-    justify-content: flex-end;
     gap: 8px;
-    height: 24px;
-    padding: 0 10px;
     color: ${token.colorTextSecondary};
-    background: ${token.colorBgContainer};
     font-family: ${token.fontFamilyCode};
     font-size: 12px;
-    line-height: 24px;
     letter-spacing: 0;
-    user-select: none;
     overflow: hidden;
+    pointer-events: none;
+  `,
+  fileEncodingControl: css`
+    min-width: 0;
+    pointer-events: auto;
   `,
   cursorPosition: css`
     flex: 0 0 auto;
     white-space: nowrap;
+    user-select: none;
   `,
 }));
