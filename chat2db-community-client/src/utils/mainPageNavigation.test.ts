@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   createMainRootRoute,
   DEFAULT_MAIN_PAGE_ACTIVE_TAB,
+  readPersistedMainPageActiveTab,
+  resolveDesktopInitialMainPage,
   resolveInitialMainPage,
 } from './mainPageNavigation';
 
@@ -20,6 +22,51 @@ assert.equal(
   resolveInitialMainPage('', ''),
   'workspace',
   'workspace should be used when neither a route nor a persisted entry exists',
+);
+assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"dashboard"}}'),
+  'dashboard',
+  'the persisted main page should be read from the Zustand storage payload',
+);
+assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"settings"}}'),
+  undefined,
+  'non-navigation values should not be restored as a main page',
+);
+assert.equal(
+  readPersistedMainPageActiveTab('{invalid-json'),
+  undefined,
+  'invalid persisted state should fall back without blocking startup',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/', 'dashboard'),
+  { page: 'dashboard', pathName: '/dashboard' },
+  'desktop root startup should restore the last selected main page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/workspace', 'dashboard'),
+  { page: 'dashboard', pathName: '/dashboard' },
+  'a shallow desktop main route should not override the last selected page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/dashboard', undefined),
+  { page: 'dashboard', pathName: '/dashboard' },
+  'a shallow route should still initialize a desktop profile without persisted state',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/stream/session-1', 'dashboard'),
+  { page: 'stream', pathName: '/stream/session-1' },
+  'a chat-session deep link should take precedence over the last selected page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/dashboard/share/dashboard-1', 'workspace'),
+  { page: 'dashboard', pathName: '/dashboard/share/dashboard-1' },
+  'a dashboard deep link should take precedence over the last selected page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/settings/terminal', 'dashboard'),
+  { page: 'settings', pathName: '/settings/terminal' },
+  'a non-main explicit route should keep its full deep-link path',
 );
 assert.deepEqual(
   createMainRootRoute(true, '@/pages/main/CommunityMainPage'),
