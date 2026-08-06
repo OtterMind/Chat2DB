@@ -65,7 +65,7 @@ public class MysqlValueProcessor extends DefaultValueProcessor {
         if (value != null && !FUNCTION_SET.contains(value.toLowerCase())) {
             String dataTypeName = dataValue.getDataType() != null
                     ? dataValue.getDataType().getDataTypeName() : null;
-            if ("JSON".equalsIgnoreCase(dataTypeName)) {
+            if (MysqlColumnTypeEnum.JSON.name().equalsIgnoreCase(dataTypeName)) {
                 try {
                     JSON.parse(value);
                 } catch (JSONException e) {
