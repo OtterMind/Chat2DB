@@ -54,6 +54,16 @@ assert.deepEqual(
   'a shallow route should still initialize a desktop profile without persisted state',
 );
 assert.deepEqual(
+  resolveDesktopInitialMainPage('/', 'dashboard', ['workspace']),
+  { page: 'workspace', pathName: '/workspace' },
+  'an unavailable persisted page should fall back to an available main page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/dashboard', undefined, ['stream', 'workspace']),
+  { page: 'workspace', pathName: '/workspace' },
+  'an unavailable shallow route should fall back to the default available main page',
+);
+assert.deepEqual(
   resolveDesktopInitialMainPage('/stream/session-1', 'dashboard'),
   { page: 'stream', pathName: '/stream/session-1' },
   'a chat-session deep link should take precedence over the last selected page',

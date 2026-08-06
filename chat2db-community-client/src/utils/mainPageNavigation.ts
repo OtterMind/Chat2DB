@@ -1,6 +1,7 @@
 export const DEFAULT_MAIN_PAGE_ACTIVE_TAB = 'workspace';
 
-const RESTORABLE_MAIN_PAGE_TABS = new Set(['stream', 'workspace', 'dashboard']);
+const RESTORABLE_MAIN_PAGE_TABS = ['stream', 'workspace', 'dashboard'] as const;
+const RESTORABLE_MAIN_PAGE_TAB_SET = new Set<string>(RESTORABLE_MAIN_PAGE_TABS);
 
 const normalizeMainPagePath = (routePath?: string) => {
   const hashlessPath = (routePath || '').replace(/^#/, '');
@@ -20,20 +21,28 @@ export const readPersistedMainPageActiveTab = (serializedStore?: string | null) 
 
   try {
     const page = JSON.parse(serializedStore)?.state?.mainPageActiveTab;
-    return typeof page === 'string' && RESTORABLE_MAIN_PAGE_TABS.has(page) ? page : undefined;
+    return typeof page === 'string' && RESTORABLE_MAIN_PAGE_TAB_SET.has(page) ? page : undefined;
   } catch {
     return undefined;
   }
 };
 
-export const resolveDesktopInitialMainPage = (routePath?: string, persistedPage?: string) => {
+export const resolveDesktopInitialMainPage = (
+  routePath?: string,
+  persistedPage?: string,
+  availablePages: readonly string[] = RESTORABLE_MAIN_PAGE_TABS,
+) => {
   const normalizedPath = normalizeMainPagePath(routePath);
   const routeSegments = normalizedPath.split('/').filter(Boolean);
   const routePage = routeSegments[0] || '';
   const restoresLastSelection =
-    routeSegments.length === 0 || (routeSegments.length === 1 && RESTORABLE_MAIN_PAGE_TABS.has(routePage));
+    routeSegments.length === 0 || (routeSegments.length === 1 && RESTORABLE_MAIN_PAGE_TAB_SET.has(routePage));
+  const availablePageSet = new Set(availablePages);
+  const restoredPage = [persistedPage, routePage, DEFAULT_MAIN_PAGE_ACTIVE_TAB, ...availablePages].find(
+    (candidate) => candidate && availablePageSet.has(candidate),
+  );
   const page = restoresLastSelection
-    ? persistedPage || routePage || DEFAULT_MAIN_PAGE_ACTIVE_TAB
+    ? restoredPage || DEFAULT_MAIN_PAGE_ACTIVE_TAB
     : routePage || persistedPage || DEFAULT_MAIN_PAGE_ACTIVE_TAB;
 
   return {

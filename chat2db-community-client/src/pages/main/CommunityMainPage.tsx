@@ -218,7 +218,11 @@ function CommunityMainPage() {
         } catch {
           persistedPage = undefined;
         }
-        const initialLocation = resolveDesktopInitialMainPage(normalizedHashPath, persistedPage);
+        const initialLocation = resolveDesktopInitialMainPage(
+          normalizedHashPath,
+          persistedPage,
+          nextNavConfig.map((item) => `${item.key}`),
+        );
         page = initialLocation.page;
         pathName = initialLocation.pathName;
       } else {
