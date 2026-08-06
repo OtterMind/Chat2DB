@@ -24,7 +24,7 @@ const handleDataDisplay = (params: {
     field: index.toString(),
     title,
     showSort: false,
-    editor: canEdit ? resolveResultSetEditor(data.editorType) : undefined,
+    editor: canEdit ? resolveResultSetEditor(data.editorType, data.editorOptions, theme) : undefined,
     headerIcon: ['sort', 'filter'],
     sort: (a, b, _order): 0 | 1 | -1 => {
       if (a === null || a === undefined) return _order === 'asc' ? -1 : 1;
@@ -130,11 +130,15 @@ const handleDataDisplay = (params: {
 };
 
 // Convert data into the format required by CanvasTable.
-const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'prefixCls'>; dataTableSettings: DataTableSettings }) => {
+const dataTreating = (params: {
+  data: IManageResultData;
+  theme: Omit<Theme, 'prefixCls'>;
+  dataTableSettings: DataTableSettings;
+}) => {
   const { data, theme, dataTableSettings } = params;
   const columns: any =
     data?.headerList?.slice(1).map((item, index) => {
-      return handleDataDisplay({ data: item, index: index+1, theme, canEdit: data.canEdit, dataTableSettings });
+      return handleDataDisplay({ data: item, index: index + 1, theme, canEdit: data.canEdit, dataTableSettings });
     }) || [];
 
   const records =
@@ -151,7 +155,7 @@ const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'pre
       record['__CHAT2DB_CELL_META__'] = data?.dataList?.[rowIndex] || [];
       return record;
     }) || [];
-  
+
   return [columns, records];
 };
 

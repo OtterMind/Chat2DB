@@ -12,6 +12,8 @@ public enum ResultSetEditorTypeEnum implements IBaseEnum<String> {
     TIME,
     DATETIME,
     TIMESTAMP,
+    SELECT,
+    MULTI_SELECT,
     ;
 
     @Override

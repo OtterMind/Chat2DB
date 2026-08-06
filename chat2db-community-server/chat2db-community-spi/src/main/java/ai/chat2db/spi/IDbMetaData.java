@@ -14,6 +14,7 @@ import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableMeta;
 import ai.chat2db.community.domain.api.model.metadata.Trigger;
 import ai.chat2db.community.domain.api.model.metadata.Type;
+import ai.chat2db.community.domain.api.model.result.ResultSetEditorMetadata;
 import ai.chat2db.community.domain.api.model.view.ModifyViewConfiguration;
 import ai.chat2db.spi.enums.UnsupportedKeyOperationsEnum;
 import ai.chat2db.spi.model.request.ColumnMetadataRequest;
@@ -89,6 +90,19 @@ public interface IDbMetaData {
 
     default String resolveResultSetEditorType(String typeName, Integer type) {
         return "TEXT";
+    }
+
+    /**
+     * Resolves editor metadata from an already-loaded table column. Dialects that do not expose
+     * structured editor options naturally keep the legacy editor type with an empty option list.
+     */
+    default ResultSetEditorMetadata resolveResultSetEditorMetadata(TableColumn column) {
+        String editorType = column == null ? "TEXT"
+                : resolveResultSetEditorType(column.getColumnType(), column.getDataType());
+        return ResultSetEditorMetadata.builder()
+                .editorType(editorType)
+                .editorOptions(List.of())
+                .build();
     }
 
     ISQLIdentifierProcessor getSQLIdentifierProcessor();

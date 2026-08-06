@@ -9,6 +9,7 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.community.domain.api.enums.plugin.ResultSetEditorTypeEnum;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.Header;
+import ai.chat2db.community.domain.api.model.result.ResultSetEditorMetadata;
 import ai.chat2db.community.domain.api.model.metadata.PrimaryKey;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -20,10 +21,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -75,23 +78,34 @@ public class ExecuteResultHeaderEnhancer implements IDbExecuteResultEnhanceServi
             if (CollectionUtils.isEmpty(columns)) {
                 return headers;
             }
-            Map<String, TableColumn> columnMap = columns.stream().collect(
-                    Collectors.toMap(TableColumn::getName, tableColumn -> tableColumn, (left, right) -> left));
+            Map<String, TableColumn> columnMap = new HashMap<>();
+            Map<String, List<TableColumn>> caseInsensitiveColumnMap = new HashMap<>();
+            for (TableColumn column : columns) {
+                if (StringUtils.isBlank(column.getName())) {
+                    continue;
+                }
+                columnMap.putIfAbsent(column.getName(), column);
+                caseInsensitiveColumnMap.computeIfAbsent(normalizeColumnName(column.getName()), key -> new ArrayList<>())
+                        .add(column);
+            }
 
             Connection connection = Chat2DBContext.getConnection();
             IDbMetaData metaData = Chat2DBContext.getDbMetaData();
             List<PrimaryKey> primaryKeys = metaData.getPrimaryKeys(connection,
                     new TableMetadataRequest(tableQueryParam.getDatabaseName(), tableQueryParam.getSchemaName(),
                             tableQueryParam.getTableName()));
-            for (PrimaryKey primaryKey : primaryKeys) {
-                TableColumn tableColumn = columnMap.get(primaryKey.getColumnName());
-                if (Objects.nonNull(tableColumn)) {
-                    tableColumn.setPrimaryKey(true);
+            if (CollectionUtils.isNotEmpty(primaryKeys)) {
+                for (PrimaryKey primaryKey : primaryKeys) {
+                    TableColumn tableColumn = findColumn(columnMap, caseInsensitiveColumnMap,
+                            primaryKey.getColumnName());
+                    if (Objects.nonNull(tableColumn)) {
+                        tableColumn.setPrimaryKey(true);
+                    }
                 }
             }
-
             for (Header header : headers) {
-                TableColumn tableColumn = columnMap.get(header.getName());
+                TableColumn tableColumn = findColumn(columnMap, caseInsensitiveColumnMap,
+                        header.getColumnName(), header.getName());
                 if (tableColumn != null) {
                     header.setPrimaryKey(tableColumn.getPrimaryKey());
                     header.setComment(tableColumn.getComment());
@@ -100,14 +114,46 @@ public class ExecuteResultHeaderEnhancer implements IDbExecuteResultEnhanceServi
                     header.setColumnSize(tableColumn.getColumnSize());
                     header.setDecimalDigits(tableColumn.getDecimalDigits());
                     header.setColumnType(tableColumn.getColumnType());
-                    ResultSetEditorTypeEnum editorType = ResultSetEditorTypeEnum.from(metaData.resolveResultSetEditorType(
-                            tableColumn.getColumnType(), tableColumn.getDataType()));
-                    header.setEditorType(editorType.getCode());
+                    enrichEditorMetadata(header, tableColumn, metaData);
                 }
             }
         } catch (Exception e) {
             log.error("setColumnInfo error:", e);
         }
         return headers;
+    }
+
+    private void enrichEditorMetadata(Header header, TableColumn tableColumn, IDbMetaData metaData) {
+        try {
+            ResultSetEditorMetadata editorMetadata = metaData.resolveResultSetEditorMetadata(tableColumn);
+            ResultSetEditorTypeEnum editorType = ResultSetEditorTypeEnum.from(editorMetadata.getEditorType());
+            header.setEditorType(editorType.getCode());
+            header.setEditorOptions(editorMetadata.getEditorOptions());
+        } catch (Exception e) {
+            log.warn("Resolve result-set editor metadata failed for column: {}", tableColumn.getName(), e);
+        }
+    }
+
+    private TableColumn findColumn(Map<String, TableColumn> columnMap,
+                                   Map<String, List<TableColumn>> caseInsensitiveColumnMap,
+                                   String... candidateNames) {
+        for (String candidateName : candidateNames) {
+            if (StringUtils.isBlank(candidateName)) {
+                continue;
+            }
+            TableColumn exactMatch = columnMap.get(candidateName);
+            if (exactMatch != null) {
+                return exactMatch;
+            }
+            List<TableColumn> caseInsensitiveMatches = caseInsensitiveColumnMap.get(normalizeColumnName(candidateName));
+            if (caseInsensitiveMatches != null && caseInsensitiveMatches.size() == 1) {
+                return caseInsensitiveMatches.get(0);
+            }
+        }
+        return null;
+    }
+
+    private String normalizeColumnName(String columnName) {
+        return columnName.toLowerCase(Locale.ROOT);
     }
 }
