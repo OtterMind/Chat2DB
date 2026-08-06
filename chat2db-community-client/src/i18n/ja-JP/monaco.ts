@@ -2,6 +2,7 @@ export default {
   'monaco.group.appearance': '外観とフォント',
   'monaco.group.display': 'エディタ表示',
   'monaco.group.completion': '補完と操作',
+  'monaco.group.behavior': 'エディターの動作',
   'monaco.group.execution': 'SQL 実行',
   'monaco.theme': 'エディターテーマ',
   'monaco.theme.tooltip':
@@ -76,6 +77,9 @@ export default {
   'monaco.errorContinue.tooltip': '複数の SQL 文を実行するとき、1 つが失敗しても残りの文を続けて実行します。',
   'monaco.errorContinue.true': 'はい',
   'monaco.errorContinue.false': 'いいえ',
+  'monaco.confirmBeforeClose': '閉じる前に確認',
+  'monaco.confirmBeforeClose.tooltip':
+    'クエリまたはローカル SQL ファイルに未保存の変更がある場合、タブを閉じる前に保存するか確認します。',
   'monaco.tableDDLTriggerMode': 'テーブルDDLを表示',
   'monaco.tableDDLTriggerMode.tooltip':
     'テーブル名へのホバー時、または {1} を押しながらクリックしたときに DDL を表示します。',

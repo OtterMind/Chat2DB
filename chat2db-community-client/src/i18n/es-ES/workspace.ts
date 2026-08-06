@@ -262,6 +262,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     'Cambiar la codificación vuelve a cargar el archivo desde el disco y descarta los cambios sin guardar.',
   'workspace.fileEncoding.reloadConfirm': 'Cambiar codificación',
+  'workspace.editorClose.title': '¿Quieres guardar los cambios en "{1}"?',
+  'workspace.editorClose.content': 'Los cambios se perderán si no los guardas.',
+  'workspace.editorClose.dontSave': 'No guardar',
   'workspace.terminal.title': 'Terminal',
   'workspace.terminal.stop': 'Detener',
   'workspace.terminal.exited': 'El proceso terminó con el código',

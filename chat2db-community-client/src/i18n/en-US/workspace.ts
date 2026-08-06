@@ -262,6 +262,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     'Changing the file encoding reloads the file from disk and discards your unsaved changes.',
   'workspace.fileEncoding.reloadConfirm': 'Change encoding',
+  'workspace.editorClose.title': 'Do you want to save changes to "{1}"?',
+  'workspace.editorClose.content': "Your changes will be lost if you don't save them.",
+  'workspace.editorClose.dontSave': "Don't Save",
   'workspace.terminal.title': 'Terminal',
   'workspace.terminal.stop': 'Stop',
   'workspace.terminal.exited': 'Process exited with code',

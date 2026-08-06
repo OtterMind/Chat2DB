@@ -261,6 +261,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     '파일 인코딩을 변경하면 디스크에서 파일을 다시 불러오며 저장하지 않은 변경 사항이 삭제됩니다.',
   'workspace.fileEncoding.reloadConfirm': '인코딩 변경',
+  'workspace.editorClose.title': '"{1}"의 변경 사항을 저장하시겠습니까?',
+  'workspace.editorClose.content': '저장하지 않으면 변경 사항이 손실됩니다.',
+  'workspace.editorClose.dontSave': '저장 안 함',
   'workspace.terminal.title': '터미널',
   'workspace.terminal.stop': '종료',
   'workspace.terminal.exited': '프로세스 종료 코드',

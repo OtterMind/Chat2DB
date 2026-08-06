@@ -262,6 +262,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     'ファイルの文字コードを変更すると、ディスクからファイルが再読み込みされ、未保存の変更は破棄されます。',
   'workspace.fileEncoding.reloadConfirm': '文字コードを変更',
+  'workspace.editorClose.title': '"{1}" への変更を保存しますか？',
+  'workspace.editorClose.content': '保存しない場合、変更内容は失われます。',
+  'workspace.editorClose.dontSave': '保存しない',
   'workspace.terminal.title': 'ターミナル',
   'workspace.terminal.stop': '終了',
   'workspace.terminal.exited': 'プロセス終了コード',

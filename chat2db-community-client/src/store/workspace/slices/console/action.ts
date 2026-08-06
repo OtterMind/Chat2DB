@@ -10,7 +10,7 @@ import { useIndexDBStore } from '@/store/indexDB';
 import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
-import { confirmAndKillTerminalTabs } from '@/utils/terminalSession';
+import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
 import { applyWorkspaceTabBoundInfo, buildConsoleDefaultTabName } from '../../utils/consoleTabName';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
@@ -307,7 +307,7 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     }
     if (
       activeWorkspaceTab &&
-      !(await confirmAndKillTerminalTabs([activeWorkspaceTab], workspaceTabList))
+      !(await confirmWorkspaceTabsClose([activeWorkspaceTab], workspaceTabList, editorList || {}))
     ) {
       return;
     }

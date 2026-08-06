@@ -46,6 +46,11 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
         settingItem('editor.completionAcceptKey', 'monaco.completionAcceptKey', ['completion key', 'enter', 'tab']),
         settingItem('editor.completion', 'monaco.completion.all', ['qualified completion', 'autocomplete']),
         settingItem('editor.tableDDLTriggerMode', 'monaco.tableDDLTriggerMode', ['ddl', 'hover', 'click']),
+        settingItem('editor.confirmBeforeClose', 'monaco.confirmBeforeClose', [
+          'close editor',
+          'unsaved changes',
+          'confirmation',
+        ]),
         settingItem('editor.errorContinue', 'monaco.errorContinue', ['continue on error', 'execution']),
       ];
     case 'terminal':

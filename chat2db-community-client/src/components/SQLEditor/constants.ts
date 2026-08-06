@@ -29,4 +29,5 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   stickyScroll: {
     enabled: true,
   },
+  confirmBeforeClose: true,
 };
