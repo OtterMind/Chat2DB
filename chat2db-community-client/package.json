@@ -66,7 +66,7 @@
     "test:local-file-tab-title": "tsx src/pages/main/workspace/utils/localTextFile.test.ts",
     "test:local-file-tab-refresh": "tsx src/store/workspace/utils/localFileWorkspaceTab.test.ts",
     "test:local-file-encoding": "tsx src/utils/localFileEncoding.test.ts && yarn test:local-file-tab-refresh && tsx src/store/workspace/utils/workspaceTabPersistence.test.ts",
-    "test:main-page-navigation": "tsx src/utils/mainPageNavigation.test.ts",
+    "test:main-page-navigation": "tsx src/utils/mainPageNavigation.test.ts && tsx src/pages/main/navigationItems.test.ts",
     "test:sql-completion-context": "tsx src/components/SQLEditor/core/sqlCompletionContext.test.ts",
     "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts && tsx src/components/SQLEditor/helper/sqlInsertValueDefaults.test.ts",
     "test:console-tab-name": "tsx src/store/workspace/utils/consoleTabName.test.ts",
