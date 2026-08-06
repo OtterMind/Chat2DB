@@ -1,9 +1,17 @@
 package ai.chat2db.community.domain.api.service.ai;
 
+import ai.chat2db.community.domain.api.model.ai.TableSchemaResult;
+import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.Schema;
+import ai.chat2db.community.domain.api.model.metadata.SimpleTable;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+
+import java.util.List;
 
 /**
  * Provides AI tool operations over datasource metadata and SQL execution.
@@ -11,53 +19,53 @@ import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 public interface IAiToolService {
 
     /**
-     * Returns datasource context text for AI tools.
+     * Returns datasource metadata for AI tools.
      *
      * @param aiToolContextRequest AI tool context parameters.
-     * @return datasource context text.
+     * @return datasource metadata.
      */
-    String listAllDataSources(AiToolContextRequest aiToolContextRequest);
+    List<WorkspaceDataSource> listAllDataSources(AiToolContextRequest aiToolContextRequest);
 
     /**
-     * Returns table context text for AI tools.
+     * Returns table metadata for AI tools.
      *
      * @param aiListTablesRequest AI table listing parameters.
-     * @return table context text.
+     * @return table metadata.
      */
-    String listAllTables(AiListTablesRequest aiListTablesRequest);
+    List<SimpleTable> listAllTables(AiListTablesRequest aiListTablesRequest);
 
     /**
-     * Returns database context text for AI tools.
+     * Returns database metadata for AI tools.
      *
      * @param dataSourceId datasource identifier.
      * @param aiToolContextRequest AI tool context parameters.
-     * @return database context text.
+     * @return database metadata.
      */
-    String listAllDatabases(Long dataSourceId, AiToolContextRequest aiToolContextRequest);
+    List<Database> listAllDatabases(Long dataSourceId, AiToolContextRequest aiToolContextRequest);
 
     /**
-     * Returns schema context text for AI tools.
+     * Returns schema metadata for AI tools.
      *
      * @param databaseName database name that scopes the lookup.
      * @param dataSourceId datasource identifier.
      * @param aiToolContextRequest AI tool context parameters.
-     * @return schema context text.
+     * @return schema metadata.
      */
-    String listAllSchemas(String databaseName, Long dataSourceId, AiToolContextRequest aiToolContextRequest);
+    List<Schema> listAllSchemas(String databaseName, Long dataSourceId, AiToolContextRequest aiToolContextRequest);
 
     /**
      * Executes SQL for an AI tool request.
      *
      * @param aiExecuteSqlRequest AI SQL execution parameters.
-     * @return SQL execution context text.
+     * @return SQL execution result sets.
      */
-    String executeSql(AiExecuteSqlRequest aiExecuteSqlRequest);
+    List<ExecuteResponse> executeSql(AiExecuteSqlRequest aiExecuteSqlRequest);
 
     /**
-     * Returns table schema context text for AI tools.
+     * Returns table schema metadata for AI tools.
      *
      * @param aiGetTablesSchemaRequest AI table schema lookup parameters.
-     * @return table schema context text.
+     * @return table schema results.
      */
-    String getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest);
+    List<TableSchemaResult> getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest);
 }
