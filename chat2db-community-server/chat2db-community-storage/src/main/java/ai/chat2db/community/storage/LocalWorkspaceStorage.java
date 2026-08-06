@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
+import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import ai.chat2db.community.domain.api.model.er.ERPosition;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
 import ai.chat2db.community.domain.api.model.workspace.Node;
@@ -63,6 +64,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     public Long createDataSource(WorkspaceDataSource dataSource) {
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         dataSource.setPassword(encryptString(dataSource.getPassword()));
+        encryptSslSensitiveFields(dataSource.getSsl());
         dataSource.setId(DataSourceStorage.INSTANCE.generateId());
         Long id = DataSourceStorage.INSTANCE.save(storageConverter.workspace2dataSource(dataSource));
         if (dataSource.getSpaceId() != null && dataSource.getSpaceId() > 0) {
@@ -79,12 +81,14 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public Long updateDataSource(WorkspaceDataSource dataSource) {
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
+        DataSource oldDataSource = DataSourceStorage.INSTANCE.getById(dataSource.getId());
         if (dataSource.getPassword() != null && !dataSource.getPassword().isEmpty()) {
             dataSource.setPassword(encryptString(dataSource.getPassword()));
         } else {
-            DataSource oldDataSource = DataSourceStorage.INSTANCE.getById(dataSource.getId());
             dataSource.setPassword(oldDataSource == null ? null : oldDataSource.getPassword());
         }
+        dataSource.setSsl(mergeAndEncryptSsl(dataSource.getSsl(),
+                oldDataSource == null ? null : oldDataSource.getSsl()));
         DataSourceStorage.INSTANCE.update(storageConverter.workspace2dataSource(dataSource));
         return dataSource.getId();
     }
@@ -238,6 +242,68 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
             return password;
         }
         return AesGcmUtil.configured().encrypt(password);
+    }
+
+    /**
+     * Encrypt the secret TLS fields in place on create. Public material (CA/client cert PEM,
+     * keystore type, mode) is left cleartext.
+     */
+    private void encryptSslSensitiveFields(SSLInfo ssl) {
+        if (ssl == null) {
+            return;
+        }
+        ssl.setClientPrivateKeyPem(encryptString(ssl.getClientPrivateKeyPem()));
+        ssl.setClientKeyPassword(encryptString(ssl.getClientKeyPassword()));
+        ssl.setKeyStoreBytes(encryptString(ssl.getKeyStoreBytes()));
+        ssl.setKeyStorePassword(encryptString(ssl.getKeyStorePassword()));
+    }
+
+    /**
+     * Reconcile incoming TLS material against the previously-saved (still-encrypted) material on
+     * update, mirroring the password preserve-if-blank rule.
+     *
+     * <p>Secret fields (private key, key password, keystore bytes, keystore password): a blank
+     * incoming value keeps the previous encrypted value, so the user does not have to re-upload
+     * the key on every edit; a non-blank incoming value is encrypted and replaces it.
+     *
+     * <p>Public fields (mode, CA PEM, client cert PEM, keystore type): the incoming value always
+     * wins — an empty string clears the previous value, satisfying "replacing or deleting TLS
+     * material makes the previous material unavailable".
+     *
+     * @param incoming      the SSLInfo from the update request (secrets still cleartext)
+     * @param oldEncrypted  the previously-saved SSLInfo (secrets still encrypted), may be null
+     * @return the SSLInfo to persist, or null when neither side has TLS configured
+     */
+    private SSLInfo mergeAndEncryptSsl(SSLInfo incoming, SSLInfo oldEncrypted) {
+        if (incoming == null) {
+            return oldEncrypted;
+        }
+        if (oldEncrypted == null) {
+            encryptSslSensitiveFields(incoming);
+            return incoming;
+        }
+        // Public fields: incoming wins (empty string clears).
+        oldEncrypted.setTlsMode(incoming.getTlsMode());
+        oldEncrypted.setCaPem(incoming.getCaPem());
+        oldEncrypted.setClientCertPem(incoming.getClientCertPem());
+        oldEncrypted.setKeyStoreType(incoming.getKeyStoreType());
+        // Secret fields: preserve the previous encrypted value when blank, otherwise re-encrypt.
+        oldEncrypted.setClientPrivateKeyPem(
+                preserveOrEncrypt(incoming.getClientPrivateKeyPem(), oldEncrypted.getClientPrivateKeyPem()));
+        oldEncrypted.setClientKeyPassword(
+                preserveOrEncrypt(incoming.getClientKeyPassword(), oldEncrypted.getClientKeyPassword()));
+        oldEncrypted.setKeyStoreBytes(
+                preserveOrEncrypt(incoming.getKeyStoreBytes(), oldEncrypted.getKeyStoreBytes()));
+        oldEncrypted.setKeyStorePassword(
+                preserveOrEncrypt(incoming.getKeyStorePassword(), oldEncrypted.getKeyStorePassword()));
+        return oldEncrypted;
+    }
+
+    private String preserveOrEncrypt(String incomingCleartext, String oldEncrypted) {
+        if (incomingCleartext == null || incomingCleartext.isEmpty()) {
+            return oldEncrypted;
+        }
+        return encryptString(incomingCleartext);
     }
 
     private int normalizePageNo(Integer pageNo) {

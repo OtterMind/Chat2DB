@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.enums.plugin.AuthenticationTypeEnum;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePreConnectRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import ai.chat2db.community.domain.api.service.db.IDbDataSourceService;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
@@ -78,7 +79,28 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
                 && !AuthenticationTypeEnum.NONE.getCode().equals(request.getAuthenticationType())) {
             request.setPassword(savedDataSource.getPassword());
         }
+        // Recover saved TLS material when the request did not resubmit it (e.g. test-from-saved).
+        // savedDataSource.getSsl() is already decrypted by queryDisplayDataSourceById.
+        if (request.getId() != null
+                && savedDataSource != null
+                && isSslEffectivelyBlank(request.getSsl())) {
+            request.setSsl(savedDataSource.getSsl());
+        }
         dataSourceService.preConnect(request);
+    }
+
+    private boolean isSslEffectivelyBlank(SSLInfo ssl) {
+        if (ssl == null) {
+            return true;
+        }
+        return StringUtils.isBlank(ssl.getTlsMode())
+                && StringUtils.isBlank(ssl.getCaPem())
+                && StringUtils.isBlank(ssl.getClientCertPem())
+                && StringUtils.isBlank(ssl.getClientPrivateKeyPem())
+                && StringUtils.isBlank(ssl.getClientKeyPassword())
+                && StringUtils.isBlank(ssl.getKeyStoreType())
+                && StringUtils.isBlank(ssl.getKeyStoreBytes())
+                && StringUtils.isBlank(ssl.getKeyStorePassword());
     }
 
     @Override
@@ -200,6 +222,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         }
         if ("LOCAL".equalsIgnoreCase(dataSource.getStorageType()) || ConfigUtils.isLocalPersistence()) {
             dataSource.setPassword(decryptString(dataSource.getPassword()));
+            decryptSslSensitiveFields(dataSource.getSsl(), false, null);
             return;
         }
         Context context = ContextUtils.queryContext();
@@ -219,6 +242,29 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         if (StringUtils.isNotBlank(dataSource.getUser())) {
             dataSource.setUser(decryptToken(dataSource.getUser(), privateKey));
         }
+        decryptSslSensitiveFields(dataSource.getSsl(), true, privateKey);
+    }
+
+    /**
+     * Decrypt the secret TLS fields. LOCAL storage uses the shared AES key (same AAD as the
+     * datasource password); cloud storage uses the organization RSA token. Public material
+     * (CA/client cert PEM, keystore type, mode) is stored cleartext and left untouched.
+     */
+    private void decryptSslSensitiveFields(SSLInfo ssl, boolean cloud, PrivateKey privateKey) {
+        if (ssl == null) {
+            return;
+        }
+        ssl.setClientPrivateKeyPem(decryptSecret(ssl.getClientPrivateKeyPem(), cloud, privateKey));
+        ssl.setClientKeyPassword(decryptSecret(ssl.getClientKeyPassword(), cloud, privateKey));
+        ssl.setKeyStoreBytes(decryptSecret(ssl.getKeyStoreBytes(), cloud, privateKey));
+        ssl.setKeyStorePassword(decryptSecret(ssl.getKeyStorePassword(), cloud, privateKey));
+    }
+
+    private String decryptSecret(String value, boolean cloud, PrivateKey privateKey) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        return cloud ? decryptToken(value, privateKey) : decryptString(value);
     }
 
     private PrivateKey stringToPrivateKey(String privateKeyString) {
