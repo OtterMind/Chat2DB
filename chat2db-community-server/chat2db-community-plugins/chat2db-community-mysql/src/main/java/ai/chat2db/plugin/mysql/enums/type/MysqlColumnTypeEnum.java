@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_KEYWORD;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_SPACE_SINGLE_QUOTE;
+import static ai.chat2db.plugin.mysql.constant.MysqlMetaDataConstants.SQL_INVISIBLE;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlColumnTypeEnumConstants.*;
 @Getter
@@ -187,7 +188,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         script.append(buildComment(column, type)).append(" ");
 
         if (column.getVisible() != null && !column.getVisible()) {
-            script.append("INVISIBLE").append(" ");
+            script.append(SQL_INVISIBLE).append(" ");
         }
 
         return script.toString();
