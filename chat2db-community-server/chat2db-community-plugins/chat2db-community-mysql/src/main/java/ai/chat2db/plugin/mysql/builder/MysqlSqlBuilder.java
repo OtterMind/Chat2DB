@@ -49,6 +49,8 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_PARTITION_S
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SECURITY;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_VIEW_IF_EXISTS;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_VIEW;
 
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
@@ -533,7 +535,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
     @Override
     public String buildDropView(String databaseName, String schemaName, String viewName) {
         StringBuilder sql = new StringBuilder();
-        sql.append("DROP VIEW IF EXISTS ");
+        sql.append(SQL_DROP_VIEW_IF_EXISTS);
         if (StringUtils.isNotBlank(databaseName)) {
             sql.append(quoteMysqlIdentifier(databaseName)).append(SQLConstants.DOT);
         }
@@ -544,7 +546,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
     @Override
     public String buildAlterView(ModifyView modifyView) {
         StringBuilder sql = new StringBuilder();
-        sql.append("ALTER VIEW ");
+        sql.append(SQL_ALTER_VIEW);
         String databaseName = modifyView.getDatabaseName();
         if (StringUtils.isNotBlank(databaseName)) {
             sql.append(quoteMysqlIdentifier(databaseName)).append(SQLConstants.DOT);
