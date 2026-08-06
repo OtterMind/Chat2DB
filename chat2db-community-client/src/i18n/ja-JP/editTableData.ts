@@ -4,8 +4,6 @@ export default {
   'editTableData.tips.deleteRow': '行を削除',
   'editTableData.tips.revert': '元に戻す',
   'editTableData.tips.previewPendingChanges': '保留中の変更をプレビュー',
-  'editTableData.tips.showComment': 'コメントを表示',
-  'editTableData.tips.hideComment': 'コメントを非表示',
   'editTableData.tips.submit': '送信',
   'editTable.placeholder.columnName': '日文名を入力します',
 };

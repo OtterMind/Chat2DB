@@ -239,7 +239,7 @@ export function completeWebSqlExecution(
       ...record,
       status: results.some((result) => result.success === false) ? ('failed' as const) : ('success' as const),
       finishedAtEpochMs,
-      durationMs: maximumDuration(results) ?? Math.max(0, finishedAtEpochMs - startedAtEpochMs),
+      durationMs: totalDuration(results) ?? Math.max(0, finishedAtEpochMs - startedAtEpochMs),
     };
   });
 
@@ -545,9 +545,9 @@ function createResultOutput(
     (fallbackSequence === undefined ? nextResultSequence(record) : fallbackSequence + 1);
   const rawResultKey = event?.resultKey || text(result.extra?.resultKey) || undefined;
   const resultKey = (result.headerList?.length || 0) > 1 ? rawResultKey : undefined;
-  const outputIdentity = rawResultKey
-    ? `key:${rawResultKey}`
-    : explicitResultSequence !== undefined
+    const outputIdentity = rawResultKey
+      ? `key:${rawResultKey}`
+      : explicitResultSequence !== undefined
       ? `sequence:${explicitResultSequence}`
       : event?.eventSequence !== undefined
         ? `event:${event.eventSequence}`
@@ -566,7 +566,7 @@ function createResultOutput(
     success: result.success !== false,
     rowCount,
     updateCount: result.updateCount,
-    durationMs: result.duration,
+    durationMs: result.executionMetrics?.totalDurationMs,
     executionMetrics: result.executionMetrics,
     message: truncateMessage(text(result.message)) || undefined,
   };
@@ -739,9 +739,11 @@ function eventResultSequence(event: SqlExecutionEvent) {
   );
 }
 
-function maximumDuration(results: IManageResultData[]) {
-  const durations = results.map((result) => result.duration).filter((value): value is number => typeof value === 'number');
-  return durations.length ? Math.max(...durations) : undefined;
+function totalDuration(results: IManageResultData[]) {
+  const durations = results
+    .map((result) => result.executionMetrics?.totalDurationMs)
+    .filter((value): value is number => typeof value === 'number');
+  return durations.length ? durations.reduce((total, duration) => total + duration, 0) : undefined;
 }
 
 function idFor(executionId: string, statementSequence: number) {

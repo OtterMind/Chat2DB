@@ -36,6 +36,11 @@ import {
 } from '@/store/workspace/utils/resultInspector';
 import { staticMessage } from '@chat2db/ui';
 import { X } from 'lucide-react';
+import {
+  applyResultSearchVisibilityAction,
+  getResultSearchVisibility,
+  RESULT_SEARCH_VISIBLE_BY_DEFAULT,
+} from './resultSearchVisibility';
 
 interface IProps {
   resultData: IManageResultData;
@@ -61,7 +66,7 @@ export default memo<IProps>(
     const statusBarRef = useRef<StatusBarRef>(null);
     const [executeErrorMessage, setExecuteErrorMessage] = useState<string | null>(null);
     const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
-    const [showFESearch, setShowFESearch] = useState(true);
+    const [showFESearch, setShowFESearch] = useState(RESULT_SEARCH_VISIBLE_BY_DEFAULT);
     const [activeFilterCount, setActiveFilterCount] = useState(0);
     const resultSetRef = useRef<HTMLDivElement>(null);
     const searchAreaId = useMemo(() => uuidv4(), []);
@@ -214,16 +219,21 @@ export default memo<IProps>(
           }
           return;
         }
-        if (e.key === 'Escape') {
-          feSearchRef.current?.close();
-          return;
-        }
-        if (isShortcutEventMatch(e, shortcutConfig[ShortcutAction.ResultSearch].binding)) {
-          setShowFESearch(true);
-          e.preventDefault();
-          setTimeout(() => {
-            feSearchRef.current?.focus();
+        const resultSearchAction =
+          e.key === 'Escape'
+            ? 'close'
+            : isShortcutEventMatch(e, shortcutConfig[ShortcutAction.ResultSearch].binding)
+            ? 'open'
+            : null;
+        if (resultSearchAction) {
+          applyResultSearchVisibilityAction(resultSearchAction, {
+            close: () => feSearchRef.current?.close(),
+            defer: (callback) => setTimeout(callback),
+            focus: () => feSearchRef.current?.focus(),
+            open: () => setShowFESearch(getResultSearchVisibility('open')),
+            preventDefault: () => e.preventDefault(),
           });
+          return;
         }
         if (isShortcutEventMatch(e, shortcutConfig[ShortcutAction.ResultSubmit].binding)) {
           e.preventDefault();
@@ -411,7 +421,7 @@ export default memo<IProps>(
     }, [openRowInspector, openValueInspector, resultData]);
 
     const handleCloseFESearch = useCallback(() => {
-      setShowFESearch(false);
+      setShowFESearch(getResultSearchVisibility('close'));
     }, []);
 
     const handleClearAllFilters = useCallback(() => {

@@ -12,7 +12,6 @@ import useOperationRecord, { OperationRecordUtils } from './hooks/useOperationRe
 import useFilterAndSort from './hooks/useFilterAndSort';
 import useHeaderTooltip from './hooks/useHeaderTooltip';
 import { ITableOperationUtils } from './typings';
-import { useGlobalStore } from '@/store/global';
 
 interface IProps {
   className?: string;
@@ -56,10 +55,6 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     theme,
   });
 
-  const { dataTableSettings } = useGlobalStore((s) => ({
-    dataTableSettings: s.dataTableSettings,
-  }));
-
   // Filter and sort
   const { activeFilterCount, clearAllFilters } = useFilterAndSort({
     theme,
@@ -72,8 +67,8 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   const headerTooltip = useHeaderTooltip({ tableInstance });
 
   const [columns, records] = useMemo(() => {
-    return dataTreating({ data: resultData, theme, dataTableSettings });
-  }, [resultData, theme.appearance, dataTableSettings]);
+    return dataTreating({ data: resultData, theme });
+  }, [resultData, theme.appearance]);
 
   useEffect(() => {
     onOperationChange?.(hasOperationRecord);

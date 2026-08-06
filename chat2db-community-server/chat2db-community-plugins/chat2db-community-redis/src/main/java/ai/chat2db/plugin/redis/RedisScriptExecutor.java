@@ -16,10 +16,10 @@ import ai.chat2db.community.domain.api.model.result.Header;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.ResultSetUtils;
 import ai.chat2db.spi.util.SqlUtils;
-import cn.hutool.core.date.TimeInterval;
 import com.alibaba.druid.DbType;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
@@ -176,10 +176,13 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         Connection connection = Chat2DBContext.getConnection();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            TimeInterval timeInterval = new TimeInterval();
+            long startedAtEpochMs = System.currentTimeMillis();
+            long executeStartedNanos = System.nanoTime();
             int n = stmt.executeUpdate();
+            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
             executeResult.setUpdateCount(n);
-            executeResult.setDuration(timeInterval.interval());
+            executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, 0L, 0));
         } catch (Exception e) {
             log.error(RedisConstants.LOG_EXECUTE_UPDATE_ERROR, sql, e);
             throw new IllegalStateException("Redis update command failed, sql=" + sql, e);
@@ -191,10 +194,13 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
     public ExecuteResponse executeUpdate(String sql, Connection connection, int n) {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            TimeInterval timeInterval = new TimeInterval();
+            long startedAtEpochMs = System.currentTimeMillis();
+            long executeStartedNanos = System.nanoTime();
             int affectedRows = stmt.executeUpdate();
+            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
             executeResult.setUpdateCount(affectedRows);
-            executeResult.setDuration(timeInterval.interval());
+            executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, 0L, 0));
         } catch (Exception e) {
             log.error(RedisConstants.LOG_EXECUTE_UPDATE_ERROR, sql, e);
             throw new IllegalStateException("Redis update command failed, sql=" + sql, e);
@@ -211,16 +217,22 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
-            TimeInterval timeInterval = new TimeInterval();
+            long startedAtEpochMs = System.currentTimeMillis();
+            long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
+            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            long fetchDurationNanos = 0L;
             executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
             if (query) {
+                long fetchStartedNanos = System.nanoTime();
                 executeResult = buildQueryCommandResult(stmt, sql);
+                fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
             } else {
-                executeResult.setDuration(timeInterval.interval());
                 executeResult.setUpdateCount(stmt.getUpdateCount());
             }
-            executeResult.setDuration(timeInterval.interval());
+            executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
+                    CollectionUtils.size(executeResult.getDataList())));
         }
         return executeResult;
     }

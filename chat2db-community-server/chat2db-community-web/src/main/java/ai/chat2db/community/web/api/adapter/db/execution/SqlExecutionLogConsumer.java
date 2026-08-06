@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.operation.SqlOperationLogRecord;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import org.apache.commons.lang3.StringUtils;
@@ -153,8 +154,9 @@ public class SqlExecutionLogConsumer implements ISqlExecutionResultConsumer {
         long duration = 0L;
         boolean hasDuration = false;
         for (ExecuteResponse result : results) {
-            if (result.getDuration() != null) {
-                duration += result.getDuration();
+            ExecutionMetrics executionMetrics = result.getExecutionMetrics();
+            if (executionMetrics != null && executionMetrics.getTotalDurationMs() != null) {
+                duration += executionMetrics.getTotalDurationMs();
                 hasDuration = true;
             }
         }

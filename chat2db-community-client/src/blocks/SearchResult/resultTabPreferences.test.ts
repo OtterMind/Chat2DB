@@ -21,7 +21,6 @@ function result(id: string, executionSequence?: number): IManageResultData {
     sql: `select '${id}'`,
     originalSql: `select '${id}'`,
     success: true,
-    duration: 0,
     sqlType: 'SELECT' as IManageResultData['sqlType'],
     refreshTargets: [],
     extra: executionSequence === undefined ? {} : { executionSequence },

@@ -12,6 +12,7 @@ import { formatSelectionMetric, summarizeSelection } from './selectionAggregatio
 import { SELECTION_METRIC_OPTIONS } from './selectionMetrics';
 import { copyToClipboard } from '@/utils';
 import { staticMessage } from '@chat2db/ui';
+import { formatResultSummary } from './resultSummary';
 
 interface IProps {
   className?: string;
@@ -39,8 +40,7 @@ const StatusBar = forwardRef((props: IProps, ref: ForwardedRef<StatusBarRef>) =>
   );
   const activeMetricIndexRef = useRef(2);
 
-  const { description, duration } = resultData;
-  const dataLength = resultData.dataList?.length;
+  const resultSummary = formatResultSummary(resultData, (key, durationMs) => i18n(key, durationMs));
 
   const updateMetric = (index: number, metric: SelectionMetricId) => {
     const nextMetrics = [...selectionMetrics] as [SelectionMetricId, SelectionMetricId, SelectionMetricId];
@@ -75,9 +75,7 @@ const StatusBar = forwardRef((props: IProps, ref: ForwardedRef<StatusBarRef>) =>
   return (
     <div className={classnames(styles.statusBar, className)}>
       <div className={styles.resultSummary}>
-        <span>{`【${i18n('common.text.result')}】${description}.`}</span>
-        <span>{`【${i18n('common.text.timeConsuming')}】${duration}ms.`}</span>
-        {!!dataLength && <span>{`【${i18n('common.text.searchRow')}】${dataLength} ${i18n('common.text.row')}.`}</span>}
+        <span>{resultSummary}</span>
       </div>
       {selectedValues.length > 0 && (
         <div className={styles.selectionSummary}>

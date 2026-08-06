@@ -94,12 +94,6 @@ public class ExecuteResponse {
 
 
 
-    private Long duration;
-
-
-
-
-
     private boolean canEdit;
 
 

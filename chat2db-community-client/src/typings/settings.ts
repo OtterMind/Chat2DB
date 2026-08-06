@@ -72,7 +72,6 @@ export interface IUpdateDetail {
 }
 
 export interface DataTableSettings {
-  showComment: boolean;
   selectionMetrics?: [SelectionMetricId, SelectionMetricId, SelectionMetricId];
 }
 

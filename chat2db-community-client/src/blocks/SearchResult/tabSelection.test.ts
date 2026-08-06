@@ -24,7 +24,6 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     sql: '',
     originalSql: '',
     success: true,
-    duration: 0,
     sqlType: 'SELECT' as any,
     refreshTargets: [],
     pageNo: 1,

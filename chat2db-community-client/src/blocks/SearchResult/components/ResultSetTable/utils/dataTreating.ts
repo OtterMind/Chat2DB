@@ -1,24 +1,19 @@
 import { useGlobalStore } from '@/store/global';
 import { IManageResultData, IResultCell, ITableHeaderItem } from '@/typings/database';
-import { DataTableSettings } from '@/typings/settings';
 import { Theme } from 'antd-style';
 import i18n from '@/i18n';
 import { resolveResultSetEditor } from './editorType';
+import { getResultColumnTitle } from './columnTitle';
 
 const handleDataDisplay = (params: {
   data: ITableHeaderItem;
   index: number;
   theme: Omit<Theme, 'prefixCls'>;
   canEdit?: boolean;
-  dataTableSettings: DataTableSettings;
 }) => {
-  const { data, index, theme, canEdit = false, dataTableSettings } = params;
+  const { data, index, theme, canEdit = false } = params;
   const customFontSize = useGlobalStore.getState().baseSetting.customFontSize;
-  let comment = data.comment || '';
-  if (comment.length > 10) {
-    comment = comment.slice(0, 10) + '...';
-  }
-  const title = dataTableSettings?.showComment ? `${data.name}(${comment})` : data.name;
+  const title = getResultColumnTitle(data);
   return {
     CHAT2DB_COL_NUMBER: index,
     field: index.toString(),
@@ -130,11 +125,11 @@ const handleDataDisplay = (params: {
 };
 
 // Convert data into the format required by CanvasTable.
-const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'prefixCls'>; dataTableSettings: DataTableSettings }) => {
-  const { data, theme, dataTableSettings } = params;
+const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'prefixCls'> }) => {
+  const { data, theme } = params;
   const columns: any =
     data?.headerList?.slice(1).map((item, index) => {
-      return handleDataDisplay({ data: item, index: index+1, theme, canEdit: data.canEdit, dataTableSettings });
+      return handleDataDisplay({ data: item, index: index + 1, theme, canEdit: data.canEdit });
     }) || [];
 
   const records =
@@ -151,7 +146,7 @@ const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'pre
       record['__CHAT2DB_CELL_META__'] = data?.dataList?.[rowIndex] || [];
       return record;
     }) || [];
-  
+
   return [columns, records];
 };
 

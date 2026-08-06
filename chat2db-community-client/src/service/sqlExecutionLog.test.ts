@@ -37,7 +37,6 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     sql: 'select 1',
     originalSql: 'select 1',
     success: true,
-    duration: 10,
     sqlType: SqlTypeEnum.SELECT,
     refreshTargets: [],
     pageNo: 1,
@@ -236,10 +235,48 @@ function webExecution() {
   );
   const output = state.records[0].outputs[1];
   assert.equal(output.kind === 'result' ? output.rowCount : undefined, 2);
+  assert.equal(output.kind === 'result' ? output.durationMs : undefined, 20);
   assert.equal(output.kind === 'result' ? output.resultKey : undefined, 'web-1:1:1');
   assert.equal('dataList' in output, false);
+  assert.equal(state.records[0].durationMs, 20);
   assert.equal(state.records[0].context.databaseName, 'catalog_after_use');
   assert.equal(state.records[0].context.schemaName, 'schema_after_use');
+}
+
+{
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'call multi_result_procedure()',
+    context,
+    occurredAtEpochMs: 140,
+    results: [
+      result({
+        statementSequence: 1,
+        resultSetId: 1,
+        executionMetrics: { totalDurationMs: 10 },
+      }),
+      result({
+        statementSequence: 1,
+        resultSetId: 2,
+        executionMetrics: { totalDurationMs: 15 },
+      }),
+    ],
+  });
+
+  assert.equal(state.records.length, 1);
+  assert.equal(state.records[0].durationMs, 25, 'independent result metrics are summed per statement');
+}
+
+{
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 140,
+    results: [result({ dataList: [[]] })],
+  });
+  const output = state.records[0].outputs[0];
+  assert.equal(output.kind === 'result' ? output.durationMs : undefined, undefined);
 }
 
 {

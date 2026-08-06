@@ -35,8 +35,8 @@ import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.converter.DocumentConverter;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.util.JdbcUtils;
-import cn.hutool.core.date.TimeInterval;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -129,16 +129,22 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
-            TimeInterval timeInterval = new TimeInterval();
+            long startedAtEpochMs = System.currentTimeMillis();
+            long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
+            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            long fetchDurationNanos = 0L;
             executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
             if (query) {
+                long fetchStartedNanos = System.nanoTime();
                 executeResult = buildQueryCommandResult(stmt, sql, command);
+                fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
             } else {
-                executeResult.setDuration(timeInterval.interval());
                 executeResult.setUpdateCount(stmt.getUpdateCount());
             }
-            executeResult.setDuration(timeInterval.interval());
+            executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
+                    CollectionUtils.size(executeResult.getDataList())));
         }
         return executeResult;
     }
@@ -146,7 +152,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
     private ExecuteResponse buildQueryCommandResult(Statement stmt, String sql, SqlExecuteRequest command) throws SQLException {
         List<LinkedHashMap<String, Object>> documentList = Lists.newArrayList();
         List<Header> headerList = Lists.newArrayList();
-        TimeInterval timeInterval = new TimeInterval();
         List<ResultCell> valueList = Lists.newArrayList();
         List<List<ResultCell>> dataList = Lists.newArrayList();
         Map<String, Header> headerListMap = Maps.newLinkedHashMap();
@@ -188,7 +193,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
                 result.setDataList(dataList);
                 result.setHeaderList(headerList);
                 result.setOriginalSql(command.getScript());
-                result.setDuration(timeInterval.interval());
                 result.setFuzzyTotal(String.valueOf(dataList.size()));
                 result.setDescription(I18nUtils.getMessage("sqlResult.success"));
                 return result;
@@ -230,7 +234,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
             result.setFuzzyTotal(fuzzyTotal);
             result.setCanEdit(canEdit(command.getScript()));
             result.setOriginalSql(command.getScript());
-            result.setDuration(timeInterval.interval());
             result.setDescription(I18nUtils.getMessage("sqlResult.success"));
             result.setTableName(getTableName(command.getTableName(), command.getScript()));
             result.setHasNextPage(CollectionUtils.size(result.getDataList()) >= command.getPageSize());

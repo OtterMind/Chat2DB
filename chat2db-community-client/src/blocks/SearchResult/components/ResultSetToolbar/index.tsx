@@ -13,7 +13,6 @@ import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/Ed
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
 import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
-import { useGlobalStore } from '@/store/global';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -49,10 +48,6 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
     hasNextPage: resultData.hasNextPage,
   });
   const zoerBoundInfo = useZoerStore((s) => s.zoerBoundInfo);
-  const { dataTableSettings, updateDataTableSettings } = useGlobalStore((s) => ({
-    dataTableSettings: s.dataTableSettings,
-    updateDataTableSettings: s.updateDataTableSettings,
-  }));
 
   const showCreateChart = useMemo(() => !zoerBoundInfo, [zoerBoundInfo]);
 
@@ -227,24 +222,6 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           <DingChartModal ref={dingChartModalRef} />
         </div>
       )}
-      <div className={cx(styles.toolBarItem, styles.editTableDataBar)}>
-        <IconButton
-          title={i18n(
-            dataTableSettings.showComment ? 'editTableData.tips.hideComment' : 'editTableData.tips.showComment',
-          )}
-          onClick={() => {
-            setTimeout(() => {
-              updateDataTableSettings({
-                ...dataTableSettings,
-                showComment: !dataTableSettings.showComment,
-              });
-            }, 0);
-          }}
-          size="sm"
-          className={styles.createChartIcon}
-          code={dataTableSettings.showComment ? 'icon-conceal-comment' : 'icon-show-comment'}
-        />
-      </div>
       <div className={styles.toolBarRight}>
         <ExportBar resultData={resultData} />
       </div>

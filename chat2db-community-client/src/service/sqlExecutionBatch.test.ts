@@ -31,7 +31,6 @@ function result(params: {
     sql: params.sql || 'select 1',
     originalSql: params.sql || 'select 1',
     success: true,
-    duration: 1,
     sqlType: 'SELECT' as any,
     refreshTargets: [],
     resultSetId: params.resultSetId,

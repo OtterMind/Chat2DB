@@ -2,22 +2,27 @@ import { useEffect, useRef } from 'react';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
 import ContextMenu, { ContextMenuRef } from '@/components/ContextMenu';
 import { useStyles } from '../style';
+import i18n from '@/i18n';
+import { getHeaderMetadataRows, type HeaderMetadataKey } from '../headerMetadata';
 
 const useHeaderTooltip = ({ tableInstance }: { tableInstance: ITableInstance | null }) => {
   const contextMenuRef = useRef<ContextMenuRef>(null);
   const { styles } = useStyles();
 
   const renderHeaderTooltip = (originalData) => {
+    const labels: Record<HeaderMetadataKey, string> = {
+      fieldName: i18n('workspace.resultSet.fieldName'),
+      fieldType: i18n('workspace.resultSet.fieldType'),
+      fieldComment: i18n('workspace.resultSet.fieldComment'),
+    };
     return (
       <div className={styles.headerTooltip}>
-        <div className={styles.headerTooltipFirst}>
-          <div className={styles.columnName}>{originalData.name}:</div>
-          <div className={styles.columnType}>
-            {originalData.columnType}
-            {originalData.columnSize && <>({originalData.columnSize})</>}
+        {getHeaderMetadataRows(originalData).map((row) => (
+          <div className={styles.headerTooltipRow} key={row.key}>
+            <div className={styles.headerTooltipLabel}>{labels[row.key]}</div>
+            <div className={styles.headerTooltipValue}>{row.value}</div>
           </div>
-        </div>
-        <div className={styles.columnComment}>{originalData.comment}</div>
+        ))}
       </div>
     );
   };

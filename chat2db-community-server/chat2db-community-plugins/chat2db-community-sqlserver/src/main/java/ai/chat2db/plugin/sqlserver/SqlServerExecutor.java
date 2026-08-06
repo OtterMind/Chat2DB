@@ -13,7 +13,6 @@ import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.util.SqlUtils;
-import cn.hutool.core.date.TimeInterval;
 import com.alibaba.druid.DbType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -174,7 +173,6 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
             throws SQLException {
         List<ExecuteResponse> executeResults = new ArrayList<>();
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(originalSql).success(Boolean.TRUE).build();
-        TimeInterval timeInterval = new TimeInterval();
         int resultCount = 0;
         for (String sql : sqlList) {
             try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -202,7 +200,6 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
                         executeResult.setUpdateCount(updateCount);
                     }
                     executeResult.setSql(originalSql);
-                    executeResult.setDuration(timeInterval.interval());
                     executeResult.setStatementSequence(1);
                     executeResult.setExecutionContext(executionContext);
                     executeResult.setExecutionMetrics(ExecutionTiming.complete(

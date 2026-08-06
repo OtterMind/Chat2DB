@@ -84,7 +84,12 @@ function getResultVersion(item: IManageResultData, consoleMode: boolean) {
       item.extra?.resultSequence,
       item.extra?.resultKey,
       item.resultSetId,
-      item.duration,
+      item.executionMetrics?.startedAtEpochMs,
+      item.executionMetrics?.finishedAtEpochMs,
+      item.executionMetrics?.totalDurationMs,
+      item.executionMetrics?.executeDurationMs,
+      item.executionMetrics?.fetchDurationMs,
+      item.executionMetrics?.fetchedRowCount,
       item.dataList?.length,
       item.extra?.messages?.length,
     ].join('|');

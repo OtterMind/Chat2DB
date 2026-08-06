@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSelectResultUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.sql.DbSqlValidateRequest;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
 import ai.chat2db.community.domain.api.model.result.Header;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.service.cli.ICliSqlService;
@@ -70,6 +71,7 @@ class CliSqlServiceTest {
         ExecuteResponse executeResult = new ExecuteResponse();
         executeResult.setSuccess(Boolean.TRUE);
         executeResult.setUpdateCount(3);
+        executeResult.setExecutionMetrics(ExecutionMetrics.builder().totalDurationMs(7L).build());
         executeResult.setHeaderList(Collections.emptyList());
         executeResult.setDataList(Collections.emptyList());
         dlTemplateService.result = executeResult;
@@ -79,6 +81,7 @@ class CliSqlServiceTest {
 
         assertEquals(3, vo.getUpdateCount());
         assertEquals(3, vo.getRowCount());
+        assertEquals(7L, vo.getDuration());
     }
 
     @Test

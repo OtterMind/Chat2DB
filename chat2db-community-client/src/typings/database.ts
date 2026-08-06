@@ -166,7 +166,6 @@ export interface IManageResultData {
   sql: string;
   originalSql: string;
   success: boolean;
-  duration: number;
   updateCount?: number; // If it is modified. The backend will return the number of modified items
   canEdit?: boolean; // Whether the returned data can be edited
   // Editable results include the table name required for update requests.

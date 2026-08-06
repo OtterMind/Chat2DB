@@ -10,24 +10,26 @@ export const useStyles = createStyles(({ css, token }) => {
       background-color: ${token.colorBgBase};
       box-shadow: ${token.boxShadow};
       border: 1px solid ${token.colorBorderSecondary};
-      padding: 6px;
+      padding: 8px 10px;
+      min-width: 220px;
+      max-width: 420px;
     `,
-    headerTooltipFirst: css`
-      display: flex;
+    headerTooltipRow: css`
+      display: grid;
+      grid-template-columns: max-content minmax(120px, 1fr);
       align-items: center;
+      min-height: 24px;
+      column-gap: 12px;
     `,
-    columnName: css`
-      font-size: 15px;
-      color: ${token.colorText};
-      margin-right: 4px;
+    headerTooltipLabel: css`
+      font-size: 14px;
+      color: ${token.colorTextSecondary};
     `,
-    columnType: css`
+    headerTooltipValue: css`
+      min-width: 0;
       font-size: 14px;
       color: ${token.colorText};
-    `,
-    columnComment: css`
-      font-size: 14px;
-      color: ${token.colorText};
+      overflow-wrap: anywhere;
     `,
   };
 });
