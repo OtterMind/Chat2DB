@@ -15,6 +15,8 @@ import java.util.Locale;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_SPACE_SINGLE_QUOTE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_PRIMARY_KEY;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_INVISIBLE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_INDEX;
 
 @Getter
 public enum MysqlIndexTypeEnum {
@@ -81,7 +83,7 @@ public enum MysqlIndexTypeEnum {
 
         if (tableIndex.getVisible() != null && !tableIndex.getVisible()
                 && !PRIMARY_KEY.equals(this)) {
-            script.append(" INVISIBLE");
+            script.append(" " + SQL_INVISIBLE);
         }
 
         return script.toString();
@@ -146,8 +148,8 @@ public enum MysqlIndexTypeEnum {
     }
 
     public String buildAlterIndexVisibility(TableIndex tableIndex) {
-        String visibility = Boolean.FALSE.equals(tableIndex.getVisible()) ? "INVISIBLE" : "VISIBLE";
-        return StringUtils.join("ALTER INDEX ",
+        String visibility = Boolean.FALSE.equals(tableIndex.getVisible()) ? SQL_INVISIBLE : "VISIBLE";
+        return StringUtils.join(SQL_ALTER_INDEX,
                 MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getName()),
                 " ", visibility);
     }
