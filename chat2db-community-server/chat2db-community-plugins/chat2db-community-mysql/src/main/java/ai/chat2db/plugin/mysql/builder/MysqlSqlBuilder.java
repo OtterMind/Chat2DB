@@ -8,6 +8,7 @@ import ai.chat2db.plugin.mysql.enums.MysqlViewSqlSecurityOptionEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlIndexTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
+import ai.chat2db.community.domain.api.enums.plugin.ForeignKeyActionEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.request.PageLimitRequest;
@@ -49,6 +50,12 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_PARTITION_S
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SECURITY;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_FOREIGN_KEY;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ADD_CONSTRAINT;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_FOREIGN_KEY_PREFIX;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_REFERENCES;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ON_DELETE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ON_UPDATE;
 
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
@@ -214,14 +221,14 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                     continue;
                 }
                 if (EditStatusEnum.DELETE.name().equals(fk.getEditStatus())) {
-                    script.append(SQLConstants.TAB).append("DROP FOREIGN KEY ")
+                    script.append(SQLConstants.TAB).append(SQL_DROP_FOREIGN_KEY)
                             .append(quoteMysqlIdentifier(fk.getFkName()))
                             .append(SQLConstants.COMMA_LINE_SEPARATOR);
                 } else if (EditStatusEnum.ADD.name().equals(fk.getEditStatus())) {
                     script.append(SQLConstants.TAB).append(buildAddForeignKey(fk))
                             .append(SQLConstants.COMMA_LINE_SEPARATOR);
                 } else if (EditStatusEnum.MODIFY.name().equals(fk.getEditStatus())) {
-                    script.append(SQLConstants.TAB).append("DROP FOREIGN KEY ")
+                    script.append(SQLConstants.TAB).append(SQL_DROP_FOREIGN_KEY)
                             .append(quoteMysqlIdentifier(fk.getFkName()))
                             .append(SQLConstants.COMMA_LINE_SEPARATOR);
                     script.append(SQLConstants.TAB).append(buildAddForeignKey(fk))
@@ -242,34 +249,24 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
     private String buildAddForeignKey(ForeignKeyInfo fk) {
         StringBuilder sb = new StringBuilder();
-        sb.append("ADD CONSTRAINT ");
+        sb.append(SQL_ADD_CONSTRAINT);
         if (StringUtils.isNotBlank(fk.getFkName())) {
             sb.append(quoteMysqlIdentifier(fk.getFkName())).append(" ");
         }
-        sb.append("FOREIGN KEY (");
+        sb.append(SQL_FOREIGN_KEY_PREFIX);
         sb.append(quoteMysqlIdentifier(fk.getFkColumnName()));
-        sb.append(") REFERENCES ");
+        sb.append(SQL_REFERENCES);
         sb.append(quoteMysqlIdentifier(fk.getPkTableName()));
         sb.append("(").append(quoteMysqlIdentifier(fk.getPkColumnName())).append(")");
-        String deleteAction = foreignKeyAction(fk.getDeleteRule());
-        if (StringUtils.isNotBlank(deleteAction)) {
-            sb.append(" ON DELETE ").append(deleteAction);
+        ForeignKeyActionEnum deleteAction = ForeignKeyActionEnum.fromJdbcCode(fk.getDeleteRule());
+        if (deleteAction != null) {
+            sb.append(SQL_ON_DELETE).append(deleteAction.sqlKeyword());
         }
-        String updateAction = foreignKeyAction(fk.getUpdateRule());
-        if (StringUtils.isNotBlank(updateAction)) {
-            sb.append(" ON UPDATE ").append(updateAction);
+        ForeignKeyActionEnum updateAction = ForeignKeyActionEnum.fromJdbcCode(fk.getUpdateRule());
+        if (updateAction != null) {
+            sb.append(SQL_ON_UPDATE).append(updateAction.sqlKeyword());
         }
         return sb.toString();
-    }
-
-    private static String foreignKeyAction(short rule) {
-        return switch (rule) {
-            case 0 -> "CASCADE";
-            case 1 -> "RESTRICT";
-            case 2 -> "SET NULL";
-            case 3 -> "NO ACTION";
-            default -> null;
-        };
     }
 
     private String findPrevious(TableColumn tableColumn, Table newTable) {
