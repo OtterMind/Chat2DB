@@ -2,10 +2,13 @@ package ai.chat2db.plugin.mysql.value;
 
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.value.factory.MysqlValueProcessorFactory;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,6 +57,24 @@ public class MysqlValueProcessor extends DefaultValueProcessor {
             }
         }
         return convertJDBCValueStrByType(dataValue);
+    }
+
+    @Override
+    public String getSqlValueString(SQLDataValue dataValue) {
+        String value = dataValue.getValue();
+        if (value != null && !FUNCTION_SET.contains(value.toLowerCase())) {
+            String dataTypeName = dataValue.getDataType() != null
+                    ? dataValue.getDataType().getDataTypeName() : null;
+            if ("JSON".equalsIgnoreCase(dataTypeName)) {
+                try {
+                    JSON.parse(value);
+                } catch (JSONException e) {
+                    throw new BusinessException("mysql.json.invalid",
+                            new Object[]{e.getMessage()}, e);
+                }
+            }
+        }
+        return super.getSqlValueString(dataValue);
     }
 
     @Override
