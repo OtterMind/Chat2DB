@@ -61,6 +61,7 @@ export const importConfigMap = importConfigList.reduce((acc, cur) => {
 const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClose, onConfirm }) => {
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [importContent, setImportContent] = useState<any>();
+  const [masterPassword, setMasterPassword] = useState<string>('');
   const { styles } = useStyles();
 
   const currentConfig = useMemo(() => {
@@ -80,6 +81,14 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     let params: any = {
       file: importContent,
     };
+
+    if (type === ImportConnectionType.DBEAVER && masterPassword) {
+      // DBeaver 设置过主密码时,凭据需用主密码解密才能导入
+      params = {
+        ...params,
+        masterPassword,
+      };
+    }
 
     if (type === ImportConnectionType.DATAGRIP) {
       params = {
@@ -137,6 +146,16 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
         ) : (
           <>
             <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={currentConfig?.accept} />
+            {currentConfig?.type === ImportConnectionType.DBEAVER && (
+              <Input.Password
+                allowClear
+                className={styles.masterPasswordInput}
+                placeholder={i18n('connection.import.dbeaver.masterPassword.placeholder')}
+                onChange={(event) => {
+                  setMasterPassword(event.target.value);
+                }}
+              />
+            )}
             <div className={styles.tips}>{currentConfig?.tips}</div>
           </>
         )}

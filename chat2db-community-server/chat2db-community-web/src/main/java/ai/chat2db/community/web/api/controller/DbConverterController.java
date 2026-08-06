@@ -86,14 +86,17 @@ public class DbConverterController {
      * Endpoint: {@code POST /api/converter/dbp/upload}.
      *
      * @param file uploaded file for the request.
+     * @param masterPassword optional DBeaver master password, used to decrypt connection credentials
+     *                       when the default local key does not match. May be null.
      * @return data result containing upload response.
      */
     @SneakyThrows
     @PostMapping("/dbp/upload")
-    public DataResult<UploadResponse> edbpUploadFile(@RequestParam("file") MultipartFile file) {
+    public DataResult<UploadResponse> edbpUploadFile(@RequestParam("file") MultipartFile file,
+                                                     @RequestParam(value = "masterPassword", required = false) String masterPassword) {
         File temp = uploadFileService.transferToTempFile(file, ConfigFileTypeEnum.DBP);
         try {
-            return DataResult.of(converterWebConverter.ncxImportResult2response(ncxImportService.dbpUploadFile(temp)));
+            return DataResult.of(converterWebConverter.ncxImportResult2response(ncxImportService.dbpUploadFile(temp, masterPassword)));
         } finally {
             deleteTempFile(temp);
         }

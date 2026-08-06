@@ -30,6 +30,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -115,7 +116,7 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
 
     @SneakyThrows
     @Override
-    public NcxImportResponse dbpUploadFile(File file) {
+    public NcxImportResponse dbpUploadFile(File file, String masterPassword) {
         NcxImportResponse vo = new NcxImportResponse();
         Document metaTree;
         int n = 0;
@@ -165,9 +166,7 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                         DataBaseTypeEnum dataBaseType = DataBaseTypeEnum.matchType(provider.toUpperCase());
                         WorkspaceDataSource dataSourceDO;
                         if (null != dataBaseType) {
-                            File credentials = new File(config + File.separator + ExportConstants.CONFIG_CREDENTIALS_FILE);
-                            DefaultValueEncryptor defaultValueEncryptor = new DefaultValueEncryptor(DefaultValueEncryptor.getLocalSecretKey());
-                            JSONObject credentialsJson = JSON.parseObject(defaultValueEncryptor.decryptValue(Files.readAllBytes(credentials.toPath())));
+                            JSONObject credentialsJson = parseDbeaverCredentials(config, masterPassword);
                             dataSourceDO = new WorkspaceDataSource();
                             dataSourceDO.setAlias(configurations.getString("name"));
                             dataSourceDO.setHost(configuration.getString("host"));
@@ -178,10 +177,14 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                             dataSourceDO.setSsh(sshInfo);
                             if (null != credentialsJson) {
                                 JSONObject userInfo = credentialsJson.getJSONObject(key);
-                                JSONObject userPassword = userInfo.getJSONObject(connection);
-                                dataSourceDO.setUser(userPassword.getString("user"));
-                                String password = userPassword.getString("password");
-                                dataSourceDO.setPassword(password);
+                                if (null != userInfo) {
+                                    JSONObject userPassword = userInfo.getJSONObject(connection);
+                                    if (null != userPassword) {
+                                        dataSourceDO.setUser(userPassword.getString("user"));
+                                        String password = userPassword.getString("password");
+                                        dataSourceDO.setPassword(password);
+                                    }
+                                }
                             }
                             dataSourceDO.setType(dataBaseType.name());
                             n++;
@@ -195,6 +198,44 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
         projects.forEach(v -> FileUtils.delete(new File(ConfigUtils.getBasePath() + File.separator + v)));
         vo.setCount(n);
         return vo;
+    }
+
+    /**
+     * 解析 DBeaver 导出的凭据文件(credentials-config.json)。
+     * 依次尝试 DBeaver 默认本地密钥、用户提供的主密码(密钥 = 主密码 UTF-8 前 16 字节,
+     * 与 DBeaver DefaultValueEncryptor#makeSecretKeyFromPassword 一致);
+     * 均失败时返回 null,连接不带账号密码继续导入,由用户在导入后手动填写。
+     */
+    private JSONObject parseDbeaverCredentials(String config, String masterPassword) throws IOException {
+        File credentials = new File(config + File.separator + ExportConstants.CONFIG_CREDENTIALS_FILE);
+        if (!credentials.exists()) {
+            log.warn("DBeaver credentials file not found, connections will be imported without passwords.");
+            return null;
+        }
+        byte[] encrypted = Files.readAllBytes(credentials.toPath());
+        JSONObject credentialsJson = tryDecryptDbeaverCredentials(new DefaultValueEncryptor(DefaultValueEncryptor.getLocalSecretKey()), encrypted);
+        if (credentialsJson != null) {
+            return credentialsJson;
+        }
+        if (StringUtils.isNotBlank(masterPassword)) {
+            credentialsJson = tryDecryptDbeaverCredentials(
+                    new DefaultValueEncryptor(DefaultValueEncryptor.makeSecretKeyFromPassword(masterPassword)), encrypted);
+            if (credentialsJson != null) {
+                log.info("DBeaver credentials decrypted with the provided master password.");
+                return credentialsJson;
+            }
+        }
+        log.warn("Unable to decrypt DBeaver credentials, connections will be imported without passwords.");
+        return null;
+    }
+
+    private JSONObject tryDecryptDbeaverCredentials(DefaultValueEncryptor encryptor, byte[] encrypted) {
+        try {
+            return JSON.parseObject(encryptor.decryptValue(encrypted));
+        } catch (Exception e) {
+            log.warn("Failed to decrypt DBeaver credentials: {}", e.getMessage());
+            return null;
+        }
     }
 
     @SneakyThrows
@@ -290,7 +331,7 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
             return ncxUploadFile(file);
         }
         if (ConfigFileTypeEnum.DBP == fileType) {
-            return dbpUploadFile(file);
+            return dbpUploadFile(file, null);
         }
         if (ConfigFileTypeEnum.JSON == fileType) {
             return chat2dbUploadFile(file);
