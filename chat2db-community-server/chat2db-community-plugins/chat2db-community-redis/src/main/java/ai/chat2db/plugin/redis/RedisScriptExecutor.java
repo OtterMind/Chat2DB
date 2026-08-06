@@ -287,13 +287,15 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         if (oldKey == null && newKey == null) {
             return new ExecuteResponse();
         }
+        // Validate both key types up front. A null/none/unknown type means the key
+        // is missing or the request is malformed/stale (the UI never submits these),
+        // so reject explicitly before generating any Redis command — never fall back
+        // to string semantics and silently emit DEL/RENAME/type-specific writes.
+        validateKeyType(oldKey, "old");
+        validateKeyType(newKey, "new");
+
         List<String> scripts = new ArrayList<>();
-        // Only treat as a type change when BOTH types are non-null; otherwise
-        // RedisDataType.fromCode(null) downstream would NPE. A null type means
-        // the key doesn't exist — no type-change script to run, fall through to
-        // the rename path.
         boolean typeChanged = oldKey != null && newKey != null
-                && oldKey.getType() != null && newKey.getType() != null
                 && !Objects.equals(oldKey.getType(), newKey.getType());
         if (typeChanged) {
             List<String> addScript = RedisDataType.fromCode(newKey.getType()).getScript().createKey(newKey);
@@ -335,6 +337,27 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
             }
         }
         return executeResult;
+    }
+
+    /**
+     * Rejects a key whose type is null, {@code none}, or not in the supported set
+     * ({@code string, list, set, zset, hash, stream}). Such types indicate a missing
+     * key or malformed/stale direct-API input; emitting commands against them would
+     * silently fall back to string behavior or fail with "no such key".
+     */
+    private void validateKeyType(RedisKey key, String role) {
+        if (key == null) {
+            return;
+        }
+        String type = key.getType();
+        if (StringUtils.isBlank(type)) {
+            throw new BusinessException(String.format(RedisConstants.ERROR_UNSUPPORTED_KEY_TYPE, role + "=<null>"));
+        }
+        RedisDataType dataType = RedisDataType.fromCode(type);
+        if (dataType == RedisDataType.NONE) {
+            // fromCode returns NONE for both the literal "none" code and any unknown code.
+            throw new BusinessException(String.format(RedisConstants.ERROR_UNSUPPORTED_KEY_TYPE, role + "=" + type));
+        }
     }
 
 }
