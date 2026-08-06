@@ -14,11 +14,14 @@ import java.util.Map;
 @Service
 public class DbSessionServiceImpl implements IDbSessionService {
 
+    private static final String SQL_SHOW_PROCESSLIST = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO FROM information_schema.processlist ORDER BY ID";
+    private static final String SQL_KILL = "KILL";
+    private static final String SQL_KILL_QUERY_SUFFIX = " QUERY";
+
     @Override
     public List<Map<String, Object>> list() {
         Connection connection = Chat2DBContext.getConnection();
-        String sql = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO FROM information_schema.processlist ORDER BY ID";
-        return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
+        return DefaultSQLExecutor.getInstance().execute(connection, SQL_SHOW_PROCESSLIST, resultSet -> {
             List<Map<String, Object>> sessions = new ArrayList<>();
             while (resultSet.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -39,8 +42,8 @@ public class DbSessionServiceImpl implements IDbSessionService {
     @Override
     public void kill(Long connectionId, String killType) {
         Connection connection = Chat2DBContext.getConnection();
-        String suffix = "CONNECTION".equalsIgnoreCase(killType) ? "" : " QUERY";
-        String sql = "KILL" + suffix + " " + connectionId;
+        String suffix = "CONNECTION".equalsIgnoreCase(killType) ? "" : SQL_KILL_QUERY_SUFFIX;
+        String sql = SQL_KILL + suffix + " " + connectionId;
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
     }
 }
