@@ -23,6 +23,7 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.enums.plugin.ObjectTypeEnum;
+import ai.chat2db.community.domain.api.enums.plugin.TableMaintenanceTypeEnum;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.sql.Sql;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
@@ -321,13 +322,12 @@ public class DbTableServiceImpl implements IDbTableService {
             Connection connection = Chat2DBContext.getConnection();
             String name = metaData.getMetaDataName(param.getTableName());
             IDbManager dbManager = Chat2DBContext.getDbManager();
-            String op = operationType.toUpperCase(Locale.ROOT);
+            TableMaintenanceTypeEnum op = TableMaintenanceTypeEnum.from(operationType);
             return switch (op) {
-                case "ANALYZE" -> dbManager.analyzeTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
-                case "OPTIMIZE" -> dbManager.optimizeTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
-                case "CHECK" -> dbManager.checkTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
-                case "REPAIR" -> dbManager.repairTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
-                default -> throw new BusinessException("unsupported maintenance operation: " + operationType);
+                case ANALYZE -> dbManager.analyzeTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
+                case OPTIMIZE -> dbManager.optimizeTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
+                case CHECK -> dbManager.checkTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
+                case REPAIR -> dbManager.repairTable(connection, param.getDatabaseName(), param.getSchemaName(), name);
             };
         } catch (SQLException e) {
             throw new BusinessException("maintenance sql error", new Object[]{e.getMessage()}, e);
