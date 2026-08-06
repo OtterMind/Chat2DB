@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.db;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.model.runtime.TransactionStateResponse;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.McpConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbObjectsQueryRequest;
@@ -17,12 +18,15 @@ import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.model.request.TablesRequest;
 import ai.chat2db.spi.model.request.ViewMetadataRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.spi.sql.ConsoleTransactionRegistry;
 import ai.chat2db.community.domain.api.enums.plugin.ObjectTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -39,7 +43,18 @@ public class DbConnectionContextServiceImpl implements IDbConnectionContextServi
 
     @Override
     public void bind(DbConnectionContextRequest param) {
-        Chat2DBContext.putContext(buildConnectInfo(param));
+        ConnectInfo connectInfo = buildConnectInfo(param);
+        // When a manual transaction is open for this console, reuse the bound connection
+        // (already autoCommit=false, consoleOwn=true) instead of borrowing a fresh one. The
+        // fresh ConnectInfo's metadata (host/db/schema) is preserved while the live
+        // connection is grafted in so ConnectionPool.getConnection() hits its
+        // tryGetExistingConnection fast path.
+        ConnectInfo bound = ConsoleTransactionRegistry.getBoundConnectInfo(param.getConsoleId());
+        if (bound != null && bound.getConnection() != null) {
+            connectInfo.setConnection(bound.getConnection());
+            connectInfo.setConsoleOwn(Boolean.TRUE);
+        }
+        Chat2DBContext.putContext(connectInfo);
     }
 
     @Override
@@ -81,15 +96,93 @@ public class DbConnectionContextServiceImpl implements IDbConnectionContextServi
         if (connectInfo == null) {
             throw new BusinessException("connection error");
         }
+        // Switching database changes the connection's catalog, so an open transaction cannot
+        // survive it. Release the bound connection (rolling back any open transaction) before
+        // rebuilding the context for the new database.
+        if (connectInfo.getConsoleId() != null
+                && ConsoleTransactionRegistry.isInTransaction(connectInfo.getConsoleId())) {
+            ConsoleTransactionRegistry.release(connectInfo.getConsoleId(), true);
+        }
         Chat2DBContext.removeContext();
         connectInfo.setDatabaseName(databaseName);
         connectInfo.setConnection(null);
+        connectInfo.setConsoleOwn(Boolean.FALSE);
         Chat2DBContext.putContext(connectInfo);
     }
 
     @Override
     public void close() {
         Chat2DBContext.close();
+    }
+
+    @Override
+    public TransactionStateResponse beginManualTransaction(DbConnectionContextRequest param) {
+        bind(param);
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null) {
+            throw new BusinessException("connection error");
+        }
+        // If a transaction is already open for this console, this is idempotent.
+        if (ConsoleTransactionRegistry.isInTransaction(param.getConsoleId())) {
+            return TransactionStateResponse.of(true, "manual");
+        }
+        // Open a fresh, isolated connection (not borrowed from the pool) and switch it to
+        // manual commit. The connection is owned by the registry for the console's lifetime.
+        Connection connection = Chat2DBContext.getDbManager().getConnection(connectInfo);
+        connectInfo.setConnection(connection);
+        connectInfo.setConsoleOwn(Boolean.TRUE);
+        try {
+            connection.setAutoCommit(false);
+        } catch (SQLException e) {
+            log.error("Failed to disable autoCommit for consoleId={}", param.getConsoleId(), e);
+            connectInfo.setConsoleOwn(Boolean.FALSE);
+            connectInfo.setConnection(null);
+            quietlyClose(connection);
+            TransactionStateResponse response = TransactionStateResponse.of(false, "auto");
+            response.setLastError(e.getMessage());
+            return response;
+        }
+        ConsoleTransactionRegistry.register(param.getConsoleId(), connectInfo);
+        return TransactionStateResponse.of(true, "manual");
+    }
+
+    @Override
+    public TransactionStateResponse commitTransaction(DbConnectionContextRequest param) {
+        ConsoleTransactionRegistry.TransactionOutcome outcome =
+                ConsoleTransactionRegistry.commit(param.getConsoleId());
+        TransactionStateResponse response = TransactionStateResponse.of(false, "auto");
+        response.setOutcome(outcome.name());
+        return response;
+    }
+
+    @Override
+    public TransactionStateResponse rollbackTransaction(DbConnectionContextRequest param) {
+        ConsoleTransactionRegistry.TransactionOutcome outcome =
+                ConsoleTransactionRegistry.rollback(param.getConsoleId());
+        TransactionStateResponse response = TransactionStateResponse.of(false, "auto");
+        response.setOutcome(outcome.name());
+        return response;
+    }
+
+    @Override
+    public TransactionStateResponse getTransactionState(DbConnectionContextRequest param) {
+        boolean inTransaction = ConsoleTransactionRegistry.isInTransaction(param.getConsoleId());
+        return TransactionStateResponse.of(inTransaction, inTransaction ? "manual" : "auto");
+    }
+
+    @Override
+    public void releaseBoundConnection(DbConnectionContextRequest param) {
+        ConsoleTransactionRegistry.release(param.getConsoleId(), true);
+    }
+
+    @Override
+    public boolean isInTransaction(Long consoleId) {
+        return ConsoleTransactionRegistry.isInTransaction(consoleId);
+    }
+
+    @Override
+    public void releaseAllBoundTransactions() {
+        ConsoleTransactionRegistry.releaseAll(true);
     }
 
     @Override
@@ -199,6 +292,17 @@ public class DbConnectionContextServiceImpl implements IDbConnectionContextServi
 
     private ConnectInfo buildMcpConnectInfo(McpConnectionContextRequest param) {
         return connectionContextConverter.mcpParam2connectInfo(param, connectionContextConverter.buildMcpDataSourceId(param));
+    }
+
+    private void quietlyClose(Connection connection) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (SQLException e) {
+            log.debug("Failed to close connection during transaction begin cleanup", e);
+        }
     }
 
 }

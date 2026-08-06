@@ -268,6 +268,23 @@ export default {
   'workspace.terminal.closeBusyContent':
     'A program is running in this terminal. Closing the tab will terminate the program and terminal process.',
   'workspace.terminal.closeConfirm': 'Close and terminate',
+  'workspace.transaction.closeTitle': 'Uncommitted transaction',
+  'workspace.transaction.closeContent':
+    'This console has an open transaction with uncommitted changes. How do you want to proceed?',
+  'workspace.transaction.commit': 'Commit and close',
+  'workspace.transaction.rollback': 'Roll back and close',
+  'workspace.transaction.cancel': 'Cancel',
+  'workspace.transaction.inTransaction': 'In transaction',
+  'workspace.transaction.autoCommitOn': 'Auto-commit',
+  'workspace.transaction.ddlImplicitCommitWarning':
+    'This statement implicitly commits the current transaction.',
+  'workspace.transaction.myIsamNotProtected':
+    'Non-transactional engines (e.g. MyISAM) are not protected by Rollback.',
+  'workspace.transaction.rollbackOutcomeUnknown':
+    'Rollback outcome is unknown. The connection was discarded; please verify the data manually.',
+  'workspace.transaction.switchConnectionTitle': 'Uncommitted transaction',
+  'workspace.transaction.switchConnectionContent':
+    'Switching the connection will roll back the current uncommitted transaction. Continue?',
   'workspace.localSqlFileTree.revealFailed': 'Failed to reveal file',
   'workspace.databaseAccount.title': 'Users',
   'workspace.databaseAccount.open': 'Open Users',

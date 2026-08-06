@@ -693,6 +693,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             statementSequence++;
             checkCanceled(cancellation);
             String sqlType = simpleSqlStatement.getSqlType();
+            warnImplicitCommitIfInTransaction(statementListener, simpleSqlStatement, sqlType);
             List<ExecuteResponse> executeResults = executeSQLStreaming(simpleSqlStatement, dbType, command, connection,
                     consumer,
                     statementListener, cancellation, streamResultSequence, statementSequence,
@@ -1641,6 +1642,54 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     @Override
     public boolean isQueryCommand(Connection connection, String sql) {
         return false;
+    }
+
+    /**
+     * When a manual transaction is open for the current console, surfaces a warning for
+     * statements that would implicitly commit the transaction (DDL such as CREATE/ALTER/DROP/
+     * TRUNCATE). Execution proceeds regardless; the listener forwards the warning to the
+     * streaming client.
+     */
+    private static void warnImplicitCommitIfInTransaction(ISqlExecutionStatementListener statementListener,
+                                                          SimpleSqlStatement simpleSqlStatement, String sqlType) {
+        if (statementListener == null || StringUtils.isBlank(sqlType)) {
+            return;
+        }
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null || !Boolean.TRUE.equals(connectInfo.getConsoleOwn())) {
+            return;
+        }
+        if (isImplicitCommitDdl(sqlType)) {
+            statementListener.onImplicitCommitWarning(simpleSqlStatement.getSql());
+        }
+    }
+
+    /**
+     * Returns true for statement types that implicitly commit any open transaction in MySQL
+     * (and most dialects). Classified by the parsed SQL type string (a {@code SqlTypeEnum}
+     * name). Kept as plain string comparisons so it is independent of which enum backs the
+     * type value.
+     */
+    private static boolean isImplicitCommitDdl(String sqlType) {
+        if (StringUtils.isBlank(sqlType)) {
+            return false;
+        }
+        return sqlType.startsWith("CREATE")
+                || sqlType.startsWith("ALTER")
+                || sqlType.startsWith("DROP")
+                || sqlType.startsWith("TRUNCATE")
+                || sqlType.startsWith("RENAME")
+                || sqlType.equals("LOAD_DATA")
+                || sqlType.equals("LOAD_XML")
+                || sqlType.equals("GRANT")
+                || sqlType.equals("REVOKE")
+                || sqlType.equals("FLUSH")
+                || sqlType.equals("LOCK_TABLES")
+                || sqlType.equals("UNLOCK_TABLES")
+                || sqlType.equals("OPTIMIZE_TABLE")
+                || sqlType.equals("REPAIR_TABLE")
+                || sqlType.equals("ANALYZE")
+                || sqlType.equals("CHECK_TABLE");
     }
 
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList) {

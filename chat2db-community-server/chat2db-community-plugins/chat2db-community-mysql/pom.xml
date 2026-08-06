@@ -22,7 +22,43 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Testcontainers brings up a real MySQL (5.7 / 8.0) for transaction integration
+             tests. Introduced for #2586 manual transaction mode; this is the first module to
+             use Testcontainers, so the BOM is imported locally here. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- MySQL JDBC driver for the transaction integration tests. Chat2DB loads production
+             drivers dynamically at runtime from an external driver directory, so the driver is
+             not a compile/runtime dependency of the plugin; the IT needs it on the test
+             classpath both for Testcontainers' readiness probe and for DriverManager. -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>${mysql-connector.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <properties>
+        <testcontainers.version>1.20.4</testcontainers.version>
+        <mysql-connector.version>8.4.0</mysql-connector.version>
+    </properties>
     <build>
         <resources>
             <resource>

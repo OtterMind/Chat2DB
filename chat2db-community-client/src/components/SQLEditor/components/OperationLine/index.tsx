@@ -6,11 +6,14 @@ import SelectBoundInfo from '@/components/SelectBoundInfo';
 import { IBoundInfo as IDBInfo } from '@/typings/workspace';
 import historyService from '@/service/history';
 import i18n from '@/i18n';
-import { IconButton } from '@chat2db/ui';
+import { IconButton, staticMessage, staticModal } from '@chat2db/ui';
 import { keyboardKey } from '../../helper/utils';
 import { useZoerStore } from '@/store/zoer';
+import { useWorkspaceStore } from '@/store/workspace';
 import { isTemporaryId } from '@/utils';
 import { buildConsoleDefaultTabName } from '@/store/workspace/utils/consoleTabName';
+import transactionServer from '@/service/transaction';
+import type { TransactionState } from '@/store/workspace/slices/console/initialState';
 
 interface OperationLineProps {
   active: boolean;
@@ -21,6 +24,8 @@ interface OperationLineProps {
   action: (type: SQLOptType, params?: any) => void;
   isConsole?: boolean;
   contentDiffEnabled?: boolean;
+  transactionState?: TransactionState;
+  showTransactionControls?: boolean;
 }
 
 const OperationLine = ({
@@ -32,6 +37,8 @@ const OperationLine = ({
   action,
   isConsole = true,
   contentDiffEnabled = false,
+  transactionState,
+  showTransactionControls = false,
 }: OperationLineProps) => {
   const { styles, cx } = useStyles();
 
@@ -97,7 +104,35 @@ const OperationLine = ({
     return [WorkspaceTabType.CONSOLE, WorkspaceTabType.LocalSQLFile].includes(type);
   }, [type]);
 
-  const handleChangeDBInfo = (_dbInfo: IDBInfo) => {
+  const handleChangeDBInfo = async (_dbInfo: IDBInfo) => {
+    // Switching the connection changes the catalog; an open transaction cannot survive it, so
+    // confirm and roll back first when a transaction is in progress.
+    if (transactionState?.inTransaction && typeof dbInfo.consoleId === 'number') {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        staticModal.confirm({
+          title: i18n('workspace.transaction.switchConnectionTitle'),
+          content: i18n('workspace.transaction.switchConnectionContent'),
+          okText: i18n('workspace.transaction.rollback'),
+          cancelText: i18n('common.button.cancel'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await transactionServer.rollbackTransaction({
+          dataSourceId: dbInfo.dataSourceId as number,
+          databaseName: dbInfo.databaseName,
+          schemaName: dbInfo.schemaName,
+          consoleId: dbInfo.consoleId,
+        });
+        useWorkspaceStore.getState().setTransactionState(dbInfo.consoleId, { inTransaction: false });
+      } catch (error) {
+        staticMessage.error(String(error));
+      }
+    }
     const nameCustomized = _dbInfo.nameCustomized ?? dbInfo.nameCustomized ?? false;
     const nextDBInfo = {
       ..._dbInfo,
@@ -161,6 +196,44 @@ const OperationLine = ({
               action(SQLOptType.EXPLAIN_SQL);
             }}
           />
+        )}
+
+        {showTransactionControls && (
+          <>
+            <IconButton
+              className={styles.operatingButtonIcon}
+              code="icon-switch-horizontal"
+              size="sm"
+              title={i18n('common.button.autoCommit')}
+              onClick={() => {
+                action(SQLOptType.TOGGLE_AUTO_COMMIT);
+              }}
+            />
+            {transactionState?.mode === 'manual' && (
+              <>
+                <IconButton
+                  className={styles.operatingButtonIcon}
+                  code="icon-check"
+                  size="sm"
+                  disabled={!transactionState?.inTransaction}
+                  title={i18n('common.button.commit')}
+                  onClick={() => {
+                    action(SQLOptType.COMMIT_TRANSACTION);
+                  }}
+                />
+                <IconButton
+                  className={styles.operatingButtonIcon}
+                  code="icon-huigun"
+                  size="sm"
+                  disabled={!transactionState?.inTransaction}
+                  title={i18n('common.button.rollback')}
+                  onClick={() => {
+                    action(SQLOptType.ROLLBACK_TRANSACTION);
+                  }}
+                />
+              </>
+            )}
+          </>
         )}
 
         {(showRunSigleSQLButton || showRunButton) && <div className={styles.partingLine} />}
