@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -68,6 +69,32 @@ class MysqlAccountSqlBuilder {
                 requirePrivileges(command);
                 yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
+            }
+            case ALTER_AUTH_PLUGIN -> {
+                StringBuilder sb = new StringBuilder();
+                sb.append(SQL_ALTER_USER).append(account(command));
+                if (StringUtils.isNotBlank(command.getAuthPlugin())) {
+                    sb.append(" IDENTIFIED WITH ").append(command.getAuthPlugin());
+                }
+                if (StringUtils.isNotBlank(command.getPassword())) {
+                    sb.append(" BY ").append(passwordLiteral(command, maskSensitive));
+                }
+                String tls = command.getTlsRequirement();
+                if (StringUtils.isNotBlank(tls)) {
+                    sb.append(" REQUIRE ").append(tls.toUpperCase(Locale.ROOT));
+                    if ("X509".equalsIgnoreCase(tls)) {
+                        if (StringUtils.isNotBlank(command.getTlsCipher())) {
+                            sb.append(" CIPHER ").append(stringLiteral(command.getTlsCipher()));
+                        }
+                        if (StringUtils.isNotBlank(command.getTlsIssuer())) {
+                            sb.append(" ISSUER ").append(stringLiteral(command.getTlsIssuer()));
+                        }
+                        if (StringUtils.isNotBlank(command.getTlsSubject())) {
+                            sb.append(" SUBJECT ").append(stringLiteral(command.getTlsSubject()));
+                        }
+                    }
+                }
+                yield sb.toString();
             }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
         };
