@@ -10,13 +10,15 @@ import java.sql.Connection;
 @Service
 public class DbDiagnosticsServiceImpl implements IDbDiagnosticsService {
 
+    private static final String SQL_SHOW_INNODB_STATUS = "SHOW ENGINE INNODB STATUS";
+    private static final String FIELD_STATUS = "Status";
+
     @Override
     public String innodbStatus() {
         Connection connection = Chat2DBContext.getConnection();
-        String sql = "SHOW ENGINE INNODB STATUS";
-        return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
+        return DefaultSQLExecutor.getInstance().execute(connection, SQL_SHOW_INNODB_STATUS, resultSet -> {
             if (resultSet.next()) {
-                return resultSet.getString("Status");
+                return resultSet.getString(FIELD_STATUS);
             }
             return null;
         });
