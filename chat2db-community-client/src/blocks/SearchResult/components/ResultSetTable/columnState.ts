@@ -41,11 +41,37 @@ export function canHideResultColumn(
   hiddenFields: ReadonlySet<string>,
   field: string,
 ): boolean {
-  return (
-    fields.includes(field) &&
-    !hiddenFields.has(field) &&
-    fields.filter((item) => !hiddenFields.has(item)).length > 1
-  );
+  return canHideResultColumns(fields, hiddenFields, [field]);
+}
+
+export function canHideResultColumns(
+  fields: readonly string[],
+  hiddenFields: ReadonlySet<string>,
+  targetFields: readonly string[],
+): boolean {
+  const reconciledHiddenFields = reconcileHiddenResultColumnFields(fields, hiddenFields);
+  const targetFieldSet = new Set(targetFields);
+  const visibleFields = fields.filter((field) => !reconciledHiddenFields.has(field));
+  const visibleTargetCount = visibleFields.filter((field) => targetFieldSet.has(field)).length;
+  return visibleTargetCount > 0 && visibleTargetCount < visibleFields.length;
+}
+
+export function hideResultColumnFields(
+  fields: readonly string[],
+  hiddenFields: ReadonlySet<string>,
+  targetFields: readonly string[],
+): Set<string> {
+  const next = reconcileHiddenResultColumnFields(fields, hiddenFields);
+  if (!canHideResultColumns(fields, next, targetFields)) {
+    return next;
+  }
+  const targetFieldSet = new Set(targetFields);
+  fields.forEach((field) => {
+    if (targetFieldSet.has(field)) {
+      next.add(field);
+    }
+  });
+  return next;
 }
 
 export function updateHiddenResultColumnFields(
@@ -60,10 +86,9 @@ export function updateHiddenResultColumnFields(
   }
   if (visible) {
     next.delete(field);
-  } else if (canHideResultColumn(fields, next, field)) {
-    next.add(field);
+    return next;
   }
-  return next;
+  return hideResultColumnFields(fields, next, [field]);
 }
 
 export function canFreezeResultColumn(columns: readonly ResultColumnLike[], field: string): boolean {

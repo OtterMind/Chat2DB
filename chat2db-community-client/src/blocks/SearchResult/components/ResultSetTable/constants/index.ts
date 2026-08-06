@@ -42,8 +42,8 @@ export enum ContextmenuType {
   markdownTable = 'markdownTable',
   showFieldType = 'showFieldType',
   showFieldComment = 'showFieldComment',
-  showHideColumns = 'showHideColumns',
   hideColumn = 'hideColumn',
+  showAllColumns = 'showAllColumns',
   freezeColumn = 'freezeColumn',
   unfreezeAllColumns = 'unfreezeAllColumns',
 }

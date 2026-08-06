@@ -15,8 +15,8 @@ export interface IOnContextmenuEvent {
   operationRecordUtils: OperationRecordUtils;
   onTableOperationUtils: ITableOperationUtils;
   frozenColumnFields: readonly string[];
-  onShowHideColumns: () => void;
-  onHideColumn: (field: string) => void;
+  onHideColumns: (fields: string[]) => void;
+  onShowAllColumns: () => void;
   onFreezeColumns: (fields: string[]) => void;
   onUnfreezeAllColumns: () => void;
 }

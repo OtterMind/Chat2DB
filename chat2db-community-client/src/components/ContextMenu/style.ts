@@ -12,6 +12,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     .ant-menu-submenu-title {
       display: flex;
       align-items: center;
+      justify-content: flex-start;
       height: 30px;
       margin: 0;
       padding: 0 10px;
@@ -19,17 +20,19 @@ export const useStyles = createStyles(({ css, token }) => ({
       color: ${token.colorText};
       font-size: 13px;
       line-height: 30px;
+      text-align: left;
     }
 
     .ant-menu-title-content {
       flex: 1 1 auto;
       min-width: 0;
+      text-align: left;
     }
 
     .ant-menu-item-icon {
-      width: 14px;
-      min-width: 14px;
-      height: 14px;
+      width: 16px;
+      min-width: 16px;
+      height: 16px;
     }
 
     .ant-menu-item:hover,
@@ -53,8 +56,26 @@ export const useStyles = createStyles(({ css, token }) => ({
   defaultMenuWidth: css`
     min-width: 160px;
   `,
-  menuIconPlaceholder: css`
-    display: inline-block;
-    visibility: hidden;
+  menuIconSlot: css`
+    display: inline-flex;
+    flex: 0 0 16px;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+
+    > svg,
+    > i {
+      width: 16px !important;
+      height: 16px !important;
+      min-width: 16px;
+      font-size: 16px !important;
+    }
+  `,
+  menuLabel: css`
+    display: block;
+    width: 100%;
+    text-align: left;
   `,
 }));

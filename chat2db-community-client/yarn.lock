@@ -9925,10 +9925,10 @@ lru-cache@^5.1.1:
   dependencies:
     yallist "^3.0.2"
 
-lucide-react@^0.356.0:
-  version "0.356.0"
-  resolved "https://registry.npmmirror.com/lucide-react/-/lucide-react-0.356.0.tgz#4a8813ece512bffb7a40a6e10a0d6e2e5ac6ad62"
-  integrity sha512-MDInjLrmZToccH2UxEshntujBlFwtOofGB22FN/eg39FfGVYV1TT1eMIv2j4rdaTJBpYjUuX7fEo9pwYkNFgwA==
+lucide-react@^1.29.0:
+  version "1.29.0"
+  resolved "https://registry.npmmirror.com/lucide-react/-/lucide-react-1.29.0.tgz#cc95a492f122b6fceda454445a0740e442b2a1dc"
+  integrity sha512-Xs9QFG5+9sNX04MdKVT4++umA+hJ2qsJVlRlRWHQ7qZobXgMiNHSpZ5eZm8JUoGCdNyoEdXoEwa8HVr0DNjOQg==
 
 lucide-react@latest:
   version "0.475.0"

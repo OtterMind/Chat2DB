@@ -18,10 +18,10 @@ import {
   getResultColumnFields,
   getResultColumnDisplayOrder,
   getNextFrozenResultColumnFields,
+  hideResultColumnFields,
   mergeResultColumnOrderFromDisplay,
   orderResultColumns,
   reconcileHiddenResultColumnFields,
-  updateHiddenResultColumnFields,
   getResultFieldAtTableColumn,
 } from './columnState';
 import { resolveResultSelectionActiveCell } from './selectionState';
@@ -58,6 +58,7 @@ export interface ResultSetTableRef {
   activeFilterCount: number;
   clearAllFilters: () => void;
   isFieldFrozen: (field: string | number) => boolean;
+  openColumnVisibility: () => void;
 }
 
 const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTableRef>) => {
@@ -157,16 +158,20 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     [clearColumnSensitiveSelection, resultColumnFields],
   );
 
-  const handleHideColumn = useCallback(
-    (field: string) => {
-      setHiddenColumnFields((current) =>
-        updateHiddenResultColumnFields(resultColumnFields, current, field, false),
-      );
-      setFrozenColumnFields((current) => current.filter((item) => item !== field));
+  const handleHideColumns = useCallback(
+    (fields: string[]) => {
+      const nextHiddenFields = hideResultColumnFields(resultColumnFields, hiddenColumnFields, fields);
+      setHiddenColumnFields(nextHiddenFields);
+      setFrozenColumnFields((current) => current.filter((field) => !nextHiddenFields.has(field)));
       clearColumnSensitiveSelection();
     },
-    [clearColumnSensitiveSelection, resultColumnFields],
+    [clearColumnSensitiveSelection, hiddenColumnFields, resultColumnFields],
   );
+
+  const handleShowAllColumns = useCallback(() => {
+    setHiddenColumnFields(new Set());
+    clearColumnSensitiveSelection();
+  }, [clearColumnSensitiveSelection]);
 
   const handleFreezeColumns = useCallback(
     (fields: string[]) => {
@@ -231,8 +236,8 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
       operationRecordUtils,
       onTableOperationUtils,
       frozenColumnFields,
-      onShowHideColumns: () => setColumnVisibilityOpen(true),
-      onHideColumn: handleHideColumn,
+      onHideColumns: handleHideColumns,
+      onShowAllColumns: handleShowAllColumns,
       onFreezeColumns: handleFreezeColumns,
       onUnfreezeAllColumns: handleUnfreezeAllColumns,
     });
@@ -249,7 +254,8 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     };
   }, [
     frozenColumnFields,
-    handleHideColumn,
+    handleHideColumns,
+    handleShowAllColumns,
     handleFreezeColumns,
     handleUnfreezeAllColumns,
     onTableOperationUtils,
@@ -334,6 +340,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
       activeFilterCount,
       clearAllFilters,
       isFieldFrozen: (field) => frozenColumnFields.includes(String(field)),
+      openColumnVisibility: () => setColumnVisibilityOpen(true),
     };
   }, [operationRecordUtils, tableInstance, activeFilterCount, clearAllFilters, frozenColumnFields]);
 

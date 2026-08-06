@@ -12,15 +12,21 @@ import {
 import {
   canFreezeResultColumns,
   canHideResultColumn,
+  canHideResultColumns,
   getNextFrozenResultColumnFields,
   getResultCellMetaAtTableColumn,
   getResultColumnDisplayOrder,
   getResultFrozenColumnCount,
+  hideResultColumnFields,
   mergeResultColumnOrderFromDisplay,
   orderResultColumns,
   updateHiddenResultColumnFields,
 } from '../ResultSetTable/columnState';
 import { resolveResultSelectionActiveCell } from '../ResultSetTable/selectionState';
+import {
+  isResultHeaderContext,
+  joinContextMenuGroups,
+} from '../ResultSetTable/event/onContextmenuCell/menuGroups';
 
 test('result search stays hidden until explicitly opened', () => {
   assert.equal(RESULT_SEARCH_VISIBLE_BY_DEFAULT, false);
@@ -197,6 +203,30 @@ test('column visibility always keeps at least one data column visible', () => {
   );
 });
 
+test('contiguous and jump-selected columns hide together in source order without hiding every column', () => {
+  assert.deepEqual(
+    [...hideResultColumnFields(['1', '2', '3', '4'], new Set(), ['4', '2'])],
+    ['2', '4'],
+  );
+  assert.deepEqual(
+    [...hideResultColumnFields(['1', '2', '3', '4'], new Set(), ['2', '3'])],
+    ['2', '3'],
+  );
+
+  const hiddenFields = new Set(['2', '4']);
+  assert.equal(canHideResultColumns(['1', '2', '3', '4'], hiddenFields, ['1', '3']), false);
+  assert.deepEqual(
+    [...hideResultColumnFields(['1', '2', '3', '4'], hiddenFields, ['3', '1'])],
+    ['2', '4'],
+  );
+});
+
+test('column and display actions are scoped to result headers', () => {
+  assert.equal(isResultHeaderContext(0, 1), true);
+  assert.equal(isResultHeaderContext(1, 1), false);
+  assert.equal(isResultHeaderContext(1, 0), false);
+});
+
 test('jump-selected columns freeze together without changing their relative order', () => {
   const frozenFields = getNextFrozenResultColumnFields(resultColumns, [], ['4', '2']);
   assert.deepEqual(frozenFields, ['2', '4']);
@@ -268,4 +298,15 @@ test('clearing a selection never restores an active cell from a pending frame', 
     ),
     { col: 2, row: 1 },
   );
+});
+
+test('result context menu groups use one divider between populated action categories', () => {
+  assert.deepEqual(joinContextMenuGroups(['view'], [], ['copy', 'paste'], ['delete']), [
+    'view',
+    { type: 'divider' },
+    'copy',
+    'paste',
+    { type: 'divider' },
+    'delete',
+  ]);
 });

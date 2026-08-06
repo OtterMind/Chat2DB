@@ -30,12 +30,17 @@ import { useGlobalStore } from '@/store/global';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
 import {
+  DEFAULT_RESULT_INSPECTOR_MODE,
+  getResultInspectorTabs,
   getWorkspaceResultInspectorCode,
+  ResultInspectorMode,
+  ResultInspectorTab,
   shouldClearInactiveResultInspector,
+  toggleResultInspectorMode,
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
-import { staticMessage } from '@chat2db/ui';
-import { X } from 'lucide-react';
+import { Modal, staticMessage } from '@chat2db/ui';
+import { PanelRight, SquareSquare, X } from 'lucide-react';
 import {
   applyResultSearchVisibilityAction,
   getResultSearchVisibility,
@@ -52,8 +57,6 @@ interface IProps {
   viewTable?: boolean;
 }
 
-type InspectorTab = 'row' | 'value' | 'aggregates';
-
 export default memo<IProps>(
   (props) => {
     const { viewTable } = props;
@@ -65,8 +68,10 @@ export default memo<IProps>(
     const resultSetTableRef = useRef<ResultSetTableRef>(null);
     const [hasOperationRecord, setHasOperationRecord] = useState(false);
     const sqlPreviewExecuteRef = useRef<SQLPreviewExecuteRef>(null);
-    const viewDataRef = useRef<ViewDataRef>(null);
-    const rowDetailRef = useRef<RowDetailRef>(null);
+    const sidebarViewDataRef = useRef<ViewDataRef>(null);
+    const modalViewDataRef = useRef<ViewDataRef>(null);
+    const sidebarRowDetailRef = useRef<RowDetailRef>(null);
+    const modalRowDetailRef = useRef<RowDetailRef>(null);
     const statusBarRef = useRef<StatusBarRef>(null);
     const [executeErrorMessage, setExecuteErrorMessage] = useState<string | null>(null);
     const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
@@ -77,14 +82,17 @@ export default memo<IProps>(
     const feSearchRef = useRef<FESearchRef>(null);
     const [orderByText, setOrderByText] = useState<string>('');
     const [submitLoading, setSubmitLoading] = useState(false);
-    const [inspectorTab, setInspectorTab] = useState<InspectorTab>('row');
+    const [inspectorMode, setInspectorMode] = useState<ResultInspectorMode>(DEFAULT_RESULT_INSPECTOR_MODE);
+    const [inspectorTab, setInspectorTab] = useState<ResultInspectorTab>('row');
+    const [inspectorModalOpen, setInspectorModalOpen] = useState(false);
     const [inspectorPortalTarget, setInspectorPortalTarget] = useState<HTMLElement | null>(null);
     const [selectedValues, setSelectedValues] = useState<unknown[]>([]);
     const [selectedRowCount, setSelectedRowCount] = useState(0);
     const [lastActiveCell, setLastActiveCell] = useState<IResultSetSelection['activeCell']>();
     const currentWorkspaceExtend = useWorkspaceStore((state) => state.currentWorkspaceExtend);
     const inspectorExtendCode = useMemo(() => getWorkspaceResultInspectorCode(searchAreaId), [searchAreaId]);
-    const inspectorOpen = currentWorkspaceExtend === inspectorExtendCode;
+    const inspectorSidebarOpen = currentWorkspaceExtend === inspectorExtendCode;
+    const inspectorOpen = inspectorSidebarOpen || inspectorModalOpen;
     const shortcutOverrides = useGlobalStore((s) => s.shortcutOverrides);
     const shortcutConfig = useMemo(
       () => getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides),
@@ -99,6 +107,7 @@ export default memo<IProps>(
       setSelectedValues([]);
       setSelectedRowCount(0);
       setLastActiveCell(undefined);
+      setInspectorModalOpen(false);
       const workspaceStore = useWorkspaceStore.getState();
       if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
         workspaceStore.setCurrentWorkspaceExtend(null);
@@ -106,6 +115,7 @@ export default memo<IProps>(
     }, [inspectorExtendCode, resultData]);
 
     const closeInspector = useCallback(() => {
+      setInspectorModalOpen(false);
       const workspaceStore = useWorkspaceStore.getState();
       if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
         workspaceStore.setCurrentWorkspaceExtend(null);
@@ -114,6 +124,9 @@ export default memo<IProps>(
 
     useEffect(() => {
       const workspaceStore = useWorkspaceStore.getState();
+      if (!props.active) {
+        setInspectorModalOpen(false);
+      }
       if (
         shouldClearInactiveResultInspector(
           workspaceStore.currentWorkspaceExtend,
@@ -126,20 +139,36 @@ export default memo<IProps>(
     }, [inspectorExtendCode, props.active]);
 
     const activateInspector = useCallback(
-      (tab: InspectorTab) => {
+      (tab: ResultInspectorTab, requestedMode: ResultInspectorMode = inspectorMode) => {
+        setInspectorMode(requestedMode);
         setInspectorTab(tab);
-        useAIStore.getState().setShowPanel(false);
         const workspaceStore = useWorkspaceStore.getState();
+        if (requestedMode === 'modal') {
+          if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
+            workspaceStore.setCurrentWorkspaceExtend(null);
+          }
+          setInspectorModalOpen(true);
+          return;
+        }
+        setInspectorModalOpen(false);
+        useAIStore.getState().setShowPanel(false);
         workspaceStore.setCurrentWorkspaceExtend(inspectorExtendCode);
         workspaceStore.togglePanelRight(true);
       },
-      [inspectorExtendCode],
+      [inspectorExtendCode, inspectorMode],
     );
 
-    useEffect(() => closeInspector, [closeInspector]);
+    useEffect(() => {
+      return () => {
+        const workspaceStore = useWorkspaceStore.getState();
+        if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
+          workspaceStore.setCurrentWorkspaceExtend(null);
+        }
+      };
+    }, [inspectorExtendCode]);
 
     useLayoutEffect(() => {
-      if (!inspectorOpen) {
+      if (!inspectorSidebarOpen) {
         setInspectorPortalTarget(null);
         return undefined;
       }
@@ -150,7 +179,7 @@ export default memo<IProps>(
       resolvePortalTarget();
       const animationFrame = window.requestAnimationFrame(resolvePortalTarget);
       return () => window.cancelAnimationFrame(animationFrame);
-    }, [inspectorOpen]);
+    }, [inspectorSidebarOpen]);
 
     // Only resultData changes here. Database metadata is stable, and the toolbar controls pagination.
     const handleExecuteSQL = useCallback(
@@ -374,16 +403,18 @@ export default memo<IProps>(
           rowId: nextParams.rowId,
           field,
         });
-        activateInspector('value');
+        const targetMode = inspectorMode;
+        activateInspector('value', targetMode);
         setTimeout(() => {
-          viewDataRef.current?.openPanel({
+          const targetRef = targetMode === 'sidebar' ? sidebarViewDataRef : modalViewDataRef;
+          targetRef.current?.openPanel({
             ...nextParams,
             canEdit: !!resultData?.canEdit && !fieldIsFrozen,
             operationRecordUtils: resultSetTableRef.current?.operationRecordUtils,
           });
         }, 0);
       },
-      [activateInspector, isResultFieldFrozen, resultData?.canEdit],
+      [activateInspector, inspectorMode, isResultFieldFrozen, resultData?.canEdit],
     );
 
     const openRowInspector = useCallback((params) => {
@@ -400,9 +431,13 @@ export default memo<IProps>(
         rowId: params.rowId ?? record?.CHAT2DB_ROW_NUMBER,
         field,
       });
-      activateInspector('row');
-      setTimeout(() => rowDetailRef.current?.openPanel(params), 0);
-    }, [activateInspector]);
+      const targetMode = inspectorMode;
+      activateInspector('row', targetMode);
+      setTimeout(() => {
+        const targetRef = targetMode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef;
+        targetRef.current?.openPanel(params);
+      }, 0);
+    }, [activateInspector, inspectorMode]);
 
     const onTableOperationUtils = useMemo(() => {
       return {
@@ -450,6 +485,10 @@ export default memo<IProps>(
 
     const handleClearAllFilters = useCallback(() => {
       resultSetTableRef.current?.clearAllFilters?.();
+    }, []);
+
+    const handleManageColumns = useCallback(() => {
+      resultSetTableRef.current?.openColumnVisibility();
     }, []);
 
     const handleRowDetailChangeData = useCallback((params: IChangeDataParams) => {
@@ -502,18 +541,19 @@ export default memo<IProps>(
         setLastActiveCell(selection.activeCell);
         if (inspectorOpen) {
           if (inspectorTab === 'row') {
-            rowDetailRef.current?.openPanel(selection.activeCell);
+            const targetRef = inspectorMode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef;
+            targetRef.current?.openPanel(selection.activeCell);
           } else if (inspectorTab === 'value') {
             openValueInspector(selection.activeCell);
           }
         }
       },
-      [closeInspector, inspectorOpen, inspectorTab, openValueInspector],
+      [closeInspector, inspectorMode, inspectorOpen, inspectorTab, openValueInspector],
     );
 
     const handleInspectorTabChange = useCallback(
-      (key: string) => {
-        const nextTab = key as InspectorTab;
+      (key: string, targetMode: ResultInspectorMode = inspectorMode) => {
+        const nextTab = key as ResultInspectorTab;
         setInspectorTab(nextTab);
         if (nextTab === 'aggregates' || !lastActiveCell) {
           return;
@@ -538,10 +578,12 @@ export default memo<IProps>(
             return;
           }
           if (nextTab === 'row') {
-            rowDetailRef.current?.openPanel({ ...lastActiveCell, col: tableCol, field });
+            const targetRef = targetMode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef;
+            targetRef.current?.openPanel({ ...lastActiveCell, col: tableCol, field });
             return;
           }
-          viewDataRef.current?.openPanel({
+          const targetRef = targetMode === 'sidebar' ? sidebarViewDataRef : modalViewDataRef;
+          targetRef.current?.openPanel({
             ...lastActiveCell,
             col: tableCol,
             field,
@@ -551,8 +593,14 @@ export default memo<IProps>(
           });
         }, 0);
       },
-      [closeInspector, isResultFieldFrozen, lastActiveCell, resultData?.canEdit],
+      [closeInspector, inspectorMode, isResultFieldFrozen, lastActiveCell, resultData?.canEdit],
     );
+
+    const handleInspectorModeSwitch = useCallback(() => {
+      const nextMode = toggleResultInspectorMode(inspectorMode);
+      activateInspector(inspectorTab, nextMode);
+      handleInspectorTabChange(inspectorTab, nextMode);
+    }, [activateInspector, handleInspectorTabChange, inspectorMode, inspectorTab]);
 
     const showAllAggregates = useCallback(() => {
       activateInspector('aggregates');
@@ -570,7 +618,84 @@ export default memo<IProps>(
       }, 0);
 
       return () => window.clearTimeout(resizeTimer);
-    }, [inspectorOpen, tableInstance]);
+    }, [inspectorSidebarOpen, tableInstance]);
+
+    const renderInspectorTabs = (mode: ResultInspectorMode) => {
+      const availableTabs = getResultInspectorTabs(mode);
+      const switchLabel = i18n(
+        mode === 'sidebar'
+          ? 'common.resultInspector.switchToModal'
+          : 'common.resultInspector.switchToSidebar',
+      );
+      const items = [
+        {
+          key: 'row',
+          label: i18n('common.resultInspector.record'),
+          children: (
+            <RowDetail
+              ref={mode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef}
+              resultData={resultData}
+              isFieldReadOnly={isResultFieldFrozen}
+              onChangeData={handleRowDetailChangeData}
+              onViewData={openValueInspector}
+            />
+          ),
+        },
+        {
+          key: 'value',
+          label: i18n('common.resultInspector.value'),
+          children: <ViewData ref={mode === 'sidebar' ? sidebarViewDataRef : modalViewDataRef} />,
+        },
+        {
+          key: 'aggregates',
+          label: i18n('common.resultInspector.aggregates'),
+          children: (
+            <SelectionAggregates
+              selectedValues={selectedValues}
+              selectedRowCount={selectedRowCount}
+            />
+          ),
+        },
+      ].filter((item) => availableTabs.includes(item.key as ResultInspectorTab));
+
+      return (
+        <Tabs
+          className={styles.inspectorTabs}
+          size="small"
+          activeKey={inspectorTab}
+          onChange={handleInspectorTabChange}
+          tabBarExtraContent={
+            <div className={styles.inspectorActions}>
+              <Tooltip title={switchLabel}>
+                <Button
+                  type="text"
+                  size="small"
+                  className={styles.inspectorActionButton}
+                  aria-label={switchLabel}
+                  icon={
+                    mode === 'sidebar'
+                      ? <SquareSquare size={16} strokeWidth={1.75} />
+                      : <PanelRight size={16} strokeWidth={1.75} />
+                  }
+                  onClick={handleInspectorModeSwitch}
+                />
+              </Tooltip>
+              <Tooltip title={i18n('common.button.close')}>
+                <Button
+                  type="text"
+                  size="small"
+                  className={styles.inspectorActionButton}
+                  aria-label={i18n('common.button.close')}
+                  icon={<X size={16} strokeWidth={1.75} />}
+                  onClick={closeInspector}
+                />
+              </Tooltip>
+            </div>
+          }
+          items={items}
+        />
+      );
+    };
 
     return (
       <>
@@ -593,6 +718,7 @@ export default memo<IProps>(
               resultData={resultData}
               activeFilterCount={activeFilterCount}
               onClearAllFilters={handleClearAllFilters}
+              onManageColumns={handleManageColumns}
             />
             {viewTable && (
               <ScreeningResult
@@ -626,57 +752,10 @@ export default memo<IProps>(
                   onSelectionChange={handleSelectionChange}
                 />
               </div>
-              {inspectorOpen && inspectorPortalTarget &&
+              {inspectorSidebarOpen && inspectorPortalTarget &&
                 createPortal(
                   <aside className={styles.inspector}>
-                    <Tabs
-                      className={styles.inspectorTabs}
-                      size="small"
-                      activeKey={inspectorTab}
-                      onChange={handleInspectorTabChange}
-                      tabBarExtraContent={
-                        <Tooltip title={i18n('common.button.close')}>
-                          <Button
-                            type="text"
-                            size="small"
-                            className={styles.inspectorClose}
-                            aria-label={i18n('common.button.close')}
-                            icon={<X size={15} strokeWidth={1.75} />}
-                            onClick={closeInspector}
-                          />
-                        </Tooltip>
-                      }
-                      items={[
-                        {
-                          key: 'row',
-                          label: i18n('common.resultInspector.record'),
-                          children: (
-                            <RowDetail
-                              ref={rowDetailRef}
-                              resultData={resultData}
-                              isFieldReadOnly={isResultFieldFrozen}
-                              onChangeData={handleRowDetailChangeData}
-                              onViewData={openValueInspector}
-                            />
-                          ),
-                        },
-                        {
-                          key: 'value',
-                          label: i18n('common.resultInspector.value'),
-                          children: <ViewData ref={viewDataRef} />,
-                        },
-                        {
-                          key: 'aggregates',
-                          label: i18n('common.resultInspector.aggregates'),
-                          children: (
-                            <SelectionAggregates
-                              selectedValues={selectedValues}
-                              selectedRowCount={selectedRowCount}
-                            />
-                          ),
-                        },
-                      ]}
-                    />
+                    {renderInspectorTabs('sidebar')}
                   </aside>,
                   inspectorPortalTarget,
                 )}
@@ -696,6 +775,19 @@ export default memo<IProps>(
           onExecuteSuccess={handleExecuteSuccess}
           ref={sqlPreviewExecuteRef}
         />
+        <Modal
+          open={inspectorModalOpen}
+          onCancel={closeInspector}
+          width="60vw"
+          maskClosable={false}
+          forceRender={true}
+          footer={null}
+          closable={false}
+        >
+          <div className={styles.inspectorModalBody}>
+            {renderInspectorTabs('modal')}
+          </div>
+        </Modal>
       </>
     );
   },
