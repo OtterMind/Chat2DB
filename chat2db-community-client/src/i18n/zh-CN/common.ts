@@ -232,6 +232,8 @@ export default {
   'common.text.oldestFirst': '最早优先',
   'common.text.newestFirst': '最新优先',
   'common.text.resultSettings': '结果设置',
+  'common.text.showFieldType': '显示字段类型',
+  'common.text.showFieldComment': '显示字段注释',
   'common.text.moreTabs': '更多标签页',
   'common.text.cancelRequestFailed': '取消请求失败，请重试',
   'common.text.rowsReturned': '返回 {1} 行',

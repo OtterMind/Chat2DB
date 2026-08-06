@@ -10,8 +10,8 @@ import onPasteData from './event/onPasteData';
 import dataTreating from './utils/dataTreating';
 import useOperationRecord, { OperationRecordUtils } from './hooks/useOperationRecord';
 import useFilterAndSort from './hooks/useFilterAndSort';
-import useHeaderTooltip from './hooks/useHeaderTooltip';
 import { ITableOperationUtils } from './typings';
+import { useGlobalStore } from '@/store/global';
 
 interface IProps {
   className?: string;
@@ -48,6 +48,11 @@ export interface ResultSetTableRef {
 const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTableRef>) => {
   const { resultData, onOperationChange, onTableOperationUtils, tableInstance, setTableInstance } = props;
   const { styles, theme } = useStyles();
+  const { customFontSize, showFieldType, showFieldComment } = useGlobalStore((state) => ({
+    customFontSize: state.baseSetting.customFontSize ?? 13,
+    showFieldType: state.dataTableSettings.showFieldType ?? true,
+    showFieldComment: state.dataTableSettings.showFieldComment ?? true,
+  }));
 
   // Registry data manipulation method
   const { operationRecordUtils, hasOperationRecord, reCalculateCellStyle } = useOperationRecord({
@@ -64,11 +69,13 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     filterAfter: reCalculateCellStyle,
     setOrderByText: props.setOrderByText,
   });
-  const headerTooltip = useHeaderTooltip({ tableInstance });
-
   const [columns, records] = useMemo(() => {
-    return dataTreating({ data: resultData, theme });
-  }, [resultData, theme.appearance]);
+    return dataTreating({
+      data: resultData,
+      theme,
+      visibility: { showFieldType, showFieldComment },
+    });
+  }, [resultData, theme.appearance, customFontSize, showFieldType, showFieldComment]);
 
   useEffect(() => {
     onOperationChange?.(hasOperationRecord);
@@ -205,10 +212,9 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
             selectAllOnCtrlA: true, // Turn on all selections
           },
           frozenColCount: 1, // Number of frozen columns
+          defaultHeaderRowHeight: 'auto',
         }}
       />
-      {/* plug-in area */}
-      <>{headerTooltip}</>
     </>
   );
 });

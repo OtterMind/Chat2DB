@@ -2,6 +2,7 @@ import React, { memo, forwardRef, useImperativeHandle, useMemo, useState, useRef
 // import i18n from '@/i18n';
 import { Dropdown } from 'antd';
 import { IconfontSvg } from '@chat2db/ui';
+import { Check } from 'lucide-react';
 
 interface IProps {
   className?: string;
@@ -62,12 +63,20 @@ const ContextMenu = (props: IProps, ref) => {
 
   const renderChildren = (children: any) => {
     return children?.map((t) => {
+      if (t.type === 'divider') {
+        return { type: 'divider' as const };
+      }
       return {
         key: t.key,
         onClick: () => {
           t.onClick?.();
         },
-        icon: t.icon && <IconfontSvg code={t.icon} size="lg" />,
+        icon:
+          t.checked !== undefined ? (
+            <Check opacity={t.checked ? 1 : 0} size={14} />
+          ) : (
+            t.icon && <IconfontSvg code={t.icon} size="lg" />
+          ),
         label: t.label,
         children: renderChildren(t.children),
       };
@@ -83,9 +92,14 @@ const ContextMenu = (props: IProps, ref) => {
     }
 
     const dropdownsItems = renderChildren(dropdownParams.dropdownsList);
+    const selectedKeys = (dropdownParams.dropdownsList || [])
+      .filter((item) => item.checked === true)
+      .map((item) => item.key);
 
     return {
       items: dropdownsItems,
+      selectable: true,
+      selectedKeys,
       style: dropdownsItems?.length ? {} : { display: 'none' }, // Show only when menu items exist.
     };
   }, [dropdownParams]);

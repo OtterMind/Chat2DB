@@ -1,9 +1,7 @@
 import type { ITableHeaderItem } from '@/typings/database';
+import { getHeaderMetadataRows, type HeaderMetadataVisibility } from '../headerMetadata';
 
-export const getResultColumnTitle = (data: Pick<ITableHeaderItem, 'name' | 'comment'>): string => {
-  let comment = data.comment?.trim() || '';
-  if (comment.length > 10) {
-    comment = `${comment.slice(0, 10)}...`;
-  }
-  return comment ? `${data.name}(${comment})` : data.name;
-};
+export const getResultColumnTitle = (data: ITableHeaderItem, visibility?: HeaderMetadataVisibility): string =>
+  getHeaderMetadataRows(data, visibility)
+    .map((row) => row.value)
+    .join('\n');

@@ -234,6 +234,8 @@ export default {
   'common.text.oldestFirst': 'Oldest first',
   'common.text.newestFirst': 'Newest first',
   'common.text.resultSettings': 'Result settings',
+  'common.text.showFieldType': 'Show field type',
+  'common.text.showFieldComment': 'Show field comment',
   'common.text.moreTabs': 'More tabs',
   'common.text.cancelRequestFailed': 'Failed to cancel request. Try again.',
   'common.text.rowsReturned': '{1} rows returned',

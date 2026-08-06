@@ -234,6 +234,8 @@ export default {
   'common.text.oldestFirst': '古い順',
   'common.text.newestFirst': '新しい順',
   'common.text.resultSettings': '結果設定',
+  'common.text.showFieldType': 'フィールド型を表示',
+  'common.text.showFieldComment': 'フィールドコメントを表示',
   'common.text.moreTabs': 'その他のタブ',
   'common.text.cancelRequestFailed': 'リクエストをキャンセルできませんでした。もう一度お試しください。',
   'common.text.rowsReturned': '{1} 行を取得',

@@ -20,11 +20,15 @@ import {
 import { getLargeCellErrorMessage } from '@/blocks/SearchResult/components/ViewData/largeCellValueMessage';
 
 import { staticMessage } from '@chat2db/ui';
+import { useGlobalStore } from '@/store/global';
 
 // monitors the right mouse click on a cell
 const onContextmenuCell = (props: IOnContextmenuEvent) => {
   const { resultData, tableInstance, operationRecordUtils, onTableOperationUtils } = props;
   const id = tableInstance.on('contextmenu_cell', (selectEvent) => {
+    const { dataTableSettings, updateDataTableSettings } = useGlobalStore.getState();
+    const showFieldType = dataTableSettings.showFieldType ?? true;
+    const showFieldComment = dataTableSettings.showFieldComment ?? true;
     const contextmenuMap = {
       [ContextmenuType.viewUpdateData]: {
         key: ContextmenuType.viewUpdateData,
@@ -203,6 +207,22 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
           },
         ],
       },
+      [ContextmenuType.showFieldType]: {
+        key: ContextmenuType.showFieldType,
+        label: i18n('common.text.showFieldType'),
+        checked: showFieldType,
+        onClick: () => {
+          updateDataTableSettings({ ...dataTableSettings, showFieldType: !showFieldType });
+        },
+      },
+      [ContextmenuType.showFieldComment]: {
+        key: ContextmenuType.showFieldComment,
+        label: i18n('common.text.showFieldComment'),
+        checked: showFieldComment,
+        onClick: () => {
+          updateDataTableSettings({ ...dataTableSettings, showFieldComment: !showFieldComment });
+        },
+      },
     };
 
     // If the cell I right-click is within the selected range, I don’t need to select it again.
@@ -285,6 +305,12 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         (item) => !list.includes(item.key),
       );
     }
+
+    dropdownsList.push(
+      { type: 'divider' },
+      contextmenuMap[ContextmenuType.showFieldType],
+      contextmenuMap[ContextmenuType.showFieldComment],
+    );
 
     if (!dropdownsList.length) {
       return;

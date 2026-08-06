@@ -271,6 +271,8 @@ export default {
   'common.text.oldestFirst': '오래된 순',
   'common.text.newestFirst': '최신 순',
   'common.text.resultSettings': '결과 설정',
+  'common.text.showFieldType': '필드 유형 표시',
+  'common.text.showFieldComment': '필드 설명 표시',
   'common.text.moreTabs': '더 많은 탭',
   'common.text.cancelRequestFailed': '요청을 취소하지 못했습니다. 다시 시도하세요.',
   'common.text.rowsReturned': '{1}개 행 반환',

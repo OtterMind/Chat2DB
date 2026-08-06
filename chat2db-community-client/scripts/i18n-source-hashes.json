@@ -5,7 +5,7 @@
     "es-ES": {
       "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
       "chat.ts": "f6c6ab9cbc5c1c828c35c75d83c4adca347ade590b5177e10d64fdd18cc8aef5",
-      "common.ts": "94c74ecece9c1ad0853468ee9b334c8221af9c4c44a73989704dacff4f41e401",
+      "common.ts": "6a5e1a0456fdb62597f5c590184294eea34379d89e12fb3b16529d4e91aee824",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",
       "dashboard.ts": "b217bbe260c7674d4efad1dd1b61136653858884f5b9b2134cfdf7d1de5a44ee",
       "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
@@ -27,12 +27,12 @@
       "stream.ts": "8418dd25b0fd54b2ef2b15a2573edf0a4876efb4e69936ff82a157ea5cf42be4",
       "team.ts": "eb1fb03bdfeb93169ef1d2e347deb5b95071c10c8c93c35cfe2cb5b6606779ea",
       "userGuide.ts": "0103ba35af95a3a0ff7a414130b68a7dd5f5f8196e59cd951631ac2090cb04fe",
-      "workspace.ts": "5a05f34ed754b8dd6cdf98c479d96b486436ca2203ae1b7ea6c3c2507e5c19df"
+      "workspace.ts": "6fbfba84a3b5eaf3d806202ff3318951b9506c013eb418767aaec13229201121"
     },
     "ko-KR": {
       "ai.ts": "391a6e14c58d8401bf3bc245eca5bdd4b66efd8225a877bfbbcae01a1c1c019a",
       "chat.ts": "f6c6ab9cbc5c1c828c35c75d83c4adca347ade590b5177e10d64fdd18cc8aef5",
-      "common.ts": "94c74ecece9c1ad0853468ee9b334c8221af9c4c44a73989704dacff4f41e401",
+      "common.ts": "6a5e1a0456fdb62597f5c590184294eea34379d89e12fb3b16529d4e91aee824",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",
       "dashboard.ts": "b217bbe260c7674d4efad1dd1b61136653858884f5b9b2134cfdf7d1de5a44ee",
       "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
@@ -54,7 +54,7 @@
       "stream.ts": "8418dd25b0fd54b2ef2b15a2573edf0a4876efb4e69936ff82a157ea5cf42be4",
       "team.ts": "eb1fb03bdfeb93169ef1d2e347deb5b95071c10c8c93c35cfe2cb5b6606779ea",
       "userGuide.ts": "0103ba35af95a3a0ff7a414130b68a7dd5f5f8196e59cd951631ac2090cb04fe",
-      "workspace.ts": "5a05f34ed754b8dd6cdf98c479d96b486436ca2203ae1b7ea6c3c2507e5c19df"
+      "workspace.ts": "6fbfba84a3b5eaf3d806202ff3318951b9506c013eb418767aaec13229201121"
     }
   }
 }

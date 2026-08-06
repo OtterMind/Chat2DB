@@ -271,6 +271,8 @@ export default {
   'common.text.oldestFirst': 'Antiguos primero',
   'common.text.newestFirst': 'Nuevos primero',
   'common.text.resultSettings': 'Configuración de resultados',
+  'common.text.showFieldType': 'Mostrar tipo de campo',
+  'common.text.showFieldComment': 'Mostrar comentario de campo',
   'common.text.moreTabs': 'Más pestañas',
   'common.text.cancelRequestFailed': 'No se pudo cancelar la solicitud. Inténtelo de nuevo.',
   'common.text.rowsReturned': '{1} filas devueltas',

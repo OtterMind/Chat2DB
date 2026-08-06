@@ -3,24 +3,40 @@ import { IManageResultData, IResultCell, ITableHeaderItem } from '@/typings/data
 import { Theme } from 'antd-style';
 import i18n from '@/i18n';
 import { resolveResultSetEditor } from './editorType';
-import { getResultColumnTitle } from './columnTitle';
+import type { HeaderMetadataVisibility } from '../headerMetadata';
+import { createResultHeaderCustomRender } from '../headerRender';
 
 const handleDataDisplay = (params: {
   data: ITableHeaderItem;
   index: number;
   theme: Omit<Theme, 'prefixCls'>;
   canEdit?: boolean;
+  visibility?: HeaderMetadataVisibility;
 }) => {
-  const { data, index, theme, canEdit = false } = params;
-  const customFontSize = useGlobalStore.getState().baseSetting.customFontSize;
-  const title = getResultColumnTitle(data);
+  const { data, index, theme, canEdit = false, visibility } = params;
+  const customFontSize = useGlobalStore.getState().baseSetting.customFontSize ?? 13;
+  const headerCustomRender = createResultHeaderCustomRender({
+    data,
+    theme,
+    fontSize: customFontSize,
+    visibility,
+  });
   return {
     CHAT2DB_COL_NUMBER: index,
     field: index.toString(),
-    title,
+    title: '',
+    headerCustomRender,
+    headerStyle: {
+      padding: [
+        8,
+        8,
+        headerCustomRender.expectedHeight - (customFontSize + 9) - 8,
+        8,
+      ],
+    },
     showSort: false,
     editor: canEdit ? resolveResultSetEditor(data.editorType) : undefined,
-    headerIcon: ['sort', 'filter'],
+    headerIcon: ['filter', 'sort'],
     sort: (a, b, _order): 0 | 1 | -1 => {
       if (a === null || a === undefined) return _order === 'asc' ? -1 : 1;
       if (b === null || b === undefined) return _order === 'asc' ? 1 : -1;
@@ -125,11 +141,15 @@ const handleDataDisplay = (params: {
 };
 
 // Convert data into the format required by CanvasTable.
-const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'prefixCls'> }) => {
-  const { data, theme } = params;
+const dataTreating = (params: {
+  data: IManageResultData;
+  theme: Omit<Theme, 'prefixCls'>;
+  visibility?: HeaderMetadataVisibility;
+}) => {
+  const { data, theme, visibility } = params;
   const columns: any =
     data?.headerList?.slice(1).map((item, index) => {
-      return handleDataDisplay({ data: item, index: index + 1, theme, canEdit: data.canEdit });
+      return handleDataDisplay({ data: item, index: index + 1, theme, canEdit: data.canEdit, visibility });
     }) || [];
 
   const records =

@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
-import { formatResultSummary, type DurationTranslator } from './resultSummary';
+import { formatResultSummary, type ResultSummaryTranslator } from './resultSummary';
 
-const zhTranslation: DurationTranslator = (key, durationMs) =>
-  key === 'common.text.executeDuration' ? `执行 ${durationMs} ms` : `读取 ${durationMs} ms`;
+const zhTranslation: ResultSummaryTranslator = (key, value) => {
+  const translations = {
+    'workspace.resultSet.cost': `耗时：${value}ms`,
+    'workspace.resultSet.rows': `行数：${value}`,
+    'common.text.executeDuration': `执行 ${value} ms`,
+    'common.text.fetchDuration': `读取 ${value} ms`,
+  };
+  return translations[key];
+};
 
 assert.equal(
   formatResultSummary(
@@ -17,11 +24,11 @@ assert.equal(
     },
     zhTranslation,
   ),
-  'cost: 6ms (执行 2ms · 读取 4ms) rows: 5',
+  '耗时：6ms (执行 2ms · 读取 4ms) 行数：5',
 );
 
-assert.equal(formatResultSummary({ dataList: [[], []] }, zhTranslation), 'rows: 2');
-assert.equal(formatResultSummary({ dataList: [] }, zhTranslation), 'rows: 0');
+assert.equal(formatResultSummary({ dataList: [[], []] }, zhTranslation), '行数：2');
+assert.equal(formatResultSummary({ dataList: [] }, zhTranslation), '行数：0');
 
 assert.equal(
   formatResultSummary(
@@ -36,7 +43,7 @@ assert.equal(
     },
     zhTranslation,
   ),
-  'cost: 0ms (执行 0ms · 读取 0ms) rows: 0',
+  '耗时：0ms (执行 0ms · 读取 0ms) 行数：0',
 );
 
 assert.equal(
@@ -47,7 +54,7 @@ assert.equal(
     },
     zhTranslation,
   ),
-  'rows: 1',
+  '行数：1',
 );
 
 console.log('result status summary tests passed');
