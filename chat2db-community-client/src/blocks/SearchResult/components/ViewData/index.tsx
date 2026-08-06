@@ -38,6 +38,7 @@ import {
 } from './largeCellValue';
 import { getLargeCellDisplayMessage, getLargeCellErrorMessage } from './largeCellValueMessage';
 import JsonAwareMonacoEditor from './JsonAwareMonacoEditor';
+import { getResultFieldAtTableColumn } from '../ResultSetTable/columnState';
 
 interface IProps {
   className?: string;
@@ -50,6 +51,14 @@ interface IViewData extends IHandleViewUpdateDataParams {
   field?: string;
   rowId?: string | number;
   operationRecordUtils?: OperationRecordUtils;
+}
+
+function resolveViewDataLocation(viewData: IViewData) {
+  const { tableInstance, row } = viewData;
+  const field = viewData.field || getResultFieldAtTableColumn(tableInstance, viewData.col, row);
+  const tableCol = field ? tableInstance.getTableIndexByField(field) : viewData.col;
+  const record = tableInstance.getRecordByCell(tableCol >= 1 ? tableCol : 1, row);
+  return { field, tableCol, record };
 }
 
 type LargeValueLoadingAction = 'initial' | 'more' | 'all' | null;
@@ -91,7 +100,9 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
 
   useEffect(() => {
     if (viewData) {
-      const { row, col, tableInstance, cellMeta } = viewData;
+      const { cellMeta } = viewData;
+      const { field, record } = resolveViewDataLocation(viewData);
+      const tableValue = field ? record?.[field] : undefined;
       setLargeValueChunks([]);
       setLargeValueLoading(false);
       setLargeValueLoadingAction(null);
@@ -104,7 +115,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
       if (cellMeta?.largeValue) {
         originalLargeValueRef.current = {
           value: cellMeta.value || '',
-          restoreValue: tableInstance.getCellOriginValue(col, row),
+          restoreValue: tableValue ?? null,
           cellMeta: cloneCellMeta(cellMeta),
         };
         setEditorValue(cellMeta.value || '');
@@ -118,8 +129,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
         }
         return;
       }
-      const data = tableInstance.getCellOriginValue(col, row);
-      setEditorValue(data);
+      setEditorValue(tableValue);
     } else {
       activeLargeValueIdRef.current = '';
       originalLargeValueRef.current = null;
@@ -218,7 +228,10 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     }
     originalLargeValueRef.current = {
       value: largeValueViewerValue,
-      restoreValue: viewData.tableInstance.getCellOriginValue(viewData.col, viewData.row),
+      restoreValue: (() => {
+        const { field, record } = resolveViewDataLocation(viewData);
+        return field ? record?.[field] ?? null : null;
+      })(),
       cellMeta: cloneCellMeta(largeValueMeta),
     };
   }, [isLargeValue, viewerMode, displayMode, latestChunk?.eof, largeValueViewerValue, largeValueMeta, viewData]);
@@ -344,16 +357,16 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     if (!viewData || !editorCanEdit) {
       return;
     }
-    const { row, col, tableInstance, operationRecordUtils } = viewData;
-    const originData = tableInstance.getRecordByCell(col, row);
-    if (!originData) {
+    const { row, tableInstance, operationRecordUtils } = viewData;
+    const { field, tableCol, record: originData } = resolveViewDataLocation(viewData);
+    if (!originData || !field) {
       return;
     }
     if (viewData.rowId !== undefined && String(originData.CHAT2DB_ROW_NUMBER) !== String(viewData.rowId)) {
       return;
     }
     const originalLargeValue = originalLargeValueRef.current;
-    const currentTableValue = tableInstance.getCellOriginValue(col, row);
+    const currentTableValue = originData[field];
     if (!originalLargeValue && currentTableValue === data) {
       return;
     }
@@ -363,8 +376,9 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     const hasChanged = currentValue !== data;
     const nextTableValue = hasChanged ? data : (restoreValue ?? data);
 
-    originData[col] = nextTableValue;
-    const nextCellMeta = originData.__CHAT2DB_CELL_META__?.[col];
+    const sourceIndex = Number(field);
+    originData[field] = nextTableValue;
+    const nextCellMeta = originData.__CHAT2DB_CELL_META__?.[sourceIndex];
     if (hasChanged && nextCellMeta) {
       nextCellMeta.value = data;
       if (nextCellMeta.largeValue) {
@@ -376,12 +390,16 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
         nextCellMeta.unsupportedReason = undefined;
       }
     } else if (!hasChanged && restoreCellMeta && originData.__CHAT2DB_CELL_META__) {
-      originData.__CHAT2DB_CELL_META__[col] = restoreCellMeta;
+      originData.__CHAT2DB_CELL_META__[sourceIndex] = restoreCellMeta;
     }
 
-    tableInstance.changeCellValue(col, row, nextTableValue);
+    if (tableCol >= 1) {
+      tableInstance.changeCellValue(tableCol, row, nextTableValue);
+    } else {
+      tableInstance.render();
+    }
     operationRecordUtils?.handleCellValueChange({
-      field: String(tableInstance.getHeaderField(col, row)),
+      field,
       rowId: originData.CHAT2DB_ROW_NUMBER,
       rawValue: currentValue,
       currentValue,
@@ -545,27 +563,30 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
 
   const openPanel = (params) => {
     if (!params) return;
-    const { col, tableInstance } = params;
-    const field = tableInstance?.columns?.[col - 1]?.title || col;
-    const nextViewData = { ...params, field } as IViewData;
-    const record = tableInstance.getRecordByCell(params.col, params.row);
+    const { tableInstance } = params;
+    const field = params.field || getResultFieldAtTableColumn(tableInstance, params.col, params.row);
+    if (!field) {
+      return;
+    }
+    const tableCol = tableInstance.getTableIndexByField(field);
+    const record = tableInstance.getRecordByCell(tableCol >= 1 ? tableCol : 1, params.row);
+    const cellMeta = params.cellMeta ?? record?.__CHAT2DB_CELL_META__?.[Number(field)];
+    const nextViewData = { ...params, col: tableCol, field, cellMeta } as IViewData;
     nextViewData.rowId = params.rowId ?? record?.CHAT2DB_ROW_NUMBER;
     const current = activeViewDataRef.current;
     const isSameCell =
       current?.tableInstance === tableInstance &&
-      current.col === params.col &&
+      current.field === field &&
       current.row === params.row &&
       String(current.rowId) === String(nextViewData.rowId);
-    const nextValue = params.cellMeta?.largeValue
-      ? params.cellMeta.value || ''
-      : tableInstance.getCellOriginValue(params.col, params.row);
+    const nextValue = cellMeta?.largeValue ? cellMeta.value || '' : record?.[field];
     const nextEditorValue = nextValue === null || nextValue === undefined ? '' : String(nextValue);
     if (isSameCell && nextEditorValue === editorValueRef.current) {
       return;
     }
     if (!isSameCell) {
       largeValueRequestVersionRef.current += 1;
-      activeLargeValueIdRef.current = params.cellMeta?.largeValueId || '';
+      activeLargeValueIdRef.current = cellMeta?.largeValueId || '';
     }
     activeViewDataRef.current = nextViewData;
     setViewData(nextViewData);

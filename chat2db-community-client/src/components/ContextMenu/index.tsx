@@ -68,6 +68,7 @@ const ContextMenu = (props: IProps, ref) => {
       }
       return {
         key: t.key,
+        disabled: t.disabled,
         onClick: () => {
           t.onClick?.();
         },

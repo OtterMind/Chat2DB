@@ -27,6 +27,8 @@ import { useGlobalStore } from '@/store/global';
 export interface ICustomOptions {
   // Whether to display the left border
   showLeftBorder?: boolean;
+  // Whether to draw a divider after the frozen data columns.
+  showFrozenColumnDivider?: boolean;
 }
 
 interface IProps {
@@ -189,7 +191,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   // update theme
   useEffect(() => {
     if (!tableInstance) return;
-    tableInstance.theme = tableTheme;
+    tableInstance.updateTheme(tableTheme);
   }, [tableTheme]);
 
   // update records

@@ -8,6 +8,7 @@ import { getRowOriginDataAsArray } from '@/blocks/CanvasTable/utils';
 const handleCopyRow = (props: IHandleContextmenuProps) => {
   const { tableInstance, type } = props;
   if (!tableInstance) return;
+  const visibleColumns = tableInstance.columns.filter((column: any) => column.hide !== true);
 
   // Gets the selected actual data details collection
   const rowsDetails: any = [];
@@ -31,15 +32,15 @@ const handleCopyRow = (props: IHandleContextmenuProps) => {
 
   // tab-delimited field
   if (type === ContextmenuType.tabSplitField) {
-    const fields: any = tableInstance.columns.map((_col) => _col.title || '');
+    const fields: any = visibleColumns.map((_col: any) => _col.originalData?.name || _col.title || '');
     copyToClipboard(fields);
     return;
   }
 
   // Tab-separated value field
   if (type === ContextmenuType.tabSplitFieldAndValue) {
-    const fields: any = tableInstance.columns.map((_col) => {
-      return _col.title || '';
+    const fields: any = visibleColumns.map((_col: any) => {
+      return _col.originalData?.name || _col.title || '';
     });
     const list = getRowOriginDataAsArray(tableInstance, rowsDetails);
     copyToClipboard([fields, ...list]);

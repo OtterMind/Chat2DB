@@ -44,5 +44,5 @@ export function formatResultSummary(resultData: ResultSummaryData, translate: Re
   const costSummary = compactMilliseconds(
     translate('workspace.resultSet.cost', executionMetrics.totalDurationMs),
   );
-  return `${costSummary}${detailSummary} ${rowSummary}`;
+  return `${costSummary}${detailSummary} · ${rowSummary}`;
 }

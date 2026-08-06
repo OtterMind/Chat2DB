@@ -1,6 +1,11 @@
 import * as VTable from '@visactor/vtable';
+import { getResultCellMetaAtTableColumn } from '../../columnState';
 
-const onChangeCellValue = (tableInstance: VTable.ListTable, handleCellValueChange) => {
+const onChangeCellValue = (
+  tableInstance: VTable.ListTable,
+  handleCellValueChange,
+  readOnlyFields: ReadonlySet<string> = new Set(),
+) => {
   // Reentry guard: when a large-value cell is edited, the listener programmatically
   // calls changeCellValue to restore the original display. VTable re-fires
   // change_cell_value synchronously inside that call (because oldValue !== changedValue),
@@ -14,8 +19,9 @@ const onChangeCellValue = (tableInstance: VTable.ListTable, handleCellValueChang
     }
     const { row, col } = event;
     const originData = tableInstance.getRecordByCell(col, row);
-    const cellMeta = originData?.__CHAT2DB_CELL_META__?.[col];
-    if (cellMeta?.largeValue) {
+    const cellMeta = getResultCellMetaAtTableColumn(tableInstance, originData, col, row);
+    const headerField = tableInstance.getHeaderField(col, row);
+    if (readOnlyFields.has(String(headerField)) || cellMeta?.largeValue) {
       isRestoring = true;
       try {
         tableInstance.changeCellValue(col, row, event.currentValue);
@@ -24,7 +30,6 @@ const onChangeCellValue = (tableInstance: VTable.ListTable, handleCellValueChang
       }
       return;
     }
-    const headerField = tableInstance.getHeaderField(col, row);
 
     const rowId = originData.CHAT2DB_ROW_NUMBER;
     handleCellValueChange({

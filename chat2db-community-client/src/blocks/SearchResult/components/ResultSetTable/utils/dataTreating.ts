@@ -12,8 +12,11 @@ const handleDataDisplay = (params: {
   theme: Omit<Theme, 'prefixCls'>;
   canEdit?: boolean;
   visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
 }) => {
-  const { data, index, theme, canEdit = false, visibility } = params;
+  const { data, index, theme, canEdit = false, visibility, hiddenFields, readOnlyFields } = params;
+  const field = index.toString();
   const customFontSize = useGlobalStore.getState().baseSetting.customFontSize ?? 13;
   const headerCustomRender = createResultHeaderCustomRender({
     data,
@@ -23,7 +26,8 @@ const handleDataDisplay = (params: {
   });
   return {
     CHAT2DB_COL_NUMBER: index,
-    field: index.toString(),
+    field,
+    hide: hiddenFields?.has(field) ?? false,
     title: '',
     headerCustomRender,
     headerStyle: {
@@ -35,7 +39,7 @@ const handleDataDisplay = (params: {
       ],
     },
     showSort: false,
-    editor: canEdit ? resolveResultSetEditor(data.editorType) : undefined,
+    editor: canEdit && !readOnlyFields?.has(field) ? resolveResultSetEditor(data.editorType) : undefined,
     headerIcon: ['filter', 'sort'],
     sort: (a, b, _order): 0 | 1 | -1 => {
       if (a === null || a === undefined) return _order === 'asc' ? -1 : 1;
@@ -141,18 +145,31 @@ const handleDataDisplay = (params: {
 };
 
 // Convert data into the format required by CanvasTable.
-const dataTreating = (params: {
+export const buildResultColumns = (params: {
   data: IManageResultData;
   theme: Omit<Theme, 'prefixCls'>;
   visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
 }) => {
-  const { data, theme, visibility } = params;
-  const columns: any =
+  const { data, theme, visibility, hiddenFields, readOnlyFields } = params;
+  return (
     data?.headerList?.slice(1).map((item, index) => {
-      return handleDataDisplay({ data: item, index: index + 1, theme, canEdit: data.canEdit, visibility });
-    }) || [];
+      return handleDataDisplay({
+        data: item,
+        index: index + 1,
+        theme,
+        canEdit: data.canEdit,
+        visibility,
+        hiddenFields,
+        readOnlyFields,
+      });
+    }) || []
+  );
+};
 
-  const records =
+export const buildResultRecords = (data: IManageResultData) => {
+  return (
     data?.dataList?.map((item, rowIndex) => {
       const record = {};
       data?.headerList?.forEach((header, index) => {
@@ -165,7 +182,19 @@ const dataTreating = (params: {
       });
       record['__CHAT2DB_CELL_META__'] = data?.dataList?.[rowIndex] || [];
       return record;
-    }) || [];
+    }) || []
+  );
+};
+
+const dataTreating = (params: {
+  data: IManageResultData;
+  theme: Omit<Theme, 'prefixCls'>;
+  visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
+}) => {
+  const columns = buildResultColumns(params);
+  const records = buildResultRecords(params.data);
 
   return [columns, records];
 };

@@ -5,12 +5,14 @@ import Iconfont from '@/components/Iconfont';
 import { IManageResultData, IResultCell } from '@/typings';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
 import { useStyles } from './style';
+import { getResultFieldAtTableColumn } from '../ResultSetTable/columnState';
 
 interface IOpenRowDetailParams {
   tableInstance: ITableInstance;
   col: number;
   row: number;
   rowId?: string | number;
+  field?: string;
 }
 
 export interface IViewDataParams {
@@ -27,10 +29,12 @@ export interface IChangeDataParams extends IViewDataParams {
 }
 
 interface IRowDetailItem {
+  label: string;
   field: string;
   col: number;
   value: string | number | boolean | null;
   largeValue?: boolean;
+  readOnly?: boolean;
   cellMeta?: IResultCell;
 }
 
@@ -38,12 +42,13 @@ interface IRowDetailState {
   tableInstance: ITableInstance;
   row: number;
   rowId?: string | number;
-  activeCol: number;
+  activeField?: string;
   items: IRowDetailItem[];
 }
 
 interface IProps {
   resultData: IManageResultData;
+  isFieldReadOnly?: (field: string) => boolean;
   onViewData?: (params: IViewDataParams) => void;
   onChangeData?: (params: IChangeDataParams) => void;
 }
@@ -67,7 +72,7 @@ const formatValue = (value: any, cellMeta?: IResultCell) => {
 };
 
 const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) => {
-  const { resultData, onViewData, onChangeData } = props;
+  const { resultData, isFieldReadOnly, onViewData, onChangeData } = props;
   const { styles, cx } = useStyles();
   const [rowDetail, setRowDetail] = useState<IRowDetailState | null>(null);
   const activeItemRef = useRef<HTMLDivElement>(null);
@@ -76,7 +81,7 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
     return resultData.headerList || [];
   }, [resultData.headerList]);
 
-  const openPanel = ({ tableInstance, col, row }: IOpenRowDetailParams) => {
+  const openPanel = ({ tableInstance, col, row, field: activeField }: IOpenRowDetailParams) => {
     const recordCol = col > 0 ? col : 1;
     const record = tableInstance.getRecordByCell(recordCol, row);
     if (!record) {
@@ -85,14 +90,18 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
 
     const cellMetaList: IResultCell[] = record.__CHAT2DB_CELL_META__ || [];
     const items = headerMap.slice(1).map((header, index) => {
-      const fieldCol = index + 1;
-      const cellMeta = cellMetaList[fieldCol];
-      const columnTitle = tableInstance.columns?.[fieldCol - 1]?.title;
+      const sourceIndex = index + 1;
+      const field = String(sourceIndex);
+      const tableCol = tableInstance.getTableIndexByField(field);
+      const cellMeta = cellMetaList[sourceIndex];
+      const column = tableInstance.columns?.find((item: any) => String(item.field) === field) as any;
       return {
-        field: header?.name || (columnTitle ? String(columnTitle) : String(fieldCol)),
-        col: fieldCol,
-        value: formatValue(record[fieldCol], cellMeta),
+        label: header?.name || column?.originalData?.name || field,
+        field,
+        col: tableCol,
+        value: formatValue(record[field], cellMeta),
         largeValue: cellMeta?.largeValue,
+        readOnly: isFieldReadOnly?.(field) ?? false,
         cellMeta,
       };
     });
@@ -101,21 +110,21 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
       tableInstance,
       row,
       rowId: record.CHAT2DB_ROW_NUMBER,
-      activeCol: recordCol,
+      activeField: activeField || getResultFieldAtTableColumn(tableInstance, recordCol, row),
       items,
     });
   };
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [rowDetail?.row, rowDetail?.activeCol]);
+  }, [rowDetail?.row, rowDetail?.activeField]);
 
   useImperativeHandle(
     ref,
     () => ({
       openPanel,
     }),
-    [headerMap],
+    [headerMap, isFieldReadOnly],
   );
 
   const handleViewData = (item: IRowDetailItem) => {
@@ -132,20 +141,20 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
     });
   };
 
-  const handleValueChange = (col: number, value: string) => {
+  const handleValueChange = (field: string, value: string) => {
     setRowDetail((current) => {
       if (!current) {
         return current;
       }
       return {
         ...current,
-        items: current.items.map((item) => (item.col === col ? { ...item, value } : item)),
+        items: current.items.map((item) => (item.field === field ? { ...item, value } : item)),
       };
     });
   };
 
   const handleValueBlur = (item: IRowDetailItem) => {
-    if (!rowDetail || !resultData.canEdit || item.largeValue || !onChangeData) {
+    if (!rowDetail || !resultData.canEdit || item.largeValue || item.readOnly || !onChangeData) {
       return;
     }
     onChangeData({
@@ -164,7 +173,7 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
       <div className={styles.fields}>
         {rowDetail?.items.map((item, index) => {
           const isNull = item.value === null || item.value === undefined;
-          const isActive = item.col === rowDetail.activeCol;
+          const isActive = item.field === rowDetail.activeField;
           return (
             <div
               ref={isActive ? activeItemRef : undefined}
@@ -172,15 +181,15 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
               data-active={isActive}
               key={`${item.field}-${index}`}
             >
-              <div className={styles.field}>{item.field}</div>
+              <div className={styles.field}>{item.label}</div>
               <div className={styles.valueRow}>
                 <div className={styles.valueWrapper}>
                   <Input
                     value={item.value === null || item.value === undefined ? '' : String(item.value)}
                     placeholder={isNull ? '<null>' : undefined}
-                    readOnly={!resultData.canEdit || item.largeValue || !onChangeData}
+                    readOnly={!resultData.canEdit || item.largeValue || item.readOnly || !onChangeData}
                     className={cx(styles.valueInput, isActive && styles.activeValueInput, isNull && styles.nullValue)}
-                    onChange={(event) => handleValueChange(item.col, event.target.value)}
+                    onChange={(event) => handleValueChange(item.field, event.target.value)}
                     onBlur={() => handleValueBlur(item)}
                   />
                 </div>

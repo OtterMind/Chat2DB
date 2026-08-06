@@ -41,6 +41,10 @@ import {
   getResultSearchVisibility,
   RESULT_SEARCH_VISIBLE_BY_DEFAULT,
 } from './resultSearchVisibility';
+import {
+  getResultCellMetaAtTableColumn,
+  getResultFieldAtTableColumn,
+} from '../ResultSetTable/columnState';
 
 interface IProps {
   resultData: IManageResultData;
@@ -336,45 +340,65 @@ export default memo<IProps>(
       }
     };
 
+    const isResultFieldFrozen = useCallback(
+      (field: string | number | undefined) =>
+        field !== undefined && !!resultSetTableRef.current?.isFieldFrozen(field),
+      [],
+    );
+
     const openValueInspector = useCallback(
       (params) => {
         if (!params) {
           return;
         }
-        const record = params.tableInstance.getRecordByCell(params.col, params.row);
+        const field = params.field || getResultFieldAtTableColumn(params.tableInstance, params.col, params.row);
+        const fieldIsFrozen = isResultFieldFrozen(field);
+        const tableCol = field ? params.tableInstance.getTableIndexByField(field) : params.col;
+        const recordCol = tableCol >= 1 ? tableCol : 1;
+        const record = params.tableInstance.getRecordByCell(recordCol, params.row);
         const nextParams = {
           ...params,
+          col: tableCol,
+          field,
           rowId: params.rowId ?? record?.CHAT2DB_ROW_NUMBER,
-          cellMeta: params.cellMeta ?? record?.__CHAT2DB_CELL_META__?.[params.col],
+          cellMeta:
+            params.cellMeta ??
+            (field
+              ? record?.__CHAT2DB_CELL_META__?.[Number(field)]
+              : getResultCellMetaAtTableColumn(params.tableInstance, record, recordCol, params.row)),
         };
         setLastActiveCell({
           tableInstance: params.tableInstance,
-          col: params.col,
+          col: tableCol,
           row: params.row,
           rowId: nextParams.rowId,
+          field,
         });
         activateInspector('value');
         setTimeout(() => {
           viewDataRef.current?.openPanel({
             ...nextParams,
-            canEdit: !!resultData?.canEdit,
+            canEdit: !!resultData?.canEdit && !fieldIsFrozen,
             operationRecordUtils: resultSetTableRef.current?.operationRecordUtils,
           });
         }, 0);
       },
-      [activateInspector, resultData?.canEdit],
+      [activateInspector, isResultFieldFrozen, resultData?.canEdit],
     );
 
     const openRowInspector = useCallback((params) => {
       if (!params) {
         return;
       }
-      const record = params.tableInstance.getRecordByCell(params.col, params.row);
+      const field = params.field || getResultFieldAtTableColumn(params.tableInstance, params.col, params.row);
+      const tableCol = field ? params.tableInstance.getTableIndexByField(field) : params.col;
+      const record = params.tableInstance.getRecordByCell(tableCol >= 1 ? tableCol : 1, params.row);
       setLastActiveCell({
         tableInstance: params.tableInstance,
-        col: params.col,
+        col: tableCol,
         row: params.row,
         rowId: params.rowId ?? record?.CHAT2DB_ROW_NUMBER,
+        field,
       });
       activateInspector('row');
       setTimeout(() => rowDetailRef.current?.openPanel(params), 0);
@@ -429,29 +453,42 @@ export default memo<IProps>(
     }, []);
 
     const handleRowDetailChangeData = useCallback((params: IChangeDataParams) => {
-      const { tableInstance: targetTableInstance, col, row, field, value } = params;
-      const originData = targetTableInstance.getRecordByCell(col, row);
+      const { tableInstance: targetTableInstance, row, field, value } = params;
+      const sourceField = String(field);
+      if (isResultFieldFrozen(sourceField)) {
+        return;
+      }
+      const tableCol = targetTableInstance.getTableIndexByField(sourceField);
+      const originData = targetTableInstance.getRecordByCell(tableCol >= 1 ? tableCol : 1, row);
       if (
         params.rowId !== undefined &&
         String(originData?.CHAT2DB_ROW_NUMBER) !== String(params.rowId)
       ) {
         return;
       }
-      const currentValue = targetTableInstance.getCellOriginValue(col, row);
-      if (!originData || originData.__CHAT2DB_CELL_META__?.[col]?.largeValue || currentValue === value) {
+      const currentValue = originData?.[sourceField];
+      if (
+        !originData ||
+        originData.__CHAT2DB_CELL_META__?.[Number(sourceField)]?.largeValue ||
+        currentValue === value
+      ) {
         return;
       }
 
-      originData[col] = value;
-      targetTableInstance.changeCellValue(col, row, value);
+      originData[sourceField] = value;
+      if (tableCol >= 1) {
+        targetTableInstance.changeCellValue(tableCol, row, value);
+      } else {
+        targetTableInstance.render();
+      }
       resultSetTableRef.current?.operationRecordUtils?.handleCellValueChange({
-        field: String(targetTableInstance.getHeaderField(col, row) || field),
+        field: sourceField,
         rowId: originData.CHAT2DB_ROW_NUMBER,
         rawValue: currentValue,
         currentValue,
         changedValue: value,
       });
-    }, []);
+    }, [isResultFieldFrozen]);
 
     const handleSelectionChange = useCallback(
       (selection: IResultSetSelection) => {
@@ -482,7 +519,16 @@ export default memo<IProps>(
           return;
         }
         setTimeout(() => {
-          const record = lastActiveCell.tableInstance.getRecordByCell(lastActiveCell.col, lastActiveCell.row);
+          const field =
+            lastActiveCell.field ||
+            getResultFieldAtTableColumn(lastActiveCell.tableInstance, lastActiveCell.col, lastActiveCell.row);
+          const tableCol = field
+            ? lastActiveCell.tableInstance.getTableIndexByField(field)
+            : lastActiveCell.col;
+          const record = lastActiveCell.tableInstance.getRecordByCell(
+            tableCol >= 1 ? tableCol : 1,
+            lastActiveCell.row,
+          );
           if (
             lastActiveCell.rowId !== undefined &&
             String(record?.CHAT2DB_ROW_NUMBER) !== String(lastActiveCell.rowId)
@@ -492,18 +538,20 @@ export default memo<IProps>(
             return;
           }
           if (nextTab === 'row') {
-            rowDetailRef.current?.openPanel(lastActiveCell);
+            rowDetailRef.current?.openPanel({ ...lastActiveCell, col: tableCol, field });
             return;
           }
           viewDataRef.current?.openPanel({
             ...lastActiveCell,
-            cellMeta: record?.__CHAT2DB_CELL_META__?.[lastActiveCell.col],
-            canEdit: !!resultData?.canEdit,
+            col: tableCol,
+            field,
+            cellMeta: field ? record?.__CHAT2DB_CELL_META__?.[Number(field)] : undefined,
+            canEdit: !!resultData?.canEdit && !isResultFieldFrozen(field),
             operationRecordUtils: resultSetTableRef.current?.operationRecordUtils,
           });
         }, 0);
       },
-      [closeInspector, lastActiveCell, resultData?.canEdit],
+      [closeInspector, isResultFieldFrozen, lastActiveCell, resultData?.canEdit],
     );
 
     const showAllAggregates = useCallback(() => {
@@ -606,6 +654,7 @@ export default memo<IProps>(
                             <RowDetail
                               ref={rowDetailRef}
                               resultData={resultData}
+                              isFieldReadOnly={isResultFieldFrozen}
                               onChangeData={handleRowDetailChangeData}
                               onViewData={openValueInspector}
                             />

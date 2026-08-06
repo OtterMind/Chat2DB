@@ -24,10 +24,14 @@ export const createResultHeaderCustomRender = (params: {
   const { data, theme, fontSize, visibility } = params;
   const rows = getHeaderMetadataRows(data, visibility);
   const lineHeight = fontSize + 9;
+  const getRowFontSize = (key: HeaderMetadataKey) => (key === 'fieldName' ? fontSize + 1 : fontSize);
   const expectedHeight = rows.length * lineHeight + 16;
   const expectedWidth = Math.min(
     360,
-    Math.max(120, ...rows.map((row) => estimateHeaderTextWidth(row.value, fontSize) + HEADER_ICON_SPACE)),
+    Math.max(
+      120,
+      ...rows.map((row) => estimateHeaderTextWidth(row.value, getRowFontSize(row.key)) + HEADER_ICON_SPACE),
+    ),
   );
   const colors: Record<HeaderMetadataKey, string> = {
     fieldName: theme.colorText,
@@ -39,9 +43,9 @@ export const createResultHeaderCustomRender = (params: {
     elements: rows.map((row, index) => ({
       type: 'text' as const,
       fill: colors[row.key],
-      fontSize,
+      fontSize: getRowFontSize(row.key),
       fontFamily: theme.fontFamily,
-      fontWeight: 400,
+      fontWeight: row.key === 'fieldName' ? 600 : 400,
       text: row.value,
       x: HEADER_HORIZONTAL_PADDING,
       y: 8 + lineHeight * index + lineHeight / 2,

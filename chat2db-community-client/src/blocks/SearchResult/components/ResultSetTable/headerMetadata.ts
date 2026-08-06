@@ -12,12 +12,12 @@ export interface HeaderMetadataVisibility {
   showFieldComment?: boolean;
 }
 
-function formatFieldType(header: ITableHeaderItem): string {
+export function formatFieldType(header: ITableHeaderItem): string {
   const fieldType = header.columnType?.trim() || header.dataType?.trim();
   if (!fieldType) {
     return '--';
   }
-  return header.columnSize == null ? fieldType : `${fieldType}(${header.columnSize})`;
+  return header.columnSize == null || fieldType.includes('(') ? fieldType : `${fieldType}(${header.columnSize})`;
 }
 
 export function getHeaderMetadataRows(

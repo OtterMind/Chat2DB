@@ -24,7 +24,7 @@ assert.equal(
     },
     zhTranslation,
   ),
-  '耗时：6ms (执行 2ms · 读取 4ms) 行数：5',
+  '耗时：6ms (执行 2ms · 读取 4ms) · 行数：5',
 );
 
 assert.equal(formatResultSummary({ dataList: [[], []] }, zhTranslation), '行数：2');
@@ -43,7 +43,7 @@ assert.equal(
     },
     zhTranslation,
   ),
-  '耗时：0ms (执行 0ms · 读取 0ms) 行数：0',
+  '耗时：0ms (执行 0ms · 读取 0ms) · 行数：0',
 );
 
 assert.equal(

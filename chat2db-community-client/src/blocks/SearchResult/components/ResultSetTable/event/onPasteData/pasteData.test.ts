@@ -17,8 +17,62 @@ function createTable(rowCount = 10, colCount = 10) {
     changeCellValue: (col, row, value) => {
       calls.push({ row, col, value });
     },
+    getHeaderField: (col) => String(col),
   };
   return { table, calls };
+}
+
+{
+  const { table, calls } = createTable();
+  const selection: PasteSelection = [[{ row: 2, col: 2 }]];
+
+  applyPasteData(table, selection, 'locked', { readOnlyFields: new Set(['2']) });
+
+  assertEqual(calls, [], 'single-cell paste does not modify a frozen field');
+}
+
+{
+  const { table, calls } = createTable();
+  const selection: PasteSelection = [[{ row: 2, col: 1 }]];
+
+  applyPasteData(table, selection, 'a\tb\tc', {
+    internalClipboardGrid: [['a', 'b', 'c']],
+    readOnlyFields: new Set(['2']),
+  });
+
+  assertEqual(
+    calls,
+    [
+      { row: 2, col: 1, value: 'a' },
+      { row: 2, col: 3, value: 'c' },
+    ],
+    'anchor grid paste skips a frozen field and keeps writable targets',
+  );
+}
+
+{
+  const { table, calls } = createTable();
+  const selection: PasteSelection = [
+    [
+      { row: 1, col: 1 },
+      { row: 1, col: 2 },
+    ],
+    [
+      { row: 2, col: 1 },
+      { row: 2, col: 2 },
+    ],
+  ];
+
+  applyPasteData(table, selection, 'a\tb\nc\td', { readOnlyFields: new Set(['2']) });
+
+  assertEqual(
+    calls,
+    [
+      { row: 1, col: 1, value: 'a' },
+      { row: 2, col: 1, value: 'c' },
+    ],
+    'multi-cell paste skips every frozen-field target',
+  );
 }
 
 const multiLineSql = 'select \n  * \nfrom \n  ai_chat_message;';

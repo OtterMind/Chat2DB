@@ -18,12 +18,14 @@ export interface PasteTable {
   colCount: number;
   changeCellValue: (col: number, row: number, value: PasteCellValue) => void;
   columns?: CreateRowPasteColumn[];
+  getHeaderField?: (col: number, row: number) => string | number | undefined;
   getRecordByCell?: (col: number, row: number) => { CHAT2DB_ROW_NUMBER?: string | number | null } | undefined;
 }
 
 export interface PasteOptions {
   isCreateRow?: (rowId?: string | number | null) => boolean;
   internalClipboardGrid?: string[][];
+  readOnlyFields?: ReadonlySet<string>;
 }
 
 export type ParsedPasteData =
@@ -81,6 +83,11 @@ function isInsideTable(table: PasteTable, row: number, col: number) {
   return row <= table.rowCount && col <= table.colCount;
 }
 
+function isReadOnlyPasteTarget(table: PasteTable, options: PasteOptions | undefined, row: number, col: number) {
+  const field = table.getHeaderField?.(col, row);
+  return field !== undefined && options?.readOnlyFields?.has(String(field));
+}
+
 function normalizeCreateRowPasteCell(
   table: PasteTable,
   options: PasteOptions | undefined,
@@ -93,7 +100,8 @@ function normalizeCreateRowPasteCell(
     return value;
   }
 
-  const header = table.columns?.[col - 1]?.originalData;
+  const visibleColumns = table.columns?.filter((column: any) => column.hide !== true);
+  const header = visibleColumns?.[col - 1]?.originalData;
   if (!header) {
     return value;
   }
@@ -113,7 +121,7 @@ export function applyPasteData(table: PasteTable, selection: PasteSelection, tex
       return;
     }
     const { row, col } = normalizePasteTargetCell(firstCell);
-    if (!isInsideTable(table, row, col)) {
+    if (!isInsideTable(table, row, col) || isReadOnlyPasteTarget(table, options, row, col)) {
       return;
     }
     table.changeCellValue(col, row, normalizeCreateRowPasteCell(table, options, row, col, parsed.value));
@@ -130,7 +138,7 @@ export function applyPasteData(table: PasteTable, selection: PasteSelection, tex
       sourceRow.forEach((value, colOffset) => {
         const row = anchor.row + rowOffset;
         const col = anchor.col + colOffset;
-        if (!isInsideTable(table, row, col)) {
+        if (!isInsideTable(table, row, col) || isReadOnlyPasteTarget(table, options, row, col)) {
           return;
         }
         table.changeCellValue(col, row, normalizeCreateRowPasteCell(table, options, row, col, value));
@@ -143,7 +151,7 @@ export function applyPasteData(table: PasteTable, selection: PasteSelection, tex
     const selectedRow = selection[i];
     for (let j = 0; j < selectedRow.length; j++) {
       const { row, col } = normalizePasteTargetCell(selectedRow[j]);
-      if (!isInsideTable(table, row, col)) {
+      if (!isInsideTable(table, row, col) || isReadOnlyPasteTarget(table, options, row, col)) {
         continue;
       }
 

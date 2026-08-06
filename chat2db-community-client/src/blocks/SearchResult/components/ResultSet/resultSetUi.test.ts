@@ -9,6 +9,18 @@ import {
   getResultSearchVisibility,
   RESULT_SEARCH_VISIBLE_BY_DEFAULT,
 } from './resultSearchVisibility';
+import {
+  canFreezeResultColumns,
+  canHideResultColumn,
+  getNextFrozenResultColumnFields,
+  getResultCellMetaAtTableColumn,
+  getResultColumnDisplayOrder,
+  getResultFrozenColumnCount,
+  mergeResultColumnOrderFromDisplay,
+  orderResultColumns,
+  updateHiddenResultColumnFields,
+} from '../ResultSetTable/columnState';
+import { resolveResultSelectionActiveCell } from '../ResultSetTable/selectionState';
 
 test('result search stays hidden until explicitly opened', () => {
   assert.equal(RESULT_SEARCH_VISIBLE_BY_DEFAULT, false);
@@ -78,6 +90,22 @@ test('column metadata normalizes blank type and comment values', () => {
   ]);
 });
 
+test('column metadata does not duplicate a type size already present in the JDBC type', () => {
+  assert.deepEqual(
+    getHeaderMetadataRows({
+      dataType: 'DECIMAL' as any,
+      name: 'amount',
+      columnType: 'DECIMAL(10,2)',
+      columnSize: 10,
+    }),
+    [
+      { key: 'fieldName', value: 'amount' },
+      { key: 'fieldType', value: 'DECIMAL(10,2)' },
+      { key: 'fieldComment', value: '--' },
+    ],
+  );
+});
+
 test('field type and comment rows are enabled by default and can be hidden independently', () => {
   const header = { dataType: 'STRING' as any, name: 'id', comment: 'identifier' };
   assert.deepEqual(getHeaderMetadataRows(header, { showFieldType: false }), [
@@ -123,11 +151,17 @@ test('result header custom render fixes row positions and applies semantic color
   assert.equal(render.expectedHeight, 82);
   assert.equal(render.renderDefault, true);
   assert.deepEqual(
-    render.elements.map((element) => ({ text: element.text, fill: element.fill, y: element.y })),
+    render.elements.map((element) => ({
+      text: element.text,
+      fill: element.fill,
+      fontSize: element.fontSize,
+      fontWeight: element.fontWeight,
+      y: element.y,
+    })),
     [
-      { text: 'id', fill: '#111111', y: 19 },
-      { text: 'STRING', fill: '#1677ff', y: 41 },
-      { text: '--', fill: '#888888', y: 63 },
+      { text: 'id', fill: '#111111', fontSize: 14, fontWeight: 600, y: 19 },
+      { text: 'STRING', fill: '#1677ff', fontSize: 13, fontWeight: 400, y: 41 },
+      { text: '--', fill: '#888888', fontSize: 13, fontWeight: 400, y: 63 },
     ],
   );
 });
@@ -148,4 +182,90 @@ test('incoming result replaces a pinned result with the same key', () => {
   const updatedResult = { uuid: 'same', value: 'updated result' };
 
   assert.deepEqual(retainPinnedResults([updatedResult], [oldResult], new Set(['same'])), [updatedResult]);
+});
+
+const resultColumns = ['1', '2', '3', '4'].map((field) => ({ field }));
+
+test('column visibility always keeps at least one data column visible', () => {
+  let hiddenFields = new Set<string>();
+  hiddenFields = updateHiddenResultColumnFields(['1', '2'], hiddenFields, '1', false);
+  assert.deepEqual([...hiddenFields], ['1']);
+  assert.equal(canHideResultColumn(['1', '2'], hiddenFields, '2'), false);
+  assert.deepEqual(
+    [...updateHiddenResultColumnFields(['1', '2'], hiddenFields, '2', false)],
+    ['1'],
+  );
+});
+
+test('jump-selected columns freeze together without changing their relative order', () => {
+  const frozenFields = getNextFrozenResultColumnFields(resultColumns, [], ['4', '2']);
+  assert.deepEqual(frozenFields, ['2', '4']);
+  assert.deepEqual(getResultColumnDisplayOrder(['1', '2', '3', '4'], frozenFields), ['2', '4', '1', '3']);
+  assert.deepEqual(
+    orderResultColumns(resultColumns, getResultColumnDisplayOrder(['1', '2', '3', '4'], frozenFields)).map(
+      (column) => column.field,
+    ),
+    ['2', '4', '1', '3'],
+  );
+});
+
+test('each later freeze batch is inserted before previously frozen columns', () => {
+  const firstDisplay = orderResultColumns(resultColumns, ['2', '4', '1', '3']);
+  const frozenFields = getNextFrozenResultColumnFields(firstDisplay, ['2', '4'], ['3']);
+  assert.deepEqual(frozenFields, ['3', '2', '4']);
+  assert.deepEqual(getResultColumnDisplayOrder(['1', '2', '3', '4'], frozenFields), ['3', '2', '4', '1']);
+});
+
+test('unfreezing restores the base order captured before freezing', () => {
+  assert.deepEqual(getResultColumnDisplayOrder(['1', '2', '3', '4'], ['3', '2']), ['3', '2', '1', '4']);
+  assert.deepEqual(getResultColumnDisplayOrder(['1', '2', '3', '4'], []), ['1', '2', '3', '4']);
+});
+
+test('dragging scrollable columns while frozen updates only their base-order slots', () => {
+  assert.deepEqual(
+    mergeResultColumnOrderFromDisplay(['1', '2', '3', '4'], ['2', '4', '3', '1'], ['2', '4']),
+    ['3', '2', '1', '4'],
+  );
+  assert.deepEqual(
+    mergeResultColumnOrderFromDisplay(['1', '2', '3', '4'], ['4', '2', '1', '3'], []),
+    ['4', '2', '1', '3'],
+  );
+});
+
+test('display-order merges keep hidden or otherwise omitted fields in their base slots', () => {
+  assert.deepEqual(
+    mergeResultColumnOrderFromDisplay(['1', '2', '3', '4'], ['4', '2', '1'], ['2']),
+    ['4', '2', '3', '1'],
+  );
+});
+
+test('freeze count includes row numbers and refuses freezing every visible data column', () => {
+  const renderedColumns = orderResultColumns(resultColumns, ['2', '4', '1', '3']);
+  assert.equal(getResultFrozenColumnCount(renderedColumns, ['2', '4']), 3);
+  assert.equal(canFreezeResultColumns(renderedColumns, ['2', '4'], ['1', '3']), false);
+  assert.equal(canFreezeResultColumns(renderedColumns, ['2'], ['4']), true);
+});
+
+test('cell metadata lookup resolves the stable field after an earlier column is hidden', () => {
+  const record = {
+    __CHAT2DB_CELL_META__: [undefined, { value: 'first' }, { value: 'second' }],
+  } as any;
+  const table = {
+    getHeaderField: (col: number) => (col === 1 ? '2' : undefined),
+  } as any;
+  assert.equal(getResultCellMetaAtTableColumn(table, record, 1, 1)?.value, 'second');
+});
+
+test('clearing a selection never restores an active cell from a pending frame', () => {
+  assert.equal(resolveResultSelectionActiveCell([], { col: 2, row: 3 }), undefined);
+  assert.deepEqual(
+    resolveResultSelectionActiveCell(
+      [
+        { col: 1, row: 1 },
+        { col: 2, row: 1 },
+      ],
+      { col: 4, row: 2 },
+    ),
+    { col: 2, row: 1 },
+  );
 });

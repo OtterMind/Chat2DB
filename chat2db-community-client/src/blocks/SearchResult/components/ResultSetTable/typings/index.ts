@@ -14,6 +14,11 @@ export interface IOnContextmenuEvent {
   tableInstance: ITableInstance;
   operationRecordUtils: OperationRecordUtils;
   onTableOperationUtils: ITableOperationUtils;
+  frozenColumnFields: readonly string[];
+  onShowHideColumns: () => void;
+  onHideColumn: (field: string) => void;
+  onFreezeColumns: (fields: string[]) => void;
+  onUnfreezeAllColumns: () => void;
 }
 
 // The type of seat that needs to be processed when copying row data
@@ -48,12 +53,14 @@ export interface IHandleViewUpdateDataParams {
   col: number;
   row: number;
   cellMeta?: IResultCell;
+  field?: string;
 }
 
 export interface IHandleViewRowDetailParams {
   tableInstance: ITableInstance;
   col: number;
   row: number;
+  field?: string;
 }
 
 // Callback after some operations on the table
