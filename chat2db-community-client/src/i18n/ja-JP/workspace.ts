@@ -141,6 +141,8 @@ export default {
   'workspace.menu.openView': 'ビューを開く',
   'workspace.menu.annotationDatabaseTable': 'データベース表(AI)',
   'workspace.menu.editView': 'ビューを編集',
+  'workspace.menu.createView': 'ビューを作成',
+  'workspace.menu.dropView': 'ビューを削除',
   'workspace.menu.openConsole': 'コンソールを開く',
   'workspace.menu.removeConsole': '削除',
   'workspace.menu.runSqlFile': 'SQLファイルを実行',

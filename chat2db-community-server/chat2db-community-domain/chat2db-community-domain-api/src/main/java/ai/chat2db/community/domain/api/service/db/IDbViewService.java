@@ -61,6 +61,13 @@ public interface IDbViewService {
     void drop(DbViewDeleteRequest dbViewDeleteRequest);
 
     /**
+     * Creates a database view by executing the generated CREATE VIEW SQL.
+     *
+     * @param modifyView view creation model.
+     */
+    void create(ModifyView modifyView);
+
+    /**
      * Returns view DDL for AI-assisted view generation.
      *
      * @param dbTableDdlRequest table DDL query parameters.
