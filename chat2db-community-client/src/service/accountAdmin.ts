@@ -9,6 +9,7 @@ export enum AccountActionType {
   DROP_USER = 'DROP_USER',
   GRANT_PRIVILEGE = 'GRANT_PRIVILEGE',
   REVOKE_PRIVILEGE = 'REVOKE_PRIVILEGE',
+  RENAME_USER = 'RENAME_USER',
 }
 
 export enum AccountPrivilegeScope {
@@ -69,6 +70,8 @@ export interface AccountCommand extends AccountBaseParams {
   grantOption?: boolean;
   password?: string;
   previewToken?: string;
+  newUser?: string;
+  newHost?: string;
 }
 
 export interface AccountPreview {
