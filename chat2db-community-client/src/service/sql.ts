@@ -437,6 +437,29 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Lock view (MYSQL-OPS-003). */
+export interface ILockView {
+  source: 'performance_schema' | 'information_schema';
+  dataLocks: Record<string, string | null>[];
+  waits: Record<string, string | null>[];
+  metaLocks: Record<string, string | null>[];
+  waitChains: {
+    waiterThreadId: string | null;
+    waiterState: string | null;
+    waiterUser: string | null;
+    waiterHost: string | null;
+    waiterQuery: string | null;
+    blockerThreadId: string | null;
+    blockerState: string | null;
+    blockerUser: string | null;
+    blockerHost: string | null;
+    blockerQuery: string | null;
+    rootBlocker: boolean;
+  }[];
+}
+
+const getLockView = createRequest<Record<string, never>, ILockView>('/api/rdb/lock/view', { method: 'get' });
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -497,5 +520,6 @@ export default {
   getAllFieldByTable,
   exportResultTable,
   checkIsSelectSQL,
+  getLockView,
   getDataSourceList,
 };
