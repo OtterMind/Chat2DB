@@ -7747,6 +7747,11 @@ fetch-blob@^3.1.2, fetch-blob@^3.1.4:
     node-domexception "^1.0.0"
     web-streams-polyfill "^3.0.3"
 
+fetch-extras@^1.0.0:
+  version "1.1.0"
+  resolved "https://registry.npmmirror.com/fetch-extras/-/fetch-extras-1.1.0.tgz#b9fd94eb5f3204af38855e4231f4ea90df96256e"
+  integrity sha512-MBtBhNJVzRvGEUBCs735qZqr2OqHZxqOEUqCYZmQDFvyy06rv2rkvvUoLB2Xq3qDQb7WR3iYNmIxuVsFX+lufA==
+
 file-entry-cache@^11.1.1:
   version "11.1.5"
   resolved "https://registry.npmmirror.com/file-entry-cache/-/file-entry-cache-11.1.5.tgz#c8210eb055de63e68685ccfb6a017e386d4577d0"
@@ -9159,14 +9164,14 @@ is-number@^7.0.0:
   resolved "https://registry.npmmirror.com/is-number/-/is-number-7.0.0.tgz#7535345b896734d5f80c4d06c50955527a14f12b"
   integrity sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==
 
-is-online@^11.0.0:
-  version "11.0.0"
-  resolved "https://registry.npmmirror.com/is-online/-/is-online-11.0.0.tgz#e4cc4e2048d5a3bfa9fd88be6389f7a45e0b8467"
-  integrity sha512-LY3UOlRGCofw5RMhsEFHQ9xQ6jJXL9wFWWIfmSdNo8vO+DrIvan3G9hAPZiMRXddVZS2v9+CV4z9PslLhBGIyA==
+is-online@^12.0.2:
+  version "12.0.2"
+  resolved "https://registry.npmmirror.com/is-online/-/is-online-12.0.2.tgz#c6bc1a6d28d86a3ed968c75b263bd63f2980e16f"
+  integrity sha512-aMN8oxroDeWTyio61kRQOlldQO1+BQp3JfdHMZD8R20oCtL/KZV4eUGUTy9gnuKOm7g6N49wXwLD9OIPi7qWmQ==
   dependencies:
-    got "^13.0.0"
+    fetch-extras "^1.0.0"
     p-any "^4.0.0"
-    p-timeout "^6.1.2"
+    p-timeout "^6.1.4"
     public-ip "^7.0.1"
 
 is-path-inside@^3.0.3:
@@ -11197,7 +11202,7 @@ p-some@^6.0.0:
     aggregate-error "^4.0.0"
     p-cancelable "^3.0.0"
 
-p-timeout@^6.1.2:
+p-timeout@^6.1.4:
   version "6.1.4"
   resolved "https://registry.npmmirror.com/p-timeout/-/p-timeout-6.1.4.tgz#418e1f4dd833fa96a2e3f532547dd2abdb08dbc2"
   integrity sha512-MyIV3ZA/PmyBN/ud8vV9XzwTrNtR4jFrObymZYnZqMmW0zA8Z17vnT0rBgFE/TlohB+YCHqXMgZzb3Csp49vqg==
