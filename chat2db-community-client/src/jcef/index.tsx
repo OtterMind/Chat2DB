@@ -1,5 +1,5 @@
 import createJcefApi from './base';
-import { IUpdateDetail } from '@/typings/settings';
+import { IUpdateDetail, McpRestartResult, McpStatus } from '@/typings/settings';
 import { LangType } from '@/constants/settings';
 import type { LocalFileReadResult } from '@/utils/localFileEncoding';
 import { ThemeAppearance } from '@chat2db/ui';
@@ -159,8 +159,8 @@ const jcefApi = {
     return createJcefApi('trigger-installation');
   },
   // Restart app
-  restartApp: () => {
-    return createJcefApi('restart-app');
+  restartApp: (data?: { operationId?: string }) => {
+    return createJcefApi<McpRestartResult>('restart-app', data);
   },
   // Set zoom
   webFrameSetZoom: (data: { action: 'zoomIn' | 'zoomOut' | 'zoomReset' }) => {
@@ -194,7 +194,7 @@ const jcefApi = {
     return createJcefApi<LocalFileReadResult>('read-file', { path, charsets: charset });
   },
   // The front-end setting information is synchronized with the back-end
-  updateSettings: (data: { appearance: ThemeAppearance; language: LangType; enableMcp?: boolean }) => {
+  updateSettings: (data: { appearance: ThemeAppearance; language: LangType }) => {
     return createJcefApi('update-settings', data);
   },
   // Get clipboard information
@@ -208,6 +208,12 @@ const jcefApi = {
   // Reset MCP token
   resetMcpToken: () => {
     return createJcefApi<string>('reset-mcp-token');
+  },
+  getMcpStatus: (data: { operationId: string }) => {
+    return createJcefApi<McpStatus>('get-mcp-status', data);
+  },
+  setMcpEnabled: (data: { operationId: string; enabled: boolean }) => {
+    return createJcefApi<McpStatus>('set-mcp-enabled', data);
   },
 };
 

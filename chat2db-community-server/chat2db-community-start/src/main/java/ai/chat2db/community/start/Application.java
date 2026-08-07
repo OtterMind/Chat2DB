@@ -10,6 +10,7 @@ import ai.chat2db.community.tools.security.AesGcmUtil;
 import ai.chat2db.community.tools.util.SystemSettingsUtil;
 import ai.chat2db.community.tools.network.NetworkProxyUtil;
 import ai.chat2db.community.tools.util.ConfigUtils;
+import ai.chat2db.community.tools.util.McpRuntimeStatus;
 import ai.chat2db.community.web.api.config.console.WebJcefServerBridge;
 import io.micrometer.context.ContextRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ public class Application {
         NetworkProxyUtil.applySavedSettingsToJvm();
         boolean cliRuntimeMode = isCliRuntimeMode();
         boolean mcpEnabled = !cliRuntimeMode && SystemSettingsUtil.isMcpEnabled();
+        McpRuntimeStatus.initialize(mcpEnabled);
         System.setProperty("spring.ai.mcp.server.enabled", String.valueOf(mcpEnabled));
         if (cliRuntimeMode || (ConfigUtils.isDesktop() && ConfigUtils.isShowGUI() && mcpEnabled)) {
             System.setProperty("server.address", "127.0.0.1");
@@ -60,7 +62,13 @@ public class Application {
         if (!cliRuntimeMode && ConfigUtils.isDesktop() && ConfigUtils.isRelease() && !mcpEnabled) {
             app.setWebApplicationType(WebApplicationType.NONE);
         }
-        app.run(args);
+        try {
+            app.run(args);
+            McpRuntimeStatus.markReady();
+        } catch (RuntimeException | Error exception) {
+            McpRuntimeStatus.markFailed(exception);
+            throw exception;
+        }
     }
 
     private static void initializeCommunityRuntimeMode() {
