@@ -42,7 +42,7 @@ public class SystemSettingsUtil {
         return ConfigUtils.getBasePath() + File.separator + CACHE_PATH;
     }
 
-    public static void setProperty(String key, Object newValue) {
+    public static synchronized void setProperty(String key, Object newValue) {
         if (Objects.isNull(key) || Objects.isNull(newValue)) {
             log.info("key or new value is null");
             return;
