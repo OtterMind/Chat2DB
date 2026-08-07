@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ConsoleOpenedStatus, ConsoleStatus, WorkspaceTabType } from '@/constants';
 import historyServer from '@/service/history';
 import i18n from '@/i18n';
@@ -277,5 +277,15 @@ export const useSaveEditorData = (props: IProps) => {
     }
   }, []);
 
-  return { saveConsole, saveStatus, hasSavedSqlRecord };
+  const hasUnsavedChanges = useCallback(
+    (value: string) => {
+      if (!value.trim()) {
+        return false;
+      }
+      return !hasSavedSqlRecord || value !== lastSyncConsole.current;
+    },
+    [hasSavedSqlRecord],
+  );
+
+  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges };
 };

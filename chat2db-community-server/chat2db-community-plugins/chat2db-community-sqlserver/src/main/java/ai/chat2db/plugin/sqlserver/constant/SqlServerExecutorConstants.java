@@ -5,7 +5,6 @@ import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import cn.hutool.core.date.TimeInterval;
 import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;

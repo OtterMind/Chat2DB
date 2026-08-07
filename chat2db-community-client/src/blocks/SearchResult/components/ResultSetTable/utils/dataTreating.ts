@@ -1,31 +1,46 @@
 import { useGlobalStore } from '@/store/global';
 import { IManageResultData, IResultCell, ITableHeaderItem } from '@/typings/database';
-import { DataTableSettings } from '@/typings/settings';
 import { Theme } from 'antd-style';
 import i18n from '@/i18n';
 import { resolveResultSetEditor } from './editorType';
+import type { HeaderMetadataVisibility } from '../headerMetadata';
+import { createResultHeaderCustomRender } from '../headerRender';
 
 const handleDataDisplay = (params: {
   data: ITableHeaderItem;
   index: number;
   theme: Omit<Theme, 'prefixCls'>;
   canEdit?: boolean;
-  dataTableSettings: DataTableSettings;
+  visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
 }) => {
-  const { data, index, theme, canEdit = false, dataTableSettings } = params;
-  const customFontSize = useGlobalStore.getState().baseSetting.customFontSize;
-  let comment = data.comment || '';
-  if (comment.length > 10) {
-    comment = comment.slice(0, 10) + '...';
-  }
-  const title = dataTableSettings?.showComment ? `${data.name}(${comment})` : data.name;
+  const { data, index, theme, canEdit = false, visibility, hiddenFields, readOnlyFields } = params;
+  const field = index.toString();
+  const customFontSize = useGlobalStore.getState().baseSetting.customFontSize ?? 13;
+  const headerCustomRender = createResultHeaderCustomRender({
+    data,
+    theme,
+    fontSize: customFontSize,
+    visibility,
+  });
   return {
     CHAT2DB_COL_NUMBER: index,
-    field: index.toString(),
-    title,
+    field,
+    hide: hiddenFields?.has(field) ?? false,
+    title: '',
+    headerCustomRender,
+    headerStyle: {
+      padding: [
+        8,
+        8,
+        headerCustomRender.expectedHeight - (customFontSize + 9) - 8,
+        8,
+      ],
+    },
     showSort: false,
-    editor: canEdit ? resolveResultSetEditor(data.editorType) : undefined,
-    headerIcon: ['sort', 'filter'],
+    editor: canEdit && !readOnlyFields?.has(field) ? resolveResultSetEditor(data.editorType) : undefined,
+    headerIcon: ['filter', 'sort'],
     sort: (a, b, _order): 0 | 1 | -1 => {
       if (a === null || a === undefined) return _order === 'asc' ? -1 : 1;
       if (b === null || b === undefined) return _order === 'asc' ? 1 : -1;
@@ -130,14 +145,31 @@ const handleDataDisplay = (params: {
 };
 
 // Convert data into the format required by CanvasTable.
-const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'prefixCls'>; dataTableSettings: DataTableSettings }) => {
-  const { data, theme, dataTableSettings } = params;
-  const columns: any =
+export const buildResultColumns = (params: {
+  data: IManageResultData;
+  theme: Omit<Theme, 'prefixCls'>;
+  visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
+}) => {
+  const { data, theme, visibility, hiddenFields, readOnlyFields } = params;
+  return (
     data?.headerList?.slice(1).map((item, index) => {
-      return handleDataDisplay({ data: item, index: index+1, theme, canEdit: data.canEdit, dataTableSettings });
-    }) || [];
+      return handleDataDisplay({
+        data: item,
+        index: index + 1,
+        theme,
+        canEdit: data.canEdit,
+        visibility,
+        hiddenFields,
+        readOnlyFields,
+      });
+    }) || []
+  );
+};
 
-  const records =
+export const buildResultRecords = (data: IManageResultData) => {
+  return (
     data?.dataList?.map((item, rowIndex) => {
       const record = {};
       data?.headerList?.forEach((header, index) => {
@@ -150,8 +182,20 @@ const dataTreating = (params: { data: IManageResultData; theme: Omit<Theme, 'pre
       });
       record['__CHAT2DB_CELL_META__'] = data?.dataList?.[rowIndex] || [];
       return record;
-    }) || [];
-  
+    }) || []
+  );
+};
+
+const dataTreating = (params: {
+  data: IManageResultData;
+  theme: Omit<Theme, 'prefixCls'>;
+  visibility?: HeaderMetadataVisibility;
+  hiddenFields?: ReadonlySet<string>;
+  readOnlyFields?: ReadonlySet<string>;
+}) => {
+  const columns = buildResultColumns(params);
+  const records = buildResultRecords(params.data);
+
   return [columns, records];
 };
 

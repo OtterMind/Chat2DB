@@ -27,6 +27,7 @@ import StreamSidebar from './components/StreamSidebar';
 // ----- block -----
 import Dashboard from './dashboard';
 import DashboardMenuList from './dashboard/DashboardMenuList';
+import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
 // import KnowledgeManagement from './knowledgeManagement';
 import Stream from '../stream';
@@ -55,27 +56,11 @@ function MainPage() {
 
   const initNavConfig: INavItem[] = useMemo(() => {
     return [
-      {
-        key: 'stream',
-        icon: 'icon-chat-alt-21',
-        isLoad: false,
-        component: <Stream />,
-        name: i18n('stream.nav.title'),
-      },
-      {
-        key: 'workspace',
-        icon: 'icon-gongxiang-',
-        isLoad: false,
-        component: <Workspace />,
-        name: i18n('workspace.title'),
-      },
-      {
-        key: 'dashboard',
-        icon: 'icon-chart-square-bar',
-        isLoad: false,
-        component: <Dashboard />,
-        name: i18n('dashboard.title'),
-      },
+      ...createCoreMainNavItems({
+        stream: { component: <Stream />, name: i18n('stream.nav.title') },
+        workspace: { component: <Workspace />, name: i18n('workspace.title') },
+        dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
+      }),
       // {
       //   key: 'knowledge-management',
       //   icon: 'icon-knowledge-management',
@@ -523,6 +508,7 @@ function MainPage() {
               return null;
             }
             const isActive = item.key === mainPageActiveTab && settingPageActiveTab === false;
+            const NavIcon = typeof item.icon === 'string' ? null : item.icon;
 
             if (!sidebarExpanded) {
               return (
@@ -532,10 +518,11 @@ function MainPage() {
                   key={item.key}
                   size={{
                     boxSize: 34,
-                    iconSize: 22,
+                    iconSize: NavIcon ? 18 : 22,
                   }}
                   title={item.name}
-                  code={item.icon}
+                  code={NavIcon ? undefined : item.icon}
+                  icon={NavIcon || undefined}
                   tooltipPlacement="right"
                   onClick={() => handleNavItemClick(item)}
                 />
@@ -548,7 +535,11 @@ function MainPage() {
                 className={cx(styles.navItem, isActive && styles.navItemActive)}
                 onClick={() => handleNavItemClick(item)}
               >
-                <IconfontSvg code={item.icon} className={styles.navItemIcon} size={20} />
+                {NavIcon ? (
+                  <NavIcon className={styles.navItemIcon} size={18} />
+                ) : (
+                  <IconfontSvg code={item.icon} className={styles.navItemIcon} size={20} />
+                )}
                 <span className={styles.navItemLabel}>{item.name}</span>
               </div>
             );

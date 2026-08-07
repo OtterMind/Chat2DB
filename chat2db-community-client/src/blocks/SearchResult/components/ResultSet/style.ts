@@ -58,12 +58,22 @@ export const useStyles = createStyles(({ css, token }) => {
         overflow: hidden;
       }
     `,
-    inspectorClose: css`
+    inspectorActions: css`
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-right: 4px;
+    `,
+    inspectorActionButton: css`
       width: 28px;
       height: 28px;
       padding: 0;
-      margin-right: 4px;
       color: ${token.colorTextSecondary};
+    `,
+    inspectorModalBody: css`
+      height: min(70vh, 720px);
+      min-height: 360px;
+      overflow: hidden;
     `,
     tableLoading: css`
       position: absolute;

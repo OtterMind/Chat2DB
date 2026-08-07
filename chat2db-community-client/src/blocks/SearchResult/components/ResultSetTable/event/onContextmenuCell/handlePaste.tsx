@@ -26,14 +26,18 @@ function normalizePasteValues(
     values,
     startCol: col,
     startRow: row,
-    columns: tableInstance.columns,
+    columns: tableInstance.columns.filter((column: any) => column.hide !== true),
     getRowId: (targetRow, targetCol) => tableInstance.getRecordByCell(targetCol, targetRow)?.CHAT2DB_ROW_NUMBER,
     isCreateRow: operationRecordUtils?.isCreateRow,
   });
 }
 
 // Existing null cells are pasted as empty strings by the current clipboard format.
-const handlePaste = async (tableInstance: VTable.ListTable, operationRecordUtils?: PasteOperationRecordUtils) => {
+const handlePaste = async (
+  tableInstance: VTable.ListTable,
+  operationRecordUtils?: PasteOperationRecordUtils,
+  readOnlyFields: ReadonlySet<string> = new Set(),
+) => {
   if (tableInstance.editorManager?.editingEditor || !tableInstance.stateManager.select.ranges?.length) {
     return;
   }
@@ -45,7 +49,21 @@ const handlePaste = async (tableInstance: VTable.ListTable, operationRecordUtils
     return cells.map((cell, cellIndex) => (cellIndex === cells.length - 1 ? cell.trim() : cell));
   });
   const normalizedValues = normalizePasteValues(tableInstance, operationRecordUtils, col, row, values);
-  tableInstance.changeCellValues(col, row, normalizedValues);
+  normalizedValues.forEach((rowValues, rowOffset) => {
+    rowValues.forEach((value, colOffset) => {
+      const targetCol = col + colOffset;
+      const targetRow = row + rowOffset;
+      const field = tableInstance.getHeaderField(targetCol, targetRow);
+      if (
+        targetCol > tableInstance.colCount ||
+        targetRow > tableInstance.rowCount ||
+        readOnlyFields.has(String(field))
+      ) {
+        return;
+      }
+      tableInstance.changeCellValue(targetCol, targetRow, value);
+    });
+  });
 };
 
 export default handlePaste;

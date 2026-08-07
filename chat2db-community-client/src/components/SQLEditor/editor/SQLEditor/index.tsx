@@ -152,7 +152,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     },
     ref,
   ) => {
-    const { styles } = useStyles();
+    const { styles, theme } = useStyles();
     const [sqlTemp, setSqlTemp] = useState<string>(defaultValue ?? '');
     const [hoverHelperInfo, setHoverHelpInfo] = useState<HoverHelperInfo>(hoverHelpDefaultConfig);
 
@@ -177,12 +177,13 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const backendEditorHintsRequestRef = useRef(0);
     const backendEditorHintsEpochRef = useRef(0);
     const autoFillEditInProgressRef = useRef(false);
+    const editorSurfaceRef = useRef<HTMLDivElement | null>(null);
     const cursorPositionRef = useRef<HTMLSpanElement | null>(null);
-
     const sqlStatementListRef = useRef<SqlStatement[]>([]);
     const markMessageListRef = useRef<MarkMessage[]>([]);
     const tableDDLTriggerMode = useGlobalStore((s) => getTableDDLTriggerMode(s.editorSettings));
     const shortcutOverrides = useGlobalStore((s) => s.shortcutOverrides);
+    const activeEditorTheme = useGlobalStore((s) => s.getEditorTheme(theme.appearance));
     const [isObjectClickModifierPressed, setIsObjectClickModifierPressed] = useState(false);
     const shortcutConfig = getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides);
 
@@ -209,6 +210,30 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const getInstance = useCallback(() => {
       return editorRef?.current?.getInstance() ?? null;
     }, []);
+
+    const syncEditorSurfaceBackground = useCallback((editor: monaco.editor.IStandaloneCodeEditor | null) => {
+      const editorDomNode = editor?.getDomNode();
+      if (!editorDomNode || !editorSurfaceRef.current) {
+        return;
+      }
+
+      const editorStyle = window.getComputedStyle(editorDomNode);
+      const editorBackground =
+        editorStyle.getPropertyValue('--vscode-editor-background').trim() || editorStyle.backgroundColor;
+      const editorForeground =
+        editorStyle.getPropertyValue('--vscode-editor-foreground').trim() || editorStyle.color;
+      if (editorBackground) {
+        editorSurfaceRef.current.style.setProperty('--chat2db-sql-editor-background', editorBackground);
+      }
+      if (editorForeground) {
+        editorSurfaceRef.current.style.setProperty('--chat2db-sql-editor-foreground', editorForeground);
+      }
+    }, []);
+
+    useEffect(() => {
+      const frame = window.requestAnimationFrame(() => syncEditorSurfaceBackground(getInstance()));
+      return () => window.cancelAnimationFrame(frame);
+    }, [activeEditorTheme, getInstance, syncEditorSurfaceBackground]);
 
     const getValue = useCallback(() => {
       return editorRef.current?.getValue() ?? '';
@@ -948,12 +973,20 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
           updateParameterHint(editor, localInsertValueParameterHint(editor));
         });
         parameterHintFocusedRef.current = editor.hasTextFocus();
+        syncEditorSurfaceBackground(editor);
         syncBackendCompletionModel(editor);
         bindSnippetPlaceholderCompletion(editor);
         onReady?.();
         onMount && onMount(editor);
       },
-      [bindSnippetPlaceholderCompletion, handleHover, onMount, onReady, syncBackendCompletionModel],
+      [
+        bindSnippetPlaceholderCompletion,
+        handleHover,
+        onMount,
+        onReady,
+        syncBackendCompletionModel,
+        syncEditorSurfaceBackground,
+      ],
     );
 
     /**
@@ -981,7 +1014,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     }, []);
 
     return (
-      <div className={styles.editor}>
+      <div ref={editorSurfaceRef} className={styles.editor}>
         <div className={styles.editorBody}>
           <MonacoEditor
             {...rest}

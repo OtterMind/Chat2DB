@@ -148,6 +148,11 @@ export default memo<IProps>(({
     <div className={styles.console}>
       <Dropdown
         menu={{
+          selectable: true,
+          selectedKeys: [
+            ...(followLatest ? ['follow'] : []),
+            ...(keepHistory ? ['keep-history'] : []),
+          ],
           items: [
             { key: 'copy', icon: <Copy size={14} />, label: i18n('common.button.copyConsole') },
             { type: 'divider' },

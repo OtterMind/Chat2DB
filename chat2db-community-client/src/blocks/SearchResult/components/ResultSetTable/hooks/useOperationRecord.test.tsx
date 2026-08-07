@@ -13,10 +13,21 @@ const createChangeRecord = (field: string, currentValue: string, changedValue: s
 
 const renderOperationRecord = (tableInstance: any) => {
   let operationRecordUtils: OperationRecordUtils | undefined;
+  const normalizedTableInstance = {
+    getTableIndexByField(field: string) {
+      const visibleColumns = tableInstance.columns.filter((column: any) => column.hide !== true);
+      return visibleColumns.findIndex((column: any) => String(column.field) === String(field)) + 1;
+    },
+    get colCount() {
+      return tableInstance.columns.filter((column: any) => column.hide !== true).length + 1;
+    },
+    render: () => undefined,
+    ...tableInstance,
+  };
 
   const HookHarness = () => {
     operationRecordUtils = useOperationRecord({
-      tableInstance,
+      tableInstance: normalizedTableInstance,
       theme: {} as any,
     }).operationRecordUtils;
     return null;

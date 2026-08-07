@@ -2,6 +2,7 @@ export default {
   'monaco.group.appearance': 'Appearance and font',
   'monaco.group.display': 'Editor display',
   'monaco.group.completion': 'Completion and interaction',
+  'monaco.group.behavior': 'Editor behavior',
   'monaco.group.execution': 'SQL execution',
   'monaco.theme': 'Editor Theme',
   'monaco.theme.tooltip':
@@ -77,6 +78,9 @@ export default {
     'When running multiple SQL statements, continue with the remaining statements after one fails.',
   'monaco.errorContinue.true': 'Yes',
   'monaco.errorContinue.false': 'No',
+  'monaco.confirmBeforeClose': 'Confirm before closing',
+  'monaco.confirmBeforeClose.tooltip':
+    'When a query or local SQL file has unsaved changes, ask whether to save before closing its tab.',
   'monaco.tableDDLTriggerMode': 'Show Table DDL',
   'monaco.tableDDLTriggerMode.tooltip':
     'Show table DDL either when hovering a table name or when holding {1} and clicking it.',

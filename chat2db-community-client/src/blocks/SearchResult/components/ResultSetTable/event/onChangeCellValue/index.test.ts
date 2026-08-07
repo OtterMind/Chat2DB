@@ -5,6 +5,8 @@ let listener: ((event: any) => void) | undefined;
 let restoreCount = 0;
 let trackedChangeCount = 0;
 let largeValue = true;
+let hiddenLeadingColumnLargeValue = false;
+let headerField = '1';
 let failRestore = false;
 
 const tableInstance = {
@@ -14,9 +16,12 @@ const tableInstance = {
   },
   getRecordByCell: () => ({
     CHAT2DB_ROW_NUMBER: 'row-1',
-    __CHAT2DB_CELL_META__: { 1: { largeValue } },
+    __CHAT2DB_CELL_META__: {
+      1: { largeValue },
+      2: { largeValue: hiddenLeadingColumnLargeValue },
+    },
   }),
-  getHeaderField: () => 'value',
+  getHeaderField: () => headerField,
   changeCellValue: (col: number, row: number) => {
     restoreCount += 1;
     if (failRestore) {
@@ -46,5 +51,30 @@ failRestore = false;
 largeValue = false;
 listener({ col: 1, row: 1, currentValue: 'before', changedValue: 'after' });
 assert.equal(trackedChangeCount, 1, 'the guard should reset after a failure so ordinary edits are still tracked');
+
+headerField = '2';
+hiddenLeadingColumnLargeValue = true;
+const restoreCountBeforeHiddenColumnEdit = restoreCount;
+listener({ col: 1, row: 1, currentValue: 'original preview', changedValue: 'attempted edit' });
+assert.equal(
+  restoreCount,
+  restoreCountBeforeHiddenColumnEdit + 1,
+  'a screen column must resolve large-value metadata by its stable field after a leading column is hidden',
+);
+assert.equal(trackedChangeCount, 1, 'restoring a remapped large-value preview must not be tracked as a user edit');
+
+headerField = '1';
+hiddenLeadingColumnLargeValue = false;
+onChangeCellValue(
+  tableInstance as any,
+  () => {
+    trackedChangeCount += 1;
+  },
+  new Set(['1']),
+);
+const restoreCountBeforeFrozenColumnEdit = restoreCount;
+listener?.({ col: 1, row: 1, currentValue: 'before', changedValue: 'after' });
+assert.equal(restoreCount, restoreCountBeforeFrozenColumnEdit + 1, 'a frozen field edit must restore its original value');
+assert.equal(trackedChangeCount, 1, 'a frozen field edit must not be tracked as a user edit');
 
 console.log('onChangeCellValue tests passed');

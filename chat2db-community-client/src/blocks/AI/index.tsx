@@ -102,7 +102,6 @@ function buildChartDetail(chartJson: Record<string, any>): IChartItem {
       sql: '',
       originalSql: '',
       success: true,
-      duration: 0,
       sqlType: 'SELECT' as any,
       refreshTargets: [],
       pageNo: 1,

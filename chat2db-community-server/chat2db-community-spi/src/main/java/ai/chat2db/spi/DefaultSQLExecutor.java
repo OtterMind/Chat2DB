@@ -33,7 +33,6 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.ResultSetUtils;
 import ai.chat2db.spi.util.SqlUtils;
-import cn.hutool.core.date.TimeInterval;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
@@ -258,7 +257,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     }
                 }
                 long startedAtEpochMs = System.currentTimeMillis();
-                TimeInterval timeInterval = new TimeInterval();
                 ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
                 long executeStartedNanos = System.nanoTime();
                 boolean query = stmt.execute();
@@ -274,7 +272,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 } else {
                     executeResult.setUpdateCount(stmt.getUpdateCount());
                 }
-                executeResult.setDuration(timeInterval.interval());
                 executeResult.setStatementSequence(1);
                 executeResult.setExecutionContext(executionContext);
                 executeResult.setExecutionMetrics(ExecutionTiming.complete(
@@ -1005,7 +1002,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             executeResult.setOriginalSql(originalSql);
         }
         consumer.statementFinished(originalSql,
-                maximumStatementDuration(executeResults));
+                totalStatementDuration(executeResults));
         return executeResults;
     }
 
@@ -1054,7 +1051,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     }
                 }
             }
-            TimeInterval timeInterval = new TimeInterval();
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
@@ -1076,7 +1072,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 } else {
                     executeResult.setUpdateCount(stmt.getUpdateCount());
                 }
-                executeResult.setDuration(timeInterval.interval());
                 executeResult.setExecutionContext(executionContext);
                 executeResult.setExecutionMetrics(ExecutionTiming.complete(
                         ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
@@ -1136,7 +1131,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     }
                 }
             }
-            TimeInterval timeInterval = new TimeInterval();
             checkCanceled(cancellation);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
@@ -1171,7 +1165,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     executeResult.setPageSize(CollectionUtils.size(executeResult.getDataList()));
                     executeResult.setHasNextPage(Boolean.FALSE);
                     executeResult.setFuzzyTotal("0");
-                    executeResult.setDuration(timeInterval.interval());
                     executeResult.setExecutionMetrics(ExecutionTiming.complete(
                             ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, 0L,
                             CollectionUtils.size(executeResult.getDataList())));
@@ -1184,7 +1177,6 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                             ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, 0L,
                             CollectionUtils.size(executeResult.getDataList())));
                 }
-                executeResult.setDuration(timeInterval.interval());
                 executeResults.add(executeResult);
                 long nextStartedAtEpochMs = System.currentTimeMillis();
                 long nextExecuteStartedNanos = System.nanoTime();
@@ -1360,18 +1352,19 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 .sql(sql)
                 .success(Boolean.FALSE)
                 .message(exception.getMessage())
-                .duration(executionMetrics.getTotalDurationMs())
                 .executionMetrics(executionMetrics)
                 .executionContext(executionContext)
                 .build();
     }
 
-    protected static long maximumStatementDuration(List<ExecuteResponse> executeResults) {
+    protected static long totalStatementDuration(List<ExecuteResponse> executeResults) {
         return executeResults.stream()
-                .map(ExecuteResponse::getDuration)
+                .map(ExecuteResponse::getExecutionMetrics)
                 .filter(Objects::nonNull)
-                .max(Long::compareTo)
-                .orElse(0L);
+                .map(ExecutionMetrics::getTotalDurationMs)
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
     }
 
     private void attachMessages(List<ExecuteResponse> executeResults, List<Map<String, Object>> messages) {

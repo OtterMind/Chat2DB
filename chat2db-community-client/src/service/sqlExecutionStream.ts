@@ -369,7 +369,6 @@ function ensureResultData(result: IManageResultData) {
     sql: normalized.sql || normalized.originalSql || '',
     originalSql: normalized.originalSql || normalized.sql || '',
     success: normalized.success ?? true,
-    duration: normalized.duration || 0,
     headerList: normalized.headerList || [],
     dataList: normalized.dataList || [],
     sqlType: normalized.sqlType || SqlTypeEnum.OTHER,

@@ -11,7 +11,7 @@ import { osNow } from '@/utils';
 import { v4 as uuid } from 'uuid';
 import { databaseMap } from '@/constants';
 import { useUpdateEffect } from 'ahooks';
-import { Braces, ChevronDown, Monitor, Palette, Play } from 'lucide-react';
+import { Braces, ChevronDown, Monitor, Palette, Play, ShieldCheck } from 'lucide-react';
 import SearchTargetLabel from '../SearchTargetLabel';
 
 const THEMES = Object.entries(editorThemes).map(([key]) => ({ label: key, value: key }));
@@ -283,6 +283,27 @@ function EditorSettings() {
                   </Radio>
                 ))}
               </Radio.Group>
+            </Form.Item>
+          </div>
+        </section>
+
+        <section className={styles.settingSection} data-editor-setting-group="behavior">
+          <h2 className={styles.sectionTitle}>
+            <ShieldCheck aria-hidden="true" className={styles.sectionIcon} size={17} strokeWidth={1.8} />
+            <span>{i18n('monaco.group.behavior')}</span>
+          </h2>
+          <div className={styles.fieldGrid}>
+            <Form.Item
+              name="confirmBeforeClose"
+              label={
+                <SearchTargetLabel targetId="editor.confirmBeforeClose">
+                  {i18n('monaco.confirmBeforeClose')}
+                </SearchTargetLabel>
+              }
+              tooltip={i18n('monaco.confirmBeforeClose.tooltip')}
+              valuePropName="checked"
+            >
+              <Switch />
             </Form.Item>
           </div>
         </section>

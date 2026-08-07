@@ -23,6 +23,7 @@ const typographyGroupIndex = baseSettingSource.indexOf('data-setting-group="typo
 const editorAppearanceGroupIndex = editorSettingSource.indexOf('data-editor-setting-group="appearance"');
 const editorDisplayGroupIndex = editorSettingSource.indexOf('data-editor-setting-group="display"');
 const editorCompletionGroupIndex = editorSettingSource.indexOf('data-editor-setting-group="completion"');
+const editorBehaviorGroupIndex = editorSettingSource.indexOf('data-editor-setting-group="behavior"');
 const editorExecutionGroupIndex = editorSettingSource.indexOf('data-editor-setting-group="execution"');
 const editorTooltipKeys = [
   'monaco.lineHeight.tooltip',
@@ -35,6 +36,7 @@ const editorTooltipKeys = [
   'monaco.completionAcceptKey.tooltip',
   'monaco.completion.all.tooltip',
   'monaco.tableDDLTriggerMode.tooltip',
+  'monaco.confirmBeforeClose.tooltip',
   'monaco.errorContinue.tooltip',
 ];
 const settingSearchTargetIds = [
@@ -56,6 +58,7 @@ const settingSearchTargetIds = [
   'editor.completionAcceptKey',
   'editor.completion',
   'editor.tableDDLTriggerMode',
+  'editor.confirmBeforeClose',
   'editor.errorContinue',
   'terminal.position',
   'terminal.confirmBeforeClose',
@@ -141,11 +144,18 @@ assert.ok(typographyGroupIndex > languageGroupIndex, 'interface typography follo
 assert.ok(editorAppearanceGroupIndex >= 0, 'editor settings expose an appearance group');
 assert.ok(editorDisplayGroupIndex > editorAppearanceGroupIndex, 'editor display follows appearance');
 assert.ok(editorCompletionGroupIndex > editorDisplayGroupIndex, 'completion follows editor display');
-assert.ok(editorExecutionGroupIndex > editorCompletionGroupIndex, 'SQL execution follows completion');
+assert.ok(editorBehaviorGroupIndex > editorCompletionGroupIndex, 'editor behavior follows completion');
+assert.ok(editorExecutionGroupIndex > editorBehaviorGroupIndex, 'SQL execution follows editor behavior');
 assert.match(editorSettingSource, /<Palette\b/, 'editor appearance uses a Lucide icon');
 assert.match(editorSettingSource, /<Monitor\b/, 'editor display uses a Lucide icon');
 assert.match(editorSettingSource, /<Braces\b/, 'editor completion uses a Lucide icon');
+assert.match(editorSettingSource, /<ShieldCheck\b/, 'editor close behavior uses a Lucide icon');
 assert.match(editorSettingSource, /<Play\b/, 'editor execution uses a Lucide icon');
+assert.match(
+  editorSettingSource,
+  /name="confirmBeforeClose"[\s\S]*?valuePropName="checked"[\s\S]*?<Switch\b/,
+  'editor close confirmation uses a persisted binary switch',
+);
 assert.match(terminalSettingSource, /<Switch\b/, 'terminal close confirmation uses a binary switch');
 assert.match(
   terminalSettingSource,

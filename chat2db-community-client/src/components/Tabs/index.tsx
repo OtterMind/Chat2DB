@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useState, useRef } from 'react';
-import { ChevronDown } from 'lucide-react';
 import Iconfont from '@/components/Iconfont';
+import DropdownChevronTrigger from '@/components/DropdownChevronTrigger';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { Popover, Dropdown } from 'antd';
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
@@ -941,17 +941,7 @@ export default memo<IProps>((props) => {
               placement="bottomRight"
               trigger={['click']}
             >
-              <button
-                type="button"
-                className={styles.iconButtonTrigger}
-                aria-label={i18n('common.text.moreTabs')}
-              >
-                <IconButton
-                  aria-hidden
-                  icon={ChevronDown}
-                  size={{ boxSize: 24, iconSize: 14, borderRadius: 4 }}
-                />
-              </button>
+              <DropdownChevronTrigger aria-label={i18n('common.text.moreTabs')} />
             </Dropdown>
           </div>
       </>

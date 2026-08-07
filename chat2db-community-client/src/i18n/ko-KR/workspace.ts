@@ -191,6 +191,8 @@ export default {
   'workspace.searchResult.prev': '이전 일치 항목(⇧Enter)',
   'workspace.searchResult.next': '다음 일치 항목(Enter)',
   'workspace.searchResult.close': '닫기',
+  'workspace.resultSet.cost': '소요 시간: {1}ms',
+  'workspace.resultSet.rows': '행 수: {1}',
   'workspace.syncStructure.title': '구조 동기화',
   'workspace.sourceDatabase': '원본 데이터베이스',
   'workspace.targetDatabase': '대상 데이터베이스',
@@ -259,6 +261,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     '파일 인코딩을 변경하면 디스크에서 파일을 다시 불러오며 저장하지 않은 변경 사항이 삭제됩니다.',
   'workspace.fileEncoding.reloadConfirm': '인코딩 변경',
+  'workspace.editorClose.title': '"{1}"의 변경 사항을 저장하시겠습니까?',
+  'workspace.editorClose.content': '저장하지 않으면 변경 사항이 손실됩니다.',
+  'workspace.editorClose.dontSave': '저장 안 함',
   'workspace.terminal.title': '터미널',
   'workspace.terminal.stop': '종료',
   'workspace.terminal.exited': '프로세스 종료 코드',

@@ -2,6 +2,8 @@ import React, { memo, forwardRef, useImperativeHandle, useMemo, useState, useRef
 // import i18n from '@/i18n';
 import { Dropdown } from 'antd';
 import { IconfontSvg } from '@chat2db/ui';
+import { Check } from 'lucide-react';
+import { useStyles } from './style';
 
 interface IProps {
   className?: string;
@@ -26,6 +28,7 @@ export interface ContextMenuRef {
 
 const ContextMenu = (props: IProps, ref) => {
   const { className } = props;
+  const { styles } = useStyles();
   // Parameters required to open the drop-down menu.
   const [dropdownParams, setDropdownParams] = useState<{
     zIndex?: number;
@@ -61,14 +64,33 @@ const ContextMenu = (props: IProps, ref) => {
   };
 
   const renderChildren = (children: any) => {
+    const reserveIconSpace = children?.some(
+      (item) => item.type !== 'divider' && (item.checked !== undefined || item.icon),
+    );
     return children?.map((t) => {
+      if (t.type === 'divider') {
+        return { type: 'divider' as const };
+      }
       return {
         key: t.key,
+        danger: t.danger,
+        disabled: t.disabled,
         onClick: () => {
           t.onClick?.();
         },
-        icon: t.icon && <IconfontSvg code={t.icon} size="lg" />,
-        label: t.label,
+        icon:
+          t.checked !== undefined ? (
+            <span className={styles.menuIconSlot}>
+              <Check opacity={t.checked ? 1 : 0} size={16} />
+            </span>
+          ) : t.icon ? (
+            <span className={styles.menuIconSlot}>
+              {React.isValidElement(t.icon) ? t.icon : <IconfontSvg code={t.icon} size="lg" />}
+            </span>
+          ) : reserveIconSpace ? (
+            <span aria-hidden className={styles.menuIconSlot} />
+          ) : undefined,
+        label: <span className={styles.menuLabel}>{t.label}</span>,
         children: renderChildren(t.children),
       };
     });
@@ -83,12 +105,17 @@ const ContextMenu = (props: IProps, ref) => {
     }
 
     const dropdownsItems = renderChildren(dropdownParams.dropdownsList);
+    const selectedKeys = (dropdownParams.dropdownsList || [])
+      .filter((item) => item.checked === true)
+      .map((item) => item.key);
 
     return {
       items: dropdownsItems,
+      selectable: true,
+      selectedKeys,
       style: dropdownsItems?.length ? {} : { display: 'none' }, // Show only when menu items exist.
     };
-  }, [dropdownParams]);
+  }, [dropdownParams, styles.menuIconSlot, styles.menuLabel]);
 
   useImperativeHandle(ref, () => ({
     openDropdown,

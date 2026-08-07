@@ -192,6 +192,8 @@ export default {
   'workspace.searchResult.prev': 'Coincidencia anterior (⇧Intro)',
   'workspace.searchResult.next': 'Coincidencia siguiente (Intro)',
   'workspace.searchResult.close': 'Cerrar',
+  'workspace.resultSet.cost': 'tiempo: {1}ms',
+  'workspace.resultSet.rows': 'filas: {1}',
   'workspace.syncStructure.title': 'Sincronización de estructura',
   'workspace.sourceDatabase': 'Base de datos de origen',
   'workspace.targetDatabase': 'Base de datos de destino',
@@ -260,6 +262,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     'Cambiar la codificación vuelve a cargar el archivo desde el disco y descarta los cambios sin guardar.',
   'workspace.fileEncoding.reloadConfirm': 'Cambiar codificación',
+  'workspace.editorClose.title': '¿Quieres guardar los cambios en "{1}"?',
+  'workspace.editorClose.content': 'Los cambios se perderán si no los guardas.',
+  'workspace.editorClose.dontSave': 'No guardar',
   'workspace.terminal.title': 'Terminal',
   'workspace.terminal.stop': 'Detener',
   'workspace.terminal.exited': 'El proceso terminó con el código',

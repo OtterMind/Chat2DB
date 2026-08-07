@@ -46,6 +46,8 @@ import {
   reduceActiveTabSelection,
 } from './tabSelection';
 import { ShortcutAction } from '@/constants/shortcut';
+import { useGlobalStore } from '@/store/global';
+import { retainPinnedResults } from './resultTabPinning';
 
 interface IProps {
   className?: string;
@@ -84,7 +86,12 @@ function getResultVersion(item: IManageResultData, consoleMode: boolean) {
       item.extra?.resultSequence,
       item.extra?.resultKey,
       item.resultSetId,
-      item.duration,
+      item.executionMetrics?.startedAtEpochMs,
+      item.executionMetrics?.finishedAtEpochMs,
+      item.executionMetrics?.totalDurationMs,
+      item.executionMetrics?.executeDurationMs,
+      item.executionMetrics?.fetchDurationMs,
+      item.executionMetrics?.fetchedRowCount,
       item.dataList?.length,
       item.extra?.messages?.length,
     ].join('|');
@@ -115,11 +122,24 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   const { className, viewTable = false } = props;
   const consoleMode = props.executionLogRecords !== undefined;
   const { styles } = useStyles();
+  const { dataTableSettings, updateDataTableSettings } = useGlobalStore((state) => ({
+    dataTableSettings: state.dataTableSettings,
+    updateDataTableSettings: state.updateDataTableSettings,
+  }));
+  const showFieldType = dataTableSettings.showFieldType ?? true;
+  const showFieldComment = dataTableSettings.showFieldComment ?? true;
   const [resultDataList, setResultDataList] = useState<IManageResultData[] | null>(props.resultDataList);
   const [historyResultDataList, setHistoryResultDataList] = useState<IManageResultData[]>(
     props.historyResultDataList || [],
   );
   const [showHistory, setShowHistory] = useState(false);
+  const [pinnedResultTabKeys, setPinnedResultTabKeys] = useState<Set<string>>(() => new Set());
+  const resultDataListRef = useRef(resultDataList);
+  const historyResultDataListRef = useRef(historyResultDataList);
+  const pinnedResultTabKeysRef = useRef(pinnedResultTabKeys);
+  resultDataListRef.current = resultDataList;
+  historyResultDataListRef.current = historyResultDataList;
+  pinnedResultTabKeysRef.current = pinnedResultTabKeys;
   const consoleResultDataList = useMemo(
     () => [...(resultDataList || []), ...historyResultDataList],
     [resultDataList, historyResultDataList],
@@ -167,9 +187,16 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   }, [props.resultBatchKey, consoleMode]);
 
   useEffect(() => {
-    const nextResultDataList = props.resultDataList || [];
+    const incomingResultDataList = props.resultDataList || [];
+    const incomingHistoryResultDataList = props.historyResultDataList || [];
+    const nextResultDataList = retainPinnedResults(
+      incomingResultDataList,
+      [...(resultDataListRef.current || []), ...historyResultDataListRef.current],
+      pinnedResultTabKeysRef.current,
+      incomingHistoryResultDataList,
+    );
     const previousResultVersions = knownResultVersionMapRef.current;
-    const changedResults = nextResultDataList.filter((item) => {
+    const changedResults = incomingResultDataList.filter((item) => {
       const resultKey = getResultIdentity(item);
       if (!resultKey) {
         return false;
@@ -191,7 +218,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         tabId: getPreferredActiveTabId(latestChangedResult, consoleMode, props.forceOutputTab),
       });
     }
-  }, [props.resultDataList, consoleMode, props.forceOutputTab]);
+  }, [props.resultDataList, props.historyResultDataList, consoleMode, props.forceOutputTab]);
 
   useEffect(() => {
     const nextHistoryResultDataList = props.historyResultDataList || [];
@@ -230,7 +257,13 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         ? [...(resultDataList || []), ...visibleHistoryResultDataList]
         : resultDataList || [];
     if (!visibleResultDataList?.length) return [];
-    const newResultDataList = visibleResultDataList?.filter(consoleMode ? hasTabularResult : hasLegacyResultTab);
+    const newResultDataList = visibleResultDataList
+      ?.filter(consoleMode ? hasTabularResult : hasLegacyResultTab)
+      .sort(
+        (left, right) =>
+          Number(pinnedResultTabKeys.has(String(right.uuid))) -
+          Number(pinnedResultTabKeys.has(String(left.uuid))),
+      );
 
     const tabsListRes =
       newResultDataList?.map((queryResultData, index) => {
@@ -255,6 +288,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               queryResultData.comment ||
               i18n('common.text.executionResult', index + 1),
           key: queryResultData.uuid!,
+          pinned: pinnedResultTabKeys.has(String(queryResultData.uuid)),
           children: (
             <SearchResultItem
               active={activeTabId === queryResultData.uuid}
@@ -276,7 +310,26 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     props.showExecutionResultCoordinates,
     styles.resultTabIcon,
     viewTable,
+    pinnedResultTabKeys,
   ]);
+
+  const resultTabKeySet = useMemo(
+    () => new Set(consoleResultDataList.map((item) => String(item.uuid)).filter(Boolean)),
+    [consoleResultDataList],
+  );
+
+  const handlePinResultTab = useCallback((tab: ITabItem) => {
+    const key = String(tab.key);
+    setPinnedResultTabKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const handleResultTabOrderChange = useCallback((nextOrder: ResultTabOrder) => {
     setResultTabOrder(nextOrder);
@@ -291,9 +344,22 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
         );
       } else if (key === 'keep-result-history') {
         props.onKeepResultHistoryChange?.(!(props.keepResultHistory ?? true));
+      } else if (key === 'show-field-type') {
+        updateDataTableSettings({ ...dataTableSettings, showFieldType: !showFieldType });
+      } else if (key === 'show-field-comment') {
+        updateDataTableSettings({ ...dataTableSettings, showFieldComment: !showFieldComment });
       }
     },
-    [handleResultTabOrderChange, props.keepResultHistory, props.onKeepResultHistoryChange, resultTabOrder],
+    [
+      dataTableSettings,
+      handleResultTabOrderChange,
+      props.keepResultHistory,
+      props.onKeepResultHistoryChange,
+      resultTabOrder,
+      showFieldComment,
+      showFieldType,
+      updateDataTableSettings,
+    ],
   );
 
   const executionMessages = useMemo<IExecutionMessageItem[]>(() => {
@@ -509,7 +575,11 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               <Dropdown
                 menu={{
                   selectable: true,
-                  selectedKeys: (props.keepResultHistory ?? true) ? ['keep-result-history'] : [],
+                  selectedKeys: [
+                    ...((props.keepResultHistory ?? true) ? ['keep-result-history'] : []),
+                    ...(showFieldType ? ['show-field-type'] : []),
+                    ...(showFieldComment ? ['show-field-comment'] : []),
+                  ],
                   items: [
                     {
                       key: 'toggle-result-tab-order',
@@ -524,6 +594,17 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
                       key: 'keep-result-history',
                       icon: <Check opacity={(props.keepResultHistory ?? true) ? 1 : 0} size={14} />,
                       label: i18n('common.button.keepHistoryResult'),
+                    },
+                    { type: 'divider' },
+                    {
+                      key: 'show-field-type',
+                      icon: <Check opacity={showFieldType ? 1 : 0} size={14} />,
+                      label: i18n('common.text.showFieldType'),
+                    },
+                    {
+                      key: 'show-field-comment',
+                      icon: <Check opacity={showFieldComment ? 1 : 0} size={14} />,
+                      label: i18n('common.text.showFieldComment'),
                     },
                   ],
                   onClick: handleResultSettingsClick,
@@ -551,6 +632,9 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
           activeTabScrollKey={consoleMode ? resultTabOrder : undefined}
           closeActiveTabOnCloseShortcut={consoleMode && props.closeActiveResultShortcutEnabled}
           closeShortcutAction={consoleMode ? ShortcutAction.CloseCurrentConsole : undefined}
+          contextActions={{ pin: true }}
+          contextActionAvailability={(tab) => ({ pin: resultTabKeySet.has(String(tab.key)) })}
+          contextActionHandlers={{ pin: handlePinResultTab }}
         />
       ) : (
         <div className={styles.noData}>

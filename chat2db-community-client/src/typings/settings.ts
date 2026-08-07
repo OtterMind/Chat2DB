@@ -72,8 +72,9 @@ export interface IUpdateDetail {
 }
 
 export interface DataTableSettings {
-  showComment: boolean;
   selectionMetrics?: [SelectionMetricId, SelectionMetricId, SelectionMetricId];
+  showFieldType?: boolean;
+  showFieldComment?: boolean;
 }
 
 export type TerminalShellId = 'system' | 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd';

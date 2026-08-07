@@ -2,6 +2,7 @@ export default {
   'monaco.group.appearance': 'Apariencia y fuente',
   'monaco.group.display': 'Visualización del editor',
   'monaco.group.completion': 'Autocompletado e interacción',
+  'monaco.group.behavior': 'Comportamiento del editor',
   'monaco.group.execution': 'Ejecución de SQL',
   'monaco.theme': 'Tema del editor',
   'monaco.theme.tooltip':
@@ -80,6 +81,9 @@ export default {
     'Al ejecutar varias sentencias SQL, continúa con las restantes cuando una de ellas falla.',
   'monaco.errorContinue.true': 'Sí',
   'monaco.errorContinue.false': 'No',
+  'monaco.confirmBeforeClose': 'Confirmar antes de cerrar',
+  'monaco.confirmBeforeClose.tooltip':
+    'Cuando una consulta o un archivo SQL local tenga cambios sin guardar, pregunta si deben guardarse antes de cerrar la pestaña.',
   'monaco.tableDDLTriggerMode': 'Mostrar DDL de la tabla',
   'monaco.tableDDLTriggerMode.tooltip':
     'Muestra el DDL al pasar el cursor sobre una tabla o al mantener {1} y hacer clic en ella.',

@@ -55,9 +55,6 @@ public class ExecuteResultResponse {
     private String fuzzyTotal;
 
 
-    private Long duration;
-
-
     private boolean canEdit;
 
 

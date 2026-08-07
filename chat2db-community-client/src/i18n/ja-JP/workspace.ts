@@ -190,6 +190,8 @@ export default {
   'workspace.searchResult.prev': '前の一致項目(⇧Enter)',
   'workspace.searchResult.next': '次の一致項目(Enter)',
   'workspace.searchResult.close': '閉じる',
+  'workspace.resultSet.cost': '所要時間: {1}ms',
+  'workspace.resultSet.rows': '行数: {1}',
   'workspace.syncStructure.title': '構造同期',
   'workspace.sourceDatabase': 'ソースデータベース',
   'workspace.targetDatabase': 'ターゲットデータベース',
@@ -260,6 +262,9 @@ export default {
   'workspace.fileEncoding.unsavedContent':
     'ファイルの文字コードを変更すると、ディスクからファイルが再読み込みされ、未保存の変更は破棄されます。',
   'workspace.fileEncoding.reloadConfirm': '文字コードを変更',
+  'workspace.editorClose.title': '"{1}" への変更を保存しますか？',
+  'workspace.editorClose.content': '保存しない場合、変更内容は失われます。',
+  'workspace.editorClose.dontSave': '保存しない',
   'workspace.terminal.title': 'ターミナル',
   'workspace.terminal.stop': '終了',
   'workspace.terminal.exited': 'プロセス終了コード',

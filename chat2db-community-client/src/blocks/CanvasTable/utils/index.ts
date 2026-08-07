@@ -24,13 +24,13 @@ export const getRowOriginDataAsArray = (
   },
 ) => {
   const list: (string | null)[][] = [];
-  const columns = tableInstance.columns;
+  const columns = tableInstance.columns.filter((column: any) => column.hide !== true);
   rowsDetails?.forEach((rowDetail, index) => {
     columns?.forEach((col) => {
       if (!list[index]) {
         list[index] = [];
       }
-      list[index].push(rowDetail[col.field as string] || null);
+      list[index].push(rowDetail[col.field as string] ?? null);
     });
   });
   return list;
@@ -66,9 +66,7 @@ export const findRowNumbersByIds = (tableInstance: ITableInstance, ids: string[]
 
 // Find the column number where the current column id is located
 export const findColNumberById = (tableInstance: ITableInstance, field: string) => {
-  const columns = tableInstance.columns;
-  const index = columns?.findIndex((col) => col?.field === field);
-  return index + 1;
+  return tableInstance.getTableIndexByField(field);
 };
 
 // Get sorted or filtered data

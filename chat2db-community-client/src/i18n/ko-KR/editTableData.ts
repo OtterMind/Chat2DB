@@ -4,8 +4,6 @@ export default {
   'editTableData.tips.deleteRow': '행 삭제',
   'editTableData.tips.revert': '되돌리기',
   'editTableData.tips.previewPendingChanges': '대기 중인 변경 사항 미리 보기',
-  'editTableData.tips.showComment': '설명 표시',
-  'editTableData.tips.hideComment': '설명 숨기기',
   'editTableData.tips.submit': '제출',
   'editTable.placeholder.columnName': 'AI 트리거 입력',
 };

@@ -109,9 +109,13 @@ const useTableTheme = (params: { antdTheme: Omit<AntdTheme, 'prefixCls'>, option
       },
       frozenColumnLine: {
         shadow: {
-          width: 4,
-          startColor: 'transparent',
-          endColor: 'transparent',
+          width: customOptions?.showFrozenColumnDivider ? 1 : 4,
+          startColor: customOptions?.showFrozenColumnDivider
+            ? colorPrimary
+            : 'transparent',
+          endColor: customOptions?.showFrozenColumnDivider
+            ? colorPrimary
+            : 'transparent',
         },
       },
       selectionStyle: {
@@ -127,7 +131,7 @@ const useTableTheme = (params: { antdTheme: Omit<AntdTheme, 'prefixCls'>, option
         sort_color_opacity_2: '1',
       },
     };
-  }, [antdTheme.appearance]);
+  }, [antdTheme.appearance, customOptions?.showFrozenColumnDivider]);
   return theme;
 };
 

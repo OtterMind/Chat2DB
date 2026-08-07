@@ -343,7 +343,6 @@ class DefaultSQLExecutorExecutionMetricsTest {
 
             assertEquals(Boolean.FALSE, result.getSuccess());
             assertEquals(1, result.getStatementSequence());
-            assertNotNull(result.getDuration());
             assertEquals("PUBLIC", result.getExecutionContext().getSchemaName());
             assertMetrics(result, 0);
         }
@@ -360,7 +359,7 @@ class DefaultSQLExecutorExecutionMetricsTest {
 
             assertEquals(2, executor.attempts);
             assertEquals(Boolean.FALSE, result.getSuccess());
-            assertTrue(result.getDuration() >= 60L);
+            assertTrue(result.getExecutionMetrics().getTotalDurationMs() >= 60L);
             assertEquals("PUBLIC", result.getExecutionContext().getSchemaName());
             assertMetrics(result, 0);
         }
@@ -389,10 +388,14 @@ class DefaultSQLExecutorExecutionMetricsTest {
     }
 
     @Test
-    void statementDurationUsesLatestCumulativeResultDuration() {
-        assertEquals(15L, TestSQLExecutor.statementDuration(List.of(
-                ExecuteResponse.builder().duration(10L).build(),
-                ExecuteResponse.builder().duration(15L).build())));
+    void statementDurationAddsIndependentResultMetrics() {
+        assertEquals(25L, TestSQLExecutor.statementDuration(List.of(
+                ExecuteResponse.builder()
+                        .executionMetrics(ExecutionMetrics.builder().totalDurationMs(10L).build())
+                        .build(),
+                ExecuteResponse.builder()
+                        .executionMetrics(ExecutionMetrics.builder().totalDurationMs(15L).build())
+                        .build())));
     }
 
     private static Connection openDatabase(String name) throws Exception {
@@ -581,7 +584,7 @@ class DefaultSQLExecutorExecutionMetricsTest {
     private static class TestSQLExecutor extends DefaultSQLExecutor {
 
         private static long statementDuration(List<ExecuteResponse> results) {
-            return maximumStatementDuration(results);
+            return totalStatementDuration(results);
         }
 
         private List<ExecuteResponse> executeMultiResults(Connection connection) throws Exception {

@@ -30,6 +30,7 @@ export interface EditorSettings {
   completionAcceptKey?: SqlCompletionAcceptKey;
   renderLineHighlight?: monaco.editor.IEditorOptions['renderLineHighlight'];
   stickyScroll?: monaco.editor.IEditorStickyScrollOptions;
+  confirmBeforeClose?: boolean;
 }
 
 export interface IRange {

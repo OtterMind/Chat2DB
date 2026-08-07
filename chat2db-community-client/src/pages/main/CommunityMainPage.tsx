@@ -1,6 +1,5 @@
 import { Confetti, IconButton, IconfontSvg } from '@chat2db/ui';
 import { Tooltip, type InputRef } from 'antd';
-import { Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '@/i18n';
@@ -21,6 +20,7 @@ import StreamSidebar from './components/StreamSidebar';
 
 import Dashboard from './dashboard';
 import DashboardMenuList from './dashboard/DashboardMenuList';
+import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
 import Stream from '../stream';
 
@@ -43,29 +43,12 @@ function CommunityMainPage() {
   const [navConfig, setNavConfig] = useState<INavItem[]>([]);
 
   const initNavConfig: INavItem[] = useMemo(
-    () => [
-      {
-        key: 'stream',
-        icon: MessageSquarePlus,
-        isLoad: false,
-        component: <Stream />,
-        name: i18n('stream.nav.title'),
-      },
-      {
-        key: 'workspace',
-        icon: Layers,
-        isLoad: false,
-        component: <Workspace />,
-        name: i18n('workspace.title'),
-      },
-      {
-        key: 'dashboard',
-        icon: LayoutDashboard,
-        isLoad: false,
-        component: <Dashboard />,
-        name: i18n('dashboard.title'),
-      },
-    ],
+    () =>
+      createCoreMainNavItems({
+        stream: { component: <Stream />, name: i18n('stream.nav.title') },
+        workspace: { component: <Workspace />, name: i18n('workspace.title') },
+        dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
+      }),
     [],
   );
 

@@ -1,15 +1,17 @@
 import * as VTable from '@visactor/vtable';
+import { getResultFieldAtTableColumn } from '../../columnState';
 
-const handleSetNull = (tableInstance: VTable.ListTable) => {
+const handleSetNull = (tableInstance: VTable.ListTable, readOnlyFields: ReadonlySet<string> = new Set()) => {
   const cells = tableInstance.getSelectedCellInfos() || [];
-  cells.map((rowCells) => { 
-    rowCells.map((cell) => {
+  cells.forEach((rowCells) => {
+    rowCells.forEach((cell) => {
       // does not change the meter header
-      if (cell.row === 0) {
+      const field = getResultFieldAtTableColumn(tableInstance, cell.col, cell.row);
+      if (cell.row === 0 || (field && readOnlyFields.has(field))) {
         return;
       }
       tableInstance.changeCellValue(cell.col, cell.row, null);
-     });
+    });
   });
 };
 

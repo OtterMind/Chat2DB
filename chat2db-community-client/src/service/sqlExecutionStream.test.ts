@@ -19,7 +19,6 @@ function chunk(rows: unknown[][]): IManageResultData {
     sql: 'select 1',
     originalSql: 'select 1',
     success: true,
-    duration: 0,
     sqlType: 'SELECT' as any,
     refreshTargets: [],
     extra: {
