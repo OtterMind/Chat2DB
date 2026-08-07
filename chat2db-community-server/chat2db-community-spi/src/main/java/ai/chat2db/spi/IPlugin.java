@@ -70,6 +70,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional Liquibase change-set processor for this plugin.
+     *
+     * @return database-specific diff processor, or a no-op processor by default.
+     */
+    default IDbDiffChangeSetProcessor getDiffChangeSetProcessor() {
+        return IDbDiffChangeSetProcessor.NO_OP;
+    }
+
+    /**
      * Returns key operations for this plugin.
      *
      * @return key operations implementation.

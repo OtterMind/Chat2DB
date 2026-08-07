@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectionPool;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.SqlUtils;
@@ -27,7 +28,6 @@ import liquibase.database.jvm.JdbcConnection;
 import liquibase.diff.DiffResult;
 import liquibase.diff.compare.CompareControl;
 import liquibase.diff.output.DiffOutputControl;
-import liquibase.diff.output.changelog.DiffToChangeLog;
 import liquibase.exception.DatabaseException;
 import liquibase.exception.LiquibaseException;
 import liquibase.resource.FileSystemResourceAccessor;
@@ -77,7 +77,7 @@ public class DbDiffServiceImpl implements IDbDiffService {
             DiffResult diffResult = generateDiff(sourceDatabase, targetDatabase);
 
             String path = filePath + File.separator + DIFF_FILE;
-            generateChangeLog(diffResult, path);
+            generateChangeLog(diffResult, path, target.getDbType());
 
             if (!FileUtil.exist(path)) {
                 return "-- No differences. ";
@@ -134,13 +134,15 @@ public class DbDiffServiceImpl implements IDbDiffService {
     }
 
 
-    private void generateChangeLog(DiffResult diffResult, String diffFilePath) throws DatabaseException, IOException, ParserConfigurationException {
+    private void generateChangeLog(DiffResult diffResult, String diffFilePath, String targetDbType)
+            throws DatabaseException, IOException, ParserConfigurationException {
         DiffOutputControl diffOutputControl = new DiffOutputControl();
         diffOutputControl.setIncludeCatalog(false);
         diffOutputControl.setIncludeSchema(false);
         diffOutputControl.setIncludeTablespace(false);
 
-        DiffToChangeLog diffToChangeLog = new DiffToChangeLog(diffResult, diffOutputControl);
+        Chat2dbDiffToChangeLog diffToChangeLog = new Chat2dbDiffToChangeLog(
+                diffResult, diffOutputControl, Chat2DBContext.getDiffChangeSetProcessor(targetDbType));
         diffToChangeLog.setChangeSetAuthor("Chat2DB client");
         diffToChangeLog.print(diffFilePath);
     }
