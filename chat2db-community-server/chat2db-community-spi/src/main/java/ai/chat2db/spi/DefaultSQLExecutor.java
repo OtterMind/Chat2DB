@@ -1643,7 +1643,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList,
                                    ISqlExecutionStatementListener statementListener,
                                    Runnable cancellationChecker) {
+        boolean originalAutoCommit = true;
         try {
+            originalAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
             for (String sql : sqlCacheList) {
                 checkTaskCancellation(cancellationChecker);
                 PreparedStatement stmt = connection.prepareStatement(sql);
@@ -1655,9 +1658,13 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     notifyStatementClosed(statementListener, stmt);
                 }
             }
+            connection.commit();
         } catch (SQLException e) {
+            try { connection.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
             checkTaskCancellation(cancellationChecker);
             throw new RuntimeException(e);
+        } finally {
+            try { connection.setAutoCommit(originalAutoCommit); } catch (SQLException ignore) {}
         }
     }
 
