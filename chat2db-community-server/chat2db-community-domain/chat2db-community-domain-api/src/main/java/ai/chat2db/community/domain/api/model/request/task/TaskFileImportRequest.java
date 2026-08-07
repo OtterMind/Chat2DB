@@ -20,4 +20,10 @@ public class TaskFileImportRequest {
     private String importType;
 
     private String fileName;
+
+    /** SQL-file import options (MYSQL-IMPORT-004). */
+    private String encoding;
+    private String errorPolicy;
+    private String commitMode;
+    private Integer batchSize;
 }

@@ -11,8 +11,16 @@ public class OtherFileImportRequest extends DataSourceBaseRequest {
     @NotNull
     private String importType;
 
-   private String fileName;
+    private String fileName;
 
-   private String tableName;
+    private String tableName;
 
+    /** SQL-file import options (MYSQL-IMPORT-004). */
+    private String encoding;
+
+    private String errorPolicy;
+
+    private String commitMode;
+
+    private Integer batchSize;
 }

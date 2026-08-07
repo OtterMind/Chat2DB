@@ -1,7 +1,7 @@
 import { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
 import UploadLocalFile from '@/components/UploadLocalFile';
-import { Form, Input } from 'antd';
+import { Form, Input, InputNumber, Select } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import { isDevelopment } from '@/utils/env';
@@ -31,7 +31,12 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   const { styles } = useStyles();
   const [form] = Form.useForm();
   const [fileUrlList, setFileUrlList] = useState<string[]>([]);
-  const [formValues, setFormValues] = useState<any>({});
+  const [formValues, setFormValues] = useState<any>({
+    encoding: 'UTF-8',
+    errorPolicy: 'STOP',
+    commitMode: 'SCRIPT',
+    batchSize: 1000,
+  });
 
   useEffect(() => {
     setIsReady && setIsReady(!!fileUrlList.length || formValues.fileUrl);
@@ -67,6 +72,10 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
         databaseName,
         schemaName,
         fileName: fileUrlList[0] || formValues.fileUrl,
+        encoding: formValues.encoding,
+        errorPolicy: formValues.errorPolicy,
+        commitMode: formValues.commitMode,
+        batchSize: formValues.batchSize,
       };
     },
   }));
@@ -91,6 +100,37 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
       <Form.Item>
         <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept=".sql" />
       </Form.Item>
+      <Form.Item label={`${i18n('workspace.importExport.encoding')}:`} name="encoding">
+        <Select
+          options={[
+            { value: 'UTF-8', label: 'UTF-8' },
+            { value: 'GB18030', label: 'GB18030' },
+            { value: 'ISO-8859-1', label: 'ISO-8859-1' },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item label={`${i18n('workspace.importExport.errorPolicy')}:`} name="errorPolicy">
+        <Select
+          options={[
+            { value: 'STOP', label: i18n('workspace.importExport.errorPolicyStop') },
+            { value: 'CONTINUE', label: i18n('workspace.importExport.errorPolicyContinue') },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item label={`${i18n('workspace.importExport.commitMode')}:`} name="commitMode">
+        <Select
+          options={[
+            { value: 'SCRIPT', label: i18n('workspace.importExport.commitModeScript') },
+            { value: 'BATCH', label: i18n('workspace.importExport.commitModeBatch') },
+            { value: 'SINGLE_TRANSACTION', label: i18n('workspace.importExport.commitModeSingle') },
+          ]}
+        />
+      </Form.Item>
+      {formValues.commitMode === 'BATCH' && (
+        <Form.Item label={`${i18n('workspace.importExport.batchSize')}:`} name="batchSize">
+          <InputNumber min={1} max={100000} style={{ width: '100%' }} />
+        </Form.Item>
+      )}
       {isDevelopment && (
         <Form.Item label="File URL" name="fileUrl">
           <Input autoComplete="off" />

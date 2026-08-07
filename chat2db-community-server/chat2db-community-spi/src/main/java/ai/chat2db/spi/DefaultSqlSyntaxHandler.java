@@ -216,6 +216,31 @@ public class DefaultSqlSyntaxHandler {
        return sqlParser.parserSqlScript(file, progressListener, sqlBatchHandler);
     }
 
+    /**
+     * MYSQL-IMPORT-004: parses a SQL file with an explicit charset. Non-MySQL plugins keep
+     * their default behavior; the MySQL parser honors the charset.
+     */
+    public static int parserSqlScript(File file, String databaseType, ITaskProgressListener progressListener,
+                                      ISqlBatchHandler sqlBatchHandler, java.nio.charset.Charset charset) {
+        ISQLParser sqlParser = getSQLParser(databaseType.toUpperCase());
+        if (Objects.isNull(sqlParser)) {
+            return 0;
+        }
+        // Charset-aware overload is a plugin-side extension (MYSQL-IMPORT-004); invoke it
+        // reflectively so the SPI layer keeps no compile-time dependency on a plugin.
+        try {
+            java.lang.reflect.Method charsetMethod = sqlParser.getClass().getMethod(
+                    "parserSqlScript", File.class, ITaskProgressListener.class, ISqlBatchHandler.class,
+                    java.nio.charset.Charset.class);
+            if (charsetMethod.getDeclaringClass() != Object.class) {
+                return (int) charsetMethod.invoke(sqlParser, file, progressListener, sqlBatchHandler, charset);
+            }
+        } catch (Exception e) {
+            // Plugin without the overload: fall back to its default charset behavior.
+        }
+        return sqlParser.parserSqlScript(file, progressListener, sqlBatchHandler);
+    }
+
     private static void loadFromDatabasePlugins() {
         Chat2DBContext.PLUGIN_MAP.forEach((databaseType, plugin) -> {
             if (plugin == null) {

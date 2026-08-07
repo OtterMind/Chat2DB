@@ -25,6 +25,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -203,8 +204,19 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
     public int parserSqlScript(File file,
                                ITaskProgressListener progressListener,
                                ISqlBatchHandler sqlBatchHandler) {
+        return parserSqlScript(file, progressListener, sqlBatchHandler, StandardCharsets.UTF_8);
+    }
 
-        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, StandardCharsets.UTF_8)) {
+    /**
+     * MYSQL-IMPORT-004: parses a SQL file with an explicit charset (the default overload
+     * keeps UTF-8 for compatibility with existing callers).
+     */
+    public int parserSqlScript(File file,
+                               ITaskProgressListener progressListener,
+                               ISqlBatchHandler sqlBatchHandler,
+                               Charset charset) {
+
+        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, charset)) {
             String content;
             long bytesRead = 0L;
             int statementCount = 0;

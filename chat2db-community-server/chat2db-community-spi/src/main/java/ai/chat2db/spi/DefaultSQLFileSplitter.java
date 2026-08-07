@@ -40,7 +40,9 @@ public class DefaultSQLFileSplitter implements ISQLFileSplitter {
         } catch (FileNotFoundException e) {
             throw new RuntimeException("Unable to open file " + file, e);
         }
-        this.reader = new PushbackReader(new BufferedReader(fileReader), 256);
+        // FileReader would use the platform default charset; honor the requested one.
+        this.reader = new PushbackReader(new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), charSet)), 256);
         this.charset = charSet;
     }
 

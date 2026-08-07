@@ -8,4 +8,12 @@ public class SqlFileImportRequest extends DataSourceBaseRequest {
 
     private String fileName;
 
+    private String encoding;
+
+    private String errorPolicy;
+
+    private String commitMode;
+
+    private Integer batchSize;
+
 }

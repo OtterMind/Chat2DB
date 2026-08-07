@@ -122,8 +122,13 @@ public class TaskTransferServiceImpl implements ITaskTransferService {
     }
 
     private ImportAsyncContext createImportContext(Long taskId, String importType, TaskFileImportRequest request) {
-        return taskFileService.createImportContext(taskId, importType, request.getTableName(), request.getFileName(),
-                taskSchedulerService.asyncCall(taskId), ContextUtils.queryContext());
+        ImportAsyncContext context = taskFileService.createImportContext(taskId, importType, request.getTableName(),
+                request.getFileName(), taskSchedulerService.asyncCall(taskId), ContextUtils.queryContext());
+        context.setEncoding(request.getEncoding());
+        context.setErrorPolicy(request.getErrorPolicy());
+        context.setCommitMode(request.getCommitMode());
+        context.setBatchSize(request.getBatchSize());
+        return context;
     }
 
     private Long createExportTask(String databaseName, String schemaName, List<String> tableNames) {
