@@ -38,6 +38,7 @@ export interface IColumnItemNew {
   ordinalPosition: number | null; // location
   nullable: NullableType | null; //Is it empty
   generatedColumn: string | null; // Whether to generate columns
+  visible?: boolean | null; // Column visibility (MySQL 8.0.23+)
 
   charSetName: string | null; // Character set name
   collationName: string | null; // collation name

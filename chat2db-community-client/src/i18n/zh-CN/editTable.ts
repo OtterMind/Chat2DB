@@ -19,6 +19,7 @@ export default {
   'editTable.label.columnSize': '长度',
   'editTable.label.columnType': '类型',
   'editTable.label.nullable': '可空',
+  'editTable.label.columnVisible': '可见',
   'editTable.label.prefixLength': '前缀长度',
   'editTable.label.defaultValue': '默认值',
   'editTable.label.updateTime': '根据当前时间戳更新',

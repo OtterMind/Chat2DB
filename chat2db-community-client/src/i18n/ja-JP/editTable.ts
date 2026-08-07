@@ -19,6 +19,7 @@ export default {
   'editTable.label.columnSize': 'サイズ',
   'editTable.label.columnType': 'タイプ',
   'editTable.label.nullable': 'Null許容',
+  'editTable.label.columnVisible': '表示',
   'editTable.label.prefixLength': 'プレフィックス長',
   'editTable.label.defaultValue': 'デフォルト値',
   'editTable.label.updateTime': '現在のタイムスタンプに基づいて更新',

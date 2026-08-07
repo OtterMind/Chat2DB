@@ -20,7 +20,7 @@ import { Context } from '../index';
 import { IColumnItemNew, IColumnTypes } from '@/typings';
 import i18n from '@/i18n';
 import { EditColumnOperationType, NullableType } from '@/constants';
-import { isSqliteExistingColumnReadonly, shouldShowSqlServerSparse } from '@/utils/databaseJudgments';
+import { isSqliteExistingColumnReadonly, shouldShowSqlServerSparse, shouldShowMysqlColumnVisible } from '@/utils/databaseJudgments';
 import CustomSelect from '@/components/CustomSelect';
 import Iconfont from '@/components/Iconfont';
 import { useStyles } from './style';
@@ -197,7 +197,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
 
   const columns = useMemo(() => {
     const isEditing = (record: IColumnItemNew) => record.key === editingData?.key;
-    return [
+    const _columns = [
       {
         key: 'sort',
         width: columnsWidth[0],
@@ -343,6 +343,28 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
         },
       },
     ];
+    if (shouldShowMysqlColumnVisible(databaseType)) {
+      _columns.splice(-1, 0, {
+        title: i18n('editTable.label.columnVisible'),
+        dataIndex: 'visible',
+        width: 80,
+        render: (text: boolean | null | undefined, record: IColumnItemNew) => {
+          const editable = isEditing(record);
+          const value = record.visible === false ? 'INVISIBLE' : 'VISIBLE';
+          return editable ? (
+            <Form.Item name="visible" style={{ margin: 0 }}>
+              <Select size="small" style={{ width: '100%' }}>
+                <Select.Option value={true}>VISIBLE</Select.Option>
+                <Select.Option value={false}>INVISIBLE</Select.Option>
+              </Select>
+            </Form.Item>
+          ) : (
+            <div className={styles.editableCell}>{value}</div>
+          );
+        },
+      });
+    }
+    return _columns;
   }, [columnsWidth, editingData, editingConfig, databaseType, dataSource]);
 
   const handleResize = useCallback(

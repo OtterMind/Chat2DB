@@ -243,6 +243,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 column.setDefaultValue(resultSet.getString(FIELD_COLUMN_DEFAULT));
                 column.setAutoIncrement(resultSet.getString(FIELD_EXTRA).contains(SQL_AUTO_INCREMENT));
                 column.setOnUpdateCurrentTimestamp(resultSet.getString(FIELD_EXTRA).contains(SQL_ON_UPDATE_CURRENT_TIMESTAMP));
+                column.setVisible(!resultSet.getString(FIELD_EXTRA).contains(SQL_INVISIBLE));
                 column.setComment(resultSet.getString(FIELD_COLUMN_COMMENT));
                 column.setPrimaryKey(SQL_PRIMARY_KEY_FLAG.equalsIgnoreCase(resultSet.getString(FIELD_COLUMN_KEY)));
                 column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);

@@ -19,6 +19,7 @@ export default {
   'editTable.label.columnSize': 'Size',
   'editTable.label.columnType': 'Type',
   'editTable.label.nullable': 'Nullable',
+  'editTable.label.columnVisible': 'Visible',
   'editTable.label.prefixLength': 'Prefix length',
   'editTable.label.defaultValue': 'Default value',
   'editTable.label.updateTime': 'Update based on current timestamp',

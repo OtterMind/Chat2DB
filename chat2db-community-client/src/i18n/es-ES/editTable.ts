@@ -19,6 +19,7 @@ export default {
   'editTable.label.columnSize': 'Tamaño',
   'editTable.label.columnType': 'Tipo',
   'editTable.label.nullable': 'Permite NULL',
+  'editTable.label.columnVisible': 'Visible',
   'editTable.label.prefixLength': 'Longitud del prefijo',
   'editTable.label.defaultValue': 'Valor predeterminado',
   'editTable.label.updateTime': 'Actualizar según la marca de tiempo actual',

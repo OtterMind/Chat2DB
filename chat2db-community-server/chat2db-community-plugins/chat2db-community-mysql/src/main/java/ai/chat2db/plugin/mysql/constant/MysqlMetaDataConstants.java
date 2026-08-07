@@ -112,6 +112,7 @@ public final class MysqlMetaDataConstants {
     public static final String SQL_DOT = ".";
     public static final String SQL_ENUM_TYPE = "ENUM";
     public static final String SQL_FULLTEXT_INDEX_TYPE = "FULLTEXT";
+    public static final String SQL_INVISIBLE = "INVISIBLE";
     public static final String SQL_METADATA_QUOTE = "`";
     public static final String SQL_NAME_SIZE_CLOSE = ")";
     public static final String SQL_NAME_SIZE_OPEN = "(";
