@@ -300,7 +300,6 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
      * questionType parameter
      * default is ORDINARY_CHAT
      * console opens as NL_2_SQL
-     * Insert test data DATA_INSERT
      */
     const questionType = params?.questionType || QuestionType.ORDINARY_CHAT;
 

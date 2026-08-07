@@ -225,11 +225,15 @@ export const envItem = {
   required: true,
   selects: [
     {
-      label: 'RELEASE',
+      label: 'TEST',
       value: 1,
     },
     {
-      label: 'TEST',
+      label: 'DEV',
+      value: 3,
+    },
+    {
+      label: 'RELEASE',
       value: 2,
     },
   ],

@@ -24,6 +24,9 @@ export interface IConnectionDetails {
   id: number;
   alias: string;
   environment: IConnectionEnv;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   type: DatabaseTypeCode;
 
   isAdmin: boolean;
@@ -46,9 +49,25 @@ export interface IConnectionListItem {
   id: number;
   alias: string;
   environment: IConnectionEnv;
+  environmentId?: number | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   type: DatabaseTypeCode;
   supportDatabase: boolean;
   supportSchema: boolean;
+}
+
+export interface IDataSourceIdentityColorUpdateRequest {
+  id: number;
+  identityColor: string | null;
+}
+
+export interface IDataSourceIdentityColorResponse {
+  id: number;
+  identityColor: string | null;
+  environmentId: number | null;
+  environment: IConnectionEnv | null;
 }
 
 export type ICreateConnectionDetails = Omit<IConnectionDetails, 'id'>;

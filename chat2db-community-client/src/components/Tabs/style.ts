@@ -29,7 +29,7 @@ export const useStyles = createStyles(
         right: 0px;
         top: 0px;
         height: 2px;
-        background-color: ${colorPrimary};
+        background-color: var(--chat2db-tab-accent-color, ${colorPrimary});
         z-index: 2;
       }
       &:before {

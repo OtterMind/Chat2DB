@@ -243,6 +243,12 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 extraParams: {
                   databaseType: t.type,
                   dataSourceId: t.id,
+                  dataSourceName: t.alias,
+                  environmentId: t.environmentId ?? t.environment?.id ?? null,
+                  environment: t.environment ?? null,
+                  identityColor: t.identityColor ?? null,
+                  watermarkEnabled: t.watermarkEnabled ?? null,
+                  watermarkContent: t.watermarkContent ?? null,
                 },
               };
             });

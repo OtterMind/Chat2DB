@@ -68,6 +68,19 @@ public interface IWorkspaceStorage {
     }
 
     /**
+     * Updates only the shared identity color of a datasource. Providers must implement
+     * a native partial update so credentials are never fetched or resubmitted as a
+     * side effect of changing presentation metadata.
+     *
+     * @param id datasource identifier.
+     * @param identityColor normalized nullable identity color.
+     * @return updated datasource identifier.
+     */
+    default Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        throw unsupported("updateDataSourceIdentityColor");
+    }
+
+    /**
      * Lists workspace datasources with pagination and filters.
      *
      * @param dbDataSourcePageQueryRequest datasource page query parameters.

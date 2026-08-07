@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 import ConnectionEdit, { submitType } from '@/components/ConnectionEdit';
+import { applyConnectionIdentityColorUpdate } from '@/components/ConnectionEdit/identityColorUpdate';
 import FileUploadModal, { importConfigList } from '@/components/ImportConnection';
 import { ImportConnectionType } from '@/constants/database';
 import connectionService from '@/service/connection';
@@ -180,9 +181,16 @@ export default memo<IProps>(() => {
         .update({
           ...dataSource,
         })
-        .then((res) => {
+        .then(async (res) => {
+          const updatedDataSource = await applyConnectionIdentityColorUpdate(
+            res,
+            connectionDetail?.identityColor,
+            dataSource.identityColor,
+            connectionService.updateIdentityColor,
+          );
           setIsModalVisible(false);
-          editorDataSource(res);
+          editorDataSource(updatedDataSource);
+          return updatedDataSource;
         });
     } else {
       return connectionService
@@ -247,8 +255,8 @@ export default memo<IProps>(() => {
         </Dropdown>
       </ConfigProvider>
       <Modal
-        width="80%"
-        style={{ maxWidth: '900px', minWidth: '800px' }}
+        width="90%"
+        style={{ maxWidth: '1200px', minWidth: '800px' }}
         title={renderTitle()}
         footer={null}
         open={isModalVisible}

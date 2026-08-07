@@ -37,6 +37,8 @@ import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
+import type { IConnectionEnv } from '@/typings';
+import { resolveAIDataSourceContext } from './dataSourceContext';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -354,6 +356,11 @@ export interface ITableClickContext {
   schemaName?: string;
   databaseType?: DatabaseTypeCode;
   dataSourceName?: string;
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
 }
 
 interface IAIProps {
@@ -1628,28 +1635,32 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const schemaName = cascaderData && 'schemaName' in cascaderData ? cascaderData.schemaName : undefined;
 
       // Prefer databaseType and dataSourceName from the cascader selection.
-      // This also works on pages such as Stream where treeData is not loaded.
+      // Resolve presentation identity from the flat datasource list by immutable id.
       let databaseType: DatabaseTypeCode | undefined =
         cascaderData && 'databaseType' in cascaderData ? cascaderData.databaseType : undefined;
       let dataSourceName: string | undefined =
         cascaderData && 'dataSourceName' in cascaderData ? cascaderData.dataSourceName : undefined;
-      if (!databaseType || !dataSourceName) {
-        const treeData = useTreeStore.getState().treeData;
-        if (treeData && dataSourceId) {
-          const dsNode = treeData.find((n) => n.extraParams?.dataSourceId === dataSourceId);
-          if (dsNode) {
-            databaseType = databaseType || dsNode.extraParams?.databaseType;
-            dataSourceName = dataSourceName || dsNode.extraParams?.dataSourceName;
-          }
-        }
-      }
+      const dataSourceContext = resolveAIDataSourceContext(useTreeStore.getState().dataSourceList, dataSourceId);
+      databaseType = databaseType || dataSourceContext?.databaseType;
+      dataSourceName = dataSourceName || dataSourceContext?.dataSourceName;
 
       if (!dataSourceId || !databaseType || !dataSourceName) {
         feedback.warning(i18n('stream.warning.selectDataSource'));
         return;
       }
 
-      const context: ITableClickContext = { dataSourceId, databaseName, schemaName, databaseType, dataSourceName };
+      const context: ITableClickContext = {
+        dataSourceId,
+        databaseName,
+        schemaName,
+        databaseType,
+        dataSourceName,
+        environmentId: dataSourceContext?.environmentId,
+        environment: dataSourceContext?.environment,
+        identityColor: dataSourceContext?.identityColor,
+        watermarkEnabled: dataSourceContext?.watermarkEnabled,
+        watermarkContent: dataSourceContext?.watermarkContent,
+      };
 
       if (onPinSql) {
         onPinSql(sql, context);
@@ -1663,6 +1674,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         databaseType,
         databaseName,
         schemaName,
+        environmentId: dataSourceContext?.environmentId,
+        environment: dataSourceContext?.environment,
+        identityColor: dataSourceContext?.identityColor,
+        watermarkEnabled: dataSourceContext?.watermarkEnabled,
+        watermarkContent: dataSourceContext?.watermarkContent,
         ddl: sql,
       });
 

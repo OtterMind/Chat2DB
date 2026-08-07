@@ -48,6 +48,9 @@ import {
 import { ShortcutAction } from '@/constants/shortcut';
 import { useGlobalStore } from '@/store/global';
 import { retainPinnedResults } from './resultTabPinning';
+import { useTreeStore } from '@/store/tree';
+import { resolveDataSourceIdentityColor } from '@/utils/dataSourceIdentity';
+import type { DataSourceExecutionTarget } from '@/service/dataSourceExecutionSnapshot';
 
 interface IProps {
   className?: string;
@@ -128,6 +131,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   }));
   const showFieldType = dataTableSettings.showFieldType ?? true;
   const showFieldComment = dataTableSettings.showFieldComment ?? true;
+  const dataSourceList = useTreeStore((state) => state.dataSourceList);
   const [resultDataList, setResultDataList] = useState<IManageResultData[] | null>(props.resultDataList);
   const [historyResultDataList, setHistoryResultDataList] = useState<IManageResultData[]>(
     props.historyResultDataList || [],
@@ -267,6 +271,13 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
 
     const tabsListRes =
       newResultDataList?.map((queryResultData, index) => {
+        const executionTarget = queryResultData.extra?.executionTarget as DataSourceExecutionTarget | undefined;
+        const dataSourceId = executionTarget?.dataSourceId ?? queryResultData.executeSqlParams?.dataSourceId;
+        const identityColor = dataSourceId
+          ? resolveDataSourceIdentityColor(
+              dataSourceList?.find((item) => item.extraParams.dataSourceId === dataSourceId)?.extraParams,
+            )
+          : undefined;
         return {
           prefixIcon: <IconfontSvg key={index} className={styles.resultTabIcon} size="sm" code="icon-table" />,
           popover: (
@@ -289,6 +300,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               i18n('common.text.executionResult', index + 1),
           key: queryResultData.uuid!,
           pinned: pinnedResultTabKeys.has(String(queryResultData.uuid)),
+          accentColor: dataSourceId ? identityColor : undefined,
           children: (
             <SearchResultItem
               active={activeTabId === queryResultData.uuid}
@@ -307,6 +319,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     showHistory,
     consoleMode,
     orderedConsoleResultDataList,
+    dataSourceList,
     props.showExecutionResultCoordinates,
     styles.resultTabIcon,
     viewTable,

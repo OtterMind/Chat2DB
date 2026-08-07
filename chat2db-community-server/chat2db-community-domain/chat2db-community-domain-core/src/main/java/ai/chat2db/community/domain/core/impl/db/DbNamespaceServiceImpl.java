@@ -17,14 +17,17 @@ import java.util.Objects;
 public class DbNamespaceServiceImpl implements IDbNamespaceService {
 
     private final IWorkspaceStorageFacade workspaceStorageFacade;
+    private final DataSourceEnvironmentEnricher environmentEnricher;
 
-    public DbNamespaceServiceImpl(IWorkspaceStorageFacade workspaceStorageFacade) {
+    public DbNamespaceServiceImpl(IWorkspaceStorageFacade workspaceStorageFacade,
+            DataSourceEnvironmentEnricher environmentEnricher) {
         this.workspaceStorageFacade = workspaceStorageFacade;
+        this.environmentEnricher = environmentEnricher;
     }
 
     @Override
     public WorkspaceDataSourceNamespace getNamespaceDataSources() {
-        return workspaceStorageFacade.getNamespaceDataSources();
+        return environmentEnricher.enrich(workspaceStorageFacade.getNamespaceDataSources());
     }
 
     @Override
@@ -62,7 +65,7 @@ public class DbNamespaceServiceImpl implements IDbNamespaceService {
 
     @Override
     public List<Node> getTree() {
-        return workspaceStorageFacade.getTree();
+        return environmentEnricher.enrichTree(workspaceStorageFacade.getTree());
     }
 
     @Override

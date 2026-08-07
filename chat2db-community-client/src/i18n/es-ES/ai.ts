@@ -25,9 +25,6 @@ export default {
   'ai.aiType.CURDGeneration.title': 'Generación de CRUD',
   'ai.aiType.CURDGeneration.desc': 'Genera CRUD',
 
-  'ai.aiType.InsertData.title': 'Generar datos de prueba',
-  'ai.aiType.InsertData.desc': 'Inserta datos de prueba',
-
   'ai.action.pin': 'Insertar el código en el editor',
 
   'ai.common.think': 'La IA está resolviendo el problema... 🤔💭',
@@ -43,8 +40,6 @@ export default {
   'ai.select.databaseOrDataCollection': 'Seleccione una base de datos o una colección de datos',
   'ai.select.globalDatabaseScope': 'Consulta global (sin fuente de datos seleccionada)',
   'ai.select.model': 'Seleccione un modelo',
-  'ai.insertData.title': 'Generar datos de prueba para {1}',
-  'ai.insertData.error.title': 'Corregir errores de {1}',
   'ai.sqlDebug.prefill':
     'Ayúdame a diagnosticar el siguiente error de SQL y proporciona soluciones ejecutables.\n\nSQL:\n{1}\n\nError:\n{2}',
   'ai.codeBlock.run.title': 'Este código modifica la base de datos. ¿Confirma que desea ejecutarlo?',

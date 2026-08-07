@@ -18,6 +18,7 @@ import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPa
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationPageQueryRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
+import ai.chat2db.community.tools.exception.storage.UnsupportedStorageCapabilityException;
 
 import java.util.List;
 
@@ -57,6 +58,17 @@ public interface IWorkspaceStorageFacade {
      * @return updated datasource identifier.
      */
     Long updateDataSource(WorkspaceDataSource dataSource);
+
+    /**
+     * Updates only the shared identity color of a datasource.
+     *
+     * @param id datasource identifier.
+     * @param identityColor normalized nullable identity color.
+     * @return updated datasource identifier.
+     */
+    default Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        throw UnsupportedStorageCapabilityException.forCapability("updateDataSourceIdentityColor");
+    }
 
     /**
      * Lists workspace datasources with pagination and filters.
