@@ -12,11 +12,11 @@ import {
   useImperativeHandle,
 } from 'react';
 import classnames from 'classnames';
-import { Table, Form, Select, Button } from 'antd';
+import { Table, Form, Select, Button, InputNumber } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { Context } from '../index';
 import { IColumnItemNew, IIndexIncludeColumnItem } from '@/typings';
-import { shouldShowSqliteIncludeCollation } from '@/utils/databaseJudgments';
+import { shouldShowSqliteIncludeCollation, shouldShowMysqlIndexMethod } from '@/utils/databaseJudgments';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import Iconfont from '@/components/Iconfont';
@@ -168,25 +168,27 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
         );
       },
     },
-
-    // {
-    //   title: i18n('editTable.label.prefixLength'),
-    //   dataIndex: 'prefixLength',
-    //   width: '45%',
-    //   render: (text: string, record: IIndexIncludeColumnItem) => {
-    //     const editable = isEditing(record);
-    //     return editable ? (
-    //       <Form.Item name="prefixLength" style={{ margin: 0 }}>
-    //         <InputNumber style={{ width: '100%' }} />
-    //       </Form.Item>
-    //     ) : (
-    //       <div className={styles.editableCell} onClick={() => edit(record)}>
-    //         {text}
-    //       </div>
-    //     );
-    //   },
-    // },
   ];
+
+  if (shouldShowMysqlIndexMethod(databaseType)) {
+    columns.splice(-1, 0, {
+      title: i18n('editTable.label.prefixLength'),
+      dataIndex: 'subPart',
+      width: '120px',
+      render: (text: number | null, record: IIndexIncludeColumnItem) => {
+        const editable = isEditing(record);
+        return editable ? (
+          <Form.Item name="subPart" style={{ margin: 0 }}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+        ) : (
+          <div className={styles.editableCell} onClick={() => edit(record)}>
+            {text ?? ''}
+          </div>
+        );
+      },
+    });
+  }
   // sqlLite Add sorting rules
   if (shouldShowSqliteIncludeCollation(databaseType)) {
     columns.splice(2, 0, {
