@@ -6,6 +6,7 @@ import { ImportExportTaskDetails } from '@/typings/importExport';
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import dayjs from 'dayjs';
 import i18n from '@/i18n';
+import { staticMessage } from '@chat2db/ui';
 import { useImportExportStore } from '@/store/importExport';
 
 interface IProps {
@@ -76,6 +77,12 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
       }
       // Get task list
       getTaskList({ visible: true });
+    }).catch((error) => {
+      if (requestGeneration !== requestGenerationRef.current) return;
+      // Surface the failure so the progress UI does not silently freeze on a
+      // network error; the recursive poll is not rescheduled (avoids infinite
+      // retry on a persistent failure).
+      staticMessage.error(error?.message || i18n('common.text.failure'));
     });
   };
 
