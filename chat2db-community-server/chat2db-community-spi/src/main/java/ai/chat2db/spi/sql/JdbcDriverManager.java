@@ -120,7 +120,12 @@ public class JdbcDriverManager {
     private static Connection tryConnectionAgain(DriverEntry driverEntry, String url,
                                                  Properties info) throws SQLException {
         if (url.contains("mysql")) {
-            if (!info.containsKey("useSSL")) {
+            // Only fall back to plaintext when no explicit TLS intent was expressed. A failed
+            // TLS connection (sslMode / useSSL=true / trustCertificate* / clientCertificate*)
+            // must not be retried with useSSL=false — on Connector/J 8.x that mixes the
+            // deprecated useSSL with sslMode and on 5.1.x it silently disables the TLS the
+            // user configured. See MySqlTlsTranslator.hasExplicitTlsIntent.
+            if (!info.containsKey("useSSL") && !MySqlTlsTranslator.hasExplicitTlsIntent(info)) {
                 info.put("useSSL", "false");
             }
             return driverEntry.getDriver().connect(url, info);
