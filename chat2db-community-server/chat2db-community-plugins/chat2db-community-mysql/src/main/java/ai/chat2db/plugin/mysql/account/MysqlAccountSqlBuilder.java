@@ -23,6 +23,7 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ACCOUNT_UNL
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_USER;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_CREATE_USER;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_USER;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME_USER;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_FROM;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_GRANT;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_IDENTIFIED_BY;
@@ -72,7 +73,7 @@ class MysqlAccountSqlBuilder {
             case RENAME_USER -> {
                 validateAccountPart(command.getNewUser(), ERROR_KEY_ACCOUNT_USER_REQUIRED);
                 validateAccountPart(command.getNewHost(), ERROR_KEY_ACCOUNT_HOST_REQUIRED);
-                yield "RENAME USER " + account(command) + " TO "
+                yield SQL_RENAME_USER + account(command) + " TO "
                         + account(command.getNewUser(), command.getNewHost());
             }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
