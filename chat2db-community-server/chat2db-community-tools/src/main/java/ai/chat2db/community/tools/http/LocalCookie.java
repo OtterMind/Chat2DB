@@ -45,7 +45,7 @@ public class LocalCookie {
         } catch (Exception e) {
             log.error("LocalCookie init error", e);
         }
-        new Thread(() -> {
+        Thread cookieFlushThread = new Thread(() -> {
             while (true) {
                 try {
                     Thread.sleep(1000);
@@ -61,7 +61,9 @@ public class LocalCookie {
                     log.error("LocalCookie write file error", e);
                 }
             }
-        }).start();
+        }, "chat2db-local-cookie-flush");
+        cookieFlushThread.setDaemon(true);
+        cookieFlushThread.start();
     }
 
     private static void init() {
