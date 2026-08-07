@@ -7,8 +7,8 @@ import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +20,7 @@ import java.util.Set;
 public class MysqlValueProcessor extends DefaultValueProcessor {
     public static final Set<String> FUNCTION_SET = Set.of("now()", "default");
     private static final Logger log = LoggerFactory.getLogger(MysqlValueProcessor.class);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
 
     @Override
@@ -66,9 +67,11 @@ public class MysqlValueProcessor extends DefaultValueProcessor {
             String dataTypeName = dataValue.getDataType() != null
                     ? dataValue.getDataType().getDataTypeName() : null;
             if (MysqlColumnTypeEnum.JSON.name().equalsIgnoreCase(dataTypeName)) {
+                // Jackson is intentionally used instead of fastjson2: fastjson accepts
+                // single-quoted and otherwise non-standard JSON that MySQL rejects.
                 try {
-                    JSON.parse(value);
-                } catch (JSONException e) {
+                    JSON_MAPPER.readTree(value);
+                } catch (JsonProcessingException e) {
                     throw new BusinessException("mysql.json.invalid",
                             new Object[]{e.getMessage()}, e);
                 }
