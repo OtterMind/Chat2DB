@@ -6,6 +6,17 @@ import interceptorsResponse from '../interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
 
+// Mask credential-like fields in debug IPC logs only. The real request payload
+// (sent to javaQuery) is never redacted — only the logged copy is.
+const SENSITIVE_LOG_KEY = /password|passphrase|apikey|secret|token|authorization/i;
+const redactForLog = (obj: any) =>
+  JSON.stringify(obj, (key, value) => {
+    if (typeof key === 'string' && SENSITIVE_LOG_KEY.test(key)) {
+      return '***';
+    }
+    return value;
+  });
+
 export interface ICommandLineRequest {
   requestUrl: string;
   method: string;
@@ -74,7 +85,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       }),
     );
     if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(res));
+      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', redactForLog(res));
     }
     // Prepare for a cancellation request
     options?.restParams?.signal?.({ id, reject });
@@ -122,7 +133,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
 export const pushMessageFlow = (_data) => {
   const data = JSON.parse(_data);
   if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), data);
+    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), redactForLog(data));
   }
   const { setServiceStatus, commandLineRequestList, removeCommandLineRequestListItem } = useGlobalStore.getState();
 
