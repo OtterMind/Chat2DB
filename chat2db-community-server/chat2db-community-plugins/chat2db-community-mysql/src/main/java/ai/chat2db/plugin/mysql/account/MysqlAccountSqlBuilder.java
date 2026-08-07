@@ -61,11 +61,13 @@ class MysqlAccountSqlBuilder {
             case DROP_USER -> SQL_DROP_USER + account(command);
             case GRANT_PRIVILEGE -> {
                 requirePrivileges(command);
+                requireRoutinePrivileges(command);
                 yield SQL_GRANT + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQLConstants.SQL_TO
                         + account(command) + (Boolean.TRUE.equals(command.getGrantOption()) ? SQL_WITH_GRANT_OPTION : SQLConstants.EMPTY);
             }
             case REVOKE_PRIVILEGE -> {
                 requirePrivileges(command);
+                requireRoutinePrivileges(command);
                 yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
             }
@@ -136,6 +138,16 @@ class MysqlAccountSqlBuilder {
                     throw new BusinessException(ERROR_KEY_ACCOUNT_TABLE_REQUIRED);
                 }
                 return identifier(command.getDatabaseName()) + SQLConstants.DOT + identifier(command.getTableName());
+            case FUNCTION:
+            case PROCEDURE:
+                if (StringUtils.isBlank(command.getDatabaseName())) {
+                    throw new BusinessException(ERROR_KEY_ACCOUNT_DATABASE_REQUIRED);
+                }
+                if (StringUtils.isBlank(command.getObjectName())) {
+                    throw new BusinessException(ERROR_KEY_ACCOUNT_OBJECT_REQUIRED);
+                }
+                return ("FUNCTION".equalsIgnoreCase(command.getScope()) ? "FUNCTION " : "PROCEDURE ")
+                        + identifier(command.getDatabaseName()) + SQLConstants.DOT + identifier(command.getObjectName());
             default:
                 throw new BusinessException(ERROR_KEY_ACCOUNT_SCOPE_UNSUPPORTED);
         }
@@ -143,6 +155,23 @@ class MysqlAccountSqlBuilder {
 
     private static String scope(AccountOperationRequest command) {
         return scopeSql(command);
+    }
+
+    /**
+     * Routine-scope grants only support EXECUTE and ALTER ROUTINE; anything else is
+     * rejected so the generated ON FUNCTION/PROCEDURE clause stays server-valid.
+     */
+    private static void requireRoutinePrivileges(AccountOperationRequest command) {
+        String scope = command.getScope();
+        if (!"FUNCTION".equalsIgnoreCase(scope) && !"PROCEDURE".equalsIgnoreCase(scope)) {
+            return;
+        }
+        for (String privilege : command.getPrivileges()) {
+            String upper = StringUtils.upperCase(privilege);
+            if (!"EXECUTE".equals(upper) && !"ALTER_ROUTINE".equals(upper) && !"ALTER ROUTINE".equals(upper)) {
+                throw new BusinessException(ERROR_KEY_ACCOUNT_ROUTINE_PRIVILEGE_UNSUPPORTED);
+            }
+        }
     }
 
     private static String privilegeList(List<String> privileges) {
