@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.model.metadata.ProcedureParameter;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.community.domain.api.model.metadata.Trigger;
 import java.util.List;
 import java.util.stream.Stream;
@@ -42,6 +43,29 @@ public abstract class SqlCompletionConverter {
         return databases == null ? List.of()
                 : databases.stream()
                 .map(database -> database2candidate(database, datasourceName, identifierProcessor))
+                .toList();
+    }
+
+    public SqlCompletionCandidate tablespace2candidate(Tablespace tablespace,
+                                                       String datasourceName,
+                                                       @Context ISQLIdentifierProcessor identifierProcessor) {
+        if (tablespace == null) {
+            return null;
+        }
+        SqlCompletionCandidate candidate = baseCandidate(SqlCompletionCandidateTypeEnum.TABLESPACE,
+                tablespace.getName(), identifierProcessor);
+        candidate.setObjectName(tablespace.getName());
+        candidate.setDatasourceName(datasourceName);
+        candidate.setDescription(datasourceDescription(datasourceName));
+        return candidate;
+    }
+
+    public List<SqlCompletionCandidate> tablespaces2candidates(List<Tablespace> tablespaces,
+                                                               String datasourceName,
+                                                               @Context ISQLIdentifierProcessor identifierProcessor) {
+        return tablespaces == null ? List.of()
+                : tablespaces.stream()
+                .map(tablespace -> tablespace2candidate(tablespace, datasourceName, identifierProcessor))
                 .toList();
     }
 

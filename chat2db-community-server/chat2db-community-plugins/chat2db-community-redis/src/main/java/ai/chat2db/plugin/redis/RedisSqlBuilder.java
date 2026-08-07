@@ -12,6 +12,7 @@ import ai.chat2db.spi.sql.builder.IDmlSqlBuilder;
 import ai.chat2db.spi.sql.builder.IDqlSqlBuilder;
 import ai.chat2db.spi.sql.builder.ISchemaSqlBuilder;
 import ai.chat2db.spi.sql.builder.ITableSqlBuilder;
+import ai.chat2db.spi.sql.builder.ITablespaceSqlBuilder;
 import ai.chat2db.spi.sql.builder.IViewSqlBuilder;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.spi.model.request.DeleteSqlRequest;
@@ -44,7 +45,7 @@ import java.util.UUID;
 import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
 
 public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuilder, IDdlSqlBuilder,
-        IDatabaseSqlBuilder, ISchemaSqlBuilder, ITableSqlBuilder, IViewSqlBuilder {
+        IDatabaseSqlBuilder, ISchemaSqlBuilder, ITableSqlBuilder, IViewSqlBuilder, ITablespaceSqlBuilder {
 
     private static final RedisSqlBuilder INSTANCE = new RedisSqlBuilder();
 
@@ -89,6 +90,31 @@ public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuil
     @Override
     public IViewSqlBuilder view() {
         return this;
+    }
+
+    @Override
+    public ITablespaceSqlBuilder tablespace() {
+        return this;
+    }
+
+    @Override
+    public String buildCreateTablespace(Tablespace tablespace) {
+        throw unsupported(RedisConstants.METHOD_BUILD_CREATE_TABLESPACE);
+    }
+
+    @Override
+    public String buildDropTablespace(String tablespaceName) {
+        throw unsupported(RedisConstants.METHOD_BUILD_DROP_TABLESPACE);
+    }
+
+    @Override
+    public String buildRenameTablespace(String oldTablespaceName, String newTablespaceName) {
+        throw unsupported(RedisConstants.METHOD_BUILD_ALTER_TABLESPACE_RENAME);
+    }
+
+    @Override
+    public String buildAlterTablespaceAddDatafile(String tablespaceName, String dataFile) {
+        throw unsupported(RedisConstants.METHOD_BUILD_ALTER_TABLESPACE_ADD_DATAFILE);
     }
 
     @Override

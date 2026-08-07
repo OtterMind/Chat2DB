@@ -2,6 +2,7 @@
   "dbType": "MYSQL",
   "supportDatabase": true,
   "supportSchema": false,
+  "supportTablespace": true,
   "driverConfigList": [
     {
       "url": "jdbc:mysql://localhost:3306/",

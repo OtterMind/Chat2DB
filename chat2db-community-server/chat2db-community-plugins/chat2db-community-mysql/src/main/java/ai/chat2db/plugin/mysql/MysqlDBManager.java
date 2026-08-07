@@ -3,12 +3,15 @@ package ai.chat2db.plugin.mysql;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.plugin.mysql.builder.MysqlSqlBuilder;
 import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
+import ai.chat2db.plugin.mysql.util.MysqlVersionUtils;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.constant.SQLConstants;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import cn.hutool.core.date.DateUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
@@ -233,6 +236,30 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     @Override
     public void dropSchema(Connection connection, String databaseName, String schemaName) {
         throw new BusinessException("database.delete.notSupportSchema");
+    }
+
+    @Override
+    public void createTablespace(Connection connection, Tablespace tablespace) {
+        executeDropSql(connection, new MysqlSqlBuilder().ddl().tablespace().buildCreateTablespace(tablespace));
+    }
+
+    @Override
+    public void dropTablespace(Connection connection, String tablespaceName) {
+        executeDropSql(connection, new MysqlSqlBuilder().ddl().tablespace().buildDropTablespace(tablespaceName));
+    }
+
+    @Override
+    public void alterTablespaceRename(Connection connection, String oldTablespaceName, String newTablespaceName) {
+        if (!supportsTablespaceRename()) {
+            throw new BusinessException("tablespace.rename.notSupported");
+        }
+        executeDropSql(connection,
+                new MysqlSqlBuilder().ddl().tablespace().buildRenameTablespace(oldTablespaceName, newTablespaceName));
+    }
+
+    @Override
+    public boolean supportsTablespaceRename() {
+        return MysqlVersionUtils.supportsTablespaceRename(Chat2DBContext.getDbVersion());
     }
 
     void executeDropSql(Connection connection, String sql) {

@@ -31,6 +31,7 @@ export default {
   'editTable.label.autoIncrement': '자동 증가',
   'editTable.label.engine': '엔진',
   'editTable.label.incrementValue': '증가 값',
+  'editTable.label.tablespace': '테이블스페이스',
   'editTable.label.order': '순서',
   'editTable.label.primaryKey': '키',
   'editTable.title.sqlPreview': 'SQL 미리 보기',

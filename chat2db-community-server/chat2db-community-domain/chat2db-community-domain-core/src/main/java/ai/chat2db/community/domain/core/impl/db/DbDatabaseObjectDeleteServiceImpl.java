@@ -4,15 +4,20 @@ import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.community.domain.api.model.db.DatabaseObjectDeletePrepare;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseDeletePrepareRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseObjectDeleteExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaDeletePrepareRequest;
+import ai.chat2db.community.domain.api.model.request.db.DbTablespaceDeletePrepareRequest;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.db.IDbDatabaseObjectDeleteService;
+import ai.chat2db.community.domain.core.cache.CacheKey;
+import ai.chat2db.community.domain.core.cache.CacheManage;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +31,8 @@ public class DbDatabaseObjectDeleteServiceImpl implements IDbDatabaseObjectDelet
     private static final String TYPE_DATABASE = "DATABASE";
 
     private static final String TYPE_SCHEMA = "SCHEMA";
+
+    private static final String TYPE_TABLESPACE = "TABLESPACE";
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             DatabaseTypeEnum.MYSQL.name(),
@@ -141,6 +148,76 @@ public class DbDatabaseObjectDeleteServiceImpl implements IDbDatabaseObjectDelet
         } catch (Exception e) {
             throw new BusinessException("database.delete.executeFailed", new Object[]{e.getMessage()}, e);
         }
+    }
+
+    @Override
+    public DatabaseObjectDeletePrepare prepareTablespaceDelete(DbTablespaceDeletePrepareRequest param) {
+        ConnectionProfile profile = requireCurrentProfile();
+        String dbType = requireSupportedDbType(profile);
+        String tablespaceName = requireName(param.getTablespaceName(), "tablespaceName");
+        assertTablespaceManagementSupported(dbType);
+        Connection connection = requireConnection();
+        try {
+            Tablespace tablespace = Chat2DBContext.getDbMetaData(dbType).tablespace(connection, tablespaceName);
+            if (tablespace == null) {
+                throw new BusinessException("tablespace.delete.notExists");
+            }
+            String sqlPreview = Chat2DBContext.getDbMetaData(dbType).getSqlBuilder().ddl().tablespace()
+                    .buildDropTablespace(tablespaceName);
+            return DatabaseObjectDeletePrepare.builder()
+                    .confirmName(tablespaceName)
+                    .sqlPreview(sqlPreview)
+                    .objectType(TYPE_TABLESPACE)
+                    .dbType(dbType)
+                    .occupyingTables(tablespace.getOccupyingTables())
+                    .build();
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("database.delete.prepareFailed", new Object[]{e.getMessage()}, e);
+        }
+    }
+
+    @Override
+    public void executeTablespaceDelete(DbDatabaseObjectDeleteExecuteRequest param) {
+        ConnectionProfile profile = requireCurrentProfile();
+        String dbType = requireSupportedDbType(profile);
+        String tablespaceName = requireName(param.getTablespaceName(), "tablespaceName");
+        assertTablespaceManagementSupported(dbType);
+        assertConfirmName(param.getConfirmName(), tablespaceName);
+        Connection connection = requireConnection();
+        try {
+            // Defense-in-depth: re-check occupancy immediately before dropping. MySQL itself also
+            // rejects a non-empty tablespace (ER_TABLESPACE_NOT_EMPTY), but surfacing the list here
+            // gives a clearer error than the raw driver exception.
+            Tablespace tablespace = Chat2DBContext.getDbMetaData(dbType).tablespace(connection, tablespaceName);
+            if (tablespace == null) {
+                throw new BusinessException("tablespace.delete.notExists");
+            }
+            if (CollectionUtils.isNotEmpty(tablespace.getOccupyingTables())) {
+                throw new BusinessException("tablespace.delete.notEmpty");
+            }
+            Chat2DBContext.getDbManager(dbType).dropTablespace(connection, tablespaceName);
+            invalidateTablespaceCache(param.getDataSourceId());
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("database.delete.executeFailed", new Object[]{e.getMessage()}, e);
+        }
+    }
+
+    private void assertTablespaceManagementSupported(String dbType) {
+        DBConfig dbConfig = Chat2DBContext.getDBConfig(dbType);
+        if (dbConfig == null || !dbConfig.isSupportTablespace()) {
+            throw new BusinessException("tablespace.notSupported");
+        }
+    }
+
+    private void invalidateTablespaceCache(Long dataSourceId) {
+        if (dataSourceId == null) {
+            return;
+        }
+        CacheManage.fuzzyDelete(CacheKey.getTablespacesKey(dataSourceId));
     }
 
     private ConnectionProfile requireCurrentProfile() {

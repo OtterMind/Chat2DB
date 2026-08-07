@@ -10,6 +10,7 @@ export enum IdentifierQuoteMode {
 export const databaseCapabilities = {
   routineOperationSupported: [DatabaseTypeCode.MYSQL],
   accountManageSupported: [DatabaseTypeCode.MYSQL],
+  tablespaceManageSupported: [DatabaseTypeCode.MYSQL],
   databaseDeleteSupported: [DatabaseTypeCode.MYSQL, DatabaseTypeCode.POSTGRESQL],
   schemaDeleteSupported: [DatabaseTypeCode.POSTGRESQL],
   createDatabaseUnsupported: [DatabaseTypeCode.H2],

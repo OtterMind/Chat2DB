@@ -56,6 +56,10 @@ export const canUseAccountManage = (databaseType?: DatabaseTypeInput): boolean =
   return containsNormalized(databaseCapabilities.accountManageSupported, databaseType);
 };
 
+export const canUseTablespaceManage = (databaseType?: DatabaseTypeInput): boolean => {
+  return containsNormalized(databaseCapabilities.tablespaceManageSupported, databaseType);
+};
+
 export const canDeleteDatabase = (databaseType?: DatabaseTypeInput): boolean => {
   return containsStrict(databaseCapabilities.databaseDeleteSupported, databaseType);
 };
