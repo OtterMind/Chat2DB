@@ -68,6 +68,7 @@ import {
   SQL_FILE_EXTENSION_NAME,
 } from '../../utils/localTextFile';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
+import confirmAndReleaseTransaction from '@/utils/transactionSession';
 import { EditorType } from '@/components/SQLEditor';
 import { ShortcutAction } from '@/constants/shortcut';
 import {
@@ -1001,11 +1002,12 @@ const WorkspaceTabs = memo(() => {
 
   const confirmWorkspaceTabItemsClose = (tabs: ITabItem[]) => {
     const closeKeySet = new Set(tabs.map((tab) => tab.key));
+    const closingTabs = (workspaceTabList || []).filter((tab) => closeKeySet.has(tab.id));
     return confirmWorkspaceTabsClose(
-      (workspaceTabList || []).filter((tab) => closeKeySet.has(tab.id)),
+      closingTabs,
       workspaceTabList || [],
       useWorkspaceStore.getState().editorList || {},
-    );
+    ).then((ok) => (ok ? confirmAndReleaseTransaction(closingTabs) : false));
   };
 
   const requestCloseWorkspaceTabs = async (tabs: IWorkspaceTab[]) => {
@@ -1017,7 +1019,9 @@ const WorkspaceTabs = memo(() => {
         useWorkspaceStore.getState().editorList || {},
       )
     ) {
-      closeWorkspaceTabs(closableTabs);
+      if (await confirmAndReleaseTransaction(closableTabs)) {
+        closeWorkspaceTabs(closableTabs);
+      }
     }
   };
 

@@ -103,15 +103,15 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             } else {
                 logConsumer.finishSuccess();
             }
-            sink.send(canceled.get() ? "cancelled" : "finished", Map.of("executionId", request.getExecutionId()));
+            sink.send(canceled.get() ? "cancelled" : "finished", terminalEvent(null));
         } catch (Exception e) {
             if (canceled.get()) {
                 recordTerminalStatus(logConsumer, SqlOperationLogStatusEnum.CANCELLED.getCode(), e.getMessage());
-                sink.send("cancelled", Map.of("executionId", request.getExecutionId(), "message", e.getMessage()));
+                sink.send("cancelled", terminalEvent(e.getMessage()));
             } else {
                 log.error("SQL execution failed, executionId={}", request.getExecutionId(), e);
                 recordTerminalStatus(logConsumer, SqlOperationLogStatusEnum.FAIL.getCode(), e.getMessage());
-                sink.send("failed", Map.of("executionId", request.getExecutionId(), "message", e.getMessage()));
+                sink.send("failed", terminalEvent(e.getMessage()));
             }
         } finally {
             currentStatement = null;
@@ -119,6 +119,24 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             connectionContextService.clear();
             finishCallback.accept(this);
         }
+    }
+
+    /**
+     * Builds a terminal-event payload that always carries the executionId, an optional
+     * message, and the console's current transaction state so the frontend can keep its
+     * Commit/Rollback controls in sync after every execution (including cancellation, which
+     * leaves an open transaction intact by design).
+     */
+    private Map<String, Object> terminalEvent(String message) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("executionId", request.getExecutionId());
+        if (message != null) {
+            payload.put("message", message);
+        }
+        Long consoleId = request.getSqlEditorRequest() == null ? null : request.getSqlEditorRequest().getConsoleId();
+        payload.put("inTransaction", consoleId != null
+                && connectionContextService.isInTransaction(consoleId));
+        return payload;
     }
 
     public void cancel() {
@@ -144,7 +162,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
     public void sendCancelled() {
         canceled.set(true);
         recordFallbackTerminalStatus(SqlOperationLogStatusEnum.CANCELLED.getCode(), null);
-        sink.send("cancelled", Map.of("executionId", request.getExecutionId()));
+        sink.send("cancelled", terminalEvent(null));
     }
 
     public void pollMessages() {
@@ -176,6 +194,20 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
         if (currentStatement == statement) {
             pollMessages();
             currentStatement = null;
+        }
+    }
+
+    @Override
+    public void onImplicitCommitWarning(String sql) {
+        // A DDL/implicit-commit statement is about to run while a manual transaction is open.
+        // Surface a non-blocking warning to the user; execution proceeds regardless.
+        Map<String, Object> message = new HashMap<>();
+        message.put("level", "WARN");
+        message.put("message", "This statement implicitly commits the current transaction.");
+        message.put("source", "implicit-commit-warning");
+        synchronized (eventContext) {
+            SqlExecutionEventIdentity identity = eventContext.currentIdentity();
+            sink.send("message", message, identity);
         }
     }
 

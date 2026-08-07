@@ -554,6 +554,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
       if (event.eventType === 'message') {
+        // Surface DDL implicit-commit warnings (and other statement warnings) to the user.
+        const message = (event as any)?.message;
+        if (message && (message.level === 'WARN' || message.level === 'ERROR')) {
+          staticMessage.warning(message.message || '');
+        }
         return;
       }
       if (event.eventType === 'finished' || event.eventType === 'failed' || event.eventType === 'cancelled') {

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import executeSqlServer from '@/service/executeSql';
+import transactionServer from '@/service/transaction';
 import type { ISqlEditorExecuteRequest } from '@/service/dmlRequest';
 import useAbortRequest from './useAbortRequest';
 import { isDesktop } from '@/utils/env';
@@ -13,6 +14,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
+import { useWorkspaceStore } from '@/store/workspace';
 import {
   beginSqlExecutionRequest,
   canBeginSqlExecutionRequest,
@@ -101,11 +103,48 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
     [onExecutionCancellationError, onExecutionEvent],
   );
 
+  // When the console is in manual transaction mode, open a server-side transaction before the
+  // first execution so subsequent executions reuse the bound connection. No-op in auto mode or
+  // when a transaction is already open. Failures fall back to auto-commit (the execution still
+  // runs, just without a bound transaction) so a transient begin error never blocks the user.
+  const ensureTransactionBegun = useCallback(async (params: IExecuteSqlParams) => {
+    const consoleId = params.consoleId;
+    if (consoleId == null || typeof consoleId !== 'number') {
+      return;
+    }
+    if (params.dataSourceId == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    const state = store.getTransactionState(consoleId);
+    if (!state || state.mode !== 'manual' || state.inTransaction) {
+      return;
+    }
+    try {
+      const result = await transactionServer.beginTransaction({
+        dataSourceId: params.dataSourceId,
+        databaseName: params.databaseName,
+        schemaName: params.schemaName,
+        consoleId,
+      });
+      store.setTransactionState(consoleId, {
+        inTransaction: result?.inTransaction ?? false,
+        lastError: result?.lastError,
+      });
+    } catch (error) {
+      // Begin failed: record the error and let execution proceed in auto-commit mode.
+      store.setTransactionState(consoleId, { inTransaction: false, lastError: String(error) });
+    }
+  }, []);
+
   // execute sql
-  const executeSQL = useCallback((params: IExecuteSqlParams): Promise<IManageResultData[]> => {
+  const executeSQL = useCallback(async (params: IExecuteSqlParams): Promise<IManageResultData[]> => {
     if (params.dataSourceId == null) {
       return Promise.reject(new Error('dataSourceId is required'));
     }
+    // In manual transaction mode, ensure a server-side transaction is open before executing so
+    // this execution reuses the console's bound connection. begin is idempotent on the server.
+    await ensureTransactionBegun(params);
     const executeSqlParams: ISqlEditorExecuteRequest = {
       dataSourceId: params.dataSourceId,
       databaseName: params.databaseName,
@@ -224,6 +263,7 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
     });
   }, [
     defaultPageSize,
+    ensureTransactionBegun,
     initSignal,
     onlyOne,
     onExecutionEvent,
