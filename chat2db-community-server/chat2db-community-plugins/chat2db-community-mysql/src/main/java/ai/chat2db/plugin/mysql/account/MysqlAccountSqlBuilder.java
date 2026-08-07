@@ -74,7 +74,7 @@ class MysqlAccountSqlBuilder {
                 StringBuilder sb = new StringBuilder();
                 sb.append(SQL_ALTER_USER).append(account(command));
                 if (StringUtils.isNotBlank(command.getAuthPlugin())) {
-                    sb.append(SQL_IDENTIFIED_WITH).append(command.getAuthPlugin());
+                    sb.append(SQL_IDENTIFIED_WITH).append(requireValidAuthPlugin(command.getAuthPlugin()));
                 }
                 if (StringUtils.isNotBlank(command.getPassword())) {
                     sb.append(SQL_BY).append(passwordLiteral(command, maskSensitive));
@@ -103,6 +103,18 @@ class MysqlAccountSqlBuilder {
 
     private static String passwordLiteral(AccountOperationRequest command, boolean maskSensitive) {
         return maskSensitive ? MASKED_PASSWORD_LITERAL : stringLiteral(command.getPassword());
+    }
+
+    /**
+     * Auth plugin names are emitted unquoted in {@code IDENTIFIED WITH}, so restrict them to
+     * the safe charset ({@code caching_sha2_password}, {@code mysql_native_password}, ...)
+     * instead of escaping. This also blocks SQL injection through this clause.
+     */
+    private static String requireValidAuthPlugin(String authPlugin) {
+        if (!authPlugin.matches("[A-Za-z0-9_]+")) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_INVALID_AUTH_PLUGIN);
+        }
+        return authPlugin;
     }
 
     static String previewToken(String sql) {

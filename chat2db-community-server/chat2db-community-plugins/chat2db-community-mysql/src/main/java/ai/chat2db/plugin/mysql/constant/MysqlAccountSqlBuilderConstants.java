@@ -38,6 +38,7 @@ public final class MysqlAccountSqlBuilderConstants {
     public static final String ERROR_KEY_ACCOUNT_ACTION_REQUIRED = "mysql.account.actionRequired";
     public static final String ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED = "mysql.account.passwordRequired";
     public static final String ERROR_KEY_ACCOUNT_INVALID_ACCOUNT_NAME = "mysql.account.invalidAccountName";
+    public static final String ERROR_KEY_ACCOUNT_INVALID_AUTH_PLUGIN = "mysql.account.invalidAuthPlugin";
 
     public static final String SQL_IDENTIFIED_WITH = " IDENTIFIED WITH ";
     public static final String SQL_BY = " BY ";
