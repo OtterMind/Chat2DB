@@ -433,7 +433,10 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       try {
         await transactionServer.rollbackTransaction(transactionRequest(consoleId));
       } catch (error) {
+        // Rollback failed; stay in manual mode so the Commit/Rollback controls remain
+        // available and the open transaction is not silently abandoned.
         staticMessage.error(String(error));
+        return;
       }
     }
     store.setTransactionMode(consoleId, nextMode);

@@ -130,7 +130,10 @@ const OperationLine = ({
         });
         useWorkspaceStore.getState().setTransactionState(dbInfo.consoleId, { inTransaction: false });
       } catch (error) {
+        // The rollback failed, so the server still holds an open transaction; abort the
+        // switch instead of silently abandoning it.
         staticMessage.error(String(error));
+        return;
       }
     }
     const nameCustomized = _dbInfo.nameCustomized ?? dbInfo.nameCustomized ?? false;
