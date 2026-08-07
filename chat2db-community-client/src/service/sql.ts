@@ -437,6 +437,42 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Partitions (MYSQL-OBJ-009). */
+export interface IPartitionItem {
+  partitionName: string | null;
+  subpartitionName: string | null;
+  ordinalPosition: number | null;
+  method: string | null;
+  subpartitionMethod: string | null;
+  expression: string | null;
+  description: string | null;
+  tableRows: number | null;
+  dataLength: number | null;
+  indexLength: number | null;
+  comment: string | null;
+}
+
+const getPartitionList = createRequest<{ databaseName: string; tableName: string }, IPartitionItem[]>(
+  '/api/rdb/partition/list',
+  { method: 'get' },
+);
+const getPartitionTruncateSql = createRequest<
+  { databaseName: string; tableName: string; partitionName: string },
+  string
+>('/api/rdb/partition/truncate_sql', { method: 'post' });
+const getPartitionDropSql = createRequest<
+  { databaseName: string; tableName: string; partitionName: string },
+  string
+>('/api/rdb/partition/drop_sql', { method: 'post' });
+const getPartitionCoalesceSql = createRequest<
+  { databaseName: string; tableName: string; count: number },
+  string
+>('/api/rdb/partition/coalesce_sql', { method: 'post' });
+const getPartitionMaintainSql = createRequest<
+  { databaseName: string; tableName: string; operation: string; partitionName?: string },
+  string
+>('/api/rdb/partition/maintain_sql', { method: 'post' });
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -497,5 +533,10 @@ export default {
   getAllFieldByTable,
   exportResultTable,
   checkIsSelectSQL,
+  getPartitionList,
+  getPartitionTruncateSql,
+  getPartitionDropSql,
+  getPartitionCoalesceSql,
+  getPartitionMaintainSql,
   getDataSourceList,
 };

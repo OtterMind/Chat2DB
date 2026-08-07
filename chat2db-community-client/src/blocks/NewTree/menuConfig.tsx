@@ -233,6 +233,7 @@ export const dropMenuConfig = {
       // Copy & Import and Export
       OperationColumn.CopyName,
       OperationColumn.ViewDDL,
+      OperationColumn.Partitions,
       OperationColumn.CopyTable,
       OperationColumn.ExportSqlFile,
       OperationColumn.ImportData,
