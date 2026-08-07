@@ -14,6 +14,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.ALL_DATABASE_ALL_TABLE_SCOPE;
@@ -61,12 +62,14 @@ class MysqlAccountSqlBuilder {
             case DROP_USER -> SQL_DROP_USER + account(command);
             case GRANT_PRIVILEGE -> {
                 requirePrivileges(command);
-                yield SQL_GRANT + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQLConstants.SQL_TO
+                requireColumnPrivileges(command);
+                yield SQL_GRANT + privilegeList(command.getPrivileges()) + columnListClause(command) + SQLConstants.SQL_ON + scope(command) + SQLConstants.SQL_TO
                         + account(command) + (Boolean.TRUE.equals(command.getGrantOption()) ? SQL_WITH_GRANT_OPTION : SQLConstants.EMPTY);
             }
             case REVOKE_PRIVILEGE -> {
                 requirePrivileges(command);
-                yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
+                requireColumnPrivileges(command);
+                yield SQL_REVOKE + privilegeList(command.getPrivileges()) + columnListClause(command) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
             }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
@@ -136,6 +139,14 @@ class MysqlAccountSqlBuilder {
                     throw new BusinessException(ERROR_KEY_ACCOUNT_TABLE_REQUIRED);
                 }
                 return identifier(command.getDatabaseName()) + SQLConstants.DOT + identifier(command.getTableName());
+            case COLUMN:
+                if (StringUtils.isBlank(command.getDatabaseName())) {
+                    throw new BusinessException(ERROR_KEY_ACCOUNT_DATABASE_REQUIRED);
+                }
+                if (StringUtils.isBlank(command.getTableName())) {
+                    throw new BusinessException(ERROR_KEY_ACCOUNT_TABLE_REQUIRED);
+                }
+                return identifier(command.getDatabaseName()) + SQLConstants.DOT + identifier(command.getTableName());
             default:
                 throw new BusinessException(ERROR_KEY_ACCOUNT_SCOPE_UNSUPPORTED);
         }
@@ -143,6 +154,36 @@ class MysqlAccountSqlBuilder {
 
     private static String scope(AccountOperationRequest command) {
         return scopeSql(command);
+    }
+
+    /**
+     * Column-level privileges: GRANT SELECT (c1, c2) ON db.table. MySQL only supports
+     * SELECT, INSERT, UPDATE, and REFERENCES at column scope; anything else is rejected.
+     * Empty column selections cannot be submitted.
+     */
+    private static void requireColumnPrivileges(AccountOperationRequest command) {
+        if (!PrivilegeScopeEnum.COLUMN.name().equalsIgnoreCase(command.getScope())) {
+            return;
+        }
+        if (command.getColumnList() == null || command.getColumnList().isEmpty()) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_COLUMNS_REQUIRED);
+        }
+        Set<String> allowed = Set.of("SELECT", "INSERT", "UPDATE", "REFERENCES");
+        for (String privilege : command.getPrivileges()) {
+            if (!allowed.contains(StringUtils.upperCase(privilege))) {
+                throw new BusinessException(ERROR_KEY_ACCOUNT_COLUMN_PRIVILEGE_UNSUPPORTED);
+            }
+        }
+    }
+
+    private static String columnListClause(AccountOperationRequest command) {
+        if (!PrivilegeScopeEnum.COLUMN.name().equalsIgnoreCase(command.getScope())) {
+            return SQLConstants.EMPTY;
+        }
+        return " (" + command.getColumnList().stream()
+                .filter(StringUtils::isNotBlank)
+                .map(MysqlAccountSqlBuilder::identifier)
+                .collect(Collectors.joining(SQLConstants.COMMA_SPACE)) + ")";
     }
 
     private static String privilegeList(List<String> privileges) {
