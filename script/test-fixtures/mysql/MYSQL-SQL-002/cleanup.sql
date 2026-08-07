@@ -1,0 +1,4 @@
+-- MYSQL-SQL-002: Cleanup
+
+DROP TABLE IF EXISTS `obj002_orders`;
+DROP TABLE IF EXISTS `obj002_users`;

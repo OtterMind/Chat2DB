@@ -430,6 +430,12 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// EXPLAIN FORMAT=JSON
+const getExplainJson = createRequest<string, string>('/api/sql/explain_json', { method: 'post' });
+
+// EXPLAIN ANALYZE
+const getExplainAnalyze = createRequest<string, string>('/api/sql/explain_analyze', { method: 'post' });
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -451,6 +457,8 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  getExplainJson,
+  getExplainAnalyze,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,
