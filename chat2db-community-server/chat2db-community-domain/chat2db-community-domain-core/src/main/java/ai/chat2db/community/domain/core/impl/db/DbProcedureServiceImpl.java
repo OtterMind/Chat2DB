@@ -24,4 +24,10 @@ public class DbProcedureServiceImpl implements IDbProcedureService {
         return Chat2DBContext.getDbMetaData().procedure(Chat2DBContext.getConnection(),
                 new ProcedureMetadataRequest(databaseName, schemaName, procedureName));
     }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String procedureName) {
+        Chat2DBContext.getDbManager().dropProcedure(Chat2DBContext.getConnection(),
+                databaseName, schemaName, procedureName);
+    }
 }

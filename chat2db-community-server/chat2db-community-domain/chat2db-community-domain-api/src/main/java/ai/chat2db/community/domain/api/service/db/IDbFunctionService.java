@@ -28,4 +28,13 @@ public interface IDbFunctionService {
      * @return function metadata, or null when no matching function exists.
      */
     Function detail(String databaseName, String schemaName, String functionName);
+
+    /**
+     * Drops a database function.
+     *
+     * @param databaseName database name that scopes the operation.
+     * @param schemaName schema name that scopes the operation.
+     * @param functionName function name to drop.
+     */
+    void drop(String databaseName, String schemaName, String functionName);
 }
