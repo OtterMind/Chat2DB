@@ -3,7 +3,7 @@ package ai.chat2db.plugin.kingbase;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.kingbase.identifier.KingBaseSQLIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +84,8 @@ public class KingBaseDBManager extends DefaultDBManager implements IDbManager {
     }
 
     @Override
-    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
-        exportTableData(connection, databaseName, schemaName, tableName, asyncContext, 10000);
+    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
+            TaskExecutionContext context) {
+        exportTableData(connection, databaseName, schemaName, tableName, context, 10000);
     }
 }

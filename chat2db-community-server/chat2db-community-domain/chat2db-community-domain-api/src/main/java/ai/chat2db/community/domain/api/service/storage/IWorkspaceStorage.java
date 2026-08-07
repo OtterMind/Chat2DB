@@ -8,11 +8,7 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
@@ -169,45 +165,6 @@ public interface IWorkspaceStorage {
      */
     default void deletePinTable(PinTable request) {
         throw unsupported("deletePinTable");
-    }
-
-    /**
-     * Lists workspace tasks with pagination and filters.
-     *
-     * @param taskRecordPageRequest task page query parameters.
-     * @return paged task records.
-     */
-    default PageResponse<Task> taskList(TaskRecordPageRequest taskRecordPageRequest){
-        throw unsupported("taskList");
-    }
-
-    /**
-     * Returns a workspace task by identifier.
-     *
-     * @param id task identifier.
-     * @return task record, or null when no matching task exists.
-     */
-    default Task getTask(Long id) {
-        throw unsupported("getTask");
-    }
-
-    /**
-     * Creates a workspace task.
-     *
-     * @param taskRecordCreateRequest task creation parameters.
-     * @return created task identifier.
-     */
-    default Long createTask(TaskRecordCreateRequest taskRecordCreateRequest){
-        throw unsupported("createTask");
-    }
-
-    /**
-     * Updates a workspace task.
-     *
-     * @param taskRecordUpdateRequest task update parameters.
-     */
-    default void updateTask(TaskRecordUpdateRequest taskRecordUpdateRequest){
-        throw unsupported("updateTask");
     }
 
     /**

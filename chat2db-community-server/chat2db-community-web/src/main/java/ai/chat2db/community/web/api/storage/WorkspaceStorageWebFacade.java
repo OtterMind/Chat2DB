@@ -7,11 +7,7 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
@@ -134,23 +130,6 @@ public final class WorkspaceStorageWebFacade {
 
     public static ActionResult deletePinTable(PinTable request) {
         delegate().workspaceStorageFacade.deletePinTable(request);
-        return ActionResult.isSuccess();
-    }
-
-    public static WebPageResult<Task> taskList(TaskRecordPageRequest param) {
-        return toWebPageResult(delegate().workspaceStorageFacade.taskList(param));
-    }
-
-    public static DataResult<Task> getTask(Long id) {
-        return DataResult.of(delegate().workspaceStorageFacade.getTask(id));
-    }
-
-    public static DataResult<Long> createTask(TaskRecordCreateRequest param) {
-        return DataResult.of(delegate().workspaceStorageFacade.createTask(param));
-    }
-
-    public static ActionResult updateTask(TaskRecordUpdateRequest param) {
-        delegate().workspaceStorageFacade.updateTask(param);
         return ActionResult.isSuccess();
     }
 

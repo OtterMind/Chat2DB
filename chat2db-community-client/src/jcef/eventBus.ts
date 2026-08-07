@@ -11,6 +11,7 @@ export enum JavaPushActionType {
   SQL_EXECUTION_EVENT = 'sql_execution_event', // SQL execution events
   TERMINAL_OUTPUT = 'terminal_output', // Integrated terminal output
   TERMINAL_EXIT = 'terminal_exit', // Integrated terminal exit
+  APP_EXIT_REQUESTED = 'app_exit_requested', // Native application exit requested
 }
 
 export const JcefEventBus = {
@@ -34,7 +35,7 @@ export const JcefEventBus = {
 
   publish(eventType, data) {
     if (listeners[eventType]) {
-      listeners[eventType].forEach(callback => callback(data));
+      listeners[eventType].forEach((callback) => callback(data));
     }
-  }
+  },
 };

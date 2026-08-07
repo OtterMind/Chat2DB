@@ -6,34 +6,66 @@ import { IDatabaseBaseInfo } from '@/typings/database';
 import { ImportExportDataBoundInfo, ImportExportTaskDetails } from '@/typings/importExport';
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import importExportServices from '@/service/importExport';
+import {
+  getTaskPollingDelay,
+  listAllTasksByStatus,
+  loadMissingTrackedTasks,
+  mergeTasks,
+  reconcileCompletedTaskNotifications,
+  TASK_CENTER_PAGE_SIZE,
+  TaskNotificationCursor,
+  TaskStatusById,
+} from './taskCenterUtils';
+
+let taskListRequestGeneration = 0;
 
 interface ImportExportState {
   runSqlBoundInfo: IDatabaseBaseInfo | null;
   importExportDataBoundInfo: ImportExportDataBoundInfo | null;
-  showExportToolbar: boolean;
   taskList: ImportExportTaskDetails[];
-  getTaskListTimer: NodeJS.Timeout | null;
+  taskListPageSize: number;
+  taskListHasNextPage: boolean;
+  taskListLoadingMore: boolean;
+  getTaskListTimer: ReturnType<typeof setTimeout> | null;
   currentTask: ImportExportTaskDetails | null;
   logModalTaskId: number | null;
+  unreadCompletedTaskCount: number;
+  unreadCompletedTaskIds: number[];
+  taskCenterOpen: boolean;
+  taskNotificationsInitialized: boolean;
+  taskNotificationCursor: TaskNotificationCursor | null;
+  taskStatusById: TaskStatusById;
+  activeTaskIds: number[];
 }
 
 const initialState: ImportExportState = {
   runSqlBoundInfo: null,
   importExportDataBoundInfo: null,
-  showExportToolbar: false,
   taskList: [],
+  taskListPageSize: TASK_CENTER_PAGE_SIZE,
+  taskListHasNextPage: false,
+  taskListLoadingMore: false,
   getTaskListTimer: null,
   currentTask: null,
   logModalTaskId: null,
+  unreadCompletedTaskCount: 0,
+  unreadCompletedTaskIds: [],
+  taskCenterOpen: false,
+  taskNotificationsInitialized: false,
+  taskNotificationCursor: null,
+  taskStatusById: {},
+  activeTaskIds: [],
 };
 
 export interface ImportExportAction {
   setRunSqlBoundInfo: (data: ImportExportState['runSqlBoundInfo']) => void;
   setImportExportDataBoundInfo: (data: ImportExportState['importExportDataBoundInfo']) => void;
   clearImportExportStore: () => void;
-  setShowExportToolbar: (showExportToolbar: ImportExportState['showExportToolbar']) => void;
-  getTaskList: (param?: { visible: boolean }) => void;
+  getTaskList: () => Promise<void>;
+  loadMoreTasks: () => Promise<void>;
+  stopTaskListPolling: () => void;
   openLogModal: (taskId: number | null) => void;
+  setTaskCenterOpen: (open: boolean) => void;
 }
 
 export type ImportExportStore = ImportExportState & ImportExportAction;
@@ -63,41 +95,108 @@ export const createImportExportAction: StateCreator<
     });
   },
   clearImportExportStore: () => {
+    get().stopTaskListPolling();
     set(initialState);
   },
-  setShowExportToolbar: (showExportToolbar) => {
-    if (showExportToolbar) {
-      get().getTaskList();
-    }
-    set({ showExportToolbar });
-  },
-  getTaskList: (params) => {
-    const { visible } = params || {};
+  getTaskList: () => {
+    const requestGeneration = ++taskListRequestGeneration;
+    const previousActiveTaskIds = get().activeTaskIds;
     // clear timer
     const { getTaskListTimer } = get();
     if (getTaskListTimer) {
       clearTimeout(getTaskListTimer);
+      set({ getTaskListTimer: null });
     }
-    importExportServices.getTaskList({ pageNo: 1, pageSize: 10 }).then((res) => {
-      if (!res.data) {
-        return;
-      }
-      const _taskList = res.data || [];
-      const _currentTask = _taskList.find((item) =>
-        [ImportExportTaskStatus.INIT, ImportExportTaskStatus.PROCESSING, ImportExportTaskStatus.RUNNING].includes(
-          item.taskStatus,
-        ),
-      );
-      set({ currentTask: _currentTask, taskList: _taskList });
-      if (_currentTask) {
+    return Promise.all([
+      importExportServices.getActiveTaskCount(undefined),
+      importExportServices.getTaskList({ pageNo: 1, pageSize: get().taskListPageSize }),
+      listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.PENDING),
+      listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.RUNNING),
+    ])
+      .then(async ([activeTaskCount, recentPage, pendingTasks, runningTasks]) => {
+        if (requestGeneration !== taskListRequestGeneration) return;
+        const activeTasks = mergeTasks(pendingTasks, runningTasks);
+        const visibleTasks = mergeTasks(recentPage.data || [], activeTasks);
+        const recovered = await loadMissingTrackedTasks(
+          previousActiveTaskIds,
+          visibleTasks,
+          importExportServices.getTaskDetails,
+        );
+        if (requestGeneration !== taskListRequestGeneration) return;
+        const taskList = mergeTasks(visibleTasks, recovered.tasks);
+        const currentTask = activeTasks[0] || null;
+        const recoveredActiveTaskIds = recovered.tasks
+          .filter((task) => [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING].includes(task.status))
+          .map((task) => task.id);
+        const activeTaskIds = [
+          ...new Set([
+            ...activeTasks.map((task) => task.id),
+            ...recoveredActiveTaskIds,
+            ...recovered.unresolvedTaskIds,
+          ]),
+        ];
+        const pollDelay = getTaskPollingDelay(Math.max(activeTaskCount, activeTaskIds.length));
+        const currentState = get();
+        const notificationUpdate = reconcileCompletedTaskNotifications(
+          currentState.taskStatusById,
+          taskList,
+          currentState.taskNotificationsInitialized,
+          currentState.taskNotificationCursor,
+        );
+        const unreadCompletedTaskIds = currentState.taskCenterOpen
+          ? []
+          : [...new Set([...currentState.unreadCompletedTaskIds, ...notificationUpdate.newlyCompletedTaskIds])];
         set({
-          showExportToolbar: visible ? true : get().showExportToolbar,
+          currentTask,
+          taskList,
+          taskListHasNextPage: recentPage.hasNextPage === true,
+          unreadCompletedTaskCount: unreadCompletedTaskIds.length,
+          unreadCompletedTaskIds,
+          taskNotificationsInitialized: true,
+          taskNotificationCursor: notificationUpdate.cursor,
+          taskStatusById: notificationUpdate.statuses,
+          activeTaskIds,
+          getTaskListTimer: pollDelay === null ? null : setTimeout(() => get().getTaskList(), pollDelay),
         });
-      }
+      })
+      .catch(() => {
+        if (requestGeneration !== taskListRequestGeneration) return;
+        set({ getTaskListTimer: setTimeout(() => get().getTaskList(), getTaskPollingDelay(0, true)!) });
+      })
+      .finally(() => {
+        if (requestGeneration === taskListRequestGeneration) {
+          set({ taskListLoadingMore: false });
+        }
+      });
+  },
+  loadMoreTasks: () => {
+    const { taskListHasNextPage, taskListLoadingMore, taskListPageSize } = get();
+    if (!taskListHasNextPage || taskListLoadingMore) {
+      return Promise.resolve();
+    }
+    set({
+      taskListLoadingMore: true,
+      taskListPageSize: taskListPageSize + TASK_CENTER_PAGE_SIZE,
     });
+    return get().getTaskList();
+  },
+  stopTaskListPolling: () => {
+    taskListRequestGeneration += 1;
+    const { getTaskListTimer } = get();
+    if (getTaskListTimer) {
+      clearTimeout(getTaskListTimer);
+      set({ getTaskListTimer: null });
+    }
   },
   openLogModal: (taskId) => {
     set({ logModalTaskId: taskId });
+  },
+  setTaskCenterOpen: (open) => {
+    set({
+      taskCenterOpen: open,
+      unreadCompletedTaskCount: open ? 0 : get().unreadCompletedTaskCount,
+      unreadCompletedTaskIds: open ? [] : get().unreadCompletedTaskIds,
+    });
   },
 });
 
@@ -115,5 +214,10 @@ export const useImportExportStore = createWithEqualityFn<ImportExportStore>()(
 
 // // Clean up the store
 export const clearImportExportStore = () => {
+  taskListRequestGeneration += 1;
+  const timer = useImportExportStore.getState().getTaskListTimer;
+  if (timer) {
+    clearTimeout(timer);
+  }
   useImportExportStore.setState(initialState);
 };

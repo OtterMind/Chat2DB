@@ -6,7 +6,6 @@ import RunSql, { RunSqlRef } from '../RunSql';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices from '@/service/importExport';
-import { ImportExportFileType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 
 interface IProps {
@@ -33,11 +32,11 @@ export default memo<IProps>((_props) => {
   }, [runSqlBoundInfo]);
 
   const handleRunSQl = () => {
-    const params = runSqlRef.current?.getValues() || {};
-    params.importType = ImportExportFileType.SQL;
-    importExportServices.importOtherFile(params).then((res) => {
-      setTaskId(res);
-      getTaskList({ visible: true });
+    const params = runSqlRef.current?.getValues();
+    if (!params) return;
+    importExportServices.submitImport(params).then((res) => {
+      setTaskId(res.taskId);
+      getTaskList();
     });
   };
 

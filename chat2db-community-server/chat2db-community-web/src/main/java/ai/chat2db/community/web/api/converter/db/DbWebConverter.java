@@ -121,11 +121,6 @@ public abstract class DbWebConverter {
     }
 
 
-    public abstract DbTablePageQueryRequest tablePageRequest2param(DataExportRequest request);
-
-
-    public abstract DbTableQueryRequest tableRequest2param(DataExportRequest request);
-
     public abstract DbTableQueryRequest tableRequest2param(TableDeleteRequest request);
 
 
@@ -234,25 +229,6 @@ public abstract class DbWebConverter {
         param.setExecuteRequest(request2param(request));
         param.setSource(SqlOperationLogSourceEnum.SQL_EDITOR_HTTP.name());
         return param;
-    }
-
-    public DbDmlExportRequest exportRequest2param(DataExportRequest request, String sql) {
-        if (request == null) {
-            return null;
-        }
-        DbDmlExportRequest param = new DbDmlExportRequest();
-        param.setSql(sql);
-        param.setExportType(request.getExportType());
-        param.setDatabaseName(request.getDatabaseName());
-        param.setSchemaName(request.getSchemaName());
-        param.setResultSetId(request.getResultSetId());
-        param.setExportSize(request.getExportSize());
-        param.setOriginalSql(request.getOriginalSql());
-        return param;
-    }
-
-    public DbDmlExportRequest exportRequest2param(DataExportRequest request) {
-        return exportRequest2param(request, request == null ? null : request.getSql());
     }
 
     public TableSelector tableSelector(boolean columnList, boolean indexList) {
