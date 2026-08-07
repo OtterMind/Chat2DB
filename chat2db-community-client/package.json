@@ -180,7 +180,7 @@
     "stylelint": "16.26.1",
     "stylelint-config-standard": "38.0.0",
     "stylelint-config-standard-less": "3.0.1",
-    "tailwindcss": "^3",
+    "tailwindcss": "^4",
     "typescript": "^5.4.3"
   },
   "peerDependencies": {
