@@ -1,0 +1,4 @@
+-- MYSQL-SEC-004: Grants for test user
+
+GRANT CREATE USER, SYSTEM_USER, ROLE_ADMIN ON *.* TO 'sec004_admin'@'%';
+FLUSH PRIVILEGES;

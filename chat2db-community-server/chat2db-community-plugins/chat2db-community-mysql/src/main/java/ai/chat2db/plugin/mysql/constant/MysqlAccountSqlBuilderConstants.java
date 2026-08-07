@@ -39,6 +39,13 @@ public final class MysqlAccountSqlBuilderConstants {
     public static final String ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED = "mysql.account.passwordRequired";
     public static final String ERROR_KEY_ACCOUNT_INVALID_ACCOUNT_NAME = "mysql.account.invalidAccountName";
 
+    public static final String SQL_CREATE_ROLE = "CREATE ROLE ";
+    public static final String SQL_DROP_ROLE_IF_EXISTS = "DROP ROLE IF EXISTS ";
+    public static final String SQL_WITH_ADMIN_OPTION = " WITH ADMIN OPTION";
+    public static final String SQL_SET_DEFAULT_ROLE = "SET DEFAULT ROLE ";
+    public static final String SQL_ROLE_ALL = "ALL";
+    public static final String SQL_ROLE_NONE = "NONE";
+
     private MysqlAccountSqlBuilderConstants() {
     }
 }
