@@ -142,7 +142,14 @@ public class DbConnectionContextServiceImpl implements IDbConnectionContextServi
             response.setLastError(e.getMessage());
             return response;
         }
-        ConsoleTransactionRegistry.register(param.getConsoleId(), connectInfo);
+        if (!ConsoleTransactionRegistry.registerIfAbsent(param.getConsoleId(), connectInfo)) {
+            // Another request opened the transaction concurrently; drop this request's fresh
+            // connection and report the existing open transaction.
+            connectInfo.setConsoleOwn(Boolean.FALSE);
+            connectInfo.setConnection(null);
+            quietlyClose(connection);
+            return TransactionStateResponse.of(true, "manual");
+        }
         return TransactionStateResponse.of(true, "manual");
     }
 

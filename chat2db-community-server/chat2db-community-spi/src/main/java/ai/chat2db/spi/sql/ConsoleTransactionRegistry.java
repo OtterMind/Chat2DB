@@ -119,24 +119,23 @@ public class ConsoleTransactionRegistry {
     }
 
     /**
-     * Registers a console-bound transaction. The supplied {@link ConnectInfo} must already
-     * hold a live connection with {@code autoCommit=false} and {@code consoleOwn=true}.
-     * Replaces any prior binding for the same console (which should have been released first).
+     * Registers a console-bound transaction only when no binding exists yet. The supplied
+     * {@link ConnectInfo} must already hold a live connection with {@code autoCommit=false}
+     * and {@code consoleOwn=true}. Returns false when another request registered
+     * concurrently; the caller must then release its own fresh connection.
      */
-    public static void register(Long consoleId, ConnectInfo connectInfo) {
+    public static boolean registerIfAbsent(Long consoleId, ConnectInfo connectInfo) {
         if (consoleId == null || connectInfo == null) {
-            return;
+            return false;
         }
-        BoundTransaction previous = BOUND.put(consoleId, new BoundTransaction(connectInfo));
-        if (previous != null) {
-            log.warn("Replaced an existing bound transaction for consoleId={}; releasing the stale one", consoleId);
-            discardQuietly(previous.getConnectInfo());
-        }
+        return BOUND.putIfAbsent(consoleId, new BoundTransaction(connectInfo)) == null;
     }
 
     /**
      * Returns the bound {@link ConnectInfo} for the console, or null when no transaction is
-     * open. Callers that need to reuse the connection across requests use this to feed the
+     * open. Only an {@link TransactionState#IN_TRANSACTION} binding is returned: a binding
+     * that is committing or rolling back on another thread must not be handed to a new
+     * request. Callers that need to reuse the connection across requests use this to feed the
      * already-open connection back into the ThreadLocal context so
      * {@link ConnectionPool#getConnection(ConnectInfo)} hits its
      * {@code tryGetExistingConnection} fast path.
@@ -146,7 +145,7 @@ public class ConsoleTransactionRegistry {
             return null;
         }
         BoundTransaction bound = BOUND.get(consoleId);
-        if (bound == null) {
+        if (bound == null || bound.getState() != TransactionState.IN_TRANSACTION) {
             return null;
         }
         bound.touch();
@@ -264,7 +263,10 @@ public class ConsoleTransactionRegistry {
             }
         } else {
             // No open transaction or caller asked not to roll back; ensure auto-commit is on.
-            restoreAutoCommit(bound.getConnectInfo().getConnection());
+            if (!restoreAutoCommit(bound.getConnectInfo().getConnection())) {
+                discardQuietly(bound.getConnectInfo());
+                return TransactionOutcome.UNKNOWN;
+            }
         }
         bound.getConnectInfo().setConsoleOwn(Boolean.FALSE);
         ConnectionPool.close(bound.getConnectInfo());
@@ -352,11 +354,15 @@ public class ConsoleTransactionRegistry {
         List<Long> toEvict = new ArrayList<>();
         for (Map.Entry<Long, BoundTransaction> entry : BOUND.entrySet()) {
             BoundTransaction bound = entry.getValue();
-            if (bound.getState() != TransactionState.IN_TRANSACTION) {
-                // A commit/rollback is in flight on another thread; leave it alone.
-                continue;
-            }
-            if (now - bound.lastUsedMillis() > IDLE_TIMEOUT_MILLIS) {
+            long idle = now - bound.lastUsedMillis();
+            if (bound.getState() == TransactionState.IN_TRANSACTION) {
+                // Idle open transactions are evicted after the idle timeout.
+                if (idle > IDLE_TIMEOUT_MILLIS) {
+                    toEvict.add(entry.getKey());
+                }
+            } else if (idle > IDLE_TIMEOUT_MILLIS * 2) {
+                // A commit/rollback stuck for twice the idle timeout means the owning thread
+                // died mid-operation; reclaim the entry so the console is not wedged forever.
                 toEvict.add(entry.getKey());
             }
         }

@@ -1,4 +1,4 @@
-import { staticModal } from '@chat2db/ui';
+import { staticMessage, staticModal } from '@chat2db/ui';
 import { Button } from 'antd';
 import { createElement, Fragment } from 'react';
 import i18n from '@/i18n';
@@ -56,7 +56,7 @@ function confirmTransactionClose(consoles: TxConsole[]): Promise<boolean> {
 
     const releaseAll = async (action: 'commit' | 'rollback') => {
       const store = useWorkspaceStore.getState();
-      await Promise.all(
+      const results = await Promise.all(
         consoles.map(async (c) => {
           const request = {
             dataSourceId: c.dataSourceId,
@@ -74,11 +74,20 @@ function confirmTransactionClose(consoles: TxConsole[]): Promise<boolean> {
               lastOutcome: result?.outcome,
               lastError: result?.lastError,
             });
+            return true;
           } catch (error) {
-            store.setTransactionState(c.consoleId, { inTransaction: false, lastError: String(error) });
+            // The server still holds the open transaction; keep the console open so the user
+            // can retry, otherwise the transaction would be silently abandoned.
+            store.setTransactionState(c.consoleId, { inTransaction: true, lastError: String(error) });
+            return false;
           }
         }),
       );
+      if (results.some((ok) => !ok)) {
+        staticMessage.error(i18n('workspace.transaction.releaseFailed'));
+        finish(false);
+        return;
+      }
       finish(true);
     };
 
