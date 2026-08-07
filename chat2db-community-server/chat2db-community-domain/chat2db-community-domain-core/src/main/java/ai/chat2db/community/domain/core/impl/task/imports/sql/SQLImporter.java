@@ -36,8 +36,14 @@ public class SQLImporter extends BaseImporter implements IImportStrategy {
         String databaseType = connectInfo.getDbType();
         if (StringUtils.equalsAnyIgnoreCase(databaseType, DatabaseTypeEnum.MYSQL.name(), DatabaseTypeEnum.ORACLE.name(), DatabaseTypeEnum.OSCAR.name(), DatabaseTypeEnum.SQLSERVER.name(), DatabaseTypeEnum.POSTGRESQL.name())) {
             ConsoleTaskProgressListener consoleProgressListener = new ConsoleTaskProgressListener(context);
-            SyncSqlBatchHandler syncSqlBatchHandler = new SyncSqlBatchHandler(context);
-            int statementCount = DefaultSqlSyntaxHandler.parserSqlScript(context.getFile(), databaseType, consoleProgressListener, syncSqlBatchHandler);
+            // MYSQL-IMPORT-004: options-aware handler (commit mode / error policy / batch
+            // size) when configured; the charset overload decodes the file with the
+            // selected encoding.
+            SqlFileOptionsHandler optionsHandler = new SqlFileOptionsHandler(context);
+            java.nio.charset.Charset charset = java.nio.charset.Charset.forName(
+                    StringUtils.defaultIfBlank(context.getEncoding(), "UTF-8"));
+            int statementCount = DefaultSqlSyntaxHandler.parserSqlScript(context.getFile(), databaseType,
+                    consoleProgressListener, optionsHandler, charset);
             context.checkCancelled();
             log.info(" parsed {} statements", statementCount);
         } else {

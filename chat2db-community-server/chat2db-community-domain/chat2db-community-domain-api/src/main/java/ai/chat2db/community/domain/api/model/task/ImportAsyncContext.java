@@ -27,6 +27,12 @@ public class ImportAsyncContext extends AsyncContext {
 
     private ITaskImportSqlExecutor sqlExecutor;
 
+    /** SQL-file import options (MYSQL-IMPORT-004). */
+    private String encoding;
+    private String errorPolicy;
+    private String commitMode;
+    private Integer batchSize;
+
     public ImportAsyncContext(ITaskAsyncCall call, Context context, String importType, String tableName, File file) {
         super(call, context, null, false);
         this.importType = importType;

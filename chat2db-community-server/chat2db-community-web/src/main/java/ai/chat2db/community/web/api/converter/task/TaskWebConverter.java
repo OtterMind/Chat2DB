@@ -50,6 +50,10 @@ public class TaskWebConverter {
                 .databaseName(request.getDatabaseName())
                 .schemaName(request.getSchemaName())
                 .fileName(request.getFileName())
+                .encoding(request.getEncoding())
+                .errorPolicy(request.getErrorPolicy())
+                .commitMode(request.getCommitMode())
+                .batchSize(request.getBatchSize())
                 .build();
     }
 
@@ -63,6 +67,10 @@ public class TaskWebConverter {
                 .tableName(request.getTableName())
                 .importType(request.getImportType())
                 .fileName(request.getFileName())
+                .encoding(request.getEncoding())
+                .errorPolicy(request.getErrorPolicy())
+                .commitMode(request.getCommitMode())
+                .batchSize(request.getBatchSize())
                 .build();
     }
 }
