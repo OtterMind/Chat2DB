@@ -123,6 +123,63 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
                 param.getName());
     }
 
+    private static final String SQL_DATABASE_INFO =
+            "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME "
+                    + "FROM information_schema.schemata WHERE SCHEMA_NAME = '%s'";
+
+    @Override
+    public Map<String, String> databaseInfo(String databaseName) {
+        if (StringUtils.isBlank(databaseName)) {
+            throw new BusinessException("database.name.required");
+        }
+        String escapedName = Chat2DBContext.getDbMetaData().getSQLIdentifierProcessor().escapeString(databaseName);
+        Connection connection = Chat2DBContext.getConnection();
+        return DefaultSQLExecutor.getInstance().execute(connection,
+                String.format(SQL_DATABASE_INFO, escapedName), resultSet -> {
+                    if (!resultSet.next()) {
+                        throw new BusinessException("database.notFound");
+                    }
+                    Map<String, String> info = new LinkedHashMap<>();
+                    info.put("charset", resultSet.getString("DEFAULT_CHARACTER_SET_NAME"));
+                    info.put("collation", resultSet.getString("DEFAULT_COLLATION_NAME"));
+                    return info;
+                });
+    }
+
+    @Override
+    public String previewAlterDatabaseSql(String databaseName, String charset, String collation) {
+        if (StringUtils.isBlank(databaseName)) {
+            throw new BusinessException("database.name.required");
+        }
+        Map<String, String> current = databaseInfo(databaseName);
+        String currentCharset = current.get("charset");
+        String currentCollation = current.get("collation");
+        if (StringUtils.isBlank(charset) && StringUtils.isBlank(collation)) {
+            return null;
+        }
+        if (StringUtils.equalsIgnoreCase(charset, currentCharset)
+                && StringUtils.equalsIgnoreCase(collation, currentCollation)) {
+            return null;
+        }
+        // Charset/collation names are emitted unquoted; restrict to the safe charset so
+        // the generated DDL can never be injected through these fields.
+        if (StringUtils.isNotBlank(charset) && !charset.matches("[A-Za-z0-9_]+")) {
+            throw new BusinessException("database.invalidCharset");
+        }
+        if (StringUtils.isNotBlank(collation) && !collation.matches("[A-Za-z0-9_]+")) {
+            throw new BusinessException("database.invalidCollation");
+        }
+        StringBuilder sql = new StringBuilder("ALTER DATABASE ");
+        sql.append(Chat2DBContext.getDbMetaData().getMetaDataName(databaseName));
+        if (StringUtils.isNotBlank(charset)) {
+            sql.append(" DEFAULT CHARACTER SET ").append(charset);
+        }
+        if (StringUtils.isNotBlank(collation)) {
+            sql.append(" DEFAULT COLLATE ").append(collation);
+        }
+        return sql.toString();
+    }
+
     @Override
     public void deleteSchema(DbSchemaOperationRequest param) {
         Chat2DBContext.getDbManager().dropSchema(Chat2DBContext.getConnection(), param.getDatabaseName(),

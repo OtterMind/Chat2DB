@@ -226,6 +226,8 @@ export interface ICharset {
 /** Arrangement rules */
 export interface ICollation {
   collationName: string;
+  /** Character set the collation belongs to; used to filter collation choices. */
+  charset?: string | null;
 }
 
 /** Type of index */

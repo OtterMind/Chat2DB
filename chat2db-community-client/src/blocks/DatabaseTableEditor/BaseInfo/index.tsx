@@ -31,13 +31,16 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
       name: tableDetails.name,
       comment: tableDetails.comment,
       charset: tableDetails.charset,
+      collation: tableDetails.collation,
       engine: tableDetails.engine,
       incrementValue: tableDetails.incrementValue,
     });
   }, [tableDetails]);
 
   function getBaseInfo(): IBaseInfo {
-    return form.getFieldsValue();
+    const values = form.getFieldsValue();
+    // Backend Table uses `collate`; the form field is `collation`.
+    return { ...values, collate: values.collation };
   }
 
   useImperativeHandle(ref, () => ({
@@ -58,6 +61,9 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
             <>
               <Form.Item label={`${i18n('editTable.label.characterSet')}:`} name="charset">
                 <CustomSelect options={databaseSupportField.charsets} />
+              </Form.Item>
+              <Form.Item label={`${i18n('editTable.label.collation')}:`} name="collation">
+                <CustomSelect options={databaseSupportField.collations} />
               </Form.Item>
               <Form.Item label={`${i18n('editTable.label.engine')}:`} name="engine">
                 <CustomSelect options={databaseSupportField.engineTypes} />

@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbSchemaOperationRequest
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaQueryRequest;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Exposes database and schema metadata lookup plus database/schema DDL operations.
@@ -62,6 +63,25 @@ public interface IDbDatabaseService {
      * @param dbDatabaseCreateRequest database operation parameters.
      */
     void modifyDatabase(DbDatabaseCreateRequest dbDatabaseCreateRequest);
+
+    /**
+     * Returns the database default character set and collation reported by the server.
+     *
+     * @param databaseName the database name.
+     * @return map with {@code charset} and {@code collation} keys.
+     */
+    Map<String, String> databaseInfo(String databaseName);
+
+    /**
+     * Generates an ALTER DATABASE statement for a default character set / collation change.
+     * No DDL is generated when both values are unchanged.
+     *
+     * @param databaseName the database name.
+     * @param charset      the new default character set.
+     * @param collation    the new default collation.
+     * @return the SQL preview, or null when nothing changed.
+     */
+    String previewAlterDatabaseSql(String databaseName, String charset, String collation);
 
     /**
      * Deletes a schema according to the supplied operation parameters.

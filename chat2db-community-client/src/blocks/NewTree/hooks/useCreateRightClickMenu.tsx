@@ -56,6 +56,7 @@ import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import DatabasePropertiesContent from '../components/DatabasePropertiesContent';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 
 // Some operations are not supported by the database and need to be excluded.
@@ -371,6 +372,19 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.DatabaseProperties]: {
+        text: i18n('workspace.ops.databaseProperties'),
+        icon: 'icon-setting',
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.databaseProperties'),
+            content: <DatabasePropertiesContent dataSourceId={dataSourceId!} databaseName={originalTitle} />,
+            footer: null,
+            width: 480,
           });
         },
       },

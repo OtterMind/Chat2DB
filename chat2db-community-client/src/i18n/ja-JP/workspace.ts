@@ -311,6 +311,12 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.ops.databaseProperties': 'データベースのプロパティ',
+  'workspace.ops.charset': '文字セット',
+  'workspace.ops.collation': '照合順序',
+  'workspace.ops.charsetHint': 'デフォルトを変更しても既存の列データは変換されません。',
+  'workspace.ops.previewSql': 'SQL プレビュー',
+  'workspace.ops.noChange': '保存する変更はありません',
   'workspace.routine.button.invoke': 'ルーチンを呼び出す',
   'workspace.routine.button.apply': '変更を適用',
   'workspace.routine.button.refresh': 'DDL を再読み込み',
