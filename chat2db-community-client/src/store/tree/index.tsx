@@ -23,7 +23,16 @@ import {
 } from './backgroundRefresh';
 import { loadNamespaceTree } from './loadNamespaceTree';
 import { updateTreeData } from './treeDataUpdate';
+import { DataSourceIdentityColorPatch, patchDataSourceIdentityTree } from './dataSourceIdentity';
+import { collectDataSourceNodes, pruneDataSourceRuntimeAvailability } from './dataSourceList';
+import { shouldReuseTreeNodeChildren } from './treeNodeLoadState';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
+import {
+  transitionDataSourceRuntimeAvailability,
+  type DataSourceRuntimeAvailability,
+  type DataSourceRuntimeAvailabilityById,
+  type DataSourceRuntimeAvailabilityGenerationById,
+} from '@/utils/editorDataSourceLifecycle';
 
 export type FocusTreeNode = {
   dataSourceId: number;
@@ -42,6 +51,8 @@ export interface TreeState {
   currentTreeNode: TreeNodeData | null;
   currentLoadingTreeNode: TreeNodeData | null;
   dataSourceList: TreeNodeData[] | null;
+  runtimeAvailabilityByDataSourceId: DataSourceRuntimeAvailabilityById;
+  runtimeAvailabilityGenerationByDataSourceId: DataSourceRuntimeAvailabilityGenerationById;
   selectedKeys: React.Key[];
   scrollTargetKey: React.Key | null;
   treeRef: any;
@@ -68,6 +79,8 @@ export const initTreeState = {
   editingTreeNode: null,
   currentTreeNode: null,
   dataSourceList: null,
+  runtimeAvailabilityByDataSourceId: {},
+  runtimeAvailabilityGenerationByDataSourceId: {},
   selectedKeys: [],
   scrollTargetKey: null,
   treeRef: null,
@@ -116,6 +129,9 @@ export interface TreeAction {
   setCurrentLoadingTreeNode: (currentLoadingTreeNode: TreeNodeData | null) => void;
   getDataSourceList: (props?: { refresh?: boolean }) => void;
   generateDataSourceList: (data: TreeNodeData[]) => void;
+  updateDataSourceIdentity: (patch: DataSourceIdentityColorPatch) => void;
+  setDataSourceRuntimeAvailability: (dataSourceId: number, availability?: DataSourceRuntimeAvailability) => void;
+  restoreDataSourceRuntimeAvailability: (dataSourceId: number, expectedGeneration: number) => void;
   deleteAiDataCollection: (treeNodeData: TreeNodeData, handleLoad: any) => Promise<void>;
   deleteAiDataCollectionElement: (treeNodeData: TreeNodeData, handleLoadData: any) => Promise<void>;
   refreshAiDataCollection: (dataSourceId: number) => void;
@@ -193,7 +209,15 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     const { refresh, closeExpandTreeNode } = config || {};
     return new Promise<any>((resolve, rj) => {
       const { key, children, treeNodeType, extraParams } = nodeData;
-      if (children && !refresh) {
+      const rootDataSourceId = treeNodeType === TreeNodeType.DATA_SOURCE ? extraParams.dataSourceId : undefined;
+      const shouldReuseChildren = shouldReuseTreeNodeChildren({
+        children,
+        refresh,
+        isDataSourceRoot: rootDataSourceId !== undefined,
+        runtimeAvailability:
+          rootDataSourceId === undefined ? undefined : get().runtimeAvailabilityByDataSourceId[rootDataSourceId],
+      });
+      if (shouldReuseChildren) {
         resolve(children);
         return;
       }
@@ -210,6 +234,9 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         .getChildren?.({ ...extraParams, refresh })
         .then((res) => {
           const loadResult = normalizeTreeNodeLoadResult(res);
+          if (rootDataSourceId !== undefined) {
+            get().setDataSourceRuntimeAvailability(rootDataSourceId, 'available');
+          }
           get().setCurrentLoadingTreeNode(null);
           // If it has already been expanded, it will not be expanded again.
           if (!get().expandedKeys.includes(key) && closeExpandTreeNode !== true) {
@@ -221,6 +248,9 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
           resolve(loadResult.children);
         })
         .catch(() => {
+          if (rootDataSourceId !== undefined) {
+            get().setDataSourceRuntimeAvailability(rootDataSourceId, 'unavailable');
+          }
           get().setTreeData((origin) => {
             return updateTreeData(origin, key, [], undefined, true);
           });
@@ -373,6 +403,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
             treeData: newTreeDataAfterDelete,
             currentTreeNode: null,
           });
+          get().setDataSourceRuntimeAvailability(dataSource.id, undefined);
           get().generateDataSourceList(newTreeDataAfterDelete);
           resolve();
           // Clean up deleted data source data
@@ -399,10 +430,17 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       return;
     }
     siblings.splice(index, 1, newTreeNode);
+    const nextTreeData = [...newTreeData];
+    const dataSourceList = collectDataSourceNodes(nextTreeData);
     // If it was originally expanded and needs to be collapsed
     set({
       expandedKeys: get().expandedKeys.filter((item) => item !== newTreeNode.key),
-      treeData: [...newTreeData],
+      treeData: nextTreeData,
+      dataSourceList,
+      runtimeAvailabilityByDataSourceId: pruneDataSourceRuntimeAvailability(
+        dataSourceList,
+        get().runtimeAvailabilityByDataSourceId,
+      ),
     });
   },
   setIsModalVisible: (isModalVisible) => {
@@ -457,23 +495,33 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       });
   },
   generateDataSourceList: (treeData) => {
-    const dataSourceList: TreeNodeData[] = [];
-    function collectDataSources(node) {
-      if (node.treeNodeType === TreeNodeType.DATA_SOURCE) {
-        dataSourceList.push(node);
-      }
-      if (node.children) {
-        node.children.forEach((child) => {
-          collectDataSources(child);
-        });
-      }
-    }
-
-    treeData.forEach((item) => {
-      collectDataSources(item);
+    const dataSourceList = collectDataSourceNodes(treeData);
+    const runtimeAvailabilityByDataSourceId = pruneDataSourceRuntimeAvailability(
+      dataSourceList,
+      get().runtimeAvailabilityByDataSourceId,
+    );
+    set({ dataSourceList, runtimeAvailabilityByDataSourceId });
+  },
+  updateDataSourceIdentity: (patch) => {
+    const patchSingleNode = (node: TreeNodeData | null) =>
+      node ? patchDataSourceIdentityTree([node], patch)?.[0] || node : null;
+    set({
+      treeData: patchDataSourceIdentityTree(get().treeData, patch),
+      dataSourceList: patchDataSourceIdentityTree(get().dataSourceList, patch),
+      searchResult: patchDataSourceIdentityTree(get().searchResult, patch),
+      currentTreeNode: patchSingleNode(get().currentTreeNode),
+      editingTreeNode: patchSingleNode(get().editingTreeNode),
+      currentLoadingTreeNode: patchSingleNode(get().currentLoadingTreeNode),
     });
-
-    set({ dataSourceList });
+  },
+  setDataSourceRuntimeAvailability: (dataSourceId, availability) => {
+    set((state) => transitionDataSourceRuntimeAvailability(state, dataSourceId, availability) || {});
+  },
+  restoreDataSourceRuntimeAvailability: (dataSourceId, expectedGeneration) => {
+    set(
+      (state) =>
+        transitionDataSourceRuntimeAvailability(state, dataSourceId, 'available', expectedGeneration) || {},
+    );
   },
   deleteAiDataCollection: (treeNodeData, handleLoad) => {
     return aiDataCollectionService.deleteAiDataCollection({ id: treeNodeData.id! }).then(() => {
@@ -637,6 +685,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   closeConnection: (dataSourceId) => {
     connectionService.closeConnection({ id: dataSourceId }).then(() => {
+      get().setDataSourceRuntimeAvailability(dataSourceId, 'unavailable');
       // Clear all child nodes under the current node and collapse the current node
       const newTreeData = get().treeData;
       const curNode = findNode(`dataSource_${dataSourceId}`, newTreeData);

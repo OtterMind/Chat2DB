@@ -68,6 +68,12 @@ public class DataSourceCreateRequest {
     private Long environmentId;
 
 
+    private Boolean watermarkEnabled;
+
+
+    private String watermarkContent;
+
+
     private String serviceName;
 
 

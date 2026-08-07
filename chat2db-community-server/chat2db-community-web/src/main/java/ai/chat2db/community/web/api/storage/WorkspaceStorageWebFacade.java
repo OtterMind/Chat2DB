@@ -15,6 +15,8 @@ import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateReques
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
+import ai.chat2db.community.domain.api.service.db.IDbNamespaceService;
+import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -44,13 +46,19 @@ public final class WorkspaceStorageWebFacade {
     private static volatile WorkspaceStorageWebFacade delegate;
 
     private final IWorkspaceStorageFacade workspaceStorageFacade;
+    private final IDbWorkspaceDataSourceService workspaceDataSourceService;
+    private final IDbNamespaceService namespaceService;
     private final DataSourceWebConverter dataSourceWebConverter;
     private final OperationLogConverter operationLogConverter;
 
     public WorkspaceStorageWebFacade(IWorkspaceStorageFacade workspaceStorageFacade,
+            IDbWorkspaceDataSourceService workspaceDataSourceService,
+            IDbNamespaceService namespaceService,
             DataSourceWebConverter dataSourceWebConverter,
             OperationLogConverter operationLogConverter) {
         this.workspaceStorageFacade = workspaceStorageFacade;
+        this.workspaceDataSourceService = workspaceDataSourceService;
+        this.namespaceService = namespaceService;
         this.dataSourceWebConverter = dataSourceWebConverter;
         this.operationLogConverter = operationLogConverter;
         delegate = this;
@@ -80,13 +88,13 @@ public final class WorkspaceStorageWebFacade {
     }
 
     public static WebPageResult<DataSourceResponse> getDataSourceList(DataSourceQueryRequest request) {
-        return mapPageResponse(delegate().workspaceStorageFacade.listDataSources(
+        return mapPageResponse(delegate().workspaceDataSourceService.listDataSources(
                         delegate().dataSourceWebConverter.request2param(request)),
                 delegate().dataSourceWebConverter::storage2response);
     }
 
     public static DataResult<DataSourceNamespaceResponse> getNamespaceDatasource() {
-        WorkspaceDataSourceNamespace result = delegate().workspaceStorageFacade.getNamespaceDataSources();
+        WorkspaceDataSourceNamespace result = delegate().namespaceService.getNamespaceDataSources();
         return DataResult.of(result == null ? null : delegate().dataSourceWebConverter.storage2response(result));
     }
 
@@ -115,7 +123,7 @@ public final class WorkspaceStorageWebFacade {
     }
 
     public static ListResult<Node> getTree() {
-        return ListResult.of(delegate().workspaceStorageFacade.getTree());
+        return ListResult.of(delegate().namespaceService.getTree());
     }
 
     public static ActionResult updatePosition(PositionUpdateRequest request) {

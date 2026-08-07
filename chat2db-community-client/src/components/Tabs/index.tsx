@@ -41,6 +41,7 @@ export interface ITabItem {
   editableName?: boolean;
   canClosed?: boolean;
   styles?: React.CSSProperties;
+  accentColor?: string | null;
   pinned?: boolean;
   destroyOnHide?: boolean;
 }
@@ -704,6 +705,12 @@ export default memo<IProps>((props) => {
       });
     }
 
+    const tabStyle = {
+      ...t.styles,
+      ...(t.accentColor !== undefined
+        ? ({ '--chat2db-tab-accent-color': t.accentColor || 'transparent' } as React.CSSProperties)
+        : {}),
+    };
     const tabNode = enableReorder ? (
       <SortableTabItem
         disabled={false}
@@ -718,7 +725,7 @@ export default memo<IProps>((props) => {
             deleteTab(t);
           }
         }}
-        style={t.styles}
+        style={tabStyle}
         className={cx(styles.tabItem, {
           [styles.activeTab]: t.key === activeKey,
           [styles.draggingTab]: String(t.key) === draggingTabKey,
@@ -738,7 +745,7 @@ export default memo<IProps>((props) => {
             deleteTab(t);
           }
         }}
-        style={t.styles}
+        style={tabStyle}
         className={cx(styles.tabItem, {
           [styles.activeTab]: t.key === activeKey,
         })}

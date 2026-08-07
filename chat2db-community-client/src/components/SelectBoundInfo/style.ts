@@ -41,10 +41,22 @@ export const useStyles = createStyles(({ css, token }) => {
       color: ${token.colorTextSecondary};
       margin: 0px 4px;
     `,
+    environmentName: css`
+      margin-left: 6px;
+      color: ${token.colorTextSecondary};
+      font-size: 12px;
+    `,
     dropdownItemLabel: css`
       display: flex;
       align-items: center;
       gap: 4px;
+    `,
+    dataSourceIdentityIcon: css`
+      display: inline-flex;
+      flex: 0 0 auto;
+      gap: 4px;
+      align-items: center;
+      min-width: 27px;
     `,
     dropdownContent: css`
       border: 1px solid ${token.colorBorder};

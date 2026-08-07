@@ -3,6 +3,8 @@ export enum InputType {
   PASSWORD = 'password',
   SELECT = 'select',
   FILE = 'file',
+  COLOR = 'color',
+  CHECKBOX = 'checkbox',
 }
 
 export enum AuthenticationType {

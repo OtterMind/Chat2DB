@@ -1,6 +1,10 @@
 package ai.chat2db.community.web.api.converter.data.source;
 
 import ai.chat2db.community.web.api.model.request.data.source.DataSourceCreateRequest;
+import ai.chat2db.community.domain.api.config.Environment;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.web.api.model.response.data.source.DataSourceIdentityColorResponse;
+import ai.chat2db.community.web.api.model.response.data.source.DataSourceResponse;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -100,5 +104,35 @@ class DataSourceWebConverterTest {
         assertEquals("ssh.example", request.getSsh().getHostName());
         assertEquals("driver.jar", request.getDriverConfig().getJdbcDriver());
         assertEquals("org.example.Driver", request.getDriverConfig().getJdbcDriverClass());
+    }
+
+    @Test
+    void mapsIdentityColorToDatasourceAndLightweightResponses() {
+        Environment environment = Environment.builder()
+                .id(2L)
+                .name("RELEASE")
+                .shortName("PROD")
+                .color("RED")
+                .build();
+        WorkspaceDataSource dataSource = new WorkspaceDataSource();
+        dataSource.setId(91L);
+        dataSource.setIdentityColor("#ABCDEF");
+        dataSource.setWatermarkEnabled(false);
+        dataSource.setWatermarkContent("Finance Read Only");
+        dataSource.setEnvironmentId(2L);
+        dataSource.setEnvironment(environment);
+        dataSource.setHost("sensitive.example");
+
+        DataSourceResponse fullResponse = DataSourceWebConverter.INSTANCE.storage2response(dataSource);
+        DataSourceIdentityColorResponse identityResponse =
+                DataSourceWebConverter.INSTANCE.storage2identityColorResponse(dataSource);
+
+        assertEquals("#ABCDEF", fullResponse.getIdentityColor());
+        assertEquals(false, fullResponse.getWatermarkEnabled());
+        assertEquals("Finance Read Only", fullResponse.getWatermarkContent());
+        assertEquals(91L, identityResponse.getId());
+        assertEquals("#ABCDEF", identityResponse.getIdentityColor());
+        assertEquals(2L, identityResponse.getEnvironmentId());
+        assertEquals("PROD", identityResponse.getEnvironment().getShortName());
     }
 }

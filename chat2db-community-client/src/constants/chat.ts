@@ -68,11 +68,6 @@ export enum QuestionType {
   CRUD_GENERATION = 'CRUD_GENERATION',
 
   /**
-   * Data insertion
-   */
-  DATA_INSERT = 'DATA_INSERT',
-
-  /**
    * SQL prompt
    */
   SQL_PROMPT = 'SQL_PROMPT',

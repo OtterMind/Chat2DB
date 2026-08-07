@@ -3,6 +3,7 @@ package ai.chat2db.community.storage;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
+import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
 import ai.chat2db.community.domain.api.model.er.ERPosition;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
@@ -28,6 +29,7 @@ import ai.chat2db.community.storage.large.OperationLogStorage;
 import ai.chat2db.community.storage.large.TaskStorage;
 import ai.chat2db.community.storage.small.*;
 import ai.chat2db.community.tools.security.AesGcmUtil;
+import ai.chat2db.community.tools.exception.DataNotFoundException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.core.date.DateUtil;
@@ -61,6 +63,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public Long createDataSource(WorkspaceDataSource dataSource) {
+        dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         dataSource.setPassword(encryptString(dataSource.getPassword()));
         dataSource.setId(DataSourceStorage.INSTANCE.generateId());
@@ -78,15 +81,24 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public Long updateDataSource(WorkspaceDataSource dataSource) {
+        dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         if (dataSource.getPassword() != null && !dataSource.getPassword().isEmpty()) {
             dataSource.setPassword(encryptString(dataSource.getPassword()));
         } else {
-            DataSource oldDataSource = DataSourceStorage.INSTANCE.getById(dataSource.getId());
-            dataSource.setPassword(oldDataSource == null ? null : oldDataSource.getPassword());
+            dataSource.setPassword(null);
         }
         DataSourceStorage.INSTANCE.update(storageConverter.workspace2dataSource(dataSource));
         return dataSource.getId();
+    }
+
+    @Override
+    public Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        String normalizedIdentityColor = DataSourceIdentityColorUtils.normalize(identityColor);
+        if (!DataSourceStorage.INSTANCE.updateIdentityColor(id, normalizedIdentityColor)) {
+            throw new DataNotFoundException();
+        }
+        return id;
     }
 
     @Override

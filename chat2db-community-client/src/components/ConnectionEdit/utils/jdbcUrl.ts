@@ -39,3 +39,25 @@ export function normalizeJdbcHostFromUrl(host: any) {
   const hostValue = host == null ? '' : String(host);
   return stripJdbcHostBrackets(hostValue);
 }
+
+export function getJdbcTemplateFieldNames(template: unknown) {
+  const fieldNames = new Set<string>();
+  const pattern = /{(.*?)}/g;
+  const templateValue = template == null ? '' : String(template);
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(templateValue)) !== null) {
+    if (match[1]) {
+      fieldNames.add(match[1]);
+    }
+  }
+
+  return fieldNames;
+}
+
+export function shouldSyncJdbcUrlForField(fieldName: string | undefined, template: unknown) {
+  if (!fieldName || fieldName === 'url' || fieldName === 'alias') {
+    return true;
+  }
+  return getJdbcTemplateFieldNames(template).has(fieldName);
+}

@@ -57,6 +57,11 @@ public class DefaultWorkspaceStorageFacade implements IWorkspaceStorageFacade {
     }
 
     @Override
+    public Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        return storage().updateDataSourceIdentityColor(id, identityColor);
+    }
+
+    @Override
     public PageResponse<WorkspaceDataSource> listDataSources(DbDataSourcePageQueryRequest dataSourcePageQueryRequest) {
         return storage().listDataSources(dataSourcePageQueryRequest);
     }
