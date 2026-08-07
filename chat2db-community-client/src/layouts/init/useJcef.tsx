@@ -4,11 +4,10 @@ import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
 
 const useJcef = () => {
-  const { appearance, language, enableMcp } = useGlobalStore((state) => {
+  const { appearance, language } = useGlobalStore((state) => {
     return {
       appearance: state.baseSetting.appearance,
       language: state.baseSetting.language,
-      enableMcp: state.baseSetting.enableMcp,
     };
   });
 
@@ -19,9 +18,8 @@ const useJcef = () => {
     jcefApi.updateSettings({
       appearance,
       language,
-      enableMcp,
     });
-  }, [appearance, language, enableMcp]);
+  }, [appearance, language]);
 };
 
 export default useJcef;

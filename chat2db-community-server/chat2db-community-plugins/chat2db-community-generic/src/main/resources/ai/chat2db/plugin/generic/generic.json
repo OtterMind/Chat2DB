@@ -723,24 +723,6 @@
     ]
   },
   {
-    "dbType": "OCIENT",
-    "name": "Ocient",
-    "supportDatabase": true,
-    "supportSchema": true,
-    "driverConfigList": [
-      {
-        "defaultDriver": true,
-        "custom": false,
-        "downloadJdbcDriverUrls": [
-          "https://repo1.maven.org/maven2/com/ocient/ocient-jdbc4/3.5.1/ocient-jdbc4-3.5.1.jar"
-        ],
-        "jdbcDriver": "ocient-jdbc4-3.5.1.jar",
-        "jdbcDriverClass": "com.ocient.jdbc.JDBCDriver",
-        "url": "jdbc:ocient://localhost:4050/mydb"
-      }
-    ]
-  },
-  {
     "dbType": "IRIS",
     "name": "InterSystems IRIS",
     "supportDatabase": true,
@@ -777,25 +759,6 @@
     ]
   },
   {
-    "dbType": "OPENSEARCH",
-    "name": "OpenSearch",
-    "sqlDialect": "ELASTICSEARCH",
-    "supportDatabase": true,
-    "supportSchema": false,
-    "driverConfigList": [
-      {
-        "defaultDriver": true,
-        "custom": false,
-        "downloadJdbcDriverUrls": [
-          "https://repo1.maven.org/maven2/org/opensearch/driver/opensearch-sql-jdbc/1.4.0.1/opensearch-sql-jdbc-1.4.0.1.jar"
-        ],
-        "jdbcDriver": "opensearch-sql-jdbc-1.4.0.1.jar",
-        "jdbcDriverClass": "org.opensearch.jdbc.Driver",
-        "url": "jdbc:opensearch://localhost:9200"
-      }
-    ]
-  },
-  {
     "dbType": "DOLPHINDB",
     "name": "DolphinDB",
     "supportDatabase": true,
@@ -805,9 +768,11 @@
         "defaultDriver": true,
         "custom": false,
         "downloadJdbcDriverUrls": [
-          "https://repo1.maven.org/maven2/com/dolphindb/jdbc/3.00.3.0/jdbc-3.00.3.0.jar"
+          "https://repo1.maven.org/maven2/com/dolphindb/jdbc/3.00.3.0/jdbc-3.00.3.0.jar",
+          "https://repo1.maven.org/maven2/com/dolphindb/dolphindb-javaapi/3.00.3.0/dolphindb-javaapi-3.00.3.0.jar",
+          "https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar"
         ],
-        "jdbcDriver": "jdbc-3.00.3.0.jar",
+        "jdbcDriver": "jdbc-3.00.3.0.jar,dolphindb-javaapi-3.00.3.0.jar,slf4j-api-2.0.16.jar",
         "jdbcDriverClass": "com.dolphindb.jdbc.Driver",
         "url": "jdbc:dolphindb://localhost:8848"
       }
