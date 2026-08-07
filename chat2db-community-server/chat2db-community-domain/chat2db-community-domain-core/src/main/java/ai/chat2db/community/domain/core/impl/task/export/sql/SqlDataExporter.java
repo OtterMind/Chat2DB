@@ -1,8 +1,12 @@
 package ai.chat2db.community.domain.core.impl.task.export.sql;
 
 import ai.chat2db.community.domain.api.enums.ExportFileSuffixEnum;
+import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
-import ai.chat2db.community.domain.api.model.task.ExportAsyncContext;
+import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
@@ -13,13 +17,14 @@ import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.util.ResultSetUtils;
-import cn.hutool.core.date.DateUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.PrintWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -37,47 +42,43 @@ public class SqlDataExporter extends BaseExporter {
 
 
     @Override
-    protected void singleExport(ExportAsyncContext asyncContext, String tableName, File file) {
+    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
         Connection connection = Chat2DBContext.getConnection();
-        asyncContext.info(String.format("Exporting data from table %s to %s", tableName, file.getAbsolutePath()));
-        try (PrintWriter writer = new PrintWriter(file);) {
-            exportSql(connection, asyncContext, tableName, writer);
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
+        ExportProgressLogger progressLogger = new ExportProgressLogger(context, "SQL", tableName);
+        progressLogger.queryStarted("Reading table data from " + tableName);
+        try (BufferedWriter writer = createWriter(file)) {
+            exportSql(connection, spec, context, tableName, writer, progressLogger);
+            progressLogger.queryCompleted("Table data read completed");
+            progressLogger.fileFinalizing();
+        } catch (IOException e) {
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
+                    "Could not write SQL export", e);
         }
     }
 
-    private void exportSql(Connection connection, ExportAsyncContext asyncContext, String tableName, PrintWriter writer) {
-        String databaseName = Chat2DBContext.getConnectInfo().getDatabaseName();
-        String schemaName = Chat2DBContext.getConnectInfo().getSchemaName();
-        Boolean containsHeader = asyncContext.getContainsHeader();
+    private void exportSql(Connection connection, ExportTaskSpec spec, TaskExecutionContext context,
+            String tableName, BufferedWriter writer, ExportProgressLogger progressLogger) {
+        String databaseName = spec.getTarget().getDatabaseName();
+        String schemaName = spec.getTarget().getSchemaName();
+        Boolean containsHeader = spec.getContainsHeader();
         IDbMetaData metaData = Chat2DBContext.getDbMetaData();
         String querySql = metaData.getSqlBuilder().dql().buildSelectTable(databaseName, schemaName, tableName);
         ISqlBuilder sqlBuilder = metaData.getSqlBuilder();
         IValueProcessor valueProcessor = metaData.getValueProcessor();
-        String sqyType = asyncContext.getSqyType();
-
-        switch (sqyType) {
-            case "single" -> exportSingleInsert(connection, querySql, containsHeader, sqlBuilder,
-                    valueProcessor, databaseName, schemaName, tableName, writer,asyncContext);
-            case "multi" -> exportMultiInsert(connection, querySql, containsHeader, sqlBuilder,
-                    valueProcessor, databaseName, schemaName, tableName, writer,asyncContext);
-            case "update" -> exportUpdate(connection, querySql, sqlBuilder, valueProcessor,
-                    databaseName, schemaName, tableName, writer,asyncContext);
-            default -> throw new IllegalArgumentException("Unsupported sqyType: " + sqyType);
-        }
+        exportSingleInsert(connection, querySql, containsHeader, sqlBuilder,
+                valueProcessor, databaseName, schemaName, tableName, writer, context, progressLogger);
     }
 
     private void exportSingleInsert(Connection connection, String querySql, Boolean containsHeader,
                                     ISqlBuilder sqlBuilder, IValueProcessor valueProcessor,
-                                    String databaseName, String schemaName, String tableName, PrintWriter writer,ExportAsyncContext asyncContext) {
+                                    String databaseName, String schemaName, String tableName, BufferedWriter writer,
+                                    TaskExecutionContext context, ExportProgressLogger progressLogger) {
         List<String> sqlList = new ArrayList<>(BATCH_SIZE);
         DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
-            List<String> header = containsHeader ? ResultSetUtils.getRsHeader(resultSet) : null;
-            int n = 0;
+            List<String> header = Boolean.TRUE.equals(containsHeader) ? ResultSetUtils.getRsHeader(resultSet) : null;
             boolean hasNext = resultSet.next();
             while (hasNext) {
-                asyncContext.checkCancelled();
+                context.checkCancelled();
                 List<String> rowData = extractRowData(resultSet, valueProcessor);
                 String sql = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
                         .tableName(tableName)
@@ -85,46 +86,47 @@ public class SqlDataExporter extends BaseExporter {
                         .valueList(rowData)
                         .build());
                 sqlList.add(sql + ";");
-                n++;
+                progressLogger.recordExportedRow();
                 hasNext = resultSet.next();
                 if (sqlList.size() >= BATCH_SIZE || !hasNext) {
                     writeSqlList(writer, sqlList);
-                    asyncContext.info(DateUtil.formatTime(new Date()) + ":" + String.format("Exported %d rows", n));
                 }
             }
             writeSqlList(writer, sqlList);
-        }, asyncContext, asyncContext::checkCancelled);
+        }, context, context::checkCancelled);
     }
 
     private void exportMultiInsert(Connection connection, String querySql, Boolean containsHeader,
                                    ISqlBuilder sqlBuilder, IValueProcessor valueProcessor,
-                                   String databaseName, String schemaName, String tableName, PrintWriter writer,ExportAsyncContext asyncContext) {
+                                   String databaseName, String schemaName, String tableName, BufferedWriter writer,
+                                   TaskExecutionContext context, ExportProgressLogger progressLogger) {
         DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
             List<List<String>> dataList = new ArrayList<>(BATCH_SIZE);
-            List<String> header = containsHeader ? ResultSetUtils.getRsHeader(resultSet) : null;
+            List<String> header = Boolean.TRUE.equals(containsHeader) ? ResultSetUtils.getRsHeader(resultSet) : null;
             while (resultSet.next()) {
-                asyncContext.checkCancelled();
+                context.checkCancelled();
                 dataList.add(extractRowData(resultSet, valueProcessor));
+                progressLogger.recordExportedRow();
             }
             String sql = sqlBuilder.dml().buildBatchInsert(MultiInsertSqlRequest.builder()
                     .tableName(tableName)
                     .columnList(header)
                     .valueLists(dataList)
                     .build());
-            writer.println(sql+";");
-            writer.flush();
-        }, asyncContext, asyncContext::checkCancelled);
+            writeSqlLine(writer, sql + ";");
+            flush(writer);
+        }, context, context::checkCancelled);
     }
 
     private void exportUpdate(Connection connection, String querySql, ISqlBuilder sqlBuilder,
                               IValueProcessor valueProcessor,
-                              String databaseName, String schemaName, String tableName, PrintWriter writer,ExportAsyncContext asyncContext) {
+                              String databaseName, String schemaName, String tableName, BufferedWriter writer,
+                              TaskExecutionContext context, ExportProgressLogger progressLogger) {
         List<String> sqlList = new ArrayList<>(BATCH_SIZE);
         DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
             Map<String, String> primaryKeyMap = getPrimaryKeyMap(connection, databaseName, schemaName, tableName);
-            int n = 0;
             while (resultSet.next()) {
-                asyncContext.checkCancelled();
+                context.checkCancelled();
                 Map<String, String> row = extractRowDataAsMap(resultSet, valueProcessor, primaryKeyMap);
                 String sql = sqlBuilder.dml().buildUpdate(UpdateSqlRequest.builder()
                         .databaseName(databaseName)
@@ -134,14 +136,12 @@ public class SqlDataExporter extends BaseExporter {
                         .primaryKeyMap(primaryKeyMap)
                         .build());
                 sqlList.add(sql);
-                n++;
+                progressLogger.recordExportedRow();
                 if (sqlList.size() >= BATCH_SIZE || resultSet.isLast()) {
                     writeSqlList(writer, sqlList);
-                    asyncContext.info(DateUtil.formatTime(new Date()) + ":" + String.format("Exported %d rows", n));
-
                 }
             }
-        }, asyncContext, asyncContext::checkCancelled);
+        }, context, context::checkCancelled);
     }
 
     private List<String> extractRowData(ResultSet resultSet, IValueProcessor valueProcessor) throws SQLException {
@@ -182,12 +182,45 @@ public class SqlDataExporter extends BaseExporter {
         return primaryKeyMap;
     }
 
-    private void writeSqlList(PrintWriter writer, List<String> sqlList) {
-        if(CollectionUtils.isEmpty(sqlList)){
+    BufferedWriter createWriter(File file) throws IOException {
+        return Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8);
+    }
+
+    void writeSqlList(BufferedWriter writer, List<String> sqlList) {
+        if (CollectionUtils.isEmpty(sqlList)) {
             return;
         }
-        sqlList.forEach(writer::println);
-        sqlList.clear();
+        try {
+            for (String sql : sqlList) {
+                writer.write(sql);
+                writer.newLine();
+            }
+            sqlList.clear();
+        } catch (IOException e) {
+            throw fileWriteFailure(e);
+        }
+    }
+
+    private void writeSqlLine(BufferedWriter writer, String sql) {
+        try {
+            writer.write(sql);
+            writer.newLine();
+        } catch (IOException e) {
+            throw fileWriteFailure(e);
+        }
+    }
+
+    private void flush(BufferedWriter writer) {
+        try {
+            writer.flush();
+        } catch (IOException e) {
+            throw fileWriteFailure(e);
+        }
+    }
+
+    private TaskExecutionException fileWriteFailure(IOException cause) {
+        return new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
+                "Could not write SQL export", cause);
     }
 
 }

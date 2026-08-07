@@ -8,13 +8,36 @@ export interface ImportExportDataBoundInfo extends IDatabaseBaseInfo {
 
 export interface ImportExportTaskDetails {
   id: number;
-  taskName: string;
-  taskType: ImportExportTaskType;
-  taskStatus: ImportExportTaskStatus;
-  taskProgress: string;
+  name: string;
+  type: ImportExportTaskType;
+  status: ImportExportTaskStatus;
   progress: number;
-  downloadUrl: string;
-  gmtCreate: number;
-  infoLog?: string;
-  errorLog?: string;
+  stage?: string;
+  progressMessage?: string;
+  target?: {
+    dataSourceId?: number;
+    connectionName?: string;
+    databaseName?: string;
+    schemaName?: string;
+    tableName?: string;
+  };
+  errorCode?: string;
+  errorMessage?: string;
+  artifactId?: string;
+  createdAt: number | string;
+  startedAt?: number | string;
+  finishedAt?: number | string;
+  updatedAt?: number | string;
+}
+
+export interface ImportExportTaskEvent {
+  eventId: number;
+  taskId: number;
+  sequence: number;
+  level: 'INFO' | 'WARN' | 'ERROR';
+  code: string;
+  stage?: string;
+  message: string;
+  details?: Record<string, unknown>;
+  createdAt: number | string;
 }

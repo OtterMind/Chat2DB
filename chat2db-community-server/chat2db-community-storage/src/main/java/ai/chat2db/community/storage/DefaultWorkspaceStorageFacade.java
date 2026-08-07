@@ -7,11 +7,7 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
@@ -109,26 +105,6 @@ public class DefaultWorkspaceStorageFacade implements IWorkspaceStorageFacade {
     @Override
     public void deletePinTable(PinTable request) {
         storage().deletePinTable(request);
-    }
-
-    @Override
-    public PageResponse<Task> taskList(TaskRecordPageRequest taskPageRequest) {
-        return storage().taskList(taskPageRequest);
-    }
-
-    @Override
-    public Task getTask(Long id) {
-        return storage().getTask(id);
-    }
-
-    @Override
-    public Long createTask(TaskRecordCreateRequest taskCreateRequest) {
-        return storage().createTask(taskCreateRequest);
-    }
-
-    @Override
-    public void updateTask(TaskRecordUpdateRequest taskUpdateRequest) {
-        storage().updateTask(taskUpdateRequest);
     }
 
     @Override

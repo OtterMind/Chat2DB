@@ -47,7 +47,7 @@ public class OSOperateUtil {
             if (os.contains("win")) {
                 Runtime.getRuntime().exec("explorer /select," + file.getAbsolutePath());
             } else if (os.contains("mac")) {
-                Runtime.getRuntime().exec(new String[]{"open", "-R", file.getAbsolutePath()});
+                revealInFinder(file);
             } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
                 try {
                     Runtime.getRuntime().exec(new String[]{"xdg-open", file.getParent()});
@@ -61,6 +61,19 @@ public class OSOperateUtil {
         } catch (IOException e) {
             log.error(e.getMessage(), e);
         }
+    }
+
+    private static void revealInFinder(File file) throws IOException {
+        Process revealProcess = new ProcessBuilder("open", "-R", file.getAbsolutePath()).start();
+        try {
+            if (revealProcess.waitFor() != 0) {
+                throw new IOException("Finder could not reveal file: " + file.getAbsolutePath());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while revealing file in Finder", e);
+        }
+        new ProcessBuilder("open", "-a", "Finder").start();
     }
 
     public static void openTerminal(String directoryPath) throws IOException {

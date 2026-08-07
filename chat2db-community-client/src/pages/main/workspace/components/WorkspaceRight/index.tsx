@@ -8,8 +8,6 @@ import {
   RESULT_INSPECTOR_MAX_PANEL_RATIO,
 } from '@/store/workspace/utils/resultInspector';
 import SplitPane from 'react-split-pane';
-import ExportProgressBar from '@/blocks/ImportAndExport/components/ExportProgressBar';
-import { canImportExport } from '@/utils/env';
 // import DragFileToApp from '@/components/DragFileToApp';
 
 // ----- components -----
@@ -69,17 +67,10 @@ const WorkspaceRight = memo(() => {
             setPanelRightWidth(newSize);
           }}
         >
-          {/* <DragFileToApp className={styles.masterScope} onDropCallback={handleDropCallback} fileType="sql">
-            <div className={styles.masterScopeMain}>
-              <WorkspaceTabs />
-            </div>
-            <div className={styles.masterScopeBottom}>{canImportExport && <ExportProgressBar />}</div>
-          </DragFileToApp> */}
           <div className={styles.masterScope}>
             <div className={styles.masterScopeMain}>
               <WorkspaceTabs />
             </div>
-            <div className={styles.masterScopeBottom}>{canImportExport && <ExportProgressBar />}</div>
           </div>
           <Fragment>{panelRight && <WorkspaceExtendBody />}</Fragment>
         </SplitPane>

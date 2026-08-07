@@ -275,6 +275,12 @@ public class MainJFrame extends JFrame {
         Desktop desktop = Desktop.getDesktop();
         if (desktop.isSupported(Desktop.Action.APP_QUIT_HANDLER)) {
             desktop.setQuitHandler((e, response) -> {
+                if (ConfigUtils.isCommunity()) {
+                    log.info("Quit handler triggered. Waiting for active task confirmation.");
+                    response.cancelQuit();
+                    ApplicationExitCoordinator.request(ApplicationExitCoordinator.ExitAction.CLOSE.name());
+                    return;
+                }
                 log.info("Quit handler triggered. Preparing for graceful shutdown.");
                 SystemSettingsUtil.saveWindowsInfo();
                 JcefContext.getInstance().getFrame_().dispose();
@@ -798,9 +804,8 @@ public class MainJFrame extends JFrame {
                     log.info("macOS 'X' button clicked. Hiding window.");
                     setVisible(false);
                 } else {
-                    log.info("Non-macOS 'X' button clicked. Disposing window and exiting application.");
-                    JFrame frameToClose = (JFrame) e.getSource();
-                    OSOperateUtil.closeWindows(frameToClose);
+                    log.info("Non-macOS 'X' button clicked. Requesting application exit.");
+                    ApplicationExitCoordinator.request(ApplicationExitCoordinator.ExitAction.CLOSE.name());
                 }
             }
         });

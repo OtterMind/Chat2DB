@@ -10,11 +10,7 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
@@ -25,7 +21,6 @@ import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespac
 import ai.chat2db.community.storage.converter.StorageConverter;
 import ai.chat2db.community.storage.large.ConsoleStorage;
 import ai.chat2db.community.storage.large.OperationLogStorage;
-import ai.chat2db.community.storage.large.TaskStorage;
 import ai.chat2db.community.storage.small.*;
 import ai.chat2db.community.tools.security.AesGcmUtil;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -148,34 +143,6 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public void deletePinTable(PinTable request) {
         PinTableStorage.INSTANCE.delete(request);
-    }
-
-    @Override
-    public PageResponse<Task> taskList(TaskRecordPageRequest taskPageRequest) {
-        List<Task> tasks = TaskStorage.INSTANCE.getDataList();
-        return page(tasks, taskPageRequest.getPageNo(), taskPageRequest.getPageSize());
-    }
-
-    @Override
-    public Task getTask(Long id) {
-        return TaskStorage.INSTANCE.getById(id);
-    }
-
-    @Override
-    public Long createTask(TaskRecordCreateRequest taskCreateRequest) {
-        Task task = storageConverter.taskCreateParam2model(taskCreateRequest);
-        task.setId(TaskStorage.INSTANCE.generateId());
-        task.setGmtCreate(new Date());
-        task.setGmtModified(new Date());
-        TaskStorage.INSTANCE.save(task);
-        return task.getId();
-    }
-
-    @Override
-    public void updateTask(TaskRecordUpdateRequest taskUpdateRequest) {
-        Task task = storageConverter.taskUpdateParam2model(taskUpdateRequest);
-        task.setGmtModified(new Date());
-        TaskStorage.INSTANCE.update(task);
     }
 
     @Override

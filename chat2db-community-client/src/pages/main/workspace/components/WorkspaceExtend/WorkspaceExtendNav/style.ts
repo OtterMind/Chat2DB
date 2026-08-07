@@ -1,6 +1,6 @@
 import { createStyles } from 'antd-style';
 
-export const useStyles = createStyles(({ css }) => {
+export const useStyles = createStyles(({ css, prefixCls, token }) => {
   return {
     workspaceExtendNav: css`
       display: flex;
@@ -18,6 +18,39 @@ export const useStyles = createStyles(({ css }) => {
     `,
     bottomBox: css`
       flex-shrink: 0;
+    `,
+    taskNotificationBadge: css`
+      line-height: 0;
+
+      .${prefixCls}-badge-count {
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        font-size: 10px;
+        line-height: 16px;
+        pointer-events: none;
+      }
+    `,
+    taskCenterButton: css`
+      position: relative;
+      display: inline-flex;
+    `,
+    taskRunningIndicator: css`
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      padding: 1px;
+      border-radius: 50%;
+      color: ${token.colorPrimary};
+      background: ${token.colorBgBase};
+      pointer-events: none;
+      animation: task-center-running-spin 1.2s linear infinite;
+
+      @keyframes task-center-running-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
     `,
     aiButton: css`
       width: 32px;

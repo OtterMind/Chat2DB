@@ -3,7 +3,7 @@ package ai.chat2db.plugin.h2;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.h2.identifier.H2IdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
@@ -23,13 +23,15 @@ public class H2DBManager extends DefaultDBManager implements IDbManager {
 
 
     @Override
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        exportSchema(connection, schemaName, asyncContext);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        exportSchema(connection, schemaName, containData, context);
     }
 
-    private void exportSchema(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportSchema(Connection connection, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
         String template = "SCRIPT NODATA NOPASSWORDS NOSETTINGS DROP SCHEMA %s;";
-        if (asyncContext.isContainsData()) {
+        if (containData) {
             template = template.replace("NODATA", "");
         }
         String sql = String.format(template, H2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName));
@@ -40,7 +42,7 @@ public class H2DBManager extends DefaultDBManager implements IDbManager {
                     StringBuilder sqlBuilder = new StringBuilder();
                     sqlBuilder.append(script);
                     sqlBuilder.append("\n");
-                    asyncContext.write(sqlBuilder.toString());
+                    context.write(sqlBuilder.toString());
                 }
             }
         }

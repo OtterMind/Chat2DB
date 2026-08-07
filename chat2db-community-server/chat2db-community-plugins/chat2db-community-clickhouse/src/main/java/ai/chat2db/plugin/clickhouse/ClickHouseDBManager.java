@@ -3,10 +3,9 @@ package ai.chat2db.plugin.clickhouse;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.clickhouse.identifier.ClickHouseIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import cn.hutool.core.date.DateUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,16 +25,19 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
     private static final Logger log = LoggerFactory.getLogger(ClickHouseDBManager.class);
 
     @Override
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting TablesOrViewsOrDictionaries");
-        exportTablesOrViewsOrDictionaries(connection, databaseName, schemaName, asyncContext);
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting functions");
-        asyncContext.setProgress(80);
-        exportFunctions(connection, asyncContext);
-        asyncContext.setProgress(99);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        logDatabaseObjectExportStarted(context, "tables, views, and dictionaries");
+        exportTablesOrViewsOrDictionaries(connection, databaseName, schemaName, containData, context);
+        logDatabaseObjectExportCompleted(context, "tables, views, and dictionaries");
+        logDatabaseObjectExportStarted(context, "functions");
+        context.reportProgress(80, EXPORT_TASK_STAGE, "Exporting functions");
+        exportFunctions(connection, context);
+        logDatabaseObjectExportCompleted(context, "functions");
+        context.reportProgress(99, EXPORT_TASK_STAGE, "Database export almost complete");
     }
 
-    private void exportFunctions(Connection connection, AsyncContext asyncContext) throws SQLException {
+    private void exportFunctions(Connection connection, TaskExecutionContext context) throws SQLException {
         String sql = "SELECT name,create_query from system.functions where origin='SQLUserDefined'";
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
@@ -43,12 +45,13 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
                 sqlBuilder.append(SQL_DROP_FUNCTION_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(resultSet.getString("name"))).append(";")
                         .append("\n")
                         .append(resultSet.getString("create_query")).append(";").append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         }
     }
 
-    private void exportTablesOrViewsOrDictionaries(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTablesOrViewsOrDictionaries(Connection connection, String databaseName, String schemaName,
+            boolean containData, TaskExecutionContext context) throws SQLException {
         String sql = String.format(SQL_SELECT_CREATE_TABLE_QUERY_HAS, ClickHouseIdentifierProcessor.INSTANCE.escapeString(databaseName));
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
@@ -61,19 +64,19 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
                     StringBuilder sqlBuilder = new StringBuilder();
                     sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
-                    asyncContext.write(sqlBuilder.toString());
+                    context.write(sqlBuilder.toString());
                 } else if (Objects.equals("Dictionary", tableType)) {
                     StringBuilder sqlBuilder = new StringBuilder();
                     sqlBuilder.append(SQL_DROP_DICTIONARY_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
-                    asyncContext.write(sqlBuilder.toString());
+                    context.write(sqlBuilder.toString());
                 } else {
                     StringBuilder sqlBuilder = new StringBuilder();
                     sqlBuilder.append(SQL_DROP_TABLE_EXISTS).append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(databaseName)).append(".").append(ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableOrViewName))
                             .append(";").append("\n").append(ddl).append(";").append("\n");
-                    asyncContext.write(sqlBuilder.toString());
-                    if (asyncContext.isContainsData() && dataFlag) {
-                        exportTableData(connection, databaseName, schemaName, tableOrViewName, asyncContext);
+                    context.write(sqlBuilder.toString());
+                    if (containData && dataFlag) {
+                        exportTableData(connection, databaseName, schemaName, tableOrViewName, context);
                     }
                 }
             }

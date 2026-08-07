@@ -7,14 +7,15 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { useImportExportStore } from '@/store/importExport';
 import { useStyles } from './style';
 import { canImportExport, isDesktop } from '@/utils/env';
-import { Divider } from 'antd';
+import { Badge, Divider } from 'antd';
 import { useAIStore } from '@/store/ai';
 import AIButton from '@/blocks/AI/components/AIButton';
-import { Terminal } from 'lucide-react';
+import { LoaderCircle, Terminal } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import jcefApi from '@/jcef';
 import { createQuickTerminalTab } from './quickTerminal';
 import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
+import TaskCenter from '@/blocks/ImportAndExport/components/TaskCenter';
 
 interface IToolbar {
   code: string;
@@ -42,12 +43,10 @@ export default (props: IProps) => {
       setCurrentWorkspaceExtend: state.setCurrentWorkspaceExtend,
     };
   });
-  const { showExportToolbar, setShowExportToolbar } = useImportExportStore((state) => {
-    return {
-      showExportToolbar: state.showExportToolbar,
-      setShowExportToolbar: state.setShowExportToolbar,
-    };
-  });
+  const { currentTask, unreadCompletedTaskCount } = useImportExportStore((state) => ({
+    currentTask: state.currentTask,
+    unreadCompletedTaskCount: state.unreadCompletedTaskCount,
+  }));
   const { showPanel: showAIPanel } = useAIStore((state) => ({
     showPanel: state.showPanel,
   }));
@@ -71,10 +70,9 @@ export default (props: IProps) => {
         rows: 30,
         shellId: terminalShellId,
       });
-      addWorkspaceTab(
-        createQuickTerminalTab(terminal, i18n('workspace.terminal.title'), terminalOpenPosition),
-        { activate: terminalOpenPosition === 'tab' },
-      );
+      addWorkspaceTab(createQuickTerminalTab(terminal, i18n('workspace.terminal.title'), terminalOpenPosition), {
+        activate: terminalOpenPosition === 'tab',
+      });
     } catch (error) {
       console.error('create terminal error', error);
       staticMessage.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
@@ -129,14 +127,27 @@ export default (props: IProps) => {
       </div>
       <div className={styles.bottomBox}>
         {canImportExport && (
-          <IconButton
-            size="lg"
-            title={i18n('workspace.title.exportProgressBar')}
-            tooltipPlacement="left"
-            code="icon-export-details"
-            isActive={showExportToolbar}
-            onClick={() => setShowExportToolbar(!showExportToolbar)}
-          />
+          <TaskCenter>
+            {(open) => (
+              <Badge
+                className={styles.taskNotificationBadge}
+                count={unreadCompletedTaskCount}
+                offset={[-3, 3]}
+                overflowCount={Number.MAX_SAFE_INTEGER}
+              >
+                <span className={styles.taskCenterButton}>
+                  <IconButton
+                    size="lg"
+                    title={i18n('workspace.title.exportProgressBar')}
+                    tooltipPlacement="left"
+                    code="icon-export-details"
+                    isActive={open}
+                  />
+                  {currentTask && <LoaderCircle aria-hidden className={styles.taskRunningIndicator} size={12} />}
+                </span>
+              </Badge>
+            )}
+          </TaskCenter>
         )}
 
         {/* <Tooltip title={i18n('workspace.title.ai')} placement="left">

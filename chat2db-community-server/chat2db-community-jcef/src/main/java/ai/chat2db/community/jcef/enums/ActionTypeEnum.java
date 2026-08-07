@@ -10,7 +10,8 @@ public enum ActionTypeEnum {
     OPEN_FILE("open_file", "Open specified file"),
     OSS_LOGIN("oss_login", "Single sign-on"),
     TERMINAL_OUTPUT("terminal_output", "Integrated terminal output"),
-    TERMINAL_EXIT("terminal_exit", "Integrated terminal exit")
+    TERMINAL_EXIT("terminal_exit", "Integrated terminal exit"),
+    APP_EXIT_REQUESTED("app_exit_requested", "Application exit requested")
     ;
 
     @Getter

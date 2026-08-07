@@ -68,10 +68,7 @@ import {
   retainLatestResultBatches,
   shouldAcceptExecutionResult,
 } from '@/service/sqlExecutionBatch';
-import {
-  planSqlExecutionRetention,
-  type SqlExecutionRetentionPreferences,
-} from '@/service/sqlExecutionRetention';
+import { planSqlExecutionRetention, type SqlExecutionRetentionPreferences } from '@/service/sqlExecutionRetention';
 import {
   beginWebSqlExecution,
   clearSqlExecutionLog,
@@ -220,21 +217,12 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const closedSqlExecutionResultsRef = useRef<ClosedSqlExecutionResults>(new Map());
   const [sqlExecutionLogState, setSqlExecutionLogState] = useState(createSqlExecutionLogState);
   const [keepExecutionLogHistory, setKeepExecutionLogHistory] = useState(() =>
-    readExecutionConsoleKeepHistory(
-      getExecutionConsolePreferenceStorage(),
-      KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY,
-    ),
+    readExecutionConsoleKeepHistory(getExecutionConsolePreferenceStorage(), KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY),
   );
-  const [resultHistoryMode, dispatchResultHistoryMode] = useReducer(
-    reduceSqlResultHistoryMode,
-    undefined,
-    () =>
-      createSqlResultHistoryMode(
-        readResultTabKeepHistory(
-          getResultTabPreferenceStorage(),
-          KEEP_RESULT_HISTORY_STORAGE_KEY,
-        ),
-      ),
+  const [resultHistoryMode, dispatchResultHistoryMode] = useReducer(reduceSqlResultHistoryMode, undefined, () =>
+    createSqlResultHistoryMode(
+      readResultTabKeepHistory(getResultTabPreferenceStorage(), KEEP_RESULT_HISTORY_STORAGE_KEY),
+    ),
   );
   const {
     keepHistory: keepResultHistory,
@@ -263,11 +251,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   );
   const handleKeepResultHistoryChange = useCallback((keepHistory: boolean) => {
     dispatchResultHistoryMode({ type: 'setPreference', keepHistory });
-    persistResultTabKeepHistory(
-      getResultTabPreferenceStorage(),
-      KEEP_RESULT_HISTORY_STORAGE_KEY,
-      keepHistory,
-    );
+    persistResultTabKeepHistory(getResultTabPreferenceStorage(), KEEP_RESULT_HISTORY_STORAGE_KEY, keepHistory);
   }, []);
   useEffect(
     () =>
@@ -292,48 +276,39 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     if (existingSequence !== undefined) {
       return existingSequence;
     }
-    const displayBatchSequence = getNextResultDisplayBatchSequence(
-      resultDisplayBatchSequenceRef.current,
-      false,
-    );
+    const displayBatchSequence = getNextResultDisplayBatchSequence(resultDisplayBatchSequenceRef.current, false);
     resultDisplayBatchSequenceRef.current = displayBatchSequence;
     resultDisplayBatchSequenceByExecutionRef.current[executionSequence] = displayBatchSequence;
     return displayBatchSequence;
   }, []);
-  const beginExecutionBatch = useCallback(
-    (retentionPreferences: SqlExecutionRetentionPreferences) => {
-      const {
-        keepResultHistory: keepResultHistoryForExecution,
-        resetResultSession,
-      } = retentionPreferences;
-      const { keepExistingOutput, keepExistingResults } = planSqlExecutionRetention(retentionPreferences);
-      const executionSequence = executionSequenceRef.current + 1;
-      executionSequenceRef.current = executionSequence;
-      const displayBatchSequence = getNextResultDisplayBatchSequence(
-        resultDisplayBatchSequenceRef.current,
-        resetResultSession,
-      );
-      resultDisplayBatchSequenceRef.current = displayBatchSequence;
-      resultDisplayBatchSequenceByExecutionRef.current[executionSequence] = displayBatchSequence;
-      keepExistingOutputByExecutionSequenceRef.current[executionSequence] = keepExistingOutput;
-      dispatchResultHistoryMode({
-        type: 'beginExecution',
-        keepHistory: keepResultHistoryForExecution,
-      });
-      setForceOutputTab(false);
-      if (!keepExistingResults) {
-        latestResultReplacementExecutionSequenceRef.current = executionSequence;
-        setResultDataList([]);
-      }
-      setResultBatchKey((value) => value + 1);
-      return {
-        executionSequence,
-        displayBatchSequence,
-        keepExistingOutput,
-      };
-    },
-    [],
-  );
+  const beginExecutionBatch = useCallback((retentionPreferences: SqlExecutionRetentionPreferences) => {
+    const { keepResultHistory: keepResultHistoryForExecution, resetResultSession } = retentionPreferences;
+    const { keepExistingOutput, keepExistingResults } = planSqlExecutionRetention(retentionPreferences);
+    const executionSequence = executionSequenceRef.current + 1;
+    executionSequenceRef.current = executionSequence;
+    const displayBatchSequence = getNextResultDisplayBatchSequence(
+      resultDisplayBatchSequenceRef.current,
+      resetResultSession,
+    );
+    resultDisplayBatchSequenceRef.current = displayBatchSequence;
+    resultDisplayBatchSequenceByExecutionRef.current[executionSequence] = displayBatchSequence;
+    keepExistingOutputByExecutionSequenceRef.current[executionSequence] = keepExistingOutput;
+    dispatchResultHistoryMode({
+      type: 'beginExecution',
+      keepHistory: keepResultHistoryForExecution,
+    });
+    setForceOutputTab(false);
+    if (!keepExistingResults) {
+      latestResultReplacementExecutionSequenceRef.current = executionSequence;
+      setResultDataList([]);
+    }
+    setResultBatchKey((value) => value + 1);
+    return {
+      executionSequence,
+      displayBatchSequence,
+      keepExistingOutput,
+    };
+  }, []);
   const cleanupDesktopExecutionRequest = useCallback((requestSequence: number, executionId?: string) => {
     const executionSequence = executionSequenceByRequestRef.current[requestSequence];
     if (executionId) {
@@ -404,12 +379,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           executionSequence,
         ),
       );
-      if (
-        !shouldAcceptExecutionResult(
-          executionSequence,
-          latestResultReplacementExecutionSequenceRef.current,
-        )
-      ) {
+      if (!shouldAcceptExecutionResult(executionSequence, latestResultReplacementExecutionSequenceRef.current)) {
         cleanupTerminalExecution();
         return;
       }
@@ -587,10 +557,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
   // Whether to show the split panel.
   const isSplitPane = useMemo(() => {
-    const _isSplitPane =
-      resultDataList.length > 0 ||
-      sqlExecutionLogState.records.length > 0 ||
-      executing === true;
+    const _isSplitPane = resultDataList.length > 0 || sqlExecutionLogState.records.length > 0 || executing === true;
     if (!_isSplitPane) {
       setBoxRightConsoleHeight(0);
     }
@@ -654,10 +621,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           ({ executionId }) => executionSequenceByIdRef.current[executionId] !== undefined,
         ),
       );
-      const nextResultDataList = sortExecutionResults([
-        ...params.resultDataList,
-        ...params.historyResultDataList,
-      ]);
+      const nextResultDataList = sortExecutionResults([...params.resultDataList, ...params.historyResultDataList]);
       setResultDataList(nextResultDataList);
     },
     [],
@@ -718,20 +682,73 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     if (webExecutionId) {
       executionSequenceByIdRef.current[webExecutionId] = executionSequence;
       setSqlExecutionLogState((state) =>
-        beginWebSqlExecution(
-          prepareSqlExecutionLogForExecution(state, webExecutionId, keepExistingOutput),
-          {
-            executionId: webExecutionId,
-            executionSequence,
-            sql: params.sql,
-            context: executionLogContext,
-          },
-        ),
+        beginWebSqlExecution(prepareSqlExecutionLogForExecution(state, webExecutionId, keepExistingOutput), {
+          executionId: webExecutionId,
+          executionSequence,
+          sql: params.sql,
+          context: executionLogContext,
+        }),
       );
     }
 
-    return executeSQL(executeSqlParams).then((res) => {
-      if (!res?.length) {
+    return executeSQL(executeSqlParams)
+      .then((res) => {
+        if (!res?.length) {
+          if (webExecutionId) {
+            setSqlExecutionLogState((state) =>
+              completeWebSqlExecution(state, {
+                executionId: webExecutionId,
+                executionSequence,
+                sql: params.sql,
+                context: executionLogContext,
+                results: [],
+              }),
+            );
+          }
+          return;
+        }
+        const _resultDataList = processResultDataList(res, executeSqlParams).map((item, index) => {
+          const sql = item.originalSql || params.sql;
+          const statementSequence = item.statementSequence ?? (Number(item.extra?.statementSequence) || index + 1);
+          const resultSequence = Number(item.extra?.streamResultId) || index + 1;
+          const executionId = webExecutionId || `legacy-${executionSequence}`;
+          const itemWithIdentity = attachExecutionIdentity(item, executionId, statementSequence);
+          return {
+            ...itemWithIdentity,
+            extra: {
+              ...(itemWithIdentity.extra || {}),
+              executionSequence,
+              statementSequence,
+              resultKey: buildResultKey(executionId, statementSequence, resultSequence),
+              resultSequence,
+            },
+            displayName: getResultDisplayName({
+              executionSequence: displayBatchSequence,
+              statementSequence,
+              resultSequence: item.resultSetId || resultSequence,
+              sql,
+            }),
+          };
+        });
+
+        if (boundInfo.databaseType) {
+          // Refresh the tree; only relational databases are supported.
+          handleRefreshTreeByExecuteSQL(_resultDataList, boundInfo.databaseType);
+        }
+
+        if (shouldAcceptExecutionResult(executionSequence, latestResultReplacementExecutionSequenceRef.current)) {
+          setResultDataList((prev) => {
+            const nextResultDataList = _resultDataList.reduce((currentResultDataList, item) => {
+              return upsertResultFinished(currentResultDataList, item);
+            }, prev);
+            const sortedResultDataList = retainLatestResultBatches(
+              sortExecutionResults(nextResultDataList),
+              HISTORY_BATCH_LIMIT,
+            );
+            return sortedResultDataList;
+          });
+        }
+
         if (webExecutionId) {
           setSqlExecutionLogState((state) =>
             completeWebSqlExecution(state, {
@@ -739,81 +756,21 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
               executionSequence,
               sql: params.sql,
               context: executionLogContext,
-              results: [],
+              results: _resultDataList,
             }),
           );
         }
-        return;
-      }
-      const _resultDataList = processResultDataList(res, executeSqlParams).map((item, index) => {
-        const sql = item.originalSql || params.sql;
-        const statementSequence = item.statementSequence ?? (Number(item.extra?.statementSequence) || index + 1);
-        const resultSequence = Number(item.extra?.streamResultId) || index + 1;
-        const executionId = webExecutionId || `legacy-${executionSequence}`;
-        const itemWithIdentity = attachExecutionIdentity(item, executionId, statementSequence);
-        return {
-          ...itemWithIdentity,
-          extra: {
-            ...(itemWithIdentity.extra || {}),
-            executionSequence,
-            statementSequence,
-            resultKey: buildResultKey(executionId, statementSequence, resultSequence),
-            resultSequence,
+
+        const data = res.filter((item) => item.dataList !== null);
+
+        onExecuteSQLCallback?.({
+          databaseInfo: {
+            ...boundInfo,
+            ...params,
           },
-          displayName: getResultDisplayName({
-            executionSequence: displayBatchSequence,
-            statementSequence,
-            resultSequence: item.resultSetId || resultSequence,
-            sql,
-          }),
-        };
-      });
-
-      if (boundInfo.databaseType) {
-        // Refresh the tree; only relational databases are supported.
-        handleRefreshTreeByExecuteSQL(_resultDataList, boundInfo.databaseType);
-      }
-
-      if (
-        shouldAcceptExecutionResult(
-          executionSequence,
-          latestResultReplacementExecutionSequenceRef.current,
-        )
-      ) {
-        setResultDataList((prev) => {
-          const nextResultDataList = _resultDataList.reduce((currentResultDataList, item) => {
-            return upsertResultFinished(currentResultDataList, item);
-          }, prev);
-          const sortedResultDataList = retainLatestResultBatches(
-            sortExecutionResults(nextResultDataList),
-            HISTORY_BATCH_LIMIT,
-          );
-          return sortedResultDataList;
+          data,
         });
-      }
-
-      if (webExecutionId) {
-        setSqlExecutionLogState((state) =>
-          completeWebSqlExecution(state, {
-            executionId: webExecutionId,
-            executionSequence,
-            sql: params.sql,
-            context: executionLogContext,
-            results: _resultDataList,
-          }),
-        );
-      }
-
-      const data = res.filter((item) => item.dataList !== null);
-
-      onExecuteSQLCallback?.({
-        databaseInfo: {
-          ...boundInfo,
-          ...params,
-        },
-        data,
-      });
-    })
+      })
       .catch((error) => {
         if (executionSequence === executionSequenceRef.current) {
           setForceOutputTab(true);
