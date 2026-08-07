@@ -34,6 +34,13 @@ public class SqlGenerateUtil {
                     return handleDistinct(originalSql);
                 }
 
+                // If the query has a GROUP BY, in-place rewrite to COUNT(*) would
+                // return one row per group. Wrap in a subquery instead.
+                if (selectBody instanceof PlainSelect plainSelect
+                        && plainSelect.getGroupBy() != null) {
+                    return buildSubQuery(originalSql);
+                }
+
                 SelectCountVisitor visitor = new SelectCountVisitor();
                 selectBody.accept(visitor);
                 return select.toString();
@@ -59,6 +66,11 @@ public class SqlGenerateUtil {
         SQLSelectQueryBlock query = ((SQLSelectStatement) stmt).getSelect().getQueryBlock();
         if (query.getDistionOption() != 0) {
             return handleDistinct(originalSql);
+        }
+        // If the query has a GROUP BY, in-place rewrite to COUNT(*) would
+        // return one row per group. Wrap in a subquery instead.
+        if (query.getGroupBy() != null) {
+            return buildSubQuery(originalSql);
         }
         query.getSelectList().clear();
         SQLAggregateExpr countExpr = new SQLAggregateExpr("COUNT");
