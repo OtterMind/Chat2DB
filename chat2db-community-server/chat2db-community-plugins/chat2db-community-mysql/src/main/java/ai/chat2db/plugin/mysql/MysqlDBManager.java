@@ -255,22 +255,34 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public String analyzeTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return SQL_ANALYZE_TABLE + format(tableName);
+        return SQL_ANALYZE_TABLE + qualifiedTableName(databaseName, tableName);
     }
 
     @Override
     public String optimizeTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return SQL_OPTIMIZE_TABLE + format(tableName);
+        return SQL_OPTIMIZE_TABLE + qualifiedTableName(databaseName, tableName);
     }
 
     @Override
     public String checkTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return SQL_CHECK_TABLE + format(tableName);
+        return SQL_CHECK_TABLE + qualifiedTableName(databaseName, tableName);
     }
 
     @Override
     public String repairTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return SQL_REPAIR_TABLE + format(tableName);
+        return SQL_REPAIR_TABLE + qualifiedTableName(databaseName, tableName);
+    }
+
+    /**
+     * Qualifies the table with its database so a maintenance statement runs against the
+     * table the user selected in the object tree, not whatever database the connection
+     * currently defaults to.
+     */
+    private static String qualifiedTableName(String databaseName, String tableName) {
+        if (StringUtils.hasText(databaseName)) {
+            return format(databaseName) + SQLConstants.DOT + format(tableName);
+        }
+        return format(tableName);
     }
 
     @Override
