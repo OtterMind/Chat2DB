@@ -223,11 +223,18 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                 Element rootElement = document.getDocumentElement();
                 WorkspaceDataSource dataSourceDO = new WorkspaceDataSource();
                 dataSourceDO.setAlias(rootElement.getAttribute("name"));
-                Element databaseInfoElement = (Element) rootElement.getElementsByTagName("database-info").item(0);
-                String type = databaseInfoElement.getAttribute("dbms");
-                String jdbcUrl = rootElement.getElementsByTagName("jdbc-url").item(0).getTextContent();
-                String username = rootElement.getElementsByTagName("user-name").item(0).getTextContent();
-                String driverName = rootElement.getElementsByTagName("jdbc-driver").item(0).getTextContent();
+                Node dbInfoNode = rootElement.getElementsByTagName("database-info").item(0);
+                Node jdbcUrlNode = rootElement.getElementsByTagName("jdbc-url").item(0);
+                Node userNameNode = rootElement.getElementsByTagName("user-name").item(0);
+                Node driverNameNode = rootElement.getElementsByTagName("jdbc-driver").item(0);
+                if (dbInfoNode == null || jdbcUrlNode == null || userNameNode == null || driverNameNode == null) {
+                    log.warn("datagrip import: missing required XML element for connection, skipping");
+                    continue;
+                }
+                String type = ((Element) dbInfoNode).getAttribute("dbms");
+                String jdbcUrl = jdbcUrlNode.getTextContent();
+                String username = userNameNode.getTextContent();
+                String driverName = driverNameNode.getTextContent();
                 String host = "";
                 String port = "";
                 if (type.equals(DataBaseTypeEnum.ORACLE.name())) {
