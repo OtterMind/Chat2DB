@@ -48,6 +48,7 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_CHARSET = "Charset";
     public static final String FIELD_DEFAULT_COLLATION = "Default collation";
     public static final String FIELD_COLLATION = "Collation";
+    public static final String FIELD_COLLATION_CHARSET = "Charset";
     public static final String FIELD_SUPPORT = "Support";
     public static final String FIELD_ENGINE = "Engine";
     public static final String FIELD_AUTO_INCREMENT = "AUTO_INCREMENT";

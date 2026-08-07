@@ -5,6 +5,8 @@ export interface IBaseInfo {
   name: string;
   comment?: string | null;
   charset: string | null; // character set
+  collation?: string | null; // collation (form field)
+  collate?: string | null; // collation mapped to the backend Table.collate field
   engine: string | null; // engine
   incrementValue: string | null; // self-added value
 }

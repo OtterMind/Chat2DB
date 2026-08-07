@@ -311,6 +311,12 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revoke privileges',
   'workspace.databaseAccount.lockUnsupported':
     'Account lock is not supported by this MySQL version or current account privileges',
+  'workspace.ops.databaseProperties': 'Database Properties',
+  'workspace.ops.charset': 'Character Set',
+  'workspace.ops.collation': 'Collation',
+  'workspace.ops.charsetHint': 'Changing the default does not convert existing column data.',
+  'workspace.ops.previewSql': 'SQL Preview',
+  'workspace.ops.noChange': 'No changes to save',
   'workspace.routine.button.invoke': 'Invoke routine',
   'workspace.routine.button.apply': 'Apply changes',
   'workspace.routine.button.refresh': 'Reload DDL',
