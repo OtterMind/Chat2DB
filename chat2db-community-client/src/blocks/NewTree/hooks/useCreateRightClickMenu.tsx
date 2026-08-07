@@ -266,10 +266,15 @@ END;`
           databaseName: dbName,
         },
       });
-      appendConsole({
-        id: ['mysql-event', dsId, dbName, eventName || 'new'].join('-'),
-        content: template,
-      });
+      const tabId = ['mysql-event', dsId, dbName, eventName || 'new'].join('-');
+      // The editor instance registers asynchronously after addWorkspaceTab; appendConsole
+      // silently drops content when the editor is not mounted yet, so defer the fill.
+      window.setTimeout(() => {
+        appendConsole({
+          id: tabId,
+          content: template,
+        });
+      }, 300);
     };
 
     const setEventEnabled = ({
