@@ -36,6 +36,10 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_VIEW_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_PROCEDURE_STATUS;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_TRIGGERS;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ANALYZE_TABLE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_OPTIMIZE_TABLE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_CHECK_TABLE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_REPAIR_TABLE;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlDBManagerConstants.*;
 @Slf4j
@@ -247,6 +251,38 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     @Override
     public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
         return String.format(SQL_TRUNCATE_TABLE_TEMPLATE, format(tableName));
+    }
+
+    @Override
+    public String analyzeTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return SQL_ANALYZE_TABLE + qualifiedTableName(databaseName, tableName);
+    }
+
+    @Override
+    public String optimizeTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return SQL_OPTIMIZE_TABLE + qualifiedTableName(databaseName, tableName);
+    }
+
+    @Override
+    public String checkTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return SQL_CHECK_TABLE + qualifiedTableName(databaseName, tableName);
+    }
+
+    @Override
+    public String repairTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return SQL_REPAIR_TABLE + qualifiedTableName(databaseName, tableName);
+    }
+
+    /**
+     * Qualifies the table with its database so a maintenance statement runs against the
+     * table the user selected in the object tree, not whatever database the connection
+     * currently defaults to.
+     */
+    private static String qualifiedTableName(String databaseName, String tableName) {
+        if (StringUtils.hasText(databaseName)) {
+            return format(databaseName) + SQLConstants.DOT + format(tableName);
+        }
+        return format(tableName);
     }
 
     @Override

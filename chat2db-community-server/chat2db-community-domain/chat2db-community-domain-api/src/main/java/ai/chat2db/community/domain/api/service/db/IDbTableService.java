@@ -154,6 +154,15 @@ public interface IDbTableService {
     void truncateTable(DbTableQueryRequest dbTableQueryRequest);
 
     /**
+     * Generates maintenance SQL for a table operation.
+     *
+     * @param dbTableQueryRequest table query parameters.
+     * @param operationType maintenance operation: ANALYZE, OPTIMIZE, CHECK, or REPAIR.
+     * @return generated SQL string.
+     */
+    String maintenanceSql(DbTableQueryRequest dbTableQueryRequest, String operationType);
+
+    /**
      * Copies a table in the current connection scope.
      *
      * @param dbTableCopyRequest table copy parameters.

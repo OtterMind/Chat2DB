@@ -105,6 +105,10 @@ export enum OperationColumn {
   ViewERModal = 'viewERModal', // View ER diagram
   GenerateCRUD = 'generateCRUD', // Generate CRUD
   GenerateTestData = 'generateTestData', // Generate test data
+  AnalyzeTable = 'analyzeTable', // Analyze table
+  OptimizeTable = 'optimizeTable', // Optimize table
+  CheckTable = 'checkTable', // Check table
+  RepairTable = 'repairTable', // Repair table
   OpenConsole = 'openConsole', // open console
   RemoveConsole = 'removeConsole',
   // Run sql file
