@@ -160,6 +160,8 @@ public class TableColumn implements Serializable {
 
 
     private Boolean generatedColumn;
+    private String generationExpression;
+    private String generatedColumnType;
 
 
     private String extent;
