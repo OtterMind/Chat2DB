@@ -71,6 +71,22 @@ export interface IUpdateDetail {
   version?: string; // Latest version number
 }
 
+export type McpRuntimeState = 'UNKNOWN' | 'STARTING' | 'RUNNING' | 'STOPPED' | 'FAILED';
+
+export interface McpStatus {
+  operationId: string;
+  configuredEnabled: boolean;
+  appliedEnabled: boolean;
+  runtimeState: McpRuntimeState;
+  restartRequired: boolean;
+  failureMessage?: string;
+}
+
+export interface McpRestartResult {
+  operationId: string;
+  accepted: boolean;
+}
+
 export interface DataTableSettings {
   selectionMetrics?: [SelectionMetricId, SelectionMetricId, SelectionMetricId];
   showFieldType?: boolean;

@@ -73,6 +73,9 @@ export default {
     'このトークンはデスクトップ版 MCP 認証に使います。リセットするとアクセス資格情報を即時ローテーションします。',
   'setting.text.mcpTokenResetConfirm': 'MCPトークンを今リセットしますか？',
   'setting.text.mcpTokenResetSuccess': 'MCPトークンをリセットしました。',
+  'setting.mcp.tokenLoadFailed': 'MCP トークンを読み込めませんでした。',
+  'setting.mcp.restartAlreadyInProgress': 'アプリはすでに再起動中です。',
+  'setting.mcp.operationFailed': 'MCP 操作に失敗しました',
   'setting.title.networkProxy': 'ネットワークプロキシ',
   'setting.text.networkProxyDescribe':
     'Chat2DB が外部ネットワークへアクセスするときに使うアプリケーションプロキシを設定します。',
