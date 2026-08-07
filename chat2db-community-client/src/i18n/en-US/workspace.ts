@@ -327,7 +327,7 @@ export default {
   'workspace.ops.partitionCoalesce': 'COALESCE',
   'workspace.ops.partitionDestructiveHint': 'DROP/TRUNCATE permanently removes the partition data.',
   'workspace.ops.partitionFailed': 'Partition operation failed',
-  'workspace.ops.partitionMethodHint': 'Method: {0}',
+  'workspace.ops.partitionMethodHint': 'Method: {1}',
   'workspace.ops.partitionEmpty': 'The table is not partitioned.',
   'workspace.routine.button.invoke': 'Invoke routine',
   'workspace.routine.button.apply': 'Apply changes',

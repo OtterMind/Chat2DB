@@ -318,7 +318,7 @@ export default {
   'workspace.ops.partitionCoalesce': 'COALESCE',
   'workspace.ops.partitionDestructiveHint': 'DROP/TRUNCATE 将永久删除分区数据。',
   'workspace.ops.partitionFailed': '分区操作失败',
-  'workspace.ops.partitionMethodHint': '方式：{0}',
+  'workspace.ops.partitionMethodHint': '方式：{1}',
   'workspace.ops.partitionEmpty': '该表未分区。',
   'workspace.routine.button.invoke': '调用例程',
   'workspace.routine.button.apply': '提交变更',

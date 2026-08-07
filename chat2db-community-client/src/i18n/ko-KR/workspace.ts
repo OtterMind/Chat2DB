@@ -325,7 +325,7 @@ export default {
   'workspace.ops.partitionCoalesce': 'COALESCE',
   'workspace.ops.partitionDestructiveHint': 'DROP/TRUNCATE는 파티션 데이터를 영구 삭제합니다.',
   'workspace.ops.partitionFailed': '파티션 작업 실패',
-  'workspace.ops.partitionMethodHint': '방식: {0}',
+  'workspace.ops.partitionMethodHint': '방식: {1}',
   'workspace.ops.partitionEmpty': '테이블이 파티션되지 않았습니다.',
   'workspace.routine.button.invoke': '루틴 호출',
   'workspace.routine.button.apply': '변경 사항 적용',

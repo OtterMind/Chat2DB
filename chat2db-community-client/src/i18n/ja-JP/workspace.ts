@@ -327,7 +327,7 @@ export default {
   'workspace.ops.partitionCoalesce': 'COALESCE',
   'workspace.ops.partitionDestructiveHint': 'DROP/TRUNCATE はパーティションのデータを完全に削除します。',
   'workspace.ops.partitionFailed': 'パーティション操作に失敗しました',
-  'workspace.ops.partitionMethodHint': '方法: {0}',
+  'workspace.ops.partitionMethodHint': '方法: {1}',
   'workspace.ops.partitionEmpty': 'テーブルはパーティション化されていません。',
   'workspace.routine.button.invoke': 'ルーチンを呼び出す',
   'workspace.routine.button.apply': '変更を適用',
