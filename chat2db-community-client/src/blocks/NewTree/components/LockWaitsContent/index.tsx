@@ -96,7 +96,7 @@ const LockWaitsContent = () => {
               children: (
                 <Table
                   size="small"
-                  rowKey={(r) => r.ENGINE_LOCK_ID ?? r.lock_id ?? Math.random().toString()}
+                  rowKey={(r, index) => r.ENGINE_LOCK_ID ?? r.lock_id ?? `lock-${index}`}
                   columns={lockColumns}
                   dataSource={view.dataLocks}
                   loading={loading}
