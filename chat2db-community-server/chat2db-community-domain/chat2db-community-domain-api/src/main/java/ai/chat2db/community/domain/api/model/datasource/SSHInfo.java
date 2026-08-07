@@ -81,4 +81,14 @@ public class SSHInfo {
         return Objects.hash(use, hostName, port, userName, localPort, authenticationType, password, keyFile, passphrase,
             rHost, rPort);
     }
+
+    @Override
+    public String toString() {
+        // Exclude password/passphrase/keyFile so SSH connection/port-forwarding error
+        // logs do not leak credentials. Lombok @Data would otherwise include them.
+        return "SSHInfo(use=" + use + ", hostName=" + hostName + ", port=" + port
+                + ", userName=" + userName + ", localPort=" + localPort
+                + ", authenticationType=" + authenticationType
+                + ", rHost=" + rHost + ", rPort=" + rPort + ")";
+    }
 }
