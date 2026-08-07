@@ -258,15 +258,21 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         sb.append(SQL_REFERENCES);
         sb.append(quoteMysqlIdentifier(fk.getPkTableName()));
         sb.append("(").append(quoteMysqlIdentifier(fk.getPkColumnName())).append(")");
-        ForeignKeyActionEnum deleteAction = ForeignKeyActionEnum.fromJdbcCode(fk.getDeleteRule());
-        if (deleteAction != null) {
-            sb.append(SQL_ON_DELETE).append(deleteAction.sqlKeyword());
-        }
-        ForeignKeyActionEnum updateAction = ForeignKeyActionEnum.fromJdbcCode(fk.getUpdateRule());
-        if (updateAction != null) {
-            sb.append(SQL_ON_UPDATE).append(updateAction.sqlKeyword());
-        }
+        // Always emit both actions explicitly; an unknown JDBC code resolves to MySQL's
+        // default RESTRICT instead of silently omitting the clause.
+        sb.append(SQL_ON_DELETE).append(foreignKeyActionSql(fk.getDeleteRule()));
+        sb.append(SQL_ON_UPDATE).append(foreignKeyActionSql(fk.getUpdateRule()));
         return sb.toString();
+    }
+
+    /**
+     * Resolves a JDBC rule code to a SQL keyword, falling back to MySQL's default
+     * {@code RESTRICT} when the code is null, so the emitted DDL never silently drops an
+     * action the UI asked for (the server would apply its default instead).
+     */
+    private static String foreignKeyActionSql(Short jdbcCode) {
+        ForeignKeyActionEnum action = ForeignKeyActionEnum.fromJdbcCode(jdbcCode);
+        return action == null ? "RESTRICT" : action.sqlKeyword();
     }
 
     private String findPrevious(TableColumn tableColumn, Table newTable) {
