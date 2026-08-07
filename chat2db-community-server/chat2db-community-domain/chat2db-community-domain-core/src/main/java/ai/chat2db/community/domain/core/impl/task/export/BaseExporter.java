@@ -57,20 +57,34 @@ public abstract class BaseExporter implements IExportStrategy {
         int n = asyncContext.getTableNames().size();
         String[] paths = new String[n];
         InputStream[] inputStreams = new InputStream[n];
-        for (int i = 0; i < n; i++) {
-            asyncContext.checkCancelled();
-            String tableName = asyncContext.getTableNames().get(i);
-            if (StringUtils.isEmpty(tableName)) {
-                throw new IllegalArgumentException("tableName should not be null or empty");
+        try {
+            for (int i = 0; i < n; i++) {
+                asyncContext.checkCancelled();
+                String tableName = asyncContext.getTableNames().get(i);
+                if (StringUtils.isEmpty(tableName)) {
+                    throw new IllegalArgumentException("tableName should not be null or empty");
+                }
+                File file = new File(path + File.separator + tableName + suffix);
+                asyncContext.info(String.format("Exporting table %s", tableName));
+                singleExport(asyncContext, tableName, file);
+                paths[i] = tableName + suffix;
+                inputStreams[i] = FileUtil.getInputStream(file);
             }
-            File file = new File(path + File.separator + tableName + suffix);
-            asyncContext.info(String.format("Exporting table %s", tableName));
-            singleExport(asyncContext, tableName, file);
-            paths[i] = tableName + suffix;
-            inputStreams[i] = FileUtil.getInputStream(file);
+            asyncContext.checkCancelled();
+            ZipUtil.zip(asyncContext.getWriteFile(), paths, inputStreams);
+        } finally {
+            // Close any opened streams on the error path; ZipUtil.zip closes them
+            // on the success path (InputStream.close() is idempotent, so double-close is safe).
+            for (InputStream is : inputStreams) {
+                if (is != null) {
+                    try {
+                        is.close();
+                    } catch (IOException ignore) {
+                        // best-effort cleanup
+                    }
+                }
+            }
         }
-        asyncContext.checkCancelled();
-        ZipUtil.zip(asyncContext.getWriteFile(), paths, inputStreams);
     }
     protected String getQuerySql(String tableName) {
         String databaseName = Chat2DBContext.getConnectInfo().getDatabaseName();
