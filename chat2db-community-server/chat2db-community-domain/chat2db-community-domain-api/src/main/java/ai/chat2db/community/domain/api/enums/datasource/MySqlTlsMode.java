@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.enums.datasource;
 
+import ai.chat2db.community.tools.exception.BusinessException;
 import lombok.Getter;
 
 
@@ -28,9 +29,10 @@ public enum MySqlTlsMode {
 
     /**
      * Parse a mode code, case-insensitive. Blank/null resolves to {@link #DISABLED}.
+     * An unrecognized value fails loudly instead of silently downgrading to plaintext.
      *
      * @param code the raw mode string from {@code SSLInfo.tlsMode}
-     * @return the matched mode, or {@link #DISABLED} when blank or unrecognized
+     * @return the matched mode, or {@link #DISABLED} when blank
      */
     public static MySqlTlsMode fromString(String code) {
         if (code == null || code.isBlank()) {
@@ -41,6 +43,6 @@ public enum MySqlTlsMode {
                 return mode;
             }
         }
-        return DISABLED;
+        throw new BusinessException("mysql.tls.unsupportedMode");
     }
 }

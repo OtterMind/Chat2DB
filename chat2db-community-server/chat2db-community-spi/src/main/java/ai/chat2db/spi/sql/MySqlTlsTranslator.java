@@ -27,26 +27,42 @@ public final class MySqlTlsTranslator {
     }
 
     /**
-     * Merge TLS connection properties for {@code ssl} into {@code properties}. No-op when
-     * {@code ssl} is null or the mode is {@link MySqlTlsMode#DISABLED}.
+     * Merge TLS connection properties for {@code ssl} into {@code properties}. When
+     * {@code ssl} is null or the mode is {@link MySqlTlsMode#DISABLED}, previously merged
+     * TLS properties are removed so deleting or disabling the TLS config actually takes
+     * effect on the next connection instead of leaving stale sslMode/useSSL behind.
      *
      * @param ssl          the structured TLS config (sensitive fields already decrypted)
      * @param driverConfig the resolved driver config, used for Connector/J version detection
      * @param properties   the property map to merge into; never null
      */
     public static void apply(SSLInfo ssl, DriverConfig driverConfig, Map<String, Object> properties) {
-        if (ssl == null || properties == null) {
+        if (properties == null) {
+            return;
+        }
+        if (ssl == null || MySqlTlsMode.fromString(ssl.getTlsMode()) == MySqlTlsMode.DISABLED) {
+            removeTlsProperties(properties);
             return;
         }
         MySqlTlsMode mode = MySqlTlsMode.fromString(ssl.getTlsMode());
-        if (mode == MySqlTlsMode.DISABLED) {
-            return;
-        }
         if (isConnectorJ8(driverConfig)) {
             applyV8(ssl, mode, properties);
         } else {
             applyV5(ssl, mode, properties);
         }
+    }
+
+    private static void removeTlsProperties(Map<String, Object> p) {
+        p.remove("sslMode");
+        p.remove("useSSL");
+        p.remove("requireSSL");
+        p.remove("verifyServerCertificate");
+        p.remove("trustCertificateKeyStoreType");
+        p.remove("trustCertificateKeyStoreUrl");
+        p.remove("trustCertificateKeyStorePassword");
+        p.remove("clientCertificateKeyStoreType");
+        p.remove("clientCertificateKeyStoreUrl");
+        p.remove("clientCertificateKeyStorePassword");
     }
 
     /**
@@ -121,13 +137,8 @@ public final class MySqlTlsTranslator {
     }
 
     private static void applyTrustStore(SSLInfo ssl, Map<String, Object> p) {
-        // A pre-built keystore overrides PEM when supplied.
-        if (StringUtils.isNotBlank(ssl.getKeyStoreBytes())) {
-            p.put("trustCertificateKeyStoreType", storeType(ssl));
-            p.put("trustCertificateKeyStoreUrl", binaryDataUrl(ssl.getKeyStoreBytes()));
-            putIfNotBlank(p, "trustCertificateKeyStorePassword", ssl.getKeyStorePassword());
-            return;
-        }
+        // The trust store only carries CA material; keyStoreBytes is the client identity
+        // keystore (mutual TLS) and must not double as the trust store.
         if (StringUtils.isNotBlank(ssl.getCaPem())) {
             p.put("trustCertificateKeyStoreType", "PEM");
             p.put("trustCertificateKeyStoreUrl", pemDataUrl(ssl.getCaPem()));

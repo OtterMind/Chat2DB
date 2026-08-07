@@ -3,6 +3,7 @@ package ai.chat2db.spi.sql;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.enums.datasource.MySqlTlsMode;
 import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
+import ai.chat2db.community.tools.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -77,12 +79,11 @@ class MySqlTlsTranslatorTest {
     }
 
     @Test
-    void unrecognizedModeTreatedAsDisabled() {
+    void unrecognizedModeFailsLoudly() {
         SSLInfo ssl = new SSLInfo();
         ssl.setTlsMode("PREFERRED");
         Map<String, Object> p = new HashMap<>();
-        MySqlTlsTranslator.apply(ssl, connectorJ8(), p);
-        assertTrue(p.isEmpty());
+        assertThrows(BusinessException.class, () -> MySqlTlsTranslator.apply(ssl, connectorJ8(), p));
     }
 
     // ---- Connector/J 8.x ----------------------------------------------------------------
@@ -144,7 +145,7 @@ class MySqlTlsTranslatorTest {
     // ---- pre-built keystore overrides PEM ----------------------------------------------
 
     @Test
-    void keystoreOverrideReplacesPemStores() {
+    void keystoreOverridesClientPemStoresOnly() {
         SSLInfo ssl = ssl(MySqlTlsMode.VERIFY_CA);
         ssl.setCaPem(PEM_CA);
         ssl.setClientCertPem(PEM_CLIENT_CERT);
@@ -154,17 +155,15 @@ class MySqlTlsTranslatorTest {
         ssl.setKeyStorePassword("storepass");
         Map<String, Object> p = new HashMap<>();
         MySqlTlsTranslator.apply(ssl, connectorJ8(), p);
-        // The same keystore backs both trust and client stores.
-        assertEquals("PKCS12", p.get("trustCertificateKeyStoreType"));
+        // The keystore is the client identity; CA PEM stays in the trust store.
+        assertEquals("PEM", p.get("trustCertificateKeyStoreType"));
         assertEquals("PKCS12", p.get("clientCertificateKeyStoreType"));
-        assertEquals("data:application/octet-stream;base64,AAABAA==",
-                p.get("trustCertificateKeyStoreUrl"));
+        assertTrue(((String) p.get("trustCertificateKeyStoreUrl"))
+                .startsWith("data:application/x-pem-file;base64,"));
         assertEquals("data:application/octet-stream;base64,AAABAA==",
                 p.get("clientCertificateKeyStoreUrl"));
-        assertEquals("storepass", p.get("trustCertificateKeyStorePassword"));
         assertEquals("storepass", p.get("clientCertificateKeyStorePassword"));
-        // PEM material is not emitted when a keystore overrides it.
-        assertEquals("PKCS12", p.get("clientCertificateKeyStoreType"));
+        assertFalse(p.containsKey("trustCertificateKeyStorePassword"));
     }
 
     @Test
@@ -173,7 +172,7 @@ class MySqlTlsTranslatorTest {
         ssl.setKeyStoreBytes("AAABAA==");
         Map<String, Object> p = new HashMap<>();
         MySqlTlsTranslator.apply(ssl, connectorJ8(), p);
-        assertEquals("PKCS12", p.get("trustCertificateKeyStoreType"));
+        assertEquals("PKCS12", p.get("clientCertificateKeyStoreType"));
     }
 
     @Test
@@ -183,7 +182,7 @@ class MySqlTlsTranslatorTest {
         // password blank
         Map<String, Object> p = new HashMap<>();
         MySqlTlsTranslator.apply(ssl, connectorJ8(), p);
-        assertFalse(p.containsKey("trustCertificateKeyStorePassword"));
+        assertFalse(p.containsKey("clientCertificateKeyStorePassword"));
     }
 
     // ---- Connector/J 5.1.x --------------------------------------------------------------
