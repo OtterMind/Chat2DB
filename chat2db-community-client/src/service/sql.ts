@@ -437,6 +437,40 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Import preview and column mapping (MYSQL-IMPORT-001). */
+export interface IImportPreview {
+  sourceColumns: { name: string; sampleValues: string[] }[];
+  targetColumns: { name: string; dataType: string; nullable: boolean; autoIncrement: boolean; defaultValue: string | null }[];
+  suggestedMapping: { sourceColumn: string; targetColumn: string }[];
+  previewLimit: number;
+  previewRows: number;
+}
+
+export interface IImportExecuteResult {
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  errors: { row: number; column: string | null; message: string }[];
+}
+
+const getImportPreview = createRequest<
+  { dataSourceId: number; databaseName: string; tableName: string; filePath: string },
+  IImportPreview
+>('/api/rdb/import_preview/preview', { method: 'post' });
+
+const executeImportWithMapping = createRequest<
+  {
+    dataSourceId: number;
+    databaseName: string;
+    tableName: string;
+    filePath: string;
+    mappings: { sourceColumn: string | null; targetColumn: string }[];
+    unmappedTarget: 'DEFAULT' | 'NULL';
+  },
+  IImportExecuteResult
+>('/api/rdb/import_preview/execute', { method: 'post' });
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -497,5 +531,7 @@ export default {
   getAllFieldByTable,
   exportResultTable,
   checkIsSelectSQL,
+  getImportPreview,
+  executeImportWithMapping,
   getDataSourceList,
 };
