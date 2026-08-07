@@ -166,14 +166,25 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     protected void saveDataList() {
         try {
             List<Long> dataList = dataMap.keySet().stream().toList();
+            String content;
             if (CollectionUtils.isNotEmpty(dataList)) {
-                String data = dataList.stream().map(String::valueOf).collect(Collectors.joining("\n"));
-                FileUtil.writeUtf8String(data + "\n", filePath);
+                content = dataList.stream().map(String::valueOf).collect(Collectors.joining("\n")) + "\n";
             } else {
-                FileUtil.writeUtf8String("", filePath);
+                content = "";
             }
-        } catch (Exception e) {
-            log.error("saveDataList error", e);
+            // Write to a temp file then atomically rename, so a crash mid-write
+            // does not corrupt/empty the index file.
+            java.nio.file.Path target = Paths.get(filePath);
+            java.nio.file.Path temp = Paths.get(filePath + ".tmp");
+            Files.write(temp, content.getBytes(StandardCharsets.UTF_8));
+            try {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            try { Files.deleteIfExists(Paths.get(filePath + ".tmp")); } catch (IOException ignore) {}
+            throw new RuntimeException("Failed to save index to " + filePath, e);
         }
     }
 
