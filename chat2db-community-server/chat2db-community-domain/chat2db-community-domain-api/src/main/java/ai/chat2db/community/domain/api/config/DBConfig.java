@@ -81,6 +81,11 @@ public class DBConfig {
 
 
 
+    private boolean supportTablespace;
+
+
+
+
     private boolean preserveScriptBatchExecution;
 
 
@@ -126,6 +131,14 @@ public class DBConfig {
 
     public void setSupportSchema(boolean supportSchema) {
         this.supportSchema = supportSchema;
+    }
+
+    public boolean isSupportTablespace() {
+        return supportTablespace;
+    }
+
+    public void setSupportTablespace(boolean supportTablespace) {
+        this.supportTablespace = supportTablespace;
     }
 
     public boolean isPreserveScriptBatchExecution() {

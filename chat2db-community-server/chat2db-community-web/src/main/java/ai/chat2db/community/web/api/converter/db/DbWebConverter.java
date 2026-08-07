@@ -22,6 +22,9 @@ import ai.chat2db.community.domain.api.model.request.db.DbTableVectorRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSelectResultUpdateRequest;
 import ai.chat2db.community.web.api.model.response.data.source.DatabaseResponse;
 import ai.chat2db.community.web.api.model.request.data.source.DataSourceBaseRequest;
+import ai.chat2db.community.domain.api.model.request.datasource.DbTablespaceCreateRequest;
+import ai.chat2db.community.domain.api.model.request.datasource.DbTablespaceModifyRequest;
+import ai.chat2db.community.domain.api.model.request.datasource.DbTablespaceQueryRequest;
 import ai.chat2db.community.web.api.model.request.db.*;
 import ai.chat2db.community.web.api.model.response.db.*;
 import ai.chat2db.community.web.api.model.request.http.TableSchemaRequest;
@@ -33,6 +36,7 @@ import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.db.DatabaseObjectDeletePrepare;
+import ai.chat2db.community.domain.api.model.db.TablespaceCapability;
 import ai.chat2db.community.domain.api.model.sql.Sql;
 import ai.chat2db.community.domain.api.model.sql.SqlPreview;
 import ai.chat2db.community.domain.api.model.view.*;
@@ -391,4 +395,18 @@ public abstract class DbWebConverter {
 
     public abstract DatabaseObjectDeletePrepareResponse databaseObjectDeletePrepare2response(
             DatabaseObjectDeletePrepare prepare);
+
+    public abstract DbTablespaceQueryRequest request2param(TablespaceQueryRequest request);
+
+    public abstract DbTablespaceCreateRequest request2param(TablespaceCreateRequest request);
+
+    public abstract DbTablespaceModifyRequest request2param(TablespaceModifyRequest request);
+
+    public abstract DbTablespaceDeletePrepareRequest request2param(TablespaceDeletePrepareRequest request);
+
+    public abstract TablespaceResponse tablespaceDto2response(Tablespace dto);
+
+    public abstract List<TablespaceResponse> tablespaceDto2response(List<Tablespace> dto);
+
+    public abstract TablespaceCapabilityResponse tablespaceCapability2response(TablespaceCapability capability);
 }

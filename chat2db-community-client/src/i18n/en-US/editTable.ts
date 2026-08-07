@@ -31,6 +31,7 @@ export default {
   'editTable.label.autoIncrement': 'Auto increment',
   'editTable.label.engine': 'Engine',
   'editTable.label.incrementValue': 'Increment value',
+  'editTable.label.tablespace': 'Tablespace',
   'editTable.label.order': 'Order',
   'editTable.label.primaryKey': 'Key',
   'editTable.title.sqlPreview': 'SQL preview',

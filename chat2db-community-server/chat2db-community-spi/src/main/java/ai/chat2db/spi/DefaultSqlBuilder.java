@@ -29,6 +29,7 @@ import ai.chat2db.spi.sql.builder.IDqlSqlBuilder;
 import ai.chat2db.spi.sql.builder.IIdentifierSqlBuilder;
 import ai.chat2db.spi.sql.builder.ISchemaSqlBuilder;
 import ai.chat2db.spi.sql.builder.ITableSqlBuilder;
+import ai.chat2db.spi.sql.builder.ITablespaceSqlBuilder;
 import ai.chat2db.spi.sql.builder.IViewSqlBuilder;
 import ai.chat2db.spi.util.DBStructUtils;
 import ai.chat2db.spi.util.SqlUtils;
@@ -58,7 +59,8 @@ import java.util.stream.Collectors;
 import static ai.chat2db.spi.constant.DefaultSqlBuilderConstants.*;
 
 public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, IDqlSqlBuilder, IDmlSqlBuilder,
-        IDdlSqlBuilder, IDatabaseSqlBuilder, ISchemaSqlBuilder, ITableSqlBuilder, IViewSqlBuilder {
+        IDdlSqlBuilder, IDatabaseSqlBuilder, ISchemaSqlBuilder, ITableSqlBuilder, IViewSqlBuilder,
+        ITablespaceSqlBuilder {
 
     @Override
     public IIdentifierSqlBuilder identifier() {
@@ -98,6 +100,31 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
     @Override
     public IViewSqlBuilder view() {
         return this;
+    }
+
+    @Override
+    public ITablespaceSqlBuilder tablespace() {
+        return this;
+    }
+
+    @Override
+    public String buildCreateTablespace(Tablespace tablespace) {
+        throw unsupported(METHOD_BUILD_CREATE_TABLESPACE);
+    }
+
+    @Override
+    public String buildDropTablespace(String tablespaceName) {
+        throw unsupported(METHOD_BUILD_DROP_TABLESPACE);
+    }
+
+    @Override
+    public String buildRenameTablespace(String oldTablespaceName, String newTablespaceName) {
+        throw unsupported(METHOD_BUILD_RENAME_TABLESPACE);
+    }
+
+    @Override
+    public String buildAlterTablespaceAddDatafile(String tablespaceName, String dataFile) {
+        throw unsupported(METHOD_BUILD_ALTER_TABLESPACE_ADD_DATAFILE);
     }
 
     @Override

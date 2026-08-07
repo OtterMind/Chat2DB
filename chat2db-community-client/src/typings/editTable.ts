@@ -7,6 +7,7 @@ export interface IBaseInfo {
   charset: string | null; // character set
   engine: string | null; // engine
   incrementValue: string | null; // self-added value
+  tablespace?: string | null; // InnoDB general tablespace (MySQL)
 }
 
 export interface IColumnItemNew {

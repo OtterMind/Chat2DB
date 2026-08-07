@@ -13,4 +13,10 @@ public class TableMeta {
     private List<IndexType> indexTypes;
     private List<DefaultValue> defaultValues;
     private List<EngineType> engineTypes;
+    /**
+     * InnoDB General Tablespaces available on the server (instance-level). Populated for dialects
+     * that support tablespaces (MySQL); empty otherwise. Feeds the tablespace option dropdown in
+     * the create/edit-table form.
+     */
+    private List<Tablespace> tablespaces;
 }

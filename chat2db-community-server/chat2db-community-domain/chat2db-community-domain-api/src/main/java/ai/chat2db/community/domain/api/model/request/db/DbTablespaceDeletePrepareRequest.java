@@ -4,16 +4,10 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
-public class DbDatabaseObjectDeleteExecuteRequest {
+public class DbTablespaceDeletePrepareRequest {
 
     @NotNull
     private Long dataSourceId;
 
-    private String databaseName;
-
-    private String schemaName;
-
     private String tablespaceName;
-
-    private String confirmName;
 }

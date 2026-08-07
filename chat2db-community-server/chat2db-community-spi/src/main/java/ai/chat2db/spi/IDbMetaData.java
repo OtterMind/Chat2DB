@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableMeta;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.community.domain.api.model.metadata.Trigger;
 import ai.chat2db.community.domain.api.model.metadata.Type;
 import ai.chat2db.community.domain.api.model.view.ModifyViewConfiguration;
@@ -40,6 +41,22 @@ public interface IDbMetaData {
     }
 
     List<Database> databases(Connection connection);
+
+    /**
+     * Lists InnoDB General Tablespaces visible on the server. Instance-level (not per-database).
+     * Returns an empty list for dialects that do not support tablespaces.
+     */
+    default List<Tablespace> tablespaces(Connection connection) {
+        return List.of();
+    }
+
+    /**
+     * Loads a single tablespace by name, including its occupying tables when requested.
+     * Returns {@code null} for dialects that do not support tablespaces.
+     */
+    default Tablespace tablespace(Connection connection, String tablespaceName) {
+        return null;
+    }
 
     List<Schema> schemas(Connection connection, String databaseName);
 

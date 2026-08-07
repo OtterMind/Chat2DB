@@ -19,6 +19,7 @@ import ai.chat2db.community.domain.api.model.metadata.ProcedureParameter;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.community.domain.api.model.metadata.Trigger;
 import ai.chat2db.spi.model.request.FunctionMetadataRequest;
 import ai.chat2db.spi.model.request.ProcedureMetadataRequest;
@@ -33,6 +34,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import static ai.chat2db.community.domain.core.cache.CacheKey.getColumnKey;
 import static ai.chat2db.community.domain.core.cache.CacheKey.getTableKey;
+import static ai.chat2db.community.domain.core.cache.CacheKey.getTablespacesKey;
 
 
 @RequiredArgsConstructor
@@ -61,6 +63,7 @@ public class SqlCompletionMetadataProviderAdapter implements ISqlCompletionMetad
             case FUNCTION -> listFunctions(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
             case PROCEDURE -> listProcedures(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
             case TRIGGER -> listTriggers(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
+            case TABLESPACE -> listTablespaces();
             case PARAMETER -> listRoutineParameters(request);
             default -> List.of();
         };
@@ -80,12 +83,20 @@ public class SqlCompletionMetadataProviderAdapter implements ISqlCompletionMetad
                 || type == SqlCompletionCandidateTypeEnum.FUNCTION
                 || type == SqlCompletionCandidateTypeEnum.PROCEDURE
                 || type == SqlCompletionCandidateTypeEnum.TRIGGER
+                || type == SqlCompletionCandidateTypeEnum.TABLESPACE
                 || type == SqlCompletionCandidateTypeEnum.PARAMETER;
     }
 
     private List<SqlCompletionCandidate> listDatabases() {
         List<Database> databases = metaData().databases(connection());
         return converter.databases2candidates(databases, context.getDatasourceName(), identifierProcessor());
+    }
+
+    private List<SqlCompletionCandidate> listTablespaces() {
+        String tablespaceKey = getTablespacesKey(context.getDataSourceId());
+        List<Tablespace> tablespaces = MemoryCacheManage.computeIfAbsent(tablespaceKey,
+                () -> new ArrayList<>(metaData().tablespaces(connection())));
+        return converter.tablespaces2candidates(tablespaces, context.getDatasourceName(), identifierProcessor());
     }
 
     private List<SqlCompletionCandidate> listSchemas(String databaseName) {
