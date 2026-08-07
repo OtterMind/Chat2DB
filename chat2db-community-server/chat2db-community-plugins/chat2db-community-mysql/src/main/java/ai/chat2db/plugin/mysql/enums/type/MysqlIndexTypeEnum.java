@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
 import lombok.Getter;
+import ai.chat2db.spi.constant.SQLConstants;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
