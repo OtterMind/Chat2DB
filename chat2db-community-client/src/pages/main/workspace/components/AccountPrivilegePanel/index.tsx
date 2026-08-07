@@ -54,6 +54,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const [tableOptions, setTableOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [databaseLoading, setDatabaseLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
+  const [routineOptions, setRoutineOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [routineLoading, setRoutineLoading] = useState(false);
   const [form] = Form.useForm();
   const [accountForm] = Form.useForm();
   const previewRequestRef = useRef(0);
@@ -160,6 +162,32 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       });
   };
 
+  const loadRoutines = (databaseName?: string) => {
+    setRoutineOptions([]);
+    if (!dataSourceId || !databaseName || !watchedScope) {
+      return;
+    }
+    setRoutineLoading(true);
+    const isFunction = watchedScope === AccountPrivilegeScope.FUNCTION;
+    const loader = isFunction ? sqlService.getFunctionList : sqlService.getProcedureList;
+    loader({ dataSourceId, databaseName, pageNo: 1, pageSize: 1000 } as never)
+      .then((res) => {
+        const rows = (res as any)?.data || [];
+        setRoutineOptions(
+          rows.map((item: any) => ({
+            label: item.functionName || item.procedureName,
+            value: item.functionName || item.procedureName,
+          })),
+        );
+      })
+      .catch(() => {
+        setRoutineOptions([]);
+      })
+      .finally(() => {
+        setRoutineLoading(false);
+      });
+  };
+
   const loadCapability = () => {
     if (!dataSourceId) {
       return Promise.resolve(null);
@@ -223,6 +251,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedTableName, tableOptions]);
 
   useEffect(() => {
+    if (watchedScope === AccountPrivilegeScope.FUNCTION || watchedScope === AccountPrivilegeScope.PROCEDURE) {
+      form.setFieldsValue({ objectName: undefined });
+      loadRoutines(watchedDatabaseName);
+    }
+  }, [watchedScope, watchedDatabaseName]);
+
+  useEffect(() => {
     if (watchedActionType === AccountActionType.REVOKE_PRIVILEGE) {
       form.setFieldsValue({ grantOption: false });
     }
@@ -242,6 +277,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       databaseName: values.databaseName,
       tableName: values.tableName,
       privileges: values.privileges,
+      objectName: values.objectName,
       grantOption: values.actionType === AccountActionType.GRANT_PRIVILEGE ? values.grantOption : false,
     };
   };
@@ -471,6 +507,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     { label: i18n('workspace.databaseAccount.scopeGlobal'), value: AccountPrivilegeScope.GLOBAL },
                     { label: i18n('workspace.databaseAccount.scopeDatabase'), value: AccountPrivilegeScope.DATABASE },
                     { label: i18n('workspace.databaseAccount.scopeTable'), value: AccountPrivilegeScope.TABLE },
+                    { label: i18n('workspace.databaseAccount.scopeFunction'), value: AccountPrivilegeScope.FUNCTION },
+                    { label: i18n('workspace.databaseAccount.scopeProcedure'), value: AccountPrivilegeScope.PROCEDURE },
                   ]}
                 />
               </Form.Item>
@@ -497,6 +535,18 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     options={tableOptions}
                     optionFilterProp="label"
                     placeholder={i18n('workspace.databaseAccount.selectTable')}
+                  />
+                </Form.Item>
+              )}
+              {(watchedScope === AccountPrivilegeScope.FUNCTION ||
+                watchedScope === AccountPrivilegeScope.PROCEDURE) && (
+                <Form.Item name="objectName" label={i18n('workspace.databaseAccount.object')} rules={[{ required: true }]}>
+                  <Select
+                    showSearch
+                    loading={routineLoading}
+                    options={routineOptions}
+                    optionFilterProp="label"
+                    placeholder={i18n('workspace.databaseAccount.selectObject')}
                   />
                 </Form.Item>
               )}

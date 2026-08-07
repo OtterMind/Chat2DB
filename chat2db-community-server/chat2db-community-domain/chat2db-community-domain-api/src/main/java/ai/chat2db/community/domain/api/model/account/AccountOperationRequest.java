@@ -15,6 +15,7 @@ public class AccountOperationRequest {
     private String scope;
     private String databaseName;
     private String tableName;
+    private String objectName;
     private List<String> privileges;
     private Boolean grantOption;
     private String password;

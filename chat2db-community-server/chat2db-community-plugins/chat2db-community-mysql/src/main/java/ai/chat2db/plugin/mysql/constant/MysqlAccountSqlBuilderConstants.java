@@ -35,6 +35,8 @@ public final class MysqlAccountSqlBuilderConstants {
     public static final String ERROR_KEY_ACCOUNT_TABLE_REQUIRED = "mysql.account.tableRequired";
     public static final String ERROR_KEY_ACCOUNT_SCOPE_UNSUPPORTED = "mysql.account.scopeUnsupported";
     public static final String ERROR_KEY_ACCOUNT_PRIVILEGE_REQUIRED = "mysql.account.privilegeRequired";
+    public static final String ERROR_KEY_ACCOUNT_OBJECT_REQUIRED = "mysql.account.objectRequired";
+    public static final String ERROR_KEY_ACCOUNT_ROUTINE_PRIVILEGE_UNSUPPORTED = "mysql.account.routinePrivilegeUnsupported";
     public static final String ERROR_KEY_ACCOUNT_ACTION_REQUIRED = "mysql.account.actionRequired";
     public static final String ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED = "mysql.account.passwordRequired";
     public static final String ERROR_KEY_ACCOUNT_INVALID_ACCOUNT_NAME = "mysql.account.invalidAccountName";
