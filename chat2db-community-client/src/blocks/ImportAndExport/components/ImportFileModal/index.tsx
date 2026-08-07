@@ -9,6 +9,7 @@ import importExportServices from '@/service/importExport';
 import { ImportExportType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
+import ImportMappingContent from '@/blocks/ImportAndExport/components/ImportMappingContent';
 import jcefApi from '@/jcef';
 
 interface IProps {
@@ -20,6 +21,7 @@ export default memo<IProps>((_props) => {
   const importExportFileRef = useRef<ImportExportFileRef>(null);
   const [taskId, setTaskId] = useState<number>();
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
+  const [importFilePath, setImportFilePath] = useState<string>('');
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
       return {
@@ -46,6 +48,10 @@ export default memo<IProps>((_props) => {
       setTaskId(res);
       getTaskList({ visible: true });
     });
+  };
+
+  const handleImportFileChange = (filePath: string) => {
+    setImportFilePath(filePath);
   };
 
   const renderFooter = () => {
@@ -127,8 +133,22 @@ export default memo<IProps>((_props) => {
     >
       {taskId ? (
         <Log finish={finish} taskId={taskId} />
+      ) : importExportDataBoundInfo?.type === ImportExportType.IMPORT && importFilePath ? (
+        <ImportMappingContent
+          dataSourceId={importExportDataBoundInfo.dataSourceId}
+          databaseName={importExportDataBoundInfo.databaseName}
+          tableName={importExportDataBoundInfo.tableName || ''}
+          filePath={importFilePath}
+          onDone={() => {
+            setImportExportDataBoundInfo(null);
+          }}
+        />
       ) : (
-        <ImportExportFile ref={importExportFileRef} setIsReady={setIsReady} />
+        <ImportExportFile
+          ref={importExportFileRef}
+          setIsReady={setIsReady}
+          onImportFileChange={handleImportFileChange}
+        />
       )}
     </Modal>
   );
