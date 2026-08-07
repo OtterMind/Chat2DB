@@ -64,6 +64,7 @@ export default {
   'common.text.functions': '函数',
   'common.text.procedures': '存储过程',
   'common.text.triggers': '触发器',
+  'common.text.events': '事件',
   'common.text.consoles': '查询',
   'common.text.columns': '列',
   'common.text.keys': '键',

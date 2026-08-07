@@ -238,6 +238,72 @@ export const useCreateRightClickMenu = () => {
       });
     };
 
+    const openEventTemplate = ({
+      dataSourceId: dsId,
+      databaseName: dbName,
+      eventName,
+    }: {
+      dataSourceId: number;
+      databaseName: string;
+      eventName?: string;
+    }) => {
+      const isNew = !eventName;
+      const template = isNew
+        ? `CREATE EVENT \`new_event\`
+ON SCHEDULE EVERY 1 DAY
+STARTS CURRENT_TIMESTAMP
+DO
+BEGIN
+  -- event body
+END;`
+        : `SHOW CREATE EVENT \`${dbName}\`.\`${eventName}\`;`;
+      addWorkspaceTab({
+        id: ['mysql-event', dsId, dbName, eventName || 'new'].join('-'),
+        type: WorkspaceTabType.CONSOLE,
+        title: isNew ? i18n('workspace.menu.createEvent') : eventName,
+        uniqueData: {
+          ...extraParams,
+          databaseName: dbName,
+        },
+      });
+      appendConsole({
+        id: ['mysql-event', dsId, dbName, eventName || 'new'].join('-'),
+        content: template,
+      });
+    };
+
+    const setEventEnabled = ({
+      dataSourceId: dsId,
+      databaseName: dbName,
+      eventName,
+      enabled,
+      refresh,
+    }: {
+      dataSourceId: number;
+      databaseName: string;
+      eventName: string;
+      enabled: boolean;
+      refresh: () => void;
+    }) => {
+      sqlService
+        .getEventEnabledSql({ databaseName: dbName, eventName, enabled })
+        .then((sql) => {
+          openUnifiedConfirmationModal({
+            title: i18n('workspace.menu.eventPreviewTitle'),
+            content: <pre style={{ whiteSpace: 'pre-wrap' }}>{sql}</pre>,
+            onOk: () => {
+              return sqlService.executeDDL({ dataSourceId: dsId, sql }).then(() => {
+                staticMessage.success(i18n('common.text.successfullySaved'));
+                refresh();
+              });
+            },
+          });
+        })
+        .catch((error) => {
+          staticMessage.error(error?.message || i18n('common.text.failure'));
+        });
+    };
+
     const renderDeleteInputConfirmLabel = (labelKey: string, confirmName: string) => {
       return (
         <>
@@ -370,6 +436,77 @@ export const useCreateRightClickMenu = () => {
             title,
             uniqueData: {
               ...extraParams,
+            },
+          });
+        },
+      },
+
+      [OperationColumn.CreateEvent]: {
+        text: i18n('workspace.menu.createEvent'),
+        icon: 'icon-file-add',
+        handle: () => {
+          openEventTemplate({ treeNodeData, addWorkspaceTab, dataSourceId, databaseName: originalTitle });
+        },
+      },
+
+      [OperationColumn.OpenEvent]: {
+        text: i18n('workspace.menu.openEvent'),
+        icon: 'icon-file-text',
+        handle: () => {
+          openEventTemplate({
+            treeNodeData,
+            addWorkspaceTab,
+            dataSourceId,
+            databaseName: extraParams.databaseName,
+            eventName: originalTitle,
+          });
+        },
+      },
+
+      [OperationColumn.EnableEvent]: {
+        text: i18n('workspace.menu.enableEvent'),
+        icon: 'icon-check',
+        handle: () => {
+          setEventEnabled({
+            dataSourceId,
+            databaseName: extraParams.databaseName,
+            eventName: originalTitle,
+            enabled: true,
+            refresh: refreshAfterDelete,
+          });
+        },
+      },
+
+      [OperationColumn.DisableEvent]: {
+        text: i18n('workspace.menu.disableEvent'),
+        icon: 'icon-pause',
+        handle: () => {
+          setEventEnabled({
+            dataSourceId,
+            databaseName: extraParams.databaseName,
+            eventName: originalTitle,
+            enabled: false,
+            refresh: refreshAfterDelete,
+          });
+        },
+      },
+
+      [OperationColumn.DropEvent]: {
+        text: i18n('workspace.menu.dropEvent'),
+        icon: 'icon-delete',
+        danger: true,
+        handle: () => {
+          openUnifiedConfirmationModal({
+            title: i18n('workspace.menu.dropEvent'),
+            needInputConfirmText: originalTitle,
+            onOk: () => {
+              return sqlService
+                .getEventDropSql({ databaseName: extraParams.databaseName, eventName: originalTitle })
+                .then((sql) => {
+                return sqlService.executeDDL({ dataSourceId, sql }).then(() => {
+                  refreshAfterDelete();
+                });
+              });
             },
           });
         },

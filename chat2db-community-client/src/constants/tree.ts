@@ -30,6 +30,8 @@ export enum TreeNodeType {
   PROCEDURES = 'procedures', // procedure group
   PROCEDURE = 'procedure', // procedure
   TRIGGERS = 'triggers', // trigger group
+  EVENTS = 'events', // event group
+  EVENT = 'event', // event
   TRIGGER = 'trigger', // trigger
   // Saved console
   SAVE_CONSOLES = 'saveConsoles',
@@ -74,6 +76,11 @@ export enum OperationColumn {
   // Universal
   DeleteTreeNode = 'deleteTreeNode', // delete tree node
   Refresh = 'refresh', // Refresh menus at all levels
+  CreateEvent = 'createEvent', // Create event
+  OpenEvent = 'openEvent', // Open event
+  EnableEvent = 'enableEvent', // Enable event
+  DisableEvent = 'disableEvent', // Disable event
+  DropEvent = 'dropEvent', // Drop event
   CreateConsole = 'createConsole', // Create a new console
   Rename = 'rename', // Rename
 
