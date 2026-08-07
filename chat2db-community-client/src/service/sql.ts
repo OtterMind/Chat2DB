@@ -437,6 +437,28 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Active InnoDB transactions (MYSQL-OPS-002). */
+export interface IActiveTransactionItem {
+  trxId: string | null;
+  state: string | null;
+  startedAt: string | null;
+  ageSeconds: number | null;
+  isolationLevel: string | null;
+  rowsLocked: number | null;
+  rowsModified: number | null;
+  lockStructs: number | null;
+  threadId: number | null;
+  user: string | null;
+  host: string | null;
+  db: string | null;
+  query: string | null;
+}
+
+const getActiveTransactionList = createRequest<Record<string, never>, IActiveTransactionItem[]>(
+  '/api/rdb/active_transaction/list',
+  { method: 'get' },
+);
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -497,5 +519,6 @@ export default {
   getAllFieldByTable,
   exportResultTable,
   checkIsSelectSQL,
+  getActiveTransactionList,
   getDataSourceList,
 };
