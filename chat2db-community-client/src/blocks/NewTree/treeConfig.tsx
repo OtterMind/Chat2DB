@@ -109,6 +109,18 @@ export const switchIcon: Partial<{
   [TreeNodeType.PROCEDURE]: {
     icon: 'icon-procedure',
   },
+  [TreeNodeType.EVENT]: {
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, databaseName, eventName } = formatObject(params);
+      return [
+        `dataSource_${dataSourceId}`,
+        `database_${databaseName}`,
+        'events_chat2dbCatalogue',
+        `event_${eventName}`,
+      ].join('-');
+    },
+  },
+
   [TreeNodeType.TRIGGER]: {
     icon: 'icon-trigger',
   },
@@ -134,6 +146,14 @@ export const switchIcon: Partial<{
     icon: fileIcon,
     iconExistDark: true,
     unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.EVENTS]: {
+    icon: fileIcon,
+    iconExistDark: true,
+    unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.EVENT]: {
+    icon: 'icon-event',
   },
   [TreeNodeType.VIEWS]: {
     icon: fileIcon,
@@ -764,6 +784,14 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               isLeaf: false,
               extraParams: nodeExtraParams,
             },
+            {
+              key: treeConfig[TreeNodeType.EVENTS].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.events'),
+              title: null,
+              treeNodeType: TreeNodeType.EVENTS,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
             createSaveConsolesNode(nodeExtraParams),
           ];
 
@@ -1266,6 +1294,48 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
         `schema_${schemaName}`,
         `function_${specificName || functionName}`,
         `uuid_${uuid()}`,
+      ].join('-');
+    },
+  },
+
+  [TreeNodeType.EVENTS]: {
+    getChildren: (extraParams) => {
+      const { dataSourceId, databaseName } = extraParams;
+      return new Promise((r: (value: TreeNodeLoadResult) => void, j) => {
+        mysqlServer
+          .getEventList({ databaseName })
+          .then((res) => {
+            const list: TreeNodeData[] = (res || []).map((t: any) => {
+              const key = treeConfig[TreeNodeType.EVENT].createTreeNodeKey!({
+                dataSourceId,
+                databaseName,
+                eventName: t.eventName,
+              });
+              return {
+                key,
+                originalTitle: t.eventName,
+                title: null,
+                treeNodeType: TreeNodeType.EVENT,
+                isLeaf: true,
+                extraParams: {
+                  ...extraParams,
+                  eventName: t.eventName,
+                },
+              };
+            });
+            r({ children: list || [], total: list.length });
+          })
+          .catch((error) => {
+            j(error);
+          });
+      });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, databaseName } = formatObject(params);
+      return [
+        `dataSource_${dataSourceId}`,
+        `database_${databaseName}`,
+        'events_chat2dbCatalogue',
       ].join('-');
     },
   },
