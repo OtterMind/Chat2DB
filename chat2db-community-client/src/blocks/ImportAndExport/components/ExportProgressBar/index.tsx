@@ -56,9 +56,10 @@ export default memo(() => {
             <>
               {taskList.map((item) => {
                 // A finished task with an error log is treated as failed, per the backend contract.
-                if (item.taskStatus === ImportExportTaskStatus.FINISHED && item.errorLog) {
-                  item.taskStatus = ImportExportTaskStatus.ERROR;
-                }
+                const effectiveStatus =
+                  item.taskStatus === ImportExportTaskStatus.FINISHED && item.errorLog
+                    ? ImportExportTaskStatus.ERROR
+                    : item.taskStatus;
                 return (
                   <div
                     key={item.id}
@@ -71,17 +72,17 @@ export default memo(() => {
                       <span className={styles.taskName}>{item.taskName}</span>
                       <span className={styles.taskTime}>{dayjs(item.gmtCreate).format('MM-DD HH:mm')}</span>
                     </div>
-                    {item.taskStatus === ImportExportTaskStatus.ERROR && (
+                    {effectiveStatus === ImportExportTaskStatus.ERROR && (
                       <div className={styles.taskContent}>
                         <div className={styles.listItemLeft}>{i18n('workspace.text.taskExecutionFailure')}</div>
                       </div>
                     )}
-                    {item.taskStatus === ImportExportTaskStatus.STOP && (
+                    {effectiveStatus === ImportExportTaskStatus.STOP && (
                       <div className={styles.taskContent}>
                         <div className={styles.listItemLeft}>{i18n('workspace.text.taskExecutionStop')}</div>
                       </div>
                     )}
-                    {item.taskStatus === ImportExportTaskStatus.FINISHED &&
+                    {effectiveStatus === ImportExportTaskStatus.FINISHED &&
                       (item.downloadUrl ? (
                         <div className={styles.taskContent}>
                           <div className={styles.listItemLeft}>{item.downloadUrl}</div>
