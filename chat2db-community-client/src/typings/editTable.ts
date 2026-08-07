@@ -62,6 +62,7 @@ export interface IIndexIncludeColumnItem {
   tableName: string | null; // table name
   type: string | null; // Type
   pages: number | null; // Number of pages
+  expression?: string | null; // Functional index expression (MySQL 8.0.13+)
 }
 
 // Data structure of index when editing table
