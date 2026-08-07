@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.service.db.IDbJdbcDriverService;
 import ai.chat2db.community.domain.api.service.db.IDbJdbcDriverUploadService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
@@ -84,7 +86,7 @@ public class DbJdbcDriverController {
      * @return operation result for the request.
      */
     @PostMapping("/save")
-    public ActionResult save(@RequestBody JdbcDriverRequest request) {
+    public ActionResult save(@Valid @RequestBody JdbcDriverRequest request) {
         jdbcDriverService.saveCustomDriver(jdbcDriverConverter.saveRequest2driverConfig(request),
                 request.getJdbcDriver());
         return ActionResult.isSuccess();
@@ -99,7 +101,7 @@ public class DbJdbcDriverController {
      * @return operation result for the request.
      */
     @DeleteMapping("/delete")
-    public ActionResult delete(@RequestBody JdbcDriverRequest request) {
+    public ActionResult delete(@Valid @RequestBody JdbcDriverRequest request) {
         jdbcDriverService.deleteCustomDriver(request.getDbType(), request.getJdbcDriver());
         return ActionResult.isSuccess();
     }
