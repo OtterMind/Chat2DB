@@ -33,16 +33,31 @@ public class DbImportPreviewController {
     public DataResult<Map<String, Object>> preview(@RequestParam("dataSourceId") Long dataSourceId,
                                                    @RequestParam("databaseName") String databaseName,
                                                    @RequestParam("tableName") String tableName,
-                                                   @RequestParam("filePath") String filePath) {
-        return DataResult.of(importPreviewService.preview(dataSourceId, databaseName, tableName, filePath));
+                                                   @RequestParam("filePath") String filePath,
+                                                   @RequestParam(value = "csvOptions", required = false) String csvOptions) {
+        return DataResult.of(importPreviewService.preview(dataSourceId, databaseName, tableName, filePath,
+                parseCsvOptions(csvOptions)));
     }
 
     @PostMapping("/execute")
     public DataResult<Map<String, Object>> execute(@Valid @RequestBody ImportExecuteRequest request) {
         return DataResult.of(importPreviewService.execute(
                 request.getDataSourceId(), request.getDatabaseName(), request.getTableName(),
-                request.getFilePath(),
+                request.getFilePath(), request.getCsvOptions() == null ? Map.of() : request.getCsvOptions(),
                 request.getMappings(), request.getUnmappedTarget()));
+    }
+
+    private static Map<String, Object> parseCsvOptions(String csvOptions) {
+        if (org.apache.commons.lang3.StringUtils.isBlank(csvOptions)) {
+            return new java.util.LinkedHashMap<>();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(csvOptions,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
+        } catch (Exception e) {
+            return new java.util.LinkedHashMap<>();
+        }
     }
 
     @Data
@@ -58,6 +73,8 @@ public class DbImportPreviewController {
 
         @NotBlank
         private String filePath;
+
+        private Map<String, Object> csvOptions;
 
         private List<Map<String, String>> mappings;
 

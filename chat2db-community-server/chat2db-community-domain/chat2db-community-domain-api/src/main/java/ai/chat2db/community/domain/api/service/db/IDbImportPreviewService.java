@@ -18,10 +18,12 @@ public interface IDbImportPreviewService {
      * @param databaseName the database name.
      * @param tableName    the target table name.
      * @param filePath     the uploaded file path (extension selects the parser).
+     * @param csvOptions   CSV options: encoding, delimiter, quote, escape, hasHeader,
+     *                     emptyAsNull (ignored for XLS/XLSX).
      * @return preview model.
      */
     Map<String, Object> preview(Long dataSourceId, String databaseName, String tableName,
-                                String filePath);
+                                String filePath, Map<String, Object> csvOptions);
 
     /**
      * Imports the whole file using the given column mapping. Rows are inserted one by one
@@ -32,11 +34,12 @@ public interface IDbImportPreviewService {
      * @param databaseName    the database name.
      * @param tableName       the target table name.
      * @param filePath        the uploaded file path.
+     * @param csvOptions      CSV options (ignored for XLS/XLSX).
      * @param mappings        list of {sourceColumn, targetColumn}; sourceColumn null skips the source field.
      * @param unmappedTarget  DEFAULT or NULL for unmapped target columns.
      * @return import result with totals and row-level errors.
      */
     Map<String, Object> execute(Long dataSourceId, String databaseName, String tableName,
-                                String filePath,
+                                String filePath, Map<String, Object> csvOptions,
                                 List<Map<String, String>> mappings, String unmappedTarget);
 }

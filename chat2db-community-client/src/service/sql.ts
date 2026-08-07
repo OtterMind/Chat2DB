@@ -455,8 +455,17 @@ export interface IImportExecuteResult {
   errors: { row: number; column: string | null; message: string }[];
 }
 
+export interface ICsvOptions {
+  encoding: string;
+  delimiter: string;
+  quote: string;
+  escape: string;
+  hasHeader: boolean;
+  emptyAsNull: boolean;
+}
+
 const getImportPreview = createRequest<
-  { dataSourceId: number; databaseName: string; tableName: string; filePath: string },
+  { dataSourceId: number; databaseName: string; tableName: string; filePath: string; csvOptions?: string },
   IImportPreview
 >('/api/rdb/import_preview/preview', { method: 'post' });
 
@@ -468,6 +477,7 @@ const executeImportWithMapping = createRequest<
     filePath: string;
     mappings: { sourceColumn: string | null; targetColumn: string }[];
     unmappedTarget: 'DEFAULT' | 'NULL';
+    csvOptions?: ICsvOptions;
   },
   IImportExecuteResult
 >('/api/rdb/import_preview/execute', { method: 'post' });

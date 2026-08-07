@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Modal, Select, Table } from 'antd';
+import { Button, Checkbox, Modal, Select, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import i18n from '@/i18n';
-import sqlService, { IImportPreview, IImportExecuteResult } from '@/service/sql';
+import sqlService, { IImportPreview, IImportExecuteResult, ICsvOptions } from '@/service/sql';
 
 interface IProps {
   dataSourceId: number;
@@ -28,13 +28,28 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
   const [unmappedTarget, setUnmappedTarget] = useState<'DEFAULT' | 'NULL'>('DEFAULT');
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<IImportExecuteResult | null>(null);
+  const [csvOptions, setCsvOptions] = useState<ICsvOptions>({
+    encoding: 'UTF-8',
+    delimiter: ',',
+    quote: '"',
+    escape: '"',
+    hasHeader: true,
+    emptyAsNull: true,
+  });
+  const isCsv = filePath.toLowerCase().endsWith('.csv');
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
     setResult(null);
     sqlService
-      .getImportPreview({ dataSourceId, databaseName, tableName, filePath })
+      .getImportPreview({
+        dataSourceId,
+        databaseName,
+        tableName,
+        filePath,
+        csvOptions: isCsv ? JSON.stringify(csvOptions) : undefined,
+      })
       .then((data) => {
         setPreview(data);
         const auto: Record<string, string> = {};
@@ -47,7 +62,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
         setError(e?.message || i18n('common.text.failure'));
       })
       .finally(() => setLoading(false));
-  }, [dataSourceId, databaseName, tableName, filePath]);
+  }, [dataSourceId, databaseName, tableName, filePath, isCsv, csvOptions]);
 
   useEffect(() => {
     load();
@@ -122,6 +137,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
           .filter(([, target]) => target && target !== SKIP)
           .map(([source, target]) => ({ sourceColumn: source, targetColumn: target })),
         unmappedTarget,
+        csvOptions: isCsv ? csvOptions : undefined,
       })
       .then(setResult)
       .catch((e) => setError(e?.message || i18n('common.text.failure')))
@@ -155,6 +171,40 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
               {i18n('common.button.close')}
             </Button>
           </div>
+        </div>
+      )}
+      {!result && preview && isCsv && (
+        <div style={{ marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Select
+            style={{ width: 120 }}
+            value={csvOptions.encoding}
+            onChange={(v) => setCsvOptions((prev) => ({ ...prev, encoding: v }))}
+            options={['UTF-8', 'GB18030', 'ISO-8859-1'].map((e) => ({ value: e, label: e }))}
+          />
+          <Select
+            style={{ width: 90 }}
+            value={csvOptions.delimiter}
+            onChange={(v) => setCsvOptions((prev) => ({ ...prev, delimiter: v }))}
+            options={[
+              { value: ',', label: i18n('workspace.importExport.delimiterComma') },
+              { value: ';', label: i18n('workspace.importExport.delimiterSemicolon') },
+              { value: '\t', label: i18n('workspace.importExport.delimiterTab') },
+              { value: '|', label: i18n('workspace.importExport.delimiterPipe') },
+            ]}
+          />
+          <Checkbox
+            checked={csvOptions.hasHeader}
+            onChange={(e) => setCsvOptions((prev) => ({ ...prev, hasHeader: e.target.checked }))}
+          >
+            {i18n('workspace.importExport.hasHeader')}
+          </Checkbox>
+          <Checkbox
+            checked={csvOptions.emptyAsNull}
+            onChange={(e) => setCsvOptions((prev) => ({ ...prev, emptyAsNull: e.target.checked }))}
+          >
+            {i18n('workspace.importExport.emptyAsNull')}
+          </Checkbox>
+          <span style={{ color: 'var(--text-color-secondary)' }}>{i18n('workspace.importExport.csvOptionsHint')}</span>
         </div>
       )}
       {!result && preview && (
