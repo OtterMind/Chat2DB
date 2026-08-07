@@ -5,6 +5,7 @@ import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.enums.plugin.AccountActionTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.PrivilegeScopeEnum;
+import ai.chat2db.community.domain.api.enums.plugin.PasswordExpirePolicyEnum;
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.plugin.mysql.enums.account.MysqlPrivilege;
 import org.apache.commons.lang3.StringUtils;
@@ -69,8 +70,53 @@ class MysqlAccountSqlBuilder {
                 yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
             }
+            case ALTER_PASSWORD_POLICY -> {
+                PasswordExpirePolicyEnum policy = PasswordExpirePolicyEnum.from(command.getPasswordExpirePolicy());
+                String expireClause = switch (policy) {
+                    case DEFAULT -> SQL_PASSWORD_EXPIRE_DEFAULT;
+                    case NEVER -> SQL_PASSWORD_EXPIRE_NEVER;
+                    case IMMEDIATE -> SQL_PASSWORD_EXPIRE;
+                    case INTERVAL -> {
+                        Integer days = command.getPasswordExpireDays();
+                        if (days == null || days < 1 || days > MAX_PASSWORD_EXPIRE_DAYS) {
+                            throw new BusinessException(ERROR_KEY_ACCOUNT_INVALID_EXPIRE_DAYS);
+                        }
+                        yield SQL_PASSWORD_EXPIRE_INTERVAL_PREFIX + days + SQL_PASSWORD_EXPIRE_INTERVAL_SUFFIX;
+                    }
+                };
+                yield SQL_ALTER_USER + account(command) + " " + expireClause;
+            }
+            case ALTER_RESOURCE_LIMITS -> {
+                StringBuilder limits = new StringBuilder();
+                requireNonNegative(command.getMaxQueriesPerHour());
+                requireNonNegative(command.getMaxUpdatesPerHour());
+                requireNonNegative(command.getMaxConnectionsPerHour());
+                requireNonNegative(command.getMaxUserConnections());
+                if (command.getMaxQueriesPerHour() != null) {
+                    limits.append(SQL_MAX_QUERIES_PER_HOUR).append(command.getMaxQueriesPerHour());
+                }
+                if (command.getMaxUpdatesPerHour() != null) {
+                    limits.append(SQL_MAX_UPDATES_PER_HOUR).append(command.getMaxUpdatesPerHour());
+                }
+                if (command.getMaxConnectionsPerHour() != null) {
+                    limits.append(SQL_MAX_CONNECTIONS_PER_HOUR).append(command.getMaxConnectionsPerHour());
+                }
+                if (command.getMaxUserConnections() != null) {
+                    limits.append(SQL_MAX_USER_CONNECTIONS).append(command.getMaxUserConnections());
+                }
+                if (limits.isEmpty()) {
+                    throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
+                }
+                yield SQL_ALTER_USER + account(command) + SQL_WITH_LIMITS + limits;
+            }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
         };
+    }
+
+    private static void requireNonNegative(Integer value) {
+        if (value != null && value < 0) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_INVALID_RESOURCE_LIMIT);
+        }
     }
 
     private static String passwordLiteral(AccountOperationRequest command, boolean maskSensitive) {

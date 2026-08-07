@@ -19,4 +19,10 @@ public class AccountOperationRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private String passwordExpirePolicy;
+    private Integer passwordExpireDays;
+    private Integer maxQueriesPerHour;
+    private Integer maxUpdatesPerHour;
+    private Integer maxConnectionsPerHour;
+    private Integer maxUserConnections;
 }
