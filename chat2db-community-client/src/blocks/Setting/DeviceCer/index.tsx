@@ -12,6 +12,7 @@ import { Dot } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import { openWebPage } from '@/utils/url';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import SearchTargetLabel from '../SearchTargetLabel';
 
 const DeviceCer = () => {
   const { styles } = useStyles();
@@ -88,7 +89,11 @@ const DeviceCer = () => {
       />
 
       <Form form={form} layout="vertical" style={{ maxWidth: 600 }} onValuesChange={handleFormValuesChange}>
-        <Form.Item label="License ID" name="licenseId" tooltip={i18n('license.licenseTooltip')}>
+        <Form.Item
+          label={<SearchTargetLabel targetId="deviceCer.license">License ID</SearchTargetLabel>}
+          name="licenseId"
+          tooltip={i18n('license.licenseTooltip')}
+        >
           <Select
             placeholder={i18n('license.selectOrder')}
             options={licenseList.map((t) => ({
@@ -118,21 +123,30 @@ const DeviceCer = () => {
         </Form.Item>
 
         <Form.Item
-          label={i18n('license.deviceNameLabel')}
+          label={
+            <SearchTargetLabel targetId="deviceCer.name">{i18n('license.deviceNameLabel')}</SearchTargetLabel>
+          }
           name="deviceName"
           tooltip={i18n('license.deviceNameTooltip')}
         >
           <Input placeholder={i18n('license.deviceNamePlaceholder')} maxLength={100} autoComplete="off" />
         </Form.Item>
 
-        <Form.Item label={i18n('license.osLabel')} name="deviceType">
+        <Form.Item
+          label={<SearchTargetLabel targetId="deviceCer.os">{i18n('license.osLabel')}</SearchTargetLabel>}
+          name="deviceType"
+        >
           <Select
             placeholder={i18n('license.selectOS')}
             options={['Windows', 'Linux', 'MacOS'].map((t) => ({ label: t, value: t }))}
           />
         </Form.Item>
 
-        <Form.Item label={i18n('license.deviceId')} name="deviceId" extra={i18n('license.deviceIdExtra')}>
+        <Form.Item
+          label={<SearchTargetLabel targetId="deviceCer.id">{i18n('license.deviceId')}</SearchTargetLabel>}
+          name="deviceId"
+          extra={i18n('license.deviceIdExtra')}
+        >
           <Input placeholder={i18n('license.deviceIdPlaceholder')} autoComplete="off" />
         </Form.Item>
 

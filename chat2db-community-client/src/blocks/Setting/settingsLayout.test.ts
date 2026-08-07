@@ -10,6 +10,10 @@ const terminalSettingSource = readFileSync('src/blocks/Setting/TerminalSetting/i
 const mcpSettingSource = readFileSync('src/blocks/Setting/McpSetting/index.tsx', 'utf8');
 const networkProxySettingSource = readFileSync('src/blocks/Setting/NetworkProxySetting/index.tsx', 'utf8');
 const shortcutSettingSource = readFileSync('src/blocks/Setting/ShortcutSetting/index.tsx', 'utf8');
+const personalSettingSource = readFileSync('src/blocks/Setting/Personal/index.tsx', 'utf8');
+const inviteSettingSource = readFileSync('src/blocks/Setting/Invite/index.tsx', 'utf8');
+const deviceCertificateSettingSource = readFileSync('src/blocks/Setting/DeviceCer/index.tsx', 'utf8');
+const purchaseDetailsSource = readFileSync('src/components/PurchaseDetails/index.tsx', 'utf8');
 const searchCatalogSource = readFileSync('src/blocks/Setting/searchCatalog.ts', 'utf8');
 const searchTargetLabelSource = readFileSync('src/blocks/Setting/SearchTargetLabel.tsx', 'utf8');
 const searchModelSource = readFileSync('src/blocks/Setting/search.ts', 'utf8');
@@ -73,6 +77,17 @@ const settingSearchTargetIds = [
   'mcp.token',
   'networkProxy.mode',
   'networkProxy.test',
+  'personal.profile',
+  'personal.email',
+  'personal.password',
+  'invite.code',
+  'invite.balance',
+  'invite.list',
+  'purchase.orders',
+  'deviceCer.license',
+  'deviceCer.name',
+  'deviceCer.os',
+  'deviceCer.id',
 ];
 const searchableSettingSources = [
   baseSettingSource,
@@ -81,6 +96,10 @@ const searchableSettingSources = [
   mcpSettingSource,
   networkProxySettingSource,
   shortcutSettingSource,
+  personalSettingSource,
+  inviteSettingSource,
+  deviceCertificateSettingSource,
+  purchaseDetailsSource,
 ].join('\n');
 const hiddenNetworkProxyTargetIds = [
   'networkProxy.type',
@@ -217,6 +236,16 @@ assert.match(
   settingSource,
   /hidePageHeader: true,[\s\S]*?body: <About \/>/,
   'other editions render About without a duplicate shared header',
+);
+assert.doesNotMatch(
+  inviteSettingSource,
+  /invite\.setting\.title'\)/,
+  'the shared settings page header owns the invitation page title',
+);
+assert.match(
+  inviteSettingSource,
+  /data-setting-search-id="invite\.code"/,
+  'invitation actions expose an exact search destination',
 );
 
 console.log('Settings layout contract tests passed.');
