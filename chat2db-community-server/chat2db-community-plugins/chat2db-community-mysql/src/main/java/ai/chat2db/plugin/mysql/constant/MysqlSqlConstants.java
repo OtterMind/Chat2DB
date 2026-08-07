@@ -35,6 +35,9 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
     public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
+    public static final String SQL_INVISIBLE = "INVISIBLE";
+    public static final String SQL_VISIBLE = "VISIBLE";
+    public static final String SQL_ALTER_INDEX = "ALTER INDEX ";
     public static final String SQL_ENGINE_ASSIGNMENT = "ENGINE=";
     public static final String SQL_FIRST_TERMINATOR = " FIRST;\n";
     public static final String SQL_FROM = " FROM ";

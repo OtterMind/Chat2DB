@@ -203,7 +203,18 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                 if (mysqlIndexTypeEnum == null) {
                     continue;
                 }
-                script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
+                if (EditStatusEnum.MODIFY.name().equals(tableIndex.getEditStatus())
+                        && !MysqlIndexTypeEnum.PRIMARY_KEY.equals(mysqlIndexTypeEnum)
+                        && onlyIndexVisibilityChanged(oldTable, tableIndex)) {
+                    // Visibility-only change: use the lightweight ALTER INDEX ... VISIBLE/INVISIBLE
+                    // instead of dropping and rebuilding the whole index. The primary key can
+                    // never be invisible, so it is excluded above.
+                    script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildAlterIndexVisibility(tableIndex))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else {
+                    script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                }
             }
         }
 
@@ -215,6 +226,35 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             return StringUtils.EMPTY;
         }
 
+    }
+
+    /**
+     * Returns true when the modified index differs from the stored one only in visibility,
+     * so the lightweight {@code ALTER INDEX ... VISIBLE/INVISIBLE} can be used instead of
+     * dropping and rebuilding the index.
+     */
+    private static boolean onlyIndexVisibilityChanged(Table oldTable, TableIndex newIndex) {
+        TableIndex oldIndex = oldTable.getIndexList() == null ? null : oldTable.getIndexList().stream()
+                .filter(idx -> StringUtils.equals(idx.getName(), newIndex.getName()))
+                .findFirst()
+                .orElse(null);
+        if (oldIndex == null) {
+            return false;
+        }
+        if (!StringUtils.equals(oldIndex.getType(), newIndex.getType())
+                || !StringUtils.equals(oldIndex.getComment(), newIndex.getComment())) {
+            return false;
+        }
+        return indexColumnNames(oldIndex).equals(indexColumnNames(newIndex));
+    }
+
+    private static List<String> indexColumnNames(TableIndex tableIndex) {
+        if (tableIndex.getColumnList() == null) {
+            return Collections.emptyList();
+        }
+        return tableIndex.getColumnList().stream()
+                .map(TableIndexColumn::getColumnName)
+                .collect(Collectors.toList());
     }
 
     private String findPrevious(TableColumn tableColumn, Table newTable) {
