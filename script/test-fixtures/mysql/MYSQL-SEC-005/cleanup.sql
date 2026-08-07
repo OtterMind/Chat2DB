@@ -1,0 +1,4 @@
+-- MYSQL-SEC-005: Cleanup
+DROP DATABASE IF EXISTS `sec005_test`;
+DROP USER IF EXISTS 'sec005_admin'@'%';
+DROP USER IF EXISTS 'sec005_user'@'%';

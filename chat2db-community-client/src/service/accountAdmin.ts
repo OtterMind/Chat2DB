@@ -15,6 +15,7 @@ export enum AccountPrivilegeScope {
   GLOBAL = 'GLOBAL',
   DATABASE = 'DATABASE',
   TABLE = 'TABLE',
+  COLUMN = 'COLUMN',
 }
 
 export enum AccountPrivilege {

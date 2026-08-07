@@ -54,6 +54,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const [tableOptions, setTableOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [databaseLoading, setDatabaseLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
+  const [columnOptions, setColumnOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [columnLoading, setColumnLoading] = useState(false);
   const [form] = Form.useForm();
   const [accountForm] = Form.useForm();
   const previewRequestRef = useRef(0);
@@ -160,6 +162,30 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       });
   };
 
+  const loadColumns = (databaseName?: string, tableName?: string) => {
+    setColumnOptions([]);
+    if (!dataSourceId || !databaseName || !tableName) {
+      return;
+    }
+    setColumnLoading(true);
+    sqlService
+      .getColumnList({ dataSourceId, databaseName, tableName, pageNo: 1, pageSize: 1000 } as never)
+      .then((res) => {
+        setColumnOptions(
+          (res?.data || []).map((item: any) => ({
+            label: item.name,
+            value: item.name,
+          })),
+        );
+      })
+      .catch(() => {
+        setColumnOptions([]);
+      })
+      .finally(() => {
+        setColumnLoading(false);
+      });
+  };
+
   const loadCapability = () => {
     if (!dataSourceId) {
       return Promise.resolve(null);
@@ -223,6 +249,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedTableName, tableOptions]);
 
   useEffect(() => {
+    if (watchedScope === AccountPrivilegeScope.COLUMN && watchedTableName) {
+      form.setFieldsValue({ columnList: undefined });
+      loadColumns(watchedDatabaseName, watchedTableName);
+    }
+  }, [watchedScope, watchedTableName]);
+
+  useEffect(() => {
     if (watchedActionType === AccountActionType.REVOKE_PRIVILEGE) {
       form.setFieldsValue({ grantOption: false });
     }
@@ -242,6 +275,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       databaseName: values.databaseName,
       tableName: values.tableName,
       privileges: values.privileges,
+      columnList: values.columnList,
       grantOption: values.actionType === AccountActionType.GRANT_PRIVILEGE ? values.grantOption : false,
     };
   };
@@ -471,6 +505,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     { label: i18n('workspace.databaseAccount.scopeGlobal'), value: AccountPrivilegeScope.GLOBAL },
                     { label: i18n('workspace.databaseAccount.scopeDatabase'), value: AccountPrivilegeScope.DATABASE },
                     { label: i18n('workspace.databaseAccount.scopeTable'), value: AccountPrivilegeScope.TABLE },
+                    { label: i18n('workspace.databaseAccount.scopeColumn'), value: AccountPrivilegeScope.COLUMN },
                   ]}
                 />
               </Form.Item>
@@ -489,7 +524,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                   />
                 </Form.Item>
               )}
-              {watchedScope === AccountPrivilegeScope.TABLE && (
+              {(watchedScope === AccountPrivilegeScope.TABLE || watchedScope === AccountPrivilegeScope.COLUMN) && (
                 <Form.Item name="tableName" label={i18n('workspace.databaseAccount.table')} rules={[{ required: true }]}>
                   <Select
                     showSearch
@@ -497,6 +532,22 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     options={tableOptions}
                     optionFilterProp="label"
                     placeholder={i18n('workspace.databaseAccount.selectTable')}
+                  />
+                </Form.Item>
+              )}
+              {watchedScope === AccountPrivilegeScope.COLUMN && (
+                <Form.Item
+                  name="columnList"
+                  label={i18n('workspace.databaseAccount.columns')}
+                  rules={[{ required: true, message: i18n('workspace.databaseAccount.columnsRequired') }]}
+                >
+                  <Select
+                    mode="multiple"
+                    showSearch
+                    loading={columnLoading}
+                    options={columnOptions}
+                    optionFilterProp="label"
+                    placeholder={i18n('workspace.databaseAccount.selectColumns')}
                   />
                 </Form.Item>
               )}
