@@ -31,7 +31,7 @@ public class RedisKeyOperations implements IKeyOperations {
     public List<KeyEntry> query(Connection connection, KeyRequest query) {
         return redisMetaData.keys(connection, query.getDatabaseName(), null, query.getPattern())
                 .stream()
-                .map(redisKeyConverter::redisKey2keyEntry)
+                .map(redisKey -> redisKey2keyEntry(redisKey, true))
                 .collect(Collectors.toList());
     }
 
@@ -42,7 +42,7 @@ public class RedisKeyOperations implements IKeyOperations {
         KeyScanResult result = new KeyScanResult();
         result.setKeys(redisKeyScanResult.getKeys()
                 .stream()
-                .map(redisKeyConverter::redisKey2keyEntry)
+                .map(redisKey -> redisKey2keyEntry(redisKey, false))
                 .collect(Collectors.toList()));
         result.setNextCursor(redisKeyScanResult.getNextCursor());
         result.setHasMore(redisKeyScanResult.getHasMore());
@@ -56,13 +56,13 @@ public class RedisKeyOperations implements IKeyOperations {
 
     @Override
     public KeyEntry keyDetail(Connection connection, KeyDetailRequest query) {
-        return redisKeyConverter.redisKey2keyEntry(redisMetaData.keyDetail(query.getKeyName()));
+        return redisKey2keyEntry(redisMetaData.keyDetail(connection, query.getKeyName()), true);
     }
 
     @Override
     public KeyEntry create(Connection connection, KeyCreate command) {
         RedisScriptExecutor.getInstance().createRedisKey(redisKeyConverter.keyCreate2redisKey(command));
-        return redisKeyConverter.redisKey2keyEntry(redisMetaData.keyDetail(command.getName()));
+        return redisKey2keyEntry(redisMetaData.keyDetail(connection, command.getName()), true);
     }
 
     @Override
@@ -74,7 +74,7 @@ public class RedisKeyOperations implements IKeyOperations {
         if (resultName == null) {
             return null;
         }
-        return redisKeyConverter.redisKey2keyEntry(redisMetaData.keyDetail(resultName));
+        return redisKey2keyEntry(redisMetaData.keyDetail(connection, resultName), true);
     }
 
     @Override
@@ -82,5 +82,11 @@ public class RedisKeyOperations implements IKeyOperations {
         String dropTableSql = Chat2DBContext.getDbManager()
                 .dropTable(connection, command.getDatabaseName(), null, command.getKeyName());
         DefaultSQLExecutor.getInstance().execute(connection, dropTableSql, resultSet -> null);
+    }
+
+    private KeyEntry redisKey2keyEntry(RedisKey redisKey, boolean detailLoaded) {
+        KeyEntry entry = redisKeyConverter.redisKey2keyEntry(redisKey);
+        entry.setDetailLoaded(detailLoaded);
+        return entry;
     }
 }

@@ -21,6 +21,13 @@ export const useStyles = createStyles(({ css, token }) => {
       align-items: center;
       height: 100%;
     `,
+    detailFailure: css`
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: ${token.colorTextSecondary};
+    `,
     operationAllDataBar: css`
       height: 34px;
       flex-shrink: 0;
