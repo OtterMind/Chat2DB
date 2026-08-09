@@ -8,6 +8,7 @@ import ai.chat2db.community.tools.constant.JdbcDriverConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.tools.util.JdbcJarUtils;
+import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.JdbcDriverManager;
 import cn.hutool.core.io.FileUtil;
@@ -63,7 +64,13 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
 
     @Override
     public DBConfig queryDbConfig(String dbType) {
-        return Chat2DBContext.PLUGIN_MAP.get(dbType).getDBConfig();
+        IPlugin plugin = Chat2DBContext.PLUGIN_MAP.get(dbType);
+        if (plugin == null) {
+            // A user-defined type can be removed while a datasource still references it,
+            // so an unknown type has to read as a business error rather than an NPE.
+            throw new BusinessException("custom.database.notRegistered", new Object[]{dbType});
+        }
+        return plugin.getDBConfig();
     }
 
     @Override

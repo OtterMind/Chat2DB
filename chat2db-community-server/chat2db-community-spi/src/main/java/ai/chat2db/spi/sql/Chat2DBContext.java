@@ -19,6 +19,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -28,6 +29,20 @@ public class Chat2DBContext {
 
 
     public static Map<String, IPlugin> PLUGIN_MAP = new ConcurrentHashMap<>();
+
+    /**
+     * Database types that came from a plugin at startup. A user-defined type may
+     * not shadow one of these, and deleting a user-defined type may not evict one.
+     */
+    private static final Set<String> BUILT_IN_DB_TYPES = ConcurrentHashMap.newKeySet();
+
+    /**
+     * The plugin that serves a list of configurations rather than a single one -
+     * the generic adapter. It is the template used to back user-defined database
+     * types, so that a type added at runtime reaches the same metadata, manager
+     * and syntax handling as one declared in the adapter's own configuration.
+     */
+    private static volatile IPlugin configurableTemplate;
 
     static {
         ServiceLoader<IPlugin> s = ServiceLoader.load(IPlugin.class);
@@ -40,12 +55,57 @@ public class Chat2DBContext {
             } else {
                 List<DBConfig> dbConfigList = plugin.getDBConfigList();
                 if (CollectionUtils.isNotEmpty(dbConfigList)) {
+                    configurableTemplate = plugin;
                     for (DBConfig config : dbConfigList) {
                         PLUGIN_MAP.put(config.getDbType(), plugin.getPlugin(config));
                     }
                 }
             }
         }
+        BUILT_IN_DB_TYPES.addAll(PLUGIN_MAP.keySet());
+    }
+
+    /**
+     * Whether the type was registered by a plugin at startup.
+     */
+    public static boolean isBuiltInDatabaseType(String dbType) {
+        return dbType != null && BUILT_IN_DB_TYPES.contains(dbType);
+    }
+
+    /**
+     * Registers a user-defined database type so it becomes connectable and shows
+     * up in the supported-database inventory without a restart.
+     *
+     * @throws IllegalStateException    if no configurable adapter is available to back it.
+     * @throws IllegalArgumentException if the type is blank or shadows a built-in one.
+     */
+    public static void registerConfigurableDatabase(DBConfig config) {
+        if (config == null || StringUtils.isBlank(config.getDbType())) {
+            throw new IllegalArgumentException("Database type must not be blank.");
+        }
+        if (isBuiltInDatabaseType(config.getDbType())) {
+            throw new IllegalArgumentException(
+                    "Database type is already provided by a plugin: " + config.getDbType());
+        }
+        IPlugin template = configurableTemplate;
+        if (template == null) {
+            throw new IllegalStateException(
+                    "No configurable database adapter is registered; cannot add " + config.getDbType());
+        }
+        PLUGIN_MAP.put(config.getDbType(), template.getPlugin(config));
+    }
+
+    /**
+     * Removes a previously registered user-defined type. Built-in types are left
+     * untouched, so a stale delete cannot uninstall a shipped database.
+     *
+     * @return true if a user-defined type was removed.
+     */
+    public static boolean unregisterConfigurableDatabase(String dbType) {
+        if (StringUtils.isBlank(dbType) || isBuiltInDatabaseType(dbType)) {
+            return false;
+        }
+        return PLUGIN_MAP.remove(dbType) != null;
     }
 
     private static IPlugin getPlugin(String dbType) {
