@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStyles } from './style';
 import { IconButton, SearchBar } from '@chat2db/ui';
-import { Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
+import { DatabaseBackup } from 'lucide-react';
 import AddDatasourceBar from './components/AddDatasourceBar';
 import TreeSetting from './components/TreeSetting';
 import { useTreeStore } from '@/store/tree';
@@ -11,8 +12,14 @@ import i18n from '@/i18n';
 import { searchTreeNodes } from '@/utils';
 import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import createRequest from '@/service/base';
 import { useUpdateEffect } from 'ahooks';
 import { debounce } from 'lodash';
+import {
+  STORAGE_MIGRATION_STATUS_EVENT,
+  needsStorageMigration,
+  type StorageMigrationStatus,
+} from './storageMigrationPrompt';
 import {
   ShortcutAction,
   ShortcutOverrides,
@@ -36,25 +43,26 @@ interface WorkspaceLeftActionBarProps {
 
 type SearchBarHandle = { focus: () => void; blur: () => void };
 
+const loadStorageMigrationStatus = createRequest<void, StorageMigrationStatus>('/api/system/storage-migration', {
+  errorLevel: false,
+});
+
 const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
   ({ active = true, onLocateActiveTab, locateActiveTabDisabled = false }) => {
     const searchBarRef = useRef<SearchBarHandle>(null);
-    const {
-      refreshTreeData,
-      searchBarValue,
-      setSearchBarValue,
-      searchResultKeys,
-      hiddenTreeNodeIds,
-    } = useTreeStore((s) => ({
-      refreshTreeData: s.refreshTreeData,
-      searchBarValue: s.searchBarValue,
-      setSearchBarValue: s.setSearchBarValue,
-      searchResultKeys: s.searchResultKeys,
-      hiddenTreeNodeIds: s.hiddenTreeNodeIds,
-    }));
+    const { refreshTreeData, searchBarValue, setSearchBarValue, searchResultKeys, hiddenTreeNodeIds } = useTreeStore(
+      (s) => ({
+        refreshTreeData: s.refreshTreeData,
+        searchBarValue: s.searchBarValue,
+        setSearchBarValue: s.setSearchBarValue,
+        searchResultKeys: s.searchResultKeys,
+        hiddenTreeNodeIds: s.hiddenTreeNodeIds,
+      }),
+    );
 
-    const { isEmbedIframe, shortcutOverrides } = useGlobalStore((s) => ({
+    const { isEmbedIframe, setSettingPageActiveTab, shortcutOverrides } = useGlobalStore((s) => ({
       isEmbedIframe: s.isEmbedIframe,
+      setSettingPageActiveTab: s.setSettingPageActiveTab,
       shortcutOverrides: s.shortcutOverrides,
     }));
     const shortcutConfig = useMemo(
@@ -63,6 +71,8 @@ const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
     );
 
     const { styles } = useStyles();
+    const showStorageMigration = !isEmbedIframe && runtimeEditionConfig.settingMenuProfile !== 'community';
+    const [migrationPending, setMigrationPending] = useState(false);
 
     const { isAdmin } = useOrgStore((s) => {
       return {
@@ -130,6 +140,42 @@ const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
       };
     }, [active, shortcutConfig]);
 
+    useEffect(() => {
+      if (!active || !showStorageMigration) {
+        setMigrationPending(false);
+        return;
+      }
+      let disposed = false;
+      void loadStorageMigrationStatus()
+        .then((status) => {
+          if (!disposed) {
+            setMigrationPending(needsStorageMigration(status));
+          }
+        })
+        .catch(() => {
+          if (!disposed) {
+            setMigrationPending(false);
+          }
+        });
+      return () => {
+        disposed = true;
+      };
+    }, [active, showStorageMigration]);
+
+    useEffect(() => {
+      if (!showStorageMigration) {
+        return;
+      }
+      const handleStatus = (event: Event) => {
+        const status = (event as CustomEvent<StorageMigrationStatus>).detail;
+        if (status) {
+          setMigrationPending(needsStorageMigration(status));
+        }
+      };
+      window.addEventListener(STORAGE_MIGRATION_STATUS_EVENT, handleStatus);
+      return () => window.removeEventListener(STORAGE_MIGRATION_STATUS_EVENT, handleStatus);
+    }, [showStorageMigration]);
+
     const showAddDatasourceBar = useMemo(() => {
       return isAdmin && !isEmbedIframe;
     }, [isAdmin, isEmbedIframe]);
@@ -167,6 +213,18 @@ const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
               </Tooltip>
             );
           })}
+          {showStorageMigration && migrationPending ? (
+            <Button
+              className={styles.storageMigrationButton}
+              danger
+              icon={<DatabaseBackup aria-hidden="true" size={14} />}
+              onClick={() => setSettingPageActiveTab('storageMigration')}
+              size="small"
+              type="text"
+            >
+              {i18n('workspace.action.storageMigrationPending')}
+            </Button>
+          ) : null}
           <div className={styles.rightActions}>
             {onLocateActiveTab && (
               <Tooltip title={i18n('workspace.tips.locateActiveTab')} mouseEnterDelay={1}>

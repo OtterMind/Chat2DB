@@ -45,6 +45,14 @@ const resultTableStyleSource = readFileSync(
   'src/blocks/SearchResult/components/ResultSetTable/style.ts',
   'utf8',
 );
+const rowDetailSource = readFileSync(
+  'src/blocks/SearchResult/components/RowDetail/index.tsx',
+  'utf8',
+);
+const resultSetSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSet/index.tsx',
+  'utf8',
+);
 
 test('more-tabs and export chevrons share one aligned trailing slot', () => {
   assert.match(exportBarSource, /<DropdownChevronTrigger>\{i18n\('common\.text\.export'\)\}/);
@@ -101,6 +109,12 @@ test('result search escape and close action use the same close lifecycle', () =>
   });
 
   assert.deepEqual(calls, ['close']);
+});
+
+test('record field focus updates the cell used by the value inspector', () => {
+  assert.match(rowDetailSource, /onFocus=\{\(\) => handleFieldActivate\(item\)\}/);
+  assert.match(rowDetailSource, /onActiveFieldChange\?\.\(\{[\s\S]*?field: item\.field,[\s\S]*?\}\);/);
+  assert.match(resultSetSource, /onActiveFieldChange=\{handleRowDetailActiveFieldChange\}/);
 });
 
 test('column metadata contains each available name, type, and comment row', () => {

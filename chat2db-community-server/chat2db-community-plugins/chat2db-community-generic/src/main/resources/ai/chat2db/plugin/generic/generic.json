@@ -423,5 +423,434 @@
       }
     ],
     "icon": "<svg viewBox=\"0 0 107.56 107.56\" xmlns=\"http://www.w3.org/2000/svg\"><defs id=\"c2diot-defs1164\" /> <style id=\"c2diot-style1117\" type=\"text/css\"> .st0{fill-rule:evenodd;clip-rule:evenodd;fill:#9E2878;} .st1{fill:#9E2878;} </style> <g transform=\"translate(-244.51235,-228.78793)\" id=\"c2diot-g1133\"> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1119\" d=\"m 341.6,253.4 c 2.6,-1 5.6,0.4 6.3,3 0.7,2.6 -1.1,5.8 -3.7,6.5 -3.2,0.6 -6.3,-1.4 -9.4,0.2 -3.1,1.7 -4,5.3 -4.7,8.4 -1.4,5.1 -8.6,7.4 -12.2,4.2 -3.3,-2.4 -3.4,-7.9 -0.2,-11.1 2.2,-2.5 6,-3.3 8.9,-2 2.7,1.2 6.1,1.7 8.7,-0.4 3,-2.4 2.2,-7.5 6.3,-8.8 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1121\" d=\"m 280.7,244.2 c 4.2,-2.2 9.6,1.5 8.3,6.2 -1.4,5.5 -0.7,11.6 2.9,15.7 3.4,4 9.9,4.8 14.8,1.9 3.7,-2.1 6.1,-5.9 7.5,-9.7 1,-3.1 0.6,-6.3 1.1,-9.4 1,-3.8 5.9,-6.1 9.2,-4.2 3.2,1.4 4,6 1.7,8.9 -1.4,2.2 -4.2,2.7 -6.4,3.8 -3.6,1.9 -6.6,5 -8.5,8.7 -1.2,2.1 -1.1,4.5 -1.7,6.8 -0.9,1.9 -3,2.7 -4.9,2.9 -4.8,0.6 -9.6,3 -13.1,6.8 -1.7,1.7 -3.1,4.2 -5.7,4.2 -2.7,-0.2 -4.7,-2.6 -7.5,-2.7 -5,-0.7 -10.3,0.7 -14.5,4 -3.7,3.1 -9.5,0.8 -9.7,-3.7 -0.9,-5.2 6.3,-9.6 10.2,-6.3 4.3,4 10.9,5.7 17.1,3.7 5.7,-1.9 9.8,-8.4 8.7,-14.1 -0.9,-5 -4.2,-9.4 -8.7,-11.5 -1.7,-0.8 -3.6,-1.6 -4.2,-3.5 -1.6,-2.9 0.2,-7 3.4,-8.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1123\" d=\"m 278,235.3 c 2.2,-0.8 4.2,1.3 3.3,3.4 -0.6,2.1 -3.7,2.7 -4.9,1.1 -1.3,-1.4 -0.3,-4 1.6,-4.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1125\" d=\"m 246.7,278.7 c 2.2,-0.8 4.2,1.2 3.3,3.4 -0.6,2.1 -3.7,2.7 -4.9,1 -1.3,-1.3 -0.3,-3.9 1.6,-4.4 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1127\" d=\"m 328.9,235.6 c 2.2,-0.7 4.2,1.3 3.3,3.5 -0.6,2 -3.7,2.7 -4.9,1 -1.2,-1.4 -0.3,-3.9 1.6,-4.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1129\" d=\"m 253.5,257.4 c 0.4,-3.7 5.6,-6 8.2,-3.6 1.9,1.1 1.6,3.6 2.2,5.5 0.4,2.4 2.7,4.3 5.3,4.3 3.2,0.3 6.5,-2.3 9.6,-1.2 4.8,1.2 6.6,7.6 3.2,11.6 -2.9,4.1 -9.4,4.5 -12.1,0.7 -2.4,-2.8 -0.5,-7.2 -2.7,-10.2 -1.7,-2.9 -5.5,-2.7 -8.4,-1.9 -3.1,0.9 -5.9,-2.2 -5.3,-5.2 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1131\" d=\"m 301.2,229.4 c 3.3,-1.9 7.6,0.9 6.8,4.6 0,2.3 -2.2,3.6 -3.5,5.3 -1.9,1.9 -2.3,5 -1.2,7.1 1.3,2.9 5,4 5.6,7.3 1.2,4.8 -3.3,10.2 -8.3,9.9 -4.8,0.1 -8.4,-5.1 -6.4,-9.6 1.2,-3.8 5.9,-5 7.3,-8.6 1.7,-3.2 -0.4,-6.2 -2.4,-8.2 -2,-2.2 -0.8,-6.4 2.1,-7.8 z\" class=\"st0\" /> </g> <g transform=\"translate(-244.51235,-228.78793)\" id=\"c2diot-g1149\"> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1135\" d=\"m 255.9,311.7 c -2.6,1 -5.6,-0.4 -6.3,-3 -0.7,-2.6 1.1,-5.8 3.7,-6.5 3.2,-0.6 6.3,1.4 9.4,-0.2 3.1,-1.6 4,-5.2 4.7,-8.3 1.4,-5.1 8.6,-7.4 12.2,-4.2 3.3,2.4 3.4,7.9 0.2,11 -2.2,2.5 -6,3.3 -8.9,2 -2.7,-1.2 -6.1,-1.7 -8.7,0.4 -3.1,2.3 -2.3,7.5 -6.3,8.8 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1137\" d=\"m 316.7,320.8 c -4.2,2.2 -9.6,-1.5 -8.3,-6.1 1.4,-5.5 0.7,-11.7 -2.9,-15.8 -3.4,-4 -9.9,-4.7 -14.8,-1.9 -3.7,2 -6.1,5.8 -7.5,9.6 -1,3.1 -0.6,6.3 -1.1,9.4 -1,3.8 -5.9,6.1 -9.2,4.3 -3.2,-1.4 -4,-6 -1.7,-9 1.4,-2.2 4.2,-2.7 6.4,-3.8 3.6,-1.9 6.6,-5 8.5,-8.7 1.2,-2 1.1,-4.5 1.7,-6.7 0.9,-1.9 3,-2.7 4.9,-2.9 4.8,-0.6 9.6,-3 13.1,-6.8 1.7,-1.6 3.1,-4.2 5.7,-4.1 2.7,0.1 4.7,2.5 7.5,2.7 5,0.6 10.3,-0.8 14.5,-4 3.7,-3.2 9.5,-0.9 9.7,3.6 0.9,5.2 -6.3,9.6 -10.2,6.3 -4.3,-4 -10.9,-5.7 -17.1,-3.7 -5.7,1.9 -9.8,8.4 -8.7,14.1 0.9,4.9 4.2,9.4 8.7,11.4 1.7,0.8 3.6,1.6 4.2,3.5 1.7,3 -0.1,7.2 -3.4,8.6 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1139\" d=\"m 319.5,329.8 c -2.2,0.8 -4.2,-1.3 -3.3,-3.4 0.6,-2.1 3.7,-2.7 4.9,-1.1 1.2,1.4 0.2,3.9 -1.6,4.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1141\" d=\"m 350.8,286.5 c -2.2,0.7 -4.2,-1.3 -3.3,-3.5 0.6,-2.1 3.7,-2.7 4.9,-1 1.3,1.4 0.3,3.9 -1.6,4.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1143\" d=\"m 268.6,329.4 c -2.2,0.7 -4.2,-1.3 -3.3,-3.5 0.6,-2 3.7,-2.7 4.9,-1 1.2,1.4 0.2,4 -1.6,4.5 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1145\" d=\"m 343.9,307.6 c -0.4,3.7 -5.6,6 -8.2,3.6 -1.9,-1.1 -1.6,-3.6 -2.2,-5.5 -0.4,-2.4 -2.7,-4.3 -5.3,-4.3 -3.2,-0.3 -6.5,2.3 -9.6,1.2 -4.8,-1.2 -6.6,-7.6 -3.2,-11.6 2.9,-4.1 9.4,-4.5 12.1,-0.7 2.4,2.8 0.5,7.1 2.7,10.1 1.7,2.9 5.5,2.7 8.4,1.9 3.2,-0.8 6,2.3 5.3,5.3 z\" class=\"st0\" /> <path style=\"clip-rule:evenodd;fill:#9e2878;fill-rule:evenodd\" id=\"c2diot-path1147\" d=\"m 296.2,335.7 c -3.3,2 -7.6,-0.9 -6.8,-4.6 0,-2.3 2.2,-3.6 3.5,-5.3 1.9,-1.9 2.3,-5 1.2,-7.1 -1.3,-2.9 -5,-4 -5.6,-7.3 -1.2,-4.8 3.3,-10.2 8.3,-9.9 4.8,-0.1 8.4,5.1 6.4,9.7 -1.2,3.7 -5.9,4.9 -7.3,8.5 -1.7,3.2 0.4,6.2 2.4,8.3 2.1,2 0.9,6.3 -2.1,7.7 z\" class=\"st0\" /> </g> <path style=\"fill:#9e2878\" id=\"c2diot-path1151\" d=\"m 172.28765,39.912072 c 13,0 19.8,5.7 20.4,17.1 v 3.6 c 0,0.4 -0.1,0.9 -0.1,1.4 l -0.1,0.1 c -1.4,14.6 -9.4,22 -24.2,22 v -7.7 h 2.8 c 7.6,0 12,-4.8 12.8,-14.3 0.5,-5 -0.1,-8.6 -1.9,-10.9 -1.7,-2.4 -4.5,-3.5 -8.4,-3.5 h -5.4 v -7.8 h 0.2 z m -3.9,44.2 h -0.1 -3.8 c -13.2,0 -20,-5.7 -20.5,-17.1 v -2.8 c 0.1,-0.7 0.1,-1.4 0.1,-2.2 l 0.1,-0.1 c 1.4,-14.6 9.5,-22 24.3,-22 v 7.8 h -2.7 c -3.9,0 -6.9,1.2 -9.1,3.5 -2.2,2.3 -3.5,6 -4,10.9 -0.9,9.5 2.6,14.3 10.3,14.3 h 5.5 v 7.7 z\" class=\"st1\" /> <path style=\"fill:#9e2878\" id=\"c2diot-path1153\" d=\"m 144.58765,32.112072 -0.6,6.3 h -4.3 l -3.7,39 h 4.3 l -0.6,6.3 h -4.3 v 0 h -10.1 v 0 h -4.3 l 0.6,-6.3 h 4.3 l 3.7,-39 h -4.3 l 0.6,-6.3 c 6.2,0 12.4,0 18.7,0 z\" class=\"st1\" /> <path style=\"fill:#9e2878\" id=\"c2diot-path1155\" d=\"m 224.38765,83.612072 h -9.9 l 4,-42.3 c -8.1,0 -14.8,0 -22.9,0 -2.4,-4.2 -7.1,-7.3 -11.6,-9.1 25.3,0 61.6,0 87,0 17.3,0 25.1,8.6 23.5,25.6 v 0.2 c -1.8,17 -11.2,25.6 -28.4,25.6 h -23.6 l 3.4,-36.1 h 10 l -2.5,27.2 h 16.1 c 4.5,0 8,-1.4 10.5,-4.1 2.4,-2.7 4,-6.9 4.5,-12.8 1.1,-11 -2.9,-16.5 -11.8,-16.5 -14.8,0 -29.4,0 -44.2,0 z\" class=\"st1\" /> <path style=\"fill:#9e2878\" id=\"c2diot-path1157\" d=\"m 319.38765,32.012072 c 3.2,0 6,0.4 8.3,1.2 2.2,0.7 4,1.8 5.3,3.2 1.3,1.4 2.2,3 2.7,4.9 0.5,1.8 0.6,3.8 0.4,6 -0.2,1.9 -0.9,3.7 -2.1,5.7 -1.2,2 -3,3.5 -5.3,4.8 2.1,1.2 3.6,2.8 4.4,4.7 0.9,1.9 1.2,4 0.9,6 -0.1,1.9 -0.6,3.7 -1.4,5.5 -0.9,1.9 -2,3.5 -3.6,5 -1.6,1.4 -3.6,2.6 -5.9,3.5 -2.4,0.9 -5.3,1.3 -8.6,1.3 h -35.6 c 5.5,-1.7 9.9,-4.7 13,-9 h 24.8 c 1.9,0 3.6,-0.6 5,-1.8 1.3,-1.2 2.1,-2.7 2.2,-4.6 0.1,-0.8 0,-1.6 -0.3,-2.3 -0.3,-0.7 -0.7,-1.4 -1.3,-1.9 -0.5,-0.6 -1.2,-1 -1.9,-1.4 -0.8,-0.3 -1.6,-0.4 -2.4,-0.4 h -21.1 c 0.3,-1.4 0.5,-2.8 0.6,-4.3 v -0.2 c 0.1,-1.6 0.2,-3.1 0.2,-4.5 h 21 c 1.9,0 3.6,-0.6 5,-1.8 1.3,-1.2 2,-2.6 2.2,-4.3 0.1,-0.8 -0.1,-1.6 -0.4,-2.3 -0.3,-0.7 -0.7,-1.4 -1.2,-1.9 -0.6,-0.6 -1.2,-1 -1.9,-1.4 -0.7,-0.3 -1.6,-0.4 -2.4,-0.4 h -24.8 c -2.2,-4.4 -6,-7.5 -11.4,-9.1 h 35.6 z\" class=\"st1\" /> <path style=\"fill:#9e2878\" id=\"c2diot-path1159\" d=\"m 263.38765,25.812072 v -2 h 2.3 l -2.3,-4.5 v 0.1 -2.1 h 2 l 5.5,10.6 h -3.1 l -1.1,-2.1 z m 25.9,-4.7 c 0,-0.2 0,-0.4 -0.1,-0.6 0,-0.1 -0.1,-0.3 -0.3,-0.5 -0.1,-0.1 -0.4,-0.2 -0.9,-0.2 h -3.5 c -0.4,0 -0.7,0 -0.9,0.1 -0.3,0 -0.4,0.1 -0.6,0.1 -0.1,0.1 -0.2,0.2 -0.3,0.4 -0.1,0.2 -0.2,0.5 -0.2,0.9 v 2.5 c 0,0.5 0.1,0.9 0.2,1.1 0.1,0.1 0.2,0.3 0.3,0.4 0.1,0.1 0.3,0.1 0.5,0.2 0.3,0.1 0.6,0.1 0.9,0.1 h 3.3 c 0.8,0 1.2,-0.1 1.4,-0.3 0.1,-0.1 0.2,-0.3 0.2,-0.4 l 0.1,-0.9 h 2.9 l -0.1,2.1 c 0,0.3 -0.1,0.5 -0.3,0.7 -0.1,0.3 -0.4,0.4 -0.7,0.6 -0.3,0.1 -0.6,0.3 -1.1,0.4 -0.5,0.1 -0.9,0.1 -1.3,0.1 h -5.3 c -0.3,0 -0.6,-0.1 -1,-0.1 -0.4,-0.1 -0.6,-0.1 -0.9,-0.2 -0.4,-0.1 -0.6,-0.2 -0.8,-0.4 -0.2,-0.2 -0.4,-0.4 -0.6,-0.8 -0.2,-0.4 -0.3,-0.8 -0.3,-1.3 v -5 c 0,-0.2 0.1,-0.4 0.1,-0.7 0.1,-0.2 0.1,-0.4 0.4,-0.6 0.1,-0.2 0.4,-0.4 0.7,-0.6 0.3,-0.2 0.6,-0.4 1.1,-0.5 0.5,-0.1 0.9,-0.1 1.2,-0.1 h 5.6 c 0.4,0 0.7,0.1 1,0.1 0.4,0.1 0.6,0.1 0.9,0.3 0.4,0.1 0.6,0.3 0.8,0.6 0.3,0.3 0.4,0.7 0.4,1.3 l 0.1,1.4 h -2.9 z m 12.8,-3.8 h 2.7 v 4.1 h 7.1 v -4.1 h 2.7 v 10.7 h -2.7 v -4.2 h -7.1 v 4.2 h -2.7 z m 22.5,0.1 h 10.9 v 2.3 h -8.1 v 2 h 7.6 v 2 h -7.7 v 2.1 h 8.2 l -0.1,2.2 h -10.8 z m -61.2,-0.1 v 2.1 l -2.3,4.4 h 2.3 v 2 h -3.4 l -1,2.1 h -3.1 l 5.4,-10.6 z m -22.4,8.1 v -2.4 h 1.9 c 0.4,0 0.8,-0.1 1,-0.4 0.2,-0.2 0.3,-0.6 0.3,-1.3 -0.1,-0.5 -0.1,-0.9 -0.4,-1.1 -0.1,-0.3 -0.5,-0.4 -0.9,-0.4 h -1.9 v -2.4 h 2.5 c 0.8,0 1.4,0.1 1.8,0.4 0.4,0.2 0.7,0.4 0.9,0.7 0.2,0.2 0.3,0.5 0.4,0.9 0.1,0.3 0.1,0.7 0.1,1.2 0.1,0.5 0.1,1 0,1.5 0,0.8 -0.1,1.4 -0.3,1.8 -0.1,0.4 -0.4,0.7 -0.6,0.9 -0.2,0.2 -0.6,0.3 -0.9,0.4 -0.4,0.1 -0.8,0.1 -1.4,0.1 h -2.5 z m -22.8,-8.1 h 2 l 5.5,10.6 h -3.1 l -1.1,-2.1 h -3.3 v -2 h 2.3 l -2.3,-4.5 v 0.1 z m 22.8,0.1 v 2.4 h -3.2 v 3.2 h 3.2 v 2.4 h -3.2 l -0.1,2.6 h -2.7 v -10.5 h 6 z m -24.9,-0.1 h 2.1 v 2.1 l -2.3,4.4 h 2.3 v 2 h -3.4 l -1,2.1 h -3.1 z\" class=\"st1\" /></svg>"
+  },
+  {
+    "dbType": "YASHANDB",
+    "name": "YashanDB",
+    "sqlDialect": "ORACLE",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/yashandb/yashandb-jdbc/1.7.10/yashandb-jdbc-1.7.10.jar"
+        ],
+        "jdbcDriver": "yashandb-jdbc-1.7.10.jar",
+        "jdbcDriverClass": "com.yashandb.jdbc.Driver",
+        "url": "jdbc:yasdb://localhost:1688/yasdb"
+      }
+    ]
+  },
+  {
+    "dbType": "VASTBASE",
+    "name": "Vastbase",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/cn/com/vastdata/vastbase-jdbc/2.11v/vastbase-jdbc-2.11v.jar"
+        ],
+        "jdbcDriver": "vastbase-jdbc-2.11v.jar",
+        "jdbcDriverClass": "cn.com.vastbase.Driver",
+        "url": "jdbc:vastbase://localhost:5432/postgres"
+      }
+    ]
+  },
+  {
+    "dbType": "CLOUDBERRY",
+    "name": "Apache Cloudberry",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5432/gpadmin"
+      }
+    ]
+  },
+  {
+    "dbType": "VERTICA",
+    "name": "Vertica",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/vertica/jdbc/vertica-jdbc/24.4.0-0/vertica-jdbc-24.4.0-0.jar"
+        ],
+        "jdbcDriver": "vertica-jdbc-24.4.0-0.jar",
+        "jdbcDriverClass": "com.vertica.jdbc.Driver",
+        "url": "jdbc:vertica://localhost:5433/vmart"
+      }
+    ]
+  },
+  {
+    "dbType": "TERADATA",
+    "name": "Teradata",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/teradata/jdbc/terajdbc/20.00.00.46/terajdbc-20.00.00.46.jar"
+        ],
+        "jdbcDriver": "terajdbc-20.00.00.46.jar",
+        "jdbcDriverClass": "com.teradata.jdbc.TeraDriver",
+        "url": "jdbc:teradata://localhost/DATABASE=dbc"
+      }
+    ]
+  },
+  {
+    "dbType": "DATABEND",
+    "name": "Databend",
+    "sqlDialect": "MYSQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/databend/databend-jdbc/0.3.9/databend-jdbc-0.3.9.jar"
+        ],
+        "jdbcDriver": "databend-jdbc-0.3.9.jar",
+        "jdbcDriverClass": "com.databend.jdbc.DatabendDriver",
+        "url": "jdbc:databend://localhost:8000/default"
+      }
+    ]
+  },
+  {
+    "dbType": "GREENGAGE",
+    "name": "Greengage",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5432/gpadmin"
+      }
+    ]
+  },
+  {
+    "dbType": "MATERIALIZE",
+    "name": "Materialize",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:6875/materialize"
+      }
+    ]
+  },
+  {
+    "dbType": "RISINGWAVE",
+    "name": "RisingWave",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:4566/dev"
+      }
+    ]
+  },
+  {
+    "dbType": "YELLOWBRICK",
+    "name": "Yellowbrick",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5432/yellowbrick"
+      }
+    ]
+  },
+  {
+    "dbType": "EDB",
+    "name": "EDB Postgres Advanced Server",
+    "sqlDialect": "POSTGRESQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/postgresql-42.5.1.jar"
+        ],
+        "jdbcDriver": "postgresql-42.5.1.jar",
+        "jdbcDriverClass": "org.postgresql.Driver",
+        "url": "jdbc:postgresql://localhost:5444/edb"
+      }
+    ]
+  },
+  {
+    "dbType": "NDBCLUSTER",
+    "name": "MySQL NDB Cluster",
+    "sqlDialect": "MYSQL",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/mysql-connector-java-8.0.30.jar"
+        ],
+        "jdbcDriver": "mysql-connector-java-8.0.30.jar",
+        "jdbcDriverClass": "com.mysql.cj.jdbc.Driver",
+        "url": "jdbc:mysql://localhost:3306/"
+      }
+    ]
+  },
+  {
+    "dbType": "AZURESQL",
+    "name": "Azure SQL Database",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/mssql-jdbc-11.2.1.jre17.jar"
+        ],
+        "jdbcDriver": "mssql-jdbc-11.2.1.jre17.jar",
+        "jdbcDriverClass": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+        "url": "jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=false"
+      }
+    ]
+  },
+  {
+    "dbType": "HANA",
+    "name": "SAP HANA",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/sap/cloud/db/jdbc/ngdbc/2.25.9/ngdbc-2.25.9.jar"
+        ],
+        "jdbcDriver": "ngdbc-2.25.9.jar",
+        "jdbcDriverClass": "com.sap.db.jdbc.Driver",
+        "url": "jdbc:sap://localhost:30015"
+      }
+    ]
+  },
+  {
+    "dbType": "MONETDB",
+    "name": "MonetDB",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/monetdb/monetdb-jdbc-new/2.37/monetdb-jdbc-new-2.37.jar"
+        ],
+        "jdbcDriver": "monetdb-jdbc-new-2.37.jar",
+        "jdbcDriverClass": "nl.cwi.monetdb.jdbc.MonetDriver",
+        "url": "jdbc:monetdb://localhost:50000/demo"
+      }
+    ]
+  },
+  {
+    "dbType": "ALTIBASE",
+    "name": "Altibase",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/altibase/altibase-jdbc/7.3.0.0.3/altibase-jdbc-7.3.0.0.3.jar"
+        ],
+        "jdbcDriver": "altibase-jdbc-7.3.0.0.3.jar",
+        "jdbcDriverClass": "Altibase.jdbc.driver.AltibaseDriver",
+        "url": "jdbc:Altibase://localhost:20300/mydb"
+      }
+    ]
+  },
+  {
+    "dbType": "IRIS",
+    "name": "InterSystems IRIS",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/intersystems/intersystems-jdbc/3.10.3/intersystems-jdbc-3.10.3.jar"
+        ],
+        "jdbcDriver": "intersystems-jdbc-3.10.3.jar",
+        "jdbcDriverClass": "com.intersystems.jdbc.IRISDriver",
+        "url": "jdbc:IRIS://localhost:1972/USER"
+      }
+    ]
+  },
+  {
+    "dbType": "NUODB",
+    "name": "NuoDB",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/nuodb/jdbc/nuodb-jdbc/24.2.1/nuodb-jdbc-24.2.1.jar"
+        ],
+        "jdbcDriver": "nuodb-jdbc-24.2.1.jar",
+        "jdbcDriverClass": "com.nuodb.jdbc.Driver",
+        "url": "jdbc:com.nuodb://localhost/test"
+      }
+    ]
+  },
+  {
+    "dbType": "DOLPHINDB",
+    "name": "DolphinDB",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/dolphindb/jdbc/3.00.3.0/jdbc-3.00.3.0.jar",
+          "https://repo1.maven.org/maven2/com/dolphindb/dolphindb-javaapi/3.00.3.0/dolphindb-javaapi-3.00.3.0.jar",
+          "https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar"
+        ],
+        "jdbcDriver": "jdbc-3.00.3.0.jar,dolphindb-javaapi-3.00.3.0.jar,slf4j-api-2.0.16.jar",
+        "jdbcDriverClass": "com.dolphindb.jdbc.Driver",
+        "url": "jdbc:dolphindb://localhost:8848"
+      }
+    ]
+  },
+  {
+    "dbType": "DB2I",
+    "name": "Db2 for IBM i",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/net/sf/jt400/jt400/21.0.4/jt400-21.0.4.jar"
+        ],
+        "jdbcDriver": "jt400-21.0.4.jar",
+        "jdbcDriverClass": "com.ibm.as400.access.AS400JDBCDriver",
+        "url": "jdbc:as400://localhost"
+      }
+    ]
+  },
+  {
+    "dbType": "GREPTIMEDB",
+    "name": "GreptimeDB",
+    "sqlDialect": "MYSQL",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/mysql-connector-java-8.0.30.jar"
+        ],
+        "jdbcDriver": "mysql-connector-java-8.0.30.jar",
+        "jdbcDriverClass": "com.mysql.cj.jdbc.Driver",
+        "url": "jdbc:mysql://localhost:4002/public"
+      }
+    ]
+  },
+  {
+    "dbType": "SPARK",
+    "name": "Apache Spark",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://cdn.chat2db-ai.com/lib/hive-jdbc-uber-2.6.5.0-292.jar"
+        ],
+        "jdbcDriver": "hive-jdbc-uber-2.6.5.0-292.jar",
+        "jdbcDriverClass": "org.apache.hive.jdbc.HiveDriver",
+        "url": "jdbc:hive2://localhost:10000/default"
+      }
+    ]
+  },
+  {
+    "dbType": "TIMECHODB",
+    "name": "TimechoDB",
+    "supportDatabase": false,
+    "supportSchema": false,
+    "identifierQuotes": "none",
+    "tableQualification": "table",
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/apache/iotdb/iotdb-jdbc/1.3.2/iotdb-jdbc-1.3.2-jar-with-dependencies.jar"
+        ],
+        "jdbcDriver": "iotdb-jdbc-1.3.2-jar-with-dependencies.jar",
+        "jdbcDriverClass": "org.apache.iotdb.jdbc.IoTDBDriver",
+        "url": "jdbc:iotdb://localhost:6667/"
+      }
+    ]
   }
 ]

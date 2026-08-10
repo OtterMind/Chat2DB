@@ -13,7 +13,11 @@ import java.util.Map;
 public class ResetMcpTokenHandler implements IJcefActionHandler {
 
     @Override
-    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
-        ResponseBuilder.buildSuccessJcef(Map.of("data", SystemSettingsUtil.resetMcpAuthToken()), callback);
+    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) {
+        try {
+            ResponseBuilder.buildSuccessJcef(Map.of("data", SystemSettingsUtil.resetMcpAuthToken()), callback);
+        } catch (Exception exception) {
+            callback.failure(500, exception.getMessage());
+        }
     }
 }

@@ -209,7 +209,10 @@ export default memo<IProps>((props) => {
   };
 
   return (
-    <div className={cx(styles.purchaseDetails, { [styles.withoutTitle]: hideTitle }, className)}>
+    <div
+      className={cx(styles.purchaseDetails, { [styles.withoutTitle]: hideTitle }, className)}
+      data-setting-search-id="purchase.orders"
+    >
       {!hideTitle && <div className={styles.title}>{i18n('setting.purchaseDetails.title')}</div>}
       <AntdTable
         className={styles.antdTableBox}
