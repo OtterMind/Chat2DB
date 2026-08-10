@@ -229,6 +229,8 @@ export default {
   'workspace.menu.copyDataSource': 'Copy Data Source',
   'workspace.explorer.title': 'Files',
   'workspace.explorer.databases': 'Data Browser',
+  'workspace.action.storageMigration': 'Storage migration',
+  'workspace.action.storageMigrationPending': 'Migrate local data now',
   'workspace.openSessions.title': 'Open Sessions',
   'workspace.openSessions.empty': 'No open SQL sessions',
   'workspace.openSessions.untitled': 'Untitled SQL',

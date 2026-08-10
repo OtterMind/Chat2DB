@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStyles } from './style';
-import { Button, Flex, Form, Table, Tag } from 'antd';
+import { Button, Form, Table, Tag } from 'antd';
 import { CopyButton, IconButton, Input, Modal, staticMessage } from '@chat2db/ui';
 import { RefreshCcw } from 'lucide-react';
 import { InvitationOrderVO, InvitationStatusCode } from '@/typings/invitation';
@@ -31,7 +31,7 @@ const Invite = () => {
   const [invitationCode, setInvitationCode] = useState<string>('');
   const [openModal, setOpenModal] = useState(false);
   const [modalInputValue, setModalInputValue] = useState<string>('');
-  const [invitationOrder, setInvitationOrder] = useState<InvitationOrderVO>();
+  const [invitationOrder, setInvitationOrder] = useState<InvitationOrderVO | null>(null);
   const [openPayoutsModal, setOpenPayoutsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const { appUrlConfig } = useGlobalStore((state) => ({
@@ -88,18 +88,20 @@ const Invite = () => {
       );
     }
     return (
-      <>
-        <Flex gap={8} align="center">
-          {invitationCode}
-          <CopyButton size="sm" copyContent={invitationCode} copySuccessText={'复制成功'} />
-          <CopyButton
-            code="icon-share"
-            size="sm"
-            copyContent={i18n('invite.share.text', invitationCode)}
-            copySuccessText={i18n('common.button.copySuccessfully')}
-          />
-        </Flex>
-      </>
+      <div className={styles.codeValue}>
+        <span>{invitationCode}</span>
+        <CopyButton
+          size="sm"
+          copyContent={invitationCode}
+          copySuccessText={i18n('common.button.copySuccessfully')}
+        />
+        <CopyButton
+          code="icon-share"
+          size="sm"
+          copyContent={i18n('invite.share.text', invitationCode)}
+          copySuccessText={i18n('common.button.copySuccessfully')}
+        />
+      </div>
     );
   };
 
@@ -118,31 +120,30 @@ const Invite = () => {
 
   return (
     <div className={styles.wrapper}>
-      <Flex justify="space-between" align="center">
-        <div className={styles.titleWrapper}>
-          <div className={styles.title}>{i18n('invite.setting.title')}</div>
-          <div className={styles.titleDes}>
-            {i18n('invite.setting.titleDes')}
-            <Button
-              type="link"
-              onClick={() => {
-                openWebPage('https://docs.chat2db-ai.com/docs/settings/invite', '_blank');
-              }}
-            >
-              {i18n('invite.setting.checkRule')}
-            </Button>
+      <section className={styles.inviteToolbar} data-setting-search-id="invite.code">
+        <div className={styles.inviteCodeMeta}>
+          <div className={styles.sectionTitle} data-setting-search-title="true">
+            {i18n('invite.setting.inviteCode')}
           </div>
+          <Button
+            size="small"
+            type="link"
+            onClick={() => {
+              openWebPage('https://docs.chat2db-ai.com/docs/settings/invite', '_blank');
+            }}
+          >
+            {i18n('invite.setting.checkRule')}
+          </Button>
         </div>
-        <div className={styles.inviteWrapper}>
-          <div>{i18n('invite.setting.inviteCode')}</div>
-          <div>{renderInvitationCode()}</div>
+        <div className={styles.toolbarActions}>
+          {renderInvitationCode()}
           <Button type="primary" onClick={() => setOpenPayoutsModal(true)}>
             {i18n('invite.setting.toWithdraw')}
           </Button>
         </div>
-      </Flex>
+      </section>
 
-      <div className={styles.amountWrapper}>
+      <div className={styles.amountWrapper} data-setting-search-id="invite.balance">
         <div className={styles.amountItem}>
           <div className={styles.amountCount}>
             {appUrlConfig.CURRENCY_SYMBOL}
@@ -180,9 +181,9 @@ const Invite = () => {
         </div>
       </div>
 
-      <div className={styles.inviteListWrapper}>
+      <section className={styles.inviteListWrapper} data-setting-search-id="invite.list">
         <div className={styles.inviteTitle}>
-          {i18n('invite.setting.inviteList')}
+          <span data-setting-search-title="true">{i18n('invite.setting.inviteList')}</span>
           <IconButton
             icon={RefreshCcw}
             size="sm"
@@ -192,7 +193,12 @@ const Invite = () => {
           />
         </div>
 
-        <Table dataSource={invitationOrder?.invitationOrderItems} pagination={false} loading={loading}>
+        <Table
+          dataSource={invitationOrder?.invitationOrderItems}
+          pagination={false}
+          loading={loading}
+          scroll={{ x: 760 }}
+        >
           <Table.Column
             title={i18n('invite.setting.invitedUser')}
             dataIndex="invitationUserDisplayName"
@@ -211,7 +217,7 @@ const Invite = () => {
             title={i18n('invite.setting.rewardAmount')}
             dataIndex="amount"
             key="amount"
-            render={(v) => `￥${formatPrice(v)}`}
+            render={(v) => `${appUrlConfig.CURRENCY_SYMBOL}${formatPrice(v)}`}
           />
           <Table.Column
             title={i18n('invite.setting.inviteStatus')}
@@ -220,7 +226,7 @@ const Invite = () => {
             render={(v) => <Tag color={getStatusColor(v)}>{InvitationStatus[v]}</Tag>}
           />
         </Table>
-      </div>
+      </section>
 
       <Modal
         title={i18n('invite.setting.createInviteCode')}

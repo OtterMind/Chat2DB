@@ -246,7 +246,7 @@ function Setting() {
       // },
       {
         title: i18n('invite.setting.nav.title'),
-        describe: '',
+        describe: i18n('invite.setting.titleDes'),
         group: 'account' as const,
         icon: BadgePlus,
         body: <Invite />,

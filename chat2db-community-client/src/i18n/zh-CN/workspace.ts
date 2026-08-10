@@ -222,6 +222,8 @@ export default {
   'workspace.menu.copyDataSource': '复制数据源',
   'workspace.explorer.title': '文件',
   'workspace.explorer.databases': '数据浏览器',
+  'workspace.action.storageMigration': '存储迁移',
+  'workspace.action.storageMigrationPending': '请尽快迁移本地数据',
   'workspace.openSessions.title': '打开的会话',
   'workspace.openSessions.empty': '暂无打开的 SQL 会话',
   'workspace.openSessions.untitled': '未命名 SQL',

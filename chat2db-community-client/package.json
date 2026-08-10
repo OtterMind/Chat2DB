@@ -75,7 +75,7 @@
     "test:tree-title-highlight": "tsx src/blocks/NewTree/components/TitleRender/highlightSearchText.test.ts",
     "test:tree-data-update": "tsx src/store/tree/treeDataUpdate.test.ts",
     "test:tree-node-lookup": "tsx src/utils/treeNodeLookup.test.ts",
-    "test:terminal": "tsx src/constants/terminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceExtend/WorkspaceExtendNav/quickTerminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/terminalTabPlacement.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabSelection.test.ts",
+    "test:terminal": "tsx src/constants/terminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceExtend/WorkspaceExtendNav/quickTerminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/terminalTabPlacement.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/terminalAttachmentLifecycle.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabSelection.test.ts",
     "test:task-center": "tsx src/store/importExport/taskCenterUtils.test.ts",
     "test:workspace-tab-drag": "tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabDrop.test.ts",
     "test:verification-code-countdown": "tsx src/utils/verificationCodeCountdown.test.ts && tsx src/utils/latestRequest.test.ts",
