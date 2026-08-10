@@ -32,23 +32,21 @@ export default memo<IProps>(() => {
 
   const {
     createGroup,
-    addDataSource,
-    editorDataSource,
     isModalVisible,
     setIsModalVisible,
     connectionDetail,
     setConnectionDetail,
     refreshTreeData,
+    refreshDataSourceAfterMutation,
   } = useTreeStore((state) => ({
     createGroup: state.createGroup,
-    addDataSource: state.addDataSource,
-    editorDataSource: state.editorDataSource,
     connectionDetail: state.connectionDetail,
     setConnectionDetail: state.setConnectionDetail,
     isModalVisible: state.isModalVisible,
     setIsModalVisible: state.setIsModalVisible,
     currentTreeNode: state.currentTreeNode,
     refreshTreeData: state.refreshTreeData,
+    refreshDataSourceAfterMutation: state.refreshDataSourceAfterMutation,
   }));
 
   const databaseTypeListMenu = useMemo(() => {
@@ -180,9 +178,11 @@ export default memo<IProps>(() => {
         .update({
           ...dataSource,
         })
-        .then((res) => {
+        .then(async (res) => {
           setIsModalVisible(false);
-          editorDataSource(res);
+          if (res?.id) {
+            await refreshDataSourceAfterMutation(res.id);
+          }
         });
     } else {
       return connectionService
@@ -190,10 +190,10 @@ export default memo<IProps>(() => {
           ...dataSource,
           spaceId: connectionDetail?.spaceId,
         })
-        .then((res: any) => {
+        .then(async (res: any) => {
           setIsModalVisible(false);
-          if (res) {
-            addDataSource({ ...res, spaceId: connectionDetail?.spaceId });
+          if (res?.id) {
+            await refreshDataSourceAfterMutation(res.id);
           }
         });
     }

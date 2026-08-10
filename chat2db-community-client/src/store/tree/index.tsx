@@ -21,6 +21,7 @@ import {
   loadExistingTreeNodeRefresh,
   reconcileTreeInteractionAfterRefresh,
 } from './backgroundRefresh';
+import { hydrateDataSourceAfterMutation } from './dataSourceMutationRefresh';
 import { loadNamespaceTree } from './loadNamespaceTree';
 import { updateTreeData } from './treeDataUpdate';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
@@ -96,6 +97,7 @@ export interface TreeAction {
   setTreeData: (treeData: TreeState['treeData'] | any) => void;
   getTreeData: (props?: { refresh?: boolean }) => Promise<void>;
   refreshTreeData: () => Promise<void>;
+  refreshDataSourceAfterMutation: (dataSourceId: number) => Promise<void>;
   // Database structure synchronization
   schemaSync: () => void;
   setSelectedKeys: (selectedKeys: TreeState['selectedKeys']) => void;
@@ -160,6 +162,15 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   refreshTreeData: async () => {
     await clearTreeStore();
     await get().getTreeData({ refresh: true });
+  },
+  refreshDataSourceAfterMutation: async (dataSourceId) => {
+    await hydrateDataSourceAfterMutation(dataSourceId, {
+      refreshTreeData: () => get().getTreeData({ refresh: true }),
+      getDataSourceList: () => get().dataSourceList,
+      setSelectedKeys: get().setSelectedKeys,
+      setScrollTargetKey: get().setScrollTargetKey,
+      loadData: (node) => get().handleLoadData(node),
+    });
   },
   schemaSync: () => {
     // currently selected node
