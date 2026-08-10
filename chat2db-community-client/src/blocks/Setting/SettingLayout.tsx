@@ -1,5 +1,6 @@
 import i18n from '@/i18n';
-import { IconfontSvg, SearchBar } from '@chat2db/ui';
+import { IconfontSvg } from '@chat2db/ui';
+import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
 import { X, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { history } from 'umi';
@@ -36,11 +37,6 @@ interface SettingLayoutProps {
 
 type I18nKey = Parameters<typeof i18n>[0];
 
-interface SearchBarHandle {
-  blur: () => void;
-  focus: () => void;
-}
-
 const groupTitleKeys: Record<SettingNavigationGroupCode, I18nKey> = {
   general: 'setting.nav.group.general',
   services: 'setting.nav.group.services',
@@ -52,7 +48,7 @@ export default function SettingLayout({ activeTab, menus, onActiveTabChange }: S
   const { styles, cx } = useStyles();
   const settingBoxRef = useRef<HTMLDivElement>(null);
   const menuContentRef = useRef<HTMLElement>(null);
-  const searchBarRef = useRef<SearchBarHandle>(null);
+  const searchBarRef = useRef<SearchBarRef>(null);
   const highlightedSearchTargetRef = useRef<HTMLElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSearchResultKey, setSelectedSearchResultKey] = useState<string | null>(null);

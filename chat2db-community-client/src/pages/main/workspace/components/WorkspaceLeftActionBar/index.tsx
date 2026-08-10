@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useStyles } from './style';
-import { IconButton, SearchBar } from '@chat2db/ui';
+import { IconButton } from '@chat2db/ui';
+import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
 import { Tooltip } from 'antd';
 import AddDatasourceBar from './components/AddDatasourceBar';
 import TreeSetting from './components/TreeSetting';
@@ -34,11 +35,9 @@ interface WorkspaceLeftActionBarProps {
   locateActiveTabDisabled?: boolean;
 }
 
-type SearchBarHandle = { focus: () => void; blur: () => void };
-
 const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
   ({ active = true, onLocateActiveTab, locateActiveTabDisabled = false }) => {
-    const searchBarRef = useRef<SearchBarHandle>(null);
+    const searchBarRef = useRef<SearchBarRef>(null);
     const {
       refreshTreeData,
       searchBarValue,

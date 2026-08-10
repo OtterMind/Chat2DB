@@ -1,7 +1,8 @@
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import SplitPane from 'react-split-pane';
-import { IconfontSvg, SearchBar } from '@chat2db/ui';
+import { IconfontSvg } from '@chat2db/ui';
 
+import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
 import i18n from '@/i18n';
 import { LOCAL_SQL_SESSION_DRAG_TYPE, WorkspaceTabType, workspaceTabConfig } from '@/constants';
 import {
@@ -19,8 +20,6 @@ import { useStyles } from './style';
 const SESSION_PANEL_MIN_HEIGHT = 72;
 const SESSION_PANEL_DEFAULT_HEIGHT = 220;
 const SESSION_PANEL_MAX_HEIGHT = 420;
-type SearchBarHandle = { focus: () => void; blur: () => void };
-
 interface WorkspaceExplorerProps {
   active?: boolean;
 }
@@ -33,7 +32,7 @@ const WorkspaceExplorer = memo(
   forwardRef<WorkspaceExplorerRef, WorkspaceExplorerProps>(({ active = true }, ref) => {
     const { styles } = useStyles();
     const explorerRef = useRef<HTMLDivElement>(null);
-    const searchBarRef = useRef<SearchBarHandle>(null);
+    const searchBarRef = useRef<SearchBarRef>(null);
     const activeSessionRowRef = useRef<HTMLButtonElement | null>(null);
     const localFileTreeRef = useRef<LocalSQLFileTreeRef>(null);
     const [searchKeyword, setSearchKeyword] = useState('');

@@ -7,9 +7,10 @@ import { RedisDataItem } from '@/typings/redis';
 import { RedisFieldType } from '@/constants/redis';
 import EditData from './EditData';
 import BaseTable, { BaseTableRef } from '@/components/BaseTable';
+import SearchBar from '@/components/SearchBar';
 import redisServer from '@/service/nonRelationalDatabase/redis';
 import SplitPane from 'react-split-pane';
-import { ToolbarBtn, SearchBar } from '@chat2db/ui';
+import { ToolbarBtn } from '@chat2db/ui';
 import openUnifiedDeletion from '@/utils/staticModal/unifiedDeletion';
 import {
   buildRedisKeyTree,

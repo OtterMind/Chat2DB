@@ -15,7 +15,8 @@ import { SearchComponent } from '@visactor/vtable-search';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
 import { hexToRgba } from '@/utils/color';
 import { debounce } from 'lodash';
-import { IconButton, SearchBar } from '@chat2db/ui';
+import { IconButton } from '@chat2db/ui';
+import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
 
 interface IProps {
   className?: string;
@@ -39,7 +40,7 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
   const [value, setValue] = useState('');
   const [lastSearchValue, setLastSearchValue] = useState('');
   const feSearchRef = useRef<HTMLDivElement>(null);
-  const searchBarRef = useRef<HTMLDivElement>(null);
+  const searchBarRef = useRef<SearchBarRef>(null);
 
   useEffect(() => {
     if (!tableInstance) return;

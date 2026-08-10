@@ -5,11 +5,12 @@ import SaveList from '../SaveList';
 import ViewDDL from '@/components/ViewDDL';
 import TaskCenter from '@/blocks/ImportAndExport/components/TaskCenter';
 import { canImportExport } from '@/utils/env';
+import { Bookmark, Info, ListTodo, RotateCcwClock, type LucideIcon } from 'lucide-react';
 
-interface IToolbar {
+export interface IToolbar {
   code: string;
   title: string;
-  icon: string;
+  icon: string | LucideIcon;
   components: any;
 }
 
@@ -34,19 +35,19 @@ export const extendConfig: IToolbar[] = [
   {
     code: 'info',
     title: i18n('common.title.info'),
-    icon: 'icon-extend-nav-info',
+    icon: Info,
     components: GlobalExtendComponents,
   },
   {
     code: 'executiveLog',
     title: i18n('common.title.executiveLogging'),
-    icon: 'icon-clipboard',
+    icon: RotateCcwClock,
     components: globalComponents.executiveLog,
   },
   {
     code: 'saveList',
     title: i18n('workspace.title.savedConsole'),
-    icon: 'icon-clipboard-list',
+    icon: Bookmark,
     components: globalComponents.saveList,
   },
   ...(canImportExport
@@ -54,7 +55,7 @@ export const extendConfig: IToolbar[] = [
         {
           code: GlobalComponents.task_center,
           title: i18n('workspace.title.exportProgressBar'),
-          icon: 'icon-export-details',
+          icon: ListTodo,
           components: globalComponents.taskCenter,
         },
       ]
