@@ -20,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -31,11 +32,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -217,23 +217,55 @@ public class FileTaskStorage implements TaskStorage {
         if (!file.isFile()) {
             return List.of();
         }
-        Deque<TaskEvent> window = new ArrayDeque<>(resultLimit);
-        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                TaskEvent event = parseValidEvent(line, taskId);
-                if (event == null || beforeSequence != null && event.getSequence() >= beforeSequence) {
-                    continue;
+        List<TaskEvent> newestFirst = new ArrayList<>(resultLimit);
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long position = skipTrailingLineBreaks(input, input.length() - 1L);
+            while (position >= 0 && newestFirst.size() < resultLimit) {
+                PreviousLine previousLine = readPreviousLine(input, position);
+                position = previousLine.nextPosition();
+                TaskEvent event = parseValidEvent(previousLine.value(), taskId);
+                if (event != null && (beforeSequence == null || event.getSequence() < beforeSequence)) {
+                    newestFirst.add(copyEvent(event));
                 }
-                if (window.size() == resultLimit) {
-                    window.removeFirst();
-                }
-                window.addLast(copyEvent(event));
             }
-            return List.copyOf(window);
+            Collections.reverse(newestFirst);
+            return List.copyOf(newestFirst);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read task events", e);
         }
+    }
+
+    private long skipTrailingLineBreaks(RandomAccessFile input, long position) throws IOException {
+        while (position >= 0) {
+            input.seek(position);
+            int value = input.read();
+            if (value != '\n' && value != '\r') {
+                break;
+            }
+            position--;
+        }
+        return position;
+    }
+
+    private PreviousLine readPreviousLine(RandomAccessFile input, long position) throws IOException {
+        ByteArrayOutputStream reversed = new ByteArrayOutputStream();
+        while (position >= 0) {
+            input.seek(position--);
+            int value = input.read();
+            if (value == '\n') {
+                break;
+            }
+            if (value != '\r') {
+                reversed.write(value);
+            }
+        }
+        byte[] bytes = reversed.toByteArray();
+        for (int left = 0, right = bytes.length - 1; left < right; left++, right--) {
+            byte value = bytes[left];
+            bytes[left] = bytes[right];
+            bytes[right] = value;
+        }
+        return new PreviousLine(new String(bytes, StandardCharsets.UTF_8), position);
     }
 
     @Override
@@ -624,6 +656,9 @@ public class FileTaskStorage implements TaskStorage {
         target.setStartedAt(copy.getStartedAt());
         target.setFinishedAt(copy.getFinishedAt());
         target.setUpdatedAt(copy.getUpdatedAt());
+    }
+
+    private record PreviousLine(String value, long nextPosition) {
     }
 
     @Data

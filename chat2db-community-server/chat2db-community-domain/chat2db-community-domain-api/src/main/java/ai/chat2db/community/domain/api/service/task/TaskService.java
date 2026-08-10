@@ -32,5 +32,7 @@ public interface TaskService {
 
     void prepareForUserExit();
 
+    void abortUserExit();
+
     TaskDownload resolveArtifact(Long taskId);
 }

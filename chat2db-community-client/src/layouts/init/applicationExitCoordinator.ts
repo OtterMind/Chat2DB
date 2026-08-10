@@ -7,16 +7,22 @@ export interface ApplicationExitConfirmation {
 interface ApplicationExitOperations {
   getActiveTaskCount: () => Promise<number>;
   prepareUserExit: () => Promise<void>;
+  abortUserExit: () => Promise<void>;
   confirmCloseWindow: () => Promise<boolean>;
   requestConfirmation: (confirmation: ApplicationExitConfirmation) => void;
   onCancel: () => void;
 }
 
 const finishApplicationExit = async (operations: ApplicationExitOperations) => {
-  await operations.prepareUserExit();
-  const confirmed = await operations.confirmCloseWindow();
-  if (!confirmed) {
-    throw new Error('No pending application exit request');
+  try {
+    await operations.prepareUserExit();
+    const confirmed = await operations.confirmCloseWindow();
+    if (!confirmed) {
+      throw new Error('No pending application exit request');
+    }
+  } catch (error) {
+    await operations.abortUserExit().catch(() => undefined);
+    throw error;
   }
 };
 

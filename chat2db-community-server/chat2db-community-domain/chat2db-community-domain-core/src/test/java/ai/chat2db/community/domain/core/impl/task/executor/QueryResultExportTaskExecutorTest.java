@@ -9,7 +9,6 @@ import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.service.db.IDbDmlExportService;
@@ -51,10 +50,11 @@ class QueryResultExportTaskExecutorTest {
     void xlsxUsesExcelExportType(@TempDir Path tempDirectory) {
         RecordingExportService service = new RecordingExportService();
         QueryResultExportTaskExecutor executor = new QueryResultExportTaskExecutor(service);
+        RecordingContext context = new RecordingContext(tempDirectory);
 
-        TaskExecutionResult result = executor.execute(spec("XLSX"), new RecordingContext(tempDirectory));
+        executor.execute(spec("XLSX"), context);
 
-        assertNotNull(result.getArtifactDraft());
+        assertNotNull(context.createdArtifact);
         assertEquals(1, service.prepareCalls);
         assertEquals(1, service.exportCalls);
         assertEquals(ExportTypeEnum.EXCEL.name(), service.preparedRequest.getExportType());
@@ -198,6 +198,8 @@ class QueryResultExportTaskExecutorTest {
 
         private final List<RecordedEvent> recordedEvents = new ArrayList<>();
 
+        private ArtifactDraft createdArtifact;
+
         private RecordingContext(Path tempDirectory) {
             this.tempDirectory = tempDirectory;
         }
@@ -234,11 +236,12 @@ class QueryResultExportTaskExecutorTest {
 
         @Override
         public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
-            return ArtifactDraft.builder()
+            createdArtifact = ArtifactDraft.builder()
                     .temporaryFile(tempDirectory.resolve("query-export.part").toFile())
                     .targetFile(tempDirectory.resolve(fileName).toFile())
                     .mediaType(mediaType)
                     .build();
+            return createdArtifact;
         }
 
         @Override

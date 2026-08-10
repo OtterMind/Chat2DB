@@ -32,7 +32,7 @@ type TaskPageLoader = (params: {
   status: ImportExportTaskStatus;
 }) => Promise<TaskPage>;
 
-type TaskDetailsLoader = (params: { id: number }) => Promise<ImportExportTaskDetails>;
+type TaskDetailsLoader = (params: { taskId: number }) => Promise<ImportExportTaskDetails>;
 
 export const listAllTasksByStatus = async (
   loadPage: TaskPageLoader,
@@ -72,7 +72,7 @@ export const loadMissingTrackedTasks = async (
   const results = await Promise.all(
     missingTaskIds.map(async (taskId) => {
       try {
-        return await loadDetails({ id: taskId });
+        return await loadDetails({ taskId });
       } catch {
         return null;
       }

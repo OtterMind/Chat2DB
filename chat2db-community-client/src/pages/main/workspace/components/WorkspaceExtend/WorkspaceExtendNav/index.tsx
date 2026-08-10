@@ -43,8 +43,8 @@ export default (props: IProps) => {
       setCurrentWorkspaceExtend: state.setCurrentWorkspaceExtend,
     };
   });
-  const { currentTask, unreadCompletedTaskCount } = useImportExportStore((state) => ({
-    currentTask: state.currentTask,
+  const { activeTaskCount, unreadCompletedTaskCount } = useImportExportStore((state) => ({
+    activeTaskCount: state.activeTaskCount,
     unreadCompletedTaskCount: state.unreadCompletedTaskCount,
   }));
   const { showPanel: showAIPanel } = useAIStore((state) => ({
@@ -116,7 +116,7 @@ export default (props: IProps) => {
             >
               <span className={styles.taskCenterButton}>
                 {button}
-                {currentTask && <LoaderCircle aria-hidden className={styles.taskRunningIndicator} size={12} />}
+                {activeTaskCount > 0 && <LoaderCircle aria-hidden className={styles.taskRunningIndicator} size={12} />}
               </span>
             </Badge>
           );

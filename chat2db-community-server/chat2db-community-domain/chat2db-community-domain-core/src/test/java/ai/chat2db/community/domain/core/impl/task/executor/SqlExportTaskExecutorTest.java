@@ -5,7 +5,6 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.enums.ExportScopeTypeEnum;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
@@ -63,9 +62,9 @@ class SqlExportTaskExecutorTest {
 
     @Test
     void allScopeForcesDataExportWhenRequestContainDataIsFalse(@TempDir Path tempDirectory) {
-        TaskExecutionResult result = execute(ExportScopeTypeEnum.ALL, false, List.of(), tempDirectory);
+        RecordingContext context = execute(ExportScopeTypeEnum.ALL, false, List.of(), tempDirectory);
 
-        assertNotNull(result.getArtifactDraft());
+        assertNotNull(context.createdArtifact);
         assertEquals(1, dbManager.exportDatabaseCalls);
         assertTrue(dbManager.containData);
         assertEquals(0, dbManager.exportTableCalls);
@@ -74,9 +73,9 @@ class SqlExportTaskExecutorTest {
 
     @Test
     void schemaScopeDisablesDataExportWhenRequestContainDataIsTrue(@TempDir Path tempDirectory) {
-        TaskExecutionResult result = execute(ExportScopeTypeEnum.SCHEMA, true, List.of(), tempDirectory);
+        RecordingContext context = execute(ExportScopeTypeEnum.SCHEMA, true, List.of(), tempDirectory);
 
-        assertNotNull(result.getArtifactDraft());
+        assertNotNull(context.createdArtifact);
         assertEquals(1, dbManager.exportDatabaseCalls);
         assertFalse(dbManager.containData);
         assertEquals(0, dbManager.exportTableCalls);
@@ -85,16 +84,16 @@ class SqlExportTaskExecutorTest {
 
     @Test
     void tableScopeUsesDataOnlyExport(@TempDir Path tempDirectory) {
-        TaskExecutionResult result = execute(ExportScopeTypeEnum.TABLE, true, List.of("orders"), tempDirectory);
+        RecordingContext context = execute(ExportScopeTypeEnum.TABLE, true, List.of("orders"), tempDirectory);
 
-        assertNotNull(result.getArtifactDraft());
+        assertNotNull(context.createdArtifact);
         assertEquals(0, dbManager.exportDatabaseCalls);
         assertEquals(0, dbManager.exportTableCalls);
         assertEquals(1, dbManager.exportTableDataCalls);
         assertEquals("orders", dbManager.tableName);
     }
 
-    private TaskExecutionResult execute(ExportScopeTypeEnum scope, boolean containData, List<String> tableNames,
+    private RecordingContext execute(ExportScopeTypeEnum scope, boolean containData, List<String> tableNames,
             Path tempDirectory) {
         ExportTaskSpec spec = ExportTaskSpec.builder()
                 .taskType(TaskType.SQL_EXPORT.name())
@@ -107,7 +106,9 @@ class SqlExportTaskExecutorTest {
                         .schemaName("public")
                         .build())
                 .build();
-        return new SqlExportTaskExecutor().execute(spec, new RecordingContext(tempDirectory));
+        RecordingContext context = new RecordingContext(tempDirectory);
+        new SqlExportTaskExecutor().execute(spec, context);
+        return context;
     }
 
     private static Connection connection() {
@@ -136,6 +137,8 @@ class SqlExportTaskExecutorTest {
     private static final class RecordingContext implements TaskExecutionContext {
 
         private final Path tempDirectory;
+
+        private ArtifactDraft createdArtifact;
 
         private RecordingContext(Path tempDirectory) {
             this.tempDirectory = tempDirectory;
@@ -171,11 +174,12 @@ class SqlExportTaskExecutorTest {
 
         @Override
         public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
-            return ArtifactDraft.builder()
+            createdArtifact = ArtifactDraft.builder()
                     .temporaryFile(tempDirectory.resolve("dump.sql.part").toFile())
                     .targetFile(tempDirectory.resolve("dump.sql").toFile())
                     .mediaType(mediaType)
                     .build();
+            return createdArtifact;
         }
 
         @Override

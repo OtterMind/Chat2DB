@@ -88,6 +88,10 @@ const prepareUserExit = createRequest<void, void>('/api/tasks/prepare-user-exit'
   method: 'post',
   errorLevel: 'toast',
 });
+const abortUserExit = createRequest<void, void>('/api/tasks/abort-user-exit', {
+  method: 'post',
+  errorLevel: false,
+});
 
 // Generate Java classes
 const generateJavaClass = createRequest<GenerateJavaClassParams, number>('/api/rdb/table/generate/class', {
@@ -104,5 +108,6 @@ export default {
   deleteTask,
   getActiveTaskCount,
   prepareUserExit,
+  abortUserExit,
   generateJavaClass,
 };

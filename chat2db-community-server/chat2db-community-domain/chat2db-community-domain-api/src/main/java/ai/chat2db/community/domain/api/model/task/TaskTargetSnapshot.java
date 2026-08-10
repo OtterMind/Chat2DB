@@ -13,8 +13,6 @@ public class TaskTargetSnapshot {
 
     private Long dataSourceId;
 
-    private String connectionName;
-
     private String databaseName;
 
     private String schemaName;

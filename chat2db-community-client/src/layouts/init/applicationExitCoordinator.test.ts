@@ -8,6 +8,9 @@ async function testExitWithoutActiveTasks() {
     prepareUserExit: async () => {
       calls.push('prepare');
     },
+    abortUserExit: async () => {
+      calls.push('abort');
+    },
     confirmCloseWindow: async () => {
       calls.push('confirm');
       return true;
@@ -29,6 +32,9 @@ async function testExitWithActiveTasks() {
     getActiveTaskCount: async () => 2,
     prepareUserExit: async () => {
       calls.push('prepare');
+    },
+    abortUserExit: async () => {
+      calls.push('abort');
     },
     confirmCloseWindow: async () => {
       calls.push('confirm');
@@ -60,6 +66,7 @@ async function testPrepareFailureKeepsNativeWindowOpen() {
       prepareUserExit: async () => {
         throw prepareError;
       },
+      abortUserExit: async () => undefined,
       confirmCloseWindow: async () => {
         confirmCalled = true;
         return true;
@@ -73,16 +80,26 @@ async function testPrepareFailureKeepsNativeWindowOpen() {
 }
 
 async function testMissingNativeExitRequestFailsClosed() {
+  const calls: string[] = [];
   await assert.rejects(
     coordinateApplicationExit({
       getActiveTaskCount: async () => 0,
-      prepareUserExit: async () => undefined,
-      confirmCloseWindow: async () => false,
+      prepareUserExit: async () => {
+        calls.push('prepare');
+      },
+      abortUserExit: async () => {
+        calls.push('abort');
+      },
+      confirmCloseWindow: async () => {
+        calls.push('confirm');
+        return false;
+      },
       requestConfirmation: () => undefined,
       onCancel: () => undefined,
     }),
     /No pending application exit request/,
   );
+  assert.deepEqual(calls, ['prepare', 'confirm', 'abort']);
 }
 
 void Promise.all([

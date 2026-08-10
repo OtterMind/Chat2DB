@@ -84,9 +84,10 @@ public abstract class BaseExcelExporter extends BaseExporter {
             }
             MultiSheetExcelWriter multiSheetWriter = null;
             WriteSheet writeSheet = null;
-            if (excelType == ExcelTypeEnum.XLSX) {
-                multiSheetWriter = new MultiSheetExcelWriter(excelWriter, head, SpreadsheetVersion.EXCEL2007,
-                        sheetName);
+            if (excelType == ExcelTypeEnum.XLSX || excelType == ExcelTypeEnum.XLS) {
+                SpreadsheetVersion spreadsheetVersion = excelType == ExcelTypeEnum.XLS
+                        ? SpreadsheetVersion.EXCEL97 : SpreadsheetVersion.EXCEL2007;
+                multiSheetWriter = new MultiSheetExcelWriter(excelWriter, head, spreadsheetVersion, sheetName);
                 multiSheetWriter.initialize();
             } else {
                 writeSheet = EasyExcel.writerSheet(sheetName).build();

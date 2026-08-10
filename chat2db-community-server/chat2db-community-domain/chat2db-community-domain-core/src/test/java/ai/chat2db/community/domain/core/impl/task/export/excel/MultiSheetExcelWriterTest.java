@@ -92,6 +92,25 @@ class MultiSheetExcelWriterTest {
     }
 
     @Test
+    void rollsOverXlsSheetsAtTheConfiguredRowLimit() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try (ExcelWriter excelWriter = EasyExcel.write(outputStream).excelType(ExcelTypeEnum.XLS).build()) {
+            MultiSheetExcelWriter writer = new MultiSheetExcelWriter(excelWriter, List.of(List.of("id")), 3,
+                    "Data");
+
+            writer.writeRow(List.of("1"));
+            writer.writeRow(List.of("2"));
+            writer.writeRow(List.of("3"));
+        }
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(outputStream.toByteArray()))) {
+            assertEquals(2, workbook.getNumberOfSheets());
+            assertEquals(3, workbook.getSheetAt(0).getPhysicalNumberOfRows());
+            assertEquals(2, workbook.getSheetAt(1).getPhysicalNumberOfRows());
+        }
+    }
+
+    @Test
     void keepsRolloverSheetNamesUniqueWithinTheExcelLimit() throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try (ExcelWriter excelWriter = EasyExcel.write(outputStream).excelType(ExcelTypeEnum.XLSX).build()) {

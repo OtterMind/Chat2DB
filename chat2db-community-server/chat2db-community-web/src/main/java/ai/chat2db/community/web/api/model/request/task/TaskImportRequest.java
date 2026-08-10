@@ -14,13 +14,9 @@ public class TaskImportRequest extends DataSourceBaseRequest {
 
     private String sourceFile;
 
-    private String fileName;
-
     private String displayFileName;
 
     private String format;
-
-    private String importType;
 
     private String dataTimeFormat;
 }

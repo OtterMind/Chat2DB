@@ -155,6 +155,15 @@ public class LocalTaskManager {
                 new TaskOwner(userId, organizationId));
     }
 
+    void abortUserExit() {
+        lifecycleLock.lock();
+        try {
+            preparingForExit = false;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
     @PreDestroy
     void shutdown() {
         terminateActiveTasks(TaskErrorCode.APPLICATION_TERMINATED.name(),
@@ -218,7 +227,6 @@ public class LocalTaskManager {
     private void cleanupInterruptedArtifacts(Long taskId) {
         long afterSequence = 0L;
         String temporaryPath = null;
-        String targetPath = null;
         String publishedPath = null;
         while (true) {
             List<TaskEvent> events = taskStorage.listEvents(taskId, afterSequence, TaskConstants.MAX_EVENT_LIMIT);
@@ -229,7 +237,6 @@ public class LocalTaskManager {
                 Map<String, Object> details = event.getDetails();
                 if (TaskEventCode.ARTIFACT_PREPARED.name().equals(event.getCode())) {
                     temporaryPath = detail(details, TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY);
-                    targetPath = detail(details, TaskConstants.ARTIFACT_TARGET_PATH_DETAIL_KEY);
                 } else if (TaskEventCode.ARTIFACT_PUBLISHED.name().equals(event.getCode())) {
                     publishedPath = detail(details, TaskConstants.ARTIFACT_ID_DETAIL_KEY);
                 }
@@ -240,8 +247,7 @@ public class LocalTaskManager {
             }
             afterSequence = nextSequence;
         }
-        artifactService.cleanupInterruptedArtifact(taskId, temporaryPath,
-                publishedPath == null ? targetPath : publishedPath);
+        artifactService.cleanupInterruptedArtifact(taskId, temporaryPath, publishedPath);
     }
 
     private String detail(Map<String, Object> details, String key) {

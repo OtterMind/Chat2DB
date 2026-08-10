@@ -192,7 +192,7 @@ export default memo(() => {
                         <div className={styles.listItemRight}>
                           <IconButton
                             code={'icon-close'}
-                            size={{ boxSize: 14, iconSize: 12, borderRaduis: 14 } as any}
+                            size={{ boxSize: 14, iconSize: 12, borderRadius: 14 }}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStopTask(item.id);

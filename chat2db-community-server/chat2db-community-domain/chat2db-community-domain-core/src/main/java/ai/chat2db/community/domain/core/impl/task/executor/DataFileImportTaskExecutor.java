@@ -4,7 +4,6 @@ import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
@@ -28,7 +27,7 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
     }
 
     @Override
-    public TaskExecutionResult execute(ImportTaskSpec spec, TaskExecutionContext context) {
+    public void execute(ImportTaskSpec spec, TaskExecutionContext context) {
         try {
             TaskExecutorSupport.requireReadableSource(spec.getSourceFile());
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
@@ -40,7 +39,6 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
             IImportStrategy strategy = ImportFactory.get(format);
             strategy.run(spec, context);
             context.reportProgress(95, TaskStage.IMPORTING.name(), "Data import completed");
-            return TaskExecutionResult.completed();
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {

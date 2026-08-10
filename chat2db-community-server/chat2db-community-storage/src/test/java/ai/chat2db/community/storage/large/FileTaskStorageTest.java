@@ -308,6 +308,21 @@ class FileTaskStorageTest {
     }
 
     @Test
+    void reversePaginationPreservesUtf8EventMessages() {
+        FileTaskStorage storage = storage();
+        Task created = create(storage, "task");
+        TaskEvent second = event(TaskEventCode.QUERY_STARTED.name());
+        second.setTaskId(created.getId());
+        second.setMessage("\u8bfb\u53d6\u8868\u6570\u636e");
+        storage.appendEvent(second);
+
+        List<TaskEvent> events = storage.listEventsBefore(created.getId(), null, 1);
+
+        assertEquals(1, events.size());
+        assertEquals("\u8bfb\u53d6\u8868\u6570\u636e", events.get(0).getMessage());
+    }
+
+    @Test
     void incompleteTrailingEventIsDiscardedWithoutLosingNextAppendedEvent() {
         FileTaskStorage storage = storage();
         Task created = create(storage, "task");
@@ -455,7 +470,6 @@ class FileTaskStorageTest {
                 .name(name)
                 .target(TaskTargetSnapshot.builder()
                         .dataSourceId(1L)
-                        .connectionName("connection")
                         .databaseName("database")
                         .schemaName("schema")
                         .tableName("source_table")

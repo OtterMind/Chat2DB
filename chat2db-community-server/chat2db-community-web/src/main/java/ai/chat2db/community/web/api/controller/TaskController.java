@@ -108,4 +108,10 @@ public class TaskController {
         taskService.prepareForUserExit();
         return ActionResult.isSuccess();
     }
+
+    @PostMapping("/abort-user-exit")
+    public ActionResult abortUserExit() {
+        taskService.abortUserExit();
+        return ActionResult.isSuccess();
+    }
 }

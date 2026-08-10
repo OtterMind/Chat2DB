@@ -27,7 +27,7 @@ interface ImportExportState {
   taskListHasNextPage: boolean;
   taskListLoadingMore: boolean;
   getTaskListTimer: ReturnType<typeof setTimeout> | null;
-  currentTask: ImportExportTaskDetails | null;
+  activeTaskCount: number;
   logModalTaskId: number | null;
   unreadCompletedTaskCount: number;
   unreadCompletedTaskIds: number[];
@@ -46,7 +46,7 @@ const initialState: ImportExportState = {
   taskListHasNextPage: false,
   taskListLoadingMore: false,
   getTaskListTimer: null,
-  currentTask: null,
+  activeTaskCount: 0,
   logModalTaskId: null,
   unreadCompletedTaskCount: 0,
   unreadCompletedTaskIds: [],
@@ -60,7 +60,6 @@ const initialState: ImportExportState = {
 export interface ImportExportAction {
   setRunSqlBoundInfo: (data: ImportExportState['runSqlBoundInfo']) => void;
   setImportExportDataBoundInfo: (data: ImportExportState['importExportDataBoundInfo']) => void;
-  clearImportExportStore: () => void;
   getTaskList: () => Promise<void>;
   loadMoreTasks: () => Promise<void>;
   stopTaskListPolling: () => void;
@@ -69,14 +68,6 @@ export interface ImportExportAction {
 }
 
 export type ImportExportStore = ImportExportState & ImportExportAction;
-
-// import { useImportExportStore } from '@/store/importExport';
-// const { runSqlBoundInfo, setRunSqlBoundInfo } = useImportExportStore((state) => {
-//   return {
-//     runSqlBoundInfo: state.runSqlBoundInfo,
-//     setRunSqlBoundInfo: state.setRunSqlBoundInfo,
-//   };
-// });
 
 export const createImportExportAction: StateCreator<
   ImportExportStore,
@@ -94,10 +85,6 @@ export const createImportExportAction: StateCreator<
       importExportDataBoundInfo: _importExportDataBoundInfo,
     });
   },
-  clearImportExportStore: () => {
-    get().stopTaskListPolling();
-    set(initialState);
-  },
   getTaskList: () => {
     const requestGeneration = ++taskListRequestGeneration;
     const previousActiveTaskIds = get().activeTaskIds;
@@ -108,12 +95,11 @@ export const createImportExportAction: StateCreator<
       set({ getTaskListTimer: null });
     }
     return Promise.all([
-      importExportServices.getActiveTaskCount(undefined),
       importExportServices.getTaskList({ pageNo: 1, pageSize: get().taskListPageSize }),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.PENDING),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.RUNNING),
     ])
-      .then(async ([activeTaskCount, recentPage, pendingTasks, runningTasks]) => {
+      .then(async ([recentPage, pendingTasks, runningTasks]) => {
         if (requestGeneration !== taskListRequestGeneration) return;
         const activeTasks = mergeTasks(pendingTasks, runningTasks);
         const visibleTasks = mergeTasks(recentPage.data || [], activeTasks);
@@ -124,7 +110,6 @@ export const createImportExportAction: StateCreator<
         );
         if (requestGeneration !== taskListRequestGeneration) return;
         const taskList = mergeTasks(visibleTasks, recovered.tasks);
-        const currentTask = activeTasks[0] || null;
         const recoveredActiveTaskIds = recovered.tasks
           .filter((task) => [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING].includes(task.status))
           .map((task) => task.id);
@@ -135,7 +120,7 @@ export const createImportExportAction: StateCreator<
             ...recovered.unresolvedTaskIds,
           ]),
         ];
-        const pollDelay = getTaskPollingDelay(Math.max(activeTaskCount, activeTaskIds.length));
+        const pollDelay = getTaskPollingDelay(activeTaskIds.length);
         const currentState = get();
         const notificationUpdate = reconcileCompletedTaskNotifications(
           currentState.taskStatusById,
@@ -147,7 +132,7 @@ export const createImportExportAction: StateCreator<
           ? []
           : [...new Set([...currentState.unreadCompletedTaskIds, ...notificationUpdate.newlyCompletedTaskIds])];
         set({
-          currentTask,
+          activeTaskCount: activeTaskIds.length,
           taskList,
           taskListHasNextPage: recentPage.hasNextPage === true,
           unreadCompletedTaskCount: unreadCompletedTaskIds.length,
@@ -211,13 +196,3 @@ export const useImportExportStore = createWithEqualityFn<ImportExportStore>()(
   }),
   shallow,
 );
-
-// // Clean up the store
-export const clearImportExportStore = () => {
-  taskListRequestGeneration += 1;
-  const timer = useImportExportStore.getState().getTaskListTimer;
-  if (timer) {
-    clearTimeout(timer);
-  }
-  useImportExportStore.setState(initialState);
-};

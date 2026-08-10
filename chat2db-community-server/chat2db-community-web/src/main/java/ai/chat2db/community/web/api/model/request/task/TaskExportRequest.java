@@ -24,8 +24,6 @@ public class TaskExportRequest extends DataSourceBaseRequest {
 
     private String format;
 
-    private String exportType;
-
     private String scope;
 
     private Boolean containData;

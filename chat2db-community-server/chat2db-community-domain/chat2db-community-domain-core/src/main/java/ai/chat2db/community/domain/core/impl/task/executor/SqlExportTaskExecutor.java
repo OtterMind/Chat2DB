@@ -9,7 +9,6 @@ import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
@@ -40,7 +39,7 @@ public class SqlExportTaskExecutor implements TaskExecutor<ExportTaskSpec> {
     }
 
     @Override
-    public TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context) {
+    public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
         try {
             ExportScopeTypeEnum scope = ExportScopeTypeEnum.from(spec.getScope());
             if (scope == null) {
@@ -63,7 +62,6 @@ public class SqlExportTaskExecutor implements TaskExecutor<ExportTaskSpec> {
             context.checkCancelled();
             context.reportProgress(92, TaskStage.FINALIZING.name(), "Finalizing SQL export file");
             context.logInfo(TaskEventCode.FILE_FINALIZING.name(), "Finalizing SQL export file", exportDetails);
-            return TaskExecutionResult.withArtifact(draft);
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {

@@ -16,7 +16,6 @@ export interface ImportExportTaskDetails {
   progressMessage?: string;
   target?: {
     dataSourceId?: number;
-    connectionName?: string;
     databaseName?: string;
     schemaName?: string;
     tableName?: string;

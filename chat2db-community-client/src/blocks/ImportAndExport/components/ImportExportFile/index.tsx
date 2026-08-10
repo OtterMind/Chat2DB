@@ -150,7 +150,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
             <Input autoComplete="off" disabled value={exportLocation} />
             <IconButton
               className={styles.iconButton}
-              size={{ boxSize: 30, iconSize: 22, borderRadius: 6 } as any}
+              size={{ boxSize: 30, iconSize: 22, borderRadius: 6 }}
               code="icon-folder"
               onClick={handleSelectExportLocation}
             />

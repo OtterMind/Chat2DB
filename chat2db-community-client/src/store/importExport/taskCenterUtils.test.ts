@@ -63,8 +63,8 @@ async function testCompletedTrackedTaskOutsideRecentPage() {
   const completedTask = { ...runningTask, status: ImportExportTaskStatus.SUCCESS, progress: 100 };
   const loadedTaskIds: number[] = [];
 
-  const recovered = await loadMissingTrackedTasks([runningTask.id], [newerTask], async ({ id }) => {
-    loadedTaskIds.push(id);
+  const recovered = await loadMissingTrackedTasks([runningTask.id], [newerTask], async ({ taskId }) => {
+    loadedTaskIds.push(taskId);
     return completedTask;
   });
 

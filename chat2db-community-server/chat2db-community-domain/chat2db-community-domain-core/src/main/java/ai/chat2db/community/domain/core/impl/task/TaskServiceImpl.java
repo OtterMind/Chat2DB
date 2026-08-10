@@ -132,6 +132,11 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public void abortUserExit() {
+        localTaskManager.abortUserExit();
+    }
+
+    @Override
     public TaskDownload resolveArtifact(Long taskId) {
         Task task = get(taskId);
         if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus())

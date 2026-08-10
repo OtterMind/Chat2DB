@@ -137,7 +137,7 @@ public class ArtifactService {
         }
     }
 
-    void cleanupInterruptedArtifact(Long taskId, String temporaryPath, String targetPath) {
+    void cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
         if (StringUtils.isNotBlank(temporaryPath)) {
             Path temporary = Path.of(temporaryPath).toAbsolutePath().normalize();
             String fileName = temporary.getFileName() == null ? "" : temporary.getFileName().toString();
@@ -145,8 +145,8 @@ public class ArtifactService {
                 deleteQuietly(temporary);
             }
         }
-        if (StringUtils.isNotBlank(targetPath)) {
-            deleteQuietly(Path.of(targetPath).toAbsolutePath().normalize());
+        if (StringUtils.isNotBlank(publishedPath)) {
+            deleteQuietly(Path.of(publishedPath).toAbsolutePath().normalize());
         }
     }
 

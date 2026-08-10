@@ -20,6 +20,7 @@ const useApplicationExit = () => {
         await coordinateApplicationExit({
           getActiveTaskCount: () => importExportServices.getActiveTaskCount(undefined),
           prepareUserExit: () => importExportServices.prepareUserExit(undefined),
+          abortUserExit: () => importExportServices.abortUserExit(undefined),
           confirmCloseWindow: jcefApi.confirmCloseWindow,
           onCancel: () => {
             handlingExitRef.current = false;

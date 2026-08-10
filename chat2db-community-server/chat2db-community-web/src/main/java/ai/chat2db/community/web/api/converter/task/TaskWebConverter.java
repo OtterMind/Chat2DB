@@ -20,7 +20,7 @@ public class TaskWebConverter {
 
     public ExportTaskSpec exportRequest2spec(TaskExportRequest request) {
         String taskType = resolveExportTaskType(request);
-        String format = normalizeFormat(StringUtils.firstNonBlank(request.getFormat(), request.getExportType()));
+        String format = normalize(request.getFormat());
         if (TaskType.SQL_EXPORT.name().equals(taskType)) {
             format = TaskFileFormat.SQL.name();
         }
@@ -46,8 +46,8 @@ public class TaskWebConverter {
     }
 
     public ImportTaskSpec importRequest2spec(TaskImportRequest request) {
-        String sourceFile = StringUtils.firstNonBlank(request.getSourceFile(), request.getFileName());
-        String format = normalizeFormat(StringUtils.firstNonBlank(request.getFormat(), request.getImportType()));
+        String sourceFile = request.getSourceFile();
+        String format = normalize(request.getFormat());
         String taskType = resolveImportTaskType(request.getTaskType(), format);
         return ImportTaskSpec.builder()
                 .taskType(taskType)
@@ -113,17 +113,6 @@ public class TaskWebConverter {
                     : String.join("_", tableNames);
         }
         return StringUtils.firstNonBlank(schemaName, databaseName, "chat2db");
-    }
-
-    private String normalizeFormat(String format) {
-        String normalized = normalize(format);
-        if ("EXCEL".equals(normalized)) {
-            return TaskFileFormat.XLSX.name();
-        }
-        if ("INSERT".equals(normalized)) {
-            return TaskFileFormat.SQL.name();
-        }
-        return normalized;
     }
 
     private String normalize(String value) {

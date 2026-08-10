@@ -10,9 +10,7 @@ import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
-import ai.chat2db.spi.model.request.MultiInsertSqlRequest;
 import ai.chat2db.spi.model.request.SingleInsertSqlRequest;
-import ai.chat2db.spi.model.request.UpdateSqlRequest;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
@@ -29,7 +27,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 
 @Slf4j
@@ -66,12 +65,12 @@ public class SqlDataExporter extends BaseExporter {
         ISqlBuilder sqlBuilder = metaData.getSqlBuilder();
         IValueProcessor valueProcessor = metaData.getValueProcessor();
         exportSingleInsert(connection, querySql, containsHeader, sqlBuilder,
-                valueProcessor, databaseName, schemaName, tableName, writer, context, progressLogger);
+                valueProcessor, tableName, writer, context, progressLogger);
     }
 
     private void exportSingleInsert(Connection connection, String querySql, Boolean containsHeader,
                                     ISqlBuilder sqlBuilder, IValueProcessor valueProcessor,
-                                    String databaseName, String schemaName, String tableName, BufferedWriter writer,
+                                    String tableName, BufferedWriter writer,
                                     TaskExecutionContext context, ExportProgressLogger progressLogger) {
         List<String> sqlList = new ArrayList<>(BATCH_SIZE);
         DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
@@ -96,54 +95,6 @@ public class SqlDataExporter extends BaseExporter {
         }, context, context::checkCancelled);
     }
 
-    private void exportMultiInsert(Connection connection, String querySql, Boolean containsHeader,
-                                   ISqlBuilder sqlBuilder, IValueProcessor valueProcessor,
-                                   String databaseName, String schemaName, String tableName, BufferedWriter writer,
-                                   TaskExecutionContext context, ExportProgressLogger progressLogger) {
-        DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
-            List<List<String>> dataList = new ArrayList<>(BATCH_SIZE);
-            List<String> header = Boolean.TRUE.equals(containsHeader) ? ResultSetUtils.getRsHeader(resultSet) : null;
-            while (resultSet.next()) {
-                context.checkCancelled();
-                dataList.add(extractRowData(resultSet, valueProcessor));
-                progressLogger.recordExportedRow();
-            }
-            String sql = sqlBuilder.dml().buildBatchInsert(MultiInsertSqlRequest.builder()
-                    .tableName(tableName)
-                    .columnList(header)
-                    .valueLists(dataList)
-                    .build());
-            writeSqlLine(writer, sql + ";");
-            flush(writer);
-        }, context, context::checkCancelled);
-    }
-
-    private void exportUpdate(Connection connection, String querySql, ISqlBuilder sqlBuilder,
-                              IValueProcessor valueProcessor,
-                              String databaseName, String schemaName, String tableName, BufferedWriter writer,
-                              TaskExecutionContext context, ExportProgressLogger progressLogger) {
-        List<String> sqlList = new ArrayList<>(BATCH_SIZE);
-        DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet -> {
-            Map<String, String> primaryKeyMap = getPrimaryKeyMap(connection, databaseName, schemaName, tableName);
-            while (resultSet.next()) {
-                context.checkCancelled();
-                Map<String, String> row = extractRowDataAsMap(resultSet, valueProcessor, primaryKeyMap);
-                String sql = sqlBuilder.dml().buildUpdate(UpdateSqlRequest.builder()
-                        .databaseName(databaseName)
-                        .schemaName(schemaName)
-                        .tableName(tableName)
-                        .row(row)
-                        .primaryKeyMap(primaryKeyMap)
-                        .build());
-                sqlList.add(sql);
-                progressLogger.recordExportedRow();
-                if (sqlList.size() >= BATCH_SIZE || resultSet.isLast()) {
-                    writeSqlList(writer, sqlList);
-                }
-            }
-        }, context, context::checkCancelled);
-    }
-
     private List<String> extractRowData(ResultSet resultSet, IValueProcessor valueProcessor) throws SQLException {
         ResultSetMetaData metaData = resultSet.getMetaData();
         List<String> rowData = new ArrayList<>(metaData.getColumnCount());
@@ -152,34 +103,6 @@ public class SqlDataExporter extends BaseExporter {
             rowData.add(valueProcessor.getJdbcSqlValueString(jdbcDataValue));
         }
         return rowData;
-    }
-
-    private Map<String, String> extractRowDataAsMap(ResultSet resultSet, IValueProcessor valueProcessor,
-                                                    Map<String, String> primaryKeyMap) throws SQLException {
-        ResultSetMetaData metaData = resultSet.getMetaData();
-        Map<String, String> row = new HashMap<>(metaData.getColumnCount());
-        for (int i = 1; i <= metaData.getColumnCount(); i++) {
-            JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
-            String columnName = metaData.getColumnName(i);
-            String jdbcValueString = valueProcessor.getJdbcSqlValueString(jdbcDataValue);
-            if (primaryKeyMap.containsKey(columnName)) {
-                primaryKeyMap.put(columnName, jdbcValueString);
-            } else {
-                row.put(columnName, jdbcValueString);
-            }
-        }
-        return row;
-    }
-
-    private Map<String, String> getPrimaryKeyMap(Connection connection, String databaseName,
-                                                 String schemaName, String tableName) throws SQLException {
-        Map<String, String> primaryKeyMap = new HashMap<>();
-        try (ResultSet primaryKeys = connection.getMetaData().getPrimaryKeys(databaseName, schemaName, tableName)) {
-            while (primaryKeys.next()) {
-                primaryKeyMap.put(primaryKeys.getString("COLUMN_NAME"), "");
-            }
-        }
-        return primaryKeyMap;
     }
 
     BufferedWriter createWriter(File file) throws IOException {
@@ -196,23 +119,6 @@ public class SqlDataExporter extends BaseExporter {
                 writer.newLine();
             }
             sqlList.clear();
-        } catch (IOException e) {
-            throw fileWriteFailure(e);
-        }
-    }
-
-    private void writeSqlLine(BufferedWriter writer, String sql) {
-        try {
-            writer.write(sql);
-            writer.newLine();
-        } catch (IOException e) {
-            throw fileWriteFailure(e);
-        }
-    }
-
-    private void flush(BufferedWriter writer) {
-        try {
-            writer.flush();
         } catch (IOException e) {
             throw fileWriteFailure(e);
         }

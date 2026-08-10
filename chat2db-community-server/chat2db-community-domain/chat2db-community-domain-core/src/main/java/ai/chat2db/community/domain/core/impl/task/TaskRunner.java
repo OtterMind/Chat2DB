@@ -8,7 +8,6 @@ import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
@@ -60,12 +59,11 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                 return;
             }
             bindExecutionContext();
-            TaskExecutionResult result = taskExecutor.execute(submission.spec(), executionContext);
-            ArtifactDraft draft = result != null && result.getArtifactDraft() != null
-                    ? result.getArtifactDraft() : executionContext.artifactDraft();
+            taskExecutor.execute(submission.spec(), executionContext);
+            ArtifactDraft draft = executionContext.artifactDraft();
             executionContext.finishArtifactWrites();
             logArtifactWritten(executionContext, draft);
-            completeSuccessfully(result, draft);
+            completeSuccessfully(draft);
         } catch (TaskCancelledException | CancellationException e) {
             completeCancelled(executionContext.artifactDraft());
         } catch (TaskExecutionException e) {
@@ -123,7 +121,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
         }
     }
 
-    private void completeSuccessfully(TaskExecutionResult result, ArtifactDraft draft) {
+    private void completeSuccessfully(ArtifactDraft draft) {
         runningTask.completionLock().lock();
         String artifactId = null;
         try {
@@ -148,7 +146,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                     TaskStatusPatch.builder()
                             .progress(TaskConstants.COMPLETED_PROGRESS)
                             .stage(TaskStage.COMPLETED.name())
-                            .progressMessage(result == null ? null : result.getSummary())
+                            .progressMessage("Task completed successfully")
                             .artifactId(artifactId)
                             .finishedAt(now)
                             .updatedAt(now)

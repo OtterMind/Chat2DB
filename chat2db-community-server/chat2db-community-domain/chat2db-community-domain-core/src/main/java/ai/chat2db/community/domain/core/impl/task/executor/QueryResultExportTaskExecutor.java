@@ -10,7 +10,6 @@ import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
@@ -44,7 +43,7 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
     }
 
     @Override
-    public TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context) {
+    public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
         try {
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
             DbDmlExportRequest request = request(spec, format);
@@ -64,7 +63,6 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
                         () -> beginFileFinalization(context, progressLogger, format));
             }
             context.checkCancelled();
-            return TaskExecutionResult.withArtifact(draft);
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {

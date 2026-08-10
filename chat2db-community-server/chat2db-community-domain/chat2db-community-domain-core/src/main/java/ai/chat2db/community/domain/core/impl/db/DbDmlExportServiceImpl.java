@@ -132,7 +132,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
             ExcelWriterBuilder excelWriterBuilder = EasyExcel.write(outputStream)
                     .charset(StandardCharsets.UTF_8)
                     .excelType(ExcelTypeEnum.CSV);
-            excelWrapper.setExcelWriterBuilder(excelWriterBuilder);
             DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), sql, headerList -> {
                 excelWriterBuilder.head(
                         EasyCollectionUtils.toList(headerList, header -> Lists.newArrayList(header.getName())));
@@ -161,7 +160,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
             ExcelWriterBuilder excelWriterBuilder = EasyExcel.write(outputStream)
                     .charset(StandardCharsets.UTF_8)
                     .excelType(ExcelTypeEnum.XLSX);
-            excelWrapper.setExcelWriterBuilder(excelWriterBuilder);
             DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), sql, headerList -> {
                 List<List<String>> head = EasyCollectionUtils.toList(headerList,
                         header -> Lists.newArrayList(header.getName()));
@@ -230,7 +228,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
 
     @Data
     private static class ExcelWrapper {
-        private ExcelWriterBuilder excelWriterBuilder;
         private ExcelWriter excelWriter;
         private WriteSheet writeSheet;
         private MultiSheetExcelWriter multiSheetExcelWriter;

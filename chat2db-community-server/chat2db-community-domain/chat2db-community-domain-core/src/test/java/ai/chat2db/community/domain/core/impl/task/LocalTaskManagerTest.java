@@ -10,7 +10,6 @@ import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
@@ -64,7 +63,7 @@ class LocalTaskManagerTest {
     @Test
     void successfulTaskHasOneImmutableTerminalResult() throws Exception {
         TestTaskStorage storage = new TestTaskStorage();
-        taskManager = manager(storage, (spec, context) -> TaskExecutionResult.completed());
+        taskManager = manager(storage, (spec, context) -> {});
         Task task = newTask();
 
         taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
@@ -148,7 +147,6 @@ class LocalTaskManagerTest {
                 Thread.currentThread().interrupt();
             }
             context.checkCancelled();
-            return TaskExecutionResult.completed();
         });
         Task task = newTask();
         taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
@@ -176,7 +174,6 @@ class LocalTaskManagerTest {
                 Thread.currentThread().interrupt();
             }
             context.checkCancelled();
-            return TaskExecutionResult.completed();
         });
         Task task = newTask();
         taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
@@ -198,7 +195,7 @@ class LocalTaskManagerTest {
     @Test
     void confirmedUserExitRejectsNewTaskBeforeItIsPersisted() {
         TestTaskStorage storage = new TestTaskStorage();
-        taskManager = manager(storage, (spec, context) -> TaskExecutionResult.completed());
+        taskManager = manager(storage, (spec, context) -> {});
 
         taskManager.prepareForUserExit(null, null);
 
@@ -206,6 +203,21 @@ class LocalTaskManagerTest {
                 () -> taskManager.submit(newTask(), event(TaskEventCode.TASK_CREATED.name()),
                         spec(), null, null));
         assertTrue(storage.listNonTerminalTasks().isEmpty());
+    }
+
+    @Test
+    void abortedUserExitAllowsNewTasksAgain() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        taskManager = manager(storage, (spec, context) -> {});
+        taskManager.prepareForUserExit(null, null);
+
+        taskManager.abortUserExit();
+        Task submitted = taskManager.submit(newTask(), event(TaskEventCode.TASK_CREATED.name()),
+                spec(), null, null);
+
+        assertNotNull(submitted);
+        assertTrue(storage.awaitTerminal());
+        assertEquals(TaskStatus.SUCCESS.name(), storage.get(submitted.getId()).orElseThrow().getStatus());
     }
 
     @Test
@@ -228,9 +240,8 @@ class LocalTaskManagerTest {
             }
 
             @Override
-            public TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context) {
+            public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
                 executed.set(true);
-                return TaskExecutionResult.completed();
             }
         };
         ConnectInfo invalidConnectInfo = new ConnectInfo() {
@@ -269,7 +280,6 @@ class LocalTaskManagerTest {
                 Thread.currentThread().interrupt();
             }
             context.checkCancelled();
-            return TaskExecutionResult.completed();
         });
         Task task = newTask();
         taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
@@ -290,7 +300,7 @@ class LocalTaskManagerTest {
     void startupReconciliationDoesNotResubmitInterruptedTask() {
         TestTaskStorage storage = new TestTaskStorage();
         Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
-        taskManager = manager(storage, (spec, context) -> TaskExecutionResult.completed());
+        taskManager = manager(storage, (spec, context) -> {});
 
         taskManager.reconcileInterruptedTasks();
 
@@ -323,7 +333,7 @@ class LocalTaskManagerTest {
                 .message("Artifact published")
                 .details(Map.of(TaskConstants.ARTIFACT_ID_DETAIL_KEY, target.toString()))
                 .build());
-        taskManager = manager(storage, (spec, context) -> TaskExecutionResult.completed());
+        taskManager = manager(storage, (spec, context) -> {});
 
         taskManager.reconcileInterruptedTasks();
 
@@ -333,12 +343,36 @@ class LocalTaskManagerTest {
     }
 
     @Test
+    void startupReconciliationPreservesTargetWithoutPublishedEvent() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
+        Path temporary = Files.writeString(
+                tempDirectory.resolve(".task-" + task.getId() + "-draft.csv.part"), "temporary");
+        Path target = Files.writeString(tempDirectory.resolve("export.csv"), "user-created");
+        storage.appendEvent(TaskEvent.builder()
+                .taskId(task.getId())
+                .level(TaskEventLevel.INFO.name())
+                .code(TaskEventCode.ARTIFACT_PREPARED.name())
+                .message("Artifact prepared")
+                .details(Map.of(
+                        TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY, temporary.toString(),
+                        TaskConstants.ARTIFACT_TARGET_PATH_DETAIL_KEY, target.toString()))
+                .build());
+        taskManager = manager(storage, (spec, context) -> {});
+
+        taskManager.reconcileInterruptedTasks();
+
+        assertFalse(Files.exists(temporary));
+        assertEquals("user-created", Files.readString(target));
+        assertEquals(TaskStatus.FAILED.name(), storage.get(task.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void artifactPreparationIsPersistedBeforePublication() throws Exception {
         TestTaskStorage storage = new TestTaskStorage();
         taskManager = manager(storage, (spec, context) -> {
-            var draft = context.createArtifact(tempDirectory.toString(), "export.csv", "text/csv");
+            context.createArtifact(tempDirectory.toString(), "export.csv", "text/csv");
             context.write("value");
-            return TaskExecutionResult.withArtifact(draft);
         });
         Task task = newTask();
 
@@ -368,8 +402,8 @@ class LocalTaskManagerTest {
             }
 
             @Override
-            public TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context) {
-                return execution.execute(spec, context);
+            public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
+                execution.execute(spec, context);
             }
         };
         return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactService(), 1,
@@ -402,7 +436,7 @@ class LocalTaskManagerTest {
 
     @FunctionalInterface
     private interface TestExecution {
-        TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context);
+        void execute(ExportTaskSpec spec, TaskExecutionContext context);
     }
 
     private static final class TestTaskStorage implements TaskStorage {

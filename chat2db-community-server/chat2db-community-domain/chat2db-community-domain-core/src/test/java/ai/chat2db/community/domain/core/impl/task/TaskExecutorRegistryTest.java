@@ -7,7 +7,6 @@ import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionResult;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
@@ -31,7 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiFunction;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,9 +52,9 @@ class TaskExecutorRegistryTest {
     @Test
     void duplicateTaskTypeRegistrationIsRejected() {
         TaskExecutor<ExportTaskSpec> first = exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
-                (spec, context) -> TaskExecutionResult.completed());
+                (spec, context) -> {});
         TaskExecutor<ExportTaskSpec> duplicate = exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
-                (spec, context) -> TaskExecutionResult.completed());
+                (spec, context) -> {});
 
         IllegalStateException exception = assertThrows(IllegalStateException.class,
                 () -> new TaskExecutorRegistry(List.of(first, duplicate)));
@@ -106,14 +106,13 @@ class TaskExecutorRegistryTest {
         RunningTask runningTask = new RunningTask(task.getId());
         RunningTaskRegistry runningTaskRegistry = new RunningTaskRegistry();
         runningTaskRegistry.register(runningTask);
-        Path temporaryFile = Files.writeString(tempDirectory.resolve("result.csv.part"), "value\n");
-        ArtifactDraft draft = ArtifactDraft.builder()
-                .temporaryFile(temporaryFile.toFile())
-                .targetFile(tempDirectory.resolve("result.csv").toFile())
-                .mediaType("text/csv")
-                .build();
+        AtomicReference<ArtifactDraft> draftReference = new AtomicReference<>();
         TaskExecutor<ExportTaskSpec> executor = exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
-                (spec, context) -> TaskExecutionResult.withArtifact(draft));
+                (spec, context) -> {
+                    ArtifactDraft draft = context.createArtifact(tempDirectory.toString(), "result.csv", "text/csv");
+                    draftReference.set(draft);
+                    context.write("value");
+                });
         ArtifactService failingArtifactService = new ArtifactService() {
             @Override
             String publish(ArtifactDraft ignored) {
@@ -130,21 +129,22 @@ class TaskExecutorRegistryTest {
         assertEquals(TaskStatus.FAILED.name(), failed.getStatus());
         assertEquals(TaskErrorCode.ARTIFACT_PUBLISH_FAILED.name(), failed.getErrorCode());
         assertFalse(storage.statusTransitions().contains(TaskStatus.SUCCESS.name()));
-        assertFalse(Files.exists(temporaryFile));
+        ArtifactDraft draft = draftReference.get();
+        assertFalse(Files.exists(draft.getTemporaryFile().toPath()));
         assertFalse(Files.exists(draft.getTargetFile().toPath()));
     }
 
     private TaskServiceImpl taskService(RecordingTaskStorage storage) {
         TaskExecutorRegistry registry = new TaskExecutorRegistry(List.of(
                 exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
-                        (spec, context) -> TaskExecutionResult.completed()),
+                        (spec, context) -> {}),
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
         taskManager = new LocalTaskManager(storage, registry, new ArtifactService(), 1, 1);
         return new TaskServiceImpl(storage, taskManager, new ArtifactService());
     }
 
     private TaskExecutor<ExportTaskSpec> exportExecutor(String taskType,
-            BiFunction<ExportTaskSpec, TaskExecutionContext, TaskExecutionResult> execution) {
+            BiConsumer<ExportTaskSpec, TaskExecutionContext> execution) {
         return new TaskExecutor<>() {
             @Override
             public String taskType() {
@@ -157,8 +157,8 @@ class TaskExecutorRegistryTest {
             }
 
             @Override
-            public TaskExecutionResult execute(ExportTaskSpec spec, TaskExecutionContext context) {
-                return execution.apply(spec, context);
+            public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
+                execution.accept(spec, context);
             }
         };
     }
@@ -176,8 +176,7 @@ class TaskExecutorRegistryTest {
             }
 
             @Override
-            public TaskExecutionResult execute(ImportTaskSpec spec, TaskExecutionContext context) {
-                return TaskExecutionResult.completed();
+            public void execute(ImportTaskSpec spec, TaskExecutionContext context) {
             }
         };
     }
