@@ -146,7 +146,7 @@ export const useStyles = createStyles(({ css, token, cx }) => {
     taskCard: css`
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto auto auto;
       column-gap: 8px;
       min-width: 0;
     `,
@@ -164,6 +164,28 @@ export const useStyles = createStyles(({ css, token, cx }) => {
       font-size: 12px;
       color: ${token.colorTextSecondary};
       font-variant-numeric: tabular-nums;
+    `,
+    taskProgress: css`
+      display: flex;
+      grid-column: 1 / -1;
+      grid-row: 3;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      margin-top: 6px;
+    `,
+    taskProgressBar: css`
+      min-width: 0;
+      flex: 1;
+      line-height: 1;
+    `,
+    taskProgressValue: css`
+      width: 34px;
+      flex: none;
+      color: ${token.colorTextSecondary};
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
     `,
     timingTooltip: css`
       display: grid;

@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useStyles } from './style';
 import { IconButton, Empty, EmptyImage } from '@chat2db/ui';
-import { Spin, Tooltip } from 'antd';
+import { Progress, Spin, Tooltip } from 'antd';
 import i18n from '@/i18n';
 import RunSqlModal from '@/blocks/ImportAndExport/components/RunSqlModal';
 import ImportFileModal from '@/blocks/ImportAndExport/components/ImportFileModal';
@@ -146,6 +146,7 @@ export default memo(() => {
               const duration = formatTaskDuration(item.startedAt, item.finishedAt, item.status, now);
               const fullStartTime = startTime;
               const fullEndTime = formatTaskTime(item.finishedAt, 'YYYY-MM-DD HH:mm:ss');
+              const progress = Math.min(100, Math.max(0, Number(item.progress) || 0));
               return (
                 <div
                   key={item.id}
@@ -208,6 +209,17 @@ export default memo(() => {
                           {i18n('common.text.timeConsuming')} {duration}
                         </span>
                       </div>
+                      {item.status === ImportExportTaskStatus.RUNNING && (
+                        <div className={styles.taskProgress}>
+                          <Progress
+                            className={styles.taskProgressBar}
+                            percent={progress}
+                            size="small"
+                            showInfo={false}
+                          />
+                          <span className={styles.taskProgressValue}>{progress}%</span>
+                        </div>
+                      )}
                       {!canCancel && (
                         <div className={styles.taskActions}>
                           {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
