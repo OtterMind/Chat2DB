@@ -49,6 +49,7 @@ interface IRowDetailState {
 interface IProps {
   resultData: IManageResultData;
   isFieldReadOnly?: (field: string) => boolean;
+  onActiveFieldChange?: (params: IViewDataParams) => void;
   onViewData?: (params: IViewDataParams) => void;
   onChangeData?: (params: IChangeDataParams) => void;
 }
@@ -72,7 +73,7 @@ const formatValue = (value: any, cellMeta?: IResultCell) => {
 };
 
 const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) => {
-  const { resultData, isFieldReadOnly, onViewData, onChangeData } = props;
+  const { resultData, isFieldReadOnly, onActiveFieldChange, onViewData, onChangeData } = props;
   const { styles, cx } = useStyles();
   const [rowDetail, setRowDetail] = useState<IRowDetailState | null>(null);
   const activeItemRef = useRef<HTMLDivElement>(null);
@@ -141,6 +142,21 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
     });
   };
 
+  const handleFieldActivate = (item: IRowDetailItem) => {
+    if (!rowDetail) {
+      return;
+    }
+    setRowDetail((current) => (current ? { ...current, activeField: item.field } : current));
+    onActiveFieldChange?.({
+      tableInstance: rowDetail.tableInstance,
+      col: item.col,
+      row: rowDetail.row,
+      rowId: rowDetail.rowId,
+      field: item.field,
+      cellMeta: item.cellMeta,
+    });
+  };
+
   const handleValueChange = (field: string, value: string) => {
     setRowDetail((current) => {
       if (!current) {
@@ -189,6 +205,7 @@ const RowDetail = forwardRef((props: IProps, ref: ForwardedRef<RowDetailRef>) =>
                     placeholder={isNull ? '<null>' : undefined}
                     readOnly={!resultData.canEdit || item.largeValue || item.readOnly || !onChangeData}
                     className={cx(styles.valueInput, isActive && styles.activeValueInput, isNull && styles.nullValue)}
+                    onFocus={() => handleFieldActivate(item)}
                     onChange={(event) => handleValueChange(item.field, event.target.value)}
                     onBlur={() => handleValueBlur(item)}
                   />

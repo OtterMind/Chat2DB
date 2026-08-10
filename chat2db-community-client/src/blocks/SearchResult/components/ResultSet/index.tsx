@@ -9,7 +9,7 @@ import useSqlExecutor from '@/hooks/useSqlExecutor';
 import executeSql from '@/service/executeSql';
 import SQLPreviewExecute, { SQLPreviewExecuteRef } from '../SQLPreviewExecute';
 import ViewData, { ViewDataRef } from '../ViewData';
-import RowDetail, { IChangeDataParams, RowDetailRef } from '../RowDetail';
+import RowDetail, { IChangeDataParams, IViewDataParams, RowDetailRef } from '../RowDetail';
 import SelectionAggregates from '../SelectionAggregates';
 import { IManageResultData } from '@/typings';
 import { Button, Spin, Tabs, Tooltip } from 'antd';
@@ -529,6 +529,16 @@ export default memo<IProps>(
       });
     }, [isResultFieldFrozen]);
 
+    const handleRowDetailActiveFieldChange = useCallback((params: IViewDataParams) => {
+      setLastActiveCell({
+        tableInstance: params.tableInstance,
+        col: params.col,
+        row: params.row,
+        rowId: params.rowId,
+        field: params.field,
+      });
+    }, []);
+
     const handleSelectionChange = useCallback(
       (selection: IResultSetSelection) => {
         setSelectedValues(selection.values);
@@ -636,6 +646,7 @@ export default memo<IProps>(
               ref={mode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef}
               resultData={resultData}
               isFieldReadOnly={isResultFieldFrozen}
+              onActiveFieldChange={handleRowDetailActiveFieldChange}
               onChangeData={handleRowDetailChangeData}
               onViewData={openValueInspector}
             />
