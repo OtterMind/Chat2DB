@@ -1,4 +1,14 @@
-import { memo, useEffect, useMemo, forwardRef, useImperativeHandle, ForwardedRef, useCallback, useState } from 'react';
+import {
+  memo,
+  useEffect,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+  ForwardedRef,
+  useCallback,
+  useRef,
+  useState,
+} from 'react';
 import { useStyles } from './style';
 import CanvasTable from '@/blocks/CanvasTable';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
@@ -24,7 +34,7 @@ import {
   reconcileHiddenResultColumnFields,
   getResultFieldAtTableColumn,
 } from './columnState';
-import { resolveResultSelectionActiveCell } from './selectionState';
+import { resolveResultSelectionActiveCell, ResultSelectionCause } from './selectionState';
 
 interface IProps {
   className?: string;
@@ -43,6 +53,8 @@ interface IProps {
 export interface IResultSetSelection {
   values: unknown[];
   rowCount: number;
+  cause: ResultSelectionCause;
+  interactionRevision: number;
   activeCell?: {
     tableInstance: ITableInstance;
     col: number;
@@ -59,6 +71,7 @@ export interface ResultSetTableRef {
   clearAllFilters: () => void;
   isFieldFrozen: (field: string | number) => boolean;
   openColumnVisibility: () => void;
+  getInteractionRevision: () => number;
 }
 
 const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTableRef>) => {
@@ -68,6 +81,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   const [frozenColumnFields, setFrozenColumnFields] = useState<string[]>([]);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
+  const interactionRevisionRef = useRef(0);
   const { customFontSize, showFieldType, showFieldComment } = useGlobalStore((state) => ({
     customFontSize: state.baseSetting.customFontSize ?? 13,
     showFieldType: state.dataTableSettings.showFieldType ?? true,
@@ -143,8 +157,14 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   const records = useMemo(() => buildResultRecords(resultData), [resultData]);
 
   const clearColumnSensitiveSelection = useCallback(() => {
+    interactionRevisionRef.current += 1;
     tableInstance?.clearSelected();
-    props.onSelectionChange?.({ values: [], rowCount: 0 });
+    props.onSelectionChange?.({
+      values: [],
+      rowCount: 0,
+      cause: 'table-selection',
+      interactionRevision: interactionRevisionRef.current,
+    });
   }, [props.onSelectionChange, tableInstance]);
 
   const handleColumnVisibilityConfirm = useCallback(
@@ -271,6 +291,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
 
     let frameId: number | null = null;
     let latestActiveCell: { col: number; row: number } | undefined;
+    let pendingCause: ResultSelectionCause = 'table-selection';
     const emitSelection = () => {
       frameId = null;
       const cells = (tableInstance.getSelectedCellInfos() || [])
@@ -282,6 +303,8 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
       props.onSelectionChange?.({
         values: cells.map((cell) => (cell.dataValue !== undefined ? cell.dataValue : cell.value)),
         rowCount: new Set(cells.map((cell) => cell.row)).size,
+        cause: pendingCause,
+        interactionRevision: interactionRevisionRef.current,
         activeCell: activeCell
           ? {
               tableInstance,
@@ -293,7 +316,13 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
           : undefined,
       });
     };
-    const scheduleSelection = (event?: { col?: number; row?: number }) => {
+    const scheduleSelection = (
+      cause: ResultSelectionCause,
+      event?: { col?: number; row?: number },
+    ) => {
+      if (cause === 'table-selection' || frameId === null) {
+        pendingCause = cause;
+      }
       if (
         event?.col !== undefined &&
         event?.row !== undefined &&
@@ -309,16 +338,16 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     };
     const clearSelection = () => {
       latestActiveCell = undefined;
-      scheduleSelection();
+      scheduleSelection('table-selection');
     };
 
     const eventIds = [
-      tableInstance.on('selected_cell', scheduleSelection),
-      tableInstance.on('drag_select_end', scheduleSelection),
+      tableInstance.on('selected_cell', (event) => scheduleSelection('table-selection', event)),
+      tableInstance.on('drag_select_end', (event) => scheduleSelection('table-selection', event)),
       tableInstance.on('selected_clear', clearSelection),
-      tableInstance.on('change_cell_value', scheduleSelection),
+      tableInstance.on('change_cell_value', (event) => scheduleSelection('value-change', event)),
     ];
-    scheduleSelection();
+    scheduleSelection('table-selection');
 
     return () => {
       if (frameId !== null) {
@@ -341,6 +370,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
       clearAllFilters,
       isFieldFrozen: (field) => frozenColumnFields.includes(String(field)),
       openColumnVisibility: () => setColumnVisibilityOpen(true),
+      getInteractionRevision: () => interactionRevisionRef.current,
     };
   }, [operationRecordUtils, tableInstance, activeFilterCount, clearAllFilters, frozenColumnFields]);
 
@@ -354,6 +384,14 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     onPasteData(tableInstance, operationRecordUtils, new Set(frozenColumnFields));
   }, [frozenColumnFields, tableInstance, operationRecordUtils]);
 
+  const handleTablePointerDown = useCallback(() => {
+    interactionRevisionRef.current += 1;
+  }, []);
+
+  const handleTableKeyDown = useCallback(() => {
+    interactionRevisionRef.current += 1;
+  }, []);
+
   return (
     <>
       <CanvasTable
@@ -363,6 +401,8 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
         className={styles.canvasTable}
         onCopy={onCopy}
         onPaste={onPaste}
+        onKeyDown={handleTableKeyDown}
+        onPointerDown={handleTablePointerDown}
         customOptions={{ showFrozenColumnDivider: frozenColumnFields.length > 0 }}
         options={{
           rowSeriesNumber: {

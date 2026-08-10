@@ -23,7 +23,11 @@ import {
   orderResultColumns,
   updateHiddenResultColumnFields,
 } from '../ResultSetTable/columnState';
-import { resolveResultSelectionActiveCell } from '../ResultSetTable/selectionState';
+import {
+  resolveResultInspectorActiveCell,
+  resolveResultSelectionActiveCell,
+} from '../ResultSetTable/selectionState';
+import { areResultCellValuesEquivalent } from './inspectorState';
 import {
   isResultHeaderContext,
   joinContextMenuGroups,
@@ -115,6 +119,49 @@ test('record field focus updates the cell used by the value inspector', () => {
   assert.match(rowDetailSource, /onFocus=\{\(\) => handleFieldActivate\(item\)\}/);
   assert.match(rowDetailSource, /onActiveFieldChange\?\.\(\{[\s\S]*?field: item\.field,[\s\S]*?\}\);/);
   assert.match(resultSetSource, /onActiveFieldChange=\{handleRowDetailActiveFieldChange\}/);
+  assert.match(resultSetSource, /const lastActiveCell = lastActiveCellRef\.current;/);
+});
+
+test('unchanged typed values do not produce a row-detail cell update', () => {
+  assert.equal(areResultCellValuesEquivalent(42, '42'), true);
+  assert.equal(areResultCellValuesEquivalent(true, 'true'), true);
+  assert.equal(areResultCellValuesEquivalent(false, 'false'), true);
+  assert.equal(areResultCellValuesEquivalent(null, null), true);
+  assert.equal(areResultCellValuesEquivalent(undefined, null), true);
+  assert.equal(areResultCellValuesEquivalent(42, '43'), false);
+  assert.equal(areResultCellValuesEquivalent(null, ''), false);
+});
+
+test('value refresh preserves the inspector field while real table selection replaces it', () => {
+  const inspectorField = { row: 1, field: '2' };
+  const oldTableField = { row: 1, field: '1' };
+  const newTableField = { row: 2, field: '3' };
+
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, oldTableField, 'value-change'),
+    inspectorField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, newTableField, 'table-selection'),
+    newTableField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, oldTableField, 'table-selection', true),
+    inspectorField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(undefined, newTableField, 'value-change'),
+    newTableField,
+  );
+});
+
+test('result table advances inspector interaction revisions for pointer and keyboard input', () => {
+  const resultSetTableSource = readFileSync(
+    'src/blocks/SearchResult/components/ResultSetTable/index.tsx',
+    'utf8',
+  );
+  assert.match(resultSetTableSource, /onPointerDown=\{handleTablePointerDown\}/);
+  assert.match(resultSetTableSource, /onKeyDown=\{handleTableKeyDown\}/);
 });
 
 test('column metadata contains each available name, type, and comment row', () => {

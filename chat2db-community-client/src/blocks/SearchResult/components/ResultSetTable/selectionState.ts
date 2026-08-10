@@ -3,6 +3,8 @@ export interface ResultSelectionCellPosition {
   row: number;
 }
 
+export type ResultSelectionCause = 'table-selection' | 'value-change';
+
 export function resolveResultSelectionActiveCell(
   cells: readonly ResultSelectionCellPosition[],
   latestActiveCell?: ResultSelectionCellPosition,
@@ -15,4 +17,15 @@ export function resolveResultSelectionActiveCell(
   }
   const fallbackCell = cells[cells.length - 1];
   return fallbackCell ? { col: fallbackCell.col, row: fallbackCell.row } : undefined;
+}
+
+export function resolveResultInspectorActiveCell<T>(
+  inspectorActiveCell: T | undefined,
+  tableActiveCell: T | undefined,
+  cause: ResultSelectionCause,
+  preserveInspectorForTableSelection = false,
+): T | undefined {
+  return (cause === 'value-change' || preserveInspectorForTableSelection) && inspectorActiveCell
+    ? inspectorActiveCell
+    : tableActiveCell;
 }
