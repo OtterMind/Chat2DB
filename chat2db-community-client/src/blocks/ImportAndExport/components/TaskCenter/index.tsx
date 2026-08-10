@@ -155,100 +155,103 @@ export default memo(() => {
                   data-status={item.status}
                   onClick={() => openLogModal(item.id)}
                 >
-                  <Tooltip
-                    title={
-                      <div className={styles.timingTooltip}>
-                        <div>
-                          {i18n('workspace.text.taskName')}: {item.name}
-                        </div>
-                        <div>
-                          {i18n('workspace.text.taskStatus')}: {statusLabel}
-                        </div>
-                        <div>
-                          {i18n('workspace.text.startTime')}: {fullStartTime}
-                        </div>
-                        <div>
-                          {i18n('workspace.text.endTime')}: {fullEndTime}
-                        </div>
-                        <div>
-                          {i18n('common.text.timeConsuming')}: {duration}
-                        </div>
-                      </div>
-                    }
-                  >
-                    <div className={styles.taskCard}>
-                      <div className={styles.taskItemHeader}>
-                        <span
-                          aria-label={statusLabel}
-                          className={styles.taskStatusIcon}
-                          data-status={item.status}
-                          role="img"
-                        >
-                          <TaskStatusIcon status={item.status} />
-                        </span>
+                  <div className={styles.taskCard}>
+                    <div className={styles.taskItemHeader}>
+                      <span
+                        aria-label={statusLabel}
+                        className={styles.taskStatusIcon}
+                        data-status={item.status}
+                        role="img"
+                      >
+                        <TaskStatusIcon status={item.status} />
+                      </span>
+                      <Tooltip
+                        align={{ offset: [-48, 0] }}
+                        mouseEnterDelay={0.6}
+                        placement="leftTop"
+                        title={
+                          <div className={styles.timingTooltip}>
+                            <div>
+                              {i18n('workspace.text.taskName')}: {item.name}
+                            </div>
+                            <div>
+                              {i18n('workspace.text.taskStatus')}: {statusLabel}
+                            </div>
+                            <div>
+                              {i18n('workspace.text.startTime')}: {fullStartTime}
+                            </div>
+                            <div>
+                              {i18n('workspace.text.endTime')}: {fullEndTime}
+                            </div>
+                            <div>
+                              {i18n('common.text.timeConsuming')}: {duration}
+                            </div>
+                          </div>
+                        }
+                      >
                         <span className={styles.taskName}>{item.name}</span>
+                      </Tooltip>
+                    </div>
+                    {canCancel && (
+                      <div className={styles.listItemRight}>
+                        <IconButton
+                          code={'icon-close'}
+                          size={{ boxSize: 14, iconSize: 12, borderRadius: 14 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStopTask(item.id);
+                          }}
+                        />
                       </div>
-                      {canCancel && (
-                        <div className={styles.listItemRight}>
-                          <IconButton
-                            code={'icon-close'}
-                            size={{ boxSize: 14, iconSize: 12, borderRadius: 14 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStopTask(item.id);
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div className={styles.listItemLeft}>
-                        <time>{startTime}</time>
-                        <span aria-hidden>-</span>
-                        <time>{endTime}</time>
-                        <span aria-hidden>·</span>
-                        <span>
-                          {i18n('common.text.timeConsuming')} {duration}
-                        </span>
+                    )}
+                    <div className={styles.listItemLeft}>
+                      <time>{startTime}</time>
+                      <span aria-hidden>-</span>
+                      <time>{endTime}</time>
+                      <span aria-hidden>·</span>
+                      <span>
+                        {i18n('common.text.timeConsuming')} {duration}
+                      </span>
+                    </div>
+                    {item.status === ImportExportTaskStatus.RUNNING && (
+                      <div className={styles.taskProgress}>
+                        <Progress
+                          className={styles.taskProgressBar}
+                          percent={progress}
+                          size="small"
+                          showInfo={false}
+                        />
+                        <span className={styles.taskProgressValue}>{progress}%</span>
                       </div>
-                      {item.status === ImportExportTaskStatus.RUNNING && (
-                        <div className={styles.taskProgress}>
-                          <Progress
-                            className={styles.taskProgressBar}
-                            percent={progress}
-                            size="small"
-                            showInfo={false}
-                          />
-                          <span className={styles.taskProgressValue}>{progress}%</span>
-                        </div>
-                      )}
-                      {!canCancel && (
-                        <div className={styles.taskActions}>
-                          {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
-                            <IconButton
-                              code={isDesktop ? 'icon-folder' : 'icon-download'}
-                              title={i18n('workspace.text.openFile')}
-                              tooltipPlacement="left"
-                              size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openArtifact(item);
-                              }}
-                            />
-                          )}
+                    )}
+                    {!canCancel && (
+                      <div className={styles.taskActions}>
+                        {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
                           <IconButton
-                            className={styles.deleteAction}
-                            icon={Trash2}
-                            title={i18n('common.button.delete')}
+                            code={isDesktop ? 'icon-folder' : 'icon-download'}
+                            title={i18n('workspace.text.openFile')}
                             tooltipPlacement="left"
                             size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteTask(item);
+                              openArtifact(item);
                             }}
                           />
-                        </div>
-                      )}
-                    </div>
-                  </Tooltip>
+                        )}
+                        <IconButton
+                          className={styles.deleteAction}
+                          icon={Trash2}
+                          title={i18n('common.button.delete')}
+                          tooltipPlacement="left"
+                          size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteTask(item);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

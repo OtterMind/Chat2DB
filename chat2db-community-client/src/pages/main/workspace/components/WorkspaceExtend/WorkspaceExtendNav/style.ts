@@ -19,12 +19,13 @@ export const useStyles = createStyles(({ css, prefixCls, token }) => {
     taskNotificationBadge: css`
       line-height: 0;
 
-      .${prefixCls}-badge-count {
+      &.${prefixCls}-badge .${prefixCls}-badge-count {
         min-width: 16px;
         height: 16px;
         padding: 0 4px;
         font-size: 10px;
         line-height: 16px;
+        transform: translateY(-50%);
         pointer-events: none;
       }
     `,

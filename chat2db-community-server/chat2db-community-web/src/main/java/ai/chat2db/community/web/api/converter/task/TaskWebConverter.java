@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.converter.task;
 
+import ai.chat2db.community.domain.api.enums.ExportSizeEnum;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
@@ -21,21 +22,21 @@ public class TaskWebConverter {
     public ExportTaskSpec exportRequest2spec(TaskExportRequest request) {
         String taskType = resolveExportTaskType(request);
         String format = normalize(request.getFormat());
+        String exportSize = normalize(request.getExportSize());
         if (TaskType.SQL_EXPORT.name().equals(taskType)) {
             format = TaskFileFormat.SQL.name();
         }
         return ExportTaskSpec.builder()
                 .taskType(taskType)
                 .taskName(StringUtils.defaultIfBlank(request.getTaskName(),
-                        "Export " + targetName(request.getDatabaseName(), request.getSchemaName(),
-                                request.getTableNames())))
+                        defaultExportTaskName(taskType, exportSize, format, request)))
                 .target(target(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
                         singleTable(request.getTableNames())))
                 .tableNames(request.getTableNames())
                 .sql(request.getSql())
                 .originalSql(request.getOriginalSql())
                 .resultSetId(request.getResultSetId())
-                .exportSize(request.getExportSize())
+                .exportSize(exportSize)
                 .format(format)
                 .scope(normalize(request.getScope()))
                 .containData(request.getContainData())
@@ -52,8 +53,7 @@ public class TaskWebConverter {
         return ImportTaskSpec.builder()
                 .taskType(taskType)
                 .taskName(StringUtils.defaultIfBlank(request.getTaskName(),
-                        "Import " + targetName(request.getDatabaseName(), request.getSchemaName(),
-                                request.getTableName() == null ? List.of() : List.of(request.getTableName()))))
+                        defaultImportTaskName(taskType, request)))
                 .target(target(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
                         request.getTableName()))
                 .sourceFile(sourceFile)
@@ -106,13 +106,70 @@ public class TaskWebConverter {
         return tableNames != null && tableNames.size() == 1 ? tableNames.get(0) : null;
     }
 
-    private String targetName(String databaseName, String schemaName, List<String> tableNames) {
+    private String defaultExportTaskName(String taskType, String exportSize, String format, TaskExportRequest request) {
+        if (TaskType.QUERY_RESULT_EXPORT.name().equals(taskType)) {
+            return queryResultExportOperation(exportSize, format) + " - "
+                    + resultTargetName(request.getDatabaseName(), request.getSchemaName(), request.getTableNames());
+        }
+        if (TaskType.SQL_EXPORT.name().equals(taskType)) {
+            return "Export database SQL - " + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(),
+                    request.getTableNames());
+        }
+        return "Export table data - " + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(),
+                request.getTableNames());
+    }
+
+    private String queryResultExportOperation(String exportSize, String format) {
+        String resultScope;
+        if (ExportSizeEnum.ALL.name().equals(exportSize)) {
+            resultScope = "all query results";
+        } else if (ExportSizeEnum.CURRENT_PAGE.name().equals(exportSize)) {
+            resultScope = "current page results";
+        } else {
+            resultScope = "query result";
+        }
+
+        String displayFormat = TaskFileFormat.SQL.name().equals(format) ? "INSERT SQL" : format;
+        return "Export " + resultScope
+                + (StringUtils.isBlank(displayFormat) ? "" : " as " + displayFormat);
+    }
+
+    private String defaultImportTaskName(String taskType, TaskImportRequest request) {
+        String operation = TaskType.SQL_FILE_IMPORT.name().equals(taskType)
+                ? "Import SQL file" : "Import table data";
+        List<String> tableNames = StringUtils.isBlank(request.getTableName())
+                ? List.of() : List.of(request.getTableName());
+        return operation + " - " + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(), tableNames);
+    }
+
+    private String resultTargetName(String databaseName, String schemaName, List<String> tableNames) {
         if (CollectionUtils.isNotEmpty(tableNames)) {
-            return tableNames.size() > 2
-                    ? tableNames.get(0) + "_" + tableNames.get(1)
-                    : String.join("_", tableNames);
+            return tableListName(tableNames);
+        }
+        return namespaceName(databaseName, schemaName);
+    }
+
+    private String qualifiedTargetName(String databaseName, String schemaName, List<String> tableNames) {
+        String namespace = namespaceName(databaseName, schemaName);
+        if (CollectionUtils.isEmpty(tableNames)) {
+            return namespace;
+        }
+        return namespace + "." + tableListName(tableNames);
+    }
+
+    private String namespaceName(String databaseName, String schemaName) {
+        if (StringUtils.isNotBlank(databaseName) && StringUtils.isNotBlank(schemaName)
+                && !databaseName.equals(schemaName)) {
+            return databaseName + "." + schemaName;
         }
         return StringUtils.firstNonBlank(schemaName, databaseName, "chat2db");
+    }
+
+    private String tableListName(List<String> tableNames) {
+        if (tableNames.size() <= 2) {
+            return String.join(", ", tableNames);
+        }
+        return tableNames.get(0) + ", " + tableNames.get(1) + " +" + (tableNames.size() - 2);
     }
 
     private String normalize(String value) {

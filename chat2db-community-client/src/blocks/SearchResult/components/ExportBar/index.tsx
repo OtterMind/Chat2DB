@@ -34,10 +34,12 @@ export default memo<IProps>((props) => {
         : exportType === ExportTypeEnum.INSERT
         ? ImportExportFileType.SQL
         : ImportExportFileType.CSV;
+    const tableName = resultData.tableName || params.tableName;
     const result = await importExportServices.submitExport({
       ...params,
       schemaName: params.schemaName || undefined,
       taskType: ImportExportTaskType.QUERY_RESULT_EXPORT,
+      tableNames: tableName ? [tableName] : undefined,
       format,
     });
     getTaskList();

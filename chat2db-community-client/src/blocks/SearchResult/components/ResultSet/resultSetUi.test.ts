@@ -70,6 +70,11 @@ test('more-tabs and export chevrons share one aligned trailing slot', () => {
   assert.match(resultToolbarStyleSource, /toolBarRight:[\s\S]*?height: 100%;[\s\S]*?align-items: center;/);
 });
 
+test('query result export sends the concrete table as the task target', () => {
+  assert.match(exportBarSource, /const tableName = resultData\.tableName \|\| params\.tableName;/);
+  assert.match(exportBarSource, /tableNames: tableName \? \[tableName\] : undefined,/);
+});
+
 test('manage-columns title exposes an aligned localized help tooltip', () => {
   assert.match(columnVisibilityModalSource, /<CircleHelp aria-hidden="true" size=\{14\} \/>/);
   assert.match(columnVisibilityModalSource, /i18n\('common\.text\.manageColumns\.tooltip'\)/);

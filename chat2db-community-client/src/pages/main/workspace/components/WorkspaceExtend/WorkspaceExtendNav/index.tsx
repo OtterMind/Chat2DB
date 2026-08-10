@@ -111,7 +111,7 @@ export default (props: IProps) => {
               key={item.code}
               className={styles.taskNotificationBadge}
               count={unreadCompletedTaskCount}
-              offset={[-3, 3]}
+              offset={[0, 3]}
               overflowCount={Number.MAX_SAFE_INTEGER}
             >
               <span className={styles.taskCenterButton}>

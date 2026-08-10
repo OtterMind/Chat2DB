@@ -190,7 +190,8 @@ export const useStyles = createStyles(({ css, token, cx }) => {
     timingTooltip: css`
       display: grid;
       gap: 2px;
-      white-space: nowrap;
+      max-width: 360px;
+      overflow-wrap: anywhere;
       font-variant-numeric: tabular-nums;
     `,
     listItemRight: css`
