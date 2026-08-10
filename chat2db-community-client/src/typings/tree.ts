@@ -19,6 +19,7 @@ export interface IExtraParams {
   user?: string;
   host?: string;
   aiDataCollectionId?: number;
+  storageType?: string;
   hasPermission?: boolean;
   isAdmin?: boolean;
   dataCollectionElementType?: DataCollectionElementType;

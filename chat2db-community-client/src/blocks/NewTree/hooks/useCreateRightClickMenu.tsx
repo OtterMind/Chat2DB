@@ -53,6 +53,7 @@ import { ILoadDataOptions, treeConfig } from '../treeConfig';
 
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
@@ -201,7 +202,7 @@ export const useCreateRightClickMenu = () => {
       tableName,
       dataCollectionElementType,
     } = extraParams;
-    const hasPermission = extraParams.hasPermission ?? runtimeEditionConfig.usesFixedIdentity;
+    const { hasPermission } = resolveDataSourceAuthorization(extraParams, runtimeEditionConfig.usesFixedIdentity);
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
     // Set the current node
