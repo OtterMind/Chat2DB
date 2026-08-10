@@ -29,11 +29,17 @@ public class LocalCookie {
 
     private static final String HEADER_PATH = ConfigUtils.getBasePath()
             + File.separator
-            + "cache" + File.separator + "chat2db-community-header-" + StringUtils.defaultString(System.getProperty("spring.profiles.active"), "dev");
+            + "cache" + File.separator + LocalStateNamespace.fileName(
+                    "header",
+                    StringUtils.defaultString(System.getProperty("spring.profiles.active"), "dev")
+            );
 
     private static final String COOKIE_PATH = ConfigUtils.getBasePath()
             + File.separator
-            + "cache" + File.separator + "chat2db-community-cookie-" + StringUtils.defaultString(System.getProperty("spring.profiles.active"), "dev");
+            + "cache" + File.separator + LocalStateNamespace.fileName(
+                    "cookie",
+                    StringUtils.defaultString(System.getProperty("spring.profiles.active"), "dev")
+            );
 
     private static AtomicBoolean WRRITE_HEADER = new AtomicBoolean(false);
 
