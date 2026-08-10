@@ -58,7 +58,7 @@
     "test:saved-console-tree-refresh": "tsx src/store/tree/savedConsoleTreeRefresh.test.ts",
     "test:saved-console-lifecycle": "tsx src/store/workspace/utils/savedConsoleLifecycle.test.ts && tsx src/store/workspace/utils/workspaceTabPersistence.test.ts",
     "test:sse-request": "tsx src/components/SSERequest/requestOwnership.test.ts && tsx src/components/SSERequest/requestTransport.test.ts",
-    "test:settings-layout": "tsx src/blocks/Setting/navigation.test.ts && tsx src/blocks/Setting/search.test.ts && tsx src/blocks/Setting/BaseSetting/model.test.ts && tsx src/blocks/Setting/settingsLayout.test.ts",
+    "test:settings-layout": "tsx src/blocks/Setting/navigation.test.ts && tsx src/blocks/Setting/search.test.ts && tsx src/blocks/Setting/BaseSetting/model.test.ts && tsx src/edition-ui/settingMenus.test.ts && tsx src/blocks/Setting/settingsLayout.test.ts",
     "test:shortcut": "tsx src/constants/shortcut.test.ts && tsx src/utils/jcefZoom.test.ts",
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
     "test:sql-execution-batch": "tsx src/service/sqlExecutionBatch.test.ts",
