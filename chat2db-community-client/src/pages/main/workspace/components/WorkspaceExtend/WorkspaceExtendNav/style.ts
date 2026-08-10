@@ -16,9 +16,6 @@ export const useStyles = createStyles(({ css, prefixCls, token }) => {
       gap: 8px;
       flex: 1;
     `,
-    bottomBox: css`
-      flex-shrink: 0;
-    `,
     taskNotificationBadge: css`
       line-height: 0;
 

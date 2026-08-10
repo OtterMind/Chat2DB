@@ -3,6 +3,8 @@ import Output from '@/components/Output';
 import GlobalExtendComponents from './GlobalExtendComponents';
 import SaveList from '../SaveList';
 import ViewDDL from '@/components/ViewDDL';
+import TaskCenter from '@/blocks/ImportAndExport/components/TaskCenter';
+import { canImportExport } from '@/utils/env';
 
 interface IToolbar {
   code: string;
@@ -16,6 +18,7 @@ export enum GlobalComponents {
   account_grants = 'accountGrants',
   executive_log = 'executiveLog',
   save_list = 'saveList',
+  task_center = 'taskCenter',
 }
 
 export const globalComponents: {
@@ -24,6 +27,7 @@ export const globalComponents: {
   [GlobalComponents.view_ddl]: ViewDDL,
   [GlobalComponents.executive_log]: Output,
   [GlobalComponents.save_list]: SaveList,
+  [GlobalComponents.task_center]: TaskCenter,
 };
 
 export const extendConfig: IToolbar[] = [
@@ -45,4 +49,14 @@ export const extendConfig: IToolbar[] = [
     icon: 'icon-clipboard-list',
     components: globalComponents.saveList,
   },
+  ...(canImportExport
+    ? [
+        {
+          code: GlobalComponents.task_center,
+          title: i18n('workspace.title.exportProgressBar'),
+          icon: 'icon-export-details',
+          components: globalComponents.taskCenter,
+        },
+      ]
+    : []),
 ];

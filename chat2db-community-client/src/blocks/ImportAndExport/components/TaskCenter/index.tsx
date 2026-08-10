@@ -1,7 +1,7 @@
-import { memo, ReactNode, useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useStyles } from './style';
-import { IconfontSvg, IconButton, Empty, EmptyImage } from '@chat2db/ui';
-import { Popover, Flex, Spin, Tooltip } from 'antd';
+import { IconButton, Empty, EmptyImage } from '@chat2db/ui';
+import { Spin, Tooltip } from 'antd';
 import i18n from '@/i18n';
 import RunSqlModal from '@/blocks/ImportAndExport/components/RunSqlModal';
 import ImportFileModal from '@/blocks/ImportAndExport/components/ImportFileModal';
@@ -57,11 +57,12 @@ const formatTaskDuration = (
   return `${seconds}${i18n('common.text.second')}`;
 };
 
-export default memo(({ children }: { children: (open: boolean) => ReactNode }) => {
+export default memo(() => {
   const { styles } = useStyles();
-  const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [highlightedTaskIds, setHighlightedTaskIds] = useState<Set<number>>(() => new Set());
+  const [highlightedTaskIds] = useState<Set<number>>(
+    () => new Set(useImportExportStore.getState().unreadCompletedTaskIds),
+  );
 
   const {
     getTaskList,
@@ -84,18 +85,16 @@ export default memo(({ children }: { children: (open: boolean) => ReactNode }) =
   const hasRunningTask = taskList.some((task) => task.status === ImportExportTaskStatus.RUNNING);
 
   useEffect(() => {
-    if (!open || !hasRunningTask) return;
+    if (!hasRunningTask) return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [hasRunningTask, open]);
+  }, [hasRunningTask]);
 
-  useEffect(() => () => setTaskCenterOpen(false), [setTaskCenterOpen]);
-
-  const closeTaskCenter = () => {
-    setTaskCenterOpen(false);
-    setOpen(false);
-  };
+  useEffect(() => {
+    setTaskCenterOpen(true);
+    return () => setTaskCenterOpen(false);
+  }, [setTaskCenterOpen]);
 
   const openArtifact = (task) => {
     if (isDesktop && task.artifactId) {
@@ -119,164 +118,145 @@ export default memo(({ children }: { children: (open: boolean) => ReactNode }) =
     });
   };
 
-  const contentRender = () => {
-    return (
-      <div className={styles.wrapper}>
-        <div className={styles.title}>
-          <Flex align="center" gap={8}>
-            <IconfontSvg code={'icon-bell'} /> <span>{i18n('workspace.title.exportProgressBar')}</span>
-          </Flex>
-          <IconButton code={'icon-close'} size="md" onClick={closeTaskCenter} />
-        </div>
+  return (
+    <div className={styles.wrapper}>
+      <div className={styles.title}>
+        <span>{i18n('workspace.title.exportProgressBar')}</span>
+        <IconButton code="icon-refresh" size={18} onClick={() => void getTaskList()} />
+      </div>
 
-        <div
-          className={styles.listWrapper}
-          onScroll={(event) => {
-            const list = event.currentTarget;
-            const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-            if (distanceToBottom <= 40 && taskListHasNextPage && !taskListLoadingMore) {
-              void loadMoreTasks();
-            }
-          }}
-        >
-          {taskList.length ? (
-            <>
-              {taskList.map((item) => {
-                const canCancel =
-                  item.status === ImportExportTaskStatus.PENDING || item.status === ImportExportTaskStatus.RUNNING;
-                const statusLabel = i18n(TASK_STATUS_I18N_KEYS[item.status]);
-                const startTime = formatTaskTime(item.startedAt, 'YYYY-MM-DD HH:mm:ss');
-                const endTime = formatTaskTime(item.finishedAt);
-                const duration = formatTaskDuration(item.startedAt, item.finishedAt, item.status, now);
-                const fullStartTime = startTime;
-                const fullEndTime = formatTaskTime(item.finishedAt, 'YYYY-MM-DD HH:mm:ss');
-                return (
-                  <div
-                    key={item.id}
-                    className={styles.listItem}
-                    data-highlighted={highlightedTaskIds.has(item.id)}
-                    data-status={item.status}
-                    onClick={() => {
-                      closeTaskCenter();
-                      openLogModal(item.id);
-                    }}
+      <div
+        className={styles.listWrapper}
+        onScroll={(event) => {
+          const list = event.currentTarget;
+          const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+          if (distanceToBottom <= 40 && taskListHasNextPage && !taskListLoadingMore) {
+            void loadMoreTasks();
+          }
+        }}
+      >
+        {taskList.length ? (
+          <>
+            {taskList.map((item) => {
+              const canCancel =
+                item.status === ImportExportTaskStatus.PENDING || item.status === ImportExportTaskStatus.RUNNING;
+              const statusLabel = i18n(TASK_STATUS_I18N_KEYS[item.status]);
+              const startTime = formatTaskTime(item.startedAt, 'YYYY-MM-DD HH:mm:ss');
+              const endTime = formatTaskTime(item.finishedAt);
+              const duration = formatTaskDuration(item.startedAt, item.finishedAt, item.status, now);
+              const fullStartTime = startTime;
+              const fullEndTime = formatTaskTime(item.finishedAt, 'YYYY-MM-DD HH:mm:ss');
+              return (
+                <div
+                  key={item.id}
+                  className={styles.listItem}
+                  data-highlighted={highlightedTaskIds.has(item.id)}
+                  data-status={item.status}
+                  onClick={() => openLogModal(item.id)}
+                >
+                  <Tooltip
+                    title={
+                      <div className={styles.timingTooltip}>
+                        <div>
+                          {i18n('workspace.text.taskName')}: {item.name}
+                        </div>
+                        <div>
+                          {i18n('workspace.text.taskStatus')}: {statusLabel}
+                        </div>
+                        <div>
+                          {i18n('workspace.text.startTime')}: {fullStartTime}
+                        </div>
+                        <div>
+                          {i18n('workspace.text.endTime')}: {fullEndTime}
+                        </div>
+                        <div>
+                          {i18n('common.text.timeConsuming')}: {duration}
+                        </div>
+                      </div>
+                    }
                   >
-                    <Tooltip
-                      title={
-                        <div className={styles.timingTooltip}>
-                          <div>
-                            {i18n('workspace.text.taskName')}: {item.name}
-                          </div>
-                          <div>
-                            {i18n('workspace.text.taskStatus')}: {statusLabel}
-                          </div>
-                          <div>
-                            {i18n('workspace.text.startTime')}: {fullStartTime}
-                          </div>
-                          <div>
-                            {i18n('workspace.text.endTime')}: {fullEndTime}
-                          </div>
-                          <div>
-                            {i18n('common.text.timeConsuming')}: {duration}
-                          </div>
+                    <div className={styles.taskCard}>
+                      <div className={styles.taskItemHeader}>
+                        <span
+                          aria-label={statusLabel}
+                          className={styles.taskStatusIcon}
+                          data-status={item.status}
+                          role="img"
+                        >
+                          <TaskStatusIcon status={item.status} />
+                        </span>
+                        <span className={styles.taskName}>{item.name}</span>
+                      </div>
+                      {canCancel && (
+                        <div className={styles.listItemRight}>
+                          <IconButton
+                            code={'icon-close'}
+                            size={{ boxSize: 14, iconSize: 12, borderRaduis: 14 } as any}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStopTask(item.id);
+                            }}
+                          />
                         </div>
-                      }
-                    >
-                      <div className={styles.taskCard}>
-                        <div className={styles.taskItemHeader}>
-                          <span
-                            aria-label={statusLabel}
-                            className={styles.taskStatusIcon}
-                            data-status={item.status}
-                            role="img"
-                          >
-                            <TaskStatusIcon status={item.status} />
-                          </span>
-                          <span className={styles.taskName}>{item.name}</span>
-                        </div>
-                        {canCancel && (
-                          <div className={styles.listItemRight}>
+                      )}
+                      <div className={styles.listItemLeft}>
+                        <time>{startTime}</time>
+                        <span aria-hidden>-</span>
+                        <time>{endTime}</time>
+                        <span aria-hidden>·</span>
+                        <span>
+                          {i18n('common.text.timeConsuming')} {duration}
+                        </span>
+                      </div>
+                      {!canCancel && (
+                        <div className={styles.taskActions}>
+                          {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
                             <IconButton
-                              code={'icon-close'}
-                              size={{ boxSize: 14, iconSize: 12, borderRaduis: 14 } as any}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStopTask(item.id);
-                              }}
-                            />
-                          </div>
-                        )}
-                        <div className={styles.listItemLeft}>
-                          <time>{startTime}</time>
-                          <span aria-hidden>-</span>
-                          <time>{endTime}</time>
-                          <span aria-hidden>·</span>
-                          <span>
-                            {i18n('common.text.timeConsuming')} {duration}
-                          </span>
-                        </div>
-                        {!canCancel && (
-                          <div className={styles.taskActions}>
-                            {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
-                              <IconButton
-                                code={isDesktop ? 'icon-folder' : 'icon-download'}
-                                title={i18n('workspace.text.openFile')}
-                                tooltipPlacement="left"
-                                size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openArtifact(item);
-                                }}
-                              />
-                            )}
-                            <IconButton
-                              className={styles.deleteAction}
-                              icon={Trash2}
-                              title={i18n('common.button.delete')}
+                              code={isDesktop ? 'icon-folder' : 'icon-download'}
+                              title={i18n('workspace.text.openFile')}
                               tooltipPlacement="left"
                               size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteTask(item);
+                                openArtifact(item);
                               }}
                             />
-                          </div>
-                        )}
-                      </div>
-                    </Tooltip>
-                  </div>
-                );
-              })}
-              {taskListLoadingMore && (
-                <div className={styles.loadMoreIndicator}>
-                  <Spin size="small" />
+                          )}
+                          <IconButton
+                            className={styles.deleteAction}
+                            icon={Trash2}
+                            title={i18n('common.button.delete')}
+                            tooltipPlacement="left"
+                            size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTask(item);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </Tooltip>
                 </div>
-              )}
-            </>
-          ) : (
-            <Empty image={EmptyImage.Common} title={i18n('workspace.text.noExportTask')} />
-          )}
-        </div>
+              );
+            })}
+            {taskListLoadingMore && (
+              <div className={styles.loadMoreIndicator}>
+                <Spin size="small" />
+              </div>
+            )}
+          </>
+        ) : (
+          <Empty image={EmptyImage.Common} title={i18n('workspace.text.noExportTask')} />
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+});
 
+export const TaskCenterModals = memo(() => {
   return (
     <>
-      <Popover
-        overlayClassName={styles.notification}
-        trigger="click"
-        placement="leftBottom"
-        content={contentRender()}
-        open={open}
-        onOpenChange={(newOpen) => {
-          setHighlightedTaskIds(newOpen ? new Set(useImportExportStore.getState().unreadCompletedTaskIds) : new Set());
-          setTaskCenterOpen(newOpen);
-          setOpen(newOpen);
-        }}
-      >
-        {children(open)}
-      </Popover>
       <LogModal />
       <RunSqlModal />
       <ImportFileModal />

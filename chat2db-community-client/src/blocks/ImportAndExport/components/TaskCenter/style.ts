@@ -1,6 +1,6 @@
 import { createStyles } from 'antd-style';
 
-export const useStyles = createStyles(({ css, token, cx, prefixCls }) => {
+export const useStyles = createStyles(({ css, token, cx }) => {
   const taskItemHeader = cx(css`
     display: flex;
     grid-column: 1;
@@ -52,27 +52,28 @@ export const useStyles = createStyles(({ css, token, cx, prefixCls }) => {
         }
       }
     `,
-    notification: css`
-      .${prefixCls}-popover-inner {
-        padding: 0;
-      }
-    `,
     wrapper: css`
-      width: 420px;
-      max-width: calc(100vw - 32px);
+      display: flex;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      background: ${token.colorBgContainer};
     `,
     title: css`
-      padding: 8px 10px;
-      font-weight: ${token.fontWeightStrong};
-      font-size: ${token.fontSizeLG}px;
-      border-bottom: 1px solid ${token.colorBorderSecondary};
       display: flex;
       align-items: center;
       justify-content: space-between;
+      box-sizing: border-box;
+      height: 36px;
+      padding: 0 12px;
+      border-bottom: 1px solid ${token.colorBorderLayout};
+      font-weight: 600;
+      background: ${token.colorBgContainer};
     `,
     listWrapper: css`
-      padding: 0 8px;
-      max-height: 400px;
+      flex: 1;
+      height: 0;
+      padding: 8px;
       overflow-y: auto;
       overflow-x: hidden;
     `,
@@ -84,19 +85,28 @@ export const useStyles = createStyles(({ css, token, cx, prefixCls }) => {
     `,
     listItem: css`
       position: relative;
-      padding: 6px 0px;
+      margin-bottom: 8px;
+      padding: 10px 8px;
       cursor: pointer;
-      border-bottom: 1px solid ${token.colorBorderSecondary};
-      transition: background-color 0.2s ease;
+      border: 1px solid ${token.colorBorderSecondary};
+      border-radius: 6px;
+      background: ${token.colorFillQuaternary};
+      transition:
+        border-color 0.16s ease,
+        background-color 0.16s ease;
+
+      &:hover {
+        border-color: ${token.colorPrimaryBorder};
+        background: ${token.colorFillTertiary};
+      }
 
       &[data-highlighted='true'] {
-        margin: 0 -8px;
-        padding: 6px 8px;
+        border-color: ${token.colorSuccessBorder};
         background: ${token.colorSuccessBg};
 
         &::before {
           position: absolute;
-          inset: 4px auto 4px 0;
+          inset: 5px auto 5px 0;
           width: 3px;
           border-radius: 0 2px 2px 0;
           background: ${token.colorSuccess};
@@ -109,6 +119,7 @@ export const useStyles = createStyles(({ css, token, cx, prefixCls }) => {
       }
 
       &[data-highlighted='true'][data-status='FAILED'] {
+        border-color: ${token.colorErrorBorder};
         background: ${token.colorErrorBg};
       }
 
@@ -117,11 +128,12 @@ export const useStyles = createStyles(({ css, token, cx, prefixCls }) => {
       }
 
       &[data-highlighted='true'][data-status='CANCELLED'] {
+        border-color: ${token.colorBorder};
         background: ${token.colorFillSecondary};
       }
 
       &:last-child {
-        border-bottom: none;
+        margin-bottom: 0;
       }
 
       &:hover .task-item-actions,

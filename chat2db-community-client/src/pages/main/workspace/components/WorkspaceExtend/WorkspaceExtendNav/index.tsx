@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import classnames from 'classnames';
 import i18n from '@/i18n';
-import { extendConfig } from '../config';
+import { extendConfig, GlobalComponents } from '../config';
 import { IconButton, staticMessage } from '@chat2db/ui';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useImportExportStore } from '@/store/importExport';
@@ -15,7 +15,7 @@ import { useGlobalStore } from '@/store/global';
 import jcefApi from '@/jcef';
 import { createQuickTerminalTab } from './quickTerminal';
 import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
-import TaskCenter from '@/blocks/ImportAndExport/components/TaskCenter';
+import { TaskCenterModals } from '@/blocks/ImportAndExport/components/TaskCenter';
 
 interface IToolbar {
   code: string;
@@ -88,11 +88,11 @@ export default (props: IProps) => {
   return (
     <div className={classnames(className, styles.workspaceExtendNav)}>
       <div className={styles.topBox}>
-        {extendConfig.map((item, index) => {
-          return (
+        {extendConfig.map((item) => {
+          const button = (
             <IconButton
+              key={item.code}
               size="lg"
-              key={index}
               title={item.title}
               tooltipPlacement="left"
               code={item.icon}
@@ -102,6 +102,23 @@ export default (props: IProps) => {
                 useAIStore.getState().setShowPanel(false);
               }}
             />
+          );
+          if (item.code !== GlobalComponents.task_center) {
+            return button;
+          }
+          return (
+            <Badge
+              key={item.code}
+              className={styles.taskNotificationBadge}
+              count={unreadCompletedTaskCount}
+              offset={[-3, 3]}
+              overflowCount={Number.MAX_SAFE_INTEGER}
+            >
+              <span className={styles.taskCenterButton}>
+                {button}
+                {currentTask && <LoaderCircle aria-hidden className={styles.taskRunningIndicator} size={12} />}
+              </span>
+            </Badge>
           );
         })}
         <Divider style={{ margin: '8px 0px' }} />
@@ -125,34 +142,7 @@ export default (props: IProps) => {
           }}
         />
       </div>
-      <div className={styles.bottomBox}>
-        {canImportExport && (
-          <TaskCenter>
-            {(open) => (
-              <Badge
-                className={styles.taskNotificationBadge}
-                count={unreadCompletedTaskCount}
-                offset={[-3, 3]}
-                overflowCount={Number.MAX_SAFE_INTEGER}
-              >
-                <span className={styles.taskCenterButton}>
-                  <IconButton
-                    size="lg"
-                    title={i18n('workspace.title.exportProgressBar')}
-                    tooltipPlacement="left"
-                    code="icon-export-details"
-                    isActive={open}
-                  />
-                  {currentTask && <LoaderCircle aria-hidden className={styles.taskRunningIndicator} size={12} />}
-                </span>
-              </Badge>
-            )}
-          </TaskCenter>
-        )}
-
-        {/* <Tooltip title={i18n('workspace.title.ai')} placement="left">
-        </Tooltip> */}
-      </div>
+      {canImportExport && <TaskCenterModals />}
     </div>
   );
 };
