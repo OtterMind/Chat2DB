@@ -194,14 +194,14 @@ public class DbDataSourceController {
     /**
      * Closes datasource connections by request parameters.
      * <p>
-     * Endpoint: {@code GET /api/connection/close}.
+     * Endpoint: {@code POST /api/connection/close}.
      *
-     * @param id identifier used to locate the target resource.
+     * @param request request containing the identifier of the connection to close.
      * @return operation result for the request.
      */
-    @GetMapping("/close")
-    public ActionResult closeConnection(@RequestParam("id") Long id) {
-        dataSourceService.removeConnection(id);
+    @PostMapping("/close")
+    public ActionResult closeConnection(@RequestBody @Valid DataSourceCloseRequest request) {
+        dataSourceService.removeConnection(request.getId());
         return ActionResult.isSuccess();
     }
 

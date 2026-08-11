@@ -11,6 +11,7 @@ import {
 import { ISchemaItem } from '@/typings/schema';
 import { UpdatePositionInTree } from '@/typings/tree';
 import createRequest from './base';
+import { connectionCloseRequest } from './connectionCloseRequest';
 
 export interface IDriverResponse {
   driverConfigList: {
@@ -152,8 +153,8 @@ const exportDataSource = createRequest<
   method: 'post',
 });
 
-const closeConnection = createRequest<{ id: number }, void>('/api/connection/close', {
-  method: 'get',
+const closeConnection = createRequest<{ id: number }, void>(connectionCloseRequest.path, {
+  method: connectionCloseRequest.method,
 });
 
 export default {
