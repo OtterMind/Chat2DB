@@ -1,4 +1,4 @@
-import { memo, useState, ForwardedRef, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
+import { memo, useState, ForwardedRef, forwardRef, useImperativeHandle, useRef, useMemo, useLayoutEffect } from 'react';
 import Pagination from '@/components/Pagination';
 import i18n from '@/i18n';
 import { IconButton } from '@chat2db/ui';
@@ -8,12 +8,21 @@ import { IChartItem, IManageResultData, IResultConfig } from '@/typings';
 import { useUpdateEffect } from 'ahooks';
 import { isEqualMemo, keyboardKey } from '@/utils';
 import sqlService from '@/service/sql';
-import _ from 'lodash';
 import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/EditorChartModal';
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
 import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
 import { Columns3Cog } from 'lucide-react';
+import {
+  getPaginationQueryKey,
+  isCurrentPaginationCountRequest,
+  isExpectedPaginationResponse,
+  type IPaginationCountRequest,
+  type IPaginationRequest,
+  resolvePaginationTotal,
+  updatePaginationPage,
+  updatePaginationPageSize,
+} from '@/components/Pagination/paginationState';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -56,59 +65,93 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
     total: resultData.fuzzyTotal,
     hasNextPage: resultData.hasNextPage,
   });
+  const paginationQueryKey = getPaginationQueryKey(resultData);
+  const paginationQueryKeyRef = useRef(paginationQueryKey);
+  const exactTotalQueryKeyRef = useRef<string>();
+  const pendingPaginationRequestRef = useRef<IPaginationRequest>();
+  const resultDataRef = useRef(resultData);
+  const resultGenerationRef = useRef(0);
+  const countRequestSequenceRef = useRef(0);
   const zoerBoundInfo = useZoerStore((s) => s.zoerBoundInfo);
 
   const showCreateChart = useMemo(() => !zoerBoundInfo, [zoerBoundInfo]);
 
-  useUpdateEffect(() => {
-    // Use the latest fuzzy total when the displayed total is not numeric (for example, "1000+").
-    let total = paginationConfig.total;
-    const numericTotal = _.toNumber(total);
-    if (_.isNaN(numericTotal)) {
-      total = resultData.fuzzyTotal;
+  useLayoutEffect(() => {
+    const resultDataChanged = resultDataRef.current !== resultData;
+    const queryChanged = paginationQueryKeyRef.current !== paginationQueryKey;
+    if (!resultDataChanged && !queryChanged) {
+      return;
     }
 
-    setPaginationConfig({
+    resultDataRef.current = resultData;
+    paginationQueryKeyRef.current = paginationQueryKey;
+    resultGenerationRef.current += 1;
+    if (queryChanged) {
+      exactTotalQueryKeyRef.current = undefined;
+      pendingPaginationRequestRef.current = undefined;
+    }
+
+    // Keep an exact total only for the response to an explicit page/page-size request.
+    const preserveExactTotal =
+      exactTotalQueryKeyRef.current === paginationQueryKey &&
+      isExpectedPaginationResponse(pendingPaginationRequestRef.current, paginationQueryKey, resultData);
+    pendingPaginationRequestRef.current = undefined;
+
+    setPaginationConfig((config) => ({
       pageNo: resultData.pageNo,
       pageSize: resultData.pageSize,
-      total: resultData.fuzzyTotal,
+      total: resolvePaginationTotal(config.total, resultData.fuzzyTotal, preserveExactTotal),
       hasNextPage: resultData.hasNextPage,
-    });
+    }));
+  }, [paginationQueryKey, resultData]);
 
+  useUpdateEffect(() => {
     setChartDetail(null);
   }, [resultData]);
 
   const onPageNoChange = (pageNo: number) => {
-    setPaginationConfig({
-      ...paginationConfig,
-      pageNo,
-    });
+    pendingPaginationRequestRef.current = { queryKey: paginationQueryKey, pageNo, pageSize: paginationConfig.pageSize };
+    setPaginationConfig((config) => updatePaginationPage(config, pageNo));
     setTimeout(() => {
       handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL);
     }, 0);
   };
 
   const onPageSizeChange = (pageSize: number) => {
-    setPaginationConfig({
-      ...paginationConfig,
-      pageNo: 1,
-      pageSize,
-    });
+    pendingPaginationRequestRef.current = { queryKey: paginationQueryKey, pageNo: 1, pageSize };
+    setPaginationConfig((config) => updatePaginationPageSize(config, pageSize));
     setTimeout(() => {
       handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL);
     }, 0);
   };
 
-  const onClickTotalBtn = (): Promise<number> => {
+  const onClickTotalBtn = (): Promise<number | undefined> => {
     if (!resultData.executeSqlParams) return Promise.reject('executeSqlParams is not exist');
+    const request: IPaginationCountRequest = {
+      queryKey: paginationQueryKey,
+      resultGeneration: resultGenerationRef.current,
+      sequence: ++countRequestSequenceRef.current,
+    };
     return sqlService.getDMLCount(resultData.executeSqlParams).then((res) => {
-      const config = { ...paginationConfig, total: res };
-      setPaginationConfig(config);
+      if (!isCurrentPaginationCountRequest(request, {
+        queryKey: paginationQueryKeyRef.current,
+        resultGeneration: resultGenerationRef.current,
+        sequence: countRequestSequenceRef.current,
+      })) {
+        return undefined;
+      }
+      exactTotalQueryKeyRef.current = request.queryKey;
+      setPaginationConfig((config) => ({ ...config, total: res }));
       return res;
     });
   };
 
   const handleRefresh = () => {
+    exactTotalQueryKeyRef.current = undefined;
+    pendingPaginationRequestRef.current = undefined;
+    resultGenerationRef.current += 1;
+    countRequestSequenceRef.current += 1;
+    setPaginationConfig((config) => ({ ...config, total: resultData.fuzzyTotal }));
     handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL);
   };
 
