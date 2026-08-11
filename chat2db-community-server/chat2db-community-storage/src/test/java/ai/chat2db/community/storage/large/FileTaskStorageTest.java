@@ -323,6 +323,26 @@ class FileTaskStorageTest {
     }
 
     @Test
+    void incrementalReadStartsAfterCachedTailAndPreservesUtf8() {
+        FileTaskStorage storage = storage();
+        Task created = create(storage, "task");
+        TaskEvent second = event(TaskEventCode.QUERY_STARTED.name());
+        second.setTaskId(created.getId());
+        second.setMessage("\u5df2\u5bfc\u51fa 1000 \u884c");
+        storage.appendEvent(second);
+        assertEquals(List.of(2L), sequences(storage.listEventsBefore(created.getId(), null, 1)));
+        TaskEvent third = event(TaskEventCode.QUERY_COMPLETED.name());
+        third.setTaskId(created.getId());
+        third.setMessage("\u5bfc\u51fa\u5b8c\u6210");
+        storage.appendEvent(third);
+
+        List<TaskEvent> events = storage.listEvents(created.getId(), 2L, 10);
+
+        assertEquals(List.of(3L), sequences(events));
+        assertEquals("\u5bfc\u51fa\u5b8c\u6210", events.get(0).getMessage());
+    }
+
+    @Test
     void incompleteTrailingEventIsDiscardedWithoutLosingNextAppendedEvent() {
         FileTaskStorage storage = storage();
         Task created = create(storage, "task");
@@ -397,7 +417,7 @@ class FileTaskStorageTest {
         Task task = create(storage, "task");
         Long taskId = task.getId();
 
-        assertFalse(storage.deleteTerminalTask(taskId));
+        assertFalse(storage.deleteTerminalTask(taskId, () -> {}));
         assertTrue(detailFile(taskId).isFile());
         assertTrue(eventsFile(taskId).isFile());
 
@@ -405,7 +425,7 @@ class FileTaskStorageTest {
         assertTrue(storage.compareAndSetStatus(taskId, TaskStatus.RUNNING.name(), TaskStatus.SUCCESS.name(),
                 TaskStatusPatch.builder().artifactId("artifact").finishedAt(new Date()).build(),
                 event(TaskEventCode.TASK_SUCCEEDED.name())));
-        assertTrue(storage.deleteTerminalTask(taskId));
+        assertTrue(storage.deleteTerminalTask(taskId, () -> {}));
 
         assertTrue(storage.get(taskId).isEmpty());
         assertFalse(detailFile(taskId).exists());
@@ -415,6 +435,28 @@ class FileTaskStorageTest {
         FileTaskStorage reloaded = storage();
         assertTrue(reloaded.get(taskId).isEmpty());
         assertTrue(reloaded.listEvents(taskId, 0, 10).isEmpty());
+    }
+
+    @Test
+    void terminalTaskDeletionRollsBackSnapshotAndEventsWhenCommitFails() {
+        FileTaskStorage storage = storage();
+        Task task = create(storage, "task");
+        Long taskId = task.getId();
+        assertTrue(start(storage, taskId));
+        assertTrue(storage.compareAndSetStatus(taskId, TaskStatus.RUNNING.name(), TaskStatus.SUCCESS.name(),
+                TaskStatusPatch.builder().artifactId("artifact").finishedAt(new Date()).build(),
+                event(TaskEventCode.TASK_SUCCEEDED.name())));
+
+        assertThrows(IllegalStateException.class,
+                () -> storage.deleteTerminalTask(taskId, () -> {
+                    throw new IllegalStateException("artifact commit failed");
+                }));
+
+        assertEquals(TaskStatus.SUCCESS.name(), storage.get(taskId).orElseThrow().getStatus());
+        assertTrue(detailFile(taskId).isFile());
+        assertTrue(eventsFile(taskId).isFile());
+        assertEquals(List.of(1L, 2L, 3L), sequences(storage.listEvents(taskId, 0, 10)));
+        assertTrue(FileUtil.readLines(indexFile(), "UTF-8").contains(String.valueOf(taskId)));
     }
 
     @Test

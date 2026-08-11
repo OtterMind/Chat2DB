@@ -34,7 +34,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -110,28 +109,25 @@ public class FileTaskStorage implements TaskStorage {
     @Override
     public synchronized PageResponse<Task> list(TaskQuery query) {
         TaskQuery effectiveQuery = query == null ? new TaskQuery() : query;
-        Comparator<Task> newestFirst = Comparator
-                .comparing(Task::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(Task::getId, Comparator.nullsLast(Comparator.reverseOrder()));
-        List<Task> tasks = snapshots.all().stream()
-                .filter(task -> effectiveQuery.getStatus() == null
-                        || Objects.equals(task.getStatus(), effectiveQuery.getStatus()))
-                .filter(task -> Objects.equals(task.getUserId(), effectiveQuery.getUserId()))
-                .filter(task -> Objects.equals(task.getOrganizationId(), effectiveQuery.getOrganizationId()))
-                .sorted(newestFirst)
-                .map(this::copy)
-                .toList();
         int pageNo = Math.max(1, effectiveQuery.getPageNo() == null ? 1 : effectiveQuery.getPageNo());
         int pageSize = Math.max(1, effectiveQuery.getPageSize() == null
                 ? TaskConstants.DEFAULT_PAGE_SIZE : effectiveQuery.getPageSize());
-        long total = tasks.size();
         long offset = (long) (pageNo - 1) * pageSize;
-        if (offset >= total) {
-            return PageResponse.of(List.of(), total, pageNo, pageSize);
+        long total = 0L;
+        List<Task> page = new ArrayList<>(pageSize);
+        for (Task task : snapshots.newestFirst()) {
+            if ((effectiveQuery.getStatus() != null
+                    && !Objects.equals(task.getStatus(), effectiveQuery.getStatus()))
+                    || !Objects.equals(task.getUserId(), effectiveQuery.getUserId())
+                    || !Objects.equals(task.getOrganizationId(), effectiveQuery.getOrganizationId())) {
+                continue;
+            }
+            if (total >= offset && page.size() < pageSize) {
+                page.add(copy(task));
+            }
+            total++;
         }
-        int from = (int) offset;
-        int to = (int) Math.min(total, offset + pageSize);
-        return PageResponse.of(tasks.subList(from, to), total, pageNo, pageSize);
+        return PageResponse.of(List.copyOf(page), total, pageNo, pageSize);
     }
 
     @Override
@@ -194,10 +190,15 @@ public class FileTaskStorage implements TaskStorage {
         if (!file.isFile()) {
             return List.of();
         }
+        if (afterSequence > 0L && afterSequence >= lastSequence(taskId)) {
+            return List.of();
+        }
         List<TaskEvent> result = new ArrayList<>(resultLimit);
-        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long startOffset = afterSequence <= 0L ? 0L : findOffsetAfterSequence(input, taskId, afterSequence);
+            input.seek(startOffset);
             String line;
-            while ((line = reader.readLine()) != null && result.size() < resultLimit) {
+            while ((line = readNextLine(input)) != null && result.size() < resultLimit) {
                 TaskEvent event = parseValidEvent(line, taskId);
                 if (event != null && event.getSequence() > afterSequence) {
                     result.add(copyEvent(event));
@@ -207,6 +208,36 @@ public class FileTaskStorage implements TaskStorage {
         } catch (IOException e) {
             throw new IllegalStateException("Could not read task events", e);
         }
+    }
+
+    private long findOffsetAfterSequence(RandomAccessFile input, Long taskId, long afterSequence) throws IOException {
+        long position = skipTrailingLineBreaks(input, input.length() - 1L);
+        while (position >= 0L) {
+            long lineEnd = position;
+            PreviousLine previousLine = readPreviousLine(input, position);
+            TaskEvent event = parseValidEvent(previousLine.value(), taskId);
+            if (event != null && event.getSequence() <= afterSequence) {
+                return skipLineBreaksForward(input, lineEnd + 1L);
+            }
+            position = previousLine.nextPosition();
+        }
+        return 0L;
+    }
+
+    private String readNextLine(RandomAccessFile input) throws IOException {
+        ByteArrayOutputStream line = new ByteArrayOutputStream();
+        boolean readAny = false;
+        int value;
+        while ((value = input.read()) != -1) {
+            readAny = true;
+            if (value == '\n') {
+                break;
+            }
+            if (value != '\r') {
+                line.write(value);
+            }
+        }
+        return readAny ? line.toString(StandardCharsets.UTF_8) : null;
     }
 
     @Override
@@ -220,13 +251,20 @@ public class FileTaskStorage implements TaskStorage {
         List<TaskEvent> newestFirst = new ArrayList<>(resultLimit);
         try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
             long position = skipTrailingLineBreaks(input, input.length() - 1L);
+            Long latestSequence = null;
             while (position >= 0 && newestFirst.size() < resultLimit) {
                 PreviousLine previousLine = readPreviousLine(input, position);
                 position = previousLine.nextPosition();
                 TaskEvent event = parseValidEvent(previousLine.value(), taskId);
+                if (event != null && latestSequence == null) {
+                    latestSequence = event.getSequence();
+                }
                 if (event != null && (beforeSequence == null || event.getSequence() < beforeSequence)) {
                     newestFirst.add(copyEvent(event));
                 }
+            }
+            if (latestSequence != null) {
+                lastEventSequences.merge(taskId, latestSequence, Math::max);
             }
             Collections.reverse(newestFirst);
             return List.copyOf(newestFirst);
@@ -243,6 +281,19 @@ public class FileTaskStorage implements TaskStorage {
                 break;
             }
             position--;
+        }
+        return position;
+    }
+
+    private long skipLineBreaksForward(RandomAccessFile input, long position) throws IOException {
+        long length = input.length();
+        while (position < length) {
+            input.seek(position);
+            int value = input.read();
+            if (value != '\n' && value != '\r') {
+                break;
+            }
+            position++;
         }
         return position;
     }
@@ -277,7 +328,12 @@ public class FileTaskStorage implements TaskStorage {
     }
 
     @Override
-    public synchronized boolean deleteTerminalTask(Long taskId) {
+    public synchronized List<Task> listTasksForRecovery() {
+        return snapshots.all().stream().map(this::copy).toList();
+    }
+
+    @Override
+    public synchronized boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
         Task task = snapshots.find(taskId);
         if (task == null || !TaskStatus.isTerminal(task.getStatus())) {
             return false;
@@ -294,18 +350,24 @@ public class FileTaskStorage implements TaskStorage {
                 eventStaged = true;
             }
             snapshots.removeStrict(taskId);
+            if (commitAction != null) {
+                commitAction.run();
+            }
             try {
                 Files.deleteIfExists(stagedEventFile);
             } catch (IOException cleanupFailure) {
-                snapshots.restoreStrict(task);
-                if (eventStaged) {
-                    move(stagedEventFile, eventFile);
-                }
-                throw cleanupFailure;
+                log.warn("Could not delete staged events for deleted task {}", taskId, cleanupFailure);
             }
             lastEventSequences.remove(taskId);
             return true;
         } catch (Exception e) {
+            if (snapshots.find(taskId) == null) {
+                try {
+                    snapshots.restoreStrict(task);
+                } catch (RuntimeException rollbackFailure) {
+                    e.addSuppressed(rollbackFailure);
+                }
+            }
             if (eventStaged && Files.exists(stagedEventFile) && !Files.exists(eventFile)) {
                 try {
                     move(stagedEventFile, eventFile);
@@ -685,6 +747,10 @@ public class FileTaskStorage implements TaskStorage {
 
         private List<Task> all() {
             return getDataList();
+        }
+
+        private Iterable<Task> newestFirst() {
+            return dataMap.descendingMap().values();
         }
 
         private void replaceStrict(Long taskId, Task task) {

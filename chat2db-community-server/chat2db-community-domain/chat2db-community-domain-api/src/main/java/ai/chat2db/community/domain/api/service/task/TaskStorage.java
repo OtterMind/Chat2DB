@@ -32,5 +32,12 @@ public interface TaskStorage {
 
     List<Task> listNonTerminalTasks();
 
-    boolean deleteTerminalTask(Long taskId);
+    default List<Task> listTasksForRecovery() {
+        return listNonTerminalTasks();
+    }
+
+    /**
+     * Removes a terminal task while retaining enough storage state to roll back if the coordinated commit fails.
+     */
+    boolean deleteTerminalTask(Long taskId, Runnable commitAction);
 }

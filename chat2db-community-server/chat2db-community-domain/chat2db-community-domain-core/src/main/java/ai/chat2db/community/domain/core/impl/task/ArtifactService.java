@@ -137,17 +137,19 @@ public class ArtifactService {
         }
     }
 
-    void cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
+    boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
+        boolean cleaned = true;
         if (StringUtils.isNotBlank(temporaryPath)) {
             Path temporary = Path.of(temporaryPath).toAbsolutePath().normalize();
             String fileName = temporary.getFileName() == null ? "" : temporary.getFileName().toString();
             if (fileName.startsWith(".task-" + taskId + "-") && fileName.endsWith(DRAFT_FILE_SUFFIX)) {
-                deleteQuietly(temporary);
+                cleaned = deleteQuietly(temporary);
             }
         }
         if (StringUtils.isNotBlank(publishedPath)) {
-            deleteQuietly(Path.of(publishedPath).toAbsolutePath().normalize());
+            cleaned = deleteQuietly(Path.of(publishedPath).toAbsolutePath().normalize()) && cleaned;
         }
+        return cleaned;
     }
 
     private File resolveDirectory(String outputDirectory) {
@@ -196,13 +198,19 @@ public class ArtifactService {
         }
     }
 
-    private void deleteQuietly(Path path) {
+    private boolean deleteQuietly(Path path) {
         try {
+            if (Files.notExists(path)) {
+                return true;
+            }
             if (Files.isRegularFile(path)) {
                 Files.deleteIfExists(path);
+                return Files.notExists(path);
             }
+            return false;
         } catch (IOException ignored) {
             // The task is still converged to a terminal state even if filesystem cleanup fails.
+            return false;
         }
     }
 

@@ -77,10 +77,14 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                         executionContext.artifactDraft());
             }
         } finally {
-            executionContext.closeQuietly();
-            runningTask.close();
-            runningTaskRegistry.remove(submission.taskId(), runningTask);
-            unbindExecutionContext();
+            try {
+                executionContext.closeQuietly();
+                runningTask.close();
+                runningTaskRegistry.remove(submission.taskId(), runningTask);
+                unbindExecutionContext();
+            } finally {
+                runningTask.markFinished();
+            }
         }
     }
 

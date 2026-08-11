@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.converter.task;
 
 import ai.chat2db.community.domain.api.enums.ExportSizeEnum;
+import ai.chat2db.community.domain.api.enums.ExportScopeTypeEnum;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
@@ -56,6 +57,23 @@ class TaskWebConverterTest {
         ExportTaskSpec spec = converter.exportRequest2spec(request);
 
         assertEquals("Export database SQL - app", spec.getTaskName());
+    }
+
+    @Test
+    void distinguishesSqlExportScopesInTaskNames() {
+        TaskExportRequest structure = exportRequest(TaskType.SQL_EXPORT.name(), "app", "orders");
+        structure.setScope(ExportScopeTypeEnum.SCHEMA.name());
+        TaskExportRequest data = exportRequest(TaskType.SQL_EXPORT.name(), "app", "orders");
+        data.setScope(ExportScopeTypeEnum.TABLE.name());
+        TaskExportRequest structureAndData = exportRequest(TaskType.SQL_EXPORT.name(), "app", "orders");
+        structureAndData.setScope(ExportScopeTypeEnum.ALL.name());
+
+        assertEquals("Export database structure - app.orders",
+                converter.exportRequest2spec(structure).getTaskName());
+        assertEquals("Export database data - app.orders",
+                converter.exportRequest2spec(data).getTaskName());
+        assertEquals("Export database structure and data - app.orders",
+                converter.exportRequest2spec(structureAndData).getTaskName());
     }
 
     @Test

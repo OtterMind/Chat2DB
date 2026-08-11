@@ -293,13 +293,14 @@ class TaskExecutorRegistryTest {
         }
 
         @Override
-        public synchronized boolean deleteTerminalTask(Long taskId) {
+        public synchronized boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             Task task = tasks.get(taskId);
             if (task == null || !TaskStatus.isTerminal(task.getStatus())) {
                 return false;
             }
             tasks.remove(taskId);
             events.remove(taskId);
+            commitAction.run();
             return true;
         }
 

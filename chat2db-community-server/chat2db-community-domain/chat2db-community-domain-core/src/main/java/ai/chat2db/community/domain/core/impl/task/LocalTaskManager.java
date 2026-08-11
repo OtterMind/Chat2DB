@@ -20,6 +20,7 @@ import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -36,6 +37,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Component
 public class LocalTaskManager {
+
+    private static final long EXIT_TASK_WAIT_MILLIS = 2000L;
 
     private final TaskStorage taskStorage;
 
@@ -66,11 +69,16 @@ public class LocalTaskManager {
 
     @PostConstruct
     void reconcileInterruptedTasks() {
-        for (Task task : taskStorage.listNonTerminalTasks()) {
-            failPersistedTask(task, TaskErrorCode.APPLICATION_TERMINATED.name(),
-                    TaskEventCode.APPLICATION_TERMINATED.name(),
-                    "The application terminated before the task completed");
-            cleanupInterruptedArtifacts(task.getId());
+        for (Task task : taskStorage.listTasksForRecovery()) {
+            if (!TaskStatus.isTerminal(task.getStatus())) {
+                failPersistedTask(task, TaskErrorCode.APPLICATION_TERMINATED.name(),
+                        TaskEventCode.APPLICATION_TERMINATED.name(),
+                        "The application terminated before the task completed");
+                cleanupInterruptedArtifacts(task.getId());
+            } else if (TaskStatus.FAILED.name().equals(task.getStatus())
+                    && isTerminationError(task.getErrorCode())) {
+                cleanupInterruptedArtifacts(task.getId());
+            }
         }
     }
 
@@ -97,49 +105,55 @@ public class LocalTaskManager {
     }
 
     Task cancel(Long taskId) {
-        RunningTask runningTask = runningTaskRegistry.get(taskId);
-        Task task = taskStorage.get(taskId).orElse(null);
-        if (task == null || task.getStatus() == null || TaskStatus.isTerminal(task.getStatus())
-                || runningTask == null) {
-            return task;
-        }
-        runningTask.completionLock().lock();
+        lifecycleLock.lock();
         try {
-            task = taskStorage.get(taskId).orElse(task);
-            if (TaskStatus.isTerminal(task.getStatus()) || runningTask.isClosed()) {
+            RunningTask runningTask = runningTaskRegistry.get(taskId);
+            Task task = taskStorage.get(taskId).orElse(null);
+            if (task == null || task.getStatus() == null || TaskStatus.isTerminal(task.getStatus())
+                    || runningTask == null) {
                 return task;
             }
-            if (TaskStatus.PENDING.name().equals(task.getStatus())) {
-                runningTask.requestCancellation(false);
-                Date now = new Date();
-                taskStorage.compareAndSetStatus(taskId, TaskStatus.PENDING.name(), TaskStatus.CANCELLED.name(),
-                        TaskStatusPatch.builder()
-                                .progressMessage("Task cancelled before execution")
-                                .finishedAt(now)
-                                .updatedAt(now)
-                                .build(),
-                        event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(),
-                                "Task cancelled before execution"));
-                runningTask.close();
-                runningTaskRegistry.remove(taskId, runningTask);
-            } else if (TaskStatus.RUNNING.name().equals(task.getStatus())) {
-                taskStorage.appendEvent(TaskEvent.builder()
-                        .taskId(taskId)
-                        .level(TaskEventLevel.INFO.name())
-                        .code(TaskEventCode.TASK_CANCEL_ACCEPTED.name())
-                        .message("Task cancellation accepted")
-                        .details(Collections.emptyMap())
-                        .build());
-                taskStorage.updateProgressIfRunning(taskId, TaskProgress.builder()
-                        .progress(task.getProgress())
-                        .stage(task.getStage())
-                        .message("Cancelling task")
-                        .build());
-                runningTask.requestCancellation(true);
+            runningTask.completionLock().lock();
+            try {
+                task = taskStorage.get(taskId).orElse(task);
+                if (TaskStatus.isTerminal(task.getStatus()) || runningTask.isClosed()) {
+                    return task;
+                }
+                if (TaskStatus.PENDING.name().equals(task.getStatus())) {
+                    runningTask.requestCancellation(false);
+                    Date now = new Date();
+                    taskStorage.compareAndSetStatus(taskId, TaskStatus.PENDING.name(), TaskStatus.CANCELLED.name(),
+                            TaskStatusPatch.builder()
+                                    .progressMessage("Task cancelled before execution")
+                                    .finishedAt(now)
+                                    .updatedAt(now)
+                                    .build(),
+                            event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(),
+                                    "Task cancelled before execution"));
+                    runningTask.close();
+                    runningTask.markFinished();
+                    runningTaskRegistry.remove(taskId, runningTask);
+                } else if (TaskStatus.RUNNING.name().equals(task.getStatus())) {
+                    taskStorage.appendEvent(TaskEvent.builder()
+                            .taskId(taskId)
+                            .level(TaskEventLevel.INFO.name())
+                            .code(TaskEventCode.TASK_CANCEL_ACCEPTED.name())
+                            .message("Task cancellation accepted")
+                            .details(Collections.emptyMap())
+                            .build());
+                    taskStorage.updateProgressIfRunning(taskId, TaskProgress.builder()
+                            .progress(task.getProgress())
+                            .stage(task.getStage())
+                            .message("Cancelling task")
+                            .build());
+                    runningTask.requestCancellation(true);
+                }
+                return taskStorage.get(taskId).orElse(task);
+            } finally {
+                runningTask.completionLock().unlock();
             }
-            return taskStorage.get(taskId).orElse(task);
         } finally {
-            runningTask.completionLock().unlock();
+            lifecycleLock.unlock();
         }
     }
 
@@ -180,14 +194,17 @@ public class LocalTaskManager {
             }
             preparingForExit = true;
             List<Task> activeTasks = taskStorage.listNonTerminalTasks();
+            List<RunningTask> tasksToAwait = new ArrayList<>();
+            List<Long> tasksToCleanup = new ArrayList<>();
             for (Task task : activeTasks) {
                 if (owner != null && !belongsTo(task, owner.userId(), owner.organizationId())) {
                     continue;
                 }
                 RunningTask runningTask = runningTaskRegistry.get(task.getId());
                 if (runningTask == null) {
-                    failPersistedTask(task, errorCode, eventCode, message);
-                    cleanupInterruptedArtifacts(task.getId());
+                    if (failPersistedTask(task, errorCode, eventCode, message)) {
+                        tasksToCleanup.add(task.getId());
+                    }
                     continue;
                 }
                 runningTask.completionLock().lock();
@@ -196,23 +213,55 @@ public class LocalTaskManager {
                     if (TaskStatus.isTerminal(currentTask.getStatus())) {
                         continue;
                     }
-                    runningTask.requestCancellation(TaskStatus.RUNNING.name().equals(currentTask.getStatus()));
-                    failPersistedTask(currentTask, errorCode, eventCode, message);
-                    cleanupInterruptedArtifacts(task.getId());
-                    runningTask.close();
-                    runningTaskRegistry.remove(task.getId(), runningTask);
+                    boolean wasRunning = TaskStatus.RUNNING.name().equals(currentTask.getStatus());
+                    runningTask.requestCancellation(wasRunning);
+                    if (failPersistedTask(currentTask, errorCode, eventCode, message)) {
+                        tasksToCleanup.add(task.getId());
+                    }
+                    if (wasRunning) {
+                        tasksToAwait.add(runningTask);
+                    } else {
+                        runningTask.close();
+                        runningTask.markFinished();
+                        runningTaskRegistry.remove(task.getId(), runningTask);
+                    }
                 } finally {
                     runningTask.completionLock().unlock();
                 }
+            }
+            awaitTaskTermination(tasksToAwait);
+            for (Long taskId : tasksToCleanup) {
+                cleanupInterruptedArtifacts(taskId);
             }
         } finally {
             lifecycleLock.unlock();
         }
     }
 
-    private void failPersistedTask(Task task, String errorCode, String eventCode, String message) {
+    private void awaitTaskTermination(List<RunningTask> runningTasks) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(EXIT_TASK_WAIT_MILLIS);
+        for (RunningTask runningTask : runningTasks) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0L) {
+                break;
+            }
+            try {
+                runningTask.awaitFinished(remaining, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
+    private boolean isTerminationError(String errorCode) {
+        return TaskErrorCode.USER_EXITED.name().equals(errorCode)
+                || TaskErrorCode.APPLICATION_TERMINATED.name().equals(errorCode);
+    }
+
+    private boolean failPersistedTask(Task task, String errorCode, String eventCode, String message) {
         Date now = new Date();
-        taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.FAILED.name(),
+        return taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.FAILED.name(),
                 TaskStatusPatch.builder()
                         .stage(TaskStage.FAILED.name())
                         .progressMessage(message)
@@ -225,6 +274,11 @@ public class LocalTaskManager {
     }
 
     private void cleanupInterruptedArtifacts(Long taskId) {
+        List<TaskEvent> latestEvents = taskStorage.listEventsBefore(taskId, null, 1);
+        if (!latestEvents.isEmpty()
+                && TaskEventCode.ARTIFACT_CLEANUP_COMPLETED.name().equals(latestEvents.get(0).getCode())) {
+            return;
+        }
         long afterSequence = 0L;
         String temporaryPath = null;
         String publishedPath = null;
@@ -247,7 +301,12 @@ public class LocalTaskManager {
             }
             afterSequence = nextSequence;
         }
-        artifactService.cleanupInterruptedArtifact(taskId, temporaryPath, publishedPath);
+        if (artifactService.cleanupInterruptedArtifact(taskId, temporaryPath, publishedPath)) {
+            TaskEvent cleanupEvent = event(TaskEventCode.ARTIFACT_CLEANUP_COMPLETED.name(),
+                    TaskEventLevel.INFO.name(), "Interrupted task artifacts cleaned");
+            cleanupEvent.setTaskId(taskId);
+            taskStorage.appendEvent(cleanupEvent);
+        }
     }
 
     private String detail(Map<String, Object> details, String key) {
@@ -277,6 +336,7 @@ public class LocalTaskManager {
         } catch (RejectedExecutionException e) {
             runningTaskRegistry.remove(task.getId(), runningTask);
             runningTask.close();
+            runningTask.markFinished();
             Date now = new Date();
             taskStorage.compareAndSetStatus(task.getId(), TaskStatus.PENDING.name(), TaskStatus.FAILED.name(),
                     TaskStatusPatch.builder()

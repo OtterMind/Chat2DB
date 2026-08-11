@@ -3,7 +3,9 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -17,6 +19,8 @@ final class RunningTask {
     private final AtomicReference<TaskCancelable> cancelable = new AtomicReference<>();
 
     private final ReentrantLock completionLock = new ReentrantLock();
+
+    private final CountDownLatch executionFinished = new CountDownLatch(1);
 
     private volatile Future<?> future;
 
@@ -73,6 +77,14 @@ final class RunningTask {
     void close() {
         closed = true;
         cancelable.set(null);
+    }
+
+    void markFinished() {
+        executionFinished.countDown();
+    }
+
+    boolean awaitFinished(long timeout, TimeUnit unit) throws InterruptedException {
+        return executionFinished.await(timeout, unit);
     }
 
     private void cancelRegisteredResource() {

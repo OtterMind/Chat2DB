@@ -14,6 +14,7 @@ import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
 import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, Trash2 } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
+import type { ImportExportTaskDetails } from '@/typings/importExport';
 
 const TASK_STATUS_I18N_KEYS = {
   [ImportExportTaskStatus.PENDING]: 'workspace.task.status.pending',
@@ -70,6 +71,7 @@ export default memo(() => {
     taskList,
     taskListHasNextPage,
     taskListLoadingMore,
+    removeTask,
     openLogModal,
     setTaskCenterOpen,
   } = useImportExportStore((state) => ({
@@ -78,6 +80,7 @@ export default memo(() => {
     taskList: state.taskList,
     taskListHasNextPage: state.taskListHasNextPage,
     taskListLoadingMore: state.taskListLoadingMore,
+    removeTask: state.removeTask,
     openLogModal: state.openLogModal,
     setTaskCenterOpen: state.setTaskCenterOpen,
   }));
@@ -114,7 +117,11 @@ export default memo(() => {
     openUnifiedConfirmationModal({
       title: i18n('common.text.deleteConfirmTitle'),
       content: i18n('workspace.task.delete.confirm', task.name),
-      onOk: () => importExportServices.deleteTask({ taskId: task.id }).then(() => getTaskList()),
+      onOk: () =>
+        importExportServices.deleteTask({ taskId: task.id }).then(() => {
+          removeTask(task.id);
+          return getTaskList();
+        }),
     });
   };
 

@@ -21,6 +21,7 @@ import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import com.google.common.util.concurrent.Striped;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -28,9 +29,12 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.locks.Lock;
 
 @Service
 public class TaskServiceImpl implements TaskService {
+
+    private final Striped<Lock> deletionLocks = Striped.lazyWeakLock(64);
 
     private final TaskStorage taskStorage;
 
@@ -95,28 +99,34 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void delete(Long taskId) {
-        Task task = get(taskId);
-        if (task == null) {
-            throw new DataNotFoundException();
-        }
-        if (!TaskStatus.isTerminal(task.getStatus())) {
-            throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
-        }
-        ArtifactService.PublishedArtifactDeletion deletion =
-                artifactService.stagePublishedDeletion(task.getArtifactId());
+        Lock deletionLock = deletionLocks.get(taskId);
+        deletionLock.lock();
         try {
-            if (!taskStorage.deleteTerminalTask(taskId)) {
+            Task task = get(taskId);
+            if (task == null) {
                 throw new DataNotFoundException();
             }
-        } catch (RuntimeException e) {
-            try {
-                artifactService.restorePublishedDeletion(deletion);
-            } catch (RuntimeException rollbackFailure) {
-                e.addSuppressed(rollbackFailure);
+            if (!TaskStatus.isTerminal(task.getStatus())) {
+                throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
             }
-            throw e;
+            ArtifactService.PublishedArtifactDeletion deletion =
+                    artifactService.stagePublishedDeletion(task.getArtifactId());
+            try {
+                if (!taskStorage.deleteTerminalTask(taskId,
+                        () -> artifactService.commitPublishedDeletion(deletion))) {
+                    throw new DataNotFoundException();
+                }
+            } catch (RuntimeException e) {
+                try {
+                    artifactService.restorePublishedDeletion(deletion);
+                } catch (RuntimeException rollbackFailure) {
+                    e.addSuppressed(rollbackFailure);
+                }
+                throw e;
+            }
+        } finally {
+            deletionLock.unlock();
         }
-        artifactService.commitPublishedDeletion(deletion);
     }
 
     @Override

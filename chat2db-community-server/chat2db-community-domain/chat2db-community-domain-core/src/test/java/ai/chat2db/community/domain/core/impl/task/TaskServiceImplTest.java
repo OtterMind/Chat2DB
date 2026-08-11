@@ -157,8 +157,13 @@ class TaskServiceImplTest {
         }
 
         @Override
-        public boolean deleteTerminalTask(Long taskId) {
-            return tasks.remove(taskId) != null;
+        public boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
+            Task deleted = tasks.remove(taskId);
+            if (deleted == null) {
+                return false;
+            }
+            commitAction.run();
+            return true;
         }
     }
 }

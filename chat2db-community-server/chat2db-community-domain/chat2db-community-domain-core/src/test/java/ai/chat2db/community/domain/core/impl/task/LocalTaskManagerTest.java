@@ -34,6 +34,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -159,6 +162,49 @@ class LocalTaskManagerTest {
         assertTrue(storage.awaitTerminal());
         assertEquals(TaskStatus.CANCELLED.name(), storage.get(task.getId()).orElseThrow().getStatus());
         assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void cancellationWaitsUntilPersistedTaskIsRegistered() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicLong executions = new AtomicLong();
+        taskManager = manager(storage, (spec, context) -> {
+            executions.incrementAndGet();
+            firstStarted.countDown();
+            try {
+                releaseFirst.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            context.checkCancelled();
+        });
+        Task first = newTask();
+        taskManager.submit(first, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
+
+        CountDownLatch persisted = new CountDownLatch(1);
+        CountDownLatch allowRegistration = new CountDownLatch(1);
+        storage.pauseNextCreate(persisted, allowRegistration);
+        Task second = newTask();
+        ExecutorService requests = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> submission = requests.submit(
+                    () -> taskManager.submit(second, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null));
+            assertTrue(persisted.await(5, TimeUnit.SECONDS));
+            Future<Task> cancellation = requests.submit(() -> taskManager.cancel(second.getId()));
+
+            allowRegistration.countDown();
+            submission.get();
+            assertEquals(TaskStatus.CANCELLED.name(), cancellation.get().getStatus());
+        } finally {
+            releaseFirst.countDown();
+            requests.shutdownNow();
+        }
+
+        assertEquals(TaskStatus.CANCELLED.name(), storage.get(second.getId()).orElseThrow().getStatus());
+        assertEquals(1L, executions.get());
     }
 
     @Test
@@ -368,6 +414,40 @@ class LocalTaskManagerTest {
     }
 
     @Test
+    void startupReconciliationRetriesCleanupForExitFailedTask() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
+        assertTrue(storage.compareAndSetStatus(task.getId(), TaskStatus.PENDING.name(), TaskStatus.FAILED.name(),
+                TaskStatusPatch.builder()
+                        .errorCode(TaskErrorCode.USER_EXITED.name())
+                        .errorMessage("User exited")
+                        .finishedAt(new Date())
+                        .build(),
+                event(TaskEventCode.USER_EXITED.name())));
+        Path temporary = Files.writeString(
+                tempDirectory.resolve(".task-" + task.getId() + "-retry.csv.part"), "temporary");
+        storage.appendEvent(TaskEvent.builder()
+                .taskId(task.getId())
+                .level(TaskEventLevel.INFO.name())
+                .code(TaskEventCode.ARTIFACT_PREPARED.name())
+                .message("Artifact prepared")
+                .details(Map.of(TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY, temporary.toString()))
+                .build());
+        taskManager = manager(storage, (spec, context) -> {});
+
+        taskManager.reconcileInterruptedTasks();
+
+        assertFalse(Files.exists(temporary));
+        assertEquals(TaskErrorCode.USER_EXITED.name(), storage.get(task.getId()).orElseThrow().getErrorCode());
+        assertEquals(TaskEventCode.ARTIFACT_CLEANUP_COMPLETED.name(),
+                storage.listEventsBefore(task.getId(), null, 1).get(0).getCode());
+
+        Files.writeString(temporary, "recreated");
+        taskManager.reconcileInterruptedTasks();
+        assertTrue(Files.exists(temporary));
+    }
+
+    @Test
     void artifactPreparationIsPersistedBeforePublication() throws Exception {
         TestTaskStorage storage = new TestTaskStorage();
         taskManager = manager(storage, (spec, context) -> {
@@ -446,6 +526,8 @@ class LocalTaskManagerTest {
         private final Map<Long, List<TaskEvent>> events = new LinkedHashMap<>();
         private final CountDownLatch terminal = new CountDownLatch(1);
         private int terminalTransitions;
+        private CountDownLatch createPaused;
+        private CountDownLatch resumeCreate;
 
         @Override
         public synchronized Task create(Task task, TaskEvent createdEvent) {
@@ -456,6 +538,18 @@ class LocalTaskManagerTest {
             tasks.put(task.getId(), task);
             createdEvent.setTaskId(task.getId());
             appendEvent(createdEvent);
+            if (createPaused != null) {
+                createPaused.countDown();
+                try {
+                    resumeCreate.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while pausing task creation", e);
+                } finally {
+                    createPaused = null;
+                    resumeCreate = null;
+                }
+            }
             return task;
         }
 
@@ -545,13 +639,19 @@ class LocalTaskManagerTest {
         }
 
         @Override
-        public synchronized boolean deleteTerminalTask(Long taskId) {
+        public synchronized List<Task> listTasksForRecovery() {
+            return List.copyOf(tasks.values());
+        }
+
+        @Override
+        public synchronized boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             Task task = tasks.get(taskId);
             if (task == null || !TaskStatus.isTerminal(task.getStatus())) {
                 return false;
             }
             tasks.remove(taskId);
             events.remove(taskId);
+            commitAction.run();
             return true;
         }
 
@@ -561,6 +661,11 @@ class LocalTaskManagerTest {
 
         synchronized int terminalTransitionCount() {
             return terminalTransitions;
+        }
+
+        synchronized void pauseNextCreate(CountDownLatch paused, CountDownLatch resume) {
+            createPaused = paused;
+            resumeCreate = resume;
         }
     }
 }

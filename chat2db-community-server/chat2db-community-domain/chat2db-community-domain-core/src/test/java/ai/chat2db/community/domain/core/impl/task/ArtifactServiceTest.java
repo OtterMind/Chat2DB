@@ -10,6 +10,7 @@ import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.community.tools.exception.DataNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -113,6 +119,78 @@ class ArtifactServiceTest {
     }
 
     @Test
+    void artifactCommitFailureRestoresTaskAndPublishedArtifact() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("commit-failure.csv"), "value");
+        RecordingTaskStorage storage = new RecordingTaskStorage(Task.builder()
+                .id(1L)
+                .status(TaskStatus.SUCCESS.name())
+                .artifactId(artifact.toString())
+                .build());
+        ArtifactService artifactService = new ArtifactService() {
+            @Override
+            void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
+                throw new IllegalStateException("Could not commit artifact deletion");
+            }
+        };
+
+        assertThrows(IllegalStateException.class,
+                () -> new TaskServiceImpl(storage, null, artifactService).delete(1L));
+
+        assertEquals("value", Files.readString(artifact));
+        assertTrue(storage.get(1L).isPresent());
+    }
+
+    @Test
+    void concurrentDeletionCannotRestoreAnOrphanArtifact() throws Exception {
+        Path artifact = Files.writeString(tempDirectory.resolve("concurrent.csv"), "value");
+        RecordingTaskStorage storage = new RecordingTaskStorage(Task.builder()
+                .id(1L)
+                .status(TaskStatus.SUCCESS.name())
+                .artifactId(artifact.toString())
+                .build());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger deleted = new AtomicInteger();
+        AtomicInteger alreadyDeleted = new AtomicInteger();
+        try {
+            Future<?> first = executor.submit(() -> {
+                start.await();
+                try {
+                    service.delete(1L);
+                    deleted.incrementAndGet();
+                } catch (DataNotFoundException ignored) {
+                    alreadyDeleted.incrementAndGet();
+                }
+                return null;
+            });
+            Future<?> second = executor.submit(() -> {
+                start.await();
+                try {
+                    service.delete(1L);
+                    deleted.incrementAndGet();
+                } catch (DataNotFoundException ignored) {
+                    alreadyDeleted.incrementAndGet();
+                }
+                return null;
+            });
+            start.countDown();
+            first.get();
+            second.get();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, deleted.get());
+        assertEquals(1, alreadyDeleted.get());
+        assertTrue(storage.get(1L).isEmpty());
+        assertFalse(Files.exists(artifact));
+        try (var files = Files.list(tempDirectory)) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().contains(".task-delete-")));
+        }
+    }
+
+    @Test
     void activeTaskDeletionIsRejectedBeforeArtifactDeletion() throws IOException {
         Path artifact = Files.writeString(tempDirectory.resolve("running.csv"), "value");
         RecordingTaskStorage storage = new RecordingTaskStorage(Task.builder()
@@ -142,18 +220,26 @@ class ArtifactServiceTest {
         }
 
         @Override
-        public Optional<Task> get(Long taskId) {
+        public synchronized Optional<Task> get(Long taskId) {
             return Optional.ofNullable(task);
         }
 
         @Override
-        public boolean deleteTerminalTask(Long taskId) {
+        public synchronized boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             if (failDeletion) {
                 throw new IllegalStateException("Could not delete task record");
             }
             deleted = task != null && TaskStatus.isTerminal(task.getStatus());
             if (deleted) {
+                Task deletedTask = task;
                 task = null;
+                try {
+                    commitAction.run();
+                } catch (RuntimeException e) {
+                    task = deletedTask;
+                    deleted = false;
+                    throw e;
+                }
             }
             return deleted;
         }

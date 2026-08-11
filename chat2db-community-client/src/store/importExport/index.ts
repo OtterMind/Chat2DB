@@ -63,6 +63,7 @@ export interface ImportExportAction {
   getTaskList: () => Promise<void>;
   loadMoreTasks: () => Promise<void>;
   stopTaskListPolling: () => void;
+  removeTask: (taskId: number) => void;
   openLogModal: (taskId: number | null) => void;
   setTaskCenterOpen: (open: boolean) => void;
 }
@@ -95,14 +96,15 @@ export const createImportExportAction: StateCreator<
       set({ getTaskListTimer: null });
     }
     return Promise.all([
-      importExportServices.getTaskList({ pageNo: 1, pageSize: get().taskListPageSize }),
+      importExportServices.getTaskList({ pageNo: 1, pageSize: TASK_CENTER_PAGE_SIZE }),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.PENDING),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.RUNNING),
     ])
       .then(async ([recentPage, pendingTasks, runningTasks]) => {
         if (requestGeneration !== taskListRequestGeneration) return;
         const activeTasks = mergeTasks(pendingTasks, runningTasks);
-        const visibleTasks = mergeTasks(recentPage.data || [], activeTasks);
+        const previouslyLoadedTasks = get().taskList.filter((task) => !previousActiveTaskIds.includes(task.id));
+        const visibleTasks = mergeTasks(previouslyLoadedTasks, recentPage.data || [], activeTasks);
         const recovered = await loadMissingTrackedTasks(
           previousActiveTaskIds,
           visibleTasks,
@@ -134,7 +136,10 @@ export const createImportExportAction: StateCreator<
         set({
           activeTaskCount: activeTaskIds.length,
           taskList,
-          taskListHasNextPage: recentPage.hasNextPage === true,
+          taskListHasNextPage:
+            currentState.taskListPageSize === TASK_CENTER_PAGE_SIZE
+              ? recentPage.hasNextPage === true
+              : currentState.taskListHasNextPage,
           unreadCompletedTaskCount: unreadCompletedTaskIds.length,
           unreadCompletedTaskIds,
           taskNotificationsInitialized: true,
@@ -147,11 +152,6 @@ export const createImportExportAction: StateCreator<
       .catch(() => {
         if (requestGeneration !== taskListRequestGeneration) return;
         set({ getTaskListTimer: setTimeout(() => get().getTaskList(), getTaskPollingDelay(0, true)!) });
-      })
-      .finally(() => {
-        if (requestGeneration === taskListRequestGeneration) {
-          set({ taskListLoadingMore: false });
-        }
       });
   },
   loadMoreTasks: () => {
@@ -159,11 +159,23 @@ export const createImportExportAction: StateCreator<
     if (!taskListHasNextPage || taskListLoadingMore) {
       return Promise.resolve();
     }
-    set({
-      taskListLoadingMore: true,
-      taskListPageSize: taskListPageSize + TASK_CENTER_PAGE_SIZE,
-    });
-    return get().getTaskList();
+    const nextPageSize = taskListPageSize + TASK_CENTER_PAGE_SIZE;
+    set({ taskListLoadingMore: true });
+    return importExportServices
+      .getTaskList({ pageNo: 1, pageSize: nextPageSize })
+      .then((page) => {
+        const activeStatuses = new Set<ImportExportTaskStatus>([
+          ImportExportTaskStatus.PENDING,
+          ImportExportTaskStatus.RUNNING,
+        ]);
+        const activeTasks = get().taskList.filter((task) => activeStatuses.has(task.status));
+        set({
+          taskList: mergeTasks(page.data || [], activeTasks),
+          taskListPageSize: nextPageSize,
+          taskListHasNextPage: page.hasNextPage === true,
+        });
+      })
+      .finally(() => set({ taskListLoadingMore: false }));
   },
   stopTaskListPolling: () => {
     taskListRequestGeneration += 1;
@@ -172,6 +184,20 @@ export const createImportExportAction: StateCreator<
       clearTimeout(getTaskListTimer);
       set({ getTaskListTimer: null });
     }
+  },
+  removeTask: (taskId) => {
+    const state = get();
+    const taskStatusById = { ...state.taskStatusById };
+    delete taskStatusById[String(taskId)];
+    const unreadCompletedTaskIds = state.unreadCompletedTaskIds.filter((id) => id !== taskId);
+    set({
+      taskList: state.taskList.filter((task) => task.id !== taskId),
+      taskListPageSize: Math.max(TASK_CENTER_PAGE_SIZE, state.taskListPageSize - 1),
+      unreadCompletedTaskIds,
+      unreadCompletedTaskCount: unreadCompletedTaskIds.length,
+      taskStatusById,
+      activeTaskIds: state.activeTaskIds.filter((id) => id !== taskId),
+    });
   },
   openLogModal: (taskId) => {
     set({ logModalTaskId: taskId });

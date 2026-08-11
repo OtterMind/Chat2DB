@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.converter.task;
 
 import ai.chat2db.community.domain.api.enums.ExportSizeEnum;
+import ai.chat2db.community.domain.api.enums.ExportScopeTypeEnum;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
@@ -112,11 +113,24 @@ public class TaskWebConverter {
                     + resultTargetName(request.getDatabaseName(), request.getSchemaName(), request.getTableNames());
         }
         if (TaskType.SQL_EXPORT.name().equals(taskType)) {
-            return "Export database SQL - " + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(),
-                    request.getTableNames());
+            return sqlExportOperation(normalize(request.getScope())) + " - "
+                    + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(), request.getTableNames());
         }
         return "Export table data - " + qualifiedTargetName(request.getDatabaseName(), request.getSchemaName(),
                 request.getTableNames());
+    }
+
+    private String sqlExportOperation(String scope) {
+        if (ExportScopeTypeEnum.SCHEMA.name().equals(scope)) {
+            return "Export database structure";
+        }
+        if (ExportScopeTypeEnum.TABLE.name().equals(scope)) {
+            return "Export database data";
+        }
+        if (ExportScopeTypeEnum.ALL.name().equals(scope)) {
+            return "Export database structure and data";
+        }
+        return "Export database SQL";
     }
 
     private String queryResultExportOperation(String exportSize, String format) {
