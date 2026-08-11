@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
 import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
+import ai.chat2db.community.domain.api.model.request.task.TaskRecordStopRequest;
 import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.domain.api.service.task.ITaskRecordService;
@@ -12,6 +13,7 @@ import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.web.WebPageResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
 import ai.chat2db.community.web.api.converter.task.TaskDownloadWebConverter;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -96,14 +98,14 @@ public class TaskRecordController {
     /**
      * Stops async tasks.
      * <p>
-     * Endpoint: {@code GET /api/task/stop}.
+     * Endpoint: {@code POST /api/task/stop}.
      *
-     * @param id identifier used to locate the target resource.
+     * @param request request containing the identifier of the task to stop.
      * @return operation result for the request.
      */
-    @GetMapping("/stop")
-    public ActionResult stop(Long id) {
-        taskRecordService.stopTask(id);
+    @PostMapping("/stop")
+    public ActionResult stop(@RequestBody @Valid TaskRecordStopRequest request) {
+        taskRecordService.stopTask(request.getId());
         return ActionResult.isSuccess();
     }
 

@@ -2,6 +2,7 @@ import createRequest from './base';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
 import { ImportExportTaskDetails } from '@/typings/importExport';
+import { taskStopRequest } from './taskStopRequest';
 
 export interface ImportSqlFileParams extends IDatabaseBaseInfo {
   fileName: string;
@@ -37,7 +38,7 @@ const getTaskList = createRequest<TaskListParams, IPageResponse<ImportExportTask
 });
 const getTaskDetails = createRequest<{ id: number }, ImportExportTaskDetails>('/api/task/get', { method: 'get' });
 
-const stopTask = createRequest<{ id: string }, void>('/api/task/stop', { method: 'get' });
+const stopTask = createRequest<{ id: number }, void>(taskStopRequest.path, { method: taskStopRequest.method });
 
 // Generate Java classes
 const generateJavaClass = createRequest<ExportSqlFileParams, number>('/api/rdb/table/generate/class', {
