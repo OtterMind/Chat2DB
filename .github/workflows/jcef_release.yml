@@ -546,6 +546,7 @@ jobs:
 
           if [ "${UPDATE_LATEST_VERSION_JSON}" = "true" ]; then
             VERSION="${VERSION}" UPDATE_PREFIX="${UPDATE_PREFIX}" CDN_BASE_URL="${CDN_BASE_URL}" python3 - <<'PY'
+          import hashlib
           import json
           import os
           from pathlib import Path
@@ -553,6 +554,9 @@ jobs:
           payload = {
               "latestVersion": os.environ["VERSION"],
               "metadataUrl": f"{os.environ['CDN_BASE_URL']}/{os.environ['UPDATE_PREFIX']}/version.json",
+              "metadataSha256": hashlib.sha256(
+                  Path("cdn-assets/updates/version.json").read_bytes()
+              ).hexdigest(),
               "forceUpdate": False,
           }
           Path("cdn-assets/latest_version.json").write_text(

@@ -5,6 +5,13 @@ set -euo pipefail
 # ./generate_metadata.sh <version> <source_directory> [base_url]
 # Example:
 # ./generate_metadata.sh 5.3.0 /path/to/your/files https://cdn.chat2db-ai.com/community/updates
+#
+# Publication contract for removals:
+# A release that removes a previously managed file must append an explicit
+# `{id, localTargetName, deleted: true}` record to version.json. `localTargetName`
+# must be the exact, application-relative target from the prior metadata; do not
+# omit it or replace it with the server filename. All desktop updaters validate
+# this target before deleting the file.
 
 # --- 1. Argument validation ---
 if [[ "$#" -lt 2 ]]; then
@@ -89,7 +96,7 @@ for file_path in "$SOURCE_DIR"/*; do
             --arg sha256 "$sha256" \
             --arg type "$type" \
             --argjson fileSizeByte "$file_size_byte" \
-            '{id: $id, serverFileName: $serverFileName, localTargetName: $localTargetName, url: $url, sha256: $sha256, type: $type, extractTo: null, updateStrategy: null, fileSizeByte: $fileSizeByte}')
+            '{id: $id, serverFileName: $serverFileName, localTargetName: $localTargetName, url: $url, sha256: $sha256, type: $type, extractTo: null, updateStrategy: null, fileSizeByte: $fileSizeByte, deleted: false}')
 
         json_files_array=$(echo "$json_files_array" | jq --argjson obj "$json_file_object" '. + [$obj]')
     fi
@@ -106,5 +113,17 @@ final_json=$(jq -n \
 OUTPUT_FILE="$SOURCE_DIR/version.json"
 echo "$final_json" > "$OUTPUT_FILE"
 
+# latest_version.json is the lightweight check endpoint. The desktop client
+# reads only this document while checking, then fetches version.json only when
+# the user starts a download.
+metadata_sha256=$(get_sha256 "$OUTPUT_FILE")
+latest_json=$(jq -n \
+    --arg latestVersion "$VERSION" \
+    --arg metadataUrl "${BASE_URL}/${VERSION}/version.json" \
+    --arg metadataSha256 "$metadata_sha256" \
+    --arg releaseNotes "Known issue fixes" \
+    '{latestVersion: $latestVersion, metadataUrl: $metadataUrl, metadataSha256: $metadataSha256, releaseNotes: $releaseNotes, forceUpdate: false}')
+echo "$latest_json" > "$SOURCE_DIR/latest_version.json"
+
 echo ""
-echo "Success: metadata generated at $OUTPUT_FILE"
+echo "Success: metadata generated at $OUTPUT_FILE and $SOURCE_DIR/latest_version.json"

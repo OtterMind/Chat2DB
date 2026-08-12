@@ -73,6 +73,8 @@ package-lock.json
 /jpackage/input/win/lib/
 /jpackage/input/win/local_version.json
 /jpackage/input/runtime/
+/.jbr/
+/jpackage/updater/target/
 /jpackage/input/mac/Frameworks/
 /jpackage/output/
 /chat2db-community-server/chat2db-community-web/chat2db-community-web-api/tmp_updater_downloads/

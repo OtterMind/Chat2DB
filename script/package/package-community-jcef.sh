@@ -42,6 +42,7 @@ SOURCE_FILE_DIR="${JPACKAGE_INPUT_DIR}/sourceFile"
 COMMUNITY_JAR="${SERVER_DIR}/chat2db-community-start/target/chat2db-community.jar"
 COMMUNITY_LIB_DIR="${SERVER_DIR}/chat2db-community-start/target/lib"
 COMMUNITY_LIB_ZIP="${SERVER_DIR}/chat2db-community-start/target/lib.zip"
+WINDOWS_UPDATER_PROJECT="${ROOT_DIR}/jpackage/updater"
 UPDATE_BASE_URL="${COMMUNITY_UPDATE_BASE_URL:-https://cdn.chat2db-ai.com/community/updates}"
 JBR_BASE_URL="https://cache-redirector.jetbrains.com/intellij-jbr"
 JBR_WORK_DIR=""
@@ -298,11 +299,19 @@ zip_frontend_dist() {
   exit 1
 }
 
+build_windows_updater() {
+  echo "[run] build reproducible Windows updater helper"
+  mvn -B -f "${WINDOWS_UPDATER_PROJECT}/pom.xml" clean package
+  cp "${WINDOWS_UPDATER_PROJECT}/target/chat2db-community-updater.jar" \
+    "${JPACKAGE_INPUT_DIR}/win/updater.jar"
+}
+
 stage_community_input() {
   if [ "${SKIP_BACKEND:-false}" != "true" ]; then
     echo "[run] build Community backend"
     mvn clean install -U -B \
       -Dmaven.test.skip=true \
+      -Drevision="${VERSION}" \
       -Dchat2db.finalName=chat2db-community \
       -f "${SERVER_DIR}/pom.xml"
   fi
@@ -331,10 +340,12 @@ stage_community_input() {
     "${JPACKAGE_INPUT_DIR}/mac" \
     "${JPACKAGE_INPUT_DIR}/win" \
     "${JPACKAGE_INPUT_DIR}/linux"
+  build_windows_updater
   rm -f \
     "${SOURCE_FILE_DIR}"/*.jar \
     "${SOURCE_FILE_DIR}"/*.zip \
     "${SOURCE_FILE_DIR}/version.json" \
+    "${SOURCE_FILE_DIR}/latest_version.json" \
     "${SOURCE_FILE_DIR}/local_version.json"
 
   cp "${COMMUNITY_JAR}" "${SOURCE_FILE_DIR}/chat2db-community.jar"
