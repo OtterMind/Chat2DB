@@ -1,5 +1,11 @@
 import createJcefApi from './base';
-import { IUpdateDetail, McpRestartResult, McpStatus } from '@/typings/settings';
+import {
+  IUpdateDetail,
+  IUpdatePreferences,
+  IUpdateRecoveryStatus,
+  McpRestartResult,
+  McpStatus,
+} from '@/typings/settings';
 import { LangType } from '@/constants/settings';
 import type { LocalFileReadResult } from '@/utils/localFileEncoding';
 import { ThemeAppearance } from '@chat2db/ui';
@@ -78,10 +84,7 @@ const jcefApi = {
     );
   },
   createTerminal: (params: { columns: number; rows: number; shellId?: string }) => {
-    return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>(
-      'create-terminal',
-      params,
-    );
+    return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>('create-terminal', params);
   },
   duplicateTerminal: (params: { sessionId: string; columns: number; rows: number }) => {
     return createJcefApi<{ sessionId: string; cwd: string; shell: string; shellId: string }>(
@@ -152,11 +155,20 @@ const jcefApi = {
   },
   // Start downloading hot updates
   triggerDownload: () => {
-    return createJcefApi('trigger-download');
+    return createJcefApi<boolean>('trigger-download');
   },
   // Start hot update installation
   triggerInstallation: () => {
     return createJcefApi<boolean>('trigger-installation');
+  },
+  updatePreferences: (data?: { receiveBeta: boolean }) => {
+    return createJcefApi<IUpdatePreferences>('update-preferences', data);
+  },
+  getUpdateRecoveryStatus: () => {
+    return createJcefApi<IUpdateRecoveryStatus>('update-recovery-status');
+  },
+  openUpdateRecoveryLog: () => {
+    return createJcefApi<boolean>('open-update-recovery-log');
   },
   // Restart app
   restartApp: (data?: { operationId?: string }) => {

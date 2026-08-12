@@ -250,6 +250,11 @@ export default {
   'setting.text.alertNewVersion': '새 버전을 찾으면 알림 표시',
   'setting.text.downloadNewVersion': '새 버전을 찾으면 자동 다운로드',
   'setting.text.autoInstallNewVersion': '새 버전 자동 설치',
+  'setting.text.receiveBetaVersion': 'Beta 버전 받기',
+  'setting.text.updateRecoveryFailedTitle': '업데이트 시작 실패',
+  'setting.text.updateRecoveryFailed':
+    '{1}(으)로 업데이트하지 못해 {2}(으)로 자동 복원했습니다. 업데이트 로그와 함께 support@chat2db.ai로 Chat2DB 기술 지원팀에 문의하세요.',
+  'setting.button.openUpdateLog': '업데이트 로그 보기',
   'setting.text.updateLog': '업데이트 로그',
   'setting.nav.editorFontSize': '편집기 글꼴 크기',
   'setting.nav.editorFontSizeDescribe': '편집기 글꼴 크기 설정',

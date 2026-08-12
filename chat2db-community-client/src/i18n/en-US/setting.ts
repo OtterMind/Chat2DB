@@ -250,6 +250,11 @@ export default {
   'setting.text.alertNewVersion': 'Alert me when you find a new version',
   'setting.text.downloadNewVersion': 'Automatically downloads when new versions are found',
   'setting.text.autoInstallNewVersion': 'Automatically install the new version',
+  'setting.text.receiveBetaVersion': 'Receive Beta versions',
+  'setting.text.updateRecoveryFailedTitle': 'Update startup failed',
+  'setting.text.updateRecoveryFailed':
+    'Updating to {1} failed and {2} was restored automatically. Contact Chat2DB Support at support@chat2db.ai and provide the update log.',
+  'setting.button.openUpdateLog': 'View update log',
   'setting.text.updateLog': 'Update Log',
   'setting.nav.editorFontSize': 'Editor Font Size',
   'setting.nav.editorFontSizeDescribe': 'Set the font size of the editor',

@@ -1,7 +1,8 @@
 package ai.chat2db.community.jcef.handler.biz.update;
 
 
-import ai.chat2db.community.jcef.update.Updater;
+import ai.chat2db.community.jcef.update.IDesktopUpdater;
+import ai.chat2db.community.jcef.update.DesktopUpdaterRegistry;
 import ai.chat2db.community.jcef.annotation.JcefAction;
 import ai.chat2db.community.jcef.builder.ResponseBuilder;
 import ai.chat2db.community.jcef.handler.biz.IJcefActionHandler;
@@ -25,7 +26,7 @@ public class RestartAppHandler implements IJcefActionHandler {
             if (operationId == null || operationId.isBlank()) {
                 operationId = UUID.randomUUID().toString();
             }
-            Updater updater = Updater.getInstance();
+            IDesktopUpdater updater = DesktopUpdaterRegistry.get();
             boolean accepted = updater.prepareRestart();
             ResponseBuilder.buildSuccessJcef(Map.of(
                     "data", Map.of("operationId", operationId, "accepted", accepted)

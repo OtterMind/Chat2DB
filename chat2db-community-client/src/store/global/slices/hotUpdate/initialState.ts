@@ -22,6 +22,10 @@ export const initialHotUpdateState: HotUpdateState = {
      * Whether to install automatically
      */
     autoInstall: false,
+    /**
+     * Whether beta versions are included in update checks
+     */
+    receiveBeta: false,
   },
   updateDetail: {
     status: UpdatedStatus.Default,

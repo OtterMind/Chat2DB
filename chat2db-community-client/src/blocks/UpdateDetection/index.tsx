@@ -2,6 +2,7 @@ import { Platform } from '@/constants/os';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
+import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop, isDevelopment } from '@/utils/env';
@@ -28,21 +29,25 @@ const UpdateDetection = () => {
 
   const {
     appConfig,
+    setUpdateDetail,
     downloadUpdate,
     appUrlConfig,
     hotUpdateConfig,
     updateDetail,
     handleCheckUpdate,
     updateAndRestartApp,
+    syncUpdatePreferences,
     setSettingPageActiveTab,
   } = useGlobalStore((state) => ({
     appConfig: state.appConfig,
+    setUpdateDetail: state.setUpdateDetail,
     appUrlConfig: state.appUrlConfig,
     hotUpdateConfig: state.hotUpdateConfig,
     downloadUpdate: state.downloadUpdate,
     updateDetail: state.updateDetail,
     handleCheckUpdate: state.handleCheckUpdate,
     updateAndRestartApp: state.updateAndRestartApp,
+    syncUpdatePreferences: state.syncUpdatePreferences,
     setSettingPageActiveTab: state.setSettingPageActiveTab,
   }));
 
@@ -73,11 +78,21 @@ const UpdateDetection = () => {
     if (!runtimeEditionConfig.autoUpdate) {
       return;
     }
-    // Community remains offline-first until the user explicitly enables update reminders.
-    if (appConfig.isReady && hotUpdateConfig.remindMe) {
-      handleCheckUpdate();
+    if (appConfig.isReady) {
+      void syncUpdatePreferences();
+      if (hotUpdateConfig.remindMe) {
+        void handleCheckUpdate();
+      }
+      void jcefApi
+        .getUpdateRecoveryStatus()
+        .then((status) => {
+          if (status.failed) {
+            openRecoveryNotification(status.fromVersion, status.toVersion);
+          }
+        })
+        .catch(() => undefined);
     }
-  }, [appConfig.isReady, hotUpdateConfig.remindMe]);
+  }, [appConfig.isReady, hotUpdateConfig.remindMe, syncUpdatePreferences]);
 
   useEffect(() => {
     if (!runtimeEditionConfig.autoUpdate) {
@@ -143,6 +158,24 @@ const UpdateDetection = () => {
         </div>
       ),
       description: btn,
+      key,
+    });
+  };
+
+  const openRecoveryNotification = (fromVersion: string, toVersion: string) => {
+    const key = 'update-recovery-failed';
+    notificationApi.error({
+      className: styles.notification,
+      duration: null,
+      message: i18n('setting.text.updateRecoveryFailedTitle'),
+      description: (
+        <div>
+          <div>{i18n('setting.text.updateRecoveryFailed', toVersion, fromVersion)}</div>
+          <Button type="link" size="small" onClick={() => void jcefApi.openUpdateRecoveryLog()}>
+            {i18n('setting.button.openUpdateLog')}
+          </Button>
+        </div>
+      ),
       key,
     });
   };

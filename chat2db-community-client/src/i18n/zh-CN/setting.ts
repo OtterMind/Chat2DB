@@ -228,6 +228,11 @@ export default {
   'setting.text.alertNewVersion': '发现新版本时提醒我',
   'setting.text.downloadNewVersion': '发现新版本时自动下载',
   'setting.text.autoInstallNewVersion': '自动安装新版本',
+  'setting.text.receiveBetaVersion': '接收 Beta 版本',
+  'setting.text.updateRecoveryFailedTitle': '更新启动失败',
+  'setting.text.updateRecoveryFailed':
+    '更新至 {1} 失败，已自动恢复到 {2}。请联系 Chat2DB 技术支持（support@chat2db.ai）并提供更新日志。',
+  'setting.button.openUpdateLog': '查看更新日志',
   'setting.text.updateLog': '更新日志',
   'setting.nav.editorFontSize': '编辑器字体大小',
   'setting.nav.editorFontSizeDescribe': '设置SQL编辑器内字体大小',

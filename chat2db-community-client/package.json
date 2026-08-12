@@ -39,6 +39,7 @@
     "test:chat-answer-update": "tsx src/store/chat/slices/chatDetails/answerUpdates.test.ts",
     "test:chat-info-update": "tsx src/store/chat/slices/common/chatInfoUpdate.test.ts",
     "test:hot-update-check": "tsx src/store/global/slices/hotUpdate/action.test.ts",
+    "test:hot-update": "tsx src/store/global/slices/hotUpdate/action.test.ts",
     "test:combo-axis-actions": "tsx src/blocks/BI/Chart/form/components/ComboAxisSelect/comboAxisSelect.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:data-source-authorization": "tsx src/utils/dataSourceAuthorization.test.ts",

@@ -1,6 +1,5 @@
 package ai.chat2db.community.jcef.handler.biz.update;
 
-
 import ai.chat2db.community.jcef.annotation.JcefAction;
 import ai.chat2db.community.jcef.builder.ResponseBuilder;
 import ai.chat2db.community.jcef.handler.biz.IJcefActionHandler;
@@ -11,14 +10,14 @@ import org.cef.callback.CefQueryCallback;
 
 import java.util.Map;
 
+@JcefAction(value = "open-update-recovery-log", method = "client-command")
+public class OpenUpdateRecoveryLogHandler implements IJcefActionHandler {
 
-@JcefAction(value = "trigger-installation", method = "client-command")
-public class TriggerInstallationHandler implements IJcefActionHandler {
     @Override
-    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
+    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) {
         ResponseBuilder.buildSuccessJcef(
-                Map.of("data", DesktopUpdaterRegistry.get().triggerInstallation()),
-                callback
+            Map.of("data", DesktopUpdaterRegistry.get().openRecoveryLog()),
+            callback
         );
     }
 }
