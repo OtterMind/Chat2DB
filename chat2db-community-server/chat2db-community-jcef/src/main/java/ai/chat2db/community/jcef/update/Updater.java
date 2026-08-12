@@ -33,8 +33,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipInputStream;
 
 
@@ -43,6 +46,17 @@ import java.util.zip.ZipInputStream;
 @NotCliRuntime
 public class Updater {
 
+    private static final String WEB_FRONTEND_PROPERTY = "chat2db.jcef.web-frontend";
+    private static final String COMMUNITY_UPDATE_HOST = "cdn.chat2db-ai.com";
+    private static final String SHA_256_PATTERN = "^[a-fA-F0-9]{64}$";
+    private static final int MAX_ZIP_ENTRIES = 20_000;
+    private static final long MAX_ZIP_UNCOMPRESSED_BYTES = 2L * 1024 * 1024 * 1024;
+    private static final String PARTIAL_DOWNLOAD_SUFFIX = ".part";
+    private static final long MAX_SINGLE_DOWNLOAD_BYTES = 2L * 1024 * 1024 * 1024;
+    private static final long MAX_TOTAL_DOWNLOAD_BYTES = 4L * 1024 * 1024 * 1024;
+    private static final int MAX_REDIRECTS = 5;
+    private static final String BACKUP_DIRECTORY_NAME = ".chat2db-update-backups";
+    private static final String BACKUP_OWNER_PID_FILE = ".owner-pid";
     private String SERVER_BASE_URL = "https://cdn.chat2db-ai.com/download/updates/";
     private String LATEST_VERSION_INFO_URL;
     private Path APP_DIR;
@@ -52,8 +66,13 @@ public class Updater {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private UpdateProgressDialog progressDialog;
     private static volatile Updater instance;
-    private static final Map<String, Path> downloadedFilesMap = new HashMap<>();
-    private static CheckResult checkResult = new CheckResult();
+    private final Map<String, Path> downloadedFilesMap = new HashMap<>();
+    private final Object updateOperationLock = new Object();
+    private CheckResult checkResult = new CheckResult();
+    private CompletableFuture<CheckResult> activeCheck;
+    private boolean downloadInProgress;
+    private boolean installationInProgress;
+    private boolean updateReadyToInstall;
     private final RestartCoordinator restartCoordinator = new RestartCoordinator();
 
     public static Updater getInstance() {
@@ -140,6 +159,12 @@ public class Updater {
         private String releaseNotes;
         private List<FileUpdateAction> actions;
         private VersionMetadata remoteMetadata;
+        private boolean checkFailed;
+        private LatestVersionInfo latestVersionInfo;
+
+        CheckResult(boolean needsUpdate, String releaseNotes, List<FileUpdateAction> actions, VersionMetadata remoteMetadata) {
+            this(needsUpdate, releaseNotes, actions, remoteMetadata, false, null);
+        }
     }
 
     public void restartApp() throws IOException {
@@ -178,44 +203,68 @@ public class Updater {
 
 
     public CheckResult appCheckUpdate() {
+        CompletableFuture<CheckResult> checkFuture;
+        boolean startCheck = false;
+        synchronized (updateOperationLock) {
+            if (updateReadyToInstall || downloadInProgress || installationInProgress) {
+                log.info("Skip update check because another update operation is active.");
+                return checkResult;
+            }
+            if (activeCheck == null) {
+                activeCheck = new CompletableFuture<>();
+                startCheck = true;
+            }
+            checkFuture = activeCheck;
+        }
+        if (startCheck) {
+            CheckResult result = checkForLatestVersion();
+            synchronized (updateOperationLock) {
+                checkResult = result;
+                checkFuture.complete(result);
+                activeCheck = null;
+            }
+        }
+        try {
+            return checkFuture.get();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("Update check was interrupted", new Object[0], exception);
+        } catch (ExecutionException exception) {
+            throw new BusinessException("Update check failed", new Object[0], exception.getCause());
+        }
+    }
+
+    private CheckResult checkForLatestVersion() {
         progressDialog = new UpdateProgressDialog();
         try {
-            VersionMetadata localMetadata = loadLocalVersion();
+            VersionMetadata localMetadata = loadLocalVersion(false);
             LatestVersionInfo latestRemoteInfo = fetchJson(LATEST_VERSION_INFO_URL, LatestVersionInfo.class);
-
-            if (latestRemoteInfo == null) {
-                throw new BusinessException("Could not fetch latest version information from server.");
-            }
-            VersionMetadata remoteMetadata = fetchJson(latestRemoteInfo.metadataUrl, VersionMetadata.class);
-            if (remoteMetadata == null) {
-                log.warn("Could not fetch metadata for version {}", latestRemoteInfo.latestVersion);
-                return new CheckResult(false, null, null, null);
-            }
+            validateLatestVersionInfo(latestRemoteInfo);
             String localVersion = localMetadata == null ? null : localMetadata.getVersion();
-            String remoteVersion = firstNonBlank(remoteMetadata.getVersion(), latestRemoteInfo.getLatestVersion());
-            if (isBlank(remoteVersion)) {
-                log.warn("Remote version is blank, skip update check.");
-                return new CheckResult(false, null, Collections.emptyList(), remoteMetadata);
+            String remoteVersion = latestRemoteInfo.getLatestVersion();
+            boolean needsUpdate = !isBlank(remoteVersion)
+                    && (isBlank(localVersion) || compareVersions(remoteVersion, localVersion) > 0);
+            if (!needsUpdate) {
+                log.info("Skip update because latest version {} is not newer than local version {}", remoteVersion, localVersion);
             }
-            if (!isBlank(localVersion) && compareVersions(remoteVersion, localVersion) <= 0) {
-                log.info("Skip update because remote version {} is not higher than local version {}", remoteVersion, localVersion);
-                return new CheckResult(false, null, null, null);
-            }
-            List<FileUpdateAction> actions = determineUpdateActions(localMetadata, remoteMetadata);
-            actions.forEach(action -> progressDialog.appendLog("- " + action.toString()));
-            boolean needsUpdate = actions.stream()
-                    .anyMatch(a -> a.actionType == UpdateActionType.DOWNLOAD_NEW
-                            || a.actionType == UpdateActionType.UPDATE_EXISTING
-                            || a.actionType == UpdateActionType.DELETE_OLD
-                    );
-            String releaseNotes = remoteMetadata.releaseNotes;
-            checkResult = new CheckResult(needsUpdate, releaseNotes, actions, remoteMetadata);
-        } catch (Exception e) {
-            log.error("Update check/process failed: {}", e.getMessage(), e);
-            progressDialog.appendLog("ERROR: " + e.getMessage());
-            checkResult = new CheckResult(false, e.getMessage(), Collections.emptyList(), null);
+            return new CheckResult(needsUpdate, latestRemoteInfo.getReleaseNotes(), Collections.emptyList(), null,
+                    false, latestRemoteInfo);
+        } catch (Exception exception) {
+            log.error("Update check failed: {}", exception.getMessage(), exception);
+            progressDialog.appendLog("ERROR: " + exception.getMessage());
+            return new CheckResult(false, null, Collections.emptyList(), null, true, null);
         }
-        return checkResult;
+    }
+
+    private void validateLatestVersionInfo(LatestVersionInfo latestVersionInfo) throws IOException {
+        if (latestVersionInfo == null || isBlank(latestVersionInfo.getLatestVersion())) {
+            throw new IOException("Latest update version is blank");
+        }
+        validateUpdateUrl(latestVersionInfo.getMetadataUrl());
+        if (!isBlank(latestVersionInfo.getMetadataSha256())
+                && !latestVersionInfo.getMetadataSha256().matches(SHA_256_PATTERN)) {
+            throw new IOException("Latest update metadata checksum is invalid");
+        }
     }
 
     static int compareVersions(String version1, String version2) {
@@ -280,6 +329,101 @@ public class Updater {
         return value == null || value.trim().isEmpty();
     }
 
+    void validateRemoteMetadata(VersionMetadata metadata) throws IOException {
+        if (isBlank(metadata.version)) {
+            throw new IOException("Update metadata version is blank");
+        }
+        if (metadata.files == null || metadata.files.isEmpty()) {
+            throw new IOException("Update metadata must declare at least one file");
+        }
+        Set<String> fileIds = new HashSet<>();
+        for (FileInfo file : metadata.files) {
+            if (file == null || isBlank(file.id) || !fileIds.add(file.id)) {
+                throw new IOException("Update metadata contains a missing or duplicate file id");
+            }
+            resolveAppRelativePath(file.localTargetName);
+            if (file.deleted) {
+                continue;
+            }
+            resolveTemporaryFile(file.serverFileName);
+            if (isBlank(file.sha256) || !file.sha256.matches(SHA_256_PATTERN)) {
+                throw new IOException("Update metadata has an invalid SHA-256 for " + file.id);
+            }
+            if (file.fileSizeByte < 0) {
+                throw new IOException("Update metadata has a negative file size for " + file.id);
+            }
+            if (file.fileSizeByte > MAX_SINGLE_DOWNLOAD_BYTES) {
+                throw new IOException("Update metadata file exceeds the download limit for " + file.id);
+            }
+            if (!"jar".equals(file.type) && !"zip".equals(file.type)) {
+                throw new IOException("Update metadata has an unsupported file type for " + file.id);
+            }
+            validateUpdateUrl(file.url);
+        }
+        try {
+            long totalSize = metadata.files.stream()
+                    .filter(file -> !file.deleted)
+                    .mapToLong(file -> file.fileSizeByte)
+                    .reduce(0L, Math::addExact);
+            if (totalSize > MAX_TOTAL_DOWNLOAD_BYTES) {
+                throw new IOException("Update metadata exceeds the total download limit");
+            }
+        } catch (ArithmeticException exception) {
+            throw new IOException("Update metadata download size overflow", exception);
+        }
+    }
+
+    Path resolveAppRelativePath(String relativePath) throws IOException {
+        if (isBlank(relativePath)) {
+            throw new IOException("Update target path is blank");
+        }
+        Path appDirectory = APP_DIR.toAbsolutePath().normalize();
+        Path resolved = appDirectory.resolve(relativePath).normalize();
+        if (resolved.equals(appDirectory) || !resolved.startsWith(appDirectory)) {
+            throw new IOException("Update target path escapes the application directory: " + relativePath);
+        }
+        Path current = appDirectory;
+        for (Path segment : appDirectory.relativize(resolved)) {
+            current = current.resolve(segment);
+            if (Files.isSymbolicLink(current)) {
+                throw new IOException("Update target path contains a symbolic link: " + relativePath);
+            }
+        }
+        return resolved;
+    }
+
+    private Path resolveTemporaryFile(String fileName) throws IOException {
+        if (isBlank(fileName) || fileName.contains("/") || fileName.indexOf('\\') >= 0 || ".".equals(fileName) || "..".equals(fileName)) {
+            throw new IOException("Update temporary file name is invalid: " + fileName);
+        }
+        Path temporaryDirectory = TMP_DIR.toAbsolutePath().normalize();
+        if (Files.isSymbolicLink(temporaryDirectory)) {
+            throw new IOException("Update temporary directory is a symbolic link");
+        }
+        Path resolved = temporaryDirectory.resolve(fileName).normalize();
+        if (!resolved.startsWith(temporaryDirectory)) {
+            throw new IOException("Update temporary file path escapes the download directory: " + fileName);
+        }
+        if (Files.isSymbolicLink(resolved)) {
+            throw new IOException("Update temporary file is a symbolic link: " + fileName);
+        }
+        return resolved;
+    }
+
+    private static void validateUpdateUrl(String value) throws IOException {
+        if (isBlank(value)) {
+            throw new IOException("Update URL is blank");
+        }
+        try {
+            URI uri = URI.create(value);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !COMMUNITY_UPDATE_HOST.equalsIgnoreCase(uri.getHost())) {
+                throw new IOException("Update URL is outside of the Community update channel");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Update URL is invalid", e);
+        }
+    }
+
     private List<FileUpdateAction> determineUpdateActions(VersionMetadata local, VersionMetadata remote) throws IOException, NoSuchAlgorithmException {
         List<FileUpdateAction> actions = new ArrayList<>();
         Map<String, FileInfo> localFilesMap = (local != null && local.files != null) ? local.getFilesAsMap() : new HashMap<>();
@@ -289,7 +433,13 @@ public class Updater {
             String fileId = entry.getKey();
             FileInfo remoteFile = entry.getValue();
             FileInfo localFileMeta = localFilesMap.get(fileId);
-            Path actualLocalPath = APP_DIR.resolve(remoteFile.localTargetName);
+            if (remoteFile.deleted) {
+                if (localFileMeta != null) {
+                    actions.add(new FileUpdateAction(UpdateActionType.DELETE_OLD, null, localFileMeta, "Explicitly deleted by remote metadata"));
+                }
+                continue;
+            }
+            Path actualLocalPath = resolveAppRelativePath(remoteFile.localTargetName);
 
             if (localFileMeta == null) {
                 actions.add(new FileUpdateAction(UpdateActionType.DOWNLOAD_NEW, remoteFile, null, "New file"));
@@ -314,35 +464,60 @@ public class Updater {
             }
         }
 
-        for (Map.Entry<String, FileInfo> entry : localFilesMap.entrySet()) {
-            if (!remoteFilesMap.containsKey(entry.getKey())) {
-                actions.add(new FileUpdateAction(UpdateActionType.DELETE_OLD, null, entry.getValue(), "File no longer in new version"));
-            }
-        }
         return actions;
     }
 
 
     public Map<String, Path> triggerDownload(ConsoleResult consoleResult) throws IOException, NoSuchAlgorithmException, URISyntaxException {
-        progressDialog.resetProgressTracker();
-        List<FileUpdateAction> actions = checkResult.getActions();
+        synchronized (updateOperationLock) {
+            requirePackagedRelease();
+            if (activeCheck != null || downloadInProgress || installationInProgress) {
+                throw new BusinessException("Another update operation is already in progress.");
+            }
+            if (updateReadyToInstall) {
+                throw new BusinessException("An update has already been downloaded and is ready to install.");
+            }
+            if (progressDialog == null || checkResult == null || !checkResult.isNeedsUpdate()
+                    || checkResult.getLatestVersionInfo() == null) {
+                throw new BusinessException("Check for an available update before downloading it.");
+            }
+            downloadInProgress = true;
+        }
+        try {
+            clearOldBackups(APP_DIR);
+            discardDownloadedFiles();
+            progressDialog.resetProgressTracker();
+            VersionMetadata localMetadata = loadLocalVersion();
+            VersionMetadata remoteMetadata = loadMetadataForDownload(checkResult.getLatestVersionInfo());
+            List<FileUpdateAction> actions = determineUpdateActions(localMetadata, remoteMetadata);
+            checkResult = new CheckResult(true, checkResult.getReleaseNotes(), actions, remoteMetadata, false,
+                    checkResult.getLatestVersionInfo());
 
-        long totalDownloadSizeInBytes = actions.stream()
-                .filter(a -> a.actionType == UpdateActionType.DOWNLOAD_NEW || a.actionType == UpdateActionType.UPDATE_EXISTING)
-                .mapToLong(a -> a.remoteFileInfo.fileSizeByte)
-                .sum();
+            long filesToDownload = actions.stream()
+                    .filter(a -> a.actionType == UpdateActionType.DOWNLOAD_NEW || a.actionType == UpdateActionType.UPDATE_EXISTING)
+                    .count();
+            long totalDownloadSizeInBytes;
+            try {
+                totalDownloadSizeInBytes = actions.stream()
+                        .filter(a -> a.actionType == UpdateActionType.DOWNLOAD_NEW || a.actionType == UpdateActionType.UPDATE_EXISTING)
+                        .mapToLong(a -> a.remoteFileInfo.fileSizeByte)
+                        .reduce(0L, Math::addExact);
+            } catch (ArithmeticException exception) {
+                throw new IOException("Update download size overflow", exception);
+            }
+            if (totalDownloadSizeInBytes > MAX_TOTAL_DOWNLOAD_BYTES) {
+                throw new IOException("Update exceeds the total download limit");
+            }
 
-        if (totalDownloadSizeInBytes == 0) {
-            progressDialog.appendLog("--- No files to download or total size is zero ---");
+        if (filesToDownload == 0) {
+            progressDialog.appendLog("--- No files to download ---");
             progressDialog.setProgress(100, UpdatedStatus.Updated.getName(), consoleResult);
+            updateReadyToInstall = true;
             return new HashMap<>();
         }
 
         AtomicLong cumulativeBytesDownloaded = new AtomicLong(0);
 
-        long filesToDownload = actions.stream()
-                .filter(a -> a.actionType == UpdateActionType.DOWNLOAD_NEW || a.actionType == UpdateActionType.UPDATE_EXISTING)
-                .count();
         if (filesToDownload > 0) {
             progressDialog.setProgress(0, "Initializing update...", consoleResult);
             progressDialog.appendLog("--- Download Phase ---");
@@ -354,14 +529,17 @@ public class Updater {
 
                     IProgressListener listener = (bytesWritten) -> {
                         long totalDownloaded = cumulativeBytesDownloaded.addAndGet(bytesWritten);
-                        int overallProgress = (int) ((totalDownloaded * 100) / totalDownloadSizeInBytes);
+                        int overallProgress = totalDownloadSizeInBytes > 0
+                                ? (int) Math.min(100, (totalDownloaded * 100) / totalDownloadSizeInBytes)
+                                : 0;
                         String progressMsg = String.format("Downloading %s (%d%%)",
                                 remoteFile.serverFileName,
                                 overallProgress);
                         progressDialog.setProgress(overallProgress, progressMsg, consoleResult);
                     };
 
-                    Path downloadedPath = downloadFile(remoteFile.url, remoteFile.serverFileName, remoteFile.sha256, listener);
+                    Path downloadedPath = downloadFile(remoteFile.url, remoteFile.serverFileName, remoteFile.sha256,
+                            remoteFile.fileSizeByte, listener);
                     downloadedFilesMap.put(remoteFile.id, downloadedPath);
                     progressDialog.appendLog("Downloaded and verified: " + remoteFile.serverFileName);
                 }
@@ -371,28 +549,102 @@ public class Updater {
             progressDialog.appendLog("--- No files to download ---");
         }
         progressDialog.setProgress(100, UpdatedStatus.Updated.getName(), consoleResult);
-        LatestVersionInfo latestRemoteInfo = fetchJson(LATEST_VERSION_INFO_URL, LatestVersionInfo.class);
+        updateReadyToInstall = true;
+        synchronized (updateOperationLock) {
+            downloadInProgress = false;
+        }
+        LatestVersionInfo latestRemoteInfo = checkResult.getLatestVersionInfo();
         if (Objects.nonNull(latestRemoteInfo)) {
             Boolean forceUpdate = latestRemoteInfo.getForceUpdate();
             if (Boolean.TRUE.equals(forceUpdate)) {
                 if (OS.isWindows()) {
-                    triggerInstallationWithAuxiliaryProcess();
+                    if (!triggerInstallationWithAuxiliaryProcess()) {
+                        throw new IOException("Could not start the Windows updater process");
+                    }
                     return downloadedFilesMap;
                 }
-                triggerInstallation();
-                restartApp();
+                if (triggerInstallation()) {
+                    restartApp();
+                }
             }
         }
         return downloadedFilesMap;
+        } finally {
+            synchronized (updateOperationLock) {
+                downloadInProgress = false;
+            }
+        }
+    }
+
+    private VersionMetadata loadMetadataForDownload(LatestVersionInfo latestVersionInfo) throws IOException {
+        VersionMetadata remoteMetadata;
+        if (isBlank(latestVersionInfo.getMetadataSha256())) {
+            remoteMetadata = fetchJson(latestVersionInfo.getMetadataUrl(), VersionMetadata.class);
+        } else {
+            byte[] metadataBytes = fetchUpdateJsonBytes(latestVersionInfo.getMetadataUrl());
+            try {
+                String actualSha256 = bytesToHex(MessageDigest.getInstance("SHA-256").digest(metadataBytes));
+                if (!actualSha256.equalsIgnoreCase(latestVersionInfo.getMetadataSha256())) {
+                    throw new IOException("Update metadata checksum does not match latest version information");
+                }
+            } catch (NoSuchAlgorithmException exception) {
+                throw new IOException("SHA-256 is unavailable for update metadata validation", exception);
+            }
+            remoteMetadata = objectMapper.readValue(metadataBytes, VersionMetadata.class);
+        }
+        if (remoteMetadata == null) {
+            throw new IOException("Could not fetch metadata for version " + latestVersionInfo.getLatestVersion());
+        }
+        if (!latestVersionInfo.getLatestVersion().equals(remoteMetadata.getVersion())) {
+            throw new IOException("Update metadata version does not match latest version information");
+        }
+        validateRemoteMetadata(remoteMetadata);
+        return remoteMetadata;
+    }
+
+    private byte[] fetchUpdateJsonBytes(String urlString) throws IOException {
+        HttpURLConnection connection = openUpdateConnection(urlString, 30000);
+        try {
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                throw new IOException("Failed to fetch update metadata: HTTP " + connection.getResponseCode());
+            }
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > 1024 * 1024) {
+                throw new IOException("Update metadata exceeds the size limit");
+            }
+            try (InputStream inputStream = connection.getInputStream(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+                inputStream.transferTo(outputStream);
+                if (outputStream.size() > 1024 * 1024) {
+                    throw new IOException("Update metadata exceeds the size limit");
+                }
+                return outputStream.toByteArray();
+            }
+        } finally {
+            connection.disconnect();
+        }
     }
 
     public boolean triggerInstallation() {
-        List<FileUpdateAction> actions = checkResult.getActions();
+        synchronized (updateOperationLock) {
+            requirePackagedRelease();
+            if (downloadInProgress || installationInProgress) {
+                throw new BusinessException("Update installation is already in progress.");
+            }
+            if (!updateReadyToInstall) {
+                throw new BusinessException("No downloaded update is ready to install.");
+            }
+            installationInProgress = true;
+        }
         List<Runnable> rollbackOperations = new ArrayList<>();
-        long filesToApplyOrDelete = actions.stream()
-                .filter(a -> a.actionType != UpdateActionType.KEEP_LOCAL)
-                .count();
+        Path backupSession = null;
+        boolean installationSucceeded = false;
         try {
+            List<FileUpdateAction> actions = requireUpdateActions();
+            long filesToApplyOrDelete = actions.stream()
+                    .filter(a -> a.actionType != UpdateActionType.KEEP_LOCAL)
+                    .count();
+            backupSession = createBackupSession();
+            final Path currentBackupSession = backupSession;
             progressDialog.appendLog("Starting update execution phase...");
             if (filesToApplyOrDelete > 0) {
                 progressDialog.appendLog("--- Apply Phase ---");
@@ -402,7 +654,7 @@ public class Updater {
                     }
                     FileInfo remoteFile = action.remoteFileInfo;
                     FileInfo localFileMeta = action.localFileInfo;
-                    Path targetLocalPath = APP_DIR.resolve(remoteFile != null ? remoteFile.localTargetName : localFileMeta.localTargetName);
+                    Path targetLocalPath = resolveAppRelativePath(remoteFile != null ? remoteFile.localTargetName : localFileMeta.localTargetName);
 
                     if (targetLocalPath.getParent() != null) {
                         Files.createDirectories(targetLocalPath.getParent());
@@ -419,9 +671,27 @@ public class Updater {
                             Path sourcePath = downloadedFilesMap.get(remoteFile.id);
                             if (sourcePath == null)
                                 throw new IOException("Downloaded file not found in map for ID: " + remoteFile.id);
+                            Path stagedZipContent = null;
+                            Path zipStagingDirectory = null;
+                            if ("zip".equals(remoteFile.type)) {
+                                zipStagingDirectory = Files.createTempDirectory(targetLocalPath.getParent(), ".update-stage-");
+                                final Path finalZipStagingDirectory = zipStagingDirectory;
+                                rollbackOperations.add(() -> {
+                                    try {
+                                        deleteDirectoryRecursively(finalZipStagingDirectory);
+                                    } catch (IOException e) {
+                                        progressDialog.appendLog("ERROR during staged ZIP cleanup: " + e.getMessage());
+                                    }
+                                });
+                                extractZip(sourcePath, zipStagingDirectory, targetLocalPath.getFileName().toString());
+                                stagedZipContent = zipStagingDirectory.resolve(targetLocalPath.getFileName());
+                                if (!Files.isDirectory(stagedZipContent)) {
+                                    throw new IOException("ZIP archive does not contain the expected directory: " + targetLocalPath.getFileName());
+                                }
+                            }
                             if (Files.exists(targetLocalPath)) {
-                                String backupSuffix = ("zip".equals(remoteFile.type) && Files.isDirectory(targetLocalPath) ? "_dir" : "") + ".bak_" + System.currentTimeMillis();
-                                Path backupPath = targetLocalPath.getParent().resolve(targetLocalPath.getFileName() + backupSuffix);
+                                Path backupPath = resolveBackupPath(currentBackupSession, targetLocalPath);
+                                Files.createDirectories(backupPath.getParent());
                                 progressDialog.appendLog("Backing up " + targetLocalPath.getFileName() + " to " + backupPath.getFileName());
                                 Files.move(targetLocalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
                                 final Path finalBackupPath = backupPath;
@@ -455,14 +725,13 @@ public class Updater {
                                 });
                             }
                             if ("zip".equals(remoteFile.type)) {
-                                progressDialog.appendLog("Extracting " + sourcePath.getFileName() + " to " + targetLocalPath.getFileName());
-                                targetLocalPath = targetLocalPath.getParent();
-                                Files.createDirectories(targetLocalPath);
-                                extractZip(sourcePath, targetLocalPath);
+                                progressDialog.appendLog("Installing staged ZIP " + sourcePath.getFileName() + " to " + targetLocalPath.getFileName());
+                                moveIntoPlace(stagedZipContent, targetLocalPath);
                                 Files.delete(sourcePath);
+                                deleteDirectoryRecursively(zipStagingDirectory);
                             } else {
                                 progressDialog.appendLog("Moving " + sourcePath.getFileName() + " to " + targetLocalPath.getFileName());
-                                Files.move(sourcePath, targetLocalPath, StandardCopyOption.REPLACE_EXISTING);
+                                moveIntoPlace(sourcePath, targetLocalPath);
                             }
                             progressDialog.appendLog("Applied: " + remoteFile.localTargetName);
                             break;
@@ -471,12 +740,31 @@ public class Updater {
                             assert localFileMeta != null;
                             currentOpDisplay = "Deleting: " + localFileMeta.localTargetName;
                             progressDialog.appendLog(currentOpDisplay);
-                            Path pathToDelete = APP_DIR.resolve(localFileMeta.localTargetName);
+                            Path pathToDelete = resolveAppRelativePath(localFileMeta.localTargetName);
                             if (Files.exists(pathToDelete)) {
-                                if (Files.isDirectory(pathToDelete))
-                                    deleteDirectoryRecursively(pathToDelete);
-                                else Files.delete(pathToDelete);
-                                progressDialog.appendLog("Deleted: " + localFileMeta.localTargetName);
+                                Path deleteBackupPath = resolveBackupPath(currentBackupSession, pathToDelete);
+                                Files.createDirectories(deleteBackupPath.getParent());
+                                progressDialog.appendLog("Backing up deleted file " + pathToDelete.getFileName()
+                                        + " to " + deleteBackupPath.getFileName());
+                                Files.move(pathToDelete, deleteBackupPath, StandardCopyOption.REPLACE_EXISTING);
+                                final Path finalDeleteBackupPath = deleteBackupPath;
+                                final Path finalPathToDelete = pathToDelete;
+                                rollbackOperations.add(() -> {
+                                    try {
+                                        progressDialog.appendLog("Rollback: Restoring deleted " + finalPathToDelete.getFileName());
+                                        if (Files.exists(finalPathToDelete)) {
+                                            if (Files.isDirectory(finalPathToDelete)) {
+                                                deleteDirectoryRecursively(finalPathToDelete);
+                                            } else {
+                                                Files.delete(finalPathToDelete);
+                                            }
+                                        }
+                                        Files.move(finalDeleteBackupPath, finalPathToDelete, StandardCopyOption.REPLACE_EXISTING);
+                                    } catch (IOException e) {
+                                        progressDialog.appendLog("ERROR during rollback restore: " + e.getMessage());
+                                    }
+                                });
+                                progressDialog.appendLog("Staged deletion: " + localFileMeta.localTargetName);
                             } else {
                                 progressDialog.appendLog("Skipped delete (already gone): " + localFileMeta.localTargetName);
                             }
@@ -487,11 +775,11 @@ public class Updater {
             } else {
                 progressDialog.appendLog("--- No files to apply or delete ---");
             }
-            progressDialog.appendLog("Clearing old backups...");
-            clearOldBackups(APP_DIR);
             saveLocalVersion(checkResult.getRemoteMetadata());
             downloadedFilesMap.clear();
             checkResult = new CheckResult();
+            updateReadyToInstall = false;
+            installationSucceeded = true;
             return true;
         } catch (Exception e) {
             log.error("Failed to execute update action", e);
@@ -505,36 +793,104 @@ public class Updater {
             }
             return false;
         } finally {
-            downloadedFilesMap.values().forEach(tempFile -> {
+            discardDownloadedFiles();
+            updateReadyToInstall = false;
+            synchronized (updateOperationLock) {
+                installationInProgress = false;
+            }
+            if (!installationSucceeded && backupSession != null) {
                 try {
-                    Files.deleteIfExists(tempFile);
-                } catch (IOException ex) {
-                    log.warn("Failed to delete temporary download file: {}", tempFile, ex);
+                    deleteDirectoryRecursively(backupSession);
+                } catch (IOException exception) {
+                    log.warn("Failed to clean incomplete update backup session: {}", backupSession, exception);
                 }
-            });
+            }
         }
     }
 
-    private void clearOldBackups(Path baseDir) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(baseDir, path -> path.getFileName().toString().contains(".bak_"))) {
-            for (Path backupFile : stream) {
-                try {
-                    progressDialog.appendLog("Deleting old backup: " + backupFile.getFileName());
-                    if (Files.isDirectory(backupFile)) {
-                        deleteDirectoryRecursively(backupFile);
-                    } else {
-                        Files.delete(backupFile);
-                    }
-                } catch (IOException e) {
-                    progressDialog.appendLog("ERROR: Failed to delete old backup " + backupFile.getFileName() + ": " + e.getMessage());
+    private Path createBackupSession() throws IOException {
+        Path backupRoot = resolveAppRelativePath(BACKUP_DIRECTORY_NAME);
+        Path session = Files.createDirectories(backupRoot.resolve(UUID.randomUUID().toString()));
+        Files.writeString(session.resolve(BACKUP_OWNER_PID_FILE), Long.toString(ProcessHandle.current().pid()),
+                StandardOpenOption.CREATE_NEW);
+        return session;
+    }
+
+    private Path resolveBackupPath(Path backupSession, Path targetPath) throws IOException {
+        Path appDirectory = APP_DIR.toAbsolutePath().normalize();
+        Path relativeTarget = appDirectory.relativize(targetPath.toAbsolutePath().normalize());
+        Path backupPath = backupSession.resolve(relativeTarget).normalize();
+        if (!backupPath.startsWith(backupSession)) {
+            throw new IOException("Update backup path escapes the backup session");
+        }
+        return backupPath;
+    }
+
+    void clearOldBackups(Path baseDir) {
+        Path backupDirectory = baseDir.toAbsolutePath().normalize().resolve(BACKUP_DIRECTORY_NAME);
+        if (Files.isSymbolicLink(backupDirectory) || !Files.isDirectory(backupDirectory, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isSymbolicLink(backupDirectory)) {
+                log.warn("Keeping symbolic-link update backup directory: {}", backupDirectory);
+            }
+            return;
+        }
+        List<Path> backupSessions;
+        try (Stream<Path> stream = Files.list(backupDirectory)) {
+            backupSessions = stream.sorted(Comparator.reverseOrder()).collect(Collectors.toList());
+        } catch (IOException e) {
+            if (progressDialog != null) {
+                progressDialog.appendLog("ERROR: Could not list old backups: " + e.getMessage());
+            }
+            return;
+        }
+        for (Path backupSession : backupSessions) {
+            try {
+                if (!isBackupFromPreviousProcess(backupSession)) {
+                    continue;
+                }
+                if (progressDialog != null) {
+                    progressDialog.appendLog("Deleting completed update backup session: " + backupSession.getFileName());
+                }
+                if (Files.isDirectory(backupSession)) {
+                    deleteDirectoryRecursively(backupSession);
+                } else {
+                    Files.deleteIfExists(backupSession);
+                }
+            } catch (IOException e) {
+                if (progressDialog != null) {
+                    progressDialog.appendLog("ERROR: Failed to delete update backup session " + backupSession.getFileName() + ": " + e.getMessage());
                 }
             }
+        }
+        try (Stream<Path> remainingSessions = Files.list(backupDirectory)) {
+            if (!remainingSessions.findAny().isPresent()) {
+                Files.deleteIfExists(backupDirectory);
+            }
         } catch (IOException e) {
-            progressDialog.appendLog("ERROR: Could not list old backups: " + e.getMessage());
+            if (progressDialog != null) {
+                progressDialog.appendLog("ERROR: Failed to delete empty update backup directory: " + e.getMessage());
+            }
+        }
+    }
+
+    private boolean isBackupFromPreviousProcess(Path backupSession) {
+        Path ownerPidFile = backupSession.resolve(BACKUP_OWNER_PID_FILE);
+        try {
+            if (!Files.isRegularFile(ownerPidFile)) {
+                return false;
+            }
+            return Long.parseLong(Files.readString(ownerPidFile).trim()) != ProcessHandle.current().pid();
+        } catch (IOException | NumberFormatException exception) {
+            log.warn("Keeping update backup session with an invalid owner marker: {}", backupSession, exception);
+            return false;
         }
     }
 
     private VersionMetadata loadLocalVersion() {
+        return loadLocalVersion(true);
+    }
+
+    private VersionMetadata loadLocalVersion(boolean repairCorruptFile) {
         if (Files.exists(LOCAL_VERSION_FILE)) {
             if (progressDialog != null) progressDialog.appendLog("Loading local version from: " + LOCAL_VERSION_FILE);
             try (InputStream is = Files.newInputStream(LOCAL_VERSION_FILE)) {
@@ -543,10 +899,12 @@ public class Updater {
                 String errorMsg = "Failed to load local_version.json: " + e.getMessage() + ". Assuming no local version.";
                 if (progressDialog != null) progressDialog.appendLog("ERROR: " + errorMsg);
                 log.error(errorMsg);
-                try {
-                    Files.move(LOCAL_VERSION_FILE, LOCAL_VERSION_FILE.resolveSibling("local_version.json.corrupted_" + System.currentTimeMillis()), StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException moveEx) {
-                    log.error("Could not rename corrupted local_version.json: {}", moveEx.getMessage());
+                if (repairCorruptFile) {
+                    try {
+                        Files.move(LOCAL_VERSION_FILE, LOCAL_VERSION_FILE.resolveSibling("local_version.json.corrupted_" + System.currentTimeMillis()), StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException moveEx) {
+                        log.error("Could not rename corrupted local_version.json: {}", moveEx.getMessage());
+                    }
                 }
                 return null;
             }
@@ -590,14 +948,7 @@ public class Updater {
             }
         }
 
-        URL url = URI.create(urlString).toURL();
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(30000);
-        connection.setRequestProperty("User-Agent", "JavaUpdater/1.0");
-        connection.setRequestProperty("Referer", "https://chat2db.ai");
-
+        HttpURLConnection connection = openUpdateConnection(urlString, 30000);
         int responseCode = connection.getResponseCode();
         if (responseCode == HttpURLConnection.HTTP_OK) {
             try (InputStream inputStream = connection.getInputStream()) {
@@ -616,19 +967,26 @@ public class Updater {
 
                 }
             } catch (IOException ex) {   }
-            return null;
+            throw new IOException(errorMsg);
         }
     }
 
 
-    private Path downloadFile(String urlString, String targetFileNameInTmp, String expectedSha256, IProgressListener progressListener) throws IOException, NoSuchAlgorithmException, URISyntaxException {
-        Path targetPath = TMP_DIR.resolve(targetFileNameInTmp);
+    private Path downloadFile(String urlString, String targetFileNameInTmp, String expectedSha256, long expectedSize,
+                              IProgressListener progressListener) throws IOException, NoSuchAlgorithmException, URISyntaxException {
+        validateUpdateUrl(urlString);
+        Path targetPath = resolveTemporaryFile(targetFileNameInTmp);
+        Path partialPath = resolvePartialDownloadFile(targetPath);
         Files.createDirectories(targetPath.getParent());
         if (Files.exists(targetPath)) {
             if (progressDialog != null) {
                 progressDialog.appendLog("File already exists, verifying: " + targetFileNameInTmp);
             }
             if (verifyFileChecksum(targetPath, expectedSha256)) {
+                if (Files.size(targetPath) != expectedSize) {
+                    Files.deleteIfExists(targetPath);
+                    throw new IOException("Existing update file size does not match metadata");
+                }
                 if (progressDialog != null) {
                     progressDialog.appendLog("Checksum matches. Skipping download.");
                 }
@@ -644,7 +1002,28 @@ public class Updater {
                 if (progressDialog != null) {
                     progressDialog.appendLog("Checksum mismatch. Re-downloading...");
                 }
+                Files.deleteIfExists(targetPath);
             }
+        }
+
+        long existingBytes = Files.exists(partialPath) ? Files.size(partialPath) : 0L;
+        if (existingBytes > expectedSize) {
+            if (progressDialog != null) {
+                progressDialog.appendLog("Partial download exceeds expected size. Starting over.");
+            }
+            Files.deleteIfExists(partialPath);
+            existingBytes = 0L;
+        }
+        if (existingBytes == expectedSize) {
+            if (verifyFileChecksum(partialPath, expectedSha256)) {
+                moveIntoPlace(partialPath, targetPath);
+                if (progressListener != null) {
+                    progressListener.onProgress(existingBytes);
+                }
+                return targetPath;
+            }
+            Files.deleteIfExists(partialPath);
+            existingBytes = 0L;
         }
 
         if (progressDialog != null) {
@@ -662,26 +1041,66 @@ public class Updater {
             if (progressDialog != null) {
                 progressDialog.appendLog("Copying local file " + sourcePath.getFileName() + " to " + targetPath.getFileName());
             }
-            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            try (InputStream in = Files.newInputStream(sourcePath);
+                 OutputStream out = Files.newOutputStream(partialPath)) {
+                copyWithLimit(in, out, expectedSize, progressListener);
+            }
         } else {
             if (progressDialog != null) progressDialog.appendLog("Downloading remote file " + targetFileNameInTmp);
-            URL url = URI.create(urlString).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(120000);
-            connection.setRequestProperty("User-Agent", "JavaUpdater/1.0");
-            connection.setRequestProperty("Referer", "https://chat2db.ai");
+            HttpURLConnection connection = openUpdateConnection(urlString, 120000,
+                    existingBytes == 0 ? Collections.emptyMap() : Map.of("Range", "bytes=" + existingBytes + "-"));
+            int responseCode = connection.getResponseCode();
+            boolean append = isPartialResponseForOffset(existingBytes, expectedSize, responseCode,
+                    connection.getHeaderField("Content-Range"), connection.getContentLengthLong());
+            if (existingBytes > 0 && !append) {
+                if (progressDialog != null) {
+                    progressDialog.appendLog("Update server cannot resume this download. Starting over.");
+                }
+                connection.disconnect();
+                Files.deleteIfExists(partialPath);
+                existingBytes = 0L;
+                connection = openUpdateConnection(urlString, 120000);
+                responseCode = connection.getResponseCode();
+            }
+            if (responseCode != HttpURLConnection.HTTP_OK && responseCode != HttpURLConnection.HTTP_PARTIAL) {
+                connection.disconnect();
+                throw new IOException("Failed to download update file. Status: " + responseCode);
+            }
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > MAX_SINGLE_DOWNLOAD_BYTES) {
+                connection.disconnect();
+                throw new IOException("Update file exceeds the download limit");
+            }
+            long expectedRemainingBytes = expectedSize - existingBytes;
+            if (contentLength >= 0 && contentLength != expectedRemainingBytes) {
+                connection.disconnect();
+                throw new IOException("Update file size does not match metadata");
+            }
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            if (existingBytes > 0) {
+                updateDigestFromFile(partialPath, sha256);
+                if (progressListener != null) {
+                    progressListener.onProgress(existingBytes);
+                }
+            }
             try (InputStream in = new BufferedInputStream(connection.getInputStream());
-                 OutputStream out = Files.newOutputStream(targetPath)) {
+                 OutputStream out = Files.newOutputStream(partialPath, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 byte[] buffer = new byte[8192];
+                long bytesWritten = existingBytes;
                 int bytesRead;
                 while ((bytesRead = in.read(buffer)) != -1) {
+                    bytesWritten = Math.addExact(bytesWritten, bytesRead);
+                    if (bytesWritten > MAX_SINGLE_DOWNLOAD_BYTES || bytesWritten > expectedSize) {
+                        throw new IOException("Update file exceeds its declared size");
+                    }
                     out.write(buffer, 0, bytesRead);
                     sha256.update(buffer, 0, bytesRead);
                     if (progressListener != null) {
                         progressListener.onProgress(bytesRead);
                     }
+                }
+                if (bytesWritten != expectedSize) {
+                    throw new IOException("Update file size does not match metadata");
                 }
             }
             byte[] hash = sha256.digest();
@@ -694,25 +1113,127 @@ public class Updater {
             actualSha256 = hexString.toString();
         }
 
+        if (Files.size(partialPath) != expectedSize) {
+            Files.deleteIfExists(partialPath);
+            throw new IOException("Update file size does not match metadata");
+        }
+
         if (progressDialog != null) progressDialog.appendLog("Verifying checksum for " + targetFileNameInTmp);
 
         boolean checksumVerified;
         if (actualSha256 != null) {
             checksumVerified = actualSha256.equalsIgnoreCase(expectedSha256);
         } else {
-            checksumVerified = verifyFileChecksum(targetPath, expectedSha256);
+            checksumVerified = verifyFileChecksum(partialPath, expectedSha256);
         }
 
         if (!checksumVerified) {
-            Files.deleteIfExists(targetPath);
-            throw new IOException("Checksum mismatch for " + targetPath.getFileName() + ". Expected: " + expectedSha256 + ", Actual: " + (actualSha256 != null ? actualSha256 : "re-calculated"));
+            Files.deleteIfExists(partialPath);
+            throw new IOException("Checksum mismatch for " + partialPath.getFileName() + ". Expected: " + expectedSha256 + ", Actual: " + (actualSha256 != null ? actualSha256 : "re-calculated"));
         }
+
+        moveIntoPlace(partialPath, targetPath);
 
         if (progressDialog != null) {
             progressDialog.appendLog("Download & verification complete: " + targetFileNameInTmp);
         }
 
         return targetPath;
+    }
+
+    private static Path partialDownloadPath(Path targetPath) {
+        return targetPath.resolveSibling(targetPath.getFileName() + PARTIAL_DOWNLOAD_SUFFIX);
+    }
+
+    private Path resolvePartialDownloadFile(Path targetPath) throws IOException {
+        Path partialPath = partialDownloadPath(targetPath);
+        Path temporaryDirectory = TMP_DIR.toAbsolutePath().normalize();
+        if (!partialPath.startsWith(temporaryDirectory) || Files.isSymbolicLink(partialPath)) {
+            throw new IOException("Update partial download file is unsafe: " + partialPath.getFileName());
+        }
+        return partialPath;
+    }
+
+    static boolean isPartialResponseForOffset(long existingBytes, long expectedSize, int responseCode,
+                                              String contentRange, long contentLength) {
+        if (existingBytes <= 0 || responseCode != HttpURLConnection.HTTP_PARTIAL || contentRange == null) {
+            return false;
+        }
+        String expectedPrefix = "bytes " + existingBytes + "-";
+        String expectedSuffix = "/" + expectedSize;
+        return contentRange.startsWith(expectedPrefix)
+                && contentRange.endsWith(expectedSuffix)
+                && (contentLength < 0 || contentLength == expectedSize - existingBytes);
+    }
+
+    private static void updateDigestFromFile(Path path, MessageDigest digest) throws IOException {
+        try (InputStream input = new BufferedInputStream(Files.newInputStream(path))) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, bytesRead);
+            }
+        }
+    }
+
+    private void copyWithLimit(InputStream inputStream, OutputStream outputStream, long expectedSize,
+                               IProgressListener progressListener) throws IOException {
+        byte[] buffer = new byte[8192];
+        long bytesWritten = 0;
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            bytesWritten = Math.addExact(bytesWritten, bytesRead);
+            if (bytesWritten > MAX_SINGLE_DOWNLOAD_BYTES || bytesWritten > expectedSize) {
+                throw new IOException("Update file exceeds its declared size");
+            }
+            outputStream.write(buffer, 0, bytesRead);
+            if (progressListener != null) {
+                progressListener.onProgress(bytesRead);
+            }
+        }
+        if (bytesWritten != expectedSize) {
+            throw new IOException("Update file size does not match metadata");
+        }
+    }
+
+    private HttpURLConnection openUpdateConnection(String urlString, int readTimeoutMs) throws IOException {
+        return openUpdateConnection(urlString, readTimeoutMs, Collections.emptyMap());
+    }
+
+    private HttpURLConnection openUpdateConnection(String urlString, int readTimeoutMs,
+                                                   Map<String, String> requestHeaders) throws IOException {
+        URI currentUri;
+        try {
+            currentUri = URI.create(urlString);
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("Update URL is invalid", exception);
+        }
+        for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+            validateUpdateUrl(currentUri.toString());
+            HttpURLConnection connection = (HttpURLConnection) currentUri.toURL().openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(readTimeoutMs);
+            connection.setRequestProperty("User-Agent", "JavaUpdater/1.0");
+            connection.setRequestProperty("Referer", "https://chat2db.ai");
+            requestHeaders.forEach(connection::setRequestProperty);
+            int responseCode = connection.getResponseCode();
+            if (responseCode < HttpURLConnection.HTTP_MULT_CHOICE || responseCode >= HttpURLConnection.HTTP_BAD_REQUEST) {
+                return connection;
+            }
+            String location = connection.getHeaderField("Location");
+            connection.disconnect();
+            if (isBlank(location)) {
+                throw new IOException("Update server returned a redirect without a location");
+            }
+            try {
+                currentUri = currentUri.resolve(location).normalize();
+            } catch (IllegalArgumentException exception) {
+                throw new IOException("Update server returned an invalid redirect", exception);
+            }
+        }
+        throw new IOException("Update server exceeded the redirect limit");
     }
 
     private boolean verifyFileChecksum(Path filePath, String expectedSha256) throws IOException, NoSuchAlgorithmException {
@@ -753,12 +1274,23 @@ public class Updater {
         return hexString.toString();
     }
 
-    private static void extractZip(Path zipFile, Path destDir) throws IOException {
+    static void extractZip(Path zipFile, Path destDir, String expectedTopLevelDirectory) throws IOException {
         Files.createDirectories(destDir);
         byte[] buffer = new byte[8192];
+        int entryCount = 0;
+        long extractedBytes = 0;
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(Files.newInputStream(zipFile)))) {
             java.util.zip.ZipEntry zipEntry = zis.getNextEntry();
             while (zipEntry != null) {
+                if (++entryCount > MAX_ZIP_ENTRIES) {
+                    throw new IOException("ZIP archive has too many entries");
+                }
+                String entryName = zipEntry.getName();
+                int separator = entryName.indexOf('/');
+                String topLevelDirectory = separator >= 0 ? entryName.substring(0, separator) : entryName;
+                if (!expectedTopLevelDirectory.equals(topLevelDirectory)) {
+                    throw new IOException("ZIP entry is outside of the expected top-level directory: " + entryName);
+                }
                 Path newFile = destDir.resolve(zipEntry.getName()).normalize();
                 if (!newFile.startsWith(destDir.normalize())) {
                     throw new IOException("Zip entry is outside of the target dir: " + zipEntry.getName());
@@ -770,6 +1302,10 @@ public class Updater {
                     try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(newFile))) {
                         int len;
                         while ((len = zis.read(buffer)) > 0) {
+                            extractedBytes += len;
+                            if (extractedBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
+                                throw new IOException("ZIP archive exceeds the uncompressed size limit");
+                            }
                             fos.write(buffer, 0, len);
                         }
                     }
@@ -780,9 +1316,17 @@ public class Updater {
         }
     }
 
+    private static void moveIntoPlace(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     private static void deleteDirectoryRecursively(Path path) throws IOException {
-        if (Files.exists(path)) {
-            if (Files.isDirectory(path)) {
+        if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
                 try (DirectoryStream<Path> entries = Files.newDirectoryStream(path)) {
                     for (Path entry : entries) {
                         deleteDirectoryRecursively(entry);
@@ -792,11 +1336,21 @@ public class Updater {
             Files.delete(path);
         }
     }
-    public void triggerInstallationWithAuxiliaryProcess() {
+    public boolean triggerInstallationWithAuxiliaryProcess() {
+        synchronized (updateOperationLock) {
+            requirePackagedRelease();
+            if (downloadInProgress || installationInProgress) {
+                throw new BusinessException("Update installation is already in progress.");
+            }
+            if (!updateReadyToInstall) {
+                throw new BusinessException("No downloaded update is ready to install.");
+            }
+            installationInProgress = true;
+        }
         progressDialog.appendLog("Preparing for update via auxiliary process...");
         try {
             UpdatePlan plan = new UpdatePlan();
-            plan.setTasks(checkResult.getActions());
+            plan.setTasks(requireUpdateActions());
             plan.setRemoteMetadata(checkResult.getRemoteMetadata());
             plan.setDownloadedFiles(downloadedFilesMap.entrySet().stream()
                     .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toAbsolutePath().toString())));
@@ -819,10 +1373,15 @@ public class Updater {
             } catch (InterruptedException ignored) {
             }
             System.exit(0);
+            return true;
 
         } catch (Exception e) {
             log.error("Failed to launch auxiliary updater process", e);
             progressDialog.appendLog("FATAL ERROR: Could not start the update process. " + e.getMessage());
+            synchronized (updateOperationLock) {
+                installationInProgress = false;
+            }
+            return false;
         }
     }
 
@@ -845,6 +1404,34 @@ public class Updater {
 
         pb.redirectErrorStream(true);
         return pb;
+    }
+
+    List<FileUpdateAction> requireUpdateActions() throws IOException {
+        if (checkResult == null || checkResult.getActions() == null) {
+            throw new IOException("Update plan is incomplete: update actions are missing.");
+        }
+        return checkResult.getActions();
+    }
+
+    private void requirePackagedRelease() {
+        if (!isSelfUpdateSupported(ConfigUtils.isRelease(), Boolean.getBoolean(WEB_FRONTEND_PROPERTY))) {
+            throw new BusinessException("Self-update is only available from an installed desktop release.");
+        }
+    }
+
+    private void discardDownloadedFiles() {
+        downloadedFilesMap.values().forEach(tempFile -> {
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (IOException ex) {
+                log.warn("Failed to delete temporary download file: {}", tempFile, ex);
+            }
+        });
+        downloadedFilesMap.clear();
+    }
+
+    static boolean isSelfUpdateSupported(boolean releaseProfile, boolean webFrontend) {
+        return releaseProfile && !webFrontend;
     }
 
 

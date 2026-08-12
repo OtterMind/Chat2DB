@@ -11,7 +11,7 @@ BACKEND_LIB_DIR="${BACKEND_TARGET_DIR}/lib"
 JAVA_BIN="${JBR_HOME:?JBR_HOME must point to a JBR 17 runtime with JCEF}/bin/java"
 JAVA_OPTIONS=()
 FRONTEND_URL="http://127.0.0.1:8889/"
-FRONTEND_HEALTH_URL="${FRONTEND_URL}umi.js"
+FRONTEND_HEALTH_URL="${FRONTEND_URL}"
 FRONTEND_TIMEOUT_SECONDS=180
 BACKEND_URL="http://127.0.0.1:10825/"
 BACKEND_HEALTH_URL="${BACKEND_URL}api/system"
@@ -22,7 +22,6 @@ BACKEND_PID=""
 case "$(uname -s)" in
     Darwin)
         JAVA_OPTIONS+=(
-            -XstartOnFirstThread
             --add-opens=java.desktop/sun.awt=ALL-UNNAMED
             --add-opens=java.desktop/sun.lwawt=ALL-UNNAMED
             --add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED
@@ -107,8 +106,7 @@ while true; do
         echo "[error] frontend exited before it became ready" >&2
         exit 1
     fi
-    FRONTEND_CONTENT_TYPE=$(curl --noproxy '*' --fail --silent --max-time 2 --output /dev/null --write-out '%{content_type}' "${FRONTEND_HEALTH_URL}" 2>/dev/null || true)
-    if [[ "${FRONTEND_CONTENT_TYPE}" == *javascript* ]]; then
+    if curl --noproxy '*' --fail --silent --max-time 2 --output /dev/null "${FRONTEND_HEALTH_URL}"; then
         break
     fi
     if [ "${SECONDS}" -ge "${FRONTEND_DEADLINE}" ]; then

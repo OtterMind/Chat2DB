@@ -24,6 +24,8 @@ public class FileInfo {
     String updateStrategy;
     @JsonProperty("fileSizeByte")
     long fileSizeByte;
+    @JsonProperty("deleted")
+    boolean deleted;
 
     @Override
     public boolean equals(Object o) {

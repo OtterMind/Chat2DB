@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.cef.callback.CefQueryCallback;
 
 import java.util.Map;
+import java.util.Objects;
 
 
 @Slf4j
@@ -22,8 +23,11 @@ public class AppCheckUpdateHandler implements IJcefActionHandler {
         Updater.CheckResult checkResult = Updater.getInstance().appCheckUpdate();
         log.info(checkResult.toString());
         ResponseBuilder.buildSuccessJcef(
-                Map.of("data", Map.of("status", checkResult.isNeedsUpdate() ? UpdatedStatus.Available.getName() : UpdatedStatus.NotAvailable.getName(),
-                        "version", checkResult.isNeedsUpdate() ? checkResult.getRemoteMetadata().getVersion() : "")
+                Map.of("data", Map.of("status", checkResult.isCheckFailed() ? UpdatedStatus.UpdateFailed.getName()
+                                : checkResult.isNeedsUpdate() ? UpdatedStatus.Available.getName() : UpdatedStatus.NotAvailable.getName(),
+                        "version", checkResult.isNeedsUpdate() ? checkResult.getLatestVersionInfo().getLatestVersion() : "",
+                        "releaseNotes", checkResult.isNeedsUpdate() ? Objects.toString(checkResult.getReleaseNotes(), "") : "",
+                        "message", checkResult.isCheckFailed() ? "Unable to check for updates. Please try again." : "")
                 ), callback);
     }
 }

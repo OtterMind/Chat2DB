@@ -9,6 +9,10 @@ public class LatestVersionInfo {
     String latestVersion;
     @JsonProperty("metadataUrl")
     String metadataUrl;
+    @JsonProperty("releaseNotes")
+    String releaseNotes;
+    @JsonProperty("metadataSha256")
+    String metadataSha256;
     @JsonProperty("forceUpdate")
     Boolean forceUpdate = Boolean.FALSE;
 }

@@ -19,8 +19,7 @@ public class TriggerInstallationHandler implements IJcefActionHandler {
     public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
         Updater updater = Updater.getInstance();
         if (OS.isWindows()) {
-            updater.triggerInstallationWithAuxiliaryProcess();
-            ResponseBuilder.buildSuccessJcef(Map.of("data", true),callback);
+            ResponseBuilder.buildSuccessJcef(Map.of("data", updater.triggerInstallationWithAuxiliaryProcess()), callback);
             return;
         }
         ResponseBuilder.buildSuccessJcef(Map.of("data", updater.triggerInstallation()),callback);
