@@ -2,11 +2,11 @@ import { Platform } from '@/constants/os';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
-import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
+import { isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
-import { Icon } from '@chat2db/ui';
+import { Icon, staticMessage } from '@chat2db/ui';
 import { Button, notification } from 'antd';
 import { useEffect } from 'react';
 import { useStyles } from './style';
@@ -24,10 +24,11 @@ const createTop = () => {
 
 const UpdateDetection = () => {
   const { styles } = useStyles();
+  const isDevelopmentDesktop = isDesktop && isDevelopment;
 
   const {
     appConfig,
-    setUpdateDetail,
+    downloadUpdate,
     appUrlConfig,
     hotUpdateConfig,
     updateDetail,
@@ -38,7 +39,7 @@ const UpdateDetection = () => {
     appConfig: state.appConfig,
     appUrlConfig: state.appUrlConfig,
     hotUpdateConfig: state.hotUpdateConfig,
-    setUpdateDetail: state.setUpdateDetail,
+    downloadUpdate: state.downloadUpdate,
     updateDetail: state.updateDetail,
     handleCheckUpdate: state.handleCheckUpdate,
     updateAndRestartApp: state.updateAndRestartApp,
@@ -72,11 +73,11 @@ const UpdateDetection = () => {
     if (!runtimeEditionConfig.autoUpdate) {
       return;
     }
-    // Check for updates, check for updates after app initialization is completed
-    if (appConfig.isReady) {
+    // Community remains offline-first until the user explicitly enables update reminders.
+    if (appConfig.isReady && hotUpdateConfig.remindMe) {
       handleCheckUpdate();
     }
-  }, [appConfig.isReady]);
+  }, [appConfig.isReady, hotUpdateConfig.remindMe]);
 
   useEffect(() => {
     if (!runtimeEditionConfig.autoUpdate) {
@@ -87,18 +88,24 @@ const UpdateDetection = () => {
         if (hotUpdateConfig.remindMe) {
           openFindNewVersionNotification();
         }
-        if (hotUpdateConfig.autoDownload) {
-          jcefApi.triggerDownload();
+        if (!isDevelopmentDesktop && hotUpdateConfig.autoDownload) {
+          void downloadUpdate();
         }
         break;
       case UpdatedStatus.Updated:
-        if (hotUpdateConfig.autoInstall) {
-          jcefApi.triggerInstallation();
+        if (!isDevelopmentDesktop && hotUpdateConfig.autoInstall) {
+          void updateAndRestartApp();
+          return;
+        }
+        if (isDevelopmentDesktop) {
           return;
         }
         openNotificationAuto();
         break;
       case UpdatedStatus.Installed:
+        if (isDevelopmentDesktop) {
+          return;
+        }
         openNotificationAuto();
         break;
       default:
@@ -165,6 +172,7 @@ const UpdateDetection = () => {
           size="small"
           onClick={() => {
             openWebPage(CHANGE_LOG_URL);
+            staticMessage.success(i18n('setting.text.changeLogOpenedInBrowser'));
             notificationApi.destroy();
           }}
         >

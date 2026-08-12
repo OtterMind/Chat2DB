@@ -2,31 +2,14 @@ import { GlobalBaseSettings, GlobalAppConfig, DataTableSettings } from '@/typing
 import { getUserComputerLanguage } from '@/utils';
 import { DEFAULT_RESULT_PAGE_SIZE } from './pagination';
 
+export { UpdatedStatus } from '@/store/global/slices/hotUpdate/status';
+
 export enum LangType {
   EN_US = 'en-US',
   ZH_CN = 'zh-CN',
   JA_JP = 'ja-JP',
   ES_ES = 'es-ES',
   KO_KR = 'ko-KR',
-}
-
-export enum UpdatedStatus {
-  // default
-  Default = 'default',
-  // There are updates available
-  Available = 'available',
-  // Not available
-  NotAvailable = 'notAvailable',
-  // Updating
-  Updating = 'updating',
-  // Update completed
-  Updated = 'updated',
-  // Installing
-  Installing = 'installing',
-  // Installation completed
-  Installed = 'installed',
-  // Update failed
-  UpdateFailed = 'updateFailed',
 }
 
 export const DEFAULT_BASE_SETTINGS: GlobalBaseSettings = {

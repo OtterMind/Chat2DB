@@ -183,7 +183,7 @@ const communityConfig: RuntimeEditionConfig = {
   accountCenter: false,
   upgradeEntry: false,
   downloadEntry: false,
-  autoUpdate: false,
+  autoUpdate: true,
   mcpSetting: isDesktop,
   networkProxySetting: isDesktop,
   licenseSetting: false,

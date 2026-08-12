@@ -69,6 +69,7 @@ export interface IUpdateDetail {
   status?: UpdatedStatus; // update status
   progress?: number; // update progress
   version?: string; // Latest version number
+  releaseNotes?: string; // Release notes for the latest version
 }
 
 export type McpRuntimeState = 'UNKNOWN' | 'STARTING' | 'RUNNING' | 'STOPPED' | 'FAILED';

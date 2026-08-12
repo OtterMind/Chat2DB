@@ -125,6 +125,8 @@ export default {
   'setting.ai.user.hidden':
     'Póngase en contacto con el administrador para configurar la ApiKey en «Configuración -> IA personalizada»',
   'setting.button.startDownloading': 'Iniciar descarga',
+  'setting.button.checkingUpdate': 'Buscando actualizaciones',
+  'setting.button.developmentCheckOnly': 'Desarrollo: solo comprobar',
   'setting.button.beDownloading': 'Descargando',
   'setting.button.redownload': 'Volver a descargar',
   'setting.button.restart': 'Reiniciar e instalar',
@@ -240,6 +242,11 @@ export default {
   'setting.title.checkUpdate': 'Buscar actualizaciones',
   'setting.text.downloadProgress': 'Progreso de descarga',
   'setting.text.notAvailable': 'No hay ninguna versión nueva disponible',
+  'setting.text.updateCheckFailed': 'No se pudieron buscar actualizaciones. Vuelve a intentarlo.',
+  'setting.text.updateDownloadFailed': 'No se pudo descargar la actualización. Vuelve a intentarlo.',
+  'setting.text.developmentUpdateOnlyCheck':
+    'El modo de desarrollo solo permite buscar actualizaciones. Las descargas, instalaciones y reinicios solo se pueden probar en un paquete de escritorio Community instalado.',
+  'setting.text.changeLogOpenedInBrowser': 'Se abrió en el navegador predeterminado',
   'setting.text.latestVersion': 'Versión más reciente',
   'setting.text.buildTime': 'Fecha de compilación',
   'setting.text.alertNewVersion': 'Avisarme cuando se encuentre una versión nueva',

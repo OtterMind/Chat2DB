@@ -4,9 +4,8 @@ import { APP_CONFIG } from '@/constants/appConfig';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
-import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
-import { isDesktop } from '@/utils/env';
+import { isCommunityEnv, isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
 import { staticMessage } from '@chat2db/ui';
 import { Button, Checkbox, Progress } from 'antd';
@@ -16,7 +15,16 @@ import { useStyles } from './style';
 // About Us
 export default function AboutUs() {
   const { styles } = useStyles();
-  const { appUrlConfig, hotUpdateConfig, updateDetail, updateHotUpdateConfig, updateAndRestartApp, handleCheckUpdate } =
+  const isDevelopmentDesktop = isDesktop && isDevelopment;
+  const {
+    appUrlConfig,
+    hotUpdateConfig,
+    updateDetail,
+    updateHotUpdateConfig,
+    updateAndRestartApp,
+    handleCheckUpdate,
+    downloadUpdate,
+  } =
     useGlobalStore((state) => ({
       appUrlConfig: state.appUrlConfig,
       hotUpdateConfig: state.hotUpdateConfig,
@@ -24,6 +32,7 @@ export default function AboutUs() {
       updateHotUpdateConfig: state.updateHotUpdateConfig,
       updateAndRestartApp: state.updateAndRestartApp,
       handleCheckUpdate: state.handleCheckUpdate,
+      downloadUpdate: state.downloadUpdate,
     }));
 
   const jumpDoc = () => {
@@ -39,8 +48,24 @@ export default function AboutUs() {
       if (available) {
         return;
       }
+      if (useGlobalStore.getState().updateDetail.status === UpdatedStatus.UpdateFailed) {
+        staticMessage.error(i18n('setting.text.updateCheckFailed'));
+        return;
+      }
       staticMessage.info(i18n('setting.text.notAvailable'));
     });
+  };
+
+  const startDownload = async () => {
+    const downloaded = await downloadUpdate();
+    if (!downloaded) {
+      staticMessage.error(i18n('setting.text.updateDownloadFailed'));
+    }
+  };
+
+  const viewChangeLog = () => {
+    jumpDoc();
+    staticMessage.success(i18n('setting.text.changeLogOpenedInBrowser'));
   };
 
   const updateButton = useMemo(() => {
@@ -48,14 +73,25 @@ export default function AboutUs() {
       return false;
     }
     switch (updateDetail.status) {
+      case UpdatedStatus.Checking:
+        return (
+          <Button type="primary" size="small" loading>
+            {i18n('setting.button.checkingUpdate')}
+          </Button>
+        );
       case UpdatedStatus.Available:
+        if (isDevelopmentDesktop) {
+          return (
+            <Button type="primary" size="small" disabled>
+              {i18n('setting.button.developmentCheckOnly')}
+            </Button>
+          );
+        }
         return (
           <Button
             type="primary"
             size="small"
-            onClick={() => {
-              jcefApi.triggerDownload();
-            }}
+            onClick={startDownload}
           >
             {i18n('setting.button.startDownloading')}
           </Button>
@@ -74,6 +110,13 @@ export default function AboutUs() {
         );
       case UpdatedStatus.Updated:
       case UpdatedStatus.Installed:
+        if (isDevelopmentDesktop) {
+          return (
+            <Button size="small" disabled>
+              {i18n('setting.button.developmentCheckOnly')}
+            </Button>
+          );
+        }
         return (
           <Button size="small" icon={<Iconfont code="&#xe662;" />} type="primary" onClick={updateAndRestartApp}>
             {i18n('setting.button.restart')}
@@ -107,12 +150,17 @@ export default function AboutUs() {
           </div> */}
           <div className={styles.updateButton}>
             {updateButton}
-            {!runtimeEditionConfig.localPersistence && (
-              <Button size="small" onClick={jumpDoc}>
+            {(!runtimeEditionConfig.localPersistence || isCommunityEnv) && (
+              <Button size="small" onClick={viewChangeLog}>
                 {i18n('setting.button.changeLog')}
               </Button>
             )}
           </div>
+          {isDevelopmentDesktop && updateDetail.status === UpdatedStatus.Available && (
+            <div className={styles.developmentUpdateHint}>
+              {i18n('setting.text.developmentUpdateOnlyCheck')}
+            </div>
+          )}
         </div>
       </div>
       {isDesktop && runtimeEditionConfig.autoUpdate && (
@@ -137,6 +185,7 @@ export default function AboutUs() {
                 {i18n('setting.text.alertNewVersion')}
               </Checkbox>
               <Checkbox
+                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop}
                 onChange={(e) => {
                   updateHotUpdateConfig('autoDownload', e.target.checked);
                 }}
@@ -145,6 +194,7 @@ export default function AboutUs() {
                 {i18n('setting.text.downloadNewVersion')}
               </Checkbox>
               <Checkbox
+                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop}
                 onChange={(e) => {
                   updateHotUpdateConfig('autoInstall', e.target.checked);
                 }}

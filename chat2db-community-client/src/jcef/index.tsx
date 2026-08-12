@@ -156,7 +156,7 @@ const jcefApi = {
   },
   // Start hot update installation
   triggerInstallation: () => {
-    return createJcefApi('trigger-installation');
+    return createJcefApi<boolean>('trigger-installation');
   },
   // Restart app
   restartApp: (data?: { operationId?: string }) => {
