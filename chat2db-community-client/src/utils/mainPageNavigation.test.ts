@@ -29,6 +29,11 @@ assert.equal(
   'the persisted main page should be read from the Zustand storage payload',
 );
 assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"tasks"}}'),
+  'tasks',
+  'the task board should be restored as a main page',
+);
+assert.equal(
   readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"settings"}}'),
   undefined,
   'non-navigation values should not be restored as a main page',

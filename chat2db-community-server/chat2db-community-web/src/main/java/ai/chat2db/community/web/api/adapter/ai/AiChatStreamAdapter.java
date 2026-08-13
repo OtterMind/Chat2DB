@@ -9,6 +9,11 @@ import ai.chat2db.community.domain.api.model.ai.AiChatSession;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
 import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeStartRequest;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
@@ -18,6 +23,7 @@ import ai.chat2db.community.domain.api.service.ai.IAiBusinessContextService;
 import ai.chat2db.community.domain.api.service.ai.IAiChatHistoryService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.domain.api.service.agent.runtime.AgentEventSink;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.community.tools.util.ConfigUtils;
@@ -51,6 +57,7 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -262,6 +269,156 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         } finally {
             aiChatClient.close();
         }
+    }
+
+    /**
+     * Executes one Agent Run through the existing Spring AI provider and tool
+     * stack while reporting transport-neutral runtime events to the control
+     * plane. Task and Run state remain owned by the caller.
+     */
+    public Disposable streamAgent(AgentRuntimeStartRequest runtimeRequest, AgentEventSink eventSink) {
+        if (eventSink == null) {
+            throw new IllegalArgumentException("agent event sink is required");
+        }
+        ChatRequest request = agentChatRequest(runtimeRequest);
+        AiRuntimeModel runtimeModel = modelConfigService.resolveRuntimeModel(chatConverter.toRuntimeResolveParam(request));
+        AiModelFactory.AiChatClient aiChatClient = modelFactory.create(runtimeModel,
+                AiModelFactory.RequestMode.STREAMING);
+        Map<String, Object> toolContext = buildToolContext(request);
+        putRequestContext(toolContext);
+        List<AgentDataScope> dataScopes = runtimeRequest.getTask().getDataScopeSnapshot();
+        if (dataScopes != null && dataScopes.size() == 1) {
+            toolContext.put("agentDataScope", dataScopes.get(0));
+        }
+        toolContext.put("agentRunId", runtimeRequest.getRun().getId());
+        toolContext.put(AiChatTraceSupport.TRACE_EMITTER_KEY,
+                (Consumer<Map<String, Object>>) payload -> emitAgentTrace(runtimeRequest.getRun().getId(), payload,
+                        eventSink));
+
+        List<Message> messages = buildMessages(request.getInput(), List.of(), List.of(),
+                runtimeRequest.getAssembledContext());
+        ChatClient.ChatClientRequestSpec spec = aiChatClient.getChatClient().prompt()
+                .system(resolveSystemPrompt(request, toolContext))
+                .messages(messages);
+        if (Boolean.TRUE.equals(request.getEnableTools()) && !toolContext.isEmpty()) {
+            spec = spec.toolCallbacks(aiToolCallbackProvider).toolContext(toolContext);
+        }
+
+        Set<String> emittedToolCallIds = new HashSet<>();
+        StringBuilder streamedReasoningState = new StringBuilder();
+        ThinkTagStreamParser thinkParser = new ThinkTagStreamParser();
+        String runId = runtimeRequest.getRun().getId();
+        return spec.stream().chatResponse()
+                .doFinally(signal -> aiChatClient.close())
+                .subscribe(
+                        chunk -> handleAgentChunk(runId, chunk, emittedToolCallIds, streamedReasoningState,
+                                thinkParser, eventSink),
+                        error -> emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.ERROR,
+                                StringUtils.defaultIfBlank(error.getMessage(), "Agent runtime failed"), Map.of(),
+                                eventSink),
+                        () -> {
+                            ThinkTagStreamParser.Segments rest = thinkParser.flush();
+                            emitAgentSegments(runId, rest, eventSink);
+                            emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.STATUS, "COMPLETED",
+                                    Map.of("status", "COMPLETED"), eventSink);
+                        });
+    }
+
+    private ChatRequest agentChatRequest(AgentRuntimeStartRequest runtimeRequest) {
+        if (runtimeRequest == null || runtimeRequest.getAgent() == null
+                || runtimeRequest.getTask() == null || runtimeRequest.getRun() == null) {
+            throw new IllegalArgumentException("agent, task and run are required for Spring AI execution");
+        }
+        ChatRequest request = new ChatRequest();
+        request.setInput(agentGoal(runtimeRequest));
+        request.setSystemPrompt(runtimeRequest.getAgent().getSystemPrompt());
+        request.setModelConfigId(runtimeRequest.getAgent().getModelConfigId());
+        List<AgentDataScope> scopes = runtimeRequest.getTask().getDataScopeSnapshot();
+        if (scopes == null || scopes.isEmpty()) {
+            request.setEnableTools(false);
+            return request;
+        }
+        if (scopes.size() != 1) {
+            throw new IllegalArgumentException("embedded Spring AI runtime currently requires one task data scope");
+        }
+        AgentDataScope scope = scopes.get(0);
+        request.setDataSourceId(scope.getDataSourceId());
+        request.setDatabaseName(scope.getDatabaseName());
+        request.setSchemaName(scope.getSchemaName());
+        request.setEnableTools(runtimeRequest.getAgent().getCapabilities() != null
+                && runtimeRequest.getAgent().getCapabilities().contains(AgentCapabilityEnum.DATA_READ));
+        return request;
+    }
+
+    private String agentGoal(AgentRuntimeStartRequest request) {
+        StringBuilder goal = new StringBuilder(request.getTask().getTitle());
+        if (StringUtils.isNotBlank(request.getTask().getDescription())) {
+            goal.append("\n\n## Task Description\n").append(request.getTask().getDescription());
+        }
+        if (StringUtils.isNotBlank(request.getTask().getAcceptanceCriteria())) {
+            goal.append("\n\n## Acceptance Criteria\n").append(request.getTask().getAcceptanceCriteria());
+        }
+        return goal.toString();
+    }
+
+    private void handleAgentChunk(String runId, ChatResponse chunk, Set<String> emittedToolCallIds,
+                                  StringBuilder streamedReasoningState, ThinkTagStreamParser thinkParser,
+                                  AgentEventSink eventSink) {
+        if (chunk == null || chunk.getResult() == null || chunk.getResult().getOutput() == null) {
+            return;
+        }
+        AssistantMessage output = chunk.getResult().getOutput();
+        if (output.hasToolCalls() && output.getToolCalls() != null) {
+            output.getToolCalls().forEach(call -> {
+                String callId = StringUtils.defaultIfBlank(call.id(), call.name() + "-" + call.arguments());
+                if (emittedToolCallIds.add(callId)) {
+                    emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.TOOL_CALL, call.name(), Map.of(
+                            "toolCallId", callId,
+                            "name", call.name(),
+                            "arguments", StringUtils.defaultString(call.arguments())), eventSink);
+                }
+            });
+        }
+        String reasoningDelta = resolveReasoningDelta(output, streamedReasoningState);
+        ThinkTagStreamParser.Segments segments = StringUtils.isNotEmpty(output.getText())
+                ? thinkParser.consume(output.getText())
+                : new ThinkTagStreamParser.Segments("", "");
+        if (StringUtils.isNotBlank(reasoningDelta)) {
+            emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.REASONING_DELTA, reasoningDelta, Map.of(), eventSink);
+        }
+        emitAgentSegments(runId, segments, eventSink);
+    }
+
+    private void emitAgentSegments(String runId, ThinkTagStreamParser.Segments segments, AgentEventSink eventSink) {
+        if (StringUtils.isNotBlank(segments.reasoning())) {
+            emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.REASONING_DELTA, segments.reasoning(), Map.of(),
+                    eventSink);
+        }
+        if (StringUtils.isNotEmpty(segments.answer())) {
+            emitRuntimeEvent(runId, AgentRuntimeEventTypeEnum.MESSAGE_DELTA, segments.answer(), Map.of(), eventSink);
+        }
+    }
+
+    private void emitAgentTrace(String runId, Map<String, Object> payload, AgentEventSink eventSink) {
+        Object type = payload == null ? null : payload.get("type");
+        AgentRuntimeEventTypeEnum eventType = AiChatTraceSupport.TYPE_TOOL_RESULT.equals(type)
+                ? AgentRuntimeEventTypeEnum.TOOL_RESULT
+                : AgentRuntimeEventTypeEnum.STATUS;
+        String content = payload == null ? null : String.valueOf(payload.getOrDefault("content", ""));
+        emitRuntimeEvent(runId, eventType, content,
+                payload == null ? Map.of() : new LinkedHashMap<>(payload), eventSink);
+    }
+
+    private void emitRuntimeEvent(String runId, AgentRuntimeEventTypeEnum type, String content,
+                                  Map<String, Object> payload, AgentEventSink eventSink) {
+        AgentRuntimeEvent event = new AgentRuntimeEvent();
+        event.setEventId(UUID.randomUUID().toString());
+        event.setRunId(runId);
+        event.setType(type);
+        event.setContent(content);
+        event.setPayload(new LinkedHashMap<>(payload));
+        event.setOccurredAt(new java.util.Date());
+        eventSink.emit(event);
     }
 
     @Override

@@ -10,12 +10,17 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.web.bind.annotation.*;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -89,6 +94,7 @@ public class RequestMappingUtils {
                 requestMappingInfo.setController(beanClass);
                 requestMappingInfo.setMethod(method.getName());
                 requestMappingInfo.setParams(parameterTypes);
+                requestMappingInfo.setPathVariables(pathVariableParameters(method));
                 List<RequestMappingInfo> requestMappingInfos = mappings.get(url);
                 if (CollectionUtils.isEmpty(requestMappingInfos)) {
                     requestMappingInfos = new ArrayList<>();
@@ -113,6 +119,17 @@ public class RequestMappingUtils {
             init();
         }
         List<RequestMappingInfo> requestMappingInfos = requestMappingInfoMap.get(url);
+        Map<String, String> pathVariableValues = Collections.emptyMap();
+        if (CollectionUtils.isEmpty(requestMappingInfos)) {
+            for (Map.Entry<String, List<RequestMappingInfo>> entry : requestMappingInfoMap.entrySet()) {
+                TemplateMatch match = matchTemplate(entry.getKey(), url);
+                if (match != null) {
+                    requestMappingInfos = entry.getValue();
+                    pathVariableValues = match.pathVariables();
+                    break;
+                }
+            }
+        }
         if (CollectionUtils.isEmpty(requestMappingInfos)) {
             return null;
         }
@@ -121,9 +138,67 @@ public class RequestMappingUtils {
         }
         for (RequestMappingInfo requestMappingInfo : requestMappingInfos) {
             if (CollectionUtils.isEmpty(requestMappingInfo.getRequestMethods()) || requestMappingInfo.getRequestMethods().contains(requestMethod)) {
-                return requestMappingInfo;
+                if (pathVariableValues.isEmpty()) {
+                    return requestMappingInfo;
+                }
+                RequestMappingInfo resolved = new RequestMappingInfo();
+                resolved.setUrl(requestMappingInfo.getUrl());
+                resolved.setController(requestMappingInfo.getController());
+                resolved.setMethod(requestMappingInfo.getMethod());
+                resolved.setParams(requestMappingInfo.getParams());
+                resolved.setRequestMethods(requestMappingInfo.getRequestMethods());
+                Map<Integer, String> resolvedPathVariables = new HashMap<>();
+                for (Map.Entry<Integer, String> entry : requestMappingInfo.getPathVariables().entrySet()) {
+                    resolvedPathVariables.put(entry.getKey(), pathVariableValues.get(entry.getValue()));
+                }
+                resolved.setPathVariables(resolvedPathVariables);
+                return resolved;
             }
         }
         return null;
+    }
+
+    private static TemplateMatch matchTemplate(String template, String requestUrl) {
+        if (template == null || requestUrl == null || !template.contains("{")) {
+            return null;
+        }
+        List<String> variableNames = new ArrayList<>();
+        Matcher placeholderMatcher = Pattern.compile("\\{([^/{}]+)}").matcher(template);
+        StringBuilder regex = new StringBuilder("^");
+        int cursor = 0;
+        while (placeholderMatcher.find()) {
+            regex.append(Pattern.quote(template.substring(cursor, placeholderMatcher.start())));
+            regex.append("([^/]+)");
+            variableNames.add(placeholderMatcher.group(1));
+            cursor = placeholderMatcher.end();
+        }
+        regex.append(Pattern.quote(template.substring(cursor))).append("$");
+        Matcher requestMatcher = Pattern.compile(regex.toString()).matcher(requestUrl);
+        if (!requestMatcher.matches()) {
+            return null;
+        }
+        Map<String, String> values = new HashMap<>();
+        for (int index = 0; index < variableNames.size(); index++) {
+            values.put(variableNames.get(index),
+                    URLDecoder.decode(requestMatcher.group(index + 1), StandardCharsets.UTF_8));
+        }
+        return new TemplateMatch(values);
+    }
+
+    private static Map<Integer, String> pathVariableParameters(Method method) {
+        Map<Integer, String> result = new HashMap<>();
+        Parameter[] parameters = method.getParameters();
+        for (int index = 0; index < parameters.length; index++) {
+            PathVariable annotation = parameters[index].getAnnotation(PathVariable.class);
+            if (annotation == null) {
+                continue;
+            }
+            String name = !annotation.name().isEmpty() ? annotation.name() : annotation.value();
+            result.put(index, name.isEmpty() ? parameters[index].getName() : name);
+        }
+        return result;
+    }
+
+    private record TemplateMatch(Map<String, String> pathVariables) {
     }
 }

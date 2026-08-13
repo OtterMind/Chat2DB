@@ -34,10 +34,11 @@ import { useStyles } from './style';
 import i18n from '@/i18n';
 import { keyboardKey } from '@/utils';
 import { cx } from 'antd-style';
-import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
+import agentService from '@/service/agent';
+import { removeAgentMention } from './components/AIChatInput/agentMentionModel';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -135,30 +136,34 @@ function normalizeAiMarkdown(content: string) {
 
 /** applies format repair rules to normal text segments outside code fences */
 function normalizeTextSegment(text: string) {
-  return text
-    // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
-    // This avoids damaging inline ## fragments such as URL anchors.
-    .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
-    .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
-    // The title at the beginning of the line is missing a space (###1. → ### 1.)
-    .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
-    // Move a separator stuck to a sentence onto its own line (text---\n).
-    // It must end the line and cannot be preceded by |, :, or whitespace.
-    // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
-    .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
-    .replace(/((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g, (segment) =>
-      Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
-        .map(([, date, value]) => `- ${date}: ${value}`)
-        .join('\n') + '\n',
-    )
-    // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
-    .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
-    // Split list items attached to the previous sentence into standalone items.
-    // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
-    .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
-    .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
-    .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
-    .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2');
+  return (
+    text
+      // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
+      // This avoids damaging inline ## fragments such as URL anchors.
+      .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
+      .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
+      // The title at the beginning of the line is missing a space (###1. → ### 1.)
+      .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
+      // Move a separator stuck to a sentence onto its own line (text---\n).
+      // It must end the line and cannot be preceded by |, :, or whitespace.
+      // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
+      .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
+      .replace(
+        /((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g,
+        (segment) =>
+          Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
+            .map(([, date, value]) => `- ${date}: ${value}`)
+            .join('\n') + '\n',
+      )
+      // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
+      .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
+      // Split list items attached to the previous sentence into standalone items.
+      // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
+      .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
+      .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
+      .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
+      .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2')
+  );
 }
 
 /** Table name click callback Context, used by MarkdownCodeBlock */
@@ -373,9 +378,7 @@ function parseTraceEntries(raw?: string): ITraceEntry[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed
-      .map((item) => normalizeTraceEntry(item))
-      .filter((item): item is ITraceEntry => !!item);
+    return parsed.map((item) => normalizeTraceEntry(item)).filter((item): item is ITraceEntry => !!item);
   } catch {
     return raw.trim()
       ? [
@@ -501,7 +504,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
-  const [openSettings, setOpenSettings] = useState(false);
+  const setSettingPageActiveTab = useGlobalStore((state) => state.setSettingPageActiveTab);
   const [sessionLoading, setSessionLoading] = useState(false);
   const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
 
@@ -545,74 +548,83 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }, delay);
   }, []);
 
-  const correctMessageTopAlignment = useCallback((messageId: string) => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const messageRect = messageElement.getBoundingClientRect();
-    const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
+  const correctMessageTopAlignment = useCallback(
+    (messageId: string) => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
 
-    if (Math.abs(delta) <= 1) {
-      return;
-    }
+      if (Math.abs(delta) <= 1) {
+        return;
+      }
 
-    lockScrollTracking('auto');
-    container.scrollTop += delta;
-  }, [lockScrollTracking]);
+      lockScrollTracking('auto');
+      container.scrollTop += delta;
+    },
+    [lockScrollTracking],
+  );
 
-  const scrollMessageToTop = useCallback((messageId: string, behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return false;
-    }
-    lockScrollTracking(behavior);
-    const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
-    container.scrollTo({
-      top: nextScrollTop,
-      behavior,
-    });
-
-    if (topAlignmentTimerRef.current !== null) {
-      window.clearTimeout(topAlignmentTimerRef.current);
-      topAlignmentTimerRef.current = null;
-    }
-
-    if (behavior === 'smooth') {
-      topAlignmentTimerRef.current = window.setTimeout(() => {
-        correctMessageTopAlignment(messageId);
-        topAlignmentTimerRef.current = null;
-      }, INITIAL_VIEWPORT_ANIMATION_MS);
-    } else {
-      requestAnimationFrame(() => {
-        correctMessageTopAlignment(messageId);
-      });
-    }
-
-    return true;
-  }, [correctMessageTopAlignment, lockScrollTracking]);
-
-  const scrollMessageListToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    if (!container) {
-      return;
-    }
-    lockScrollTracking(behavior);
-    if (bottomSentinelRef.current) {
-      bottomSentinelRef.current.scrollIntoView({
-        block: 'end',
+  const scrollMessageToTop = useCallback(
+    (messageId: string, behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return false;
+      }
+      lockScrollTracking(behavior);
+      const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
+      container.scrollTo({
+        top: nextScrollTop,
         behavior,
       });
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior,
-    });
-  }, [lockScrollTracking]);
+
+      if (topAlignmentTimerRef.current !== null) {
+        window.clearTimeout(topAlignmentTimerRef.current);
+        topAlignmentTimerRef.current = null;
+      }
+
+      if (behavior === 'smooth') {
+        topAlignmentTimerRef.current = window.setTimeout(() => {
+          correctMessageTopAlignment(messageId);
+          topAlignmentTimerRef.current = null;
+        }, INITIAL_VIEWPORT_ANIMATION_MS);
+      } else {
+        requestAnimationFrame(() => {
+          correctMessageTopAlignment(messageId);
+        });
+      }
+
+      return true;
+    },
+    [correctMessageTopAlignment, lockScrollTracking],
+  );
+
+  const scrollMessageListToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      if (!container) {
+        return;
+      }
+      lockScrollTracking(behavior);
+      if (bottomSentinelRef.current) {
+        bottomSentinelRef.current.scrollIntoView({
+          block: 'end',
+          behavior,
+        });
+        return;
+      }
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    },
+    [lockScrollTracking],
+  );
 
   const getMessageListContentHeight = useCallback(() => {
     const container = messageListRef.current;
@@ -683,26 +695,28 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!container) {
       return;
     }
-    const isAtBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
   }, [setAutoFollow]);
 
-  const setMessageElement = useCallback((id: string, node: HTMLDivElement | null) => {
-    if (node) {
-      messageElementMapRef.current.set(id, node);
-      if (pendingViewportAnchorRef.current === id) {
-        requestAnimationFrame(() => {
-          const anchored = scrollMessageToTop(id);
-          if (anchored && pendingViewportAnchorRef.current === id) {
-            pendingViewportAnchorRef.current = null;
-          }
-        });
+  const setMessageElement = useCallback(
+    (id: string, node: HTMLDivElement | null) => {
+      if (node) {
+        messageElementMapRef.current.set(id, node);
+        if (pendingViewportAnchorRef.current === id) {
+          requestAnimationFrame(() => {
+            const anchored = scrollMessageToTop(id);
+            if (anchored && pendingViewportAnchorRef.current === id) {
+              pendingViewportAnchorRef.current = null;
+            }
+          });
+        }
+        return;
       }
-      return;
-    }
-    messageElementMapRef.current.delete(id);
-  }, [scrollMessageToTop]);
+      messageElementMapRef.current.delete(id);
+    },
+    [scrollMessageToTop],
+  );
 
   const flushPendingBuffer = useCallback(() => {
     return;
@@ -849,7 +863,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     loadModelOptions();
-  }, []);
+    const refreshModels = () => void loadModelOptions();
+    window.addEventListener('chat2db:model-config-changed', refreshModels);
+    return () => window.removeEventListener('chat2db:model-config-changed', refreshModels);
+  }, [loadModelOptions]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1410,6 +1427,34 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const content = (params.input || '').trim();
       if (!content) return;
 
+      if (params.agentId) {
+        const taskDescription = removeAgentMention(content, params.agentName);
+        if (!taskDescription) {
+          feedback.warning(i18n('task.mention.empty'));
+          return;
+        }
+        try {
+          await agentService.createTask({
+            title: taskDescription.split('\n')[0].slice(0, 256),
+            description: taskDescription,
+            priority: 0,
+            assigneeAgentId: params.agentId,
+            originType: currentSessionId ? 'CHAT' : 'BOARD',
+            originSessionId: currentSessionId || undefined,
+            dataScopeSnapshot: params.agentDataScopes || [],
+          });
+          feedback.success(i18n('task.mention.created'));
+          window.dispatchEvent(
+            new CustomEvent('app:navigateTo', {
+              detail: { page: 'tasks', pathName: '/tasks' },
+            }),
+          );
+        } catch {
+          feedback.error(i18n('task.mention.failed'));
+        }
+        return;
+      }
+
       const selectedValue = params.model || selectedModel?.value;
       if (!selectedValue) {
         feedback.warning(i18n('stream.warning.selectModel'));
@@ -1745,12 +1790,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
-  const renderThoughtStrip = (
-    traceEntries: ITraceEntry[],
-    traceKey: string,
-    active = false,
-    pulse = false,
-  ) => {
+  const renderThoughtStrip = (traceEntries: ITraceEntry[], traceKey: string, active = false, pulse = false) => {
     const hasEntries = traceEntries.length > 0;
     const expanded = !!expandedTraceMap[traceKey];
     const previewText = getTracePreview(traceEntries[traceEntries.length - 1]);
@@ -2031,7 +2071,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 }
                 modelOptions={modelOptions}
                 showCustomModelEntry
-                onCustomModelClick={() => setOpenSettings(true)}
+                onCustomModelClick={() => setSettingPageActiveTab('modelConfig')}
                 customModelText={i18n('setting.modelConfig.entry')}
                 prefillInputState={prefillInputState}
                 autoFocus={isDesktop}
@@ -2040,11 +2080,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           </div>
         </div>
       )}
-      <AIModelConfigModal
-        open={openSettings}
-        onClose={() => setOpenSettings(false)}
-        onChanged={loadModelOptions}
-      />
     </div>
   );
 }

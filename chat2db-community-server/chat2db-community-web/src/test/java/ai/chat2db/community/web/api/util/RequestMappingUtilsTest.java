@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -16,6 +17,7 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RequestMappingUtilsTest {
@@ -86,6 +88,22 @@ class RequestMappingUtilsTest {
         }
     }
 
+    @Test
+    void resolvesDesktopRequestsAgainstPathVariableTemplates() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(TestController.class);
+            context.refresh();
+            new ApplicationContextUtil().setApplicationContext(context);
+
+            RequestMappingInfo mapping = RequestMappingUtils.getRequestMappingInfo("/api/test/tasks/task%201", "GET");
+
+            assertNotNull(mapping);
+            assertEquals("task", mapping.getMethod());
+            assertEquals("task 1", mapping.getPathVariables().get(0));
+            assertNull(RequestMappingUtils.getRequestMappingInfo("/api/test/tasks/task/extra", "GET"));
+        }
+    }
+
     private void resetRequestMappings() throws Exception {
         Field initialized = RequestMappingUtils.class.getDeclaredField("initialized");
         initialized.setAccessible(true);
@@ -103,6 +121,11 @@ class RequestMappingUtilsTest {
         @GetMapping("/value")
         public String value() {
             return "ok";
+        }
+
+        @GetMapping("/tasks/{taskId}")
+        public String task(@PathVariable String taskId) {
+            return taskId;
         }
     }
 

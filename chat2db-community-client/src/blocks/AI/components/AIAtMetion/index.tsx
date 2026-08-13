@@ -5,6 +5,7 @@ import { Cascader, CascaderProps, Flex } from 'antd';
 import useActive from './useActive';
 import { useStyles } from './style';
 import { IconfontSvg } from '@chat2db/ui';
+import { Bot } from 'lucide-react';
 
 export interface RenderChildrenProps<T> {
   /**
@@ -74,12 +75,16 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
       <Flex align="center" gap={4} justify="space-between">
         <Flex align="center" gap={4} className={styles.optionTitle}>
           {/* {node.icon} */}
-          <IconfontSvg
-            size="md"
-            existDark={true}
-            appearance={appearance}
-            code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
-          />
+          {node.kind === 'AGENT' ? (
+            <Bot size={16} />
+          ) : (
+            <IconfontSvg
+              size="md"
+              existDark={true}
+              appearance={appearance}
+              code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
+            />
+          )}
           {node.label}
         </Flex>
         <div className={styles.optionExtra}>{node.extra}</div>

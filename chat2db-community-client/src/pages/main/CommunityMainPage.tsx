@@ -22,6 +22,7 @@ import Dashboard from './dashboard';
 import DashboardMenuList from './dashboard/DashboardMenuList';
 import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
+import Tasks from './tasks';
 import Stream from '../stream';
 
 import { useStyles } from './style';
@@ -46,6 +47,7 @@ function CommunityMainPage() {
     () =>
       createCoreMainNavItems({
         stream: { component: <Stream />, name: i18n('stream.nav.title') },
+        tasks: { component: <Tasks />, name: i18n('task.title') },
         workspace: { component: <Workspace />, name: i18n('workspace.title') },
         dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
       }),
@@ -269,8 +271,8 @@ function CommunityMainPage() {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const { page } = (event as CustomEvent<{ page: string }>).detail;
-      handleChangePageTab({ page, navConfigTmp: navConfig });
+      const { page, pathName } = (event as CustomEvent<{ page: string; pathName?: string }>).detail;
+      handleChangePageTab({ page, pathName, navConfigTmp: navConfig });
     };
     window.addEventListener('app:navigateTo', handler);
     return () => window.removeEventListener('app:navigateTo', handler);

@@ -1,9 +1,9 @@
-import { Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
+import { ClipboardList, Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { INavItem } from '@/typings/main';
 
-export const CORE_MAIN_NAV_KEYS = ['stream', 'workspace', 'dashboard'] as const;
+export const CORE_MAIN_NAV_KEYS = ['stream', 'tasks', 'workspace', 'dashboard'] as const;
 
 type CoreMainNavKey = (typeof CORE_MAIN_NAV_KEYS)[number];
 
@@ -17,6 +17,7 @@ type CoreMainNavContent = Record<
 
 export const CORE_MAIN_NAV_ICONS = {
   stream: MessageSquarePlus,
+  tasks: ClipboardList,
   workspace: Layers,
   dashboard: LayoutDashboard,
 } as const;

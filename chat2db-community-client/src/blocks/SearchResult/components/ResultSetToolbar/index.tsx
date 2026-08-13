@@ -13,7 +13,7 @@ import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/Ed
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
 import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
-import { Columns3Cog } from 'lucide-react';
+import { Columns3 } from 'lucide-react';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -237,7 +237,7 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           onClick={onManageColumns}
           size="sm"
           className={styles.createChartIcon}
-          icon={Columns3Cog}
+          icon={Columns3}
         />
       </div>
       <div className={styles.toolBarRight}>

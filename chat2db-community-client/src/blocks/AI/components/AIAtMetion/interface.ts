@@ -4,6 +4,7 @@ export interface SuggestionItem {
   label: string;
   value: string;
   tableType: string;
+  kind?: 'TABLE' | 'AGENT';
 
   icon?: React.ReactNode;
   children?: SuggestionItem[];

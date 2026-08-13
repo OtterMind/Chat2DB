@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.model.request.ai;
 
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.tools.model.Context;
 import jakarta.validation.Valid;
@@ -19,4 +20,13 @@ public class AiToolContextRequest {
 
     @Valid
     private Context requestContext;
+
+    /**
+     * Present only for Agent Runs. Generic Chat requests retain their existing
+     * connection-context behavior.
+     */
+    @Valid
+    private AgentDataScope agentDataScope;
+
+    private String agentRunId;
 }

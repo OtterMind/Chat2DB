@@ -21,10 +21,8 @@ interface AIModelConfigModalProps {
 }
 
 const providerOptions = [
-  { label: 'OpenAI', value: 'OPENAI' },
-  { label: 'Claude', value: 'CLAUDE' },
-  { label: 'Gemini', value: 'GEMINI' },
-  { label: 'MiniMax', value: 'MINIMAX' },
+  { label: 'OpenAI Compatible', value: 'OPENAI' },
+  { label: 'Anthropic Compatible', value: 'CLAUDE' },
 ];
 
 const emptyFormValues: IAIModelConfigSaveRequest = {
@@ -294,9 +292,7 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               rules={[
                 {
                   required:
-                    (currentProvider === 'OPENAI' ||
-                      currentProvider === 'CLAUDE' ||
-                      currentProvider === 'MINIMAX') &&
+                    (currentProvider === 'OPENAI' || currentProvider === 'CLAUDE') &&
                     !currentConfig?.hasApiKey,
                   message: i18n('setting.modelConfig.validation.apiKey'),
                 },

@@ -3,6 +3,7 @@ package ai.chat2db.community.web.api.converter.ai;
 import java.util.Map;
 
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 import ai.chat2db.community.tools.model.Context;
 import org.apache.commons.lang3.StringUtils;
@@ -31,6 +32,12 @@ public class AiToolContextConverter {
         }
         if (context.get("requestContext") instanceof Context requestContext) {
             param.setRequestContext(requestContext);
+        }
+        if (context.get("agentDataScope") instanceof AgentDataScope agentDataScope) {
+            param.setAgentDataScope(agentDataScope);
+        }
+        if (context.get("agentRunId") instanceof String agentRunId) {
+            param.setAgentRunId(agentRunId);
         }
         return param;
     }
