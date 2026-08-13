@@ -351,6 +351,9 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
     private String agentGoal(AgentRuntimeStartRequest request) {
+        if (StringUtils.isNotBlank(request.getCurrentInput())) {
+            return request.getCurrentInput();
+        }
         StringBuilder goal = new StringBuilder(request.getTask().getTitle());
         if (StringUtils.isNotBlank(request.getTask().getDescription())) {
             goal.append("\n\n## Task Description\n").append(request.getTask().getDescription());

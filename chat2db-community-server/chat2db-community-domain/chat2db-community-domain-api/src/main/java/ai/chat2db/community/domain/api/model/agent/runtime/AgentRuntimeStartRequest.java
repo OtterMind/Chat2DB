@@ -15,6 +15,12 @@ public class AgentRuntimeStartRequest {
     private AgentRun run;
 
     /**
+     * The user request that triggered this run. It is null for the initial
+     * task-created run, where the task definition remains the active goal.
+     */
+    private String currentInput;
+
+    /**
      * Context assembled by the Chat2DB control plane. Runtimes must not load
      * unrestricted task or datasource state on their own.
      */

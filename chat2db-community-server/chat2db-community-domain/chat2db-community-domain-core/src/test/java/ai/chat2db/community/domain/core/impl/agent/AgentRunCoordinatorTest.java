@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeResumeReq
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeStartRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentTaskContextCreateRequest;
 import ai.chat2db.community.domain.api.service.agent.runtime.AgentEventSink;
 import ai.chat2db.community.domain.api.service.agent.runtime.AgentRuntime;
 import ai.chat2db.community.domain.core.impl.agent.runtime.AgentRunCoordinatorImpl;
@@ -42,6 +43,8 @@ class AgentRunCoordinatorTest {
 
         assertEquals(AgentRunStatusEnum.COMPLETED,
                 fixture.runService().get(fixture.creation().getInitialRun().getId()).getStatus());
+        assertEquals("analysis complete",
+                fixture.runService().get(fixture.creation().getInitialRun().getId()).getResultSummary());
         assertEquals(AgentTaskStatusEnum.IN_REVIEW,
                 fixture.taskService().get(fixture.creation().getTask().getId()).getStatus());
         assertEquals(1, fixture.artifactService().listByTask(fixture.creation().getTask().getId()).size());
@@ -96,6 +99,30 @@ class AgentRunCoordinatorTest {
         assertEquals(AgentRunStatusEnum.COMPLETED, fixture.runService().get(runId).getStatus());
     }
 
+    @Test
+    void includesPreviousAnswerAndToolResultInTheNextRunContext() {
+        ContextCapturingRuntime runtime = new ContextCapturingRuntime();
+        Fixture fixture = fixture(runtime);
+        String taskId = fixture.creation().getTask().getId();
+
+        fixture.coordinator().dispatch(fixture.creation().getInitialRun().getId());
+        AgentTaskContextCreateRequest message = new AgentTaskContextCreateRequest();
+        message.setTaskId(taskId);
+        message.setType(ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum.COMMENT);
+        message.setContent("Use the previous result and explain the reporting database.");
+        new AgentTaskContextServiceImpl(fixture.storage(), fixture.taskService()).append(message);
+        AgentTaskCreation followUp = fixture.taskService().createRun(
+                taskId, ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum.USER_MESSAGE);
+        fixture.coordinator().dispatch(followUp.getInitialRun().getId());
+
+        String context = runtime.secondRunContext.get();
+        assertTrue(context.contains("Previous Execution History"));
+        assertTrue(context.contains("Existing databases: sales, reporting"));
+        assertTrue(context.contains("TOOL_RESULT list_all_databases: sales, reporting"));
+        assertTrue(context.contains("Do not repeat a database query"));
+        assertEquals("Use the previous result and explain the reporting database.", runtime.secondRunInput.get());
+    }
+
     private Fixture fixture(AgentRuntime runtime) {
         AgentControlServiceTest.MemoryAgentControlStorage storage =
                 new AgentControlServiceTest.MemoryAgentControlStorage();
@@ -122,11 +149,12 @@ class AgentRunCoordinatorTest {
         AgentRunCoordinatorImpl coordinator = new AgentRunCoordinatorImpl(runService, taskService, agentService,
                 new AgentContextAssemblerImpl(storage), artifactService, storage,
                 new AgentRuntimeRegistry(List.of(runtime)));
-        return new Fixture(coordinator, taskService, runService, artifactService, creation);
+        return new Fixture(coordinator, taskService, runService, artifactService, storage, creation);
     }
 
     private record Fixture(AgentRunCoordinatorImpl coordinator, AgentTaskServiceImpl taskService,
                            AgentRunServiceImpl runService, AgentArtifactServiceImpl artifactService,
+                           AgentControlServiceTest.MemoryAgentControlStorage storage,
                            AgentTaskCreation creation) {
     }
 
@@ -235,6 +263,33 @@ class AgentRunCoordinatorTest {
 
         @Override
         public void cancel(String runId) {
+        }
+    }
+
+    private static final class ContextCapturingRuntime extends CompletingRuntime {
+        private int starts;
+        private final AtomicReference<String> secondRunContext = new AtomicReference<>();
+        private final AtomicReference<String> secondRunInput = new AtomicReference<>();
+
+        @Override
+        public AgentRunHandle start(AgentRuntimeStartRequest request, AgentEventSink eventSink) {
+            starts++;
+            if (starts == 1) {
+                eventSink.emit(event(request, "tool-call", AgentRuntimeEventTypeEnum.TOOL_CALL,
+                        "list_all_databases", Map.of("name", "list_all_databases")));
+                eventSink.emit(event(request, "tool-result", AgentRuntimeEventTypeEnum.TOOL_RESULT,
+                        "sales, reporting", Map.of("name", "list_all_databases")));
+                eventSink.emit(event(request, "first-answer", AgentRuntimeEventTypeEnum.MESSAGE_DELTA,
+                        "Existing databases: sales, reporting", Map.of()));
+            } else {
+                secondRunContext.set(request.getAssembledContext());
+                secondRunInput.set(request.getCurrentInput());
+                eventSink.emit(event(request, "second-answer", AgentRuntimeEventTypeEnum.MESSAGE_DELTA,
+                        "Reused the previous database list.", Map.of()));
+            }
+            eventSink.emit(event(request, "completed-" + starts, AgentRuntimeEventTypeEnum.STATUS,
+                    "COMPLETED", Map.of("status", "COMPLETED")));
+            return new AgentRunHandle();
         }
     }
 }

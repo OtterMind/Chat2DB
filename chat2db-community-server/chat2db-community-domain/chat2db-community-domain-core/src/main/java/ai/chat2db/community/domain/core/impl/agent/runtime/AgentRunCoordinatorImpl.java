@@ -2,7 +2,9 @@ package ai.chat2db.community.domain.core.impl.agent.runtime;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
@@ -10,6 +12,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
+import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeResumeRequest;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeStartRequest;
@@ -41,6 +44,7 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
     private static final String PSEUDO_TOOL_CALL_FAILURE =
             "Agent returned pseudo tool-call markup; no database tool was executed. "
                     + "Use a model endpoint with native tool-calling support.";
+    private static final int MAX_RESULT_SUMMARY_LENGTH = 20_000;
 
     private final IAgentRunService runService;
     private final IAgentTaskService taskService;
@@ -73,9 +77,9 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         AgentDefinition agent = agentService.get(queued.getAgentId());
         AgentRuntime runtime = runtimeRegistry.require(queued.getRuntimeType());
 
-        transitionRun(queued, AgentRunStatusEnum.DISPATCHED, null);
+        transitionRun(queued, AgentRunStatusEnum.DISPATCHED, null, null);
         persistStatus(runId, "DISPATCHED");
-        AgentRun running = transitionRun(runService.get(runId), AgentRunStatusEnum.RUNNING, null);
+        AgentRun running = transitionRun(runService.get(runId), AgentRunStatusEnum.RUNNING, null, null);
         transitionTaskIf(task.getStatus(), task, AgentTaskStatusEnum.TODO, AgentTaskStatusEnum.IN_PROGRESS);
         persistStatus(runId, "RUNNING");
 
@@ -139,7 +143,7 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
             return current;
         }
         runtimeRegistry.require(current.getRuntimeType()).cancel(runId);
-        AgentRun cancelled = transitionRun(runService.get(runId), AgentRunStatusEnum.CANCELLED, null);
+        AgentRun cancelled = transitionRun(runService.get(runId), AgentRunStatusEnum.CANCELLED, null, null);
         persistStatus(runId, "CANCELLED");
         return cancelled;
     }
@@ -149,9 +153,25 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         request.setAgent(agent);
         request.setTask(taskService.get(task.getId()));
         request.setRun(run);
+        request.setCurrentInput(currentUserInput(run, task.getId()));
         request.setAssembledContext(contextAssembler.assemble(
                 agent, request.getTask(), taskService.listRuns(task.getId())));
         return request;
+    }
+
+    private String currentUserInput(AgentRun run, String taskId) {
+        if (run.getTriggerType() != AgentRunTriggerTypeEnum.USER_MESSAGE) {
+            return null;
+        }
+        List<AgentTaskContext> contexts = storage.listTaskContexts(taskId);
+        for (int index = contexts.size() - 1; index >= 0; index--) {
+            AgentTaskContext entry = contexts.get(index);
+            if (entry.getType() == AgentTaskContextTypeEnum.COMMENT
+                    && StringUtils.isNotBlank(entry.getContent())) {
+                return entry.getContent();
+            }
+        }
+        return null;
     }
 
     @Override
@@ -201,18 +221,15 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         if (terminal(current.getStatus()) || current.getStatus() == target) {
             return;
         }
-        transitionRun(current, target, target == AgentRunStatusEnum.FAILED ? message : null);
+        String resultSummary = target == AgentRunStatusEnum.COMPLETED ? completedAnswerSummary(runId) : null;
+        transitionRun(current, target, target == AgentRunStatusEnum.FAILED ? message : null, resultSummary);
     }
 
     private void finalizeCompletedRun(String runId) {
         AgentRun run = runService.get(runId);
         AgentTask task = taskService.get(run.getTaskId());
         AgentDefinition agent = agentService.get(run.getAgentId());
-        String markdown = storage.listRunEvents(runId).stream()
-                .filter(event -> event.getType() == AgentRuntimeEventTypeEnum.MESSAGE_DELTA)
-                .map(AgentRunEvent::getContent)
-                .filter(StringUtils::isNotEmpty)
-                .reduce("", String::concat);
+        String markdown = completedAnswer(runId);
         if (StringUtils.isNotBlank(markdown)) {
             AgentArtifactCreateRequest artifact = new AgentArtifactCreateRequest();
             artifact.setTaskId(task.getId());
@@ -274,16 +291,35 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
             return;
         }
         String resolvedReason = StringUtils.defaultIfBlank(failureReason, "Agent runtime failed");
-        transitionRun(current, AgentRunStatusEnum.FAILED, resolvedReason);
+        transitionRun(current, AgentRunStatusEnum.FAILED, resolvedReason, null);
     }
 
-    private AgentRun transitionRun(AgentRun current, AgentRunStatusEnum target, String failureReason) {
+    private AgentRun transitionRun(AgentRun current, AgentRunStatusEnum target, String failureReason,
+                                   String resultSummary) {
         AgentRunTransitionRequest transition = new AgentRunTransitionRequest();
         transition.setRunId(current.getId());
         transition.setExpectedRevision(current.getRevision());
         transition.setTargetStatus(target);
         transition.setFailureReason(failureReason);
+        transition.setResultSummary(resultSummary);
         return runService.transition(transition);
+    }
+
+    private String completedAnswerSummary(String runId) {
+        String answer = completedAnswer(runId);
+        if (answer.length() <= MAX_RESULT_SUMMARY_LENGTH) {
+            return answer;
+        }
+        return answer.substring(0, MAX_RESULT_SUMMARY_LENGTH) + "\n[truncated]";
+    }
+
+    private String completedAnswer(String runId) {
+        String answer = storage.listRunEvents(runId).stream()
+                .filter(event -> event.getType() == AgentRuntimeEventTypeEnum.MESSAGE_DELTA)
+                .map(AgentRunEvent::getContent)
+                .filter(StringUtils::isNotEmpty)
+                .reduce("", String::concat);
+        return answer;
     }
 
     private void transitionTaskIf(AgentTaskStatusEnum currentStatus, AgentTask task,

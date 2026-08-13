@@ -1,8 +1,11 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
 import ai.chat2db.community.domain.api.service.agent.IAgentContextAssembler;
@@ -16,6 +19,10 @@ import java.util.List;
 public class AgentContextAssemblerImpl implements IAgentContextAssembler {
 
     private static final int MAX_RECENT_CONTEXT = 12;
+    private static final int MAX_RECENT_RUNS = 4;
+    private static final int MAX_RUN_ANSWER_LENGTH = 8_000;
+    private static final int MAX_TOOL_RESULT_LENGTH = 2_000;
+    private static final int MAX_TOOL_EVENTS_PER_RUN = 8;
 
     private final IAgentControlStorage storage;
 
@@ -51,16 +58,26 @@ public class AgentContextAssemblerImpl implements IAgentContextAssembler {
             return;
         }
         List<AgentTaskContext> pinned = entries.stream()
-                .filter(entry -> entry.getType() == ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum.PINNED)
+                .filter(entry -> entry.getType() == AgentTaskContextTypeEnum.PINNED)
                 .toList();
+        AgentTaskContext currentRequest = entries.stream()
+                .filter(entry -> entry.getType() == AgentTaskContextTypeEnum.COMMENT)
+                .reduce((previous, current) -> current)
+                .orElse(null);
         List<AgentTaskContext> recent = entries.stream()
-                .filter(entry -> entry.getType() != ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum.PINNED)
+                .filter(entry -> entry.getType() != AgentTaskContextTypeEnum.PINNED)
+                .filter(entry -> currentRequest == null || !entry.getId().equals(currentRequest.getId()))
                 .skip(Math.max(0, entries.stream()
-                        .filter(entry -> entry.getType() != ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum.PINNED)
+                        .filter(entry -> entry.getType() != AgentTaskContextTypeEnum.PINNED)
+                        .filter(entry -> currentRequest == null || !entry.getId().equals(currentRequest.getId()))
                         .count() - MAX_RECENT_CONTEXT))
                 .toList();
         appendContextGroup(context, "Pinned Context", pinned);
         appendContextGroup(context, "Recent Collaboration Context", recent);
+        if (currentRequest != null) {
+            context.append("\n### Current User Request\n")
+                    .append(currentRequest.getContent()).append('\n');
+        }
     }
 
     private void appendContextGroup(StringBuilder context, String heading, List<AgentTaskContext> entries) {
@@ -105,21 +122,82 @@ public class AgentContextAssemblerImpl implements IAgentContextAssembler {
         List<AgentRun> previousRuns = (runs == null ? List.<AgentRun>of() : runs).stream()
                 .filter(run -> !run.getId().equals(currentRunId))
                 .filter(run -> StringUtils.isNotBlank(run.getResultSummary())
-                        || StringUtils.isNotBlank(run.getFailureReason()))
+                        || StringUtils.isNotBlank(run.getFailureReason())
+                        || hasRuntimeEvidence(run.getId()))
                 .toList();
         if (previousRuns.isEmpty()) {
             return;
         }
-        context.append("\n### Previous Run Summaries\n");
-        for (AgentRun run : previousRuns) {
-            context.append("- run=").append(run.getId()).append(", status=").append(run.getStatus());
-            if (StringUtils.isNotBlank(run.getResultSummary())) {
-                context.append(", summary=").append(run.getResultSummary());
+        int fromIndex = Math.max(0, previousRuns.size() - MAX_RECENT_RUNS);
+        context.append("\n### Previous Execution History\n");
+        context.append("Treat completed answers and tool results below as existing task evidence. ")
+                .append("Do not repeat a database query or other tool call unless the latest user message ")
+                .append("explicitly requests a refresh/action, the previous result is insufficient, or current data is required.\n");
+        for (AgentRun run : previousRuns.subList(fromIndex, previousRuns.size())) {
+            context.append("\n#### Run ").append(run.getAttempt() == null ? run.getId() : run.getAttempt())
+                    .append(" (status=").append(run.getStatus()).append(")\n");
+            List<AgentRunEvent> events = storage.listRunEvents(run.getId());
+            String answer = StringUtils.defaultIfBlank(run.getResultSummary(), answerFrom(events));
+            if (StringUtils.isNotBlank(answer)) {
+                context.append("Final answer:\n")
+                        .append(truncate(answer, MAX_RUN_ANSWER_LENGTH)).append('\n');
             }
             if (StringUtils.isNotBlank(run.getFailureReason())) {
-                context.append(", failure=").append(run.getFailureReason());
+                context.append("Failure: ").append(run.getFailureReason()).append('\n');
+            }
+            appendToolEvidence(context, events);
+        }
+    }
+
+    private boolean hasRuntimeEvidence(String runId) {
+        return storage.listRunEvents(runId).stream().anyMatch(event ->
+                event.getType() == AgentRuntimeEventTypeEnum.MESSAGE_DELTA
+                        || event.getType() == AgentRuntimeEventTypeEnum.TOOL_CALL
+                        || event.getType() == AgentRuntimeEventTypeEnum.TOOL_RESULT);
+    }
+
+    private String answerFrom(List<AgentRunEvent> events) {
+        return events.stream()
+                .filter(event -> event.getType() == AgentRuntimeEventTypeEnum.MESSAGE_DELTA)
+                .map(AgentRunEvent::getContent)
+                .filter(StringUtils::isNotEmpty)
+                .reduce("", String::concat);
+    }
+
+    private void appendToolEvidence(StringBuilder context, List<AgentRunEvent> events) {
+        List<AgentRunEvent> allToolEvents = events.stream().filter(event ->
+                event.getType() == AgentRuntimeEventTypeEnum.TOOL_CALL
+                        || event.getType() == AgentRuntimeEventTypeEnum.TOOL_RESULT).toList();
+        int fromIndex = Math.max(0, allToolEvents.size() - MAX_TOOL_EVENTS_PER_RUN);
+        List<AgentRunEvent> toolEvents = allToolEvents.subList(fromIndex, allToolEvents.size());
+        if (toolEvents.isEmpty()) {
+            return;
+        }
+        context.append("Tool evidence:\n");
+        for (AgentRunEvent event : toolEvents) {
+            String toolName = event.getPayload() == null ? null : String.valueOf(event.getPayload().get("name"));
+            if ("null".equals(toolName)) {
+                toolName = null;
+            }
+            context.append("- ").append(event.getType());
+            if (StringUtils.isNotBlank(toolName)) {
+                context.append(" ").append(toolName);
+            } else if (event.getType() == AgentRuntimeEventTypeEnum.TOOL_CALL
+                    && StringUtils.isNotBlank(event.getContent())) {
+                context.append(" ").append(event.getContent());
+            }
+            if (event.getType() == AgentRuntimeEventTypeEnum.TOOL_RESULT
+                    && StringUtils.isNotBlank(event.getContent())) {
+                context.append(": ").append(truncate(event.getContent(), MAX_TOOL_RESULT_LENGTH));
             }
             context.append('\n');
         }
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "\n[truncated]";
     }
 }
