@@ -38,7 +38,12 @@ import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOpti
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
 import agentService from '@/service/agent';
+import { takePendingConversationTarget } from '@/utils/conversationNavigation';
 import { removeAgentMention } from './components/AIChatInput/agentMentionModel';
+import {
+  cacheAgentTaskDetail,
+  notifyAgentTaskCreated,
+} from '@/pages/main/tasks/taskNavigation';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -317,6 +322,10 @@ interface IChatItem {
   content: string;
   attachments?: IChatAttachment[];
   traceEntries?: ITraceEntry[];
+  messageType?: 'TASK_DELEGATION';
+  taskId?: string;
+  agentId?: string;
+  agentName?: string;
 }
 
 interface IChatRound {
@@ -503,6 +512,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [openingTaskId, setOpeningTaskId] = useState<string>();
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
   const setSettingPageActiveTab = useGlobalStore((state) => state.setSettingPageActiveTab);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -1244,7 +1254,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Load a historical conversation by session ID.
 
   const handleLoadSessionById = useCallback(
-    async (sessionId: string, title?: string) => {
+    async (sessionId: string, title?: string, messageId?: string) => {
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1266,8 +1276,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
       setAutoFollow(true);
       chatInputRef.current?.resetAttachments();
-      pendingViewportAnchorRef.current = null;
-      pendingInitialBottomSyncRef.current = true;
+      pendingViewportAnchorRef.current = messageId || null;
+      pendingInitialBottomSyncRef.current = !messageId;
       initialViewportAnimatingRef.current = false;
       if (initialViewportAnimationTimerRef.current !== null) {
         window.clearTimeout(initialViewportAnimationTimerRef.current);
@@ -1327,6 +1337,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           content: m.content,
           attachments: m.attachments,
           traceEntries: parseTraceEntries(m.reasoningContent),
+          messageType: m.messageType,
+          taskId: m.taskId,
+          agentId: m.agentId,
+          agentName: m.agentName,
         }));
         const latestInProgressSession = inProgressSessionRef.current;
         const shouldRestoreHiddenInProgress =
@@ -1387,7 +1401,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!isPanel) {
       const chatId = getChatIdFromPath();
       if (chatId) {
-        handleLoadSessionById(chatId);
+        const target = takePendingConversationTarget(chatId);
+        handleLoadSessionById(chatId, undefined, target?.messageId);
       }
     }
   }, []);
@@ -1410,8 +1425,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title } = (e as CustomEvent).detail;
-      handleLoadSessionById(sessionId, title);
+      const { sessionId, title, messageId } = (e as CustomEvent).detail;
+      const target = takePendingConversationTarget(sessionId);
+      handleLoadSessionById(sessionId, title, messageId || target?.messageId);
     };
 
     window.addEventListener('stream:loadSession', handleLoadEvent);
@@ -1434,21 +1450,43 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           return;
         }
         try {
-          await agentService.createTask({
-            title: taskDescription.split('\n')[0].slice(0, 256),
-            description: taskDescription,
-            priority: 0,
+          const messageId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`;
+          const created = await agentService.createTaskFromChat({
+            sessionId: currentSessionIdRef.current || undefined,
+            messageId,
+            content,
+            taskDescription,
             assigneeAgentId: params.agentId,
-            originType: currentSessionId ? 'CHAT' : 'BOARD',
-            originSessionId: currentSessionId || undefined,
             dataScopeSnapshot: params.agentDataScopes || [],
+            attachments: params.attachments,
           });
+          const delegatedMessage: IChatItem = {
+            id: created.message.id,
+            role: 'user',
+            content: created.message.content,
+            attachments: created.message.attachments,
+            messageType: created.message.messageType,
+            taskId: created.message.taskId,
+            agentId: created.message.agentId,
+            agentName: created.message.agentName,
+          };
+          setMessages((current) => {
+            const next = current.some((item) => item.id === delegatedMessage.id)
+              ? current
+              : [...current, delegatedMessage];
+            messagesRef.current = next;
+            return next;
+          });
+          if (!currentSessionIdRef.current) {
+            currentSessionIdRef.current = created.sessionId;
+            setCurrentSessionId(created.sessionId);
+            if (!isPanel) setChatIdInPath(created.sessionId);
+          }
+          notifyAgentTaskCreated(created.taskDetail);
+          window.dispatchEvent(new CustomEvent('stream:sessionsChanged'));
           feedback.success(i18n('task.mention.created'));
-          window.dispatchEvent(
-            new CustomEvent('app:navigateTo', {
-              detail: { page: 'tasks', pathName: '/tasks' },
-            }),
-          );
         } catch {
           feedback.error(i18n('task.mention.failed'));
         }
@@ -1570,8 +1608,30 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       selectedModel?.value,
       request,
       scrollMessageListToBottom,
+      isPanel,
+      setChatIdInPath,
     ],
   );
+
+  const openDelegatedTask = useCallback(async (message: IChatItem) => {
+    if (!message.taskId || openingTaskId) return;
+    setOpeningTaskId(message.taskId);
+    try {
+      const taskDetail = await agentService.getTask({ taskId: message.taskId });
+      if (taskDetail.task.archivedAt) {
+        feedback.warning(i18n('task.delegation.archived'));
+        return;
+      }
+      cacheAgentTaskDetail(taskDetail);
+      window.dispatchEvent(new CustomEvent('app:navigateTo', {
+        detail: { page: 'tasks', pathName: `/tasks/${message.taskId}` },
+      }));
+    } catch {
+      feedback.warning(i18n('task.delegation.unavailable'));
+    } finally {
+      setOpeningTaskId(undefined);
+    }
+  }, [openingTaskId]);
 
   // Handle externally triggered messages, such as context-menu actions.
 
@@ -1885,6 +1945,24 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                       </div>
                     ) : null}
                     <div className={styles.userBubble}>{round.user.content}</div>
+                    {round.user.messageType === 'TASK_DELEGATION' && round.user.taskId ? (
+                      <div className={styles.taskDelegationCard}>
+                        <div className={styles.taskDelegationSummary}>
+                          <strong>{i18n('task.delegation.created', round.user.taskId.slice(0, 6).toUpperCase())}</strong>
+                          <span>{round.user.agentName ? `@${round.user.agentName}` : i18n('task.mention.agent')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.taskDelegationLink}
+                          disabled={openingTaskId === round.user.taskId}
+                          onClick={() => void openDelegatedTask(round.user!)}
+                        >
+                          {openingTaskId === round.user.taskId
+                            ? i18n('task.delegation.loading')
+                            : i18n('task.delegation.open')}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}

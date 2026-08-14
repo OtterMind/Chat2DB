@@ -12,6 +12,10 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentTaskMessageReque
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskContextCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskLifecycleRequest;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
+import ai.chat2db.community.domain.api.model.agent.AgentChatTaskCreation;
+import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
+import ai.chat2db.community.domain.api.model.ai.AiChatSession;
+import ai.chat2db.community.domain.api.model.request.agent.AgentChatTaskCreateRequest;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunCoordinator;
@@ -21,6 +25,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentArtifactService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
+import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationHandler;
@@ -237,7 +242,8 @@ class AgentControlControllerTest {
             throw new UnsupportedOperationException(method.getName());
         });
         AgentControlController controller = new AgentControlController(agentService, taskService, runService,
-                coordinator, artifactService, toolGateway, publicationService, contextService, () -> 7L);
+                coordinator, artifactService, toolGateway, publicationService, contextService,
+                unsupportedChatTaskService(), () -> 7L);
         AgentTaskMessageRequest request = new AgentTaskMessageRequest();
         request.setContent("Compare the result with last month.");
 
@@ -247,6 +253,57 @@ class AgentControlControllerTest {
         assertEquals(7L, capturedContext.get().getCreatedBy());
         assertEquals(AgentRunTriggerTypeEnum.USER_MESSAGE, capturedTrigger.get());
         assertEquals("run-2", dispatchedRunId.get());
+    }
+
+    @Test
+    void chatTaskCreationBindsCurrentIdentityAndReturnsPersistedReferences() {
+        AtomicReference<AgentChatTaskCreateRequest> captured = new AtomicReference<>();
+        AgentTask delegatedTask = task("task-from-chat", 7L);
+        AiChatSession session = new AiChatSession();
+        session.setId("session-1");
+        AiChatMessage message = new AiChatMessage();
+        message.setId("message-1");
+        message.setTaskId(delegatedTask.getId());
+        IAgentChatTaskService chatTaskService = proxy(IAgentChatTaskService.class, (proxy, method, args) -> {
+            captured.set((AgentChatTaskCreateRequest) args[0]);
+            return new AgentChatTaskCreation(
+                    session, message, new AgentTaskCreation(delegatedTask, null));
+        });
+        IAgentDefinitionService agentService = proxy(IAgentDefinitionService.class,
+                (proxy, method, args) -> List.of());
+        IAgentTaskService taskService = proxy(IAgentTaskService.class, (proxy, method, args) -> {
+            return switch (method.getName()) {
+                case "get" -> delegatedTask;
+                case "listRuns" -> List.of();
+                default -> throw new UnsupportedOperationException(method.getName());
+            };
+        });
+        IAgentRunService runService = proxy(IAgentRunService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentRunCoordinator coordinator = proxy(IAgentRunCoordinator.class,
+                (proxy, method, args) -> List.of());
+        IAgentArtifactService artifactService = proxy(IAgentArtifactService.class, (proxy, method, args) -> {
+            if ("listByTask".equals(method.getName())) return List.of();
+            throw new UnsupportedOperationException(method.getName());
+        });
+        IAgentToolGateway toolGateway = proxy(IAgentToolGateway.class,
+                (proxy, method, args) -> List.of());
+        IAgentArtifactPublicationService publicationService = proxy(
+                IAgentArtifactPublicationService.class, (proxy, method, args) -> List.of());
+        IAgentTaskContextService contextService = proxy(IAgentTaskContextService.class,
+                (proxy, method, args) -> List.of());
+        AgentControlController controller = new AgentControlController(agentService, taskService, runService,
+                coordinator, artifactService, toolGateway, publicationService, contextService,
+                chatTaskService, () -> 7L);
+        AgentChatTaskCreateRequest request = new AgentChatTaskCreateRequest();
+        request.setCreatedBy(999L);
+
+        var response = controller.createTaskFromChat(request).getData();
+
+        assertEquals(7L, captured.get().getCreatedBy());
+        assertEquals("session-1", response.getSessionId());
+        assertEquals("message-1", response.getMessage().getId());
+        assertEquals("task-from-chat", response.getTaskDetail().getTask().getId());
     }
 
     private AgentControlController controller(IAgentDefinitionService agentService, IAgentTaskService taskService) {
@@ -274,7 +331,13 @@ class AgentControlControllerTest {
         IAgentTaskContextService contextService = proxy(IAgentTaskContextService.class,
                 (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
         return new AgentControlController(agentService, taskService, runService, coordinator,
-                artifactService, toolGateway, publicationService, contextService, () -> 7L);
+                artifactService, toolGateway, publicationService, contextService,
+                unsupportedChatTaskService(), () -> 7L);
+    }
+
+    private IAgentChatTaskService unsupportedChatTaskService() {
+        return proxy(IAgentChatTaskService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
     }
 
     private AgentDefinition agent(String id, Long createdBy) {

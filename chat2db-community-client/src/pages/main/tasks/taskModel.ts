@@ -220,6 +220,12 @@ export function groupTasks(tasks: AgentTask[]) {
   }));
 }
 
+export function upsertTask(tasks: AgentTask[], task: AgentTask): AgentTask[] {
+  const index = tasks.findIndex((item) => item.id === task.id);
+  if (index < 0) return [task, ...tasks];
+  return tasks.map((item) => (item.id === task.id ? task : item));
+}
+
 export function currentArtifactVersion(detail: AgentArtifactDetail): AgentArtifactVersion | undefined {
   return detail.versions.find((version) => version.version === detail.artifact.currentVersion);
 }

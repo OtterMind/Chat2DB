@@ -21,5 +21,13 @@ public class AiChatMessage {
 
     private List<ChatAttachment> attachments = new ArrayList<>();
 
+    private String messageType;
+
+    private String taskId;
+
+    private String agentId;
+
+    private String agentName;
+
     private LocalDateTime gmtCreate;
 }

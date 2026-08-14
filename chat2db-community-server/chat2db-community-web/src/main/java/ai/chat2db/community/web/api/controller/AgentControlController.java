@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
+import ai.chat2db.community.domain.api.model.agent.AgentChatTaskCreation;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
@@ -16,6 +17,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentArtifactPublishR
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentChatTaskCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskScopeSyncRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskLifecycleRequest;
@@ -33,10 +35,12 @@ import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
+import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.model.response.agent.AgentTaskDetailResponse;
+import ai.chat2db.community.web.api.model.response.agent.AgentChatTaskCreateResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,6 +65,7 @@ public class AgentControlController {
     private final IAgentToolGateway toolGateway;
     private final IAgentArtifactPublicationService publicationService;
     private final IAgentTaskContextService contextService;
+    private final IAgentChatTaskService chatTaskService;
     private final IIdentityService identityService;
 
     public AgentControlController(IAgentDefinitionService agentService, IAgentTaskService taskService,
@@ -68,6 +73,7 @@ public class AgentControlController {
                                   IAgentArtifactService artifactService, IAgentToolGateway toolGateway,
                                   IAgentArtifactPublicationService publicationService,
                                   IAgentTaskContextService contextService,
+                                  IAgentChatTaskService chatTaskService,
                                   IIdentityService identityService) {
         this.agentService = agentService;
         this.taskService = taskService;
@@ -77,6 +83,7 @@ public class AgentControlController {
         this.toolGateway = toolGateway;
         this.publicationService = publicationService;
         this.contextService = contextService;
+        this.chatTaskService = chatTaskService;
         this.identityService = identityService;
     }
 
@@ -136,6 +143,21 @@ public class AgentControlController {
         AgentTaskCreation creation = taskService.create(request);
         runCoordinator.dispatch(creation.getInitialRun().getId());
         return DataResult.of(detail(creation.getTask().getId()));
+    }
+
+    @PostMapping("/tasks/from-chat")
+    public DataResult<AgentChatTaskCreateResponse> createTaskFromChat(
+            @RequestBody AgentChatTaskCreateRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("chat task request is required");
+        }
+        request.setCreatedBy(identityService.currentUserId());
+        AgentChatTaskCreation creation = chatTaskService.create(request);
+        AgentChatTaskCreateResponse response = new AgentChatTaskCreateResponse();
+        response.setSessionId(creation.getSession().getId());
+        response.setMessage(creation.getMessage());
+        response.setTaskDetail(detail(creation.getTaskCreation().getTask().getId()));
+        return DataResult.of(response);
     }
 
     @GetMapping("/tasks")

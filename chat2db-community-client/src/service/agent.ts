@@ -1,4 +1,6 @@
 import createRequest from './base';
+import type { IChatAttachment } from './aiAttachment';
+import type { IChatMessage } from './aiStream';
 
 export type AgentTaskStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'BLOCKED' | 'DONE' | 'CANCELLED';
 
@@ -53,6 +55,7 @@ export interface AgentTask {
   assigneeAgentId: string;
   originType: 'CHAT' | 'BOARD' | 'CONSOLE' | 'API';
   originSessionId?: string;
+  originMessageId?: string;
   dataScopeSnapshot: AgentDataScope[];
   dataScopeSyncedAt?: string | number;
   dataScopeSyncedFromAgentRevision?: number;
@@ -168,7 +171,7 @@ export interface AgentArtifactDashboardRef {
   publishedAt: string | number;
 }
 
-export type AgentTaskContextType = 'PINNED' | 'COMMENT' | 'ATTACHMENT';
+export type AgentTaskContextType = 'PINNED' | 'COMMENT' | 'ATTACHMENT' | 'CHAT_SNAPSHOT';
 
 export interface AgentTaskContext {
   id: string;
@@ -207,6 +210,22 @@ export interface CreateAgentTaskRequest {
   dataScopeSnapshot: AgentDataScope[];
 }
 
+export interface CreateAgentChatTaskRequest {
+  sessionId?: string;
+  messageId: string;
+  content: string;
+  taskDescription: string;
+  assigneeAgentId: string;
+  dataScopeSnapshot: AgentDataScope[];
+  attachments?: IChatAttachment[];
+}
+
+export interface AgentChatTaskCreateResponse {
+  sessionId: string;
+  message: IChatMessage;
+  taskDetail: AgentTaskDetail;
+}
+
 export interface CreateAgentDefinitionRequest {
   avatar?: string;
   name: string;
@@ -241,6 +260,10 @@ const listTasks = createRequest<void, AgentTask[]>('/api/agent/tasks');
 const listArchivedTasks = createRequest<void, AgentTask[]>('/api/agent/tasks/archived');
 const getTask = createRequest<{ taskId: string }, AgentTaskDetail>('/api/agent/tasks/:taskId');
 const createTask = createRequest<CreateAgentTaskRequest, AgentTaskDetail>('/api/agent/tasks', { method: 'post' });
+const createTaskFromChat = createRequest<CreateAgentChatTaskRequest, AgentChatTaskCreateResponse>(
+  '/api/agent/tasks/from-chat',
+  { method: 'post' },
+);
 const transitionTask = createRequest<
   { taskId: string; expectedRevision: number; targetStatus: AgentTaskStatus },
   AgentTask
@@ -298,6 +321,7 @@ export default {
   listArchivedTasks,
   getTask,
   createTask,
+  createTaskFromChat,
   transitionTask,
   syncTaskScopes,
   archiveTask,

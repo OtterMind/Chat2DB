@@ -4,6 +4,8 @@ import type { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { TableDataType } from '@/constants/table';
 import i18n from '@/i18n';
 import { listAIModelConfigs } from '@/service/aiModelConfig';
+import aiStreamService from '@/service/aiStream';
+import { setPendingConversationTarget } from '@/utils/conversationNavigation';
 import agentService, {
   type AgentApproval,
   type AgentArtifactContentMode,
@@ -78,7 +80,13 @@ import {
   extractAgentChartPresentation,
   groupTasks,
   TASK_TRANSITIONS,
+  upsertTask,
 } from './taskModel';
+import {
+  AGENT_TASK_CREATED_EVENT,
+  cacheAgentTaskDetail,
+  getCachedAgentTaskDetail,
+} from './taskNavigation';
 import { useStyles } from './style';
 import AgentManagerModal from './AgentManagerModal';
 import { AgentAvatar, RunStatusMark, RuntimeBadge } from './TaskPrimitives';
@@ -369,7 +377,8 @@ export default function Tasks() {
       const result = await agentService.getTask({ taskId });
       if (detailRequestTaskId.current !== taskId) return;
       setDetail(result);
-      setTasks((current) => current.map((task) => (task.id === result.task.id ? result.task : task)));
+      cacheAgentTaskDetail(result);
+      setTasks((current) => upsertTask(current, result.task));
     } catch {
       if (!silent) feedback.error(i18n('task.detail.loadFailed'));
     } finally {
@@ -383,6 +392,17 @@ export default function Tasks() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const handleTaskCreated = (event: Event) => {
+      const created = (event as CustomEvent<AgentTaskDetail>).detail;
+      if (!created?.task) return;
+      cacheAgentTaskDetail(created);
+      setTasks((current) => upsertTask(current, created.task));
+    };
+    window.addEventListener(AGENT_TASK_CREATED_EVENT, handleTaskCreated);
+    return () => window.removeEventListener(AGENT_TASK_CREATED_EVENT, handleTaskCreated);
+  }, []);
 
   useEffect(() => {
     const routePath = window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
@@ -402,7 +422,14 @@ export default function Tasks() {
     ) {
       if (archiveView) setArchiveView(false);
       setSelectedTaskId(path[2]);
-      void loadDetail(path[2]);
+      const cached = getCachedAgentTaskDetail(path[2]);
+      if (cached) {
+        setDetail(cached);
+        setTasks((current) => upsertTask(current, cached.task));
+        void loadDetail(path[2], true);
+      } else {
+        void loadDetail(path[2]);
+      }
       return;
     }
     if (path[1] === 'tasks' && !path[2] && archiveView) setArchiveView(false);
@@ -454,6 +481,35 @@ export default function Tasks() {
     }
     window.history.pushState({}, '', url.toString());
   }, []);
+
+  const openOriginConversation = useCallback(async () => {
+    const sessionId = detail?.task.originSessionId;
+    if (!sessionId) return;
+    try {
+      const sessions = (await aiStreamService.getChatSessions(undefined as void)) || [];
+      const session = sessions.find((item) => item.id === sessionId);
+      if (!session) {
+        feedback.warning(i18n('task.origin.conversationUnavailable'));
+        return;
+      }
+      setPendingConversationTarget({
+        sessionId: session.id,
+        messageId: detail?.task.originMessageId,
+      });
+      window.dispatchEvent(new CustomEvent('app:navigateTo', {
+        detail: { page: 'stream', pathName: `/stream/${session.id}` },
+      }));
+      window.dispatchEvent(new CustomEvent('stream:loadSession', {
+        detail: {
+          sessionId: session.id,
+          title: session.title,
+          messageId: detail?.task.originMessageId,
+        },
+      }));
+    } catch {
+      feedback.warning(i18n('task.origin.conversationUnavailable'));
+    }
+  }, [detail?.task.originMessageId, detail?.task.originSessionId]);
 
   const createTask = async () => {
     const values = await createForm.validateFields();
@@ -804,7 +860,11 @@ export default function Tasks() {
                     </div>
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.field.origin')}</span>
-                      <span>{detail.task.originType}</span>
+                      {detail.task.originType === 'CHAT' && detail.task.originSessionId ? (
+                        <Button type="link" size="small" onClick={() => void openOriginConversation()}>
+                          {i18n('task.origin.openConversation')}
+                        </Button>
+                      ) : <span>{detail.task.originType}</span>}
                     </div>
                   </div>
                   <div className={styles.propertyBlock}>

@@ -22,6 +22,14 @@ public class AiChatMessageResponse {
 
     private List<ai.chat2db.community.domain.api.model.ai.ChatAttachment> attachments = new ArrayList<>();
 
+    private String messageType;
+
+    private String taskId;
+
+    private String agentId;
+
+    private String agentName;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime gmtCreate;
 }

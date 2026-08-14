@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 
 import type { AgentArtifactDetail, AgentTask } from '@/service/agent';
 import {
+  setPendingConversationTarget,
+  takePendingConversationTarget,
+} from '@/utils/conversationNavigation';
+import {
   artifactCharts,
   artifactMarkdown,
   artifactTables,
@@ -11,6 +15,7 @@ import {
   extractAgentChartPresentation,
   groupTasks,
   TASK_TRANSITIONS,
+  upsertTask,
 } from './taskModel';
 
 const task = (id: string, status: AgentTask['status']): AgentTask =>
@@ -53,6 +58,32 @@ assert.equal(
   'a completed callback with a failed SQL outcome must be presented as failed',
 );
 assert.deepEqual(TASK_TRANSITIONS.DONE, [], 'terminal tasks must not expose an invalid transition');
+assert.deepEqual(
+  upsertTask([task('old', 'TODO')], task('new', 'IN_PROGRESS')).map((item) => item.id),
+  ['new', 'old'],
+  'newly delegated tasks should be inserted into an already-mounted board',
+);
+assert.equal(
+  upsertTask([task('same', 'TODO')], task('same', 'DONE'))[0].status,
+  'DONE',
+  'existing delegated tasks should be refreshed in place',
+);
+setPendingConversationTarget({ sessionId: 'source-session', messageId: 'delegation-message' });
+assert.equal(
+  takePendingConversationTarget('another-session'),
+  undefined,
+  'a pending source anchor must not be consumed by another conversation',
+);
+assert.deepEqual(
+  takePendingConversationTarget('source-session'),
+  { sessionId: 'source-session', messageId: 'delegation-message' },
+  'the source conversation should consume its delegated-message anchor once',
+);
+assert.equal(
+  takePendingConversationTarget('source-session'),
+  undefined,
+  'a consumed source anchor must not affect later navigation',
+);
 
 const artifact = {
   artifact: { id: 'artifact', currentVersion: 2 },
