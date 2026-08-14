@@ -1,0 +1,103 @@
+name: Build YouTube Auto-Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a00250-chat2db
+    paths:
+      - 'youtube-auto-uploader/**'
+      - '.github/workflows/build-youtube-uploader.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: youtube-uploader-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-build:
+    name: Test and package Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        working-directory: youtube-auto-uploader
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+          cache-dependency-path: youtube-auto-uploader/package-lock.json
+
+      - name: Install dependencies for tests
+        run: npm ci --ignore-scripts
+
+      - name: Build Node SQLite binding
+        run: npm rebuild better-sqlite3
+
+      - name: Static checks
+        run: |
+          npm run typecheck
+          npm run lint
+
+      - name: Core smoke tests
+        run: npm run smoke
+
+      - name: Download and verify Windows media tools
+        run: npm run prebuild:win
+
+      - name: Binary smoke tests
+        run: npm run smoke:binaries
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-builder install-app-deps
+
+      - name: Build NSIS and portable applications
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run pack:win
+
+      - name: Verify packaged artifacts
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter 'YouTube Auto-Uploader 1.0.0 x64.exe' | Select-Object -First 1
+          $portable = Get-ChildItem dist -Filter 'YouTube Auto-Uploader 1.0.0 Portable.exe' | Select-Object -First 1
+
+          if (-not $installer) {
+            throw 'NSIS installer was not created'
+          }
+
+          if (-not $portable) {
+            throw 'Portable executable was not created'
+          }
+
+          if ($installer.Length -gt 250MB) {
+            throw "Installer exceeds 250 MB: $($installer.Length)"
+          }
+
+          @($installer, $portable) | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)" | Add-Content dist/SHA256SUMS.txt
+          }
+
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Upload Windows applications
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTube-Auto-Uploader-1.0.0-Windows-x64
+          path: |
+            youtube-auto-uploader/dist/YouTube Auto-Uploader 1.0.0 x64.exe
+            youtube-auto-uploader/dist/YouTube Auto-Uploader 1.0.0 Portable.exe
+            youtube-auto-uploader/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
