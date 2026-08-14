@@ -202,14 +202,20 @@ export default function AboutUs() {
               >
                 {i18n('setting.text.autoInstallNewVersion')}
               </Checkbox>
-              <Checkbox
-                onChange={(e) => {
-                  void updateHotUpdateConfig('receiveBeta', e.target.checked);
-                }}
-                checked={Boolean(hotUpdateConfig.receiveBeta)}
-              >
-                {i18n('setting.text.receiveBetaVersion')}
-              </Checkbox>
+              {isCommunityEnv ? (
+                <div className={styles.developmentUpdateHint}>
+                  {i18n('setting.text.receiveBetaUnavailable')}
+                </div>
+              ) : (
+                <Checkbox
+                  onChange={(e) => {
+                    void updateHotUpdateConfig('receiveBeta', e.target.checked);
+                  }}
+                  checked={Boolean(hotUpdateConfig.receiveBeta)}
+                >
+                  {i18n('setting.text.receiveBetaVersion')}
+                </Checkbox>
+              )}
             </div>
           </div>
         </>

@@ -4,9 +4,11 @@ import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
+import { getManualRecoveryAction } from '@/store/global/slices/hotUpdate/action';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
+import { IUpdateDetail } from '@/typings/settings';
 import { Icon, staticMessage } from '@chat2db/ui';
 import { Button, notification } from 'antd';
 import { useEffect } from 'react';
@@ -20,6 +22,21 @@ const createTop = () => {
       return 50;
     default:
       return 26;
+  }
+};
+
+const getFailureDetail = (reason?: string): string | undefined => {
+  switch (reason) {
+    case 'NETWORK':
+      return i18n('setting.text.updateFailureNetwork');
+    case 'INVALID_MANIFEST':
+      return i18n('setting.text.updateFailureInvalidManifest');
+    case 'CHECKSUM_MISMATCH':
+      return i18n('setting.text.updateFailureChecksumMismatch');
+    case 'UNSUPPORTED_REDIRECT':
+      return i18n('setting.text.updateFailureUnsupportedRedirect');
+    default:
+      return undefined;
   }
 };
 
@@ -62,10 +79,7 @@ const UpdateDetection = () => {
     }
     JcefEventBus.on(
       JavaPushActionType.AUTO_PROGRESS,
-      (data: {
-        status: UpdatedStatus; // update status
-        progress: number; // update progress
-      }) => {
+      (data: IUpdateDetail) => {
         setUpdateDetail(data);
       },
     );
@@ -122,6 +136,9 @@ const UpdateDetection = () => {
           return;
         }
         openNotificationAuto();
+        break;
+      case UpdatedStatus.UpdateFailed:
+        openUpdateFailedNotification();
         break;
       default:
         break;
@@ -229,6 +246,57 @@ const UpdateDetection = () => {
         width: 300,
       },
       description: btn,
+      key,
+    });
+  };
+
+  // Notify the user when an automatic check or download failed and offer a manual GitHub Release fallback.
+  const openUpdateFailedNotification = () => {
+    const key = 'update-failed';
+    const recoveryAction = getManualRecoveryAction(updateDetail);
+    const isCheckFailure = !updateDetail.version || updateDetail.failureStage === 'CHECK';
+    const message = isCheckFailure
+      ? i18n('setting.text.updateCheckFailed')
+      : i18n('setting.text.updateDownloadFailed');
+    const failureDetail = getFailureDetail(updateDetail.failureReason);
+
+    const btn = recoveryAction ? (
+      <div className={styles.btnBox}>
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            openWebPage(recoveryAction.url);
+            staticMessage.success(i18n('setting.text.changeLogOpenedInBrowser'));
+            notificationApi.destroy();
+          }}
+        >
+          {recoveryAction.version
+            ? i18n('setting.button.downloadVersionManually', `v${recoveryAction.version}`)
+            : i18n('setting.button.openGitHubReleases')}
+        </Button>
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            notificationApi.destroy();
+          }}
+        >
+          {i18n('common.text.laterOn')}
+        </Button>
+      </div>
+    ) : null;
+
+    notificationApi.error({
+      className: styles.notification,
+      duration: null,
+      message,
+      description: (
+        <div>
+          {failureDetail && <div>{failureDetail}</div>}
+          {btn}
+        </div>
+      ),
       key,
     });
   };

@@ -69,11 +69,22 @@ export interface IHotUpdateConfig {
 
 export type { ShortcutOverride, ShortcutOverrides } from '@/constants/shortcut';
 
+export type UpdateFailureStage = 'CHECK' | 'DOWNLOAD';
+export type UpdateFailureReason =
+  | 'NETWORK'
+  | 'INVALID_MANIFEST'
+  | 'CHECKSUM_MISMATCH'
+  | 'UNSUPPORTED_REDIRECT'
+  | 'UNKNOWN';
+
 export interface IUpdateDetail {
   status?: UpdatedStatus; // update status
   progress?: number; // update progress
   version?: string; // Latest version number
   releaseNotes?: string; // Release notes for the latest version
+  releasePageUrl?: string; // Validated GitHub Release page URL for manual recovery
+  failureStage?: UpdateFailureStage; // Stage where the failure occurred
+  failureReason?: UpdateFailureReason; // Categorized failure reason
 }
 
 export interface IUpdatePreferences {

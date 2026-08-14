@@ -1,12 +1,18 @@
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { UpdatedStatus } from './status';
 import jcefApi from '@/jcef';
-import { IHotUpdateConfig } from '@/typings/settings';
+import { IHotUpdateConfig, IUpdateDetail, UpdateFailureReason, UpdateFailureStage } from '@/typings/settings';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import produce from 'immer';
 import type { StateCreator } from 'zustand/vanilla';
 import { GlobalStore } from '../../store';
 import { createCheckUpdateCoordinator } from './checkCoordinator';
+import {
+  COMMUNITY_GITHUB_RELEASES_URL,
+  getCommunityGitHubReleaseTagUrl,
+} from '@/constants/settings';
+
+export { COMMUNITY_GITHUB_RELEASES_URL, getCommunityGitHubReleaseTagUrl };
 
 export interface HotUpdateAction {
   // Update and restart the app
@@ -20,6 +26,37 @@ export interface HotUpdateAction {
   // Update hot update configuration
   updateHotUpdateConfig: (property: keyof IHotUpdateConfig, value: any) => Promise<void>;
 }
+
+export type ManualRecoveryAction = {
+  url: string;
+  version?: string;
+};
+
+/**
+ * Derive the user-clicked manual recovery action for an update failure.
+ * Returns null when there is no failure or when no recovery URL can be built.
+ * This helper never opens a browser; callers must invoke openWebPage themselves.
+ */
+export const getManualRecoveryAction = (detail: IUpdateDetail): ManualRecoveryAction | null => {
+  if (detail.status !== UpdatedStatus.UpdateFailed) {
+    return null;
+  }
+  if (!detail.version) {
+    return { url: COMMUNITY_GITHUB_RELEASES_URL };
+  }
+  return {
+    url: detail.releasePageUrl || getCommunityGitHubReleaseTagUrl(detail.version),
+    version: detail.version,
+  };
+};
+
+const buildDownloadFailureDetail = (currentDetail: IUpdateDetail): IUpdateDetail => ({
+  status: UpdatedStatus.UpdateFailed,
+  failureStage: 'DOWNLOAD' as UpdateFailureStage,
+  failureReason: currentDetail.failureReason || ('UNKNOWN' as UpdateFailureReason),
+  releasePageUrl: currentDetail.releasePageUrl,
+  version: currentDetail.version,
+});
 
 export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtools', never]], [], HotUpdateAction> = (
   set,
@@ -98,13 +135,13 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
         .triggerDownload()
         .then((downloaded) => {
           if (!downloaded) {
-            get().setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+            get().setUpdateDetail(buildDownloadFailureDetail(get().updateDetail));
             return false;
           }
           return true;
         })
         .catch(() => {
-          get().setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+          get().setUpdateDetail(buildDownloadFailureDetail(get().updateDetail));
           return false;
         })
         .finally(() => {

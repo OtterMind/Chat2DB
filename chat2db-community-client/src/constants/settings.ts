@@ -12,6 +12,10 @@ export enum LangType {
   KO_KR = 'ko-KR',
 }
 
+export const COMMUNITY_GITHUB_RELEASES_URL = 'https://github.com/OtterMind/Chat2DB/releases';
+export const getCommunityGitHubReleaseTagUrl = (version: string) =>
+  `https://github.com/OtterMind/Chat2DB/releases/tag/v${version}`;
+
 export const DEFAULT_BASE_SETTINGS: GlobalBaseSettings = {
   appearance: 'dark',
   language: getUserComputerLanguage(),

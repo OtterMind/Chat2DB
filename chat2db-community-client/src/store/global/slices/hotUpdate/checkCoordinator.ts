@@ -18,11 +18,14 @@ export const createCheckUpdateCoordinator = (requestCheck: CheckUpdateRequest, s
           status: res.status,
           version: res.version,
           releaseNotes: res.releaseNotes,
+          releasePageUrl: res.releasePageUrl,
+          failureStage: res.failureStage,
+          failureReason: res.failureReason,
         });
         return res.status === UpdatedStatus.Available;
       })
       .catch(() => {
-        setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+        setUpdateDetail({ status: UpdatedStatus.UpdateFailed, failureStage: 'CHECK', failureReason: 'UNKNOWN' });
         return false;
       })
       .finally(() => {
