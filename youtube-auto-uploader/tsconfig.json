@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target":"ES2022","module":"ESNext","moduleResolution":"Bundler","lib":["ES2022","DOM","DOM.Iterable"],
+    "jsx":"react-jsx","strict":true,"noImplicitAny":true,"noUncheckedIndexedAccess":true,
+    "skipLibCheck":true,"esModuleInterop":true,"resolveJsonModule":true,"baseUrl":".","paths":{"@/*":["src/*"]},
+    "types":["node","vite/client"]
+  },
+  "include":["src","electron","tests","electron.vite.config.ts","vite.config.ts"]
+}

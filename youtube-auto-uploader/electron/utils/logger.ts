@@ -1,0 +1,1 @@
+import log from 'electron-log/main'; export const logger=log.scope('app'); export function configureLogger(file:string):void{log.transports.file.resolvePathFn=()=>file;log.transports.file.level='info';log.transports.console.level='debug'}

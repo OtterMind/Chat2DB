@@ -1,0 +1,2 @@
+import React from 'react';import ReactDOM from 'react-dom/client';import {HashRouter} from 'react-router-dom';import {Toaster} from 'sonner';import App from './App';import {installBrowserMock} from './lib/browserMock';import './index.css';
+installBrowserMock();const root=document.getElementById('root');if(!root)throw new Error('Root element missing');ReactDOM.createRoot(root).render(<React.StrictMode><HashRouter><App/><Toaster richColors position="bottom-right"/></HashRouter></React.StrictMode>);

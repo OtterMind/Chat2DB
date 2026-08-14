@@ -1,0 +1,1 @@
+{"style":"default","tsx":true,"tailwind":{"config":"tailwind.config.js","css":"src/index.css","baseColor":"slate","cssVariables":false},"aliases":{"components":"@/components","utils":"@/lib/utils"}}

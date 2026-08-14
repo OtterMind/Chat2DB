@@ -1,0 +1,1 @@
+import {Outlet} from 'react-router-dom';import {Sidebar} from './Sidebar';import {TopBar} from './TopBar';export function Layout():JSX.Element{return <><Sidebar/><TopBar/><main className="app-main ml-[260px] pt-14 min-h-screen"><Outlet/></main></>}

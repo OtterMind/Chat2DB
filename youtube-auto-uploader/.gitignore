@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+.node-headers/
+resources/binaries/*.exe
+resources/*.zip
+*.partial
+*.log
