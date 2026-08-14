@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EasyClip Desktop",
+  "version": "0.1.0",
+  "identifier": "ai.easyclip.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "EasyClip Desktop",
+        "width": 1360,
+        "height": 850,
+        "minWidth": 1050,
+        "minHeight": 700,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Video",
+    "shortDescription": "Local AI video clipping studio",
+    "longDescription": "Create captioned vertical clips from your own videos using local AI.",
+    "icon": ["icons/icon.png"],
+    "resources": {
+      "resources/bin/ffmpeg.exe": "bin/ffmpeg.exe",
+      "resources/bin/ffprobe.exe": "bin/ffprobe.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "languages": ["English", "Persian"]
+      }
+    }
+  }
+}
