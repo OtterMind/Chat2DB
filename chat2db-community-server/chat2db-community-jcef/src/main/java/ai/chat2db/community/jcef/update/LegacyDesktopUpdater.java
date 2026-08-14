@@ -9,11 +9,19 @@ final class LegacyDesktopUpdater implements IDesktopUpdater {
     @Override
     public DesktopUpdateCheckResult appCheckUpdate() {
         Updater.CheckResult result = Updater.getInstance().appCheckUpdate();
-        String version = result.isNeedsUpdate() && result.getLatestVersionInfo() != null
-            ? result.getLatestVersionInfo().getLatestVersion()
-            : "";
-        return new DesktopUpdateCheckResult(result.isNeedsUpdate(), version,
-            result.getReleaseNotes() == null ? "" : result.getReleaseNotes(), result.isCheckFailed());
+        if (result.isCheckFailed()) {
+            return DesktopUpdateCheckResult.failed(result.getReleasePageUrl(), result.getFailureStage(), result.getFailureReason());
+        }
+        if (!result.isNeedsUpdate()) {
+            return DesktopUpdateCheckResult.notAvailable();
+        }
+        String version = "";
+        if (result.getAvailableSnapshot() != null) {
+            version = result.getAvailableSnapshot().version();
+        }
+        return DesktopUpdateCheckResult.available(version,
+                result.getReleaseNotes() == null ? "" : result.getReleaseNotes(),
+                result.getReleasePageUrl());
     }
 
     @Override

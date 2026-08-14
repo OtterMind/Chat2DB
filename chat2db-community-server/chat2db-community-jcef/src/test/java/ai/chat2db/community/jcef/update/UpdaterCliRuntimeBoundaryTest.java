@@ -6,7 +6,6 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -31,11 +30,7 @@ class UpdaterCliRuntimeBoundaryTest {
 
     @Test
     void developmentFrontendIsRejectedBeforeDownloadOrInstallationTouchesFiles(@TempDir Path temporaryDirectory) throws Exception {
-        Updater updater = Updater.getInstance();
-        Field appDirectoryField = field("APP_DIR");
-        Field temporaryDirectoryField = field("TMP_DIR");
-        Object originalAppDirectory = appDirectoryField.get(updater);
-        Object originalTemporaryDirectory = temporaryDirectoryField.get(updater);
+        Updater updater = newAvailableUpdater(temporaryDirectory);
         String propertyName = "chat2db.jcef.web-frontend";
         String originalProperty = System.getProperty(propertyName);
         Path temporaryFile = temporaryDirectory.resolve("downloads/update.jar");
@@ -44,8 +39,6 @@ class UpdaterCliRuntimeBoundaryTest {
         Files.writeString(temporaryFile, "keep");
         Files.writeString(backupSession.resolve(".owner-pid"), "0");
         try {
-            appDirectoryField.set(updater, temporaryDirectory);
-            temporaryDirectoryField.set(updater, temporaryFile.getParent());
             System.setProperty(propertyName, "true");
 
             assertThrows(BusinessException.class, () -> updater.triggerDownload(new ConsoleResult()));
@@ -54,8 +47,6 @@ class UpdaterCliRuntimeBoundaryTest {
             assertTrue(Files.exists(temporaryFile));
             assertTrue(Files.exists(backupSession));
         } finally {
-            appDirectoryField.set(updater, originalAppDirectory);
-            temporaryDirectoryField.set(updater, originalTemporaryDirectory);
             if (originalProperty == null) {
                 System.clearProperty(propertyName);
             } else {
@@ -65,74 +56,67 @@ class UpdaterCliRuntimeBoundaryTest {
     }
 
     @Test
-    void rejectsSecondDownloadAndInstallationWhileTheFirstOperationIsActive() throws Exception {
-        Updater updater = Updater.getInstance();
-        Field downloadInProgressField = field("downloadInProgress");
-        Field installationInProgressField = field("installationInProgress");
-        Object originalDownloadInProgress = downloadInProgressField.get(updater);
-        Object originalInstallationInProgress = installationInProgressField.get(updater);
+    void rejectsSecondDownloadAndInstallationWhileTheFirstOperationIsActive(@TempDir Path temporaryDirectory) throws Exception {
+        Updater updater = newAvailableUpdater(temporaryDirectory);
         String originalProfile = System.getProperty("spring.profiles.active");
         String originalWebFrontend = System.getProperty("chat2db.jcef.web-frontend");
         try {
             System.setProperty("spring.profiles.active", "release");
             System.setProperty("chat2db.jcef.web-frontend", "false");
 
-            downloadInProgressField.set(updater, true);
+            updater.operationCoordinator().beginDownload();
             BusinessException downloadException = assertThrows(BusinessException.class,
                     () -> updater.triggerDownload(new ConsoleResult()));
             assertEquals("Another update operation is already in progress.", downloadException.getMessage());
 
-            downloadInProgressField.set(updater, false);
-            installationInProgressField.set(updater, true);
+            updater.operationCoordinator().finishDownloadAfterFailure();
+            updater.operationCoordinator().beginDownload();
+            updater.operationCoordinator().markDownloadReady();
+            updater.operationCoordinator().beginInstallation();
             BusinessException installationException = assertThrows(BusinessException.class, updater::triggerInstallation);
             assertEquals("Update installation is already in progress.", installationException.getMessage());
         } finally {
-            downloadInProgressField.set(updater, originalDownloadInProgress);
-            installationInProgressField.set(updater, originalInstallationInProgress);
+            updater.operationCoordinator().finishInstallationAfterFailure();
             restoreProperty("spring.profiles.active", originalProfile);
             restoreProperty("chat2db.jcef.web-frontend", originalWebFrontend);
         }
     }
 
     @Test
-    void installationGuardIsReleasedWhenPreparationFails() throws Exception {
-        Updater updater = Updater.getInstance();
-        Field checkResultField = field("checkResult");
-        Field updateReadyToInstallField = field("updateReadyToInstall");
-        Field installationInProgressField = field("installationInProgress");
-        Field progressDialogField = field("progressDialog");
-        Object originalCheckResult = checkResultField.get(updater);
-        Object originalUpdateReadyToInstall = updateReadyToInstallField.get(updater);
-        Object originalInstallationInProgress = installationInProgressField.get(updater);
-        Object originalProgressDialog = progressDialogField.get(updater);
+    void installationGuardIsReleasedWhenPreparationFails(@TempDir Path temporaryDirectory) throws Exception {
+        Updater updater = newAvailableUpdater(temporaryDirectory);
         String originalProfile = System.getProperty("spring.profiles.active");
         String originalWebFrontend = System.getProperty("chat2db.jcef.web-frontend");
         try {
             System.setProperty("spring.profiles.active", "release");
             System.setProperty("chat2db.jcef.web-frontend", "false");
-            checkResultField.set(updater, new Updater.CheckResult());
-            updateReadyToInstallField.set(updater, true);
-            installationInProgressField.set(updater, false);
-            progressDialogField.set(updater, new Updater.UpdateProgressDialog());
+            updater.operationCoordinator().beginDownload();
+            updater.operationCoordinator().markDownloadReady();
+            updater.operationCoordinator().replaceCheckResult(previous -> new Updater.CheckResult());
 
             assertFalse(updater.triggerInstallation());
             var exception = assertThrows(java.io.IOException.class, updater::requireUpdateActions);
             assertEquals("Update plan is incomplete: update actions are missing.", exception.getMessage());
-            assertFalse((boolean) installationInProgressField.get(updater));
+            assertEquals(UpdateOperationCoordinator.State.AVAILABLE, updater.operationCoordinator().currentState());
         } finally {
-            checkResultField.set(updater, originalCheckResult);
-            updateReadyToInstallField.set(updater, originalUpdateReadyToInstall);
-            installationInProgressField.set(updater, originalInstallationInProgress);
-            progressDialogField.set(updater, originalProgressDialog);
             restoreProperty("spring.profiles.active", originalProfile);
             restoreProperty("chat2db.jcef.web-frontend", originalWebFrontend);
         }
     }
 
-    private static Field field(String name) throws Exception {
-        Field field = Updater.class.getDeclaredField(name);
-        field.setAccessible(true);
-        return field;
+    private static Updater newAvailableUpdater(Path directory) {
+        FakeUpdateSource source = new FakeUpdateSource().manifest("""
+                {
+                  "version": "5.3.2",
+                  "releasePageUrl": "https://github.com/OtterMind/Chat2DB/releases/tag/v5.3.2",
+                  "forceUpdate": false,
+                  "files": []
+                }
+                """);
+        Updater updater = new Updater(source, directory, directory.resolve("local_version.json"),
+                directory.resolve("downloads"), System::nanoTime);
+        assertTrue(updater.appCheckUpdate().isNeedsUpdate());
+        return updater;
     }
 
     private static void restoreProperty(String propertyName, String originalValue) {
