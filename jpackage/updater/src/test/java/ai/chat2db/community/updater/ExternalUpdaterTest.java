@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -29,7 +30,7 @@ class ExternalUpdaterTest {
         plan.downloadedFiles = Map.of();
 
         IOException exception = assertThrows(IOException.class,
-                () -> ExternalUpdater.executeInstallation(plan, appDirectory));
+                () -> ExternalUpdater.executeInstallation(plan, real(appDirectory)));
 
         assertEquals("Update plan is incomplete", exception.getMessage());
     }
@@ -37,20 +38,31 @@ class ExternalUpdaterTest {
     @Test
     void rejectsTargetPathTraversal(@TempDir Path appDirectory) {
         ExternalUpdater.UpdatePlan plan = planFor(file("app", "../outside.jar", "jar", 0, "00"));
-        assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(plan, appDirectory));
+        assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(plan, real(appDirectory)));
+    }
+
+    @Test
+    void rejectsUppercaseSha256Metadata(@TempDir Path appDirectory) {
+        ExternalUpdater.UpdatePlan plan = planFor(file("app", "app.jar", "jar", 0, "A".repeat(64)));
+
+        IOException exception = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(plan, real(appDirectory)));
+
+        assertEquals("Update metadata is invalid for app", exception.getMessage());
     }
 
     @Test
     void stagesZipAndKeepsRollbackMaterialUntilTheNextRun(@TempDir Path tempDirectory) throws Exception {
-        Path appDirectory = Files.createDirectory(tempDirectory.resolve("app"));
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
         Path existing = Files.createDirectories(appDirectory.resolve("dist"));
         Files.writeString(existing.resolve("old.txt"), "old");
         Path unrelatedBackup = Files.writeString(appDirectory.resolve("unrelated.bak_1"), "keep");
-        Path archive = tempDirectory.resolve("dist.zip");
+        Path archive = workingDirectory.resolve("dist.zip");
         writeZip(archive, "dist/index.html", "new");
         ExternalUpdater.FileInfo update = file("dist", "dist", "zip", Files.size(archive), sha256(archive));
 
-        ExternalUpdater.executeInstallation(planFor(update, Map.of("dist", archive.toString())), appDirectory, tempDirectory);
+        ExternalUpdater.executeInstallation(planFor(update, Map.of("dist", archive.toString())), appDirectory, workingDirectory);
 
         assertEquals("new", Files.readString(appDirectory.resolve("dist/index.html")));
         assertTrue(Files.exists(appDirectory.resolve(".chat2db-update-backups")));
@@ -69,9 +81,10 @@ class ExternalUpdaterTest {
 
     @Test
     void rejectsDownloadedFilesOutsideTheControlledDirectory(@TempDir Path tempDirectory) throws Exception {
-        Path appDirectory = Files.createDirectory(tempDirectory.resolve("app"));
-        Path controlledDirectory = Files.createDirectory(tempDirectory.resolve("controlled"));
-        Path outsideFile = Files.writeString(tempDirectory.resolve("outside.jar"), "outside");
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
+        Path outsideFile = Files.writeString(workingDirectory.resolve("outside.jar"), "outside");
         ExternalUpdater.FileInfo update = file("app", "app.jar", "jar", Files.size(outsideFile), sha256(outsideFile));
 
         assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(
@@ -80,8 +93,9 @@ class ExternalUpdaterTest {
 
     @Test
     void rejectsActionsThatDoNotMatchRemoteMetadata(@TempDir Path tempDirectory) throws Exception {
-        Path appDirectory = Files.createDirectory(tempDirectory.resolve("app"));
-        Path controlledDirectory = Files.createDirectory(tempDirectory.resolve("controlled"));
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
         Path downloadedFile = Files.writeString(controlledDirectory.resolve("app.jar"), "new");
         ExternalUpdater.FileInfo metadataFile = file("app", "app.jar", "jar", Files.size(downloadedFile), sha256(downloadedFile));
         ExternalUpdater.FileInfo actionFile = file("app", "other.jar", "jar", Files.size(downloadedFile), sha256(downloadedFile));
@@ -93,7 +107,8 @@ class ExternalUpdaterTest {
 
     @Test
     void rejectsDeleteActionsWithADifferentTargetThanMetadata(@TempDir Path tempDirectory) throws Exception {
-        Path appDirectory = Files.createDirectory(tempDirectory.resolve("app"));
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
         ExternalUpdater.FileInfo metadataFile = file("obsolete", "old.jar", "jar", 0, "");
         metadataFile.deleted = true;
         ExternalUpdater.FileInfo actionFile = file("obsolete", "other.jar", "jar", 0, "");
@@ -108,13 +123,40 @@ class ExternalUpdaterTest {
         plan.tasks = List.of(action);
         plan.downloadedFiles = Map.of();
 
-        assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(plan, appDirectory, tempDirectory));
+        assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(plan, appDirectory, workingDirectory));
+    }
+
+    @Test
+    void rejectsDeleteActionWithForgedRemoteFileMetadata(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        ExternalUpdater.FileInfo deletedMetadata = file("obsolete", "obsolete.jar", "jar", 0, "");
+        deletedMetadata.deleted = true;
+        ExternalUpdater.FileInfo localActionFile = file("obsolete", "obsolete.jar", "jar", 0, "");
+        ExternalUpdater.FileInfo forgedRemoteFile = file("unrelated", "important.jar", "jar", 0, "0".repeat(64));
+        ExternalUpdater.FileUpdateAction action = new ExternalUpdater.FileUpdateAction();
+        action.actionType = "DELETE_OLD";
+        action.localFileInfo = localActionFile;
+        action.remoteFileInfo = forgedRemoteFile;
+        ExternalUpdater.UpdatePlan plan = new ExternalUpdater.UpdatePlan();
+        ExternalUpdater.VersionMetadata metadata = new ExternalUpdater.VersionMetadata();
+        metadata.version = "5.3.1";
+        metadata.files = List.of(deletedMetadata);
+        plan.remoteMetadata = metadata;
+        plan.tasks = List.of(action);
+        plan.downloadedFiles = Map.of();
+
+        IOException exception = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(plan, appDirectory, workingDirectory));
+
+        assertTrue(exception.getMessage().contains("must not contain remote file metadata"));
     }
 
     @Test
     void replacesAnExistingLocalVersionFile(@TempDir Path tempDirectory) throws Exception {
-        Path appDirectory = Files.createDirectory(tempDirectory.resolve("app"));
-        Path controlledDirectory = Files.createDirectory(tempDirectory.resolve("controlled"));
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
         Path downloadedFile = Files.writeString(controlledDirectory.resolve("app.jar"), "new");
         Files.writeString(appDirectory.resolve("local_version.json"), "{\"version\":\"old\"}");
         ExternalUpdater.FileInfo update = file("app", "app.jar", "jar", Files.size(downloadedFile), sha256(downloadedFile));
@@ -122,6 +164,78 @@ class ExternalUpdaterTest {
         ExternalUpdater.executeInstallation(planFor(update, Map.of("app", downloadedFile.toString())), appDirectory, controlledDirectory);
 
         assertTrue(Files.readString(appDirectory.resolve("local_version.json")).contains("5.3.1"));
+    }
+
+    @Test
+    void rejectsApplicationDirectoryWithASymbolicLinkAncestor(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path targetParent = Files.createDirectory(workingDirectory.resolve("app-parent"));
+        Files.createDirectory(targetParent.resolve("app"));
+        Path linkedParent = workingDirectory.resolve("linked-parent");
+        Files.createSymbolicLink(linkedParent, targetParent);
+
+        IOException exception = assertThrows(IOException.class, () -> ExternalUpdater.executeInstallation(
+                planFor(file("app", "app.jar", "jar", 0, "0".repeat(64))), linkedParent.resolve("app"), workingDirectory));
+
+        assertTrue(exception.getMessage().contains("Application directory contains a symbolic link"));
+    }
+
+    @Test
+    void rejectsPlanThatOmitsAManagedRemoteFile(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        ExternalUpdater.FileInfo managed = file("app", "app.jar", "jar", 0, "0".repeat(64));
+        ExternalUpdater.UpdatePlan plan = planFor(managed, Map.of());
+        plan.tasks = List.of();
+
+        IOException exception = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(plan, appDirectory, workingDirectory));
+
+        assertTrue(exception.getMessage().contains("exactly one action"));
+    }
+
+    @Test
+    void rejectsKeepLocalActionWithoutAMatchingRemoteFile(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        ExternalUpdater.FileInfo managed = file("app", "app.jar", "jar", 0, "0".repeat(64));
+        ExternalUpdater.UpdatePlan plan = planFor(managed, Map.of());
+        ExternalUpdater.FileUpdateAction keepLocal = new ExternalUpdater.FileUpdateAction();
+        keepLocal.actionType = "KEEP_LOCAL";
+        keepLocal.localFileInfo = managed;
+        plan.tasks = List.of(keepLocal);
+
+        IOException exception = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(plan, appDirectory, workingDirectory));
+
+        assertTrue(exception.getMessage().contains("Keep-local action has no remote file"));
+    }
+
+    @Test
+    void rejectsDuplicateRemoteTargetsAndActionIds(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        ExternalUpdater.FileInfo first = file("first", "shared.jar", "jar", 0, "0".repeat(64));
+        ExternalUpdater.FileInfo second = file("second", "shared.jar", "jar", 0, "0".repeat(64));
+        ExternalUpdater.UpdatePlan duplicateTargetPlan = planFor(first, Map.of());
+        duplicateTargetPlan.remoteMetadata.files = List.of(first, second);
+        duplicateTargetPlan.tasks = List.of();
+
+        IOException duplicateTarget = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(duplicateTargetPlan, appDirectory, workingDirectory));
+        assertTrue(duplicateTarget.getMessage().contains("duplicate local target path"));
+
+        ExternalUpdater.UpdatePlan duplicateActionPlan = planFor(first,
+                Map.of("first", workingDirectory.resolve("first.jar").toString()));
+        ExternalUpdater.FileUpdateAction duplicate = new ExternalUpdater.FileUpdateAction();
+        duplicate.actionType = "UPDATE_EXISTING";
+        duplicate.remoteFileInfo = first;
+        duplicateActionPlan.tasks = new ArrayList<>(duplicateActionPlan.tasks);
+        duplicateActionPlan.tasks.add(duplicate);
+
+        IOException duplicateAction = assertThrows(IOException.class,
+                () -> ExternalUpdater.executeInstallation(duplicateActionPlan, appDirectory, workingDirectory));
+        assertTrue(duplicateAction.getMessage().contains("duplicate action file id"));
     }
 
     private static ExternalUpdater.UpdatePlan planFor(ExternalUpdater.FileInfo update) {
@@ -167,5 +281,9 @@ class ExternalUpdaterTest {
             result.append(String.format("%02x", value));
         }
         return result.toString();
+    }
+
+    private static Path real(Path path) throws IOException {
+        return path.toRealPath();
     }
 }

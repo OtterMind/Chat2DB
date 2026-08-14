@@ -35,7 +35,7 @@ public final class ExternalUpdater {
     static final long MAX_TOTAL_DOWNLOAD_BYTES = 4L * 1024 * 1024 * 1024;
     static final int MAX_ZIP_ENTRIES = 20_000;
     static final long MAX_ZIP_UNCOMPRESSED_BYTES = 2L * 1024 * 1024 * 1024;
-    private static final String SHA_256_PATTERN = "^[a-fA-F0-9]{64}$";
+    private static final String SHA_256_PATTERN = "^[a-f0-9]{64}$";
     private static final String BACKUP_DIRECTORY = ".chat2db-update-backups";
     private static final String BACKUP_OWNER_PID_FILE = ".owner-pid";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -56,6 +56,7 @@ public final class ExternalUpdater {
         Path planPath = Path.of(args[0]).toAbsolutePath().normalize();
         Path appDirectory = Path.of(args[1]).toAbsolutePath().normalize();
         try {
+            rejectSymbolicLinkPathSegments(appDirectory, "Application directory");
             if (!Files.isRegularFile(planPath, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IOException("Update plan file not found or is not a regular file");
             }
@@ -81,13 +82,16 @@ public final class ExternalUpdater {
     }
 
     static void executeInstallation(UpdatePlan plan, Path appDirectory, Path downloadDirectory) throws IOException {
+        Path controlledAppDirectory = appDirectory.toAbsolutePath().normalize();
         Path controlledDownloadDirectory = downloadDirectory.toAbsolutePath().normalize();
-        validatePlan(plan, appDirectory, controlledDownloadDirectory);
+        rejectSymbolicLinkPathSegments(controlledAppDirectory, "Application directory");
+        rejectSymbolicLinkPathSegments(controlledDownloadDirectory, "Controlled download directory");
+        validatePlan(plan, controlledAppDirectory, controlledDownloadDirectory);
         Map<String, Path> downloadedFiles = new HashMap<>();
         for (Map.Entry<String, String> entry : plan.downloadedFiles.entrySet()) {
             downloadedFiles.put(entry.getKey(), Path.of(entry.getValue()).toAbsolutePath().normalize());
         }
-        Path backupSession = resolveApplicationPath(appDirectory, BACKUP_DIRECTORY).resolve(UUID.randomUUID().toString());
+        Path backupSession = resolveApplicationPath(controlledAppDirectory, BACKUP_DIRECTORY).resolve(UUID.randomUUID().toString());
         Path stagingDirectory = backupSession.resolve(".staging");
         List<Runnable> rollbackOperations = new ArrayList<>();
         try {
@@ -95,9 +99,9 @@ public final class ExternalUpdater {
             Files.writeString(backupSession.resolve(BACKUP_OWNER_PID_FILE), Long.toString(ProcessHandle.current().pid()),
                     StandardOpenOption.CREATE_NEW);
             for (FileUpdateAction action : plan.tasks) {
-                applyAction(action, downloadedFiles, appDirectory, backupSession, stagingDirectory, rollbackOperations);
+                applyAction(action, downloadedFiles, controlledAppDirectory, backupSession, stagingDirectory, rollbackOperations);
             }
-            saveLocalVersion(plan.remoteMetadata, appDirectory);
+            saveLocalVersion(plan.remoteMetadata, controlledAppDirectory);
             cleanupCommittedUpdate(downloadedFiles, stagingDirectory);
         } catch (Exception exception) {
             for (int index = rollbackOperations.size() - 1; index >= 0; index--) {
@@ -112,21 +116,27 @@ public final class ExternalUpdater {
 
     private static void applyAction(FileUpdateAction action, Map<String, Path> downloadedFiles, Path appDirectory,
                                     Path backupSession, Path stagingDirectory, List<Runnable> rollbackOperations) throws IOException {
-        if ("KEEP_LOCAL".equals(action.actionType)) {
-            return;
-        }
-        FileInfo targetInfo = action.remoteFileInfo != null ? action.remoteFileInfo : action.localFileInfo;
-        Path target = resolveApplicationPath(appDirectory, targetInfo.localTargetName);
         if ("DELETE_OLD".equals(action.actionType)) {
+            if (action.remoteFileInfo != null || action.localFileInfo == null) {
+                throw new IOException("Delete action must contain only local file metadata");
+            }
+            Path target = resolveApplicationPath(appDirectory, action.localFileInfo.localTargetName);
             if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
                 moveToBackup(target, appDirectory, backupSession, rollbackOperations);
             }
+            return;
+        }
+        if ("KEEP_LOCAL".equals(action.actionType)) {
             return;
         }
         if (!"DOWNLOAD_NEW".equals(action.actionType) && !"UPDATE_EXISTING".equals(action.actionType)) {
             throw new IOException("Unsupported update action: " + action.actionType);
         }
         FileInfo remoteFile = action.remoteFileInfo;
+        if (remoteFile == null) {
+            throw new IOException("Update action has no remote file");
+        }
+        Path target = resolveApplicationPath(appDirectory, remoteFile.localTargetName);
         Path downloadedFile = downloadedFiles.get(remoteFile.id);
         verifyDownloadedFile(downloadedFile, remoteFile);
         if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
@@ -154,26 +164,43 @@ public final class ExternalUpdater {
         }
         Map<String, FileInfo> metadataFiles = new HashMap<>();
         Set<String> fileIds = new HashSet<>();
+        Set<Path> localTargets = new HashSet<>();
+        Set<String> managedMetadataIds = new HashSet<>();
         for (FileInfo file : plan.remoteMetadata.files) {
-            validateRemoteFile(file, appDirectory, fileIds);
+            validateRemoteFile(file, appDirectory, fileIds, localTargets);
             metadataFiles.put(file.id, file);
+            if (!file.deleted) {
+                managedMetadataIds.add(file.id);
+            }
         }
+        Set<String> actionIds = new HashSet<>();
+        Set<String> managedActionIds = new HashSet<>();
         Set<String> actionDownloadIds = new HashSet<>();
         long totalDownloadSize = 0;
         for (FileUpdateAction action : plan.tasks) {
             if (action == null || isBlank(action.actionType)) {
                 throw new IOException("Update plan contains an invalid action");
             }
+            if ("DELETE_OLD".equals(action.actionType) && action.remoteFileInfo != null) {
+                throw new IOException("Delete action must not contain remote file metadata");
+            }
             FileInfo targetInfo = action.remoteFileInfo != null ? action.remoteFileInfo : action.localFileInfo;
             if (targetInfo == null) {
                 throw new IOException("Update action has no target file");
             }
+            if (isBlank(targetInfo.id) || !actionIds.add(targetInfo.id)) {
+                throw new IOException("Update plan contains a missing or duplicate action file id");
+            }
             resolveApplicationPath(appDirectory, targetInfo.localTargetName);
             if ("DOWNLOAD_NEW".equals(action.actionType) || "UPDATE_EXISTING".equals(action.actionType)) {
+                if (action.remoteFileInfo == null) {
+                    throw new IOException("Update action has no remote file");
+                }
                 FileInfo metadataFile = metadataFiles.get(action.remoteFileInfo.id);
                 if (metadataFile == null || metadataFile.deleted || !sameManagedFile(metadataFile, action.remoteFileInfo)) {
                     throw new IOException("Update action does not match remote metadata");
                 }
+                managedActionIds.add(action.remoteFileInfo.id);
                 if (!plan.downloadedFiles.containsKey(action.remoteFileInfo.id)) {
                     throw new IOException("Missing downloaded file for " + action.remoteFileInfo.id);
                 }
@@ -194,9 +221,21 @@ public final class ExternalUpdater {
                         || !metadataFile.localTargetName.equals(action.localFileInfo.localTargetName)) {
                     throw new IOException("Delete action is not declared by remote metadata");
                 }
-            } else if (!"KEEP_LOCAL".equals(action.actionType)) {
+            } else if ("KEEP_LOCAL".equals(action.actionType)) {
+                if (action.remoteFileInfo == null) {
+                    throw new IOException("Keep-local action has no remote file");
+                }
+                FileInfo metadataFile = metadataFiles.get(action.remoteFileInfo.id);
+                if (metadataFile == null || metadataFile.deleted || !sameManagedFile(metadataFile, action.remoteFileInfo)) {
+                    throw new IOException("Keep-local action does not match remote metadata");
+                }
+                managedActionIds.add(action.remoteFileInfo.id);
+            } else {
                 throw new IOException("Unsupported update action: " + action.actionType);
             }
+        }
+        if (!managedActionIds.equals(managedMetadataIds)) {
+            throw new IOException("Update plan must declare exactly one action for every managed remote file");
         }
         if (!plan.downloadedFiles.keySet().equals(actionDownloadIds)) {
             throw new IOException("Update plan contains unexpected downloaded files");
@@ -209,11 +248,15 @@ public final class ExternalUpdater {
         }
     }
 
-    private static void validateRemoteFile(FileInfo file, Path appDirectory, Set<String> fileIds) throws IOException {
+    private static void validateRemoteFile(FileInfo file, Path appDirectory, Set<String> fileIds,
+                                           Set<Path> localTargets) throws IOException {
         if (file == null || isBlank(file.id) || !fileIds.add(file.id)) {
             throw new IOException("Update metadata contains a missing or duplicate file id");
         }
-        resolveApplicationPath(appDirectory, file.localTargetName);
+        Path localTarget = resolveApplicationPath(appDirectory, file.localTargetName);
+        if (!localTargets.add(localTarget)) {
+            throw new IOException("Update metadata contains a duplicate local target path");
+        }
         if (file.deleted) {
             return;
         }
@@ -226,7 +269,7 @@ public final class ExternalUpdater {
     private static boolean sameManagedFile(FileInfo expected, FileInfo actual) {
         return expected.id.equals(actual.id)
                 && expected.localTargetName.equals(actual.localTargetName)
-                && expected.sha256.equalsIgnoreCase(actual.sha256)
+                && expected.sha256.equals(actual.sha256)
                 && expected.type.equals(actual.type)
                 && expected.fileSizeByte == actual.fileSizeByte
                 && expected.deleted == actual.deleted;
@@ -241,20 +284,11 @@ public final class ExternalUpdater {
     }
 
     private static Path resolveControlledDownloadPath(Path downloadDirectory, String fileName) throws IOException {
-        if (Files.isSymbolicLink(downloadDirectory)) {
-            throw new IOException("Controlled download directory is a symbolic link");
-        }
         Path file = Path.of(fileName).toAbsolutePath().normalize();
         if (!file.startsWith(downloadDirectory) || file.equals(downloadDirectory)) {
             throw new IOException("Downloaded update file is outside the controlled download directory");
         }
-        Path current = downloadDirectory;
-        for (Path segment : downloadDirectory.relativize(file)) {
-            current = current.resolve(segment);
-            if (Files.isSymbolicLink(current)) {
-                throw new IOException("Downloaded update file path contains a symbolic link");
-            }
-        }
+        rejectSymbolicLinkPathSegments(file, "Downloaded update file path");
         return file;
     }
 
@@ -262,18 +296,31 @@ public final class ExternalUpdater {
         if (isBlank(relativePath)) {
             throw new IOException("Update target path is blank");
         }
-        Path target = appDirectory.resolve(relativePath).normalize();
-        if (target.equals(appDirectory) || !target.startsWith(appDirectory)) {
+        Path controlledAppDirectory = appDirectory.toAbsolutePath().normalize();
+        Path target = controlledAppDirectory.resolve(relativePath).normalize();
+        if (target.equals(controlledAppDirectory) || !target.startsWith(controlledAppDirectory)) {
             throw new IOException("Update target path escapes the application directory");
         }
-        Path current = appDirectory;
-        for (Path segment : appDirectory.relativize(target)) {
+        rejectSymbolicLinkPathSegments(target, "Update target path");
+        return target;
+    }
+
+    private static void rejectSymbolicLinkPathSegments(Path path, String description) throws IOException {
+        Path absolutePath = path.toAbsolutePath().normalize();
+        Path root = absolutePath.getRoot();
+        if (root == null) {
+            throw new IOException(description + " is not absolute");
+        }
+        if (Files.isSymbolicLink(root)) {
+            throw new IOException(description + " contains a symbolic link");
+        }
+        Path current = root;
+        for (Path segment : root.relativize(absolutePath)) {
             current = current.resolve(segment);
             if (Files.isSymbolicLink(current)) {
-                throw new IOException("Update target path contains a symbolic link");
+                throw new IOException(description + " contains a symbolic link");
             }
         }
-        return target;
     }
 
     private static void verifyDownloadedFile(Path downloadedFile, FileInfo remoteFile) throws IOException {
@@ -281,7 +328,7 @@ public final class ExternalUpdater {
             throw new IOException("Downloaded update file is missing");
         }
         if (Files.size(downloadedFile) != remoteFile.fileSizeByte || Files.size(downloadedFile) > MAX_SINGLE_FILE_BYTES
-                || !sha256(downloadedFile).equalsIgnoreCase(remoteFile.sha256)) {
+                || !sha256(downloadedFile).equals(remoteFile.sha256)) {
             throw new IOException("Downloaded update file failed verification");
         }
     }
