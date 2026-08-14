@@ -1,0 +1,2 @@
+import js from '@eslint/js'; import tseslint from 'typescript-eslint'; import hooks from 'eslint-plugin-react-hooks';
+export default tseslint.config({ignores:['out','dist','node_modules','scripts/*.mjs','*.config.js']},js.configs.recommended,...tseslint.configs.strict,...tseslint.configs.stylistic,{files:['**/*.{ts,tsx}'],plugins:{'react-hooks':hooks},rules:{...hooks.configs.recommended.rules,'@typescript-eslint/consistent-type-definitions':'off','@typescript-eslint/no-confusing-void-expression':'off','@typescript-eslint/array-type':'off'}})

@@ -1,0 +1,4 @@
+export interface RetryOptions {attempts?:number;baseDelayMs?:number;maxDelayMs?:number;retryable?:(error:unknown)=>boolean}
+const wait=(ms:number):Promise<void>=>new Promise(resolve=>setTimeout(resolve,ms));
+export async function retry<T>(fn:(attempt:number)=>Promise<T>,options:RetryOptions={}):Promise<T>{const {attempts=3,baseDelayMs=2_000,maxDelayMs=60_000,retryable=()=>true}=options; let last:unknown; for(let attempt=1;attempt<=attempts;attempt++){try{return await fn(attempt)}catch(error:unknown){last=error;if(attempt===attempts||!retryable(error))throw error;const delay=Math.min(maxDelayMs,baseDelayMs*2**(attempt-1))*(0.8+Math.random()*0.4);await wait(delay)}}throw last}
+export function isRetryable(error:unknown):boolean {if(!(error instanceof Error))return false; return /ECONNRESET|ETIMEDOUT|ENOTFOUND|429|5\d\d|503/i.test(error.message)}
