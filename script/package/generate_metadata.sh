@@ -2,128 +2,216 @@
 set -euo pipefail
 
 # --- Usage ---
-# ./generate_metadata.sh <version> <source_directory> [base_url]
-# Example:
-# ./generate_metadata.sh 5.3.0 /path/to/your/files https://cdn.chat2db-ai.com/community/updates
+# ./generate_metadata.sh <version> <source_directory> [output_directory]
 #
-# Publication contract for removals:
-# A release that removes a previously managed file must append an explicit
-# `{id, localTargetName, deleted: true}` record to version.json. `localTargetName`
-# must be the exact, application-relative target from the prior metadata; do not
-# omit it or replace it with the server filename. All desktop updaters validate
-# this target before deleting the file.
+# Generates publication manifests from a canonical payload directory.
+# The source directory must contain exactly the three managed payloads:
+#   chat2db-community.jar
+#   lib.zip
+#   dist.zip
+#
+# Outputs (in output_directory, defaulting to source_directory):
+#   github-version.json   GitHub Release manifest (published as version.json)
+#   cdn-version.json      CDN bridge compatibility manifest
+#   local_version.json    Copy of github-version.json for packaged clients
+#   latest_version.json   Legacy CDN latest-version pointer (bridge only)
+#   receipt.json          Canonical artifact receipt with SHA-256 and sizes
+#
+# Environment:
+#   COMMUNITY_GITHUB_REPOSITORY   Default: OtterMind/Chat2DB
+#   CDN_BASE_URL                  Default: https://cdn.chat2db-ai.com/community/updates
 
 # --- 1. Argument validation ---
 if [[ "$#" -lt 2 ]]; then
     echo "Error: missing arguments."
-    echo "Usage: $0 <version> <source_directory> [base_url]"
+    echo "Usage: $0 <version> <source_directory> [output_directory]"
     exit 1
 fi
 
 VERSION="$1"
 SOURCE_DIR="$2"
-BASE_URL=${3:-"https://cdn.chat2db-ai.com/community/updates"}
+OUTPUT_DIR="${3:-$SOURCE_DIR}"
 
-# Check the source directory.
+COMMUNITY_GITHUB_REPOSITORY="${COMMUNITY_GITHUB_REPOSITORY:-OtterMind/Chat2DB}"
+CDN_BASE_URL="${CDN_BASE_URL:-${COMMUNITY_UPDATE_BASE_URL:-https://cdn.chat2db-ai.com/community/updates}}"
+
+# Check directories.
 if [[ ! -d "$SOURCE_DIR" ]]; then
-    echo "Error: directory does not exist: $SOURCE_DIR"
+    echo "Error: source directory does not exist: $SOURCE_DIR"
     exit 1
 fi
+
+mkdir -p "$OUTPUT_DIR"
 
 # --- Cross-platform SHA256 helper ---
 get_sha256() {
   local FILE_TO_HASH=$1
   if command -v shasum &> /dev/null; then
-    shasum -a 256 "$FILE_TO_HASH" | awk '{print $1}'
+    shasum -a 256 "$FILE_TO_HASH" | awk '{print $1}' | tr '[:upper:]' '[:lower:]'
+  elif command -v sha256sum &> /dev/null; then
+    sha256sum "$FILE_TO_HASH" | awk '{print $1}' | tr '[:upper:]' '[:lower:]'
   elif command -v certutil &> /dev/null; then
-    certutil -hashfile "$FILE_TO_HASH" SHA256 | sed -n '2p' | tr -d ' \r\n'
+    certutil -hashfile "$FILE_TO_HASH" SHA256 | sed -n '2p' | tr -d ' \r\n' | tr '[:upper:]' '[:lower:]'
   else
-    echo "Error: no supported hash tool found (shasum or certutil)." >&2
+    echo "Error: no supported hash tool found (shasum, sha256sum, or certutil)." >&2
     exit 1
   fi
 }
 
+get_file_size() {
+  local FILE=$1
+  if [[ "$(uname)" == "Darwin" ]]; then # macOS
+    stat -f %z "$FILE"
+  else # Linux & Git Bash on Windows
+    stat -c %s "$FILE"
+  fi
+}
 
-# --- 2. Initialize the JSON array ---
-json_files_array="[]"
-
-# --- 3. Process source files ---
-echo "Processing directory: $SOURCE_DIR ..."
-for file_path in "$SOURCE_DIR"/*; do
-    if [[ -f "$file_path" ]]; then
-        server_file_name=$(basename "$file_path")
-        if [[ "$server_file_name" == "generate_metadata.sh" || "$server_file_name" == "version.json" || "$server_file_name" == "local_version.json" ]]; then
-            continue
-        fi
-        echo " - Processing file: $server_file_name"
-
-        if [[ "$(uname)" == "Darwin" ]]; then # macOS
-            file_size_byte=$(stat -f %z "$file_path")
-        else # Linux & Git Bash on Windows
-            file_size_byte=$(stat -c %s "$file_path")
-        fi
-
-        sha256=$(get_sha256 "$file_path")
-
-        id=""
-        local_target_name=""
-        type=""
-        if [[ "$server_file_name" == *".jar" ]]; then
-            id="chat2db-community-server"
-            local_target_name="$server_file_name"
-            type="jar"
-        elif [[ "$server_file_name" == "lib.zip" ]]; then
-            id="chat2db-community-lib"
-            local_target_name="lib"
-            type="zip"
-        elif [[ "$server_file_name" == *".zip" ]]; then
-            id="chat2db-web"
-            local_target_name="${server_file_name%.zip}"
-            type="zip"
-        else
-            echo "   -> Skipping unknown file type: $server_file_name"
-            continue
-        fi
-
-        file_url="${BASE_URL}/${VERSION}/${server_file_name}"
-
-        # --- 4. Create and append the file object with jq ---
-        json_file_object=$(jq -n \
-            --arg id "$id" \
-            --arg serverFileName "$server_file_name" \
-            --arg localTargetName "$local_target_name" \
-            --arg url "$file_url" \
-            --arg sha256 "$sha256" \
-            --arg type "$type" \
-            --argjson fileSizeByte "$file_size_byte" \
-            '{id: $id, serverFileName: $serverFileName, localTargetName: $localTargetName, url: $url, sha256: $sha256, type: $type, extractTo: null, updateStrategy: null, fileSizeByte: $fileSizeByte, deleted: false}')
-
-        json_files_array=$(echo "$json_files_array" | jq --argjson obj "$json_file_object" '. + [$obj]')
-    fi
+# --- 2. Validate canonical payloads ---
+PAYLOADS=(chat2db-community.jar lib.zip dist.zip)
+for payload in "${PAYLOADS[@]}"; do
+  if [[ ! -f "$SOURCE_DIR/$payload" ]]; then
+    echo "Error: canonical payload missing: $SOURCE_DIR/$payload"
+    exit 1
+  fi
 done
 
-# --- 5. Build the final JSON object ---
-final_json=$(jq -n \
+# --- 3. Build the shared files array (order matters) ---
+# File metadata is identical in GitHub and CDN manifests except for the URL.
+# Avoid associative arrays for bash 3.2 compatibility (macOS default shell).
+get_payload_id() {
+  case "$1" in
+    chat2db-community.jar) echo "chat2db-community-server" ;;
+    lib.zip) echo "chat2db-community-lib" ;;
+    dist.zip) echo "chat2db-web" ;;
+  esac
+}
+
+get_payload_local_target() {
+  case "$1" in
+    chat2db-community.jar) echo "chat2db-community.jar" ;;
+    lib.zip) echo "lib" ;;
+    dist.zip) echo "dist" ;;
+  esac
+}
+
+get_payload_type() {
+  case "$1" in
+    chat2db-community.jar) echo "jar" ;;
+    lib.zip) echo "zip" ;;
+    dist.zip) echo "zip" ;;
+  esac
+}
+
+json_files_array="[]"
+receipt_files_array="[]"
+
+for server_file_name in "${PAYLOADS[@]}"; do
+  file_path="$SOURCE_DIR/$server_file_name"
+  file_size_byte=$(get_file_size "$file_path")
+  sha256=$(get_sha256 "$file_path")
+  id=$(get_payload_id "$server_file_name")
+  local_target_name=$(get_payload_local_target "$server_file_name")
+  type=$(get_payload_type "$server_file_name")
+
+  # Manifest file object (legacy schema plus GitHub-only top-level fields in GitHub variant)
+  json_file_object=$(jq -n \
+      --arg id "$id" \
+      --arg serverFileName "$server_file_name" \
+      --arg localTargetName "$local_target_name" \
+      --arg sha256 "$sha256" \
+      --arg type "$type" \
+      --argjson fileSizeByte "$file_size_byte" \
+      '{id: $id, serverFileName: $serverFileName, localTargetName: $localTargetName, sha256: $sha256, type: $type, extractTo: null, updateStrategy: null, fileSizeByte: $fileSizeByte, deleted: false}')
+
+  json_files_array=$(echo "$json_files_array" | jq --argjson obj "$json_file_object" '. + [$obj]')
+
+  # Receipt file object
+  receipt_file_object=$(jq -n \
+      --arg id "$id" \
+      --arg serverFileName "$server_file_name" \
+      --arg sha256 "$sha256" \
+      --argjson size "$file_size_byte" \
+      '{id: $id, serverFileName: $serverFileName, sha256: $sha256, size: $size}')
+
+  receipt_files_array=$(echo "$receipt_files_array" | jq --argjson obj "$receipt_file_object" '. + [$obj]')
+done
+
+# --- 4. Render GitHub manifest ---
+github_url_prefix="https://github.com/${COMMUNITY_GITHUB_REPOSITORY}/releases/download/v${VERSION}"
+github_files_array=$(echo "$json_files_array" | jq \
+    --arg prefix "$github_url_prefix" \
+    '[.[] | .url = "\($prefix)/\(.serverFileName)"]')
+
+github_manifest=$(jq -n \
     --arg version "$VERSION" \
     --arg releaseNotes "Known issue fixes" \
-    --argjson files "$json_files_array" \
+    --arg releasePageUrl "https://github.com/${COMMUNITY_GITHUB_REPOSITORY}/releases/tag/v${VERSION}" \
+    --argjson files "$github_files_array" \
+    '{version: $version, releaseNotes: $releaseNotes, releasePageUrl: $releasePageUrl, forceUpdate: false, files: $files, launchCommand: null}')
+
+# --- 5. Render CDN bridge manifest ---
+cdn_files_array=$(echo "$json_files_array" | jq \
+    --arg prefix "${CDN_BASE_URL}/${VERSION}" \
+    '[.[] | .url = "\($prefix)/\(.serverFileName)"]')
+
+cdn_manifest=$(jq -n \
+    --arg version "$VERSION" \
+    --arg releaseNotes "Known issue fixes" \
+    --argjson files "$cdn_files_array" \
     '{version: $version, releaseNotes: $releaseNotes, files: $files, launchCommand: null}')
 
-# --- 6. Write the JSON file ---
-OUTPUT_FILE="$SOURCE_DIR/version.json"
-echo "$final_json" > "$OUTPUT_FILE"
+# --- 6. Write outputs ---
+GITHUB_VERSION_FILE="$OUTPUT_DIR/github-version.json"
+CDN_VERSION_FILE="$OUTPUT_DIR/cdn-version.json"
+LOCAL_VERSION_FILE="$OUTPUT_DIR/local_version.json"
+LATEST_VERSION_FILE="$OUTPUT_DIR/latest_version.json"
+RECEIPT_FILE="$OUTPUT_DIR/receipt.json"
 
-# latest_version.json is the lightweight check endpoint. The desktop client
-# reads only this document while checking, then fetches version.json only when
-# the user starts a download.
-metadata_sha256=$(get_sha256 "$OUTPUT_FILE")
+echo "$github_manifest" > "$GITHUB_VERSION_FILE"
+echo "$cdn_manifest" > "$CDN_VERSION_FILE"
+# Packaged clients receive the GitHub manifest as their local baseline.
+cp "$GITHUB_VERSION_FILE" "$LOCAL_VERSION_FILE"
+
+# CDN bridge pointer (legacy schema, frozen at bridge release N).
 latest_json=$(jq -n \
     --arg latestVersion "$VERSION" \
-    --arg metadataUrl "${BASE_URL}/${VERSION}/version.json" \
-    --arg metadataSha256 "$metadata_sha256" \
-    --arg releaseNotes "Known issue fixes" \
-    '{latestVersion: $latestVersion, metadataUrl: $metadataUrl, metadataSha256: $metadataSha256, releaseNotes: $releaseNotes, forceUpdate: false}')
-echo "$latest_json" > "$SOURCE_DIR/latest_version.json"
+    --arg metadataUrl "${CDN_BASE_URL}/${VERSION}/version.json" \
+    '{latestVersion: $latestVersion, metadataUrl: $metadataUrl, forceUpdate: false}')
+echo "$latest_json" > "$LATEST_VERSION_FILE"
+
+# Canonical artifact receipt.
+manifest_sha256=$(get_sha256 "$GITHUB_VERSION_FILE")
+local_manifest_sha256=$(get_sha256 "$LOCAL_VERSION_FILE")
+receipt_json=$(jq -n \
+    --arg version "$VERSION" \
+    --argjson files "$receipt_files_array" \
+    --arg manifestSha256 "$manifest_sha256" \
+    --arg localManifestSha256 "$local_manifest_sha256" \
+    '{version: $version, files: $files, manifestSha256: $manifestSha256, localManifestSha256: $localManifestSha256}')
+echo "$receipt_json" > "$RECEIPT_FILE"
+
+# --- 7. Dual manifest identity check ---
+# Normalize only approved differences:
+#   - payload URLs (host/path prefix)
+#   - GitHub-only top-level fields: releasePageUrl, forceUpdate
+# Then prove the remaining semantic fields are structurally identical.
+normalized_equal=$(jq -n \
+    --slurpfile github "$GITHUB_VERSION_FILE" \
+    --slurpfile cdn "$CDN_VERSION_FILE" \
+    '($github[0] | del(.releasePageUrl, .forceUpdate) | .files |= map(del(.url)))
+     ==
+     ($cdn[0] | .files |= map(del(.url)))')
+
+if [[ "$normalized_equal" != "true" ]]; then
+    echo "Error: GitHub and CDN manifests differ beyond approved fields." >&2
+    exit 1
+fi
 
 echo ""
-echo "Success: metadata generated at $OUTPUT_FILE and $SOURCE_DIR/latest_version.json"
+echo "Success: manifests and receipt generated in $OUTPUT_DIR"
+echo "  GitHub manifest:  $GITHUB_VERSION_FILE"
+echo "  CDN manifest:     $CDN_VERSION_FILE"
+echo "  Local manifest:   $LOCAL_VERSION_FILE"
+echo "  CDN pointer:      $LATEST_VERSION_FILE"
+echo "  Receipt:          $RECEIPT_FILE"
