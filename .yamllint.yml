@@ -1,0 +1,11 @@
+extends: default
+
+rules:
+  braces: disable
+  brackets: disable
+  comments-indentation: disable
+  document-start: disable
+  line-length: disable
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off']
+    check-keys: false
