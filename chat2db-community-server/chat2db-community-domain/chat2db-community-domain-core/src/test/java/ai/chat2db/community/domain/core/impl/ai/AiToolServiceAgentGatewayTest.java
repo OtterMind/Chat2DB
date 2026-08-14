@@ -17,9 +17,11 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiToolServiceAgentGatewayTest {
@@ -59,6 +61,41 @@ class AiToolServiceAgentGatewayTest {
         assertEquals("persisted rows", service.executeSql(request("run-1", "SELECT * FROM orders", 7L)));
     }
 
+    @Test
+    void routesAgentSqlToTheMatchingScopeAcrossMultipleDatasources() throws Exception {
+        AtomicReference<AgentSqlToolRequest> captured = new AtomicReference<>();
+        AgentSqlExecutionPermit permit = new AgentSqlExecutionPermit();
+        permit.setDecision(AgentSqlPermitDecisionEnum.REPLAY_RESULT);
+        permit.setReplayResult("warehouse rows");
+        AiToolServiceImpl service = service(request -> {
+            captured.set(request);
+            return permit;
+        });
+
+        AiExecuteSqlRequest request = request("run-1", "SELECT * FROM inventory", 8L);
+        request.setDatabaseName("warehouse");
+        request.getAiToolContextRequest().setAgentDataScope(null);
+        request.getAiToolContextRequest().setAgentDataScopes(List.of(
+                scope(7L, "sales"), scope(8L, "warehouse")));
+
+        assertEquals("warehouse rows", service.executeSql(request));
+        assertEquals(8L, captured.get().getDataSourceId());
+        assertEquals("warehouse", captured.get().getDatabaseName());
+    }
+
+    @Test
+    void rejectsDatasourceOutsideAllAgentScopes() throws Exception {
+        AiToolServiceImpl service = service(request -> {
+            throw new AssertionError("unauthorized SQL must not reach the Agent Tool Gateway");
+        });
+        AiExecuteSqlRequest request = request("run-1", "SELECT * FROM inventory", 9L);
+        request.getAiToolContextRequest().setAgentDataScope(null);
+        request.getAiToolContextRequest().setAgentDataScopes(List.of(
+                scope(7L, "sales"), scope(8L, "warehouse")));
+
+        assertThrows(IllegalArgumentException.class, () -> service.executeSql(request));
+    }
+
     private AiToolServiceImpl service(SqlPrepare prepare) throws Exception {
         AiToolServiceImpl service = new AiToolServiceImpl();
         IAgentToolGateway gateway = (IAgentToolGateway) Proxy.newProxyInstance(
@@ -88,9 +125,7 @@ class AiToolServiceAgentGatewayTest {
     }
 
     private AiExecuteSqlRequest request(String runId, String sql, Long dataSourceId) {
-        AgentDataScope scope = new AgentDataScope();
-        scope.setDataSourceId(dataSourceId);
-        scope.setMaxRows(100);
+        AgentDataScope scope = scope(dataSourceId, null);
         AiToolContextRequest context = new AiToolContextRequest();
         context.setAgentRunId(runId);
         context.setAgentDataScope(scope);
@@ -99,6 +134,14 @@ class AiToolServiceAgentGatewayTest {
         request.setDataSourceId(dataSourceId);
         request.setAiToolContextRequest(context);
         return request;
+    }
+
+    private AgentDataScope scope(Long dataSourceId, String databaseName) {
+        AgentDataScope scope = new AgentDataScope();
+        scope.setDataSourceId(dataSourceId);
+        scope.setDatabaseName(databaseName);
+        scope.setMaxRows(100);
+        return scope;
     }
 
     private void set(Object target, String name, Object value) throws Exception {

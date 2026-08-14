@@ -41,6 +41,13 @@ import java.util.regex.Pattern;
 public class AgentArtifactServiceImpl implements IAgentArtifactService {
 
     private static final Pattern CHART_BLOCK = Pattern.compile("(?s)```chart\\s*(\\{.*?})\\s*```");
+    private static final Pattern MERMAID_PIE_START = Pattern.compile("(?i)^\\s*pie(?:\\s+title\\s+(.+))?\\s*$");
+    private static final Pattern MERMAID_PIE_ROW = Pattern.compile(
+            "^\\s*[\\\"'](.+?)[\\\"']\\s*:\\s*(-?\\d+(?:\\.\\d+)?)\\s*$");
+    private static final Pattern MERMAID_XY_START = Pattern.compile("(?i)^\\s*xychart-beta\\s*$");
+    private static final Pattern MERMAID_XY_TITLE = Pattern.compile("(?i)^\\s*title\\s+[\\\"']?(.*?)[\\\"']?\\s*$");
+    private static final Pattern MERMAID_XY_AXIS = Pattern.compile("(?i)^\\s*x-axis\\s*\\[(.*)]\\s*$");
+    private static final Pattern MERMAID_XY_SERIES = Pattern.compile("(?i)^\\s*(bar|line)\\s*\\[(.*)]\\s*$");
     private static final Set<String> CHART_TYPES = Set.of(
             "Column", "Bar", "Line", "AreaLine", "Pie", "RingPie", "RosePie",
             "Funnel", "Scatter", "Statistics", "Combo");
@@ -258,20 +265,180 @@ public class AgentArtifactServiceImpl implements IAgentArtifactService {
                 // Invalid model output remains visible in the report but is not promoted to an Artifact.
             }
         }
+        charts.addAll(mermaidChartSpecs(markdown).stream().filter(this::validChart).toList());
         return charts;
     }
 
+    private List<Map<String, Object>> mermaidChartSpecs(String markdown) {
+        List<Map<String, Object>> charts = new ArrayList<>();
+        String[] lines = markdown.split("\\R", -1);
+        for (int index = 0; index < lines.length; index++) {
+            Matcher pieStart = MERMAID_PIE_START.matcher(lines[index]);
+            if (pieStart.matches()) {
+                List<Map<String, Object>> data = new ArrayList<>();
+                int cursor = index + 1;
+                while (cursor < lines.length) {
+                    Matcher row = MERMAID_PIE_ROW.matcher(lines[cursor]);
+                    if (!row.matches()) {
+                        break;
+                    }
+                    data.add(Map.of("category", row.group(1), "value", chartNumber(row.group(2))));
+                    cursor++;
+                }
+                if (!data.isEmpty()) {
+                    Map<String, Object> chart = new LinkedHashMap<>();
+                    chart.put("chartType", "Pie");
+                    chart.put("angleField", "category");
+                    chart.put("valueField", "value");
+                    if (StringUtils.isNotBlank(pieStart.group(1))) {
+                        chart.put("title", stripChartQuotes(pieStart.group(1)));
+                    }
+                    chart.put("data", data);
+                    charts.add(chart);
+                    index = cursor - 1;
+                    continue;
+                }
+            }
+
+            if (!MERMAID_XY_START.matcher(lines[index]).matches()) {
+                continue;
+            }
+            String title = null;
+            List<String> categories = List.of();
+            List<Number> values = List.of();
+            String series = null;
+            int cursor = index + 1;
+            while (cursor < lines.length) {
+                String line = lines[cursor];
+                Matcher titleLine = MERMAID_XY_TITLE.matcher(line);
+                Matcher axisLine = MERMAID_XY_AXIS.matcher(line);
+                Matcher seriesLine = MERMAID_XY_SERIES.matcher(line);
+                if (titleLine.matches()) {
+                    title = stripChartQuotes(titleLine.group(1));
+                } else if (axisLine.matches()) {
+                    categories = chartValues(axisLine.group(1));
+                } else if (line.trim().toLowerCase().startsWith("y-axis")) {
+                    // Dashboard derives the numeric axis from the series values.
+                } else if (seriesLine.matches()) {
+                    series = seriesLine.group(1);
+                    values = chartNumbers(seriesLine.group(2));
+                } else if (!line.isBlank() && !"```".equals(line.trim())) {
+                    break;
+                }
+                cursor++;
+            }
+            if (!categories.isEmpty() && categories.size() == values.size()) {
+                List<Map<String, Object>> data = new ArrayList<>();
+                for (int row = 0; row < categories.size(); row++) {
+                    data.add(Map.of("category", categories.get(row), "value", values.get(row)));
+                }
+                Map<String, Object> chart = new LinkedHashMap<>();
+                chart.put("chartType", "line".equalsIgnoreCase(series) ? "Line" : "Column");
+                chart.put("xField", "category");
+                chart.put("yField", "value");
+                if (StringUtils.isNotBlank(title)) {
+                    chart.put("title", title);
+                }
+                chart.put("data", data);
+                charts.add(chart);
+                index = cursor - 1;
+            }
+        }
+        return charts;
+    }
+
+    private List<String> chartValues(String source) {
+        List<String> values = new ArrayList<>();
+        for (String value : source.split(",")) {
+            String normalized = stripChartQuotes(value);
+            if (StringUtils.isNotBlank(normalized)) {
+                values.add(normalized);
+            }
+        }
+        return values;
+    }
+
+    private List<Number> chartNumbers(String source) {
+        List<Number> values = new ArrayList<>();
+        try {
+            for (String value : source.split(",")) {
+                values.add(chartNumber(value.trim()));
+            }
+        } catch (NumberFormatException exception) {
+            return List.of();
+        }
+        return values;
+    }
+
+    private Number chartNumber(String value) {
+        String normalized = value.trim();
+        return normalized.contains(".") ? Double.parseDouble(normalized) : Long.parseLong(normalized);
+    }
+
+    private String stripChartQuotes(String value) {
+        String normalized = StringUtils.trimToEmpty(value);
+        if (normalized.length() >= 2
+                && ((normalized.startsWith("\"") && normalized.endsWith("\""))
+                || (normalized.startsWith("'") && normalized.endsWith("'")))) {
+            return normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized;
+    }
+
     private boolean validChart(Map<String, Object> chart) {
-        if (chart == null || !CHART_TYPES.contains(String.valueOf(chart.get("chartType")))) {
+        String chartType = chart == null ? null : String.valueOf(chart.get("chartType"));
+        if (!CHART_TYPES.contains(chartType)) {
             return false;
         }
         Object data = chart.get("data");
         if (!(data instanceof List<?> rows) || rows.isEmpty() || rows.size() > 500) {
             return false;
         }
-        return rows.stream().allMatch(row -> row instanceof Map<?, ?> map
+        if (!rows.stream().allMatch(row -> row instanceof Map<?, ?> map
                 && !map.isEmpty()
-                && map.values().stream().noneMatch(value -> value instanceof Map<?, ?> || value instanceof List<?>));
+                && map.values().stream().noneMatch(value -> value instanceof Map<?, ?> || value instanceof List<?>))) {
+            return false;
+        }
+        return switch (chartType) {
+            case "Pie", "RingPie", "RosePie" -> chartFieldsPresent(chart, rows, "angleField", "valueField")
+                    && numericChartField(chart, rows, "valueField");
+            case "Statistics" -> chartFieldsPresent(chart, rows, "valueField")
+                    && numericChartField(chart, rows, "valueField");
+            case "Combo" -> validComboChart(chart, rows);
+            default -> chartFieldsPresent(chart, rows, "xField", "yField")
+                    && numericChartField(chart, rows, "yField");
+        };
+    }
+
+    private boolean chartFieldsPresent(Map<String, Object> chart, List<?> rows, String... fieldKeys) {
+        for (String fieldKey : fieldKeys) {
+            Object configured = chart.get(fieldKey);
+            if (!(configured instanceof String field) || StringUtils.isBlank(field)
+                    || rows.stream().anyMatch(row -> !((Map<?, ?>) row).containsKey(field))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean numericChartField(Map<String, Object> chart, List<?> rows, String fieldKey) {
+        String field = String.valueOf(chart.get(fieldKey));
+        return rows.stream().allMatch(row -> ((Map<?, ?>) row).get(field) instanceof Number);
+    }
+
+    private boolean validComboChart(Map<String, Object> chart, List<?> rows) {
+        if (!chartFieldsPresent(chart, rows, "xField")
+                || !(chart.get("comboYAxisData") instanceof List<?> series) || series.isEmpty()) {
+            return false;
+        }
+        for (Object item : series) {
+            if (!(item instanceof Map<?, ?> definition)
+                    || !(definition.get("field") instanceof String field) || StringUtils.isBlank(field)
+                    || rows.stream().anyMatch(row -> !(((Map<?, ?>) row).get(field) instanceof Number))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private List<AgentArtifactEvidence> successfulSqlEvidence(String runId) {

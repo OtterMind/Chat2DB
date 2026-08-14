@@ -31,6 +31,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.h2.jdbcx.JdbcDataSource;
 
 import java.nio.file.Path;
 import java.util.ConcurrentModificationException;
@@ -43,11 +44,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class H2AgentControlStorageTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void keepsEmbeddedDatabaseOpenBetweenPollingConnections() {
+        JdbcDataSource dataSource = (JdbcDataSource) H2AgentControlStorage.createDataSource(
+                tempDir.resolve("polling-store"));
+
+        assertTrue(dataSource.getURL().contains("DB_CLOSE_DELAY=-1"));
+        assertTrue(dataSource.getURL().contains("DB_CLOSE_ON_EXIT=FALSE"));
+    }
 
     @Test
     void initializesWhenThreadContextClassLoaderIsNull() {

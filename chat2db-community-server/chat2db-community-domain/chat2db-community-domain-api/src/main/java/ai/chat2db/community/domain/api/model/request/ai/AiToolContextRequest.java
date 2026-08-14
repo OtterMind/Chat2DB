@@ -6,6 +6,8 @@ import ai.chat2db.community.tools.model.Context;
 import jakarta.validation.Valid;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class AiToolContextRequest {
 
@@ -27,6 +29,13 @@ public class AiToolContextRequest {
      */
     @Valid
     private AgentDataScope agentDataScope;
+
+    /**
+     * Authorized Task scopes for Agent Runs. A database tool call must resolve
+     * its target to exactly one entry before accessing a connection.
+     */
+    @Valid
+    private List<AgentDataScope> agentDataScopes;
 
     private String agentRunId;
 }

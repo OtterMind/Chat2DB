@@ -144,6 +144,52 @@ class AgentArtifactServiceTest {
                 .getVersions().get(0).getContent().get("tables")).get(0)).get("columns")));
     }
 
+    @Test
+    void convertsMermaidPieAndXyChartsToDashboardArtifacts() {
+        String runId = creation.getInitialRun().getId();
+        AgentSqlProposal proposal = new AgentSqlProposal();
+        proposal.setId("proposal-mermaid");
+        proposal.setRunId(runId);
+        proposal.setProposalVersion(1);
+        proposal.setSqlSnapshot("select type, count(*) from channels group by type");
+        proposal.setSqlHash("sql-hash");
+        proposal.setDataSourceId(7L);
+        proposal.setRevision(1L);
+        storage.createSqlProposal(proposal, null);
+        AgentToolAttempt attempt = new AgentToolAttempt();
+        attempt.setId("attempt-mermaid");
+        attempt.setRunId(runId);
+        attempt.setProposalId(proposal.getId());
+        attempt.setProposalVersion(1);
+        attempt.setToolCallId("call-mermaid");
+        attempt.setStatus(AgentToolAttemptStatusEnum.SUCCEEDED);
+        attempt.setCompletedAt(new Date());
+        attempt.setRevision(1L);
+        storage.createOrGetToolAttempt(attempt);
+
+        List<AgentArtifactDetail> extracted = artifactService.extractStructuredArtifacts(
+                creation.getTask().getId(), runId, 7L, """
+                        图表展示
+                        pie title OneAPI 渠道类型分布（共6个）
+                            "智谱 GLM (type=14)" : 5
+                            "MiniMax (type=27)" : 1
+                        xychart-beta
+                            title "各渠道配置情况"
+                            x-axis [GLM-PRO, MiniMax, GLM-MAX-3]
+                            y-axis "渠道" 0 --> 6
+                            bar [1, 1, 1]
+                        """);
+
+        assertEquals(List.of(AgentArtifactTypeEnum.CHART, AgentArtifactTypeEnum.DATA_TABLE), extracted.stream()
+                .map(detail -> detail.getArtifact().getType()).toList());
+        List<?> charts = (List<?>) extracted.get(0).getVersions().get(0).getContent().get("charts");
+        assertEquals(2, charts.size());
+        assertEquals("Pie", ((Map<?, ?>) charts.get(0)).get("chartType"));
+        assertEquals("Column", ((Map<?, ?>) charts.get(1)).get("chartType"));
+        assertEquals("GLM-MAX-3", ((Map<?, ?>) ((List<?>) ((Map<?, ?>) charts.get(1)).get("data")).get(2))
+                .get("category"));
+    }
+
     private AgentArtifactCreateRequest reportRequest(AgentArtifactEvidence evidence) {
         AgentArtifactCreateRequest request = new AgentArtifactCreateRequest();
         request.setTaskId(creation.getTask().getId());

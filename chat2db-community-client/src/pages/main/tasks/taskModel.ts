@@ -8,6 +8,131 @@ import type {
 
 const DSML_TOOL_BLOCK = /<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/gi;
 const XML_TOOL_BLOCK = /<tool_calls?>[\s\S]*?<\/tool_calls?>/gi;
+const JSON_CHART_BLOCK = /```chart\s*([\s\S]*?)```/gi;
+const CHART_SECTION_LABEL = /^(?:图表展示|charts?)\s*[:：]?$/i;
+const PIE_START = /^pie(?:\s+title\s+(.+))?$/i;
+const PIE_ROW = /^["'](.+?)["']\s*:\s*(-?\d+(?:\.\d+)?)$/;
+const XY_START = /^xychart-beta$/i;
+const XY_TITLE = /^title\s+["']?(.*?)["']?$/i;
+const XY_AXIS = /^x-axis\s*\[(.*)]$/i;
+const XY_SERIES = /^(bar|line)\s*\[(.*)]$/i;
+
+export interface AgentChartPresentation {
+  markdown: string;
+  charts: Array<Record<string, unknown>>;
+}
+
+function chartSpec(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const chart = value as Record<string, unknown>;
+  return typeof chart.chartType === 'string' && Array.isArray(chart.data) && chart.data.length
+    ? chart
+    : undefined;
+}
+
+function splitChartValues(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
+}
+
+/**
+ * Converts the lightweight Mermaid chart syntax commonly emitted by models into
+ * the same chart schema used by Dashboard. Parsed source lines are removed from
+ * Markdown so historical task results do not display chart source as text.
+ */
+export function extractAgentChartPresentation(value?: string): AgentChartPresentation {
+  const charts: Array<Record<string, unknown>> = [];
+  const withoutJsonCharts = (value || '').replace(JSON_CHART_BLOCK, (_, body: string) => {
+    try {
+      const parsed = chartSpec(JSON.parse(body));
+      if (parsed) {
+        charts.push(parsed);
+        return '';
+      }
+    } catch {
+      // Preserve malformed model output so the user can still inspect it.
+    }
+    return `\`\`\`chart${body}\`\`\``;
+  });
+  const lines = withoutJsonCharts.split('\n');
+  const consumed = new Set<number>();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    const pie = PIE_START.exec(line);
+    if (pie) {
+      const data: Array<{ category: string; value: number }> = [];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const row = PIE_ROW.exec(lines[cursor].trim());
+        if (!row) break;
+        data.push({ category: row[1], value: Number(row[2]) });
+        cursor += 1;
+      }
+      if (data.length && data.length <= 500) {
+        charts.push({
+          chartType: 'Pie',
+          angleField: 'category',
+          valueField: 'value',
+          title: pie[1]?.trim().replace(/^["']|["']$/g, ''),
+          data,
+        });
+        for (let row = index; row < cursor; row += 1) consumed.add(row);
+        if (index > 0 && CHART_SECTION_LABEL.test(lines[index - 1].trim())) consumed.add(index - 1);
+        index = cursor - 1;
+        continue;
+      }
+    }
+
+    if (!XY_START.test(line)) continue;
+    let cursor = index + 1;
+    let title: string | undefined;
+    let categories: string[] = [];
+    let seriesType: string | undefined;
+    let values: number[] = [];
+    while (cursor < lines.length) {
+      const current = lines[cursor].trim();
+      const titleMatch = XY_TITLE.exec(current);
+      const axisMatch = XY_AXIS.exec(current);
+      const seriesMatch = XY_SERIES.exec(current);
+      if (titleMatch) title = titleMatch[1].trim().replace(/^["']|["']$/g, '');
+      else if (axisMatch) categories = splitChartValues(axisMatch[1]);
+      else if (/^y-axis\b/i.test(current)) {
+        // The Dashboard schema derives its numeric axis from the series data.
+      } else if (seriesMatch) {
+        seriesType = seriesMatch[1].toLowerCase();
+        values = splitChartValues(seriesMatch[2]).map(Number);
+      } else if (current && current !== '```') break;
+      cursor += 1;
+    }
+    if (categories.length
+      && categories.length <= 500
+      && categories.length === values.length
+      && values.every(Number.isFinite)) {
+      charts.push({
+        chartType: seriesType === 'line' ? 'Line' : 'Column',
+        xField: 'category',
+        yField: 'value',
+        title,
+        data: categories.map((category, row) => ({ category, value: values[row] })),
+      });
+      for (let row = index; row < cursor; row += 1) consumed.add(row);
+      if (index > 0 && CHART_SECTION_LABEL.test(lines[index - 1].trim())) consumed.add(index - 1);
+      index = cursor - 1;
+    }
+  }
+
+  return {
+    markdown: lines
+      .filter((_, index) => !consumed.has(index))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+    charts,
+  };
+}
 
 export function cleanAgentMarkdown(value?: string): string {
   return (value || '')
@@ -23,7 +148,7 @@ export interface AgentToolActivity {
   arguments?: string;
   result?: string;
   occurredAt: string | number;
-  status: 'RUNNING' | 'COMPLETED';
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
 }
 
 export function buildToolActivities(events: AgentRunEvent[]): AgentToolActivity[] {
@@ -50,14 +175,18 @@ export function buildToolActivities(events: AgentRunEvent[]): AgentToolActivity[
       || [...rows].reverse().find((row) => row.status === 'RUNNING' && row.name === resultName);
     if (existing) {
       existing.result = event.content;
-      existing.status = 'COMPLETED';
+      existing.status = event.payload?.success === false || event.payload?.status === 'FAILED'
+        ? 'FAILED'
+        : 'COMPLETED';
     } else {
       rows.push({
         id: callId,
         name: String(event.payload?.name || 'tool'),
         result: event.content,
         occurredAt: event.occurredAt,
-        status: 'COMPLETED',
+        status: event.payload?.success === false || event.payload?.status === 'FAILED'
+          ? 'FAILED'
+          : 'COMPLETED',
       });
     }
   });

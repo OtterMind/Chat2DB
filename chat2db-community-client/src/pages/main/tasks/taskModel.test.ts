@@ -8,6 +8,7 @@ import {
   buildToolActivities,
   cleanAgentMarkdown,
   currentArtifactVersion,
+  extractAgentChartPresentation,
   groupTasks,
   TASK_TRANSITIONS,
 } from './taskModel';
@@ -35,6 +36,22 @@ assert.deepEqual(
   [['todo'], ['running'], ['review'], ['done']],
   'task board should group lifecycle states without losing tasks',
 );
+
+assert.equal(
+  buildToolActivities([
+    {
+      eventId: 'failed-result',
+      runId: 'run',
+      sequence: 1,
+      type: 'TOOL_RESULT',
+      content: 'SQL execution failed: syntax error',
+      payload: { name: 'execute_sql', success: false, status: 'FAILED' },
+      occurredAt: 3,
+    },
+  ])[0].status,
+  'FAILED',
+  'a completed callback with a failed SQL outcome must be presented as failed',
+);
 assert.deepEqual(TASK_TRANSITIONS.DONE, [], 'terminal tasks must not expose an invalid transition');
 
 const artifact = {
@@ -55,6 +72,40 @@ assert.equal(currentArtifactVersion(artifact)?.version, 2);
 assert.equal(artifactMarkdown(artifact), '# Result');
 assert.equal(artifactCharts(artifact).length, 1);
 assert.equal(artifactTables(artifact).length, 1);
+
+const chartPresentation = extractAgentChartPresentation(`图表展示
+pie title OneAPI 渠道类型分布（共6个）
+    "智谱 GLM (type=14)" : 5
+    "MiniMax (type=27)" : 1
+xychart-beta
+    title "各渠道配置情况"
+    x-axis [GLM-PRO, MiniMax, GLM-MAX-3]
+    y-axis "渠道" 0 --> 6
+    bar [1, 1, 1]`);
+assert.equal(chartPresentation.markdown, '');
+assert.deepEqual(chartPresentation.charts, [
+  {
+    chartType: 'Pie',
+    angleField: 'category',
+    valueField: 'value',
+    title: 'OneAPI 渠道类型分布（共6个）',
+    data: [
+      { category: '智谱 GLM (type=14)', value: 5 },
+      { category: 'MiniMax (type=27)', value: 1 },
+    ],
+  },
+  {
+    chartType: 'Column',
+    xField: 'category',
+    yField: 'value',
+    title: '各渠道配置情况',
+    data: [
+      { category: 'GLM-PRO', value: 1 },
+      { category: 'MiniMax', value: 1 },
+      { category: 'GLM-MAX-3', value: 1 },
+    ],
+  },
+]);
 
 assert.equal(
   cleanAgentMarkdown('准备调用。\n\n<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name="list_all_datasources"></｜｜DSML｜｜invoke></｜｜DSML｜｜tool_calls>'),

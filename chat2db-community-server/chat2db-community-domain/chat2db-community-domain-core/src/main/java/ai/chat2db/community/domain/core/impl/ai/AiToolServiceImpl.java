@@ -101,11 +101,13 @@ public class AiToolServiceImpl implements IAiToolService {
             return emitToolResult(toolContext, "list_all_datasources", "No datasources found.");
         }
 
-        AgentDataScope agentScope = agentScope(toolContext);
+        List<AgentDataScope> agentScopes = agentScopes(toolContext);
+        boolean agentRun = isAgentRun(toolContext);
         return emitToolResult(toolContext, "list_all_datasources", result.getData().stream()
                 .filter(Objects::nonNull)
-                .filter(dataSource -> agentScope == null
-                        || Objects.equals(agentScope.getDataSourceId(), dataSource.getId()))
+                .filter(dataSource -> (!agentRun && agentScopes.isEmpty())
+                        || agentScopes.stream().anyMatch(scope ->
+                        Objects.equals(scope.getDataSourceId(), dataSource.getId())))
                 .map(dataSource -> {
                     List<String> parts = new ArrayList<>();
                     parts.add("id=" + dataSource.getId());
@@ -126,6 +128,7 @@ public class AiToolServiceImpl implements IAiToolService {
         String schemaName = aiListTablesRequest == null ? null : aiListTablesRequest.getSchemaName();
         AiToolContextRequest toolContext = aiListTablesRequest == null ? null : aiListTablesRequest.getAiToolContextRequest();
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
         try {
             connectionContextService.bindProfile(profile);
             DbTablePageQueryRequest queryParam = DbTablePageQueryRequest.builder()
@@ -137,10 +140,10 @@ public class AiToolServiceImpl implements IAiToolService {
                     .refresh(false)
                     .build();
             List<SimpleTable> result = tableService.queryTables(queryParam);
-            if (CollectionUtils.isNotEmpty(result) && agentScope(toolContext) != null) {
+            if (CollectionUtils.isNotEmpty(result) && agentScope != null) {
                 result = result.stream()
                         .filter(table -> table != null
-                                && AgentToolScopePolicy.allowsTable(agentScope(toolContext), table.getName()))
+                                && AgentToolScopePolicy.allowsTable(agentScope, table.getName()))
                         .toList();
             }
             if (CollectionUtils.isEmpty(result)) {
@@ -156,7 +159,7 @@ public class AiToolServiceImpl implements IAiToolService {
     public String listAllDatabases(Long dataSourceId,
             AiToolContextRequest toolContext) {
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, null, null);
-        AgentDataScope agentScope = agentScope(toolContext);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
         if (agentScope != null && StringUtils.isNotBlank(agentScope.getDatabaseName())) {
             return emitToolResult(toolContext, "list_all_databases", agentScope.getDatabaseName());
         }
@@ -188,7 +191,7 @@ public class AiToolServiceImpl implements IAiToolService {
         if (StringUtils.isBlank(targetDatabase)) {
             return emitToolResult(toolContext, "list_all_schemas", "databaseName is required for listing schemas.");
         }
-        AgentDataScope agentScope = agentScope(toolContext);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
         if (agentScope != null && StringUtils.isNotBlank(agentScope.getSchemaName())) {
             return emitToolResult(toolContext, "list_all_schemas", agentScope.getSchemaName());
         }
@@ -226,8 +229,9 @@ public class AiToolServiceImpl implements IAiToolService {
             return emitToolResult(toolContext, "execute_sql", "sql is empty.");
         }
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
-        AgentToolScopePolicy.requireSql(agentScope(toolContext), sql);
-        int resolvedPageSize = normalizePageSize(pageSize, agentScope(toolContext));
+        AgentDataScope agentScope = agentScope(toolContext, profile);
+        AgentToolScopePolicy.requireSql(agentScope, sql);
+        int resolvedPageSize = normalizePageSize(pageSize, agentScope);
         String trimmedSql = sql.trim();
         AgentSqlExecutionPermit permit = prepareAgentSql(toolContext, trimmedSql, profile);
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED) {
@@ -360,13 +364,12 @@ public class AiToolServiceImpl implements IAiToolService {
         if (CollectionUtils.isEmpty(normalized)) {
             return emitToolResult(toolContext, "get_tables_schema", "tableNames is empty.");
         }
-        AgentDataScope agentScope = agentScope(toolContext);
+        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
         if (agentScope != null
                 && normalized.stream().anyMatch(table -> !AgentToolScopePolicy.allowsTable(agentScope, table))) {
             throw new IllegalArgumentException("requested table is outside the Agent Task data scope");
         }
-
-        ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
         try {
             connectionContextService.bindProfile(profile);
             StringBuilder ddlBuilder = new StringBuilder(4096);
@@ -799,21 +802,84 @@ public class AiToolServiceImpl implements IAiToolService {
         if (StringUtils.isBlank(resolvedSchemaName) && contextProfile != null) {
             resolvedSchemaName = contextProfile.getSchemaName();
         }
+        List<AgentDataScope> scopes = agentScopes(toolContext);
+        if (Objects.isNull(resolvedDataSourceId) && scopes.size() == 1) {
+            resolvedDataSourceId = scopes.get(0).getDataSourceId();
+        }
         if (Objects.nonNull(resolvedDataSourceId)) {
-            AgentToolScopePolicy.requireConnection(agentScope(toolContext), resolvedDataSourceId,
+            AgentDataScope scope = resolveAgentScope(toolContext, resolvedDataSourceId,
                     resolvedDatabaseName, resolvedSchemaName);
+            if (scope != null) {
+                if (StringUtils.isBlank(resolvedDatabaseName)) {
+                    resolvedDatabaseName = scope.getDatabaseName();
+                }
+                if (StringUtils.isBlank(resolvedSchemaName)) {
+                    resolvedSchemaName = scope.getSchemaName();
+                }
+                AgentToolScopePolicy.requireConnection(scope, resolvedDataSourceId,
+                        resolvedDatabaseName, resolvedSchemaName);
+            }
             final Long scopedDataSourceId = resolvedDataSourceId;
             final String scopedDatabaseName = resolvedDatabaseName;
             final String scopedSchemaName = resolvedSchemaName;
             return invokeWithRequestContext(toolContext,
                     () -> buildProfile(scopedDataSourceId, scopedDatabaseName, scopedSchemaName));
         }
+        if (isAgentRun(toolContext) && scopes.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Multiple Agent Task data scopes are authorized. Provide dataSourceId for this tool call.");
+        }
         throw new IllegalArgumentException(
                 "No database connection context found. Call list_all_datasources first, then provide dataSourceId/databaseName.");
     }
 
-    private AgentDataScope agentScope(AiToolContextRequest toolContext) {
-        return toolContext == null ? null : toolContext.getAgentDataScope();
+    private AgentDataScope agentScope(AiToolContextRequest toolContext, ConnectionProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        return resolveAgentScope(toolContext, profile.getDataSourceId(),
+                profile.getDatabaseName(), profile.getSchemaName());
+    }
+
+    private AgentDataScope resolveAgentScope(AiToolContextRequest toolContext, Long dataSourceId,
+                                             String databaseName, String schemaName) {
+        List<AgentDataScope> scopes = agentScopes(toolContext);
+        if (scopes.isEmpty()) {
+            if (isAgentRun(toolContext)) {
+                throw new IllegalArgumentException("No database tools are authorized for this Agent Task");
+            }
+            return null;
+        }
+        List<AgentDataScope> matches = scopes.stream()
+                .filter(scope -> Objects.equals(scope.getDataSourceId(), dataSourceId))
+                .filter(scope -> matchesScopeName(scope.getDatabaseName(), databaseName))
+                .filter(scope -> matchesScopeName(scope.getSchemaName(), schemaName))
+                .toList();
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException(
+                    "Database target must resolve to exactly one authorized Agent Task data scope");
+        }
+        return matches.get(0);
+    }
+
+    private List<AgentDataScope> agentScopes(AiToolContextRequest toolContext) {
+        if (toolContext == null) {
+            return List.of();
+        }
+        if (CollectionUtils.isNotEmpty(toolContext.getAgentDataScopes())) {
+            return toolContext.getAgentDataScopes();
+        }
+        return toolContext.getAgentDataScope() == null
+                ? List.of() : List.of(toolContext.getAgentDataScope());
+    }
+
+    private boolean isAgentRun(AiToolContextRequest toolContext) {
+        return toolContext != null && StringUtils.isNotBlank(toolContext.getAgentRunId());
+    }
+
+    private boolean matchesScopeName(String authorized, String requested) {
+        return StringUtils.isBlank(requested) || StringUtils.isBlank(authorized)
+                || authorized.equalsIgnoreCase(requested);
     }
 
     private ConnectionProfile resolveConnectionProfile(AiToolContextRequest toolContext) {

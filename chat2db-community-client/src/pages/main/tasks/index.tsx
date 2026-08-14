@@ -75,6 +75,7 @@ import {
   buildToolActivities,
   cleanAgentMarkdown,
   currentArtifactVersion,
+  extractAgentChartPresentation,
   groupTasks,
   TASK_TRANSITIONS,
 } from './taskModel';
@@ -179,13 +180,20 @@ interface ArtifactViewProps {
   detail: AgentArtifactDetail;
   publications: AgentTaskDetail['dashboardPublications'];
   onPublish: (artifact: AgentArtifactDetail, chartIndex: number) => void;
+  hasStructuredChartArtifact: boolean;
 }
 
-function ArtifactView({ detail, publications, onPublish }: ArtifactViewProps) {
+function ArtifactView({ detail, publications, onPublish, hasStructuredChartArtifact }: ArtifactViewProps) {
   const { styles } = useStyles();
   const version = currentArtifactVersion(detail);
-  const markdown = artifactMarkdown(detail).replace(/```chart[\s\S]*?```/g, '');
-  const charts = artifactCharts(detail);
+  const chartPresentation = extractAgentChartPresentation(artifactMarkdown(detail));
+  const structuredCharts = artifactCharts(detail);
+  const markdown = chartPresentation.markdown;
+  const charts = structuredCharts.length
+    ? structuredCharts
+    : hasStructuredChartArtifact
+      ? []
+      : chartPresentation.charts;
   const tables = artifactTables(detail);
   const publicationCount = publications.filter((item) => item.artifactId === detail.artifact.id).length;
 
@@ -217,14 +225,16 @@ function ArtifactView({ detail, publications, onPublish }: ArtifactViewProps) {
             isEditPermission={false}
             dropdownProps={{
               menu: {
-                items: [
-                  {
-                    key: 'publish',
-                    label: i18n('task.artifact.publish'),
-                    icon: <ExternalLink size={14} />,
-                    onClick: () => onPublish(detail, index),
-                  },
-                ],
+                items: structuredCharts.length
+                  ? [
+                      {
+                        key: 'publish',
+                        label: i18n('task.artifact.publish'),
+                        icon: <ExternalLink size={14} />,
+                        onClick: () => onPublish(detail, index),
+                      },
+                    ]
+                  : [],
               },
             }}
           />
@@ -828,6 +838,10 @@ export default function Tasks() {
                     detail={artifact}
                     publications={detail.dashboardPublications}
                     onPublish={openPublish}
+                    hasStructuredChartArtifact={detail.artifacts.some(
+                      (item) => item.artifact.createdByRunId === artifact.artifact.createdByRunId
+                        && artifactCharts(item).length > 0,
+                    )}
                   />
                 ))
               ) : (
@@ -1054,6 +1068,10 @@ export default function Tasks() {
                             detail={artifact}
                             publications={detail.dashboardPublications}
                             onPublish={openPublish}
+                            hasStructuredChartArtifact={detail.artifacts.some(
+                              (item) => item.artifact.createdByRunId === artifact.artifact.createdByRunId
+                                && artifactCharts(item).length > 0,
+                            )}
                           />
                         ))
                       ) : (
@@ -1123,11 +1141,13 @@ export default function Tasks() {
                                             <strong>{activity.name}</strong>
                                             <Tag
                                               bordered={false}
-                                              color={activity.status === 'COMPLETED' ? 'success' : 'processing'}
+                                              color={activity.status === 'COMPLETED'
+                                                ? 'success'
+                                                : activity.status === 'FAILED' ? 'error' : 'processing'}
                                             >
-                                              {activity.status === 'COMPLETED'
-                                                ? i18n('task.tool.completed')
-                                                : i18n('task.tool.running')}
+                                              {activity.status === 'COMPLETED' && i18n('task.tool.completed')}
+                                              {activity.status === 'FAILED' && i18n('task.status.failed')}
+                                              {activity.status === 'RUNNING' && i18n('task.tool.running')}
                                             </Tag>
                                             <ChevronRight size={13} />
                                           </summary>

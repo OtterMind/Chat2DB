@@ -517,7 +517,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     font-weight: 600;
   `,
   chart: css`
-    min-height: 320px;
+    height: 320px;
     margin-top: 10px;
   `,
   approval: css`

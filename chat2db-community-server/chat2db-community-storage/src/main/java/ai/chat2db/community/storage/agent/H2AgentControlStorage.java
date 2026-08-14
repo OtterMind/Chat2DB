@@ -1529,12 +1529,13 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         return result == null ? new ArrayList<>() : result;
     }
 
-    private static DataSource createDataSource(Path databasePath) {
+    static DataSource createDataSource(Path databasePath) {
         try {
             Path normalized = databasePath.toAbsolutePath().normalize();
             Files.createDirectories(normalized.getParent());
             JdbcDataSource dataSource = new JdbcDataSource();
-            dataSource.setURL("jdbc:h2:file:" + normalized + ";DB_CLOSE_ON_EXIT=FALSE");
+            dataSource.setURL("jdbc:h2:file:" + normalized
+                    + ";DB_CLOSE_ON_EXIT=FALSE;DB_CLOSE_DELAY=-1");
             dataSource.setUser("sa");
             dataSource.setPassword("");
             return dataSource;

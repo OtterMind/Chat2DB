@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.converter.ai;
 
+import java.util.List;
 import java.util.Map;
 
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
@@ -35,6 +36,12 @@ public class AiToolContextConverter {
         }
         if (context.get("agentDataScope") instanceof AgentDataScope agentDataScope) {
             param.setAgentDataScope(agentDataScope);
+        }
+        if (context.get("agentDataScopes") instanceof List<?> agentDataScopes) {
+            param.setAgentDataScopes(agentDataScopes.stream()
+                    .filter(AgentDataScope.class::isInstance)
+                    .map(AgentDataScope.class::cast)
+                    .toList());
         }
         if (context.get("agentRunId") instanceof String agentRunId) {
             param.setAgentRunId(agentRunId);
