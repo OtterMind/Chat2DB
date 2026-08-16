@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
 import PageTitle from '@/components/PageTitle';
 import i18n from '@/i18n';
@@ -509,7 +510,7 @@ export default memo<IProps>((props) => {
           >
             <Button>
               {i18n('knowledgeManagement.label.batchOperation')}
-              <IconfontSvg size="xs" code="icon-chevron-bottom" />
+              <ChevronDown size={14} />
             </Button>
           </Dropdown>
           <Button type="primary" onClick={handleAdd}>

@@ -4,7 +4,6 @@ export * from './dashboard';
 export * from './database';
 export * from './main';
 export * from './tree';
-export * from './setting';
 export * from './workspace';
 export * from './editTable';
 export * from './console';

@@ -15,11 +15,9 @@ public class InformixDBManager extends GenericDBManager implements IDbManager {
     public Connection getConnection(ConnectInfo connectInfo) {
         String url = connectInfo.getUrl();
         String service = connectInfo.getServiceName();
-        if(StringUtils.isNotBlank(service)){
-            url = url + ":" + "INFORMIXSERVER=" + service;
+        if (StringUtils.isNotBlank(service) && !StringUtils.contains(url, "INFORMIXSERVER=")) {
+            connectInfo.setUrl(url + ":" + "INFORMIXSERVER=" + service);
         }
-        connectInfo.setUrl(url);
-        Connection connection = super.getConnection(connectInfo);
-        return connection;
+        return super.getConnection(connectInfo);
     }
 }

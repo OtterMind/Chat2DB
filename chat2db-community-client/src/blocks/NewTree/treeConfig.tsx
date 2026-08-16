@@ -1,6 +1,6 @@
 import { ConsoleStatus, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { getRuntimeEditionCapabilities } from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import accountAdminService from '@/service/accountAdmin';
 import aiDataCollectionService from '@/service/aiDataCollection';
@@ -261,8 +261,9 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
   [TreeNodeType.DATA_SOURCE]: {
     getChildren: (extraParams: any) => {
       return new Promise((r, j) => {
+        const { aiDataCollection } = getRuntimeEditionCapabilities();
         const { dataSourceId, databaseType, needAiDataCollections: extraParamsNeedAiDataCollections } = extraParams;
-        const { supportDatabase, needAiDataCollections } = getDatabaseSupport(databaseType);
+        const { supportDatabase, supportSchema, needAiDataCollections } = getDatabaseSupport(databaseType);
         const accountNode: TreeNodeData | null = canUseAccountManage(databaseType)
           ? {
               key: treeConfig[TreeNodeType.DATABASE_ACCOUNTS].createTreeNodeKey!({ dataSourceId }),
@@ -281,6 +282,68 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
           isLeaf: false,
           extraParams,
         };
+        if (supportDatabase === false && supportSchema === false) {
+          // No database or schema level at all (Firebird, IoTDB, ...): the
+          // connection itself is the namespace, so show the object folders
+          // directly instead of requesting an empty schema list.
+          const params = { dataSourceId };
+          const nodeExtraParams = { ...extraParams };
+          const data: TreeNodeData[] = [
+            {
+              key: treeConfig[TreeNodeType.TABLES].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.tables'),
+              title: null,
+              treeNodeType: TreeNodeType.TABLES,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
+            {
+              key: treeConfig[TreeNodeType.VIEWS].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.views'),
+              title: null,
+              treeNodeType: TreeNodeType.VIEWS,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
+            {
+              key: treeConfig[TreeNodeType.FUNCTIONS].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.functions'),
+              title: null,
+              treeNodeType: TreeNodeType.FUNCTIONS,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
+            {
+              key: treeConfig[TreeNodeType.PROCEDURES].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.procedures'),
+              title: null,
+              treeNodeType: TreeNodeType.PROCEDURES,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
+            {
+              key: treeConfig[TreeNodeType.TRIGGERS].createTreeNodeKey!(params),
+              originalTitle: i18n('common.text.triggers'),
+              title: null,
+              treeNodeType: TreeNodeType.TRIGGERS,
+              isLeaf: false,
+              extraParams: nodeExtraParams,
+            },
+            createSaveConsolesNode(nodeExtraParams),
+          ];
+          if (accountNode) {
+            data.push(accountNode);
+          }
+          if (
+            aiDataCollection &&
+            needAiDataCollections !== false &&
+            extraParamsNeedAiDataCollections !== false
+          ) {
+            data.push(aiDataCollections);
+          }
+          r(data);
+          return;
+        }
         if (supportDatabase === false) {
           connectionService
             .getSchemaList(extraParams)
@@ -307,7 +370,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 data.push(accountNode);
               }
               if (
-                runtimeEditionConfig.aiDataCollection &&
+                aiDataCollection &&
                 needAiDataCollections !== false &&
                 extraParamsNeedAiDataCollections !== false
               ) {
@@ -344,7 +407,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 data.push(accountNode);
               }
               if (
-                runtimeEditionConfig.aiDataCollection &&
+                aiDataCollection &&
                 needAiDataCollections !== false &&
                 extraParamsNeedAiDataCollections !== false
               ) {

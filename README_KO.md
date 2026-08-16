@@ -19,7 +19,7 @@
 
 Chat2DB Community는 Windows, macOS, Linux를 지원하는 무료 크로스 플랫폼 데이터베이스 클라이언트입니다. 전적으로 사용자의 컴퓨터에서 실행되며, 완전한 기능을 갖춘 SQL 워크스페이스와 사용자가 직접 연결하는 자체 AI 모델 기반의 AI 어시스턴트를 결합했습니다.
 
-- **30개 이상의 데이터베이스** — MySQL, PostgreSQL, Oracle, SQL Server, ClickHouse, MongoDB, Redis, SQLite, MariaDB, TiDB, Hive, DB2, Snowflake, BigQuery, Elasticsearch 등을 플러그인으로 지원합니다.
+- **40개 이상의 데이터베이스** — MySQL, PostgreSQL, Oracle, SQL Server, ClickHouse, MongoDB, Redis, SQLite, MariaDB, TiDB, Hive, DB2, Snowflake, BigQuery, Elasticsearch, Trino, TimescaleDB, Greenplum, YugabyteDB, CrateDB, QuestDB, Apache IoTDB, Firebird, HSQLDB, Apache Derby 등을 플러그인으로 지원하며, 새로운 JDBC 데이터베이스는 코드 수정 없이 설정만으로 추가할 수 있습니다.
 - **SQL 워크스페이스** — 편집, 자동 완성, 서식 지정, 실행, 저장된 SQL 및 실행 기록을 제공합니다.
 - **AI 어시스턴트** — 자체 AI 모델을 연결하여 자연어로 SQL을 생성, 설명 및 최적화합니다.
 - **데이터베이스 관리** — 메타데이터 탐색, 테이블 및 객체 관리(DDL/DML), 데이터 직접 편집을 지원합니다.

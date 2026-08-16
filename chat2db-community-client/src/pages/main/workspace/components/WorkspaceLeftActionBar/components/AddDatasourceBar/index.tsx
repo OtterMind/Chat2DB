@@ -1,7 +1,7 @@
 import i18n from '@/i18n';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { ConfigProvider, Dropdown, Input, Modal, Tooltip } from 'antd';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 import ConnectionEdit, { submitType } from '@/components/ConnectionEdit';
@@ -11,6 +11,7 @@ import connectionService from '@/service/connection';
 
 // ----- constants/typings -----
 import { databaseMap, databaseTypeList } from '@/constants';
+import { getDynamicDatabaseVersion, subscribeDynamicDatabases } from '@/utils/dynamicDatabaseRegistry';
 
 // ----- store -----
 import { useTreeStore } from '@/store/tree';
@@ -24,26 +25,28 @@ export default memo<IProps>(() => {
   } = useStyles();
   const [importType, setImportType] = useState<string>();
   const [databaseSearchKeyword, setDatabaseSearchKeyword] = useState('');
+  // Dynamic databases register asynchronously after mount; re-render the menu
+  // when they land so the memoized list is not a stale snapshot.
+  const [dynamicDatabaseVersion, setDynamicDatabaseVersion] = useState(getDynamicDatabaseVersion());
+  useEffect(() => subscribeDynamicDatabases(() => setDynamicDatabaseVersion(getDynamicDatabaseVersion())), []);
 
   const {
     createGroup,
-    addDataSource,
-    editorDataSource,
     isModalVisible,
     setIsModalVisible,
     connectionDetail,
     setConnectionDetail,
     refreshTreeData,
+    refreshDataSourceAfterMutation,
   } = useTreeStore((state) => ({
     createGroup: state.createGroup,
-    addDataSource: state.addDataSource,
-    editorDataSource: state.editorDataSource,
     connectionDetail: state.connectionDetail,
     setConnectionDetail: state.setConnectionDetail,
     isModalVisible: state.isModalVisible,
     setIsModalVisible: state.setIsModalVisible,
     currentTreeNode: state.currentTreeNode,
     refreshTreeData: state.refreshTreeData,
+    refreshDataSourceAfterMutation: state.refreshDataSourceAfterMutation,
   }));
 
   const databaseTypeListMenu = useMemo(() => {
@@ -154,6 +157,7 @@ export default memo<IProps>(() => {
     appearance,
     createGroup,
     databaseSearchKeyword,
+    dynamicDatabaseVersion,
     refreshTreeData,
     setConnectionDetail,
     setIsModalVisible,
@@ -174,9 +178,11 @@ export default memo<IProps>(() => {
         .update({
           ...dataSource,
         })
-        .then((res) => {
+        .then(async (res) => {
           setIsModalVisible(false);
-          editorDataSource(res);
+          if (res?.id) {
+            await refreshDataSourceAfterMutation(res.id);
+          }
         });
     } else {
       return connectionService
@@ -184,10 +190,10 @@ export default memo<IProps>(() => {
           ...dataSource,
           spaceId: connectionDetail?.spaceId,
         })
-        .then((res: any) => {
+        .then(async (res: any) => {
           setIsModalVisible(false);
-          if (res) {
-            addDataSource({ ...res, spaceId: connectionDetail?.spaceId });
+          if (res?.id) {
+            await refreshDataSourceAfterMutation(res.id);
           }
         });
     }

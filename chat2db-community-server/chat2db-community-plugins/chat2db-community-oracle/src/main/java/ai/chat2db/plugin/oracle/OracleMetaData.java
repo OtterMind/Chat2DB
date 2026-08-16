@@ -7,7 +7,6 @@ import ai.chat2db.plugin.oracle.enums.type.OracleColumnTypeEnum;
 import ai.chat2db.plugin.oracle.enums.type.OracleDefaultValueEnum;
 import ai.chat2db.plugin.oracle.enums.type.OracleIndexTypeEnum;
 import ai.chat2db.plugin.oracle.value.OracleValueProcessor;
-import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISQLIdentifierProcessor;
@@ -45,11 +44,11 @@ import static ai.chat2db.plugin.oracle.constant.OracleMetaDataConstants.*;
 public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
 
-    public static final ISQLIdentifierProcessor ORACLE_SQL_IDENTIFIER_PROCESSOR = new OracleIdentifierProcessor();
+    public static final ISQLIdentifierProcessor ORACLE_SQL_IDENTIFIER_PROCESSOR = OracleIdentifierProcessor.INSTANCE;
 
     @Override
     public List<Procedure> procedures(Connection connection, String databaseName, String schemaName) {
-        String sql = String.format(PROCEDURE_LIST_DDL, schemaName);
+        String sql = String.format(PROCEDURE_LIST_DDL, escapeSqlLiteral(schemaName));
         ArrayList<Procedure> procedures = new ArrayList<>();
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
@@ -69,11 +68,11 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(TABLE_DDL_SQL, tableName, schemaName);
-        String tableCommentSql = String.format(TABLE_COMMENT_SQL, schemaName, tableName);
-        String tableColumnCommentSql = String.format(TABLE_COLUMN_COMMENT_SQL, schemaName, tableName);
-        String tableIndexSql = String.format(TABLE_INDEX_DDL_SQL, schemaName, tableName);
-        String PUIndexSql = String.format(PU_INDEX_NAME_SQL, schemaName, tableName);
+        String sql = String.format(TABLE_DDL_SQL, escapeSqlLiteral(tableName), escapeSqlLiteral(schemaName));
+        String tableCommentSql = String.format(TABLE_COMMENT_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
+        String tableColumnCommentSql = String.format(TABLE_COLUMN_COMMENT_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
+        String tableIndexSql = String.format(TABLE_INDEX_DDL_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
+        String PUIndexSql = String.format(PU_INDEX_NAME_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
         StringBuilder ddlBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             try {
@@ -88,8 +87,8 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
             if (resultSet.next()) {
                 String tableComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(tableComment)) {
-                    ddlBuilder.append("\nCOMMENT ON TABLE ").append(SqlUtils.quoteObjectName(tableName)).append(" IS ")
-                            .append(EasyStringUtils.escapeAndQuoteString(tableComment)).append(";");
+                    ddlBuilder.append("\nCOMMENT ON TABLE ").append(qualifiedName(schemaName, tableName)).append(" IS ")
+                            .append(quoteStringLiteral(tableComment)).append(";");
                 }
             }
         });
@@ -99,9 +98,9 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
                 String columnComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(columnComment)) {
                     ddlBuilder.append("\nCOMMENT ON COLUMN ")
-                            .append(SqlUtils.quoteObjectName(tableName)).append(".")
-                            .append(SqlUtils.quoteObjectName(columnName)).append(" IS ")
-                            .append(EasyStringUtils.escapeAndQuoteString(columnComment)).append(";");
+                            .append(qualifiedName(schemaName, tableName)).append(".")
+                            .append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName)).append(" IS ")
+                            .append(quoteStringLiteral(columnComment)).append(";");
                 }
             }
         });
@@ -159,7 +158,19 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     private static String escapeSqlLiteral(String value) {
-        return StringUtils.replace(value, "'", "''");
+        return OracleIdentifierProcessor.INSTANCE.escapeString(value);
+    }
+
+    private static String quoteStringLiteral(String value) {
+        return OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(value);
+    }
+
+    private static String qualifiedName(String schemaName, String objectName) {
+        String quotedObject = OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(objectName);
+        if (StringUtils.isBlank(schemaName)) {
+            return quotedObject;
+        }
+        return OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "." + quotedObject;
     }
 
 
@@ -206,7 +217,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     private Map<String, TableColumn> getTableColumns(Connection connection, String databaseName, String schemaName, String tableName) {
         Map<String, TableColumn> tableColumns = new HashMap<>();
-        String sql = String.format(SELECT_TAB_COLS, schemaName, tableName);
+        String sql = String.format(SELECT_TAB_COLS, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 TableColumn tableColumn = new TableColumn();
@@ -261,7 +272,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public Function function(Connection connection, @NotEmpty String databaseName, String schemaName,
                              String functionName) {
-        String sql = String.format(ROUTINES_SQL, "FUNCTION", schemaName, functionName);
+        String sql = String.format(ROUTINES_SQL, "FUNCTION", escapeSqlLiteral(schemaName), escapeSqlLiteral(functionName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Function function = new Function();
             function.setDatabaseName(databaseName);
@@ -291,7 +302,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
-        String pkSql = String.format(SELECT_PK_SQL, schemaName, tableName);
+        String pkSql = String.format(SELECT_PK_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
         Set<String> pkSet = new HashSet<>();
         DefaultSQLExecutor.getInstance().execute(connection, pkSql, resultSet -> {
                     while (resultSet.next()) {
@@ -301,7 +312,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
                 }
         );
 
-        String sql = String.format(SELECT_TABLE_INDEX, schemaName, tableName);
+        String sql = String.format(SELECT_TABLE_INDEX, escapeSqlLiteral(schemaName), escapeSqlLiteral(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             LinkedHashMap<String, TableIndex> map = new LinkedHashMap();
             while (resultSet.next()) {
@@ -360,7 +371,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
         List<Trigger> triggers = new ArrayList<>();
-        return DefaultSQLExecutor.getInstance().execute(connection, String.format(TRIGGER_SQL_LIST, schemaName),
+        return DefaultSQLExecutor.getInstance().execute(connection, String.format(TRIGGER_SQL_LIST, escapeSqlLiteral(schemaName)),
                 resultSet -> {
                     while (resultSet.next()) {
                         String triggerName = resultSet.getString("TRIGGER_NAME");
@@ -378,7 +389,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public Trigger trigger(Connection connection, @NotEmpty String databaseName, String schemaName,
                            String triggerName) {
-        String sql = String.format(TRIGGER_DDL_SQL, triggerName, schemaName);
+        String sql = String.format(TRIGGER_DDL_SQL, escapeSqlLiteral(triggerName), escapeSqlLiteral(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
             trigger.setDatabaseName(databaseName);
@@ -394,7 +405,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public Procedure procedure(Connection connection, @NotEmpty String databaseName, String schemaName,
                                String procedureName) {
-        String sql = String.format(ROUTINES_SQL, "PROCEDURE", schemaName, procedureName);
+        String sql = String.format(ROUTINES_SQL, "PROCEDURE", escapeSqlLiteral(schemaName), escapeSqlLiteral(procedureName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Procedure procedure = new Procedure();
             procedure.setDatabaseName(databaseName);
@@ -428,7 +439,7 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_DDL_SQL, schemaName, viewName);
+        String sql = String.format(VIEW_DDL_SQL, escapeSqlLiteral(schemaName), escapeSqlLiteral(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -459,7 +470,13 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "\"" + name + "\"").collect(Collectors.joining("."));
+        List<String> identifiers = Arrays.stream(names)
+                .filter(StringUtils::isNotBlank)
+                .toList();
+        int first = Math.max(0, identifiers.size() - 2);
+        return identifiers.subList(first, identifiers.size()).stream()
+                .map(OracleIdentifierProcessor.INSTANCE::quoteIdentifierAlways)
+                .collect(Collectors.joining("."));
     }
 
 
@@ -525,9 +542,9 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
         StringBuilder sqlBuilder = new StringBuilder(100);
         sqlBuilder.append(SQL_CREATE).append("view ");
         if (StringUtils.isNotBlank(schemaName)) {
-            sqlBuilder.append("\"").append(schemaName).append("\"").append(".");
+            sqlBuilder.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)).append(".");
         }
-        sqlBuilder.append("\"").append("undefined").append("\"");
+        sqlBuilder.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways("undefined"));
         sqlBuilder.append(" AS \n").append(sql).append(";");
         configuration.setPreviewSql(sqlBuilder.toString());
         configuration.setSql(sql);

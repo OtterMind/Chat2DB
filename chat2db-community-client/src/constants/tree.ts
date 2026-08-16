@@ -103,7 +103,6 @@ export enum OperationColumn {
   ViewAllTable = 'viewAllTable', // View all tables
   ViewAllView = 'viewAllView', // View all views
   ViewERModal = 'viewERModal', // View ER diagram
-  SyncDataBase = 'syncDataBase', // Sync database
   GenerateCRUD = 'generateCRUD', // Generate CRUD
   GenerateTestData = 'generateTestData', // Generate test data
   OpenConsole = 'openConsole', // open console

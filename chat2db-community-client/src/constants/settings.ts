@@ -1,5 +1,4 @@
-import { AIType } from '@/typings/ai';
-import { GlobalAISettings, GlobalBaseSettings, GlobalAppConfig, DataTableSettings } from '@/typings/settings';
+import { GlobalBaseSettings, GlobalAppConfig, DataTableSettings } from '@/typings/settings';
 import { getUserComputerLanguage } from '@/utils';
 import { DEFAULT_RESULT_PAGE_SIZE } from './pagination';
 
@@ -39,14 +38,6 @@ export const DEFAULT_BASE_SETTINGS: GlobalBaseSettings = {
   enableMcp: false,
 };
 
-export const DEFAULT_AI_SETTINGS: GlobalAISettings = {
-  remainingUse: undefined,
-  aiConfig: {
-    aiSqlSource: AIType.CHAT2DBAI,
-  },
-  hasWhite: false,
-};
-
 export const DEFAULT_APP_CONFIG: GlobalAppConfig = {
   version: '5.3.0',
   countries: null,
@@ -58,6 +49,7 @@ export const DEFAULT_APP_CONFIG: GlobalAppConfig = {
 };
 
 export const DATA_TABLE_SETTINGS: DataTableSettings = {
-  showComment: false,
   selectionMetrics: ['average', 'count', 'sum'],
+  showFieldType: true,
+  showFieldComment: true,
 };

@@ -35,7 +35,7 @@ public final class DMDBManagerConstants {
     public static final String SQL_COMMENT_COLUMN = "COMMENT ON COLUMN ";
     public static final String SQL_COMMENT_TABLE = "COMMENT ON TABLE ";
     public static final String SQL_DROP_TABLE_EXISTS = "DROP TABLE IF EXISTS %s";
-    public static final String SQL_SET_SCHEMA = "SET SCHEMA \"%s\"";
+    public static final String SQL_SET_SCHEMA = "SET SCHEMA %s";
     public static final String SQL_SELECT_DBMS_METADATA_GET_DDL = "SELECT DBMS_METADATA.GET_DDL('VIEW','%s','%s') as ddl FROM DUAL;";
     public static final String SQL_SELECT_TABLE_NAME_ALL_TABLES = "SELECT TABLE_NAME FROM ALL_TABLES where OWNER='%s' ";
     public static final String ROUTINES_SQL = "SELECT OWNER, NAME, TEXT FROM ALL_SOURCE WHERE TYPE = '%s' AND OWNER = '%s' AND NAME = '%s' ORDER BY LINE";

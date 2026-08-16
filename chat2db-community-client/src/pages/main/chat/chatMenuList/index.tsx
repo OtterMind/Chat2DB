@@ -99,29 +99,6 @@ const chatMenuList = () => {
                   trigger: ['contextMenu'],
                   menu: {
                     items: [
-                      // {
-                      //   key: 'Edit',
-                      //   label: i18n('dashboard.edit'),
-                      //   icon: <IconfontSvg code="icon-edit" size="md" />,
-                      //   onClick: ({ domEvent }) => {
-                      //     domEvent.stopPropagation();
-                      //     setSettingInfo(item);
-                      //     setOpenSettingModal(true);
-                      //   },
-                      // },
-                      // {
-                      //   key: 'share',
-                      //   label: i18n('chat.menu.share'),
-                      //   icon: <Share2 size={16} />,
-                      //   onClick: ({ domEvent }) => {
-                      //     domEvent.stopPropagation();
-                      //     setOpenShareModal(true);
-                      //     setShareChatVO(item);
-                      //   },
-                      // },
-                      // {
-                      //   type: 'divider',
-                      // },
                       {
                         key: '3',
                         label: <MenuLabel label={i18n('chat.menu.delete')} />,

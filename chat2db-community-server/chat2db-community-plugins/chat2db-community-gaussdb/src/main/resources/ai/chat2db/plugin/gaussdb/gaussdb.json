@@ -14,6 +14,6 @@
       "jdbcDriverClass": "org.postgresql.Driver"
     }
   ],
-  "systemSchemas": ["blockchain", "cstore", "db4ai", "dbe_application_info", "dbe_compression", "dbe_file", "dbe_heat_map", "dbe_ilm", "dbe_ilm_admin", "dbe_lob", "dbe_match", "dbe_output", "dbe_perf", "dbe_pldebugger", "dbe_pldeveloper", "dbe_profiler", "dbe_random", "dbe_raw", "dbe_scheduler", "dbe_session", "dbe_sql", "dbe_sql_util", "dbe_stats", "dbe_task", "dbe_utility", "dbe_xml", "dbe_xmldom", "dbe_xmlparser", "information_schema", "pg_catalog", "pkg_service", "pkg_util", "prvt_ilm", "public", "snapshot", "sqladvisor", "sys"],
+  "systemSchemas": ["blockchain", "cstore", "db4ai", "dbe_application_info", "dbe_compression", "dbe_file", "dbe_heat_map", "dbe_ilm", "dbe_ilm_admin", "dbe_lob", "dbe_match", "dbe_output", "dbe_perf", "dbe_pldebugger", "dbe_pldeveloper", "dbe_profiler", "dbe_random", "dbe_raw", "dbe_scheduler", "dbe_session", "dbe_sql", "dbe_sql_util", "dbe_stats", "dbe_task", "dbe_utility", "dbe_xml", "dbe_xmldom", "dbe_xmlparser", "information_schema", "pg_catalog", "pkg_service", "pkg_util", "prvt_ilm", "snapshot", "sqladvisor", "sys"],
   "name": "GaussDB"
 }

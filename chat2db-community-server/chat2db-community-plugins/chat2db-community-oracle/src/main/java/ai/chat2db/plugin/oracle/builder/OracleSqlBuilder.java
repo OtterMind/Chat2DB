@@ -2,27 +2,50 @@ package ai.chat2db.plugin.oracle.builder;
 
 import ai.chat2db.spi.constant.SQLConstants;
 
+import ai.chat2db.plugin.oracle.OracleSqlGuards;
+import ai.chat2db.plugin.oracle.identifier.OracleIdentifierProcessor;
 import ai.chat2db.plugin.oracle.enums.type.OracleColumnTypeEnum;
 import ai.chat2db.plugin.oracle.enums.type.OracleIndexTypeEnum;
-import ai.chat2db.plugin.oracle.util.OracleUtil;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.model.request.PageLimitRequest;
+import ai.chat2db.spi.model.request.UpdateSqlRequest;
 import ai.chat2db.community.domain.api.model.view.ModifyView;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
-import ai.chat2db.spi.util.SqlUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.oracle.constant.OracleSqlBuilderConstants.*;
+import static ai.chat2db.spi.constant.DefaultSqlBuilderConstants.SQL_AND;
+import static ai.chat2db.spi.constant.DefaultSqlBuilderConstants.SQL_SET_2;
+import static ai.chat2db.spi.constant.DefaultSqlBuilderConstants.SQL_UPDATE;
+import static ai.chat2db.spi.constant.DefaultSqlBuilderConstants.SQL_WHERE_2;
 public class OracleSqlBuilder extends DefaultSqlBuilder {
 
+    @Override
+    public String quoteIdentifier(String identifier) {
+        return OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(identifier);
+    }
+
+    @Override
+    public String quoteQualifiedIdentifier(String... identifiers) {
+        if (identifiers.length == 3) {
+            String qualifier = StringUtils.isNotBlank(identifiers[1]) ? identifiers[1] : identifiers[0];
+            return quoteQualifiedIdentifier(qualifier, identifiers[2]);
+        }
+        return Arrays.stream(identifiers)
+                .filter(StringUtils::isNotBlank)
+                .map(OracleIdentifierProcessor.INSTANCE::quoteIdentifierAlways)
+                .collect(Collectors.joining(SQLConstants.DOT));
+    }
 
 
 
@@ -49,7 +72,10 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
             return sql;
         }
         String body = sql.substring(0, sql.length() - whereClause.length());
-        return body + SQL_WHERE_ROWID_IN_OPEN_PAREN_SELECT_ROWID_FROM + tableName + whereClause + VALUE_AND_ROWNUM_EQUAL_1_CLOSE_PAREN;
+        String quotedTableName = OracleIdentifierProcessor.INSTANCE.isQuoteIdentifier(tableName)
+                ? tableName : quoteIdentifier(tableName);
+        return body + SQL_WHERE_ROWID_IN_OPEN_PAREN_SELECT_ROWID_FROM
+                + quotedTableName + whereClause + VALUE_AND_ROWNUM_EQUAL_1_CLOSE_PAREN;
     }
 
     @Override
@@ -57,9 +83,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         StringBuilder script = new StringBuilder();
 
         script.append(SQL_CREATE_TABLE)
-                .append(OracleUtil.quoteIdentifier(table.getSchemaName()))
-                .append(SQLConstants.DOT)
-                .append(OracleUtil.quoteIdentifierIgnoreCase(table.getName()))
+                .append(quoteQualifiedIdentifier(table.getDatabaseName(), table.getSchemaName(), table.getName()))
                 .append(SQLConstants.OPEN_PARENTHESIS).append(SQLConstants.LINE_SEPARATOR);
 
         for (TableColumn column : table.getColumnList()) {
@@ -67,9 +91,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
                 continue;
             }
             OracleColumnTypeEnum typeEnum = OracleColumnTypeEnum.getByType(column.getColumnType());
-            if (typeEnum == null) {
-                continue;
-            }
+            typeEnum = typeEnum == null ? OracleColumnTypeEnum.VARCHAR2 : typeEnum;
             script.append(SQLConstants.TAB).append(typeEnum.buildCreateColumnSql(column)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -107,9 +129,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         StringBuilder script = new StringBuilder();
 
         script.append(SQL_CREATE_TABLE)
-                .append(OracleUtil.quoteIdentifier(table.getSchemaName()))
-                .append(SQLConstants.DOT)
-                .append(OracleUtil.quoteIdentifierIgnoreCase(table.getName()))
+                .append(quoteQualifiedIdentifier(table.getDatabaseName(), table.getSchemaName(), table.getName()))
                 .append(SQLConstants.OPEN_PARENTHESIS).append(SQLConstants.LINE_SEPARATOR);
 
         for (TableColumn column : table.getColumnList()) {
@@ -117,9 +137,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
                 continue;
             }
             OracleColumnTypeEnum typeEnum = OracleColumnTypeEnum.getByType(column.getColumnType());
-            if (typeEnum == null) {
-                continue;
-            }
+            typeEnum = typeEnum == null ? OracleColumnTypeEnum.VARCHAR2 : typeEnum;
             script.append(SQLConstants.TAB).append(typeEnum.buildAICreateColumnSql(column)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -151,24 +169,27 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
 
 
     private String buildTableComment(Table table) {
-        StringBuilder script = new StringBuilder();
-        script.append(SQL_COMMENT_TABLE_2).append(SQLConstants.DOUBLE_QUOTE).append(table.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(table.getName()).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(table.getComment()).append(SQLConstants.SINGLE_QUOTE);
-        return script.toString();
+        return SQL_COMMENT_TABLE_2
+                + quoteQualifiedIdentifier(table.getDatabaseName(), table.getSchemaName(), table.getName())
+                + " IS " + quoteStringLiteral(table.getComment());
     }
 
     private String buildComment(TableColumn column) {
-        StringBuilder script = new StringBuilder();
-        script.append(SQL_COMMENT_COLUMN).append(SQLConstants.DOUBLE_QUOTE).append(column.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(column.getTableName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(column.getName()).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(column.getComment()).append(SQLConstants.SINGLE_QUOTE);
-        return script.toString();
+        return SQL_COMMENT_COLUMN
+                + quoteQualifiedIdentifier(column.getSchemaName(), column.getTableName())
+                + SQLConstants.DOT + quoteIdentifier(column.getName())
+                + " IS " + quoteStringLiteral(column.getComment());
     }
 
     @Override
     public String buildAlterTable(Table oldTable, Table newTable) {
         StringBuilder script = new StringBuilder();
 
-        if (!StringUtils.equalsIgnoreCase(oldTable.getName(), newTable.getName())) {
-            script.append(SQL_ALTER_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(oldTable.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(oldTable.getName()).append(SQLConstants.DOUBLE_QUOTE);
-            script.append(SQLConstants.SPACE).append(SQL_RENAME).append(SQLConstants.DOUBLE_QUOTE).append(newTable.getName()).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
+        if (!StringUtils.equals(oldTable.getName(), newTable.getName())) {
+            script.append(SQL_ALTER_TABLE)
+                    .append(quoteQualifiedIdentifier(oldTable.getDatabaseName(), oldTable.getSchemaName(), oldTable.getName()));
+            script.append(SQLConstants.SPACE).append(SQL_RENAME)
+                    .append(quoteIdentifier(newTable.getName())).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getComment(), newTable.getComment())) {
             script.append(SQLConstants.EMPTY).append(buildTableComment(newTable)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
@@ -177,9 +198,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
             String editStatus = tableColumn.getEditStatus();
             if (StringUtils.isNotBlank(editStatus)) {
                 OracleColumnTypeEnum typeEnum = OracleColumnTypeEnum.getByType(tableColumn.getColumnType());
-                if (typeEnum == null) {
-                    continue;
-                }
+                typeEnum = typeEnum == null ? OracleColumnTypeEnum.VARCHAR2 : typeEnum;
                 script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 if (StringUtils.isNotBlank(tableColumn.getComment())
                         &&!EditStatusEnum.DELETE.name().equals(editStatus)) {
@@ -231,10 +250,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
 
     @Override
     protected void buildTableName(String databaseName, String schemaName, String tableName, StringBuilder script) {
-        if (StringUtils.isNotBlank(databaseName)) {
-            script.append(SqlUtils.quoteObjectName(databaseName)).append('.');
-        }
-        script.append(SqlUtils.quoteObjectName(tableName));
+        script.append(quoteQualifiedIdentifier(databaseName, schemaName, tableName));
     }
 
 
@@ -242,9 +258,28 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
     protected void buildColumns(List<String> columnList, StringBuilder script) {
         if (CollectionUtils.isNotEmpty(columnList)) {
             script.append(SQLConstants.SPACE_OPEN_PARENTHESIS)
-                    .append(columnList.stream().map(SqlUtils::quoteObjectName).collect(Collectors.joining(SQLConstants.COMMA)))
+                    .append(columnList.stream()
+                            .map(OracleIdentifierProcessor.INSTANCE::quoteIdentifierAlways)
+                            .collect(Collectors.joining(SQLConstants.COMMA)))
                     .append(SQLConstants.CLOSE_PARENTHESIS_SPACE);
         }
+    }
+
+    @Override
+    public String buildUpdate(UpdateSqlRequest request) {
+        StringBuilder script = new StringBuilder(SQL_UPDATE);
+        buildTableName(request.getDatabaseName(), request.getSchemaName(), request.getTableName(), script);
+        script.append(SQL_SET_2);
+        script.append(request.getRow().entrySet().stream()
+                .map(entry -> quoteIdentifier(entry.getKey()) + SQLConstants.EQUAL_SQL + entry.getValue())
+                .collect(Collectors.joining(SQLConstants.COMMA)));
+        if (MapUtils.isNotEmpty(request.getPrimaryKeyMap())) {
+            script.append(SQL_WHERE_2);
+            script.append(request.getPrimaryKeyMap().entrySet().stream()
+                    .map(entry -> quoteIdentifier(entry.getKey()) + SQLConstants.EQUAL_SQL + entry.getValue())
+                    .collect(Collectors.joining(SQL_AND)));
+        }
+        return script.toString();
     }
 
     @Override
@@ -259,7 +294,8 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         }
         String editClause = modifyView.getEditClause();
         if (StringUtils.isNotBlank(editClause)) {
-            createViewSqlBuilder.append(editClause);
+            createViewSqlBuilder.append(OracleSqlGuards.requireKeyword("view edition clause", editClause,
+                    "EDITIONING", "EDITIONABLE", "EDITIONABLE EDITIONING", "NONEDITIONABLE"));
         }
         createViewSqlBuilder.append(SQLConstants.VIEW_KEYWORD);
         String schemaName = modifyView.getSchemaName();
@@ -278,15 +314,20 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         }
         String shareClause = modifyView.getShareClause();
         if (StringUtils.isNotBlank(shareClause)) {
-            createViewSqlBuilder.append(SQL_SHARING_EQUAL).append(shareClause).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(SQL_SHARING_EQUAL)
+                    .append(OracleSqlGuards.requireKeyword("view sharing clause", shareClause,
+                            "METADATA", "EXTENDED DATA", "DATA", "NONE"))
+                    .append(SQLConstants.SPACE);
         }
         String collationClause = modifyView.getCollationClause();
         if (StringUtils.isNotBlank(collationClause)) {
-            createViewSqlBuilder.append(SQL_DEFAULT_COLLATE).append(collationClause).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(SQL_DEFAULT_COLLATE)
+                    .append(quoteOracleIdentifier(collationClause)).append(SQLConstants.SPACE);
         }
         String security = modifyView.getSecurity();
         if (StringUtils.isNotBlank(security)) {
-            createViewSqlBuilder.append(security).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(OracleSqlGuards.requireKeyword("view security clause", security,
+                    "CURRENT_USER", "DEFINER")).append(SQLConstants.SPACE);
         }
         createViewSqlBuilder.append(SQLConstants.LINE_SEPARATOR_SQL_AS);
         String viewBody = modifyView.getViewBody();
@@ -299,16 +340,22 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         }
         String subqueryRestrictionClause = modifyView.getSubqueryRestrictionClause();
         if (StringUtils.isNotBlank(subqueryRestrictionClause)) {
-            createViewSqlBuilder.append(subqueryRestrictionClause).append(SQLConstants.SPACE);
+            createViewSqlBuilder.append(OracleSqlGuards.requireKeyword("view restriction clause",
+                    subqueryRestrictionClause, "READ ONLY", "CHECK OPTION", SQL_CHECK_OPTION_CONSTRAINT))
+                    .append(SQLConstants.SPACE);
         }
         String subqueryConstraintName = modifyView.getSubqueryConstraintName();
-        if (StringUtils.equalsAnyIgnoreCase(SQL_CHECK_OPTION_CONSTRAINT, subqueryRestrictionClause)
+        if (StringUtils.equalsAnyIgnoreCase(subqueryRestrictionClause, "CHECK OPTION", SQL_CHECK_OPTION_CONSTRAINT)
                 && StringUtils.isNotBlank(subqueryConstraintName)) {
-            createViewSqlBuilder.append(subqueryConstraintName).append(SQLConstants.SPACE);
+            if (!StringUtils.equalsIgnoreCase(SQL_CHECK_OPTION_CONSTRAINT, subqueryRestrictionClause)) {
+                createViewSqlBuilder.append("CONSTRAINT ");
+            }
+            createViewSqlBuilder.append(quoteOracleIdentifier(subqueryConstraintName)).append(SQLConstants.SPACE);
         }
         String containerClause = modifyView.getContainerClause();
         if (StringUtils.isNotBlank(containerClause)) {
-            createViewSqlBuilder.append(containerClause);
+            createViewSqlBuilder.append(OracleSqlGuards.requireKeyword("view container clause", containerClause,
+                    "CONTAINER MAP", "CONTAINERS DEFAULT"));
         }
         createViewSqlBuilder.append(SQLConstants.SEMICOLON);
 
@@ -328,15 +375,11 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
     }
 
     private static String quoteOracleIdentifier(String identifier) {
-        return SQLConstants.DOUBLE_QUOTE
-                + identifier.replace(SQLConstants.DOUBLE_QUOTE, SQLConstants.DOUBLE_QUOTE + SQLConstants.DOUBLE_QUOTE)
-                + SQLConstants.DOUBLE_QUOTE;
+        return OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(identifier);
     }
 
     private static String quoteStringLiteral(String value) {
-        return SQLConstants.SINGLE_QUOTE
-                + value.replace(SQLConstants.SINGLE_QUOTE, SQLConstants.SINGLE_QUOTE + SQLConstants.SINGLE_QUOTE)
-                + SQLConstants.SINGLE_QUOTE;
+        return OracleIdentifierProcessor.INSTANCE.quoteStringLiteral(value);
     }
 
     @Override

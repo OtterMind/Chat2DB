@@ -27,7 +27,6 @@ import ai.chat2db.community.domain.api.model.view.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.util.SortUtils;
-import ai.chat2db.spi.util.SqlUtils;
 import com.google.common.collect.Lists;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.extern.slf4j.Slf4j;
@@ -53,8 +52,6 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
 
 
 
-
-    public static final ISQLIdentifierProcessor POSTGRE_SQL_IDENTIFIER_PROCESSOR = new PostgreSQLIdentifierProcessor();
 
     @Override
     public List<Database> databases(Connection connection) {
@@ -93,7 +90,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
         List<Trigger> triggers = new ArrayList<>();
-        String sql = String.format(TRIGGER_SQL_LIST, schemaName);
+        String sql = String.format(TRIGGER_SQL_LIST, getSQLIdentifierProcessor().escapeString(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 Trigger trigger = new Trigger();
@@ -108,11 +105,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
 
 
     protected String format(String objectName) {
-        if (StringUtils.isBlank(objectName)) {
-            return objectName;
-        } else {
-            return SqlUtils.quoteObjectName(objectName);
-        }
+        return PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(objectName);
     }
 
     @Override
@@ -140,7 +133,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
 
 
         StringBuilder ddlBuilder = new StringBuilder(200);
-        String formatTableName = format(tableName);
+        String formatTableName = quoteQualifiedName(schemaName, tableName);
         ddlBuilder.append(SQL_CREATE_TABLE).append(formatTableName);
         String options = DefaultSQLExecutor.getInstance().preExecute(connection, TABLE_OPTION_SQL, new String[]{schemaName, tableName}, resultSet -> {
             if (resultSet.next()) {
@@ -156,7 +149,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
             StringBuilder tableSpaceBuilder = new StringBuilder();
             tableSpaceBuilder.append(" tablespace ");
             if (resultSet.next()) {
-                tableSpaceBuilder.append(resultSet.getString("tablespace"));
+                tableSpaceBuilder.append(format(resultSet.getString("tablespace")));
             } else {
                 tableSpaceBuilder.append("pg_default");
             }
@@ -178,9 +171,9 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                         constraintsBuilder.append(",\n");
                     }
                     constraintsBuilder.append("\t").append(" constraint ")
-                            .append(constraintName)
+                            .append(format(constraintName))
                             .append(" ")
-                            .append(constraintDefinition.toLowerCase());
+                            .append(constraintDefinition);
                 }
             }
             if (!constraintsBuilder.isEmpty()) {
@@ -197,7 +190,9 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                     String partitionDefinition = resultSet.getString("PARTITION_DEFINITION");
                     boolean isParentTable = resultSet.getBoolean("is_parent_table");
                     if (StringUtils.isNotBlank(parentTableName) && StringUtils.isNotBlank(partitionDefinition)) {
-                        ddlBuilder.append("\n").append(" partition of ").append(SqlUtils.quoteObjectName(parentTableName)).append("\n");
+                        ddlBuilder.append("\n").append(" partition of ")
+                                .append(quoteQualifiedName(resultSet.getString("parent_schema"), parentTableName))
+                                .append("\n");
                         if (!constraintsBuilder.isEmpty()) {
                             ddlBuilder.append("(\n")
                                     .append(constraintsBuilder)
@@ -219,9 +214,9 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                 String table_name = resultSet.getString("TABLE_NAME");
                 if (StringUtils.isNotBlank(owner) && StringUtils.isNotBlank(table_name)) {
                     tableOwnerBuilder.append(SQL_ALTER_TABLE)
-                            .append(format(table_name))
+                            .append(quoteQualifiedName(schemaName, table_name))
                             .append(" owner to ")
-                            .append(owner)
+                            .append(format(owner))
                             .append(";").append("\n");
                 }
             }
@@ -236,11 +231,11 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                     String privilegeType = resultSet.getString("PRIVILEGE_TYPE");
                     if (StringUtils.isNotBlank(privilegeType)) {
                         tablePrivilegeBuilder.append(SQL_GRANT)
-                                .append(privilegeType.toLowerCase())
+                                .append(PostgreSqlGuards.requirePrivilege(privilegeType))
                                 .append(SQL_ON)
                                 .append(formatTableName)
                                 .append(" to ")
-                                .append(grantee)
+                                .append(quoteRoleName(grantee))
                                 .append(";").append("\n");
                     }
                 }
@@ -459,7 +454,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                 boolean isPartitioned = false;
                 if (resultSet.next()) {
                     ddlBuilder.append(" partition by ")
-                            .append(resultSet.getString("partition_key").toLowerCase())
+                            .append(resultSet.getString("partition_key"))
                             .append(";");
                     isPartitioned = true;
                     ddlBuilder.append("\n");
@@ -474,18 +469,22 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                     String parentTableName = resultSet.getString("PARENT_TABLE");
                     String partitionDefinition = resultSet.getString("PARTITION_DEFINITION");
                     if (StringUtils.isNotBlank(parentTableName) && StringUtils.isNotBlank(partitionDefinition)) {
-                        ddlBuilder.append("\n").append(SQL_CREATE_TABLE).append(format(subName)).append("\n")
-                                .append("partition of ").append(parentTableName).append("\n")
-                                .append(partitionDefinition.toLowerCase()).append(";\n");
+                        // sub_name and PARENT_TABLE are quote_ident() output: already safely quoted
+                        ddlBuilder.append("\n").append(SQL_CREATE_TABLE)
+                                .append(resultSet.getString("schema_name")).append(".").append(subName).append("\n")
+                                .append("partition of ").append(format(schemaName)).append(".")
+                                .append(parentTableName).append("\n")
+                                .append(partitionDefinition).append(";\n");
                     }
                 }
 
             });
         } else if (childTableInfo.size() >= 2) {
+            String parentSchemaName = childTableInfo.get(0);
             String parentTableName = childTableInfo.get(1);
             ddlBuilder.append(" ").append(" inherits ")
                     .append("(")
-                    .append(format(parentTableName))
+                    .append(quoteQualifiedName(parentSchemaName, parentTableName))
                     .append(")").append("\n");
             if (StringUtils.isNotBlank(options)) {
                 ddlBuilder.append(" ").append(options).append("\n");
@@ -519,10 +518,12 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
                 }
 
                 String objectType = resultSet.getString("object_type");
+                String quoteSchemaName = resultSet.getString("schema_name");
                 String quoteTableName = resultSet.getString("table_name");
                 String columnName = resultSet.getString("column_name");
 
-                ddlBuilder.append(SQL_COMMENT).append(objectType.toLowerCase()).append(" ").append(quoteTableName);
+                ddlBuilder.append(SQL_COMMENT).append(objectType.toLowerCase(Locale.ROOT)).append(" ")
+                        .append(quoteSchemaName).append(".").append(quoteTableName);
 
                 if (StringUtils.isNotBlank(columnName)) {
                     ddlBuilder.append(".").append(columnName);
@@ -537,10 +538,11 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
             DefaultSQLExecutor.getInstance().preExecute(connection, TABLE_INDEX_COMMENT_SQL, new String[]{schemaName, tableName}, resultSet -> {
                 while (resultSet.next()) {
 
+                    String schema_name = resultSet.getString("schema_name");
                     String index_name = resultSet.getString("index_name");
                     String index_comment = resultSet.getString("index_comment");
 
-                    ddlBuilder.append(SQL_COMMENT_INDEX).append(index_name)
+                    ddlBuilder.append(SQL_COMMENT_INDEX).append(schema_name).append(".").append(index_name)
                             .append(" is ").append(index_comment).append(";\n");
                 }
 
@@ -576,7 +578,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_SQL, schemaName, viewName);
+        String sql = String.format(VIEW_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -593,7 +595,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
     public Trigger trigger(Connection connection, @NotEmpty String databaseName, String schemaName,
                            String triggerName) {
 
-        String sql = String.format(TRIGGER_SQL, schemaName, triggerName);
+        String sql = String.format(TRIGGER_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(triggerName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
             trigger.setDatabaseName(databaseName);
@@ -625,7 +627,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
 
-        String constraintSql = String.format(SELECT_KEY_INDEX, schemaName, tableName);
+        String constraintSql = String.format(SELECT_KEY_INDEX, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(tableName));
         Map<String, String> constraintMap = new HashMap();
         LinkedHashMap<String, TableIndex> foreignMap = new LinkedHashMap();
         DefaultSQLExecutor.getInstance().execute(connection, constraintSql, resultSet -> {
@@ -655,7 +657,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
             return null;
         });
 
-        String sql = String.format(SELECT_TABLE_INDEX, schemaName, tableName);
+        String sql = String.format(SELECT_TABLE_INDEX, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             LinkedHashMap<String, TableIndex> map = new LinkedHashMap(foreignMap);
 
@@ -709,7 +711,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
             if (StringUtils.equalsIgnoreCase(v.getColumnType(), "bpchar")) {
                 v.setColumnType(PostgreSQLColumnTypeEnum.CHAR.getColumnType().getTypeName().toUpperCase());
             } else {
-                v.setColumnType(v.getColumnType().toUpperCase());
+                v.setColumnType(v.getColumnType().toUpperCase(Locale.ROOT));
             }
         });
         return columnList;
@@ -747,12 +749,23 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
 
     @Override
     public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
-        return POSTGRE_SQL_IDENTIFIER_PROCESSOR;
+        return PostgreSQLIdentifierProcessor.INSTANCE;
     }
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "\"" + name + "\"").collect(Collectors.joining("."));
+        return new PostgreSQLSqlBuilder().quoteQualifiedIdentifier(names);
+    }
+
+    private String quoteQualifiedName(String schemaName, String objectName) {
+        if (StringUtils.isBlank(schemaName)) {
+            return format(objectName);
+        }
+        return format(schemaName) + "." + format(objectName);
+    }
+
+    private String quoteRoleName(String roleName) {
+        return "PUBLIC".equalsIgnoreCase(roleName) ? "PUBLIC" : format(roleName);
     }
 
     @Override
@@ -786,10 +799,7 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
         String sql = "select * from table_name";
         StringBuilder sqlBuilder = new StringBuilder(100);
         sqlBuilder.append(SQL_CREATE).append("view ");
-        if (StringUtils.isNotBlank(schemaName)) {
-            sqlBuilder.append("\"").append(schemaName).append("\"").append(".");
-        }
-        sqlBuilder.append("\"").append("undefined").append("\"");
+        sqlBuilder.append(quoteQualifiedName(schemaName, "undefined"));
         sqlBuilder.append(" AS \n").append(sql).append(";");
         configuration.setPreviewSql(sqlBuilder.toString());
         configuration.setSql(sql);

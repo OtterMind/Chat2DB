@@ -136,12 +136,6 @@ const text2Chart = createRequest<TextToSQLParams, GetChatTokenResponse & { chart
   },
 );
 
-// Get similar questions
-const getRecommendList = createRequest<TextToSQLParams, any>(`/api/ai/slash_magic/recommend/list`, {
-  method: 'post',
-  errorLevel: false,
-});
-
 export default {
   text2SQL,
   sqlGenerateNLP,
@@ -158,5 +152,4 @@ export default {
   text2Chart,
   excelChat,
   streamQA,
-  getRecommendList,
 };

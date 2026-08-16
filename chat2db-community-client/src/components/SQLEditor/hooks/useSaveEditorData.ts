@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ConsoleOpenedStatus, ConsoleStatus, WorkspaceTabType } from '@/constants';
 import historyServer from '@/service/history';
 import i18n from '@/i18n';
@@ -7,18 +7,23 @@ import { staticMessage } from '@chat2db/ui';
 import { useUserStore } from '@/store/user';
 import { useIndexDBStore } from '@/store/indexDB';
 import { SQLEditorRef } from '@/components/SQLEditor/editor/SQLEditor';
+import type { IBoundInfo } from '@/typings';
 import { isTemporaryId } from '@/utils';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
-import { savedConsoleMutationCoordinator } from '@/store/workspace/utils/savedConsoleMutationCoordinator';
+import {
+  savedConsoleMutationCoordinator,
+  type SavedConsoleSaveMode,
+} from '@/store/workspace/utils/savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from '@/store/workspace/utils/savedConsolePersistence';
 
 interface IProps {
   isActive?: boolean;
   source?: 'workspace';
   editorRef: React.RefObject<SQLEditorRef>;
-  boundInfo: any;
+  boundInfo: IBoundInfo;
   defaultValue?: string;
   name?: string;
+  onBoundInfoChange?: (boundInfo: IBoundInfo) => void;
   type:
     | WorkspaceTabType.CONSOLE
     | WorkspaceTabType.FUNCTION
@@ -28,23 +33,26 @@ interface IProps {
     | WorkspaceTabType.LocalSQLFile;
 }
 
+interface SaveConsoleOptions {
+  mode?: SavedConsoleSaveMode;
+  initialName?: string;
+}
+
 export const useSaveEditorData = (props: IProps) => {
-  const { isActive, source, editorRef, boundInfo, defaultValue, name, type } = props;
+  const { isActive, source, editorRef, boundInfo, defaultValue, name, onBoundInfoChange, type } = props;
 
   const timerRef = useRef<any>();
+  const effectiveConsoleIdRef = useRef<number | undefined>(boundInfo?.consoleId);
   // Console data from the previous synchronization.
   const lastSyncConsole = useRef<any>(defaultValue);
   const storageId = boundInfo?.workspaceTabId ?? boundInfo?.consoleId;
-  const isTemporaryConsole = isTemporaryId(storageId);
-  const isPersistedConsole =
-    type === WorkspaceTabType.CONSOLE && typeof boundInfo?.consoleId === 'number' && !isTemporaryConsole;
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
   const saveStatusRef = useRef<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
-  const { getSavedConsoleList, savedConsoleList, updateWorkspaceTabBoundInfo } = useWorkspaceStore((s) => ({
+  const { getSavedConsoleList, savedConsoleList, markWorkspaceTabConsoleSaved } = useWorkspaceStore((s) => ({
     getSavedConsoleList: s.getSavedConsoleList,
     savedConsoleList: s.savedConsoleList,
-    updateWorkspaceTabBoundInfo: s.updateWorkspaceTabBoundInfo,
+    markWorkspaceTabConsoleSaved: s.markWorkspaceTabConsoleSaved,
   }));
   const hasSavedSqlRecord = Boolean(
     type === WorkspaceTabType.CONSOLE &&
@@ -65,24 +73,34 @@ export const useSaveEditorData = (props: IProps) => {
     };
   });
 
-  const saveConsole = (value?: string, noPrompting?: boolean) => {
+  const saveConsole = (value?: string, options: SaveConsoleOptions = {}) => {
+    const mode = options.mode || 'manual';
+    const initialName = options.initialName?.trim();
+    const nameCustomized = boundInfo.nameCustomized === true || Boolean(initialName && initialName !== name);
+    const consoleId = effectiveConsoleIdRef.current;
     const p: any = {
-      id: boundInfo.consoleId,
+      id: consoleId,
       status: ConsoleStatus.RELEASE,
       ddl: value,
     };
+    if (initialName) {
+      p.name = initialName;
+      p.nameCustomized = nameCustomized;
+    }
 
     if (!storageId) {
-      return;
+      return Promise.resolve();
     }
 
     if (isReadOnly) {
       lastSyncConsole.current = value;
-      return;
+      return Promise.resolve();
     }
 
+    const isPersistedConsole =
+      type === WorkspaceTabType.CONSOLE && typeof consoleId === 'number' && !isTemporaryId(consoleId);
     if (!isPersistedConsole) {
-      indexDB
+      return indexDB
         .setValue(storageId, {
           ddl: value,
           userId: curUser?.id,
@@ -90,24 +108,22 @@ export const useSaveEditorData = (props: IProps) => {
         .then(() => {
           lastSyncConsole.current = value;
         });
-      return;
     }
 
-    const consoleId = boundInfo.consoleId as number;
-    const mode = noPrompting ? 'automatic' : 'manual';
-    savedConsoleMutationCoordinator
+    return savedConsoleMutationCoordinator
       .save(consoleId, mode, () =>
         persistSavedConsoleRecord(historyServer, {
-          manual: !noPrompting,
+          manual: mode === 'manual',
           createParams: {
             id: consoleId,
-            name: name || boundInfo.databaseName || boundInfo.schemaName || '',
+            name: initialName || name || boundInfo.databaseName || boundInfo.schemaName || '',
             ddl: value || '',
             dataSourceId: boundInfo.dataSourceId,
             dataSourceName: boundInfo.dataSourceName,
             type: boundInfo.databaseType,
             databaseName: boundInfo.databaseName,
             schemaName: boundInfo.schemaName,
+            nameCustomized,
             status: ConsoleStatus.RELEASE,
             tabOpened: ConsoleOpenedStatus.IS_OPEN,
             operationType: WorkspaceTabType.CONSOLE,
@@ -115,9 +131,9 @@ export const useSaveEditorData = (props: IProps) => {
           updateParams: p,
         }),
       )
-      .then((result) => {
+      .then(async (result) => {
         if (!result.executed) {
-          indexDB
+          await indexDB
             .setValue(storageId, {
               ddl: value,
               userId: curUser?.id,
@@ -130,18 +146,33 @@ export const useSaveEditorData = (props: IProps) => {
         if (!result.current) {
           return;
         }
+        const persistedConsoleId = result.value?.consoleId;
+        if (persistedConsoleId === undefined) {
+          return;
+        }
+        effectiveConsoleIdRef.current = persistedConsoleId;
+        const savedBoundInfo = {
+          ...boundInfo,
+          consoleId: persistedConsoleId,
+          status: ConsoleStatus.RELEASE,
+          nameCustomized: initialName ? nameCustomized : boundInfo.nameCustomized,
+        };
+        if (persistedConsoleId !== consoleId || saveStatusRef.current !== ConsoleStatus.RELEASE) {
+          onBoundInfoChange?.(savedBoundInfo);
+        }
         getSavedConsoleList();
-        emitSavedConsoleUpdated(boundInfo);
-        indexDB.deleteValue(storageId);
+        emitSavedConsoleUpdated(savedBoundInfo);
+        void indexDB.deleteValue(storageId);
         lastSyncConsole.current = value;
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
-        updateWorkspaceTabBoundInfo({
+        markWorkspaceTabConsoleSaved({
           workspaceTabId: boundInfo.workspaceTabId,
-          consoleId: boundInfo.consoleId,
-          status: ConsoleStatus.RELEASE,
+          consoleId: persistedConsoleId,
+          name: initialName,
+          nameCustomized: initialName ? nameCustomized : undefined,
         });
-        if (noPrompting) {
+        if (mode === 'automatic') {
           return;
         }
         staticMessage.success(i18n('common.tips.saveSuccessfully'));
@@ -159,7 +190,7 @@ export const useSaveEditorData = (props: IProps) => {
         return;
       }
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        saveConsole(curValue, true);
+        void saveConsole(curValue, { mode: 'automatic' });
       } else {
         if (isReadOnly || !storageId) {
           lastSyncConsole.current = curValue;
@@ -192,7 +223,7 @@ export const useSaveEditorData = (props: IProps) => {
         return;
       }
       if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        saveConsole(curValue, true);
+        void saveConsole(curValue, { mode: 'automatic' });
       } else {
         if (isReadOnly || !storageId) {
           lastSyncConsole.current = curValue;
@@ -219,6 +250,10 @@ export const useSaveEditorData = (props: IProps) => {
   }, [isActive]);
 
   useEffect(() => {
+    effectiveConsoleIdRef.current = boundInfo?.consoleId;
+  }, [boundInfo?.consoleId]);
+
+  useEffect(() => {
     const nextStatus = boundInfo?.status || ConsoleStatus.DRAFT;
     saveStatusRef.current = nextStatus;
     setSaveStatus(nextStatus);
@@ -242,5 +277,15 @@ export const useSaveEditorData = (props: IProps) => {
     }
   }, []);
 
-  return { saveConsole, saveStatus, hasSavedSqlRecord };
+  const hasUnsavedChanges = useCallback(
+    (value: string) => {
+      if (!value.trim()) {
+        return false;
+      }
+      return !hasSavedSqlRecord || value !== lastSyncConsole.current;
+    },
+    [hasSavedSqlRecord],
+  );
+
+  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges };
 };

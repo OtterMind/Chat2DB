@@ -26,6 +26,17 @@ export const useStyles = createStyles(({ css, token }) => {
       margin-left: auto;
       flex-shrink: 0;
     `,
+    storageMigrationButton: css`
+      height: 26px;
+      padding-inline: 7px;
+      flex-shrink: 0;
+      color: ${token.colorTextSecondary};
+      font-size: 12px;
+
+      &:hover {
+        color: ${token.colorText};
+      }
+    `,
     searchBar: css`
       width: 100%;
       max-width: 100%;

@@ -1,5 +1,6 @@
 import { defineConfig } from 'umi';
 import { communityProductConfig } from './product.community';
+import { createMainRootRoute } from './src/utils/mainPageNavigation';
 import { extractYarnConfig, generateBuildTime } from './src/utils/package';
 
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
@@ -107,6 +108,8 @@ const GLOBAL_LAYOUT_COMPONENT = buildProfile.isCommunity
 const MAIN_COMPONENT = buildProfile.isCommunity ? '@/pages/main/CommunityMainPage' : 'main';
 
 const chainWebpack = (config: any, { webpack }: any) => {
+  // Webpack 5.88 can replace @xterm/xterm TaskQueue base classes with null.
+  config.optimization.innerGraph(false);
   config.plugin('monaco-editor').use(MonacoWebpackPlugin, [
     {
       languages: ['mysql', 'pgsql', 'sql', 'json'],
@@ -237,10 +240,6 @@ export default defineConfig({
               component: MAIN_COMPONENT,
             },
             {
-              path: '/chat/share/:chatId',
-              component: MAIN_COMPONENT,
-            },
-            {
               path: '/stream/:chatId',
               component: MAIN_COMPONENT,
             },
@@ -265,10 +264,7 @@ export default defineConfig({
               path: '/connections',
               redirect: '/workspace',
             },
-            {
-              path: '/',
-              redirect: '/stream',
-            },
+            createMainRootRoute(buildProfile.isCommunity, MAIN_COMPONENT),
           ],
         },
       ],

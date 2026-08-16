@@ -223,7 +223,12 @@ public class DbTableServiceImpl implements IDbTableService {
         }
         if (request.getPageNo() == 1 && StringUtils.isBlank(request.getSearchKey())
                 && CollectionUtils.isNotEmpty(pinnedTables)) {
-            pinnedTables.addAll(tables);
+            Set<String> pinnedNames = pinnedTables.stream()
+                    .map(Table::getName)
+                    .collect(Collectors.toSet());
+            pinnedTables.addAll(tables.stream()
+                    .filter(table -> table == null || !pinnedNames.contains(table.getName()))
+                    .collect(Collectors.toList()));
             return pinnedTables;
         }
         return tables;

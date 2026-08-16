@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ class H2MetaResultSetLifecycleTest {
         ResultSet columns = resultSet(List.of(Map.of(
             "COLUMN_NAME", "ID",
             "TYPE_NAME", "INTEGER",
+            "DATA_TYPE", Types.INTEGER,
             "COLUMN_SIZE", 32,
             "NULLABLE", ResultSetMetaData.columnNoNulls
         )), "columns", columnsClosed, lifecycle);
@@ -54,8 +56,8 @@ class H2MetaResultSetLifecycleTest {
 
         String ddl = new H2Meta().tableDDL(connection, "TEST", "PUBLIC", "USERS");
 
-        assertEquals("CREATE TABLE USERS (\nID INTEGER(32) NOT NULL\n);\n"
-            + "CREATE INDEX IDX_USERS_ID ON USERS (ID);", ddl);
+        assertEquals("CREATE TABLE \"USERS\" (\n\"ID\" INTEGER NOT NULL\n);\n"
+            + "CREATE INDEX \"IDX_USERS_ID\" ON \"USERS\" (\"ID\");", ddl);
         assertTrue(columnsClosed.get());
         assertTrue(indexesClosed.get());
         assertEquals(List.of("columns.close", "metadata.getIndexInfo", "indexes.close"), lifecycle);

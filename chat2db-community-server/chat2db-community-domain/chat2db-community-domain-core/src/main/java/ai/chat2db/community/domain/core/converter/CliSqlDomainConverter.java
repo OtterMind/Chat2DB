@@ -46,7 +46,9 @@ public class CliSqlDomainConverter {
         response.setRowCount(result.getUpdateCount() == null ? rows.size() : result.getUpdateCount());
         response.setHasNextPage(Boolean.TRUE.equals(result.getHasNextPage()));
         response.setTruncated(Boolean.TRUE.equals(result.getHasNextPage()));
-        response.setDuration(result.getDuration());
+        response.setDuration(result.getExecutionMetrics() == null
+                ? null
+                : result.getExecutionMetrics().getTotalDurationMs());
         response.setPageNo(result.getPageNo() == null ? request.safePageNo() : result.getPageNo());
         response.setPageSize(result.getPageSize() == null ? request.safePageSize() : result.getPageSize());
         response.setResultSetId(result.getResultSetId() == null ? null : String.valueOf(result.getResultSetId()));

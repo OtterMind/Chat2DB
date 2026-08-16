@@ -1,5 +1,6 @@
 package ai.chat2db.plugin.mysql.value.sub;
 
+import ai.chat2db.plugin.mysql.MysqlSqlGuards;
 import ai.chat2db.plugin.mysql.value.template.MysqlDmlValueTemplate;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
@@ -13,7 +14,7 @@ public class MysqlVarBinaryProcessor extends DefaultValueProcessor {
     @Override
     public String convertSQLValueByType(SQLDataValue dataValue) {
         String value = dataValue.getValue();
-        if (value.startsWith("0x")) {
+        if (MysqlSqlGuards.isHexLiteral(value)) {
             return value;
         }
         return MysqlDmlValueTemplate.wrapHex(dataValue.getBlobHexString());

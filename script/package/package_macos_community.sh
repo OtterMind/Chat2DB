@@ -146,7 +146,6 @@ package_application() {
         "-Dfile.encoding=UTF-8"
         "-Dserver.address=127.0.0.1"
         "-Dserver.port=10825"
-        "-noverify"
         "-Xms128M"
     )
 
@@ -234,6 +233,45 @@ validate_packaged_dmg() {
         exit 1
     fi
 
+    local flatlaf_jar
+    local flatlaf_count
+    flatlaf_count=$(find "${app_root}/lib" -maxdepth 1 -type f \
+        -name "flatlaf-*.jar" -print | wc -l | tr -d '[:space:]')
+    if [ "${flatlaf_count}" -ne 1 ]; then
+        cleanup_mount
+        echo "Error: expected exactly one FlatLaf runtime dependency in packaged external lib, found ${flatlaf_count}" >&2
+        exit 1
+    fi
+    flatlaf_jar=$(find "${app_root}/lib" -maxdepth 1 -type f \
+        -name "flatlaf-*.jar" -print -quit)
+
+    local flatlaf_index
+    local required_flatlaf_entry
+    local required_flatlaf_entries=(
+        "com/formdev/flatlaf/FlatLaf.class"
+        "com/formdev/flatlaf/FlatDarkLaf.class"
+        "com/formdev/flatlaf/themes/FlatMacLightLaf.class"
+        "com/formdev/flatlaf/themes/FlatMacDarkLaf.class"
+        "com/formdev/flatlaf/natives/libflatlaf-macos-x86_64.dylib"
+        "com/formdev/flatlaf/natives/libflatlaf-macos-arm64.dylib"
+    )
+    flatlaf_index=$(mktemp)
+    if ! jar tf "${flatlaf_jar}" > "${flatlaf_index}"; then
+        rm -f "${flatlaf_index}"
+        cleanup_mount
+        echo "Error: failed to inspect packaged FlatLaf runtime dependency" >&2
+        exit 1
+    fi
+    for required_flatlaf_entry in "${required_flatlaf_entries[@]}"; do
+        if ! grep -Fxq "${required_flatlaf_entry}" "${flatlaf_index}"; then
+            rm -f "${flatlaf_index}"
+            cleanup_mount
+            echo "Error: required FlatLaf entry missing from packaged runtime dependency: ${required_flatlaf_entry}" >&2
+            exit 1
+        fi
+    done
+    rm -f "${flatlaf_index}"
+
     local jcef_jar
     jcef_jar=$(find "${app_root}/lib" -maxdepth 1 -name "chat2db-community-jcef-*.jar" -print -quit)
     if [ -z "${jcef_jar}" ]; then
@@ -268,8 +306,14 @@ validate_packaged_dmg() {
     done
     rm -f "${jar_index}"
 
+    if ! codesign --verify --deep --strict --verbose=2 "${app_dir}"; then
+        cleanup_mount
+        echo "Error: packaged app failed strict code-signature verification" >&2
+        exit 1
+    fi
+
     cleanup_mount
-    echo "[check] packaged DMG metadata, icon, app root, JCEF framework, and JCEF i18n resources are valid"
+    echo "[check] packaged DMG metadata, resources, and strict app signature are valid"
 }
 
 validate_resources

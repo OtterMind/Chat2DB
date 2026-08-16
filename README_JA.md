@@ -19,7 +19,7 @@
 
 Chat2DB Community は、Windows、macOS、Linux に対応した無料のクロスプラットフォームデータベースクライアントです。すべてローカルマシン上で動作し、フル機能の SQL ワークスペースと、自分で用意したモデルに接続して使う AI アシスタントを組み合わせています。
 
-- **30 以上のデータベース** — MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、MongoDB、Redis、SQLite、MariaDB、TiDB、Hive、DB2、Snowflake、BigQuery、Elasticsearch など。プラグインによりさらに拡張できます。
+- **40 以上のデータベース** — MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、MongoDB、Redis、SQLite、MariaDB、TiDB、Hive、DB2、Snowflake、BigQuery、Elasticsearch、Trino、TimescaleDB、Greenplum、YugabyteDB、CrateDB、QuestDB、Apache IoTDB、Firebird、HSQLDB、Apache Derby など。プラグインによりさらに拡張でき、新しい JDBC データベースはコード変更なしで設定のみで追加できます。
 - **SQL ワークスペース** — 編集、補完、フォーマット、実行、保存済み SQL、実行履歴。
 - **AI アシスタント** — 自分の AI モデルを接続し、自然言語で SQL の生成・説明・最適化を行えます。
 - **データベース管理** — メタデータの参照、テーブルとオブジェクトの管理（DDL/DML）、データのインライン編集。

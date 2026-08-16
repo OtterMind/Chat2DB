@@ -14,12 +14,12 @@ import { isDesktop } from '@/utils/env';
 import miscService from '@/service/misc';
 import { useGlobalStore } from '@/store/global';
 import feedback from '@/utils/feedback';
+import { resolveInvoiceDestination } from './invoice';
 
 interface IProps {
   className?: string;
+  hideTitle?: boolean;
 }
-
-const SUBOTIZ_INVOICE_PORTAL_URL = 'https://checkout.subotiz.com/m/2821768/portal/login';
 
 const lostQualification = [
   {
@@ -54,7 +54,7 @@ const unsubscribeReason = [
 ];
 
 export default memo<IProps>((props) => {
-  const { className } = props;
+  const { className, hideTitle = false } = props;
   const { styles, cx } = useStyles();
   const [data, setData] = useState<any[]>([]);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -209,8 +209,11 @@ export default memo<IProps>((props) => {
   };
 
   return (
-    <div className={cx(styles.purchaseDetails, className)}>
-      <div className={styles.title}>{i18n('setting.purchaseDetails.title')}</div>
+    <div
+      className={cx(styles.purchaseDetails, { [styles.withoutTitle]: hideTitle }, className)}
+      data-setting-search-id="purchase.orders"
+    >
+      {!hideTitle && <div className={styles.title}>{i18n('setting.purchaseDetails.title')}</div>}
       <AntdTable
         className={styles.antdTableBox}
         dataSource={data}
@@ -288,27 +291,27 @@ export default memo<IProps>((props) => {
           },
         }}
       />
-      {!isCN && (() => {
-        const hasActive = data.some((d) => d.status === 'ACTIVE' || d.status === 'TRIAL_CREATE');
-        const isCancelled = data.some((d) => d.cancelled);
-        return (
-          <div className={styles.footerActions}>
-            <Button
-              onClick={() => window.open(SUBOTIZ_INVOICE_PORTAL_URL, '_blank', 'noopener,noreferrer')}
-            >
-              {i18n('setting.purchaseDetails.getInvoice')}
-            </Button>
-            {isCancelled && (
-              <Button disabled>{i18n('setting.purchaseDetails.alreadyCancelled')}</Button>
-            )}
-            {!isCancelled && hasActive && (
-              <Button onClick={() => setShowFeedbackModal(true)}>
-                {i18n('setting.purchaseDetails.unsubscribe')}
-              </Button>
-            )}
-          </div>
-        );
-      })()}
+      {!isCN &&
+        (() => {
+          const hasActive = data.some((d) => d.status === 'ACTIVE' || d.status === 'TRIAL_CREATE');
+          const isCancelled = data.some((d) => d.cancelled);
+          const invoiceDestination = resolveInvoiceDestination(data);
+          return (
+            <div className={styles.footerActions}>
+              {invoiceDestination && (
+                <Button onClick={() => window.open(invoiceDestination.url, '_blank', 'noopener,noreferrer')}>
+                  {i18n('setting.purchaseDetails.getInvoice')}
+                </Button>
+              )}
+              {isCancelled && <Button disabled>{i18n('setting.purchaseDetails.alreadyCancelled')}</Button>}
+              {!isCancelled && hasActive && (
+                <Button onClick={() => setShowFeedbackModal(true)}>
+                  {i18n('setting.purchaseDetails.unsubscribe')}
+                </Button>
+              )}
+            </div>
+          );
+        })()}
       <Modal
         open={showFeedbackModal}
         onCancel={() => setShowFeedbackModal(false)}

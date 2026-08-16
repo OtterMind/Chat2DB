@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, Dropdown } from 'antd';
 import { IChartItem } from '@/typings';
 import { newFormattedSqlExecuteData } from '@/utils/dashboard';
@@ -9,6 +10,7 @@ import { IComboYAxisDataItem } from '@/blocks/BI/Chart/typings';
 import { ChartType } from '@/blocks/BI/Chart/constants';
 import { useUpdateEffect } from 'ahooks';
 import i18n from '@/i18n';
+import { filterComboAxisActions } from './filterComboAxisActions';
 
 interface IProps {
   value?: IComboYAxisDataItem[];
@@ -121,11 +123,11 @@ const ComboAxisSelectItem = (props: IItemProps) => {
   }, []);
 
   const actionList = useMemo(() => {
-    const _list = [
+    const allActions = [
       {
         key: 'move-up',
         label: i18n('common.button.moveUp'),
-        icon: <IconfontSvg code="icon-up-arrow" />,
+        icon: <ChevronUp size={16} />,
         onClick: () => {
           onAction?.('move-up');
         },
@@ -133,7 +135,7 @@ const ComboAxisSelectItem = (props: IItemProps) => {
       {
         key: 'move-down',
         label: i18n('common.button.moveDown'),
-        icon: <IconfontSvg code="icon-down-arrow" />,
+        icon: <ChevronDown size={16} />,
         onClick: () => {
           onAction?.('move-down');
         },
@@ -147,13 +149,7 @@ const ComboAxisSelectItem = (props: IItemProps) => {
         },
       },
     ];
-    if (isFirst) {
-      _list.splice(0, 1); // Remove Move Up
-    }
-    if (isLast) {
-      _list.splice(1, 1); // Remove Move Down
-    }
-    return _list;
+    return filterComboAxisActions(allActions, isFirst, isLast);
   }, [isFirst, isLast]);
 
   return (

@@ -1,6 +1,41 @@
 import { useCallback } from 'react';
 import _ from 'lodash';
 
+type EChartsLabel = {
+  formattedLabel?: string;
+  rawLabel?: string;
+};
+
+export const getChartLabelText = (label: unknown): string => {
+  if (label !== null && typeof label === 'object') {
+    const { formattedLabel, rawLabel } = label as EChartsLabel;
+    return formattedLabel || rawLabel || '';
+  }
+  return String(label);
+};
+
+export const calculateLabelRotation = (
+  containerWidth: number,
+  labelCount: number,
+  longestLabelWidth: number,
+): { rotate: number; interval: number } => {
+  const availableWidth = containerWidth / labelCount;
+  let rotate = 0;
+  let interval = 0;
+
+  if (availableWidth < longestLabelWidth) {
+    rotate = 45;
+    if (availableWidth < longestLabelWidth * Math.cos(Math.PI / 4)) {
+      rotate = 90;
+      if (containerWidth < 14 * labelCount) {
+        interval = Math.ceil(labelCount / (containerWidth / 14));
+      }
+    }
+  }
+
+  return { rotate, interval };
+};
+
 const useLabelRotate = (antdTheme: any) => {
   const labelRotate = useCallback((chart, option) => {
     if (option?.xAxis?.axisLine?.show === false) {
@@ -39,7 +74,7 @@ const useLabelRotate = (antdTheme: any) => {
       const font = `12px ${antdTheme.fontFamily}`;
 
       const yAxisLabelWidth = yAxisLabels.reduce((max, label) => {
-        const labelText = label.formattedLabel || label.rawLabel;
+        const labelText = getChartLabelText(label);
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         context!.font = font; // Assume a 12px font.
@@ -57,7 +92,7 @@ const useLabelRotate = (antdTheme: any) => {
 
       // Measure the longest label in pixels.
       const longestLabelWidth = labels.reduce((max, label) => {
-        const labelText = label.formattedLabel || label.rawLabel;
+        const labelText = getChartLabelText(label);
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         context!.font = font; // Assume a 12px font.
@@ -65,25 +100,7 @@ const useLabelRotate = (antdTheme: any) => {
         return Math.max(max, textWidth);
       }, 0);
 
-      // Calculate the available width for each label.
-      const availableWidth = containerWidth / labelCount;
-
-      let rotate = 0;
-      let interval = 0;
-
-      // Rotate labels when the available width is less than the longest label.
-      if (availableWidth < longestLabelWidth) {
-        rotate = 45;
-        // Check whether labels overlap at a 45-degree angle.
-        if (availableWidth < longestLabelWidth * Math.cos(Math.PI / 4)) {
-          rotate = 90;
-          // At 90 degrees, label height equals the longest label width.
-          if (containerWidth < 14 * labelCount) {
-            // Skip labels when the container is narrower than the rotated label height.
-            interval = Math.ceil(labelCount / (containerWidth / 14));
-          }
-        }
-      }
+      const { rotate, interval } = calculateLabelRotation(containerWidth, labelCount, longestLabelWidth);
       _.set(option, 'xAxis.axisLabel.interval', interval);
       _.set(option, 'xAxis.axisLabel.rotate', rotate);
       chart.setOption(option, true);

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import orgService from '@/service/enterprise/organization';
 import { PlusOutlined, CopyOutlined, LinkOutlined } from '@ant-design/icons';
 import { IOrganizationUserVO, OrgUserRoleCode, OrganizationStatusType } from '@/typings/enterprise/organization';
@@ -49,8 +50,12 @@ function UserList() {
     seats: number;
   }>();
 
+  const requestGenerationRef = useRef(0);
+
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     orgService.queryOrgDetail().then((res) => {
+      if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
       if (res) {
         setOrgMemberCount({
           currentMemberCount: res.currentMemberCount,
@@ -58,6 +63,9 @@ function UserList() {
         });
       }
     });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const findHighRole = (roleCodes: string[]) => {

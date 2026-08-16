@@ -8,6 +8,9 @@ import React from 'react';
 import { v4 as uuid } from 'uuid';
 import { isDesktop } from './env';
 import { clearInternalClipboard } from './internalClipboard';
+import { findNode } from './treeNodeLookup';
+
+export { findNode, getParentNode } from './treeNodeLookup';
 
 export function deepClone(target: any) {
   const map = new WeakMap();
@@ -380,22 +383,6 @@ export function getLanguageType(language?: string) {
   }
 }
 
-// Find the parent node of a tree node
-export const getParentNode = (key: React.Key, tree: TreeNodeData[]): TreeNodeData => {
-  let finalNode: any;
-  for (let i = 0; i < tree.length; i++) {
-    const node = tree[i];
-    if (node.children) {
-      if (node.children.some((item) => item.key === key)) {
-        finalNode = node;
-      } else if (getParentNode(key, node.children)) {
-        finalNode = getParentNode(key, node.children);
-      }
-    }
-  }
-  return finalNode!;
-};
-
 export function removeSubkeys(expandedKeys: React.Key[], tree: TreeNodeData[], targetKey: React.Key): React.Key[] {
   function getSubkeys(node: TreeNodeData): React.Key[] {
     let keys = [node.key]; // Includes the key of the current node
@@ -420,22 +407,6 @@ export function removeSubkeys(expandedKeys: React.Key[], tree: TreeNodeData[], t
   // Delete the keys of the target node and its child nodes from expandedKeys
   return expandedKeys.filter((key) => !keysToRemove.has(key));
 }
-
-// Find the node of the tree
-export const findNode = (key: React.Key, tree: TreeNodeData[]): TreeNodeData => {
-  let finalNode: any;
-  for (let i = 0; i < tree.length; i++) {
-    const node = tree[i];
-    if (node.key === key) {
-      finalNode = node;
-    } else if (node.children) {
-      if (findNode(key, node.children)) {
-        finalNode = findNode(key, node.children);
-      }
-    }
-  }
-  return finalNode!;
-};
 
 // Find a node in the tree, operate on this node, and then return the new tree
 export const findNodeAndOperate = (
@@ -524,15 +495,6 @@ export function truncateString(str: string | null | undefined, length: number = 
     return str;
   }
   return str.substring(0, length) + '...';
-}
-
-// Return the inclusive range between two numbers, with an optional offset.
-export function generateNumberSequence(start?: number, end?: number, offset: number = 0) {
-  // If one of the numbers does not exist, returns an empty array
-  if (start === undefined || end === undefined) {
-    return [];
-  }
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i + offset);
 }
 
 // Parse JSON values and return all other values unchanged.

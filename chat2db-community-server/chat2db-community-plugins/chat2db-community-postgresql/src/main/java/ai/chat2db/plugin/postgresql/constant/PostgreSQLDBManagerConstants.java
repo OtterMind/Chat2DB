@@ -30,7 +30,7 @@ public final class PostgreSQLDBManagerConstants {
     public static final String SQL_DROP_TABLE_EXISTS = "DROP TABLE IF EXISTS ";
     public static final String SQL_DROP_TYPE_EXISTS = "DROP TYPE IF EXISTS ";
     public static final String SQL_DROP_VIEW_EXISTS = "DROP VIEW IF EXISTS ";
-    public static final String SQL_SET_SEARCH_PATH_USER_PUBLIC = "SET search_path TO \"%s\",\"$user\",\"public\"";
+    public static final String SQL_SET_SEARCH_PATH_USER_PUBLIC = "SET search_path TO %s,\"$user\",\"public\"";
 
     private PostgreSQLDBManagerConstants() {
     }

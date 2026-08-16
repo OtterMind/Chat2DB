@@ -1,4 +1,3 @@
-import { IAIConfig } from '@/typings';
 import createRequest from './base';
 
 export interface ILatestVersion {
@@ -36,26 +35,6 @@ export interface ILatestVersion {
   whiteList?: null | string;
 }
 
-const getSystemConfig = createRequest<{ code: string }, { code: string; content: string }>(
-  '/api/config/system_config/:code',
-  { errorLevel: false },
-);
-const setSystemConfig = createRequest<{ code: string; content: string }, void>('/api/config/system_config', {
-  method: 'post',
-});
-
-const getAISystemConfig = createRequest<{ aiSqlSource?: string }, IAIConfig>('/api/config/system_config/ai', {
-  errorLevel: false,
-});
-
-const setAISystemConfig = createRequest<IAIConfig, void>('/api/config/system_config/ai', {
-  method: 'post',
-});
-
-const getAIWhiteAccess = createRequest<{ apiKey: string }, boolean>('/api/ai/embedding/white/check', {
-  method: 'get',
-});
-
 // Return the latest version information, or null when no update is available.
 const getLatestVersion = createRequest<{ currentVersion: string }, ILatestVersion>('/api/system/get_latest_version', {
   method: 'get',
@@ -78,11 +57,6 @@ const setAppUpdateType = createRequest<ILatestVersion['type'], boolean>('/api/sy
 });
 
 export default {
-  getSystemConfig,
-  setSystemConfig,
-  getAISystemConfig,
-  setAISystemConfig,
-  getAIWhiteAccess,
   getLatestVersion,
   isUpdateSuccess,
   updateDesktopVersion,

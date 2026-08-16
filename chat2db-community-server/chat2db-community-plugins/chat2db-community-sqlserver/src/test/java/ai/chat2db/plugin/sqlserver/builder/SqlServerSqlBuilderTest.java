@@ -1,7 +1,20 @@
 package ai.chat2db.plugin.sqlserver.builder;
 
+import ai.chat2db.community.domain.api.config.DriverConfig;
+import ai.chat2db.community.domain.api.model.result.Header;
+import ai.chat2db.community.domain.api.model.result.QueryResponse;
+import ai.chat2db.community.domain.api.model.result.ResultOperation;
 import ai.chat2db.community.domain.api.model.view.ModifyView;
+import ai.chat2db.plugin.sqlserver.SqlServerPlugin;
+import ai.chat2db.spi.IPlugin;
+import ai.chat2db.spi.constant.SQLConstants;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -52,6 +65,99 @@ class SqlServerSqlBuilderTest {
                         + "exec sp_addextendedproperty 'MS_Description', 'owner''s view', 'SCHEMA', "
                         + "'order] schema', 'VIEW', 'select] view'",
                 builder.buildCreateView(view));
+    }
+
+    @Test
+    void shouldUseExactEqualityForWildcardsInCopiedWhereClause() {
+        assertEquals("WHERE value = N'50%_off'", buildCopyWhere("VARCHAR", "50%_off"));
+    }
+
+    @Test
+    void shouldEscapeSingleQuoteInExactCopiedWhereClause() {
+        assertEquals("WHERE value = N'O''Brien'", buildCopyWhere("VARCHAR", "O'Brien"));
+    }
+
+    @Test
+    void shouldUseExactEqualityAndUnicodeLiteralForNTypes() {
+        for (String columnType : List.of("NCHAR", "NVARCHAR")) {
+            assertEquals("WHERE value = N'\u6587\u5b57_100%'", buildCopyWhere(columnType, "\u6587\u5b57_100%"), columnType);
+        }
+    }
+
+    @Test
+    void shouldCastLegacyTextTypesBeforeExactComparison() {
+        assertEquals("WHERE CAST(value AS VARCHAR(MAX)) = N'50%_off'",
+                buildCopyWhere("TEXT", "50%_off"));
+        assertEquals("WHERE CAST(value AS NVARCHAR(MAX)) = N'\u6587\u5b57_100%'",
+                buildCopyWhere("NTEXT", "\u6587\u5b57_100%"));
+    }
+
+    @Test
+    void shouldCastLegacyTextForSameColumnInClause() {
+        assertEquals("WHERE CAST(value AS VARCHAR(MAX)) IN (N'first', N'second')",
+                buildCopyWhere("TEXT", List.of("first", "second")));
+    }
+
+    @Test
+    void shouldKeepNullPredicateOnTheUncastColumn() {
+        assertEquals("WHERE value IS NULL", buildCopyWhere("TEXT", (String) null));
+        assertEquals("WHERE value IS NULL OR CAST(value AS NVARCHAR(MAX)) IN (N'next')",
+                buildCopyWhere("NTEXT", Arrays.asList(null, "next")));
+    }
+
+    @Test
+    void shouldCastLegacyTextOnlyForNonNullCompositeComparisons() {
+        ResultOperation operation = new ResultOperation();
+        operation.setType(SQLConstants.WHERE_KEYWORD);
+        operation.setDataList(Arrays.asList("50%_off", null));
+        operation.setSelectCols(List.of(0, 1));
+
+        assertEquals("WHERE CAST(legacy_text AS VARCHAR(MAX)) = N'50%_off' AND label IS NULL"
+                        + SQLConstants.LINE_SEPARATOR,
+                buildCopyWhere(List.of(
+                        Header.builder().name("legacy_text").columnType("TEXT").build(),
+                        Header.builder().name("label").columnType("NVARCHAR").build()),
+                        List.of(operation)));
+    }
+
+    private static String buildCopyWhere(String columnType, String value) {
+        return buildCopyWhere(columnType, Collections.singletonList(value));
+    }
+
+    private static String buildCopyWhere(String columnType, List<String> values) {
+        List<ResultOperation> operations = values.stream().map(value -> {
+            ResultOperation operation = new ResultOperation();
+            operation.setType(SQLConstants.WHERE_KEYWORD);
+            operation.setDataList(Collections.singletonList(value));
+            operation.setSelectCols(List.of(0));
+            return operation;
+        }).toList();
+        return buildCopyWhere(List.of(Header.builder()
+                .name("value")
+                .columnType(columnType)
+                .build()), operations);
+    }
+
+    private static String buildCopyWhere(List<Header> headers, List<ResultOperation> operations) {
+        IPlugin previousPlugin = Chat2DBContext.PLUGIN_MAP.put("SQLSERVER", new SqlServerPlugin());
+        ConnectInfo connectInfo = new ConnectInfo();
+        connectInfo.setDbType("SQLSERVER");
+        connectInfo.setDriverConfig(new DriverConfig());
+        Chat2DBContext.putContext(connectInfo);
+
+        try {
+            QueryResponse queryResponse = new QueryResponse();
+            queryResponse.setHeaderList(headers);
+            queryResponse.setOperations(operations);
+            return new SqlServerSqlBuilder().buildCopyByQueryResult(queryResponse);
+        } finally {
+            Chat2DBContext.removeContext();
+            if (previousPlugin == null) {
+                Chat2DBContext.PLUGIN_MAP.remove("SQLSERVER");
+            } else {
+                Chat2DBContext.PLUGIN_MAP.put("SQLSERVER", previousPlugin);
+            }
+        }
     }
 
     private static final class ExposedSqlServerSqlBuilder extends SqlServerSqlBuilder {

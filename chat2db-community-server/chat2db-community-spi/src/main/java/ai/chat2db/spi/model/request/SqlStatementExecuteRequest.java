@@ -1,5 +1,6 @@
 package ai.chat2db.spi.model.request;
 
+import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -26,4 +27,8 @@ public class SqlStatementExecuteRequest {
     private Integer offset;
 
     private Integer count;
+
+    private ISqlExecutionStatementListener statementListener;
+
+    private Runnable cancellationChecker;
 }

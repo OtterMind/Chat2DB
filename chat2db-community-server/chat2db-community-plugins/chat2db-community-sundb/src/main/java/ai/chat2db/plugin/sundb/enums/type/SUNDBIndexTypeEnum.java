@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.plugin.sundb.SUNDBSqlGuards;
+import ai.chat2db.plugin.sundb.identifier.SUNDBIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -72,14 +74,22 @@ public enum SUNDBIndexTypeEnum {
     public String buildIndexScript(TableIndex tableIndex) {
         StringBuilder script = new StringBuilder();
         if (PRIMARY_KEY.equals(this)) {
-            script.append(SQL_ALTER_TABLE_2).append(tableIndex.getSchemaName()).append("\".\"").append(tableIndex.getTableName()).append("\" ADD PRIMARY KEY ").append(buildIndexColumn(tableIndex));
+            script.append(SQL_ALTER_TABLE)
+                    .append(SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getSchemaName()))
+                    .append(".")
+                    .append(SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getTableName()))
+                    .append(" ADD PRIMARY KEY ").append(buildIndexColumn(tableIndex));
         } else {
             if (UNIQUE.equals(this)) {
                 script.append(SQL_CREATE_UNIQUE_INDEX);
             } else {
                 script.append(SQL_CREATE_INDEX);
             }
-            script.append(buildIndexName(tableIndex)).append(SQL_ON).append(tableIndex.getSchemaName()).append("\".\"").append(tableIndex.getTableName()).append("\" ").append(buildIndexColumn(tableIndex));
+            script.append(buildIndexName(tableIndex)).append(SQL_ON)
+                    .append(SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getSchemaName()))
+                    .append(".")
+                    .append(SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getTableName()))
+                    .append(" ").append(buildIndexColumn(tableIndex));
         }
         return script.toString();
     }
@@ -90,9 +100,9 @@ public enum SUNDBIndexTypeEnum {
         script.append("(");
         for (TableIndexColumn column : tableIndex.getColumnList()) {
             if (StringUtils.isNotBlank(column.getColumnName())) {
-                script.append("\"").append(column.getColumnName()).append("\"");
+                script.append(SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getColumnName()));
                 if (!StringUtils.isBlank(column.getAscOrDesc()) && !PRIMARY_KEY.equals(this)) {
-                    script.append(" ").append(column.getAscOrDesc());
+                    script.append(" ").append(SUNDBSqlGuards.requireAscOrDesc(column.getAscOrDesc()));
                 }
                 script.append(",");
             }
@@ -103,7 +113,7 @@ public enum SUNDBIndexTypeEnum {
     }
 
     private String buildIndexName(TableIndex tableIndex) {
-        return "\"" + tableIndex.getSchemaName() + "\"." + "\"" + tableIndex.getName() + "\"";
+        return SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getSchemaName()) + "." + SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getName());
     }
 
     public String buildModifyIndex(TableIndex tableIndex) {
@@ -121,7 +131,7 @@ public enum SUNDBIndexTypeEnum {
 
     private String buildDropIndex(TableIndex tableIndex) {
         if (SUNDBIndexTypeEnum.PRIMARY_KEY.getName().equals(tableIndex.getType())) {
-            String tableName = "\"" + tableIndex.getSchemaName() + "\"." + "\"" + tableIndex.getTableName() + "\"";
+            String tableName = SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getSchemaName()) + "." + SUNDBIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableIndex.getTableName());
             return StringUtils.join(SQL_ALTER_TABLE,tableName,SQL_DROP_PRIMARY_KEY);
         }
         StringBuilder script = new StringBuilder();

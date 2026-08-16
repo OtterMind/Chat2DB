@@ -30,7 +30,9 @@ public class SqlOperationLogConverter {
                 .status(Boolean.FALSE.equals(result.getSuccess())
                         ? SqlOperationLogStatusEnum.FAIL.getCode()
                         : SqlOperationLogStatusEnum.SUCCESS.getCode())
-                .useTime(result.getDuration())
+                .useTime(result.getExecutionMetrics() == null
+                        ? null
+                        : result.getExecutionMetrics().getTotalDurationMs())
                 .operationRows(operationRows)
                 .sqlType(result.getSqlType())
                 .errorMessage(result.getMessage())

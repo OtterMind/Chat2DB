@@ -228,7 +228,7 @@ export default memo<IProps>((props) => {
       },
       {
         title: i18n('common.text.time'),
-        field: 'duration',
+        field: 'cost',
         width: 'auto',
         minWidth: 80,
         fontSize: customFontSize,
@@ -249,7 +249,10 @@ export default memo<IProps>((props) => {
       return {
         originalSql: item.originalSql,
         success: item.success,
-        duration: `${item.duration || 0}ms`,
+        cost:
+          typeof item.executionMetrics?.totalDurationMs === 'number'
+            ? `${item.executionMetrics.totalDurationMs}ms`
+            : '-',
         message: renderMessage(item),
         updateCount: item.updateCount,
         executeSqlParams: item.executeSqlParams,

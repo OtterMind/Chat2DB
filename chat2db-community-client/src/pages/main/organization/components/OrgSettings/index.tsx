@@ -39,16 +39,24 @@ function OrgSetting() {
   const [userOptions, setUserOptions] = useState<OptionType>([]);
   const requestGenerationRef = useRef(0);
 
-  if (!curOrg) return null;
-
-  const isOwner = useMemo(() => curOrg?.roleCodes?.find((v) => v === OrgUserRoleCode.SUPER_ADMIN), [curOrg]);
+  // Hooks must run unconditionally on every render. The early return below
+  // previously sat above useMemo/useEffect, causing a Rules-of-Hooks violation
+  // ("Rendered more hooks than during the previous render") when curOrg
+  // transitioned from null to populated. Guard inside the hooks instead.
+  const isOwner = useMemo(
+    () => curOrg?.roleCodes?.includes(OrgUserRoleCode.SUPER_ADMIN) ?? false,
+    [curOrg],
+  );
 
   useEffect(() => {
+    if (!curOrg) return;
     queryUserList();
     return () => {
       invalidateLatestRequest(requestGenerationRef);
     };
-  }, []);
+  }, [curOrg]);
+
+  if (!curOrg) return null;
 
   const queryUserList = async () => {
     const requestGeneration = beginLatestRequest(requestGenerationRef);

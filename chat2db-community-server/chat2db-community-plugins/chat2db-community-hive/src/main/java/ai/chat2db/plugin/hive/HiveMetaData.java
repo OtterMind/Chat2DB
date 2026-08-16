@@ -3,8 +3,10 @@ package ai.chat2db.plugin.hive;
 import ai.chat2db.plugin.hive.builder.HiveSqlBuilder;
 import ai.chat2db.plugin.hive.enums.type.HiveColumnTypeEnum;
 import ai.chat2db.plugin.hive.enums.type.HiveIndexTypeEnum;
+import ai.chat2db.plugin.hive.identifier.HiveIdentifierProcessor;
 import ai.chat2db.spi.ICommandExecutor;
 import ai.chat2db.spi.IDbMetaData;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
@@ -30,6 +32,10 @@ import java.util.stream.Collectors;
 import static ai.chat2db.plugin.hive.constant.HiveMetaDataConstants.*;
 public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
 
+    @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return HiveIdentifierProcessor.INSTANCE;
+    }
 
     @Override
     public List<Database> databases(Connection connection) {
@@ -76,7 +82,9 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).skip(1).filter(name -> StringUtils.isNotBlank(name)).map(name -> "`" + name + "`").collect(Collectors.joining("."));
+        return Arrays.stream(names).skip(1).filter(name -> StringUtils.isNotBlank(name))
+                .map(HiveIdentifierProcessor.INSTANCE::quoteIdentifierAlways)
+                .collect(Collectors.joining("."));
     }
 
     @Override
@@ -101,7 +109,7 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<TableColumn> columns(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(SELECT_TAB_COLS, databaseName, tableName);
+        String sql = String.format(SELECT_TAB_COLS, format(databaseName), format(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             List<TableColumn> tableColumns = new ArrayList<>();
             Map<String, String> detailTableInfo = new HashMap<>();
@@ -265,14 +273,14 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     public static String format(String name) {
-        return "`" + name + "`";
+        return HiveIdentifierProcessor.INSTANCE.quoteIdentifierAlways(name);
     }
 
 
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_SQL, databaseName, viewName);
+        String sql = String.format(VIEW_SQL, format(databaseName), format(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -292,4 +300,3 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
         });
     }
 }
-

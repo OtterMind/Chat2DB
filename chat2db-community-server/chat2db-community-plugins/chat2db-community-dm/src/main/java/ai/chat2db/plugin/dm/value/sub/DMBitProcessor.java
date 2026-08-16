@@ -1,5 +1,6 @@
 package ai.chat2db.plugin.dm.value.sub;
 
+import ai.chat2db.plugin.dm.DMSqlGuards;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
@@ -11,7 +12,7 @@ public class DMBitProcessor extends DefaultValueProcessor {
 
     @Override
     public String convertSQLValueByType(SQLDataValue dataValue) {
-        return dataValue.getValue();
+        return DMSqlGuards.requireBitLiteral(dataValue.getValue());
     }
 
 

@@ -1,5 +1,4 @@
 import createRequest from '../base';
-import { IPageParams, IPageResponse } from '@/typings';
 import { IUserVO, CountryItem } from '@/typings/enterprise/user';
 
 /** User query */
@@ -32,12 +31,6 @@ const sendEmailSMS = createRequest<{ email: string }, number>(`/api/user/send_sm
 
 /** Obtain WeChat QR code */
 const getWechatQRCode = createRequest<null, { img: string }>(`/api/user/wechat_qr`, {
-  errorLevel: 'toast',
-});
-
-/** Get user list */
-const getUserList = createRequest<IPageParams, IPageResponse<IUserVO>>(`/api/user/list`, {
-  method: 'get',
   errorLevel: 'toast',
 });
 
@@ -75,7 +68,6 @@ export default {
   sendPhoneSMS,
   sendEmailSMS,
   getWechatQRCode,
-  getUserList,
   generateInviteLink,
   setAuthorizationToken,
   getCountries,

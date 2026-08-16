@@ -1,13 +1,13 @@
 import sseStream, { SSEOutput, SSEStreamProps } from './sseStream';
 import sseFetch from './sseFetch';
-import { SSERequestOptions, SSERequestParams, SSERequestCallbacks, AnyObject } from './index';
+import type { SSERequestOptions, SSERequestParams, SSERequestCallbacks, SSERequestHandle, AnyObject } from './index';
 import { handleSSEErrorPayload } from './errorPayload';
+import { createAbortableRequestHandle, createSSEStreamError } from './requestHandle';
 
 class HTTPSRequestClass {
   readonly baseURL;
   readonly model;
   private defaultHeaders;
-  private abortController?: AbortController;
 
   private static instanceBuffer: Map<string | typeof fetch, HTTPSRequestClass> = new Map();
 
@@ -41,23 +41,21 @@ class HTTPSRequestClass {
     return HTTPSRequestClass.instanceBuffer.get(id)!;
   }
 
-  public create = async <Input = AnyObject, Output = SSEOutput>(
+  public create = <Input = AnyObject, Output = SSEOutput>(
     params: SSERequestParams & Input,
     callbacks: SSERequestCallbacks<Output>,
     transformStream?: SSEStreamProps<Output>['transformStream'],
-  ) => {
-    this.abortController = new AbortController();
-    const requestInit = {
-      method: 'POST',
-      headers: this.defaultHeaders,
-      body: JSON.stringify({
-        model: this.model,
-        ...params,
-      }),
-      signal: this.abortController.signal,
-    };
-
-    try {
+  ): SSERequestHandle => {
+    return createAbortableRequestHandle(async (signal) => {
+      const requestInit = {
+        method: 'POST',
+        headers: this.defaultHeaders,
+        body: JSON.stringify({
+          model: this.model,
+          ...params,
+        }),
+        signal,
+      };
       const response = await sseFetch(this.baseURL, requestInit);
 
       if (transformStream) {
@@ -85,15 +83,7 @@ class HTTPSRequestClass {
           throw new Error(`The response content-type: ${contentType} is not support!`);
         }
       }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        callbacks?.onStop?.();
-        return;
-      }
-      const err = error instanceof Error ? error : new Error('Unknown error!');
-      callbacks?.onError?.(err);
-      throw err;
-    }
+    }, callbacks);
   };
 
   private customResponseHandler = async <Output = SSEOutput>(
@@ -124,12 +114,18 @@ class HTTPSRequestClass {
     for await (const chunk of sseStream<Output>({
       readableStream: response.body!,
     })) {
+      const streamError = createSSEStreamError(chunk);
+      if (streamError) {
+        callbacks?.onUpdate?.(chunk);
+        throw streamError;
+      }
+
       if (handleSSEErrorPayload(chunk, requestParams)) {
         callbacks?.onSuccess?.(chunks);
         return;
       }
 
-      if (chunk.data === '[DONE]') {
+      if ((chunk as SSEOutput).data === '[DONE]') {
         callbacks?.onSuccess?.(chunks);
         return;
       }
@@ -157,13 +153,6 @@ class HTTPSRequestClass {
 
     callbacks?.onSuccess?.([chunk]);
   };
-
-  public stop() {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = undefined;
-    }
-  }
 }
 
 export default HTTPSRequestClass;

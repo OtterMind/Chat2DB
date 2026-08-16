@@ -11,8 +11,9 @@ import sqlService from '@/service/sql';
 import _ from 'lodash';
 import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/EditorChartModal';
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
+import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
-import { useGlobalStore } from '@/store/global';
+import { Columns3Cog } from 'lucide-react';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -29,6 +30,7 @@ interface IProps {
   hasOperationRecord: boolean;
   activeFilterCount?: number;
   onClearAllFilters?: () => void;
+  onManageColumns: () => void;
 }
 
 export interface ResultSetToolbarRef {
@@ -36,7 +38,14 @@ export interface ResultSetToolbarRef {
 }
 
 const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetToolbarRef>) => {
-  const { resultData, hasOperationRecord, handleToolbarOperation, activeFilterCount = 0, onClearAllFilters } = props;
+  const {
+    resultData,
+    hasOperationRecord,
+    handleToolbarOperation,
+    activeFilterCount = 0,
+    onClearAllFilters,
+    onManageColumns,
+  } = props;
   const { styles, cx } = useStyles();
   const editorChartModalRef = useRef<EditChartModalRef>(null);
   const dingChartModalRef = useRef<DingChartModalRef>(null);
@@ -48,10 +57,6 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
     hasNextPage: resultData.hasNextPage,
   });
   const zoerBoundInfo = useZoerStore((s) => s.zoerBoundInfo);
-  const { dataTableSettings, updateDataTableSettings } = useGlobalStore((s) => ({
-    dataTableSettings: s.dataTableSettings,
-    updateDataTableSettings: s.updateDataTableSettings,
-  }));
 
   const showCreateChart = useMemo(() => !zoerBoundInfo, [zoerBoundInfo]);
 
@@ -204,44 +209,35 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           />
         </div>
       )}
-      {showCreateChart && (
-        <div className={cx(styles.toolBarItem, styles.editTableDataBar)}>
-          {/* Generate a report. */}
-          <IconButton
-            title={i18n('editTableData.tips.createChart')}
-            onClick={() => {
-              createChart();
-            }}
-            size="sm"
-            className={styles.createChartIcon}
-            code="icon-combo-chart"
-          />
-          <EditorChartModal
-            submitEditorChartCallback={(data) => {
-              dingChartModalRef.current?.openModal(data);
-              setChartDetail(data);
-            }}
-            ref={editorChartModalRef}
-          />
-          <DingChartModal ref={dingChartModalRef} />
-        </div>
-      )}
       <div className={cx(styles.toolBarItem, styles.editTableDataBar)}>
+        {showCreateChart && (
+          <>
+            {/* Generate a report. */}
+            <IconButton
+              title={i18n('editTableData.tips.createChart')}
+              onClick={() => {
+                createChart();
+              }}
+              size="sm"
+              className={styles.createChartIcon}
+              icon={ChartNoAxesCombined}
+            />
+            <EditorChartModal
+              submitEditorChartCallback={(data) => {
+                dingChartModalRef.current?.openModal(data);
+                setChartDetail(data);
+              }}
+              ref={editorChartModalRef}
+            />
+            <DingChartModal ref={dingChartModalRef} />
+          </>
+        )}
         <IconButton
-          title={i18n(
-            dataTableSettings.showComment ? 'editTableData.tips.hideComment' : 'editTableData.tips.showComment',
-          )}
-          onClick={() => {
-            setTimeout(() => {
-              updateDataTableSettings({
-                ...dataTableSettings,
-                showComment: !dataTableSettings.showComment,
-              });
-            }, 0);
-          }}
+          title={i18n('common.text.showHideColumns')}
+          onClick={onManageColumns}
           size="sm"
           className={styles.createChartIcon}
-          code={dataTableSettings.showComment ? 'icon-conceal-comment' : 'icon-show-comment'}
+          icon={Columns3Cog}
         />
       </div>
       <div className={styles.toolBarRight}>
@@ -258,5 +254,6 @@ export default memo(ResultSetToolbar, (prevProps, nextProps) => {
     [prevProps.handleToolbarOperation, nextProps.handleToolbarOperation],
     [prevProps.activeFilterCount, nextProps.activeFilterCount],
     [prevProps.onClearAllFilters, nextProps.onClearAllFilters],
+    [prevProps.onManageColumns, nextProps.onManageColumns],
   );
 });

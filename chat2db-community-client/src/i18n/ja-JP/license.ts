@@ -8,7 +8,8 @@ export default {
   'license.offlineCertificateInstruction':
     'インターネットに完全に接続されていない場合、以下の手順でデバイス証明書を取得できます：Chat2DB公式サイト（https://chat2db-ai.com/）にアクセス→ログイン後、アバターをクリック→デバイス証明書',
   'license.offlineActivationAIWarning': 'デバイス証明書の生成後は取り消しできず、デバイスを変更することもできません！',
-  'license.offlineAIWarning': 'オフラインでアクティベートされたデバイスではAI機能を使用できません',
+  'license.offlineAIWarning':
+    'オフラインアクティベーションにはChat2DBホスト型AIサービスは含まれません。カスタムモデルを設定するとローカルAI機能を利用できます',
 
   'license.deviceCertificateTitle': 'デバイス証明書',
   'license.getDeviceCertificateTitle': 'デバイス証明書の取得',
@@ -25,7 +26,7 @@ export default {
   'license.deviceIdExtra': 'クライアントが自動的にデバイスIDを生成します。コピーして変更しないでください',
   'license.deviceIdPlaceholder': 'デバイスIDを入力してください',
   'license.offlineAIConfirm':
-    '注意：デバイス証明書の生成後は取り消しできず、デバイスを変更することもできません！オフラインでアクティベートされたデバイスは、オンラインになってもAI機能を使用できません',
+    '注意：デバイス証明書の生成後は取り消しできず、デバイスを変更することもできません！オフラインアクティベーションにはChat2DBホスト型AIサービスは含まれません。カスタムモデルを設定するとローカルAI機能を利用できます',
   'license.getCertificate': 'デバイス証明書を取得',
   'license.getCertificateSuccess': 'デバイス証明書の取得に成功しました',
   'license.getCertificateError': 'デバイス証明書の取得に失敗しました',
@@ -38,7 +39,8 @@ export default {
   'license.permanentVersion': 'Chat2DB Local永久版',
   'license.offlineActivationIntro': 'オフラインアクティベーションプロセスについて不明な点がある場合、',
   'license.deviceLimit': 'ライセンスのデバイスバインド制限に達しました',
-  'license.licenseNotSupported': 'オフラインアクティベーションではAIはサポートされていません',
+  'license.licenseNotSupported':
+    'このオンラインAI機能はオフラインアクティベーションでは利用できません。カスタムモデルを設定してローカルAI機能を利用してください',
   'license.deactivateOnline': '解绑',
   'license.deactivateOnlineConfirm': '解绑しますか？',
   'license.deactivateOnlineSuccess': '解绑成功',

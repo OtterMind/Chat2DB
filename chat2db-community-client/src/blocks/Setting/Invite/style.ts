@@ -2,63 +2,113 @@ import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
-    wrapper: css``,
-    titleWrapper: css``,
-    title: css`
-      font-size: ${token.fontSizeLG}px;
-      font-weight: ${token.fontWeightStrong};
-      margin-bottom: 8px;
+    wrapper: css`
+      min-width: 0;
+      padding-top: 24px;
     `,
-    titleDes: css`
-      color: ${token.colorTextSecondary};
-    `,
-    inviteWrapper: css`
+    inviteToolbar: css`
+      min-height: 52px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid ${token.colorBorderSecondary};
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      border-radius: 6px;
-      background-color: ${token.colorBorderSecondary};
+      justify-content: space-between;
+      gap: 20px;
+
+      @container (max-width: 820px) {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    `,
+    inviteCodeMeta: css`
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    `,
+    sectionTitle: css`
+      font-size: ${token.fontSizeLG}px;
       font-weight: ${token.fontWeightStrong};
+    `,
+    toolbarActions: css`
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+
+      @container (max-width: 820px) {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+    `,
+    codeValue: css`
+      min-height: 32px;
+      padding: 0 4px 0 10px;
+      border: 1px solid ${token.colorBorder};
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: ${token.colorBgContainer};
+      font-family: ${token.fontFamilyCode};
     `,
 
     amountWrapper: css`
-      display: flex;
-      justify-content: space-around;
-      border-top: 1px solid ${token.colorBorderSecondary};
+      padding: 24px 0;
       border-bottom: 1px solid ${token.colorBorderSecondary};
-      margin-top: 20px;
-      margin-bottom: 48px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+
+      @container (max-width: 820px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        row-gap: 22px;
+      }
     `,
 
     amountItem: css`
-      margin: 42px 0;
-      padding: 0 48px;
+      min-width: 0;
+      padding: 2px 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      flex: 1;
       &:not(:last-child) {
         border-right: 1px solid ${token.colorBorderSecondary};
       }
+
+      @container (max-width: 820px) {
+        border-right: 0 !important;
+      }
     `,
     amountCount: css`
-      font-size: 24px;
+      overflow: hidden;
+      max-width: 100%;
+      font-size: 22px;
       font-weight: ${token.fontWeightStrong};
-    `,
-    amountTitle: css`
+      line-height: 30px;
+      text-overflow: ellipsis;
       white-space: nowrap;
     `,
-    inviteListWrapper: css``,
+    amountTitle: css`
+      overflow: hidden;
+      max-width: 100%;
+      color: ${token.colorTextSecondary};
+      font-size: ${token.fontSizeSM}px;
+      line-height: 22px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `,
+    inviteListWrapper: css`
+      min-width: 0;
+      padding-top: 28px;
+    `,
     inviteTitle: css`
       font-size: ${token.fontSizeLG}px;
       font-weight: ${token.fontWeightStrong};
-      margin-bottom: 8px;
+      margin-bottom: 12px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
     `,
 
-    inviteListWrapper: css``,
   };
 });

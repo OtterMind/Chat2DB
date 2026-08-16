@@ -375,24 +375,8 @@
                     <family>mac</family>
                 </os>
             </activation>
-            <properties>
-                <chat2db.externalLib.excludeArtifactIds>flatlaf</chat2db.externalLib.excludeArtifactIds>
-            </properties>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-maven-plugin</artifactId>
-                        <configuration>
-                            <!-- Exclude flatlaf from the macOS application jar. -->
-                            <excludes>
-                                <exclude>
-                                    <groupId>com.formdev</groupId>
-                                    <artifactId>flatlaf</artifactId>
-                                </exclude>
-                            </excludes>
-                        </configuration>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-dependency-plugin</artifactId>

@@ -32,6 +32,7 @@ import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
 import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.result.Header;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
@@ -527,8 +528,9 @@ public class AiToolServiceImpl implements IAiToolService {
         if (StringUtils.isNotBlank(result.getSqlType())) {
             builder.append("sqlType: ").append(result.getSqlType()).append("\n");
         }
-        if (Objects.nonNull(result.getDuration())) {
-            builder.append("durationMs: ").append(result.getDuration()).append("\n");
+        ExecutionMetrics executionMetrics = result.getExecutionMetrics();
+        if (executionMetrics != null && executionMetrics.getTotalDurationMs() != null) {
+            builder.append("durationMs: ").append(executionMetrics.getTotalDurationMs()).append("\n");
         }
         if (Objects.nonNull(result.getUpdateCount())) {
             builder.append("updateCount: ").append(result.getUpdateCount()).append("\n");

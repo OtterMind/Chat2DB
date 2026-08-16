@@ -47,8 +47,6 @@ const save = createRequest<ICreateConnectionDetails, IConnectionDetails>('/api/c
   delayTime: true,
 });
 
-const close = createRequest<IConnectionDetails, void>('/api/connection/datasource/close', { method: 'post' });
-
 const test = createRequest<IConnectionDetails, boolean>('/api/connection/datasource/pre_connect', {
   method: 'post',
   delayTime: true,
@@ -64,8 +62,6 @@ const update = createRequest<IConnectionDetails, IConnectionDetails>('/api/conne
 });
 
 const remove = createRequest<{ id: number }, void>('/api/connection/datasource', { method: 'delete' });
-
-const clone = createRequest<{ id: number }, number>('/api/connection/datasource/clone', { method: 'post' });
 
 const getDatabaseList = createRequest<{ dataSourceId: number; refresh?: boolean }, IDatabaseItem[]>(
   '/api/rdb/database/list',
@@ -168,10 +164,8 @@ export default {
   test,
   update,
   remove,
-  clone,
   getDatabaseList,
   getSchemaList,
-  close,
   testSSH,
   getDriverList,
   downloadDriver,

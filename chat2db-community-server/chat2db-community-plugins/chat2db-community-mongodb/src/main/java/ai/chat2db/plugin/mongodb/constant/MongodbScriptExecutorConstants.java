@@ -34,7 +34,6 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.converter.DocumentConverter;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.util.JdbcUtils;
-import cn.hutool.core.date.TimeInterval;
 import lombok.extern.slf4j.Slf4j;
 
 

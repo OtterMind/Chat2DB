@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.db2;
 
 import ai.chat2db.plugin.db2.constant.SQLConstant;
+import ai.chat2db.plugin.db2.identifier.Db2IdentifierProcessor;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
@@ -60,7 +61,7 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
             DefaultSQLExecutor.getInstance().execute(connection, SQLConstant.TABLE_DDL_FUNCTION_SQL, resultSet -> null);
         } catch (Exception e) {
         }
-        String sql = String.format(SQL_SELECT_GENERATE_TABLE_DDL_SQL, schemaName, schemaName, tableName, tableName);
+        String sql = String.format(SQL_SELECT_GENERATE_TABLE_DDL_SQL, Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName), Db2IdentifierProcessor.INSTANCE.escapeString(schemaName), Db2IdentifierProcessor.INSTANCE.escapeString(tableName), Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -75,7 +76,7 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
 
 
     private void exportViews(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_TEXT_SYSCAT_VIEWS_VIEWSCHEMA, schemaName);
+        String sql = String.format(SQL_SELECT_TEXT_SYSCAT_VIEWS_VIEWSCHEMA, Db2IdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -87,7 +88,7 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportProceduresAndFunctions(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_TEXT_SYSCAT_ROUTINES_ROUTINESCHEMA, schemaName);
+        String sql = String.format(SQL_SELECT_TEXT_SYSCAT_ROUTINES_ROUTINESCHEMA, Db2IdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -100,7 +101,7 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
 
 
     private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_SYSCAT_TRIGGERS_TRIGSCHEMA, schemaName);
+        String sql = String.format(SQL_SELECT_SYSCAT_TRIGGERS_TRIGSCHEMA, Db2IdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -119,7 +120,7 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
         }
         String schemaName = connectInfo.getSchemaName();
         try {
-            DefaultSQLExecutor.getInstance().execute(connection, String.format(SQL_SET_SCHEMA, schemaName));
+            DefaultSQLExecutor.getInstance().execute(connection, String.format(SQL_SET_SCHEMA, Db2IdentifierProcessor.escapeIdentifier(schemaName)));
         } catch (SQLException e) {
 
         }
@@ -127,15 +128,20 @@ public class DB2DBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return String.format(SQL_DROP_TABLE, tableName);
+        return String.format(SQL_DROP_TABLE, Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
+    }
+
+    @Override
+    public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "TRUNCATE TABLE " + Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName,boolean copyData) throws SQLException {
-        String sql = String.format(SQL_COPY_TABLE, newTableName, tableName);
+        String sql = String.format(SQL_COPY_TABLE, Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(newTableName), Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
         if(copyData){
-            sql = String.format(SQL_INSERT_TABLE_SELECT, newTableName, tableName);
+            sql = String.format(SQL_INSERT_TABLE_SELECT, Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(newTableName), Db2IdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
             DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
         }
     }

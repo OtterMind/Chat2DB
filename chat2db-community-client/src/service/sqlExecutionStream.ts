@@ -1,6 +1,6 @@
 import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import createJcefApi from '@/jcef/base';
-import { IExecuteSqlParams } from '@/service/executeSql';
+import type { ISqlEditorExecuteRequest } from '@/service/dmlRequest';
 import { IManageResultData } from '@/typings';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 
@@ -28,8 +28,52 @@ export interface SqlExecutionEvent<T = any> {
   message: T;
 }
 
+export function appendCompletedQueryResult(
+  current: IManageResultData[],
+  event: SqlExecutionEvent,
+): IManageResultData[] {
+  if (event.eventType !== 'resultFinished' || !Array.isArray(event.message?.dataList)) {
+    return current;
+  }
+  return [...current, event.message as IManageResultData];
+}
+
 export interface SqlExecutionStartResult {
   executionId: string;
+}
+
+export interface SqlExecutionResultIdentity {
+  executionId: string;
+  resultKey: string;
+}
+
+export type ClosedSqlExecutionResults = Map<string, Set<string>>;
+
+export function markSqlExecutionResultsClosed(
+  closedResults: ClosedSqlExecutionResults,
+  identities: SqlExecutionResultIdentity[],
+) {
+  identities.forEach(({ executionId, resultKey }) => {
+    const resultKeys = closedResults.get(executionId) || new Set<string>();
+    resultKeys.add(resultKey);
+    closedResults.set(executionId, resultKeys);
+  });
+}
+
+export function isSqlExecutionResultClosed(
+  closedResults: ClosedSqlExecutionResults,
+  executionId: string,
+  resultKey: string,
+) {
+  return closedResults.get(executionId)?.has(resultKey) === true;
+}
+
+export function clearClosedSqlExecutionResults(closedResults: ClosedSqlExecutionResults, executionId?: string) {
+  if (executionId) {
+    closedResults.delete(executionId);
+    return;
+  }
+  closedResults.clear();
 }
 
 export interface SqlExecutionMessage {
@@ -48,12 +92,30 @@ export interface SqlExecutionStatement {
   historySequence?: number;
 }
 
-export function startSqlExecution(params: IExecuteSqlParams, requestUuid: string) {
+export function startSqlExecution(params: ISqlEditorExecuteRequest, requestUuid: string) {
   return createJcefApi<SqlExecutionStartResult>('sql-execute', params, requestUuid);
 }
 
 export function cancelSqlExecution(executionId: string) {
   return createJcefApi<boolean>('sql-cancel', { executionId });
+}
+
+export async function cancelSqlExecutionWithReconciliation(
+  executionId: string,
+  handlers: {
+    onExecutionMissing: () => void;
+    onError: (error: unknown) => void;
+  },
+  cancelRequest: (targetExecutionId: string) => Promise<boolean> = cancelSqlExecution,
+) {
+  try {
+    const cancelled = await cancelRequest(executionId);
+    if (!cancelled) {
+      handlers.onExecutionMissing();
+    }
+  } catch (error) {
+    handlers.onError(error);
+  }
 }
 
 export function onSqlExecutionEvent(requestUuid: string, callback: (event: SqlExecutionEvent) => void) {
@@ -105,15 +167,19 @@ function mergeResultStartedWithMode(
 }
 
 export function mergeRows(current: IManageResultData[], chunk: IManageResultData) {
-  return current.map((item) => {
+  const normalizedChunk = ensureResultData(chunk);
+  let matched = false;
+  const next = current.map((item) => {
     if (!isSameResult(item, chunk)) {
       return item;
     }
+    matched = true;
     return {
       ...item,
-      dataList: [...(item.dataList || []), ...(chunk.dataList || [])],
+      dataList: [...(item.dataList || []), ...(normalizedChunk.dataList || [])],
     };
   });
+  return matched ? next : [...next, normalizedChunk];
 }
 
 export function mergeResultFinished(current: IManageResultData[], result: IManageResultData) {
@@ -303,7 +369,6 @@ function ensureResultData(result: IManageResultData) {
     sql: normalized.sql || normalized.originalSql || '',
     originalSql: normalized.originalSql || normalized.sql || '',
     success: normalized.success ?? true,
-    duration: normalized.duration || 0,
     headerList: normalized.headerList || [],
     dataList: normalized.dataList || [],
     sqlType: normalized.sqlType || SqlTypeEnum.OTHER,

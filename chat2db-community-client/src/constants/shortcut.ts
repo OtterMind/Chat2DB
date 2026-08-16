@@ -1,9 +1,11 @@
 import { isMac } from '@/utils/env';
+import { getFileManagerLabelKey } from '@/utils/fileManagerLabel';
 
 export enum ShortcutScope {
   Global = 'global',
   SqlEditor = 'sqlEditor',
   LocalSqlFileTree = 'localSqlFileTree',
+  DatabaseTree = 'databaseTree',
   ResultSet = 'resultSet',
   Workspace = 'workspace',
   Table = 'table',
@@ -22,6 +24,10 @@ export enum ShortcutAction {
   ArouseAIAssistant = 'arouseAIAssistant',
   NewAIChat = 'newAIChat',
   WorkspaceTreeSearch = 'workspaceTreeSearch',
+  DatabaseTreeOpenTable = 'databaseTreeOpenTable',
+  DatabaseTreeEditTable = 'databaseTreeEditTable',
+  DatabaseTreeCreateTable = 'databaseTreeCreateTable',
+  DatabaseTreeRefresh = 'databaseTreeRefresh',
   LocalSqlFileTreeOpenFolder = 'localSqlFileTreeOpenFolder',
   LocalSqlFileTreeAddFolder = 'localSqlFileTreeAddFolder',
   LocalSqlFileTreeOpen = 'localSqlFileTreeOpen',
@@ -41,6 +47,8 @@ export enum ShortcutAction {
   SqlCut = 'sqlCut',
   SqlCaseConvert = 'sqlCaseConvert',
   SqlFormat = 'sqlFormat',
+  SqlToggleLineComment = 'sqlToggleLineComment',
+  SqlToggleBlockComment = 'sqlToggleBlockComment',
   SqlSave = 'sqlSave',
   SqlSaveToDesktop = 'sqlSaveToDesktop',
   SqlExecuteCurrent = 'sqlExecuteCurrent',
@@ -79,6 +87,7 @@ export interface EffectiveShortcutConfig extends ShortcutDefinition {
 
 const modifierKey = isMac ? '⌘' : 'Ctrl';
 const deleteKey = isMac ? 'Backspace' : 'Delete';
+const localSqlFileTreeRevealLabel = getFileManagerLabelKey('shortcut');
 
 export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition> = {
   [ShortcutAction.OpenSetting]: {
@@ -187,6 +196,38 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
     allowInEditable: true,
     canModify: true,
   },
+  [ShortcutAction.DatabaseTreeOpenTable]: {
+    key: ShortcutAction.DatabaseTreeOpenTable,
+    label: 'setting.shortcut.databaseTreeOpenTable',
+    action: ShortcutAction.DatabaseTreeOpenTable,
+    defaultBinding: `${modifierKey} + O`,
+    scope: ShortcutScope.DatabaseTree,
+    canModify: true,
+  },
+  [ShortcutAction.DatabaseTreeEditTable]: {
+    key: ShortcutAction.DatabaseTreeEditTable,
+    label: 'setting.shortcut.databaseTreeEditTable',
+    action: ShortcutAction.DatabaseTreeEditTable,
+    defaultBinding: `${modifierKey} + D`,
+    scope: ShortcutScope.DatabaseTree,
+    canModify: true,
+  },
+  [ShortcutAction.DatabaseTreeCreateTable]: {
+    key: ShortcutAction.DatabaseTreeCreateTable,
+    label: 'setting.shortcut.databaseTreeCreateTable',
+    action: ShortcutAction.DatabaseTreeCreateTable,
+    defaultBinding: `${modifierKey} + N`,
+    scope: ShortcutScope.DatabaseTree,
+    canModify: true,
+  },
+  [ShortcutAction.DatabaseTreeRefresh]: {
+    key: ShortcutAction.DatabaseTreeRefresh,
+    label: 'setting.shortcut.databaseTreeRefresh',
+    action: ShortcutAction.DatabaseTreeRefresh,
+    defaultBinding: `${modifierKey} + R`,
+    scope: ShortcutScope.DatabaseTree,
+    canModify: true,
+  },
   [ShortcutAction.LocalSqlFileTreeOpenFolder]: {
     key: ShortcutAction.LocalSqlFileTreeOpenFolder,
     label: 'setting.shortcut.localSqlFileTreeOpenFolder',
@@ -269,7 +310,7 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
   },
   [ShortcutAction.LocalSqlFileTreeRevealInFinder]: {
     key: ShortcutAction.LocalSqlFileTreeRevealInFinder,
-    label: 'setting.shortcut.localSqlFileTreeRevealInFinder',
+    label: localSqlFileTreeRevealLabel,
     action: ShortcutAction.LocalSqlFileTreeRevealInFinder,
     defaultBinding: `${modifierKey} + Alt + R`,
     scope: ShortcutScope.LocalSqlFileTree,
@@ -340,6 +381,24 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
     label: 'setting.shortcut.sqlFormat',
     action: ShortcutAction.SqlFormat,
     defaultBinding: `${modifierKey} + L`,
+    scope: ShortcutScope.SqlEditor,
+    allowInEditable: true,
+    canModify: true,
+  },
+  [ShortcutAction.SqlToggleLineComment]: {
+    key: ShortcutAction.SqlToggleLineComment,
+    label: 'setting.shortcut.sqlToggleLineComment',
+    action: ShortcutAction.SqlToggleLineComment,
+    defaultBinding: `${modifierKey} + /`,
+    scope: ShortcutScope.SqlEditor,
+    allowInEditable: true,
+    canModify: true,
+  },
+  [ShortcutAction.SqlToggleBlockComment]: {
+    key: ShortcutAction.SqlToggleBlockComment,
+    label: 'setting.shortcut.sqlToggleBlockComment',
+    action: ShortcutAction.SqlToggleBlockComment,
+    defaultBinding: `${modifierKey} + Shift + /`,
     scope: ShortcutScope.SqlEditor,
     allowInEditable: true,
     canModify: true,
@@ -456,6 +515,25 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
 
 const MODIFIER_ORDER = isMac ? ['meta', 'ctrl', 'alt', 'shift'] : ['ctrl', 'meta', 'alt', 'shift'];
 const MODIFIER_KEYS = new Set(['control', 'ctrl', 'meta', 'cmd', 'command', '⌘', 'alt', 'option', '⌥', 'shift', '⇧']);
+const SINGLE_KEY_SHORTCUTS = new Set([
+  'enter',
+  'escape',
+  'tab',
+  'backspace',
+  'delete',
+  'f1',
+  'f2',
+  'f3',
+  'f4',
+  'f5',
+  'f6',
+  'f7',
+  'f8',
+  'f9',
+  'f10',
+  'f11',
+  'f12',
+]);
 const NON_PRINTABLE_KEY_LABELS: Record<string, string> = {
   ' ': 'Space',
   spacebar: 'Space',
@@ -598,6 +676,13 @@ export const getEventShortcutBinding = (event: KeyboardEvent | React.KeyboardEve
   keys.push(key);
 
   return normalizeShortcutBinding(keys.join(' + '));
+};
+
+export const isShortcutCaptureAllowed = (pressedKeys: Iterable<string>): boolean => {
+  const keys = Array.from(pressedKeys, (key) => key.toLowerCase());
+  const hasModifierKey = keys.some((key) => MODIFIER_KEYS.has(key));
+  const isAllowedSingleKey = keys.length === 1 && SINGLE_KEY_SHORTCUTS.has(keys[0]);
+  return isAllowedSingleKey || (keys.length > 1 && hasModifierKey);
 };
 
 export const isShortcutBindingEqual = (left?: string | null, right?: string | null): boolean =>

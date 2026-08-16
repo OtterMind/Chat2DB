@@ -31,6 +31,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConnectionPoolTest {
 
     @Test
+    void cleanupThreadShouldBeNamedDaemon() throws ClassNotFoundException {
+        Class.forName(ConnectionPool.class.getName());
+
+        Thread cleanupThread = Thread.getAllStackTraces().keySet().stream()
+                .filter(thread -> "chat2db-conn-pool-cleanup".equals(thread.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("connection-pool cleanup thread was not started"));
+
+        assertTrue(cleanupThread.isDaemon());
+    }
+
+    @Test
     void cleanupShouldCloseAndRemoveInvalidIdleConnection() {
         AtomicBoolean closed = new AtomicBoolean();
         ConnectInfo connectInfo = connectInfo(connection(false, closed));

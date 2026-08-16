@@ -50,4 +50,20 @@ class HashTypeScriptTest {
 
         assertTrue(typeScript.updateKey(oldKey, newKey).isEmpty());
     }
+
+    @Test
+    void updateKeyDeletesKeyWhenEveryFieldIsRemoved() {
+        RedisKey oldKey = key("k", entry("f1", "v1", null));
+        RedisKey newKey = RedisKey.builder().name("k").type("HASH").build();
+
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
+    }
+
+    @Test
+    void updateKeyDeletesKeyWhenAllFieldsAreFlaggedDeleted() {
+        RedisKey oldKey = key("k", entry("f1", "v1", null));
+        RedisKey newKey = key("k", entry("f1", "v1", ActionConstants.DELETE));
+
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
+    }
 }

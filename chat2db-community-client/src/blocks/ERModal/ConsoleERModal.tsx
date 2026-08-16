@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import ERModal, { ERModalRef } from './index';
 import { IBoundInfo } from '@/typings';
 import { IERTableDetail } from '@/typings/er';
@@ -24,16 +25,22 @@ const ConsoleERModal = (props: IProps) => {
   const [loading, setLoading] = useState(true);
 
   const erModalRef = useRef<ERModalRef>(null);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
+    const requestGeneration = beginLatestRequest(requestGenerationRef);
     getTableErInfo({ dataSourceId, databaseName, schemaName })
       .then((res) => {
+        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
         setErModalData(res.tables);
         setStoredLayout(res.position);
       })
       .finally(() => {
-        setLoading(false);
+        if (isLatestRequest(requestGenerationRef, requestGeneration)) setLoading(false);
       });
+    return () => {
+      invalidateLatestRequest(requestGenerationRef);
+    };
   }, []);
 
   const handleResetLayout = () => {

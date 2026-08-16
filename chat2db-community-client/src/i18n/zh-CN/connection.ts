@@ -44,5 +44,9 @@ export default {
   'connection.title.importDBeaver': '导入DBeaver连接',
   'connection.import.success': '成功导入{1}条连接',
   'connection.import.unable.password.tips': '我们无法导入连接密码，导入完成后请重新输入连接密码',
+  'connection.export.exporting': '正在准备连接文件...',
+  'connection.export.success': '连接导出成功',
+  'connection.export.cancelled': '已取消导出',
+  'connection.export.failed': '连接导出失败，请重试',
   'workspace.menu.exportConnections': '导出连接',
 };

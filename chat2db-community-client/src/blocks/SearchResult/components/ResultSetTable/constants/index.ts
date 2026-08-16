@@ -40,4 +40,10 @@ export enum ContextmenuType {
   tabSplitFieldAndValue = 'tabSplitFieldAndValue',
   // Markdown table
   markdownTable = 'markdownTable',
+  showFieldType = 'showFieldType',
+  showFieldComment = 'showFieldComment',
+  hideColumn = 'hideColumn',
+  showAllColumns = 'showAllColumns',
+  freezeColumn = 'freezeColumn',
+  unfreezeAllColumns = 'unfreezeAllColumns',
 }

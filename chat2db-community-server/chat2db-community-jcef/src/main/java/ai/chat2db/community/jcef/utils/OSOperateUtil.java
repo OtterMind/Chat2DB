@@ -231,6 +231,16 @@ public class OSOperateUtil {
 
 
     public static Map<String, Object> updateFileContent(String filePath, String fileContent) throws IOException {
+        return updateFileContent(filePath, fileContent, null, null);
+    }
+
+
+    public static Map<String, Object> updateFileContent(
+            String filePath,
+            String fileContent,
+            Charset charset,
+            Boolean bom
+    ) throws IOException {
         if (filePath == null || fileContent == null) {
             throw new IllegalArgumentException("File path and content must not be empty");
         }
@@ -239,14 +249,14 @@ public class OSOperateUtil {
         if (!Files.exists(path)) {
             throw new FileNotFoundException("File not found: " + filePath);
         }
-        Path tempPath = Files.createTempFile("update", ".tmp");
-        try (BufferedWriter writer = Files.newBufferedWriter(tempPath, StandardCharsets.UTF_8)) {
-            for (int i = 0; i < fileContent.length(); i += CHUNK_SIZE) {
-                int end = Math.min(fileContent.length(), i + CHUNK_SIZE);
-                writer.write(fileContent.substring(i, end));
-            }
+
+        LocalTextFileCodec.DecodedText existingFile = null;
+        if (charset == null || bom == null) {
+            existingFile = LocalTextFileCodec.read(path, charset);
         }
-        Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING);
+        Charset targetCharset = charset != null ? charset : Charset.forName(existingFile.charset());
+        boolean includeBom = bom != null ? bom : existingFile.bom();
+        LocalTextFileCodec.write(path, fileContent, targetCharset, includeBom);
 
         Map<String, Object> result = new HashMap<>();
         result.put("path", path.toAbsolutePath().toString());
@@ -264,18 +274,13 @@ public class OSOperateUtil {
         if (!Files.exists(filePath)) {
             throw new FileNotFoundException("File not found: " + path);
         }
-        StringBuilder contentBuilder = new StringBuilder();
-        try (BufferedReader reader = Files.newBufferedReader(filePath, Objects.nonNull(charsets) ? charsets : StandardCharsets.UTF_8)) {
-            char[] buffer = new char[8192];
-            int bytesRead;
-            while ((bytesRead = reader.read(buffer)) != -1) {
-                contentBuilder.append(buffer, 0, bytesRead);
-            }
-        }
+        LocalTextFileCodec.DecodedText decodedText = LocalTextFileCodec.read(filePath, charsets);
 
         Map<String, Object> result = new HashMap<>();
         result.put("path", filePath.toAbsolutePath().toString());
-        result.put("content", contentBuilder.toString());
+        result.put("content", decodedText.content());
+        result.put("charset", decodedText.charset());
+        result.put("bom", decodedText.bom());
         result.put("size", Files.size(filePath));
         return result;
     }

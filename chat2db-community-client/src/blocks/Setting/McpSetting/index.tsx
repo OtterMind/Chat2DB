@@ -1,71 +1,180 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button, Form, Input, Popconfirm, Switch } from 'antd';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { Alert, Button, Form, Input, Popconfirm, Switch } from 'antd';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
+import type { McpStatus } from '@/typings/settings';
 import { copyToClipboard } from '@/utils/copy';
+import feedback from '@/utils/feedback';
 import SettingSubsection from '../SettingSubsection';
 import { useStyles } from '../BaseSetting/style';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import {
+  canStartMcpOperation,
+  createMcpOperationId,
+  getErrorMessage,
+  initialMcpLifecycleState,
+  reduceMcpLifecycleState,
+  type McpOperation,
+} from './mcpLifecycle';
+import { useMcpStyles } from './style';
 
 export default function McpSetting() {
   const { styles } = useStyles();
+  const { styles: mcpStyles } = useMcpStyles();
   const [token, setToken] = useState('');
+  const [lifecycle, dispatch] = useReducer(reduceMcpLifecycleState, initialMcpLifecycleState);
+  const activeOperationIdRef = useRef<string | null>(null);
   const requestGenerationRef = useRef(0);
-  const { enableMcp, setBaseSetting } = useGlobalStore((state) => {
-    return {
-      enableMcp: state.baseSetting.enableMcp,
-      setBaseSetting: state.setBaseSetting,
-    };
-  });
+  const setBaseSetting = useGlobalStore((state) => state.setBaseSetting);
+
+  const startOperation = useCallback((operation: McpOperation) => {
+    if (!canStartMcpOperation(activeOperationIdRef.current)) {
+      return null;
+    }
+    const operationId = createMcpOperationId();
+    activeOperationIdRef.current = operationId;
+    dispatch({ type: 'START', operation, operationId });
+    return operationId;
+  }, []);
+
+  const applyStatus = useCallback(
+    (status: McpStatus) => {
+      if (activeOperationIdRef.current !== status.operationId) {
+        return false;
+      }
+      activeOperationIdRef.current = null;
+      dispatch({ type: 'STATUS', status });
+      setBaseSetting({ enableMcp: status.configuredEnabled });
+      return true;
+    },
+    [setBaseSetting],
+  );
+
+  const failOperation = useCallback((operationId: string, error: unknown) => {
+    if (activeOperationIdRef.current !== operationId) {
+      return false;
+    }
+    activeOperationIdRef.current = null;
+    dispatch({ type: 'FAILURE', operationId, error: getErrorMessage(error) });
+    return true;
+  }, []);
 
   useEffect(() => {
     const requestGeneration = beginLatestRequest(requestGenerationRef);
-    jcefApi.getMcpToken().then((t) => {
-      if (isLatestRequest(requestGenerationRef, requestGeneration)) {
-        setToken(t);
-      }
-    });
+    const operationId = startOperation('loading');
+    if (!operationId) {
+      return () => invalidateLatestRequest(requestGenerationRef);
+    }
+    jcefApi.getMcpStatus({ operationId })
+      .then(applyStatus)
+      .catch((error) => {
+        failOperation(operationId, error);
+      });
+    jcefApi.getMcpToken()
+      .then((t) => {
+        if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+          setToken(t);
+        }
+      })
+      .catch(() => {
+        if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+          feedback.error(i18n('setting.mcp.tokenLoadFailed'));
+        }
+      });
     return () => {
       invalidateLatestRequest(requestGenerationRef);
+      if (activeOperationIdRef.current === operationId) {
+        activeOperationIdRef.current = null;
+      }
     };
-  }, []);
+  }, [applyStatus, failOperation, startOperation]);
 
-  function changeMcpEnabled(checked: boolean) {
-    setBaseSetting({ enableMcp: checked });
-    staticMessage.info(i18n('setting.text.mcpRestartRequired'));
+  async function changeMcpEnabled(checked: boolean) {
+    const operationId = startOperation('saving');
+    if (!operationId) {
+      return;
+    }
+    try {
+      const status = await jcefApi.setMcpEnabled({ operationId, enabled: checked });
+      if (applyStatus(status) && status.restartRequired) {
+        staticMessage.info(i18n('setting.text.mcpRestartRequired'));
+      }
+    } catch (error) {
+      failOperation(operationId, error);
+    }
   }
 
-  function restartApp() {
-    jcefApi.restartApp();
+  async function restartApp() {
+    const operationId = startOperation('restarting');
+    if (!operationId) {
+      return;
+    }
+    try {
+      const result = await jcefApi.restartApp({ operationId });
+      if (activeOperationIdRef.current !== operationId || result.operationId !== operationId) {
+        return;
+      }
+      if (!result.accepted) {
+        failOperation(operationId, i18n('setting.mcp.restartAlreadyInProgress'));
+        return;
+      }
+    } catch (error) {
+      failOperation(operationId, error);
+    }
   }
 
   async function copyToken() {
     await copyToClipboard(token);
-    staticMessage.success(i18n('common.button.copySuccessfully'));
+    feedback.success(i18n('common.button.copySuccessfully'));
   }
 
   function resetToken() {
     jcefApi.resetMcpToken().then((nextToken) => {
       setToken(nextToken);
-      staticMessage.success(i18n('setting.text.mcpTokenResetSuccess'));
+      feedback.success(i18n('setting.text.mcpTokenResetSuccess'));
     });
   }
 
+  const status = lifecycle.status;
+  const controlsBusy = lifecycle.pendingOperation !== null;
+  const canRestart = !!status && (
+    status.restartRequired || status.runtimeState === 'FAILED' || status.runtimeState === 'UNKNOWN'
+  );
+
   return (
     <div className={styles.baseSettingBox}>
-      <div>
-        <SettingSubsection title={i18n('setting.title.mcp')} describe={i18n('setting.text.mcpDescribe')} />
-        <Form className={styles.customFontBox}>
-          <Switch checked={!!enableMcp} onChange={changeMcpEnabled} />
-          <Button onClick={restartApp}>{i18n('setting.button.restartApp')}</Button>
-        </Form>
+      <div data-setting-search-id="mcp.service">
+        <div className={mcpStyles.serviceControls}>
+          <Form className={mcpStyles.actionRow}>
+            <Switch
+              aria-label={i18n('setting.title.mcp')}
+              checked={status?.configuredEnabled ?? false}
+              disabled={controlsBusy}
+              loading={lifecycle.pendingOperation === 'loading' || lifecycle.pendingOperation === 'saving'}
+              onChange={changeMcpEnabled}
+            />
+            <Button
+              disabled={controlsBusy || !canRestart}
+              loading={lifecycle.pendingOperation === 'restarting'}
+              onClick={restartApp}
+            >
+              {i18n('setting.button.restartApp')}
+            </Button>
+          </Form>
+          {lifecycle.error && (
+            <Alert showIcon type="error" message={i18n('setting.mcp.operationFailed')} description={lifecycle.error} />
+          )}
+        </div>
       </div>
-      <div>
-        <SettingSubsection title={i18n('setting.title.mcpToken')} describe={i18n('setting.text.mcpTokenDescribe')} />
+      <div data-setting-search-id="mcp.token">
+        <SettingSubsection
+          title={<span data-setting-search-title="true">{i18n('setting.title.mcpToken')}</span>}
+          describe={i18n('setting.text.mcpTokenDescribe')}
+        />
         <Form className={styles.customFontBox}>
-          <Input.Password readOnly value={token} style={{ width: 420 }} />
+          <Input.Password readOnly value={token} style={{ flex: '1 1 280px', maxWidth: 420, minWidth: 0 }} />
           <Button onClick={copyToken}>{i18n('common.button.copy')}</Button>
           <Popconfirm
             title={i18n('setting.text.mcpTokenResetConfirm')}
@@ -73,7 +182,9 @@ export default function McpSetting() {
             okText={i18n('common.button.confirm')}
             cancelText={i18n('common.button.cancel')}
           >
-            <Button danger>{i18n('setting.button.resetMcpToken')}</Button>
+            <Button danger disabled={lifecycle.pendingOperation === 'restarting'}>
+              {i18n('setting.button.resetMcpToken')}
+            </Button>
           </Popconfirm>
         </Form>
       </div>

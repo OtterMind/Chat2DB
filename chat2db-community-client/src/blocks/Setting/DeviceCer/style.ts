@@ -3,12 +3,9 @@ import { createStyles } from 'antd-style';
 export const useStyles = createStyles(({ css, token }) => {
   return {
     wrapper: css`
-      min-width: 480px;
-    `,
-    mainTitle: css`
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 48px;
+      width: 100%;
+      min-width: 0;
+      padding-top: 24px;
     `,
 
     title: css``,

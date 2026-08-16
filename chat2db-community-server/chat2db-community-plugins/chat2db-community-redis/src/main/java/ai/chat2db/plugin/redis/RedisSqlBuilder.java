@@ -5,7 +5,6 @@ import ai.chat2db.spi.constant.SQLConstants;
 
 import ai.chat2db.plugin.redis.model.RedisKey;
 import ai.chat2db.plugin.redis.enums.type.RedisDataType;
-import ai.chat2db.plugin.redis.type.ITypeScript;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.sql.builder.IDatabaseSqlBuilder;
 import ai.chat2db.spi.sql.builder.IDdlSqlBuilder;
@@ -36,8 +35,13 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+import static ai.chat2db.plugin.redis.util.RedisValueUtils.getRedisValue;
 
 public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuilder, IDdlSqlBuilder,
         IDatabaseSqlBuilder, ISchemaSqlBuilder, ITableSqlBuilder, IViewSqlBuilder {
@@ -165,18 +169,197 @@ public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuil
         List<Header> headerList = queryResult.getHeaderList();
         List<ResultOperation> operations = queryResult.getOperations();
         String tableName = queryResult.getTableName();
-        if (CollectionUtils.isEmpty(operations)) {
+        if (StringUtils.isBlank(tableName) || CollectionUtils.isEmpty(operations)) {
             return StringUtils.EMPTY;
         }
         String redisKeyType = RedisScriptExecutor.getInstance().getKeyType(tableName);
-        ITypeScript typeScript = RedisDataType.fromCode(redisKeyType).getScript();
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(RedisConstants.REDIS_MULTI_COMMAND);
         stringBuilder.append(renameOrUpdateTtl(queryResult));
         for (ResultOperation operation : operations) {
+            stringBuilder.append(buildOperationScript(redisKeyType, queryResult.getTableName(), headerList, operation));
         }
         stringBuilder.append(RedisConstants.REDIS_EXEC_COMMAND);
         return stringBuilder.toString();
+    }
+
+    private String buildOperationScript(String redisKeyType, String keyName, List<Header> headerList,
+            ResultOperation operation) {
+        Map<String, String> oldRow = rowByHeader(headerList, operation.getOldDataList());
+        Map<String, String> newRow = rowByHeader(headerList, operation.getDataList());
+        String operationType = operation.getType();
+        StringBuilder script = new StringBuilder();
+        switch (RedisDataType.fromCode(redisKeyType)) {
+            case HASH:
+                appendHashOperation(script, keyName, operationType, oldRow, newRow);
+                break;
+            case SET:
+                appendSetOperation(script, keyName, operationType, oldRow, newRow);
+                break;
+            case ZSET:
+                appendZSetOperation(script, keyName, operationType, oldRow, newRow);
+                break;
+            case LIST:
+                appendListOperation(script, keyName, operationType, operation, oldRow, newRow);
+                break;
+            case STRING:
+                appendStringOperation(script, keyName, operationType, newRow);
+                break;
+            default:
+                break;
+        }
+        return script.toString();
+    }
+
+    private Map<String, String> rowByHeader(List<Header> headerList, List<String> dataList) {
+        Map<String, String> row = new HashMap<>();
+        if (CollectionUtils.isEmpty(headerList) || CollectionUtils.isEmpty(dataList)) {
+            return row;
+        }
+        for (int i = 0; i < headerList.size() && i < dataList.size(); i++) {
+            Header header = headerList.get(i);
+            if (header != null && StringUtils.isNotBlank(header.getName())) {
+                row.put(header.getName(), dataList.get(i));
+            }
+        }
+        return row;
+    }
+
+    private void appendHashOperation(StringBuilder script, String keyName, String operationType,
+            Map<String, String> oldRow, Map<String, String> newRow) {
+        String oldField = oldRow.get(RedisConstants.FIELD_FIELD);
+        String newField = newRow.get(RedisConstants.FIELD_FIELD);
+        if (SQLConstants.CREATE_KEYWORD.equals(operationType)) {
+            if (StringUtils.isNotBlank(newField)) {
+                appendCommand(script, RedisConstants.COMMAND_HASH_SET_PREFIX, keyName, newField,
+                        newRow.get(RedisConstants.FIELD_VALUE));
+            }
+        } else if (SQLConstants.UPDATE_KEYWORD.equals(operationType)) {
+            if (StringUtils.isNotBlank(oldField) && !Objects.equals(oldField, newField)) {
+                appendCommand(script, RedisConstants.COMMAND_HASH_DELETE_PREFIX, keyName, oldField);
+            }
+            if (StringUtils.isNotBlank(newField)) {
+                appendCommand(script, RedisConstants.COMMAND_HASH_SET_PREFIX, keyName, newField,
+                        newRow.get(RedisConstants.FIELD_VALUE));
+            }
+        } else if (SQLConstants.DELETE_KEYWORD.equals(operationType)) {
+            if (StringUtils.isNotBlank(oldField)) {
+                appendCommand(script, RedisConstants.COMMAND_HASH_DELETE_PREFIX, keyName, oldField);
+            }
+        }
+    }
+
+    private void appendSetOperation(StringBuilder script, String keyName, String operationType,
+            Map<String, String> oldRow, Map<String, String> newRow) {
+        String oldValue = oldRow.get(RedisConstants.FIELD_VALUE);
+        String newValue = newRow.get(RedisConstants.FIELD_VALUE);
+        if (SQLConstants.CREATE_KEYWORD.equals(operationType)) {
+            appendCommand(script, RedisConstants.COMMAND_SET_ADD_PREFIX, keyName, newValue);
+        } else if (SQLConstants.UPDATE_KEYWORD.equals(operationType)) {
+            if (!Objects.equals(oldValue, newValue)) {
+                appendCommand(script, RedisConstants.COMMAND_SET_REMOVE_PREFIX, keyName, oldValue);
+                appendCommand(script, RedisConstants.COMMAND_SET_ADD_PREFIX, keyName, newValue);
+            }
+        } else if (SQLConstants.DELETE_KEYWORD.equals(operationType)) {
+            appendCommand(script, RedisConstants.COMMAND_SET_REMOVE_PREFIX, keyName, oldValue);
+        }
+    }
+
+    private void appendZSetOperation(StringBuilder script, String keyName, String operationType,
+            Map<String, String> oldRow, Map<String, String> newRow) {
+        String oldValue = oldRow.get(RedisConstants.FIELD_VALUE);
+        String newValue = newRow.get(RedisConstants.FIELD_VALUE);
+        String newScore = StringUtils.defaultIfBlank(newRow.get(RedisConstants.FIELD_SCORE), "0");
+        if (SQLConstants.CREATE_KEYWORD.equals(operationType)) {
+            appendZAddCommand(script, keyName, newScore, newValue);
+        } else if (SQLConstants.UPDATE_KEYWORD.equals(operationType)) {
+            if (!Objects.equals(oldValue, newValue)) {
+                appendCommand(script, RedisConstants.COMMAND_ZSET_REMOVE_PREFIX, keyName, oldValue);
+                appendZAddCommand(script, keyName, newScore, newValue);
+            } else if (!Objects.equals(oldRow.get(RedisConstants.FIELD_SCORE), newRow.get(RedisConstants.FIELD_SCORE))) {
+                appendZAddCommand(script, keyName, newScore, newValue);
+            }
+        } else if (SQLConstants.DELETE_KEYWORD.equals(operationType)) {
+            appendCommand(script, RedisConstants.COMMAND_ZSET_REMOVE_PREFIX, keyName, oldValue);
+        }
+    }
+
+    private void appendListOperation(StringBuilder script, String keyName, String operationType,
+            ResultOperation operation, Map<String, String> oldRow, Map<String, String> newRow) {
+        if (SQLConstants.CREATE_KEYWORD.equals(operationType)) {
+            appendCommand(script, RedisConstants.COMMAND_LIST_RIGHT_PUSH_PREFIX, keyName,
+                    newRow.get(RedisConstants.FIELD_VALUE));
+        } else if (SQLConstants.UPDATE_KEYWORD.equals(operationType)) {
+            Integer index = rowNumberIndex(operation.getOldDataList());
+            if (index != null) {
+                script.append("LSET ").append(getRedisValue(keyName))
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(index)
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                        .append(getRedisValue(StringUtils.defaultString(newRow.get(RedisConstants.FIELD_VALUE))))
+                        .append(SQLConstants.LINE_SEPARATOR);
+            }
+        } else if (SQLConstants.DELETE_KEYWORD.equals(operationType)) {
+            Integer index = rowNumberIndex(operation.getOldDataList());
+            if (index != null) {
+                // Positional delete so a later duplicate occurrence removes exactly the
+                // edited row: LSET idx <tombstone> then LREM 1 <tombstone>. Value-based
+                // LREM would always hit the FIRST duplicate instead.
+                String tombstone = "__chat2db_deleted__" + UUID.randomUUID();
+                script.append("LSET ").append(getRedisValue(keyName))
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(index)
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(getRedisValue(tombstone))
+                        .append(SQLConstants.LINE_SEPARATOR);
+                script.append(RedisConstants.COMMAND_LIST_REMOVE_PREFIX).append(getRedisValue(keyName))
+                        .append(RedisConstants.COMMAND_LIST_REMOVE_ONE_FRAGMENT)
+                        .append(getRedisValue(tombstone))
+                        .append(SQLConstants.LINE_SEPARATOR);
+            } else {
+                script.append(RedisConstants.COMMAND_LIST_REMOVE_PREFIX).append(getRedisValue(keyName))
+                        .append(RedisConstants.COMMAND_LIST_REMOVE_ONE_FRAGMENT)
+                        .append(getRedisValue(StringUtils.defaultString(oldRow.get(RedisConstants.FIELD_VALUE))))
+                        .append(SQLConstants.LINE_SEPARATOR);
+            }
+        }
+    }
+
+    private Integer rowNumberIndex(List<String> oldDataList) {
+        if (CollectionUtils.isEmpty(oldDataList)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(oldDataList.get(0).trim()) - 1;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private void appendStringOperation(StringBuilder script, String keyName, String operationType,
+            Map<String, String> newRow) {
+        if (SQLConstants.CREATE_KEYWORD.equals(operationType) || SQLConstants.UPDATE_KEYWORD.equals(operationType)) {
+            appendCommand(script, RedisConstants.COMMAND_SET_KEY_PREFIX, keyName,
+                    newRow.get(RedisConstants.FIELD_VALUE));
+        } else if (SQLConstants.DELETE_KEYWORD.equals(operationType)) {
+            script.append(RedisConstants.COMMAND_DELETE_KEY_PREFIX).append(getRedisValue(keyName))
+                    .append(SQLConstants.LINE_SEPARATOR);
+        }
+    }
+
+    private void appendZAddCommand(StringBuilder script, String keyName, String score, String value) {
+        script.append(RedisConstants.COMMAND_ZSET_ADD_PREFIX).append(getRedisValue(keyName))
+                .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                .append(getRedisValue(StringUtils.defaultString(score)))
+                .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                .append(getRedisValue(StringUtils.defaultString(value)))
+                .append(SQLConstants.LINE_SEPARATOR);
+    }
+
+    private void appendCommand(StringBuilder script, String commandPrefix, String keyName, String... args) {
+        script.append(commandPrefix).append(getRedisValue(keyName));
+        for (String arg : args) {
+            script.append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR)
+                    .append(getRedisValue(StringUtils.defaultString(arg)));
+        }
+        script.append(SQLConstants.LINE_SEPARATOR);
     }
 
     private String renameOrUpdateTtl(QueryResponse queryResult) {
@@ -187,14 +370,27 @@ public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuil
         StringBuilder stringBuilder = new StringBuilder();
         String key = MapUtils.getString(extra, RedisConstants.FIELD_KEY);
         String ttl = MapUtils.getString(extra, RedisConstants.FIELD_TTL);
-        if (StringUtils.isNotBlank(key)) {
-            stringBuilder.append(RedisConstants.SQL_RENAME_KEY_PREFIX).append(queryResult.getTableName()).append(SQLConstants.SPACE).append(key).append(SQLConstants.LINE_SEPARATOR);
+        if (StringUtils.isNotBlank(key) && !StringUtils.equals(key, queryResult.getTableName())) {
+            stringBuilder.append(RedisConstants.SQL_RENAME_KEY_PREFIX).append(getRedisValue(queryResult.getTableName()))
+                    .append(SQLConstants.SPACE).append(getRedisValue(key)).append(SQLConstants.LINE_SEPARATOR);
             queryResult.setTableName(key);
         }
-        if (StringUtils.isNotBlank(ttl)) {
-            stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(queryResult.getTableName()).append(SQLConstants.SPACE).append(ttl).append(SQLConstants.LINE_SEPARATOR);
+        if (isPositiveTtl(ttl)) {
+            stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(queryResult.getTableName()))
+                    .append(SQLConstants.SPACE).append(ttl.trim()).append(SQLConstants.LINE_SEPARATOR);
         }
         return stringBuilder.toString();
+    }
+
+    private boolean isPositiveTtl(String ttl) {
+        if (StringUtils.isBlank(ttl)) {
+            return false;
+        }
+        try {
+            return Long.parseLong(ttl.trim()) > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
 

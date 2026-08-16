@@ -108,6 +108,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         List<WorkspaceDataSource> dataSources = new ArrayList<>();
         if (datasourceIds == null || datasourceIds.isEmpty()) {
             DbDataSourcePageQueryRequest request = new DbDataSourcePageQueryRequest();
+            request.queryAll();
             PageResponse<WorkspaceDataSource> page = listDataSources(request);
             if (page != null && page.getData() != null) {
                 if (ConfigUtils.isOffline()) {

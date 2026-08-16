@@ -40,31 +40,34 @@ public class SqlGenerateUtil {
             }
         } catch (Exception e) {
             log.error("jsqlparser parser sql error", e);
-            DbType dbType = JdbcUtils.parse2DruidDbType(dataBaseType);
-
-            if (dbType == null) {
-                throw new IllegalArgumentException("Unsupported database type: " + dataBaseType);
-            }
-
-            SQLStatement stmt = SQLUtils.parseSingleStatement(originalSql, dbType);
-
-            if (!(stmt instanceof SQLSelectStatement)) {
-                throw new IllegalArgumentException("Not a SELECT statement");
-
-            }
-            SQLSelectQueryBlock query = ((SQLSelectStatement) stmt).getSelect().getQueryBlock();
-            if (query.getDistionOption() != 0) {
-                return handleDistinct(originalSql);
-            }
-            query.getSelectList().clear();
-            SQLAggregateExpr countExpr = new SQLAggregateExpr("COUNT");
-            countExpr.addArgument(new SQLAllColumnExpr());
-            query.addSelectItem(countExpr);
-            query.setOrderBy(null);
-            query.setLimit(null);
-            query.setOffset(null);
-            return SQLUtils.toSQLString(stmt, DbType.sqlserver);
+            return generateSelectCountSqlWithDruid(originalSql, dataBaseType);
         }
+    }
+
+    static String generateSelectCountSqlWithDruid(String originalSql, String dataBaseType) {
+        DbType dbType = JdbcUtils.parse2DruidDbType(dataBaseType);
+
+        if (dbType == null) {
+            throw new IllegalArgumentException("Unsupported database type: " + dataBaseType);
+        }
+
+        SQLStatement stmt = SQLUtils.parseSingleStatement(originalSql, dbType);
+
+        if (!(stmt instanceof SQLSelectStatement)) {
+            throw new IllegalArgumentException("Not a SELECT statement");
+        }
+        SQLSelectQueryBlock query = ((SQLSelectStatement) stmt).getSelect().getQueryBlock();
+        if (query.getDistionOption() != 0) {
+            return handleDistinct(originalSql);
+        }
+        query.getSelectList().clear();
+        SQLAggregateExpr countExpr = new SQLAggregateExpr("COUNT");
+        countExpr.addArgument(new SQLAllColumnExpr());
+        query.addSelectItem(countExpr);
+        query.setOrderBy(null);
+        query.setLimit(null);
+        query.setOffset(null);
+        return SQLUtils.toSQLString(stmt, dbType);
     }
 
 

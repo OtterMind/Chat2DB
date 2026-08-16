@@ -1,22 +1,33 @@
 export default {
+  'monaco.group.appearance': 'Apariencia y fuente',
+  'monaco.group.display': 'Visualización del editor',
+  'monaco.group.completion': 'Autocompletado e interacción',
+  'monaco.group.behavior': 'Comportamiento del editor',
+  'monaco.group.execution': 'Ejecución de SQL',
   'monaco.theme': 'Tema del editor',
   'monaco.theme.tooltip':
     'El tema del editor se guardará en segundo plano para la aplicación actual y se sincronizará al cambiar el tema de la aplicación',
   'monaco.fontFamily': 'Familia de fuentes',
+  'monaco.customFontFamily.tooltip': 'El editor prioriza la fuente personalizada',
   'monaco.fontSize': 'Tamaño de fuente',
   'monaco.lineHeight': 'Altura de línea',
+  'monaco.lineHeight.tooltip':
+    'Ajusta el espacio vertical entre las líneas del editor. Los valores mayores añaden más espacio.',
   'monaco.lineNumbers': 'Mostrar números de línea',
   'monaco.lineNumbers.on': 'Mostrar',
   'monaco.lineNumbers.off': 'Ocultar',
   'monaco.minimap': 'Mostrar minimapa',
+  'monaco.minimap.tooltip':
+    'Muestra una vista compacta del SQL a la derecha para navegar rápidamente por scripts largos.',
   'monaco.minimap.on': 'Mostrar',
   'monaco.minimap.off': 'Ocultar',
   'monaco.wordWrap': 'Ajuste de línea',
+  'monaco.wordWrap.tooltip':
+    'Ajusta el SQL que supera el ancho del editor. Si se desactiva, se usa el desplazamiento horizontal.',
   'monaco.wordWrap.on': 'Activar',
   'monaco.wordWrap.off': 'Desactivar',
   'monaco.folding': 'Plegado de código',
-  'monaco.text.press': 'Pulse',
-  'monaco.text.invoke': 'Invocar',
+  'monaco.folding.tooltip': 'Muestra controles en el margen de números de línea para contraer o expandir bloques SQL.',
   'monaco.text.nl2sql': 'NL2SQL',
   'monaco.text.sqlExplain': 'Explicar SQL',
   'monaco.text.sqlOptimizer': 'Optimizar SQL',
@@ -26,6 +37,8 @@ export default {
   'monaco.text.cut': 'Cortar',
   'monaco.text.caseConvert': 'Cambiar mayúsculas/minúsculas',
   'monaco.text.formatSQL': 'Formatear SQL',
+  'monaco.text.toggleLineComment': 'Alternar comentario de línea',
+  'monaco.text.toggleBlockComment': 'Alternar comentario en bloque',
   'monaco.text.saveSQL': 'Guardar',
   'monaco.text.saveFile': 'Guardar',
   'monaco.text.saveFileToDesktop': 'Guardar como archivo',
@@ -50,18 +63,37 @@ export default {
   'monaco.completion.joinClause': 'Cláusula JOIN',
 
   'monaco.renderLineHighlight': 'Resaltado de línea',
+  'monaco.renderLineHighlight.tooltip': 'Elige qué parte de la línea actual del cursor se resalta.',
+  'monaco.renderLineHighlight.line': 'Línea completa',
+  'monaco.renderLineHighlight.none': 'Sin resaltado',
+  'monaco.renderLineHighlight.gutter': 'Solo margen',
+  'monaco.renderLineHighlight.all': 'Línea y margen',
   'monaco.keywordCase': 'Mayúsculas/minúsculas de palabras clave',
+  'monaco.keywordCase.tooltip':
+    'Controla las mayúsculas de las sugerencias y plantillas SQL insertadas sin modificar el texto existente.',
   'monaco.keywordCase.upper': 'Mayúsculas',
   'monaco.keywordCase.lower': 'Minúsculas',
   'monaco.completion.all': 'Autocompletado con todos los calificadores',
+  'monaco.completion.all.tooltip':
+    'Selecciona los tipos de base de datos cuyas sugerencias deben usar nombres completamente calificados. Los demás usan nombres más cortos.',
   'monaco.errorContinue': 'Continuar tras un error',
+  'monaco.errorContinue.tooltip':
+    'Al ejecutar varias sentencias SQL, continúa con las restantes cuando una de ellas falla.',
   'monaco.errorContinue.true': 'Sí',
   'monaco.errorContinue.false': 'No',
+  'monaco.confirmBeforeClose': 'Confirmar antes de cerrar',
+  'monaco.confirmBeforeClose.tooltip':
+    'Cuando una consulta o un archivo SQL local tenga cambios sin guardar, pregunta si deben guardarse antes de cerrar la pestaña.',
   'monaco.tableDDLTriggerMode': 'Mostrar DDL de la tabla',
+  'monaco.tableDDLTriggerMode.tooltip':
+    'Muestra el DDL al pasar el cursor sobre una tabla o al mantener {1} y hacer clic en ella.',
   'monaco.tableDDLTriggerMode.hover': 'Al pasar el cursor',
   'monaco.tableDDLTriggerMode.click': '{1} + clic',
   'monaco.completionAcceptKey': 'Tecla para aceptar el autocompletado',
+  'monaco.completionAcceptKey.tooltip': 'Elige la tecla que acepta la sugerencia de autocompletado activa.',
   'monaco.completionAcceptKey.enter': 'Intro',
   'monaco.completionAcceptKey.tab': 'Tabulador',
   'monaco.stickyScroll': 'Desplazamiento fijo',
+  'monaco.stickyScroll.tooltip':
+    'Mantiene visibles arriba las líneas iniciales del bloque actual al desplazarse por SQL largo.',
 };

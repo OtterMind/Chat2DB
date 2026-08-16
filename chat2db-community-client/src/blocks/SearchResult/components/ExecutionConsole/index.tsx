@@ -31,12 +31,21 @@ const ORDER_STORAGE_KEY = createExecutionConsoleOrderStorageKey('community', __R
 
 interface IProps {
   records: SqlExecutionLogRecord[];
+  keepHistory: boolean;
   onClear: () => void;
+  onKeepHistoryChange: (keepHistory: boolean) => void;
   onOpenResult: (resultKey: string) => void;
   isResultAvailable: (resultKey: string) => boolean;
 }
 
-export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable }) => {
+export default memo<IProps>(({
+  records,
+  keepHistory,
+  onClear,
+  onKeepHistoryChange,
+  onOpenResult,
+  isResultAvailable,
+}) => {
   const {
     styles,
     theme: { appearance },
@@ -111,6 +120,8 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
       onClear();
     } else if (key === 'follow') {
       handleToggleFollowLatest();
+    } else if (key === 'keep-history') {
+      onKeepHistoryChange(!keepHistory);
     } else if (key === 'toggle-order') {
       handleOrderChange(order === 'oldest-first' ? 'newest-first' : 'oldest-first');
     }
@@ -137,6 +148,11 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
     <div className={styles.console}>
       <Dropdown
         menu={{
+          selectable: true,
+          selectedKeys: [
+            ...(followLatest ? ['follow'] : []),
+            ...(keepHistory ? ['keep-history'] : []),
+          ],
           items: [
             { key: 'copy', icon: <Copy size={14} />, label: i18n('common.button.copyConsole') },
             { type: 'divider' },
@@ -157,6 +173,11 @@ export default memo<IProps>(({ records, onClear, onOpenResult, isResultAvailable
                 <ArrowDownToLine size={14} />
               ),
               label: i18n('common.button.followConsole'),
+            },
+            {
+              key: 'keep-history',
+              icon: <Check opacity={keepHistory ? 1 : 0} size={14} />,
+              label: i18n('common.button.keepHistoryOutput'),
             },
             { type: 'divider' },
             { key: 'clear', icon: <Trash2 size={14} />, label: i18n('common.button.clearConsole'), danger: true },

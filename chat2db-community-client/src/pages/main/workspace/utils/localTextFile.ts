@@ -12,3 +12,22 @@ export const LOCAL_TEXT_FILE_ICON_MAP: Record<string, string> = {
 export const getLocalTextFileIcon = (fileExtension?: string) => {
   return LOCAL_TEXT_FILE_ICON_MAP[(fileExtension || '').toLowerCase()] || LOCAL_TEXT_FILE_FALLBACK_ICON;
 };
+
+const getLocalTextFileName = (filePath: string) => {
+  const normalizedPath = (filePath || '').replace(/\\/g, '/');
+  const fileName = normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1);
+  return fileName || filePath;
+};
+
+export const getLocalTextFileTabPresentation = (filePath: string | undefined, fallbackLabel: string) => {
+  if (!filePath) {
+    return {
+      label: fallbackLabel,
+      popover: undefined,
+    };
+  }
+  return {
+    label: getLocalTextFileName(filePath),
+    popover: filePath,
+  };
+};

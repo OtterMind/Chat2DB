@@ -50,7 +50,7 @@ public class ResultSetUtils {
             while (rs.next()) {
                 Map<String, Object> map = new HashMap<>();
                 for (int i = 1; i <= col; i++) {
-                    map.put(headerList.get(i - 1), rs.getObject(i));
+                    map.put(headerList.get(i - 1), readMetadataValue(rs, i));
                 }
                 T obj = ResultSetConverter.map2object(map, clazz);
 
@@ -62,6 +62,24 @@ public class ResultSetUtils {
         }
     }
 
+
+    /**
+     * getObject on some drivers yields vendor structs the metadata models cannot
+     * absorb (IoTDB returns tsfile Binary for every DatabaseMetaData column);
+     * fall back to the string form JDBC guarantees for those values.
+     */
+    private static Object readMetadataValue(ResultSet rs, int index) throws SQLException {
+        Object value = rs.getObject(index);
+        if (value == null
+                || value instanceof String
+                || value instanceof Number
+                || value instanceof Boolean
+                || value instanceof java.util.Date
+                || value instanceof byte[]) {
+            return value;
+        }
+        return rs.getString(index);
+    }
 
     public static String getColumnName(ResultSetMetaData resultSetMetaData, int column) throws SQLException {
         String columnLabel = resultSetMetaData.getColumnLabel(column);

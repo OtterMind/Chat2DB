@@ -91,11 +91,18 @@ public class ListTypeScript extends BaseTypeScript implements ITypeScript {
         // which makes value-based LREM/LINSERT reconciliation unsafe.
         List<ListValue> desired = desiredValues(newKey);
         if (desired.isEmpty()) {
-            return Lists.newArrayList();
+            // Every element was deleted in the editor: remove the key itself,
+            // mirroring the newKey == null path, instead of silently keeping old data.
+            return Lists.newArrayList(delete(newKey.getName()));
         }
         List<String> scripts = new ArrayList<>();
+        // DEL + RPUSH must be atomic: if the connection drops between them the whole
+        // list would be lost. The executor sends each line on the same connection,
+        // so MULTI/EXEC lines wrap the pair (same pattern as buildByQueryResult).
+        scripts.add(RedisConstants.REDIS_MULTI_COMMAND.trim());
         scripts.add(delete(newKey.getName()));
         scripts.add(pushAll(newKey.getName(), desired));
+        scripts.add(RedisConstants.REDIS_EXEC_COMMAND);
         return scripts;
     }
 

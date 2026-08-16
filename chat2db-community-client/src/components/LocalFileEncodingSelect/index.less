@@ -1,0 +1,25 @@
+.wrapper {
+  display: inline-grid;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.sizer,
+.selector {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.sizer {
+  visibility: hidden;
+  overflow: hidden;
+  padding: 0 28px 0 7px;
+  white-space: nowrap;
+}
+
+.selector {
+  width: 100%;
+}

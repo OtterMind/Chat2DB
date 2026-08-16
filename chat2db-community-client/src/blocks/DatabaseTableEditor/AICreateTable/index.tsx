@@ -36,7 +36,11 @@ const AICreateTable = forwardRef((props: IProps, ref: ForwardedRef<IAICreateTabl
   const draggableResizableModalRef = useRef<DraggableResizableModalRef>(null);
   const [chatInputValue, setChatInputValue] = useState('');
   const [content, setContent] = useState('');
-  const { status, request } = useSSERequest(
+  const {
+    status,
+    request,
+    stop: stopAiStream,
+  } = useSSERequest(
     {
       baseURL: '/api/v2/ai/chat',
     },
@@ -68,7 +72,9 @@ const AICreateTable = forwardRef((props: IProps, ref: ForwardedRef<IAICreateTabl
     }
   }, [status]);
 
-  const closeEventSource = () => {};
+  const closeEventSource = () => {
+    stopAiStream();
+  };
 
   useEffect(() => {
     if (!content) {

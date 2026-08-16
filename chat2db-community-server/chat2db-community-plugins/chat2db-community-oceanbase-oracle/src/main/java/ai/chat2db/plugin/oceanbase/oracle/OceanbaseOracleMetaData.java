@@ -1,10 +1,10 @@
 package ai.chat2db.plugin.oceanbase.oracle;
 
+import ai.chat2db.plugin.oceanbase.oracle.identifier.OceanbaseOracleIdentifierProcessor;
 import ai.chat2db.plugin.oracle.OracleMetaData;
-import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import ai.chat2db.spi.util.SqlUtils;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -18,19 +18,19 @@ import static ai.chat2db.plugin.oceanbase.constant.OceanbaseOracleMetaDataConsta
 @Slf4j
 public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaData {
 
-
-
-
-
+    @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return OceanbaseOracleIdentifierProcessor.INSTANCE;
+    }
 
 
     @Override
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(TABLE_DDL_SQL, tableName, schemaName);
-        String tableCommentSql = String.format(TABLE_COMMENT_SQL, schemaName, tableName);
-        String tableColumnCommentSql = String.format(TABLE_COLUMN_COMMENT_SQL, schemaName, tableName);
-        String PUIndexSql = String.format(PU_INDEX_NAME_SQL, schemaName, tableName);
-        String tableIndexNameSql = String.format(TABLE_INDEX_NAME_SQL, schemaName, tableName);
+        String sql = buildTableDdlSql(tableName, schemaName);
+        String tableCommentSql = buildTableCommentSql(schemaName, tableName);
+        String tableColumnCommentSql = buildTableColumnCommentSql(schemaName, tableName);
+        String PUIndexSql = buildPuIndexNameSql(schemaName, tableName);
+        String tableIndexNameSql = buildTableIndexNameSql(schemaName, tableName);
         StringBuilder ddlBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             try {
@@ -45,8 +45,7 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
             if (resultSet.next()) {
                 String tableComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(tableComment)) {
-                    ddlBuilder.append("\nCOMMENT ON TABLE ").append(SqlUtils.quoteObjectName(tableName)).append(" IS ")
-                            .append(EasyStringUtils.escapeAndQuoteString(tableComment)).append(";");
+                    ddlBuilder.append(buildTableCommentDdl(tableName, tableComment));
                 }
             }
         });
@@ -55,10 +54,7 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
                 String columnName = resultSet.getString("column_name");
                 String columnComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(columnComment)) {
-                    ddlBuilder.append("\nCOMMENT ON COLUMN ")
-                            .append(SqlUtils.quoteObjectName(tableName)).append(".")
-                            .append(SqlUtils.quoteObjectName(columnName)).append(" IS ")
-                            .append(EasyStringUtils.escapeAndQuoteString(columnComment)).append(";");
+                    ddlBuilder.append(buildColumnCommentDdl(tableName, columnName, columnComment));
                 }
             }
         });
@@ -85,7 +81,7 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
             return indexNames;
         });
         for (String index : indexes) {
-            String tableIndexSql = String.format(TABLE_INDEX_DDL_SQL, index, schemaName);
+            String tableIndexSql = buildTableIndexDdlSql(index, schemaName);
             DefaultSQLExecutor.getInstance().execute(connection, tableIndexSql, resultSet -> {
                 while (resultSet.next()) {
                     String ddl = resultSet.getString("ddl");
@@ -96,6 +92,49 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
             });
         }
         return ddlBuilder.toString();
+    }
+
+    static String buildTableDdlSql(String tableName, String schemaName) {
+        return String.format(TABLE_DDL_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(tableName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName));
+    }
+
+    static String buildTableCommentSql(String schemaName, String tableName) {
+        return String.format(TABLE_COMMENT_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(tableName));
+    }
+
+    static String buildTableColumnCommentSql(String schemaName, String tableName) {
+        return String.format(TABLE_COLUMN_COMMENT_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(tableName));
+    }
+
+    static String buildPuIndexNameSql(String schemaName, String tableName) {
+        return String.format(PU_INDEX_NAME_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(tableName));
+    }
+
+    static String buildTableIndexNameSql(String schemaName, String tableName) {
+        return String.format(TABLE_INDEX_NAME_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(tableName));
+    }
+
+    static String buildTableIndexDdlSql(String indexName, String schemaName) {
+        return String.format(TABLE_INDEX_DDL_SQL, OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(indexName),
+                OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName));
+    }
+
+    static String buildTableCommentDdl(String tableName, String comment) {
+        return "\nCOMMENT ON TABLE "
+                + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName)
+                + " IS " + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteStringLiteral(comment) + ";";
+    }
+
+    static String buildColumnCommentDdl(String tableName, String columnName, String comment) {
+        return "\nCOMMENT ON COLUMN "
+                + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName) + "."
+                + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName)
+                + " IS " + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteStringLiteral(comment) + ";";
     }
 
 

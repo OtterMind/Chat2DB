@@ -1,6 +1,8 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
+import ai.chat2db.community.domain.api.model.ai.ModelConfigTestResponse;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiModelConfigSaveRequest;
 import ai.chat2db.community.domain.core.converter.AiModelConfigConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,26 @@ class AiModelConfigServiceImplBaseUrlTest {
         assertEquals("https://claude.example.com", resolveBaseUrl("CLAUDE", "https://claude.example.com/v1"));
     }
 
+    @Test
+    void minimaxRuntimeBaseUrlToleratesTrailingV1() {
+        assertEquals("https://minimax.example.com", resolveBaseUrl("MINIMAX", "https://minimax.example.com/v1"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "OPENAI, https://api.openai.com/v1/chat/completions",
+            "MINIMAX, https://api.minimax.io/v1/chat/completions"
+    })
+    void connectionTestUsesProviderDefaultBaseUrl(String provider, String expectedEndpoint) {
+        assertEquals(expectedEndpoint, testEndpoint(provider, null));
+    }
+
+    @Test
+    void minimaxConnectionTestKeepsCustomBaseUrl() {
+        assertEquals("https://api.minimax.chat/v1/chat/completions",
+                testEndpoint("MINIMAX", "https://api.minimax.chat/v1"));
+    }
+
     private String resolveBaseUrl(String provider, String baseUrl) {
         AiChatRuntimeResolveRequest request = new AiChatRuntimeResolveRequest();
         request.setProvider(provider);
@@ -44,6 +66,15 @@ class AiModelConfigServiceImplBaseUrlTest {
         request.setApiKey("sk-test-1234567890");
         request.setBaseUrl(baseUrl);
         return service().resolveRuntimeModel(request).getBaseUrl();
+    }
+
+    private String testEndpoint(String provider, String baseUrl) {
+        AiModelConfigSaveRequest request = new AiModelConfigSaveRequest();
+        request.setProvider(provider);
+        request.setModel("test-model");
+        request.setBaseUrl(baseUrl);
+        ModelConfigTestResponse response = service().testModelConfig(request);
+        return response.getEndpoint();
     }
 
     private AiModelConfigServiceImpl service() {

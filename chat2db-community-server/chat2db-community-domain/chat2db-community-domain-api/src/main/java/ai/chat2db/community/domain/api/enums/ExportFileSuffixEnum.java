@@ -12,7 +12,7 @@ public enum ExportFileSuffixEnum {
 
     CSV(".csv"),
 
-    XLXS(".xlxs"),
+    XLSX(".xlsx"),
 
     XLS(".xls"),
 

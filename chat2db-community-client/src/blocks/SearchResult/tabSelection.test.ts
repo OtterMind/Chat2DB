@@ -2,6 +2,7 @@ import {
   ABSTRACT_TAB_ID,
   CONSOLE_TAB_ID,
   MESSAGES_TAB_ID,
+  getConsoleResultTabLabel,
   getPreferredActiveTabId,
   reduceActiveTabSelection,
   resolveAvailableActiveTabId,
@@ -23,7 +24,6 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     sql: '',
     originalSql: '',
     success: true,
-    duration: 0,
     sqlType: 'SELECT' as any,
     refreshTargets: [],
     pageNo: 1,
@@ -73,8 +73,28 @@ assertEqual(
   CONSOLE_TAB_ID,
   'console failures open the execution console',
 );
+assertEqual(
+  getConsoleResultTabLabel('#3-1 select', false),
+  'select',
+  'a replacement batch hides both the batch and statement coordinate',
+);
+assertEqual(
+  getConsoleResultTabLabel('#3-2 select', false),
+  'select',
+  'a replacement batch does not retain a statement sequence in later result labels',
+);
+assertEqual(
+  getConsoleResultTabLabel('#3-1 Result 2 select', false),
+  'Result 2 select',
+  'a replacement batch preserves a multiple-result suffix after removing the execution coordinate',
+);
+assertEqual(
+  getConsoleResultTabLabel('#3-1 select', true),
+  '#3-1 select',
+  'a retained batch keeps the complete batch and statement coordinate',
+);
 let batchedSelection = reduceActiveTabSelection(
-  { activeTabId: CONSOLE_TAB_ID },
+  { activeTabId: CONSOLE_TAB_ID, followPreferredTabs: true },
   { type: 'prefer', tabId: 'batched-table-result' },
 );
 batchedSelection = reduceActiveTabSelection(batchedSelection, {
@@ -118,6 +138,53 @@ assertEqual(
   batchedSelection.pendingPreferredTabId,
   undefined,
   'failed and cancelled terminal states discard a pending result preference',
+);
+
+let manualSelection = reduceActiveTabSelection(
+  { activeTabId: 'first-result', followPreferredTabs: true },
+  { type: 'activateByUser', tabId: CONSOLE_TAB_ID },
+);
+manualSelection = reduceActiveTabSelection(manualSelection, { type: 'prefer', tabId: 'later-result' });
+manualSelection = reduceActiveTabSelection(manualSelection, {
+  type: 'activateAutomatically',
+  tabId: 'later-result',
+});
+manualSelection = reduceActiveTabSelection(manualSelection, {
+  type: 'tabsChanged',
+  availableTabIds: [CONSOLE_TAB_ID, 'first-result', 'later-result'],
+});
+assertEqual(
+  manualSelection.activeTabId,
+  CONSOLE_TAB_ID,
+  'later streamed results do not steal focus after the user selects Output',
+);
+assertEqual(
+  manualSelection.pendingPreferredTabId,
+  undefined,
+  'manual selection prevents future automatic preferences from becoming pending',
+);
+
+manualSelection = reduceActiveTabSelection(manualSelection, { type: 'resetPreference' });
+manualSelection = reduceActiveTabSelection(manualSelection, { type: 'prefer', tabId: 'result-after-clear' });
+assertEqual(
+  manualSelection.activeTabId,
+  CONSOLE_TAB_ID,
+  'clearing Output does not restore automatic focus within the current batch',
+);
+
+manualSelection = reduceActiveTabSelection(manualSelection, {
+  type: 'startAutoFollow',
+  tabId: CONSOLE_TAB_ID,
+});
+manualSelection = reduceActiveTabSelection(manualSelection, { type: 'prefer', tabId: 'next-batch-result' });
+manualSelection = reduceActiveTabSelection(manualSelection, {
+  type: 'tabsChanged',
+  availableTabIds: [CONSOLE_TAB_ID, 'next-batch-result'],
+});
+assertEqual(
+  manualSelection.activeTabId,
+  'next-batch-result',
+  'starting a new execution batch restores automatic result focus',
 );
 assertEqual(
   resolveAvailableActiveTabId('table-result', [ABSTRACT_TAB_ID, 'table-result']),

@@ -1,5 +1,4 @@
 import { HTMLAttributes } from 'react';
-import { ITableHeaderItem } from './database';
 
 export type NonNullable<T> = T extends null | undefined ? never : T;
 
@@ -67,22 +66,6 @@ export interface IVersionResponse {
    * WeChat public account name
    */
   wechatMpName?: string;
-}
-
-// excelSheet
-export interface IExcelSheetDataVO {
-  sheetNo: number;
-  sheetName: string;
-  tableName: string;
-  headerList: ITableHeaderItem[];
-  headerNameList: string[];
-  dataList: string[][];
-  tableType: 'horizontal' | 'vertical';
-  headerStartRowNum: number;
-  headerEndRowNum: number;
-  headerStartColNum: number;
-  headerEndColNum: number;
-  del: boolean;
 }
 
 export type DivProps = HTMLAttributes<HTMLDivElement>;

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # --- Usage ---
 # ./generate_metadata.sh <version> <source_directory> [base_url]

@@ -13,7 +13,7 @@ import ai.chat2db.community.web.api.adapter.db.execution.SqlExecutionRequest;
 import ai.chat2db.community.web.api.adapter.db.execution.SqlExecutionStartResult;
 import ai.chat2db.community.web.api.aspect.connection.ICustomConnection;
 import ai.chat2db.community.web.api.model.http.CookieUtil;
-import ai.chat2db.community.web.api.model.request.db.DmlRequest;
+import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
 import ai.chat2db.community.web.api.util.ApplicationContextUtil;
 import com.alibaba.fastjson2.JSON;
 import org.apache.commons.lang3.StringUtils;
@@ -48,7 +48,7 @@ public class WebJcefServerBridge implements IJcefServerBridge {
 
     @Override
     public SqlExecuteResponse executeSql(ConsoleMessage message) {
-        DmlRequest dmlRequest = JSON.parseObject(message.getMessage(), DmlRequest.class);
+        SqlEditorExecuteRequest sqlEditorRequest = JSON.parseObject(message.getMessage(), SqlEditorExecuteRequest.class);
         Context previousContext = ContextUtils.queryContext();
         Context context = resolveContext();
         try {
@@ -56,11 +56,11 @@ public class WebJcefServerBridge implements IJcefServerBridge {
             SqlExecutionManager manager = ApplicationContextUtil.getBean(SqlExecutionManager.class);
             SqlExecutionStartResult startResult = manager.start(SqlExecutionRequest.builder()
                     .requestUuid(message.getUuid())
-                    .laneId(buildLaneId(dmlRequest))
-                    .dmlRequest(dmlRequest)
+                    .laneId(buildLaneId(sqlEditorRequest))
+                    .sqlEditorRequest(sqlEditorRequest)
                     .consoleMessage(message)
                     .context(context)
-                    .connectionContext(resolveConnectionContext(dmlRequest))
+                    .connectionContext(resolveConnectionContext(sqlEditorRequest))
                     .headers(message.getHeaders())
                     .build());
             return SqlExecuteResponse.builder()
@@ -93,7 +93,7 @@ public class WebJcefServerBridge implements IJcefServerBridge {
                 .build();
     }
 
-    private String buildLaneId(DmlRequest request) {
+    private String buildLaneId(SqlEditorExecuteRequest request) {
         if (request.getConsoleId() != null) {
             return "console:" + request.getConsoleId();
         }
@@ -101,7 +101,7 @@ public class WebJcefServerBridge implements IJcefServerBridge {
                 + ":" + StringUtils.defaultString(request.getSchemaName());
     }
 
-    private DbConnectionContextRequest resolveConnectionContext(DmlRequest request) {
+    private DbConnectionContextRequest resolveConnectionContext(SqlEditorExecuteRequest request) {
         if (request.getDataSourceId() == null) {
             return null;
         }

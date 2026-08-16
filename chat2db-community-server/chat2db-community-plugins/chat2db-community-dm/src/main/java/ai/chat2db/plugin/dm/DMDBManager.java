@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.dm;
 
 import ai.chat2db.plugin.dm.enums.type.DMIndexTypeEnum;
+import ai.chat2db.plugin.dm.identifier.DMIdentifierProcessor;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.DefaultDBManager;
@@ -40,7 +41,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
 
 
     private String format(String tableName) {
-        return "\"" + tableName + "\"";
+        return DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 
 
@@ -66,7 +67,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_TABLE_NAME_ALL_TABLES, schemaName);
+        String sql = String.format(SQL_SELECT_TABLE_NAME_ALL_TABLES, DMIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
@@ -77,7 +78,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) throws SQLException {
-        String tableDDLSql = String.format(tableDDL, tableName, schemaName);
+        String tableDDLSql = String.format(tableDDL, DMIdentifierProcessor.INSTANCE.escapeString(tableName), DMIdentifierProcessor.INSTANCE.escapeString(schemaName));
         StringBuilder ddlBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().execute(connection, tableDDLSql, resultSet -> {
             if (resultSet.next()) {
@@ -91,7 +92,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
             String tableComment = tables.get(0).getComment();
             if (StringUtils.isNotBlank(tableComment)) {
                 ddlBuilder.append(SQL_COMMENT_TABLE).append(format(schemaName)).append(".").append(format(tableName))
-                        .append(" IS '").append(tableComment.replace("'", "''")).append("'").append(";").append("\n");
+                        .append(" IS '").append(DMIdentifierProcessor.INSTANCE.escapeString(tableComment)).append("'").append(";").append("\n");
             }
         }
         List<TableColumn> columns = metaData.columns(connection,
@@ -103,7 +104,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
                 if (StringUtils.isNotBlank(comment)) {
                     ddlBuilder.append(SQL_COMMENT_COLUMN).append(format(schemaName)).append(".").append(format(tableName))
                             .append(".").append(format(columnName)).append(" IS ")
-                            .append("'").append(comment.replace("'", "''"))
+                            .append("'").append(DMIdentifierProcessor.INSTANCE.escapeString(comment))
                             .append("';").append("\n");
                 }
             }
@@ -135,7 +136,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
                         && (CollectionUtils.isNotEmpty(uniqueConstraintIndexName) && !uniqueConstraintIndexName.contains(indexName))) {
                     String sql = "select DBMS_METADATA.GET_DDL('INDEX','%s') as INDEX_DDL";
                     try {
-                        DefaultSQLExecutor.getInstance().execute(connection, String.format(sql, indexName), resultSet -> {
+                        DefaultSQLExecutor.getInstance().execute(connection, String.format(sql, DMIdentifierProcessor.INSTANCE.escapeString(indexName)), resultSet -> {
                             if (resultSet.next()) {
                                 ddlBuilder.append(resultSet.getString("INDEX_DDL")).append("\n");
                             }
@@ -167,7 +168,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportView(Connection connection, String viewName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(SQL_SELECT_DBMS_METADATA_GET_DDL, viewName, schemaName);
+        String sql = String.format(SQL_SELECT_DBMS_METADATA_GET_DDL, DMIdentifierProcessor.INSTANCE.escapeString(viewName), DMIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -187,7 +188,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportProcedure(Connection connection, String schemaName, String procedureName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(ROUTINES_SQL, "PROC", schemaName, procedureName);
+        String sql = String.format(ROUTINES_SQL, "PROC", DMIdentifierProcessor.INSTANCE.escapeString(schemaName), DMIdentifierProcessor.INSTANCE.escapeString(procedureName));
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -198,7 +199,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(TRIGGER_SQL_LIST, schemaName);
+        String sql = String.format(TRIGGER_SQL_LIST, DMIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 String triggerName = resultSet.getString("TRIGGER_NAME");
@@ -208,7 +209,7 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     }
 
     private void exportTrigger(Connection connection, String schemaName, String triggerName, AsyncContext asyncContext) throws SQLException {
-        String sql = String.format(TRIGGER_SQL, schemaName, triggerName);
+        String sql = String.format(TRIGGER_SQL, DMIdentifierProcessor.INSTANCE.escapeString(schemaName), DMIdentifierProcessor.INSTANCE.escapeString(triggerName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -226,14 +227,50 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
         }
         String schemaName = connectInfo.getSchemaName();
         try {
-            DefaultSQLExecutor.getInstance().execute(connection, String.format(SQL_SET_SCHEMA, schemaName));
+            DefaultSQLExecutor.getInstance().execute(connection,
+                    String.format(SQL_SET_SCHEMA, DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)));
         } catch (SQLException e) {
             log.error("connectDatabase error", e);
         }
     }
 
     @Override
+    public void copyTable(Connection connection, String databaseName, String schemaName, String tableName,
+                          String newTableName, boolean copyData) throws SQLException {
+        String source = qualifiedName(schemaName, tableName, true);
+        String target = qualifiedName(schemaName, newTableName, true);
+        String sql;
+        if (copyData) {
+            sql = "CREATE TABLE " + target + " AS SELECT * FROM " + source;
+        } else {
+            sql = "CREATE TABLE " + target + " AS SELECT * FROM " + source + " WHERE 1=0";
+        }
+        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+    }
+
+    @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return String.format(SQL_DROP_TABLE_EXISTS, tableName);
+        return String.format(SQL_DROP_TABLE_EXISTS, qualifiedName(schemaName, tableName, false));
+    }
+
+    @Override
+    public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "TRUNCATE TABLE " + qualifiedName(schemaName, tableName, true);
+    }
+
+    private static String qualifiedName(String schemaName, String objectName, boolean normalizeQuotedObject) {
+        String normalizedObject = normalizeQuotedObject ? normalizeQuotedIdentifier(objectName) : objectName;
+        String quotedObject = DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedObject);
+        if (StringUtils.isBlank(schemaName)) {
+            return quotedObject;
+        }
+        return DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "." + quotedObject;
+    }
+
+    private static String normalizeQuotedIdentifier(String identifier) {
+        if (DMIdentifierProcessor.INSTANCE.isQuoteIdentifier(identifier)) {
+            return DMIdentifierProcessor.INSTANCE.removeIdentifierQuote(identifier);
+        }
+        return identifier;
     }
 }

@@ -6,7 +6,7 @@ import MainSecondaryPanel from '@/pages/main/components/MainSecondaryPanel';
 import { useTreeStore } from '@/store/tree';
 import { useWorkspaceStore } from '@/store/workspace';
 import type { TreeNodeData } from '@/typings';
-import { isCommunityEnv, isDesktop, isDesktopEnv, isWebEnv } from '@/utils/env';
+import { isCommunityEnv, isDesktop, isDesktopEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
 import feedback from '@/utils/feedback';
 import { Flex } from 'antd';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react';
@@ -20,6 +20,7 @@ import {
 } from '../../utils/activeTabLocator';
 import WorkspaceExplorer, { type WorkspaceExplorerRef } from '../WorkspaceExplorer';
 import WorkspaceLeftActionBar from '../WorkspaceLeftActionBar';
+import { shouldProbeDesktopBridge } from './desktopBridge';
 import { useStyles } from './style';
 
 type DatabaseLocateTarget = Extract<ActiveTabLocateTarget, { surface: 'databaseTree' }>;
@@ -131,10 +132,16 @@ const WorkspaceLeft = memo(() => {
   const explorerRef = useRef<WorkspaceExplorerRef>(null);
   const locateRequestSeqRef = useRef(0);
   const pendingManualPanelLocateRef = useRef<WorkspaceLeftPanel | null>(null);
-  const shouldProbeDesktopBridge = !isWebEnv && (isDesktopEnv || isCommunityEnv || isDesktop);
+  const canProbeDesktopBridge = shouldProbeDesktopBridge({
+    isWebEnv,
+    isDesktopEnv,
+    isOfflineEnv,
+    isCommunityEnv,
+    isDesktop,
+  });
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
   const { styles } = useStyles();
-  const showExplorerPanel = shouldProbeDesktopBridge && desktopBridgeReady;
+  const showExplorerPanel = canProbeDesktopBridge && desktopBridgeReady;
   const { activeConsoleId, workspaceTabList } = useWorkspaceStore((state) => ({
     activeConsoleId: state.activeConsoleId,
     workspaceTabList: state.workspaceTabList,
@@ -169,7 +176,7 @@ const WorkspaceLeft = memo(() => {
   const locateDisabled = !activeTabLocateTarget;
 
   useEffect(() => {
-    if (!shouldProbeDesktopBridge || desktopBridgeReady) {
+    if (!canProbeDesktopBridge || desktopBridgeReady) {
       return;
     }
 
@@ -191,7 +198,7 @@ const WorkspaceLeft = memo(() => {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [desktopBridgeReady, shouldProbeDesktopBridge]);
+  }, [canProbeDesktopBridge, desktopBridgeReady]);
 
   useEffect(() => {
     const handleSavedConsoleUpdated = (event: Event) => {

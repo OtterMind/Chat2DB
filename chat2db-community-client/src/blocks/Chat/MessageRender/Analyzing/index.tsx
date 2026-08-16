@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
 import { Spin } from 'antd';
 import { AnswerPartsStatus, AnswerPartsType } from '@/constants/chat';
@@ -78,7 +79,7 @@ export default memo<IProps>((props) => {
           {loading ? renderAnalyzing() : renderAnalyzed()}
           {/* {renderAnalyzing()} */}
           <span className={cx(styles.fold, { [styles.unfold]: !hiddenAnalyze })}>
-            <IconfontSvg size={12} code="icon-chevron-bottom" />
+            <ChevronDown size={12} />
           </span>
         </div>
       </div>

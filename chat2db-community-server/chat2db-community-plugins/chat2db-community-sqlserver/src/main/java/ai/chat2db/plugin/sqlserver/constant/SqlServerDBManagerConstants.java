@@ -26,7 +26,8 @@ public final class SqlServerDBManagerConstants {
     public static final String SQL_SET_IDENTITY_INSERT = "SET IDENTITY_INSERT %s %s";
     public static final String SQL_DROP_TABLE = "DROP TABLE %s";
     public static final String SQL_DROP_VIEW = "DROP VIEW %s";
-    public static final String SQL_USE_DATABASE = "use [%s];";
+    public static final String SQL_TRUNCATE_TABLE = "TRUNCATE TABLE %s";
+    public static final String SQL_USE_DATABASE = "use %s;";
 
     private SqlServerDBManagerConstants() {
     }

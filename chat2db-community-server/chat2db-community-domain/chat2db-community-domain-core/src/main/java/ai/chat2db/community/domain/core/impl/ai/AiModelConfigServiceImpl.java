@@ -55,6 +55,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     private static final String DEFAULT_GEMINI_LOCATION = "us-central1";
     private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+    private static final String DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1";
     private static final int TEST_ERROR_BODY_MAX_LENGTH = 2000;
     private static final String CONFIG_VALUE_PREFIX = "config:";
     private static final String PRESET_VALUE_PREFIX = "preset:";
@@ -212,8 +213,16 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     }
 
     public ModelConfigTestResponse testModelConfig(AiModelConfigSaveRequest request) {
-        if (AiProviderEnum.from(request.getProvider()) == AiProviderEnum.OPENAI) {
-            return testOpenAiCompatibleConfig(request);
+        AiProviderEnum provider = AiProviderEnum.from(request.getProvider());
+        if (provider == AiProviderEnum.OPENAI) {
+            return testOpenAiCompatibleConfig(request, DEFAULT_OPENAI_BASE_URL);
+        }
+        if (provider == AiProviderEnum.MINIMAX) {
+            String baseUrl = trimToNull(request.getBaseUrl());
+            if (StringUtils.isNotBlank(baseUrl) && StringUtils.containsIgnoreCase(baseUrl, "/anthropic")) {
+                return testAnthropicCompatibleConfig(request);
+            }
+            return testOpenAiCompatibleConfig(request, DEFAULT_MINIMAX_BASE_URL);
         }
         return ModelConfigTestResponse.failure(null, null,
                 "Connection test currently supports OpenAI-compatible models only.");
@@ -289,7 +298,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
      */
     private void normalizeRuntimeBaseUrl(AiRuntimeModel runtimeModel) {
         AiProviderEnum provider = AiProviderEnum.from(runtimeModel.getProvider());
-        if (provider != AiProviderEnum.OPENAI && provider != AiProviderEnum.CLAUDE) {
+        if (provider != AiProviderEnum.OPENAI && provider != AiProviderEnum.CLAUDE && provider != AiProviderEnum.MINIMAX) {
             return;
         }
         runtimeModel.setBaseUrl(stripTrailingV1(runtimeModel.getBaseUrl()));
@@ -324,6 +333,12 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         if (provider == AiProviderEnum.OPENAI) {
             runtimeModel.setApiKey(defaultValue(trimToNull(runtimeModel.getApiKey()), trimToNull(System.getenv("OPENAI_API_KEY"))));
             runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), trimToNull(System.getenv("OPENAI_BASE_URL"))));
+            return;
+        }
+        if (provider == AiProviderEnum.MINIMAX) {
+            runtimeModel.setApiKey(defaultValue(trimToNull(runtimeModel.getApiKey()), trimToNull(System.getenv("MINIMAX_API_KEY"))));
+            runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), trimToNull(System.getenv("MINIMAX_BASE_URL"))));
+            runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), DEFAULT_MINIMAX_BASE_URL));
             return;
         }
         if (provider == AiProviderEnum.CLAUDE) {
@@ -455,11 +470,12 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         presets.put(AiProviderEnum.OPENAI, List.of("gpt-5.2"));
         presets.put(AiProviderEnum.CLAUDE, List.of("claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"));
         presets.put(AiProviderEnum.GEMINI, List.of("gemini-2.5-pro", "gemini-2.5-flash"));
+        presets.put(AiProviderEnum.MINIMAX, List.of("MiniMax-M3", "MiniMax-M2.7"));
         return presets;
     }
 
-    private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request) {
-        String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), DEFAULT_OPENAI_BASE_URL);
+    private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request, String defaultBaseUrl) {
+        String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), defaultBaseUrl);
         String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/chat/completions");
         String apiKey = resolveTestApiKey(request);
         if (StringUtils.isBlank(apiKey)) {
@@ -503,7 +519,53 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         }
     }
 
-    private String resolveTestApiKey(AiModelConfigSaveRequest request) {
+    private ModelConfigTestResponse testAnthropicCompatibleConfig(AiModelConfigSaveRequest request) {
+        String baseUrl = trimToNull(request.getBaseUrl());
+        String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/messages");
+        String apiKey = resolveTestApiKey(request);
+        if (StringUtils.isBlank(apiKey)) {
+            return ModelConfigTestResponse.failure(endpoint, null, "API Key is required for the connection test.");
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", request.getModel());
+        payload.put("messages", List.of(Map.of("role", "user", "content", "ping")));
+        payload.put("max_tokens", 1);
+        if (Objects.nonNull(request.getTemperature())) {
+            payload.put("temperature", request.getTemperature());
+        }
+
+        try {
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(10_000);
+            requestFactory.setReadTimeout(20_000);
+            ResponseEntity<String> response = RestClient.builder()
+                    .requestFactory(requestFactory)
+                    .build()
+                    .post()
+                    .uri(URI.create(endpoint))
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .toEntity(String.class);
+            HttpStatusCode statusCode = response.getStatusCode();
+            if (statusCode.is2xxSuccessful()) {
+                return ModelConfigTestResponse.success(endpoint);
+            }
+            return ModelConfigTestResponse.failure(endpoint, statusCode.value(),
+                    truncate(StringUtils.defaultIfBlank(response.getBody(), statusCode.toString())));
+        } catch (RestClientResponseException e) { // impl-contract: fallback - connection test failures are returned as test result.
+            return ModelConfigTestResponse.failure(endpoint, e.getStatusCode().value(),
+                    truncate(StringUtils.defaultIfBlank(e.getResponseBodyAsString(), e.getMessage())));
+        } catch (Exception e) { // impl-contract: fallback - connection test failures are returned as test result.
+            return ModelConfigTestResponse.failure(endpoint, null, truncate(e.getMessage()));
+        }
+    }
+
+    private synchronized String resolveTestApiKey(AiModelConfigSaveRequest request) {
         if (StringUtils.isNotBlank(request.getApiKey())) {
             return request.getApiKey().trim();
         }

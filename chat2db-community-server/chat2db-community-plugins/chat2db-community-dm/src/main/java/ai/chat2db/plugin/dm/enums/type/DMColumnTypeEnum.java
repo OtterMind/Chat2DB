@@ -1,15 +1,17 @@
 package ai.chat2db.plugin.dm.enums.type;
 
+import ai.chat2db.plugin.dm.DMSqlGuards;
+import ai.chat2db.plugin.dm.identifier.DMIdentifierProcessor;
 import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.spi.util.SqlUtils;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static ai.chat2db.plugin.dm.constant.DMColumnTypeEnumConstants.*;
@@ -129,8 +131,10 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
     private ColumnType columnType;
 
     public static DMColumnTypeEnum getByType(String dataType) {
-        String type = SqlUtils.removeDigits(dataType.toUpperCase());
-        return COLUMN_TYPE_MAP.get(type);
+        if (StringUtils.isBlank(dataType)) {
+            return null;
+        }
+        return COLUMN_TYPE_MAP.get(StringUtils.normalizeSpace(dataType).toUpperCase(Locale.ROOT));
     }
 
     private static Map<String, DMColumnTypeEnum> COLUMN_TYPE_MAP = Maps.newHashMap();
@@ -152,13 +156,13 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildCreateColumnSql(TableColumn column) {
-        DMColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        DMColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return buildDefaultColumn(column, false);
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("\"").append(column.getName()).append("\"").append(" ");
+        script.append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -173,13 +177,13 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildAICreateColumnSql(TableColumn column) {
-        DMColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        DMColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return buildDefaultColumn(column, false);
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("\"").append(column.getName()).append("\"").append(" ");
+        script.append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -232,7 +236,7 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
             return StringUtils.join("DEFAULT NULL");
         }
 
-        return StringUtils.join("DEFAULT ", column.getDefaultValue());
+        return StringUtils.join("DEFAULT ", DMSqlGuards.requireDefaultExpression(column.getDefaultValue()));
     }
 
     private String buildDataType(TableColumn column, DMColumnTypeEnum type) {
@@ -243,7 +247,8 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
             if (column.getColumnSize() != null && StringUtils.isEmpty(column.getUnit())) {
                 script.append("(").append(column.getColumnSize()).append(")");
             } else if (column.getColumnSize() != null && !StringUtils.isEmpty(column.getUnit())) {
-                script.append("(").append(column.getColumnSize()).append(" ").append(column.getUnit()).append(")");
+                script.append("(").append(column.getColumnSize()).append(" ")
+                        .append(DMSqlGuards.requireUnit(column.getUnit())).append(")");
             }
             return script.toString();
         }
@@ -297,31 +302,64 @@ public enum DMColumnTypeEnum implements IColumnBuilder {
 
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-            script.append(" ").append(SQL_DROP_COLUMN).append("\"").append(tableColumn.getName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
+            script.append(" ").append(SQL_DROP_COLUMN)
+                    .append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
             return script.toString();
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
             script.append(" ").append("ADD (").append(buildCreateColumnSql(tableColumn)).append(")");
             return script.toString();
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
             if (!StringUtils.equals(tableColumn.getOldName(), tableColumn.getName())) {
-                script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-                script.append(" ").append(SQL_RENAME_COLUMN).append("\"").append(tableColumn.getOldName()).append("\"").append(" TO ").append("\"").append(tableColumn.getName()).append("\"");
+                script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
+                script.append(" ").append(SQL_RENAME_COLUMN)
+                        .append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()))
+                        .append(" TO ")
+                        .append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
                 script.append(";\n");
 
             }
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
             script.append(" ").append("MODIFY (").append(buildCreateColumnSql(tableColumn)).append(") \n");
 
             return script.toString();
 
         }
         return "";
+    }
+
+    private static String buildUnknownColumnSql(TableColumn column) {
+        StringBuilder script = new StringBuilder();
+        script.append(DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()))
+                .append(" ")
+                .append(DMSqlGuards.requireColumnTypeExpression(column.getColumnType()));
+        if (StringUtils.isNotEmpty(column.getDefaultValue())) {
+            String defaultValue = column.getDefaultValue();
+            if ("EMPTY_STRING".equalsIgnoreCase(defaultValue.trim())) {
+                script.append(" DEFAULT ''");
+            } else if ("NULL".equalsIgnoreCase(defaultValue.trim())) {
+                script.append(" DEFAULT NULL");
+            } else {
+                script.append(" DEFAULT ").append(DMSqlGuards.requireDefaultExpression(defaultValue));
+            }
+        }
+        if (column.getNullable() != null) {
+            script.append(column.getNullable() == 1 ? " NULL" : " NOT NULL");
+        }
+        return script.toString();
+    }
+
+    private static String qualifiedTableName(TableColumn column) {
+        String tableName = DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getTableName());
+        if (StringUtils.isBlank(column.getSchemaName())) {
+            return tableName;
+        }
+        return DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getSchemaName()) + "." + tableName;
     }
 
     public static List<ColumnType> getTypes() {

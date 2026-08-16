@@ -26,6 +26,9 @@ import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
+import useRuntimeEditionCapabilities, {
+  getRuntimeEditionCapabilities,
+} from '@/hooks/useRuntimeEditionCapabilities';
 
 export interface SendParams {
   input: string;
@@ -102,6 +105,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     autoSize,
     autoFocus = false,
   } = props;
+  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const { styles } = useStyles();
   const [inputValue, setInputValue] = useState('');
   const [tableList, setTableList] = useState<ITable[]>([]);
@@ -164,9 +168,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
 
   useEffect(() => {
     if (props.contextInfo) {
+      if (!aiDataCollection && 'dataSourceCollectionId' in props.contextInfo) {
+        clearCascaderData(mainPageActiveTab as PageType);
+        onContextChange?.(null);
+        return;
+      }
       setCascaderData(mainPageActiveTab as PageType, props.contextInfo ?? null);
     }
-  }, [props.contextInfo, mainPageActiveTab]);
+  }, [aiDataCollection, clearCascaderData, mainPageActiveTab, onContextChange, props.contextInfo, setCascaderData]);
 
   useEffect(() => {
     if (!prefillInputState?.token) {
@@ -183,15 +192,23 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     tableListWithoutSearchKey.current = [];
     setSelectedTable([]);
     setTableList([]);
-    if (cascaderDataMap[mainPageActiveTab]) {
-      fetchTableList(cascaderDataMap[mainPageActiveTab], '');
+    const currentContext = cascaderDataMap[mainPageActiveTab];
+    if (!aiDataCollection && currentContext && 'dataSourceCollectionId' in currentContext) {
+      clearCascaderData(mainPageActiveTab as PageType);
+      return;
     }
-  }, [cascaderDataMap[mainPageActiveTab]]);
+    if (currentContext) {
+      fetchTableList(currentContext, '');
+    }
+  }, [aiDataCollection, cascaderDataMap[mainPageActiveTab], clearCascaderData, mainPageActiveTab]);
 
   const fetchTableList = useRef(
     debounce(async (_contextInfo: IAICascaderData, searchKey: string) => {
       if (!_contextInfo) return;
       if ('dataSourceCollectionId' in _contextInfo && _contextInfo?.dataSourceCollectionId) {
+        if (!getRuntimeEditionCapabilities().aiDataCollection) {
+          return;
+        }
         if (!searchKey && tableListWithoutSearchKey.current.length) {
           setTableList(tableListWithoutSearchKey.current);
           return;
@@ -321,8 +338,10 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     const _contextInfo = contextInfo
       ? {
           ...contextInfo,
-          dataSourceCollectionId:
-            params?.dataSourceCollectionId || ('dataSourceCollectionId' in contextInfo ? contextInfo?.dataSourceCollectionId : undefined),
+          dataSourceCollectionId: aiDataCollection
+            ? params?.dataSourceCollectionId ||
+              ('dataSourceCollectionId' in contextInfo ? contextInfo?.dataSourceCollectionId : undefined)
+            : undefined,
           dataSourceId: params?.dataSourceId || ('dataSourceId' in contextInfo ? contextInfo?.dataSourceId : undefined),
           databaseName: params?.databaseName || ('databaseName' in contextInfo ? contextInfo?.databaseName : undefined),
           schemaName: params?.schemaName || ('schemaName' in contextInfo ? contextInfo?.schemaName : undefined),

@@ -11,6 +11,11 @@ import java.util.regex.Pattern;
 import static ai.chat2db.plugin.mysql.constant.MysqlIdentifierProcessorConstants.*;
 public class MysqlIdentifierProcessor extends DefaultSQLIdentifierProcessor {
 
+    /**
+     * Shared stateless instance for call sites without MetaData access.
+     */
+    public static final MysqlIdentifierProcessor INSTANCE = new MysqlIdentifierProcessor();
+
     private static final Set<String> MYSQL_RESERVED_KEYWORDS = new HashSet<>();
 
     static {
@@ -289,21 +294,61 @@ public class MysqlIdentifierProcessor extends DefaultSQLIdentifierProcessor {
         return MYSQL_RESERVED_KEYWORDS.contains(identifier);
     }
 
+    /**
+     * SPI-facing conditional quote: identifiers that are already valid plain identifiers
+     * and not reserved keywords pass through unquoted; anything else is safely quoted.
+     */
     @Override
     public String quoteIdentifier(String identifier, Integer majorVersion, Integer minorVersion) {
-        if (isValidIdentifier(identifier) && !isReservedKeyword(identifier.toUpperCase(), majorVersion, minorVersion)) {
-            return identifier;
-        }
-        return "`" + identifier + "`";
+        return quoteIdentifier(identifier);
     }
 
 
     @Override
     public String quoteIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
         if (isValidIdentifier(identifier) && !isReservedKeyword(identifier.toUpperCase(), null, null)) {
             return identifier;
         }
-        return "`" + identifier + "`";
+        return quoteIdentifierAlways(identifier);
+    }
+
+    /**
+     * Escapes a value interpolated into a single-quoted SQL string literal (surrounding
+     * quotes NOT added). MySQL treats backslash as an escape character, so backslashes
+     * are doubled before single quotes (mirrors MysqlAccountSqlBuilder.stringLiteral).
+     */
+    @Override
+    public String escapeString(String str) {
+        if (str == null) {
+            return null;
+        }
+        StringBuilder escaped = new StringBuilder(str.length());
+        for (int i = 0; i < str.length(); i++) {
+            char current = str.charAt(i);
+            switch (current) {
+                case '\0' -> escaped.append("\\0");
+                case '\b' -> escaped.append("\\b");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                case 26 -> escaped.append("\\Z");
+                case '\\' -> escaped.append("\\\\");
+                case '\'' -> escaped.append("''");
+                default -> escaped.append(current);
+            }
+        }
+        return escaped.toString();
+    }
+
+    @Override
+    public String quoteIdentifierAlways(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return "`" + identifier.replace("`", "``") + "`";
     }
 
     @Override
@@ -311,7 +356,13 @@ public class MysqlIdentifierProcessor extends DefaultSQLIdentifierProcessor {
         if (StringUtils.isBlank(identifier)) {
             return identifier;
         }
-        return removePattern(identifier, MYSQL_PATTERN);
+        if (identifier.startsWith("`") && identifier.endsWith("`") && identifier.length() >= 2) {
+            return identifier.substring(1, identifier.length() - 1).replace("``", "`");
+        }
+        if (identifier.startsWith("\"") && identifier.endsWith("\"") && identifier.length() >= 2) {
+            return identifier.substring(1, identifier.length() - 1).replace("\"\"", "\"");
+        }
+        return identifier;
     }
 
     @Override

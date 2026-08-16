@@ -7,6 +7,7 @@ import ChangePersonal from './ChangePersonal';
 import { useUserStore } from '@/store/user';
 import i18n from '@/i18n';
 import PlanBox from '@/components/PlanBox';
+import SearchTargetLabel from '../SearchTargetLabel';
 
 // personal settings
 export default function Personal() {
@@ -26,21 +27,32 @@ export default function Personal() {
     <div className={styles.personalBox}>
       {/* personal information */}
       <PlanBox openActivationCodeModal={modal === 'activationCode'} activationCode={activationCode} />
-      <div className={commonStyles.containerBlock}>
+      <div className={commonStyles.containerBlock} data-setting-search-id="personal.profile">
         <SettingSubsection
-          title={i18n('setting.nav.personal')}
+          title={
+            <SearchTargetLabel targetId="personal.profile">
+              {i18n('setting.nav.personalInformation')}
+            </SearchTargetLabel>
+          }
           describe={i18n('setting.nav.personalInformationDescribe')}
         />
         <ChangePersonal curUser={curUser} updateUser={updateUser} />
       </div>
-      <div className={commonStyles.containerBlock}>
-        <SettingSubsection title={i18n('setting.nav.resetEmail')} describe={i18n('setting.nav.resetEmailDescribe')} />
+      <div className={commonStyles.containerBlock} data-setting-search-id="personal.email">
+        <SettingSubsection
+          title={<SearchTargetLabel targetId="personal.email">{i18n('setting.nav.resetEmail')}</SearchTargetLabel>}
+          describe={i18n('setting.nav.resetEmailDescribe')}
+        />
         <ChangeEmail curUser={curUser} updateUser={updateUser} />
       </div>
       {curUser?.email && (
-        <div className={commonStyles.containerBlock}>
+        <div className={commonStyles.containerBlock} data-setting-search-id="personal.password">
           <SettingSubsection
-            title={i18n('setting.nav.resetPassword')}
+            title={
+              <SearchTargetLabel targetId="personal.password">
+                {i18n('setting.nav.resetPassword')}
+              </SearchTargetLabel>
+            }
             describe={i18n('setting.nav.resetPasswordDescribe')}
           />
           <ChangePassword updateUser={updateUser} />

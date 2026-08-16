@@ -1,9 +1,15 @@
 import React, { memo, useEffect, useState, useRef } from 'react';
 import Iconfont from '@/components/Iconfont';
+import DropdownChevronTrigger from '@/components/DropdownChevronTrigger';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { Popover, Dropdown } from 'antd';
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
-import type { ContextMenuAction, ContextMenuEntry, ContextMenuIntent } from '@/components/ContextMenu/core';
+import {
+  isContextMenuAction,
+  type ContextMenuAction,
+  type ContextMenuEntry,
+  type ContextMenuIntent,
+} from '@/components/ContextMenu/core';
 import i18n from '@/i18n';
 import { isValid } from '@/utils/check';
 import { useStyles } from './style';
@@ -21,6 +27,10 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable';
+import {
+  CloseActiveResultTabHandlerResult,
+  registerCloseActiveResultTabHandler,
+} from '@/service/resultTabShortcut';
 
 export interface ITabItem {
   prefixIcon?: string | React.ReactNode;
@@ -32,6 +42,7 @@ export interface ITabItem {
   canClosed?: boolean;
   styles?: React.CSSProperties;
   pinned?: boolean;
+  destroyOnHide?: boolean;
 }
 
 export interface ITabContextActions {
@@ -75,6 +86,7 @@ interface IProps {
   height?: number;
   onChange: (key: string | number | null) => void;
   onEdit?: (action: 'add' | 'remove', data?: ITabItem[], list?: ITabItem[]) => void;
+  beforeRemove?: (tabs: ITabItem[]) => boolean | Promise<boolean>;
   hideAdd?: boolean;
   editableNameOnBlur?: (option: ITabItem) => void;
   concealTabHeader?: boolean;
@@ -82,9 +94,15 @@ interface IProps {
   lastTabCannotClosed?: boolean;
   destroyInactiveTabPane?: boolean;
   tabMaxWidth?: string;
+  uniformTabWidth?: boolean;
   contextActions?: ITabContextActions;
   contextActionAvailability?: (tab: ITabItem) => ITabContextActions;
   contextActionHandlers?: ITabContextActionHandlers;
+  tabBarExtraContent?: React.ReactNode;
+  activateOnContextMenu?: boolean;
+  activeTabScrollKey?: string | number;
+  closeActiveTabOnCloseShortcut?: boolean;
+  closeShortcutAction?: ShortcutAction;
   useExternalSortableContext?: boolean;
   draggingTabKey?: string;
   onDraggingTabKeyChange?: (key?: string) => void;
@@ -190,6 +208,7 @@ export default memo<IProps>((props) => {
     items,
     onChange,
     onEdit,
+    beforeRemove,
     activeKey,
     hideAdd,
     lastTabCannotClosed,
@@ -198,9 +217,15 @@ export default memo<IProps>((props) => {
     destroyInactiveTabPane = false,
     height = 40,
     tabMaxWidth = 'none',
+    uniformTabWidth = false,
     contextActions,
     contextActionAvailability,
     contextActionHandlers,
+    tabBarExtraContent,
+    activateOnContextMenu = false,
+    activeTabScrollKey,
+    closeActiveTabOnCloseShortcut = false,
+    closeShortcutAction,
     useExternalSortableContext = false,
     draggingTabKey: controlledDraggingTabKey,
     onDraggingTabKeyChange,
@@ -208,9 +233,23 @@ export default memo<IProps>((props) => {
   } = props;
   const [internalTabs, setInternalTabs] = useState<ITabItem[]>([]);
   const [editingTab, setEditingTab] = useState<ITabItem['key'] | undefined>();
+  const tabBoxRef = useRef<HTMLDivElement>(null);
   const tabListBoxRef = useRef<HTMLDivElement>(null);
+  const closeActiveTabOnShortcutRef = useRef<() => CloseActiveResultTabHandlerResult>(
+    () => 'inactive',
+  );
+  const lastTabScrollRequestRef = useRef<{
+    activeKey: IProps['activeKey'];
+    scrollKey: IProps['activeTabScrollKey'];
+  }>();
   const [showAddButton, setShowAddButton] = useState<boolean>(!hideAdd);
-  const { styles, cx } = useStyles({ height, showAddButton, tabMaxWidth });
+  const { styles, cx } = useStyles({
+    height,
+    showAddButton,
+    showTabBarExtraContent: !!tabBarExtraContent,
+    tabMaxWidth,
+    uniformTabWidth,
+  });
   const [moreTabsDropdownOpen, setMoreTabsDropdownOpen] = useState<false | undefined>(undefined);
   const [searchValue, setSearchValue] = useState<string>('');
   const [searchInternalTabs, setSearchInternalTabs] = useState<ITabItem[] | undefined>(undefined);
@@ -259,22 +298,45 @@ export default memo<IProps>((props) => {
     };
   }, [internalTabs]);
 
-  useUpdateEffect(() => {
-  // Move the focused tab to the first position.
-    setTimeout(() => {
-      if (tabListBoxRef.current) {
-        const activeTab = tabListBoxRef.current?.querySelector(`.${cx(styles.tabItem, styles.activeTab)}`);
-        if (activeTab) {
-          activeTab.scrollIntoView({
-            block: 'nearest',
-          });
-        }
+  useEffect(() => {
+    const nextTabs = items || [];
+    const renderedOrderIsCurrent =
+      internalTabs.length === nextTabs.length &&
+      internalTabs.every((tab, index) => tab.key === nextTabs[index]?.key);
+    if (!renderedOrderIsCurrent) {
+      return;
+    }
+
+    const lastRequest = lastTabScrollRequestRef.current;
+    if (
+      lastRequest &&
+      Object.is(lastRequest.activeKey, activeKey) &&
+      Object.is(lastRequest.scrollKey, activeTabScrollKey)
+    ) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const activeTab = tabListBoxRef.current?.querySelector(`.${styles.activeTab}`);
+      if (!activeTab) {
+        return;
       }
-    }, 0);
+      activeTab.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+      });
+      lastTabScrollRequestRef.current = {
+        activeKey,
+        scrollKey: activeTabScrollKey,
+      };
+    });
+
     if (internalTabs.length >= MAX_TABS) {
       setShowAddButton(false);
     }
-  }, [activeKey]);
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeKey, activeTabScrollKey, internalTabs, items]);
 
   // useEffect(() => {
   //   // from copilot
@@ -285,8 +347,11 @@ export default memo<IProps>((props) => {
   //   }
   // }, [internalTabs]);
 
-  const deleteTab = (data: ITabItem) => {
+  const deleteTab = async (data: ITabItem) => {
     if (!showClosed(data)) {
+      return;
+    }
+    if (beforeRemove && !(await beforeRemove([data]))) {
       return;
     }
     const newInternalTabs = internalTabs?.filter((t) => t.key !== data.key);
@@ -307,22 +372,49 @@ export default memo<IProps>((props) => {
     onEdit?.('remove', [data], newInternalTabs);
   };
 
-  const deleteOtherTab = (data: ITabItem) => {
-    const newInternalTabs = internalTabs?.filter((t) => t.key === data.key || t.pinned);
-    const deleteTabs = internalTabs?.filter((t) => t.key !== data.key && !t.pinned);
+  const deleteOtherTab = async (data: ITabItem) => {
+    const newInternalTabs = internalTabs?.filter((t) => t.key === data.key || t.pinned || t.canClosed === false);
+    const deleteTabs = internalTabs?.filter((t) => t.key !== data.key && !t.pinned && t.canClosed !== false);
+    if (beforeRemove && !(await beforeRemove(deleteTabs))) {
+      return;
+    }
     changeTab(data.key);
     setInternalTabs(newInternalTabs);
     onEdit?.('remove', deleteTabs, newInternalTabs);
   };
 
   // Close all tabs.
-  const deleteAllTab = () => {
-    const deleteTabs = internalTabs.filter((tab) => !tab.pinned);
-    const newInternalTabs = internalTabs.filter((tab) => tab.pinned);
+  const deleteAllTab = async () => {
+    const deleteTabs = internalTabs.filter((tab) => !tab.pinned && tab.canClosed !== false);
+    const newInternalTabs = internalTabs.filter((tab) => tab.pinned || tab.canClosed === false);
+    if (beforeRemove && !(await beforeRemove(deleteTabs))) {
+      return;
+    }
     changeTab(newInternalTabs[0]?.key ?? null);
     setInternalTabs(newInternalTabs);
     onEdit?.('remove', deleteTabs, newInternalTabs);
   };
+
+  closeActiveTabOnShortcutRef.current = () => {
+    const tabBox = tabBoxRef.current;
+    const tabBoxRect = tabBox?.getBoundingClientRect();
+    if (!tabBox || !tabBoxRect?.width || !tabBoxRect.height) {
+      return 'inactive';
+    }
+    const activeTab = internalTabs.find((tab) => tab.key === activeKey);
+    if (!activeTab || !showClosed(activeTab)) {
+      return 'pass-through';
+    }
+    deleteTab(activeTab);
+    return 'closed';
+  };
+
+  useEffect(() => {
+    if (!closeActiveTabOnCloseShortcut) {
+      return undefined;
+    }
+    return registerCloseActiveResultTabHandler(() => closeActiveTabOnShortcutRef.current());
+  }, [closeActiveTabOnCloseShortcut]);
 
   const changeTab = (key: string | number | null) => {
     onChange(key);
@@ -409,7 +501,12 @@ export default memo<IProps>((props) => {
         createContextMenuAction({
           id: 'close',
           label: i18n('common.button.close'),
-          shortcutAction: tab.key === activeKey ? ShortcutAction.CloseCurrentConsole : undefined,
+          shortcutAction:
+            closeShortcutAction &&
+            (tab.key === activeKey ||
+              (activateOnContextMenu && tab.key === contextMenu?.targetSnapshot.key))
+              ? closeShortcutAction
+              : undefined,
           execute: () => deleteTab(tab),
         }),
         createContextMenuAction({
@@ -585,6 +682,12 @@ export default memo<IProps>((props) => {
     function handleContextMenu(event: React.MouseEvent) {
       event.preventDefault();
       event.stopPropagation();
+      if (!createTabContextMenuActions(t).some(isContextMenuAction)) {
+        return;
+      }
+      if (activateOnContextMenu && t.key !== activeKey) {
+        changeTab(t.key);
+      }
       setContextMenu({
         surface: 'workspaceTab',
         pointer: {
@@ -830,6 +933,7 @@ export default memo<IProps>((props) => {
               </div>
             )}
           </div>
+          {tabBarExtraContent && <div className={styles.tabBarExtra}>{tabBarExtraContent}</div>}
           <div className={styles.moreTabs}>
             <Dropdown
               open={moreTabsDropdownOpen}
@@ -837,9 +941,7 @@ export default memo<IProps>((props) => {
               placement="bottomRight"
               trigger={['click']}
             >
-              <div className={styles.moreTabsButton}>
-                <IconfontSvg code="icon-chevron-bottom" size="xs" />
-              </div>
+              <DropdownChevronTrigger aria-label={i18n('common.text.moreTabs')} />
             </Dropdown>
           </div>
       </>
@@ -861,7 +963,7 @@ export default memo<IProps>((props) => {
   }
 
   return (
-    <div className={cx(styles.tabBox, className)}>
+    <div ref={tabBoxRef} className={cx(styles.tabBox, className)}>
       <PortalContextMenu
         intent={contextMenu}
         actions={contextMenuActions}
@@ -872,6 +974,9 @@ export default memo<IProps>((props) => {
       {!destroyInactiveTabPane ? (
         <div className={styles.tabsContent}>
           {internalTabs?.map((t) => {
+            if (t.destroyOnHide && t.key !== activeKey) {
+              return null;
+            }
             return (
               <div
                 key={t.key}

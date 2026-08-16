@@ -28,6 +28,7 @@ public interface ITaskSchedulerService {
      * Cancels a running task.
      *
      * @param taskId task identifier.
+     * @return true when cancellation was accepted; false when the task was absent or already completed.
      */
-    void cancel(Long taskId);
+    boolean cancel(Long taskId);
 }

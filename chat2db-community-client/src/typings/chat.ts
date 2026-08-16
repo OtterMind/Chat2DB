@@ -202,47 +202,6 @@ export interface PromptTableVO {
   type: 'TABLE';
 }
 
-export interface ChatExamplePrompt {
-  /** title */
-  title: string;
-  /** Prompt */
-  content: string;
-  /** AI type */
-  type: QuestionType;
-}
-
-// Parameters of the second and third steps of the ai dialogue
-export interface IQueryTableDataParams {
-  /**
-   * Conversation ID, must be passed when opening in AI conversation page
-   */
-  chatId?: number;
-  /**
-   * Data source collection ID
-   */
-  dataSourceCollectionId?: number;
-  /**
-   * Enter message
-   */
-  message: null | string;
-  /**
-   * Question type
-   */
-  questionType?: QuestionType;
-  /**
-   * Source
-   */
-  source?: ChatSourceType;
-  /**
-   * Query SQL
-   */
-  sql?: null | string;
-  /**
-   *Table list
-   */
-  tableList: PromptTableVO[];
-}
-
 // Message information generated step by step
 export interface StepMessageMarkDown {
   type: AnswerPartsType.MARKDOWN;

@@ -130,7 +130,7 @@ public class DbCellValueServiceImpl implements IDbCellValueService {
         sql.append("SELECT ")
                 .append(metaData.getMetaDataName(reference.getColumnName()))
                 .append(" FROM ")
-                .append(metaData.getMetaDataName(tableName.databaseName(), tableName.schemaName(),
+                .append(metaData.getQualifiedTableName(tableName.databaseName(), tableName.schemaName(),
                         tableName.tableName()))
                 .append(" WHERE ");
         boolean first = true;

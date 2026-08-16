@@ -1,25 +1,24 @@
 package ai.chat2db.community.domain.api.model.request.db;
 
 
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-
+/**
+ * Internal carrier populated after endpoint-specific request validation.
+ */
 @Data
 public class DbDlExecuteRequest {
 
 
-    @NotBlank
     private String sql;
 
 
-    @NotNull
     private Long consoleId;
 
 
-    @NotNull
+    private Long applyId;
+
+
     private Long dataSourceId;
 
 
@@ -32,11 +31,9 @@ public class DbDlExecuteRequest {
     private String tableName;
 
 
-    @Min(1)
     private Integer pageNo;
 
 
-    @Min(1)
     private Integer pageSize;
 
 

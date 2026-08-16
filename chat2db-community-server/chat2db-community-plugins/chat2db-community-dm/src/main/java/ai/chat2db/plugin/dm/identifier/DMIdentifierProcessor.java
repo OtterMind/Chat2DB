@@ -4,9 +4,15 @@ import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 public class DMIdentifierProcessor extends DefaultSQLIdentifierProcessor {
+
+    /**
+     * Shared stateless instance for call sites without MetaData access.
+     */
+    public static final DMIdentifierProcessor INSTANCE = new DMIdentifierProcessor();
 
     public static final Set<String> DM_RESERVED_KEYWORDS = new HashSet<>();
 
@@ -249,50 +255,117 @@ public class DMIdentifierProcessor extends DefaultSQLIdentifierProcessor {
 
     @Override
     public boolean isReservedKeyword(String identifier, Integer majorVersion, Integer minorVersion) {
-        return DM_RESERVED_KEYWORDS.contains(identifier);
+        return identifier != null && DM_RESERVED_KEYWORDS.contains(identifier.toUpperCase(Locale.ROOT));
     }
 
+    /**
+     * SPI-facing conditional quoting: {@code null} and blank identifiers are
+     * returned unchanged; identifiers that are already valid for the dialect
+     * and are not reserved keywords are returned unquoted; anything else is
+     * wrapped with double quotes, stripping one surrounding quote pair and
+     * doubling every embedded double quote.
+     */
     @Override
     public String quoteIdentifier(String identifier, Integer majorVersion, Integer minorVersion) {
-        if (isValidIdentifier(identifier)) {
-            if (containsLowerCase(identifier) || isReservedKeyword(identifier.toUpperCase(), majorVersion, minorVersion)) {
-                return StringUtils.wrap(identifier, '"');
-            }
-            return identifier;
-        }
-        return StringUtils.wrap(identifier, '"');
-
+        return quoteIdentifier(identifier);
     }
 
     @Override
     public String quoteIdentifier(String identifier) {
-        if (isValidIdentifier(identifier)) {
-            if (containsLowerCase(identifier) || isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
-            }
+        if (identifier == null) {
+            return null;
+        }
+        if (StringUtils.isBlank(identifier)) {
             return identifier;
         }
-        return StringUtils.wrap(identifier, '"');
-
+        if (isValidQuotedIdentifier(identifier)) {
+            return identifier;
+        }
+        if (isValidIdentifier(identifier)
+                && !containsLowerCase(identifier)
+                && !isReservedKeyword(identifier, null, null)) {
+            return identifier;
+        }
+        return quoteIdentifierAlways(identifier);
     }
 
+    /**
+     * Unconditional quoting for DDL-generation call sites: wraps with double
+     * quotes and doubling every embedded double quote, including quotes at the
+     * raw name boundaries. Returns {@code null} for {@code null}.
+     */
     @Override
     public String quoteIdentifierIgnoreCase(String identifier) {
-        if (isValidIdentifier(identifier)) {
-            if (isReservedKeyword(identifier.toUpperCase(), null, null)) {
-                return StringUtils.wrap(identifier, '"');
-            }
+        if (identifier == null) {
+            return null;
+        }
+        if (StringUtils.isBlank(identifier)) {
             return identifier;
         }
-        return StringUtils.wrap(identifier, '"');
+        if (isValidQuotedIdentifier(identifier)) {
+            return identifier;
+        }
+        if (isValidIdentifier(identifier) && !isReservedKeyword(identifier, null, null)) {
+            return identifier;
+        }
+        return quoteIdentifierAlways(identifier);
+    }
+
+    /**
+     * Escapes a value interpolated into a single-quoted SQL string literal by
+     * doubling every single quote. Returns {@code null} for {@code null}.
+     */
+    @Override
+    public String escapeString(String str) {
+        return StringUtils.replace(str, "'", "''");
     }
 
     @Override
     public String convertIdentifierCase(String identifier) {
         if (StringUtils.isBlank(identifier)) {
             return identifier;
-        }else {
-            return identifier.toUpperCase();
+        } else {
+            return identifier.toUpperCase(Locale.ROOT);
         }
+    }
+
+    private static String escapeIdentifierContent(String identifier) {
+        return identifier == null ? null : StringUtils.replace(identifier, "\"", "\"\"");
+    }
+
+    /**
+     * Escapes identifier content for a position already surrounded by double
+     * quotes. Returns {@code null} for {@code null}.
+     */
+    public static String escapeIdentifier(String identifier) {
+        return escapeIdentifierContent(identifier);
+    }
+
+    @Override
+    public String quoteIdentifierAlways(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return "\"" + escapeIdentifierContent(identifier) + "\"";
+    }
+
+    public String quoteStringLiteral(String value) {
+        return value == null ? null : "'" + escapeString(value) + "'";
+    }
+
+    private static boolean isValidQuotedIdentifier(String identifier) {
+        if (identifier.length() < 2 || identifier.charAt(0) != '"'
+                || identifier.charAt(identifier.length() - 1) != '"') {
+            return false;
+        }
+        for (int i = 1; i < identifier.length() - 1; i++) {
+            if (identifier.charAt(i) == '"') {
+                if (i + 1 >= identifier.length() - 1 || identifier.charAt(i + 1) != '"') {
+                    return false;
+                }
+                i++;
+            }
+        }
+        return true;
     }
 }

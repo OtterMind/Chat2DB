@@ -20,6 +20,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
 
 import com.alibaba.druid.sql.parser.SQLParserUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -33,8 +35,8 @@ import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.converter.DocumentConverter;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.util.JdbcUtils;
-import cn.hutool.core.date.TimeInterval;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -45,9 +47,10 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
 
     private static final MongodbScriptExecutor INSTANCE = new MongodbScriptExecutor();
 
-    private static final Pattern pattern = Pattern.compile("db\\.(\\w+)", Pattern.CASE_INSENSITIVE);
-    private static final String regex = "db\\.\\w+\\.find\\(.*\\)";
-    private static final Pattern queryPattern = Pattern.compile(regex);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final Pattern EDITABLE_QUERY_PATTERN = Pattern.compile(
+        "db\\.(?:([A-Za-z_$][\\w$]*)|getCollection\\((\"(?:\\\\.|[^\"\\\\])*\")\\))\\.find\\(.*\\)",
+        Pattern.CASE_INSENSITIVE);
 
     public static MongodbScriptExecutor getInstance() {
         return INSTANCE;
@@ -62,13 +65,17 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         if (StringUtils.isEmpty(command.getTableName())) {
             return Collections.emptyList();
         }
-        String sql = String.format(EXECUTE_SQL, command.getTableName());
+        String sql = selectTableCommand(command.getTableName());
         command.setScript(sql);
         return execute(command);
     }
 
+    static String selectTableCommand(String tableName) {
+        return String.format(EXECUTE_SQL, MongodbSqlGuards.collectionAccessor(tableName));
+    }
 
-    private String getTableName(String tableName, String sql) {
+
+    String getTableName(String tableName, String sql) {
 
         if (StringUtils.isEmpty(tableName) && StringUtils.isEmpty(sql)) {
             return StringUtils.EMPTY;
@@ -76,11 +83,25 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         if (StringUtils.isNotEmpty(tableName)) {
             return tableName;
         }
-        Matcher matcher = pattern.matcher(sql);
-        if (matcher.find()) {
-            return matcher.group(1);
+        return editableCollectionName(sql).orElse(StringUtils.EMPTY);
+    }
+
+    static Optional<String> editableCollectionName(String sql) {
+        if (StringUtils.isEmpty(sql)) {
+            return Optional.empty();
         }
-        return StringUtils.EMPTY;
+        Matcher matcher = EDITABLE_QUERY_PATTERN.matcher(sql);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        if (matcher.group(1) != null) {
+            return Optional.of(matcher.group(1));
+        }
+        try {
+            return Optional.ofNullable(JSON_MAPPER.readValue(matcher.group(2), String.class));
+        } catch (JsonProcessingException e) {
+            return Optional.empty();
+        }
     }
 
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
@@ -108,16 +129,22 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
-            TimeInterval timeInterval = new TimeInterval();
+            long startedAtEpochMs = System.currentTimeMillis();
+            long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
+            long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
+            long fetchDurationNanos = 0L;
             executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
             if (query) {
+                long fetchStartedNanos = System.nanoTime();
                 executeResult = buildQueryCommandResult(stmt, sql, command);
+                fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
             } else {
-                executeResult.setDuration(timeInterval.interval());
                 executeResult.setUpdateCount(stmt.getUpdateCount());
             }
-            executeResult.setDuration(timeInterval.interval());
+            executeResult.setExecutionMetrics(ExecutionTiming.complete(
+                    ExecutionTiming.started(startedAtEpochMs), executeDurationNanos, fetchDurationNanos,
+                    CollectionUtils.size(executeResult.getDataList())));
         }
         return executeResult;
     }
@@ -125,7 +152,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
     private ExecuteResponse buildQueryCommandResult(Statement stmt, String sql, SqlExecuteRequest command) throws SQLException {
         List<LinkedHashMap<String, Object>> documentList = Lists.newArrayList();
         List<Header> headerList = Lists.newArrayList();
-        TimeInterval timeInterval = new TimeInterval();
         List<ResultCell> valueList = Lists.newArrayList();
         List<List<ResultCell>> dataList = Lists.newArrayList();
         Map<String, Header> headerListMap = Maps.newLinkedHashMap();
@@ -167,7 +193,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
                 result.setDataList(dataList);
                 result.setHeaderList(headerList);
                 result.setOriginalSql(command.getScript());
-                result.setDuration(timeInterval.interval());
                 result.setFuzzyTotal(String.valueOf(dataList.size()));
                 result.setDescription(I18nUtils.getMessage("sqlResult.success"));
                 return result;
@@ -209,7 +234,6 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
             result.setFuzzyTotal(fuzzyTotal);
             result.setCanEdit(canEdit(command.getScript()));
             result.setOriginalSql(command.getScript());
-            result.setDuration(timeInterval.interval());
             result.setDescription(I18nUtils.getMessage("sqlResult.success"));
             result.setTableName(getTableName(command.getTableName(), command.getScript()));
             result.setHasNextPage(CollectionUtils.size(result.getDataList()) >= command.getPageSize());
@@ -243,12 +267,8 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         return Integer.toString(command.getPageSize()) + "+";
     }
 
-    private boolean canEdit(String sql) {
-        Matcher matcher = queryPattern.matcher(sql);
-        if (matcher.find()) {
-            return Boolean.TRUE;
-        }
-        return Boolean.FALSE;
+    boolean canEdit(String sql) {
+        return editableCollectionName(sql).isPresent();
     }
 
     private static List<String> parseSql(String sql) {

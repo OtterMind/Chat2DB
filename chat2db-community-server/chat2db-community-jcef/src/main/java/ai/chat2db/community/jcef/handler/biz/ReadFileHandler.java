@@ -12,7 +12,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.cef.callback.CefQueryCallback;
 
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 
@@ -20,16 +19,19 @@ import java.util.Map;
 public class ReadFileHandler implements IJcefActionHandler {
 
     @Override
-    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
-        Charset charset = StandardCharsets.UTF_8;
-        JSONObject jsonObject = JSON.parseObject(consoleMessage.getMessage());
-        String path = jsonObject.getString("path");
-        String charsets = jsonObject.getString("charsets");
-        if (StringUtils.isNotBlank(charsets)) {
-            charset = Charset.forName(charsets);
+    public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) {
+        try {
+            Charset charset = null;
+            JSONObject jsonObject = JSON.parseObject(consoleMessage.getMessage());
+            String path = jsonObject.getString("path");
+            String charsets = jsonObject.getString("charsets");
+            if (StringUtils.isNotBlank(charsets)) {
+                charset = Charset.forName(charsets);
+            }
+            Map<String, Object> result = OSOperateUtil.openLocalFile(path, charset);
+            ResponseBuilder.buildSuccessJcef(Map.of("data", result), callback);
+        } catch (Exception exception) {
+            callback.failure(500, exception.getMessage());
         }
-        Map<String, Object> result = OSOperateUtil.openLocalFile(path, charset);
-        String content = (String) result.get("content");
-        ResponseBuilder.buildSuccessJcef(Map.of("data", content), callback);
     }
 }

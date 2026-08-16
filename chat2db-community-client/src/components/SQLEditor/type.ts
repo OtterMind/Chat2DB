@@ -30,6 +30,7 @@ export interface EditorSettings {
   completionAcceptKey?: SqlCompletionAcceptKey;
   renderLineHighlight?: monaco.editor.IEditorOptions['renderLineHighlight'];
   stickyScroll?: monaco.editor.IEditorStickyScrollOptions;
+  confirmBeforeClose?: boolean;
 }
 
 export interface IRange {
@@ -60,6 +61,8 @@ export enum SQLOptType {
   REFRESH_ROUTINE_DDL = 'REFRESH_ROUTINE_DDL',
   REVERT_ROUTINE_DDL = 'REVERT_ROUTINE_DDL',
   FORMAT_SQL = 'FORMAT_SQL',
+  TOGGLE_LINE_COMMENT = 'TOGGLE_LINE_COMMENT',
+  TOGGLE_BLOCK_COMMENT = 'TOGGLE_BLOCK_COMMENT',
   EXPLAIN_SQL = 'EXPLAIN_SQL',
   VIEW_TABLE_DDL = 'VIEW_TABLE_DDL',
   EDIT_TABLE = 'EDIT_TABLE',

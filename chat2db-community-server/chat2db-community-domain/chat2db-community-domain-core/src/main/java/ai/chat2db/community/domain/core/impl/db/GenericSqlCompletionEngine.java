@@ -322,9 +322,9 @@ public class GenericSqlCompletionEngine {
                     }
                 }
                 tableName = split[split.length - 1];
-                databaseName = sqlIdentifierProcessor.removeIdentifierQuote(databaseName);
-                schemaName = sqlIdentifierProcessor.removeIdentifierQuote(schemaName);
-                tableName = sqlIdentifierProcessor.removeIdentifierQuote(tableName);
+                databaseName = normalizeIdentifierPart(sqlIdentifierProcessor, databaseName);
+                schemaName = normalizeIdentifierPart(sqlIdentifierProcessor, schemaName);
+                tableName = normalizeIdentifierPart(sqlIdentifierProcessor, tableName);
                 tableAlias = sqlIdentifierProcessor.quoteIdentifier(tableAliasEntry.getValue());
                 if (supportDatabase && StringUtils.isBlank(databaseName)) {
                     continue;
@@ -551,17 +551,17 @@ public class GenericSqlCompletionEngine {
                     databaseName = splitName[0];
                 }
             }
-            databaseName = processor.removeIdentifierQuote(databaseName);
+            databaseName = normalizeIdentifierPart(processor, databaseName);
             if (supportDatabase && StringUtils.isBlank(databaseName)) {
                 continue;
             }
-            schemaName = processor.removeIdentifierQuote(schemaName);
+            schemaName = normalizeIdentifierPart(processor, schemaName);
             if (supportSchema && StringUtils.isBlank(schemaName)) {
                 continue;
             }
             String lastIdentifier = splitName[length - 1];
             boolean quoted = processor.isQuoteIdentifier(lastIdentifier);
-            table = processor.removeIdentifierQuote(lastIdentifier);
+            table = normalizeIdentifierPart(processor, lastIdentifier);
             if (!quoted) {
                 table = processor.convertIdentifierCase(table);
             }
@@ -645,7 +645,7 @@ public class GenericSqlCompletionEngine {
         }
         String paramDatabaseName = param.getDatabaseName();
         String paramSchemaName = param.getSchemaName();
-        String lastName = processor.removeIdentifierQuote(names[names.length - 1]);
+        String lastName = normalizeIdentifierPart(processor, names[names.length - 1]);
         List<Database> databases = metaData.databases(connection);
         if (CollectionUtils.isNotEmpty(databases)) {
             for (Database database : databases) {
@@ -678,7 +678,7 @@ public class GenericSqlCompletionEngine {
         }
 
         String databaseName = names.length - 2 < 0 ? paramDatabaseName : names[names.length - 2];
-        databaseName = processor.removeIdentifierQuote(databaseName);
+        databaseName = normalizeIdentifierPart(processor, databaseName);
         List<Schema> schemas = metaData.schemas(connection, databaseName);
         if (CollectionUtils.isNotEmpty(schemas)) {
             for (Schema schema : schemas) {
@@ -701,7 +701,7 @@ public class GenericSqlCompletionEngine {
         if (supportSchema) {
             databaseName = names.length - 3 < 0 ? paramDatabaseName : names[names.length - 3];
         } else {
-            databaseName = names.length - 2 < 0 ? paramSchemaName : names[names.length - 2];
+            databaseName = names.length - 2 < 0 ? paramDatabaseName : names[names.length - 2];
         }
         if (supportDatabase && StringUtils.isBlank(databaseName)) {
             return List.of();
@@ -713,8 +713,8 @@ public class GenericSqlCompletionEngine {
         if (supportSchema && StringUtils.isBlank(schemaName)) {
             return List.of();
         }
-        databaseName = processor.removeIdentifierQuote(databaseName);
-        schemaName = processor.removeIdentifierQuote(schemaName);
+        databaseName = normalizeIdentifierPart(processor, databaseName);
+        schemaName = normalizeIdentifierPart(processor, schemaName);
         String tableKey = getTableKey(dataSourceId, databaseName, schemaName);
         List<Table> tables = MemoryCacheManage.get(tableKey);
         if (CollectionUtils.isEmpty(tables)) {
@@ -789,6 +789,10 @@ public class GenericSqlCompletionEngine {
 
     private static SqlCompletionCandidate candidate(SqlCompletionCandidateTypeEnum type, String label) {
         return SqlCompletionCandidate.of(type, label);
+    }
+
+    static String normalizeIdentifierPart(ISQLIdentifierProcessor processor, String identifier) {
+        return identifier == null ? null : processor.removeIdentifierQuote(identifier);
     }
 
     private int resolveCursor(DbSqlCompletionGetRequest param) {

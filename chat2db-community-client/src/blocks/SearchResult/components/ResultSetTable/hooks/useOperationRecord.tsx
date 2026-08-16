@@ -48,6 +48,16 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
   const createRowRecordListRef = useRef(createRowRecordList);
   const deleteRowRecordListRef = useRef(deleteRowRecordList);
 
+  const runWithCellValueTrackingPaused = useCallback((operation: () => void) => {
+    const previousValue = isListenCellValueChange.current;
+    isListenCellValueChange.current = false;
+    try {
+      operation();
+    } finally {
+      isListenCellValueChange.current = previousValue;
+    }
+  }, []);
+
   // callback for monitoring cell value changes
   const handleCellValueChange = useCallback(
     (record: ICellChangeRecord) => {
@@ -157,62 +167,61 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
   // handles undo operations
   const handleRevocation = useCallback(() => {
     if (!tableInstance) return;
-    // does not monitor cell value changes when undoing operations
-    isListenCellValueChange.current = false;
     const cells = tableInstance.getSelectedCellInfos() || [];
     if (cells.length === 0) return;
-    const _createRowRecordList = createRowRecordListRef.current;
-    const _deleteRowRecordList = deleteRowRecordListRef.current;
-    const _cellChangeRecordList = cellChangeRecordLisLRef.current;
-    // records the rows that need to be deleted
-    const deleteRows: string[] = [];
+    runWithCellValueTrackingPaused(() => {
+      const _createRowRecordList = [...createRowRecordListRef.current];
+      const _deleteRowRecordList = [...deleteRowRecordListRef.current];
+      const _cellChangeRecordList = [...cellChangeRecordLisLRef.current];
+      // records the rows that need to be deleted
+      const deleteRows: string[] = [];
 
-    cells.forEach((cell) => {
-      const rowId: string = cell?.[0]?.originData?.CHAT2DB_ROW_NUMBER;
-      if (rowId === undefined) return;
-      // Determines whether the current row is a new row or a deleted row, and performs row-level undo
-      const createIndex = _createRowRecordList.findIndex((item) => item === rowId);
-      const deleteIndex = _deleteRowRecordList.findIndex((item) => item === rowId);
-      if (createIndex > -1 || deleteIndex > -1) {
-        if (createIndex > -1) {
-          _createRowRecordList.splice(createIndex, 1);
-          // If the undoing of a new row requires deleting the new row
-          deleteRows.push(rowId);
-        } else {
-          _deleteRowRecordList.splice(deleteIndex, 1);
-        }
-        handleRevocationRowStyle(rowId);
-        return;
-      }
-      // Perform cell-level undo
-      cell.forEach((item) => {
-        _cellChangeRecordList.forEach((record, index) => {
-          if (record.field === item.field && record.rowId === item.originData.CHAT2DB_ROW_NUMBER) {
-            handleRevocationCellStyle({
-              field: record.field,
-              rowId: record.rowId,
-              value: record.restoreValue !== undefined ? record.restoreValue : record.currentValue,
-              cellMeta: record.restoreCellMeta,
-            });
-
-            _cellChangeRecordList.splice(index, 1);
+      cells.forEach((cell) => {
+        const rowId: string = cell?.[0]?.originData?.CHAT2DB_ROW_NUMBER;
+        if (rowId === undefined) return;
+        // Determines whether the current row is a new row or a deleted row, and performs row-level undo
+        const createIndex = _createRowRecordList.findIndex((item) => item === rowId);
+        const deleteIndex = _deleteRowRecordList.findIndex((item) => item === rowId);
+        if (createIndex > -1 || deleteIndex > -1) {
+          if (createIndex > -1) {
+            _createRowRecordList.splice(createIndex, 1);
+            // If the undoing of a new row requires deleting the new row
+            deleteRows.push(rowId);
+          } else {
+            _deleteRowRecordList.splice(deleteIndex, 1);
           }
+          handleRevocationRowStyle(rowId);
+          return;
+        }
+        // Perform cell-level undo
+        cell.forEach((item) => {
+          _cellChangeRecordList.forEach((record, index) => {
+            if (record.field === item.field && record.rowId === item.originData.CHAT2DB_ROW_NUMBER) {
+              handleRevocationCellStyle({
+                field: record.field,
+                rowId: record.rowId,
+                value: record.restoreValue !== undefined ? record.restoreValue : record.currentValue,
+                cellMeta: record.restoreCellMeta,
+              });
+
+              _cellChangeRecordList.splice(index, 1);
+            }
+          });
         });
       });
+      if (deleteRows.length > 0) {
+        // What needs to be passed in here is not the line number, but the line number-1
+        const rowNumbers = findRowNumbersByIds(tableInstance, deleteRows).map((row) => row - 1);
+        tableInstance.deleteRecords(rowNumbers);
+      }
+      cellChangeRecordLisLRef.current = [..._cellChangeRecordList];
+      createRowRecordListRef.current = [..._createRowRecordList];
+      deleteRowRecordListRef.current = [..._deleteRowRecordList];
+      setCellChangeRecordList(cellChangeRecordLisLRef.current);
+      setCreateRowRecordList(createRowRecordListRef.current);
+      setDeleteRowRecordList(deleteRowRecordListRef.current);
     });
-    if (deleteRows.length > 0) {
-      // What needs to be passed in here is not the line number, but the line number-1
-      const rowNumbers = findRowNumbersByIds(tableInstance, deleteRows).map((row) => row - 1);
-      tableInstance.deleteRecords(rowNumbers);
-    }
-    cellChangeRecordLisLRef.current = [..._cellChangeRecordList];
-    createRowRecordListRef.current = [..._createRowRecordList];
-    deleteRowRecordListRef.current = [..._deleteRowRecordList];
-    setCellChangeRecordList(cellChangeRecordLisLRef.current);
-    setCreateRowRecordList(createRowRecordListRef.current);
-    setDeleteRowRecordList(deleteRowRecordListRef.current);
-    isListenCellValueChange.current = true;
-  }, [tableInstance]);
+  }, [tableInstance, runWithCellValueTrackingPaused]);
 
   // Delete row
   const handleDeleteRow = useCallback(() => {
@@ -245,37 +254,26 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
       tableInstance.deleteRecords(rowsToDeleteRows);
     }
 
-    isListenCellValueChange.current = false;
-
-    let _cellChangeRecordList = cellChangeRecordLisLRef.current;
-
-    // If there are edited cells in the deleted row, you need to undo the styles of these cells and record them.
-    cells.forEach((cell) => {
-      const rowId = cell?.[0]?.originData?.CHAT2DB_ROW_NUMBER;
-      if (rowId === undefined) return;
-      _cellChangeRecordList = _cellChangeRecordList.filter((_item) => {
-        const flag = _item.rowId === rowId;
-        if (flag) {
-          handleRevocationCellStyle({
-            field: _item.field,
-            rowId: _item.rowId,
-            value: _item.restoreValue !== undefined ? _item.restoreValue : _item.currentValue,
-            cellMeta: _item.restoreCellMeta,
-          });
-        }
-        return !flag;
-      });
-    });
-    // If the deleted row contains modified cells, these records need to be deleted
-    if (_cellChangeRecordList.length !== cellChangeRecordLisLRef.current.length) {
-      cellChangeRecordLisLRef.current = _cellChangeRecordList;
-      setCellChangeRecordList(_cellChangeRecordList);
+    const deletedRowIds = new Set(curDeleteRows);
+    const revokedCellRecords = cellChangeRecordLisLRef.current.filter((record) => deletedRowIds.has(record.rowId));
+    const remainingCellRecords = cellChangeRecordLisLRef.current.filter((record) => !deletedRowIds.has(record.rowId));
+    handleDeleteRowRecord(curDeleteRows);
+    if (revokedCellRecords.length > 0) {
+      cellChangeRecordLisLRef.current = remainingCellRecords;
+      setCellChangeRecordList(remainingCellRecords);
     }
 
-    isListenCellValueChange.current = true;
-
-    handleDeleteRowRecord(curDeleteRows);
-  }, [tableInstance]);
+    runWithCellValueTrackingPaused(() => {
+      revokedCellRecords.forEach((_item) => {
+        handleRevocationCellStyle({
+          field: _item.field,
+          rowId: _item.rowId,
+          value: _item.restoreValue !== undefined ? _item.restoreValue : _item.currentValue,
+          cellMeta: _item.restoreCellMeta,
+        });
+      });
+    });
+  }, [tableInstance, runWithCellValueTrackingPaused]);
 
   // clone line
   const handleCloneRow = useCallback(() => {
@@ -347,28 +345,34 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
       if (!tableInstance) return;
       const rowNumber = findRowNumberById(tableInstance, rowId);
       const colNumber = findColNumberById(tableInstance, field);
-      tableInstance.arrangeCustomCellStyle(
-        {
-          col: colNumber,
-          row: rowNumber,
-        },
-        '',
-      );
+      const originData = getRowOriginData(tableInstance, rowId);
+      if (colNumber >= 1) {
+        tableInstance.arrangeCustomCellStyle(
+          {
+            col: colNumber,
+            row: rowNumber,
+          },
+          '',
+        );
+      }
       if (value !== undefined) {
-        isListenCellValueChange.current = false;
-        // Restore the value of the cell
-        tableInstance.changeCellValue(colNumber, rowNumber, value);
-        isListenCellValueChange.current = true;
+        if (colNumber >= 1) {
+          runWithCellValueTrackingPaused(() => {
+            tableInstance.changeCellValue(colNumber, rowNumber, value);
+          });
+        } else if (originData) {
+          originData[field] = value;
+          tableInstance.render();
+        }
       }
       if (cellMeta) {
-        const originData = tableInstance.getRecordByCell(colNumber, rowNumber);
         const cellMetaList = originData?.__CHAT2DB_CELL_META__;
         if (cellMetaList) {
-          cellMetaList[colNumber] = { ...cellMeta };
+          cellMetaList[Number(field)] = { ...cellMeta };
         }
       }
     },
-    [tableInstance],
+    [tableInstance, runWithCellValueTrackingPaused],
   );
 
   // Undo the style of the current row
@@ -380,13 +384,13 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
         {
           range: {
             start: { row: rowNumber, col: 0 },
-            end: { row: rowNumber, col: columns.length },
+            end: { row: rowNumber, col: Math.max(0, tableInstance.colCount - 1) },
           },
         },
         '',
       );
     },
-    [tableInstance, columns],
+    [tableInstance],
   );
 
   // Clear all operation records
@@ -399,7 +403,7 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     deleteRowRecordListRef.current = [];
     // // Clear all styles
     const rowLength = tableInstance?.records?.length;
-    const colLength = tableInstance?.columns?.length;
+    const colLength = tableInstance ? Math.max(0, tableInstance.colCount - 1) : 0;
     if (!rowLength || !colLength) return;
     tableInstance?.arrangeCustomCellStyle(
       { range: { start: { row: 0, col: 0 }, end: { row: rowLength, col: colLength } } },
@@ -431,7 +435,9 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     // TODO: There is a problem here, only as of VTable version 1.10.0
     // bug description: Change the color of a cell to A, then to B, then to A. At this time, the cell has no color.
     // Resetting this undocumented VTable arrangement fixes update colors that cycle A -> B -> A.
-    // Registered create/delete styles remain intact after the reset.
+    // Registered create/delete *style definitions* remain intact after the reset, but the arrangement
+    // (cell -> style) mappings are cleared. Re-apply create/delete arrangements below so a plain cell
+    // edit does not wipe green (new-row) / red (deleted-row) highlights until the next sort/filter.
     if (tableInstance?.customCellStylePlugin) {
       tableInstance.customCellStylePlugin.customCellStyleArrangement = [];
     }
@@ -439,7 +445,7 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     cellChangeRecordList.map((record) => {
       const rowNumber = findRowNumberById(tableInstance, record.rowId);
       const colNumber = findColNumberById(tableInstance, record.field);
-      if (!rowNumber || !colNumber) return;
+      if (!rowNumber || colNumber < 1) return;
       tableInstance?.arrangeCustomCellStyle(
         {
           col: colNumber,
@@ -448,7 +454,20 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
         'custom-update-cell',
       );
     });
-  }, [cellChangeRecordList, tableInstance]);
+
+    findRowNumbersByIds(tableInstance, createRowRecordList).forEach((row) => {
+      tableInstance?.arrangeCustomCellStyle(
+        { range: { start: { row, col: 0 }, end: { row, col: Math.max(0, tableInstance.colCount - 1) } } },
+        'custom-create-cell',
+      );
+    });
+    findRowNumbersByIds(tableInstance, deleteRowRecordList)?.forEach((row) => {
+      tableInstance?.arrangeCustomCellStyle(
+        { range: { start: { row, col: 0 }, end: { row, col: Math.max(0, tableInstance.colCount - 1) } } },
+        'custom-delete-cell',
+      );
+    });
+  }, [cellChangeRecordList, createRowRecordList, deleteRowRecordList, columns, tableInstance]);
 
   useEffect(() => {
     if (!tableInstance) return;
@@ -456,7 +475,7 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     rowNumbers.map((row) => {
       tableInstance?.arrangeCustomCellStyle(
         // VTable errors when the range exceeds the actual columns; the dependency should clamp this internally.
-        { range: { start: { row, col: 0 }, end: { row, col: columns.length } } },
+        { range: { start: { row, col: 0 }, end: { row, col: Math.max(0, tableInstance.colCount - 1) } } },
         'custom-create-cell',
       );
     });
@@ -469,7 +488,7 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     rowNumbers?.map((row) => {
       tableInstance?.arrangeCustomCellStyle(
         // VTable errors when the range exceeds the actual columns; the dependency should clamp this internally.
-        { range: { start: { row, col: 0 }, end: { row, col: columns.length } } },
+        { range: { start: { row, col: 0 }, end: { row, col: Math.max(0, tableInstance.colCount - 1) } } },
         'custom-delete-cell',
       );
     });
@@ -539,7 +558,7 @@ const useOperationRecord: IUseOperationRecord = ({ tableInstance, theme }) => {
     const _deleteRowRecordList = deleteRowRecordListRef.current || [];
     if (!_cellChangeRecordList.length && !_createRowRecordList.length && !_deleteRowRecordList.length) return;
     const rowNumber = tableInstance.records.length;
-    const colNumber = tableInstance.columns.length;
+    const colNumber = Math.max(0, tableInstance.colCount - 1);
     tableInstance.arrangeCustomCellStyle(
       {
         range: {

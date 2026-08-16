@@ -5,7 +5,8 @@ import java.util.Locale;
 public enum AiProviderEnum {
     OPENAI,
     CLAUDE,
-    GEMINI;
+    GEMINI,
+    MINIMAX;
 
     public static AiProviderEnum from(String value) {
         if (value == null || value.trim().isEmpty()) {

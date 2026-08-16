@@ -3,13 +3,23 @@ import { TableDataType } from '@/constants/table';
 import type { IManageResultData } from '@/typings';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 import {
+  beginSqlExecutionRequest,
+  createSqlExecutionRequestTracker,
+  finishSqlExecutionRequest,
+  getActiveSqlExecutionId,
+  setSqlExecutionRequestId,
+} from './sqlExecutionRequestTracker';
+import {
   beginWebSqlExecution,
   clearSqlExecutionLog,
   completeWebSqlExecution,
   createSqlExecutionLogState,
   failWebSqlExecution,
   isSqlExecutionCancellationError,
+  prepareDesktopSqlExecutionLogForRequest,
+  prepareSqlExecutionLogForExecution,
   reduceDesktopSqlExecutionEvent,
+  reduceDesktopSqlExecutionEventWithHistoryPreference,
   rethrowNonCancellationSqlExecutionError,
 } from './sqlExecutionLog';
 
@@ -27,7 +37,6 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     sql: 'select 1',
     originalSql: 'select 1',
     success: true,
-    duration: 10,
     sqlType: SqlTypeEnum.SELECT,
     refreshTargets: [],
     pageNo: 1,
@@ -36,6 +45,34 @@ function result(overrides: Partial<IManageResultData> = {}): IManageResultData {
     hasNextPage: false,
     ...overrides,
   };
+}
+
+{
+  const tracker = createSqlExecutionRequestTracker();
+  const oldRequest = beginSqlExecutionRequest(tracker);
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest!, 'desktop-old'), true);
+  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-old');
+
+  assert.equal(beginSqlExecutionRequest(tracker), undefined, 'a new request cannot replace the active execution');
+  assert.equal(
+    getActiveSqlExecutionId(tracker),
+    'desktop-old',
+    'a rejected duplicate request preserves the previous execution cancellation target',
+  );
+  assert.equal(finishSqlExecutionRequest(tracker, oldRequest!), true);
+
+  const newRequest = beginSqlExecutionRequest(tracker);
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest!, 'desktop-new'), true);
+  assert.equal(setSqlExecutionRequestId(tracker, oldRequest!, 'desktop-old-late'), false);
+  assert.equal(getActiveSqlExecutionId(tracker), 'desktop-new', 'a late old start response is ignored');
+  assert.equal(finishSqlExecutionRequest(tracker, newRequest!), true);
+  assert.equal(getActiveSqlExecutionId(tracker), undefined);
+  assert.equal(setSqlExecutionRequestId(tracker, newRequest!, 'desktop-new-late'), false);
+  assert.equal(
+    getActiveSqlExecutionId(tracker),
+    undefined,
+    'a start response arriving after its terminal event cannot restore the cancel target',
+  );
 }
 
 function rawExecutionContext(value: Record<string, unknown>) {
@@ -53,6 +90,7 @@ function assertTruncatedMessage(message: string | undefined) {
 function webExecution() {
   return beginWebSqlExecution(createSqlExecutionLogState(), {
     executionId: 'web-1',
+    executionSequence: 1,
     sql: 'select 1',
     context,
     occurredAtEpochMs: 100,
@@ -69,7 +107,91 @@ function webExecution() {
     occurredAtEpochMs: 110,
     results: [],
   });
+  assert.equal(completed.records[0].executionSequence, 1, 'web execution records preserve their batch sequence');
   assert.equal(clearSqlExecutionLog(completed).records.length, 0);
+}
+
+{
+  const completed = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 110,
+    results: [],
+  });
+  const state = beginWebSqlExecution(completed, {
+    executionId: 'web-2',
+    sql: 'select 2',
+    context,
+    occurredAtEpochMs: 120,
+  });
+  assert.deepEqual(
+    prepareSqlExecutionLogForExecution(state, 'web-3', true).records.map((record) => record.executionId),
+    ['web-1', 'web-2'],
+    'keep-history mode does not remove existing executions',
+  );
+  const replacement = beginWebSqlExecution(prepareSqlExecutionLogForExecution(state, 'web-3', false), {
+    executionId: 'web-3',
+    sql: 'select 3',
+    context,
+    occurredAtEpochMs: 130,
+  });
+  assert.deepEqual(
+    replacement.records.map((record) => record.executionId),
+    ['web-3'],
+    'replace mode keeps only the latest execution, including while older executions are running',
+  );
+  assert.equal(
+    completeWebSqlExecution(replacement, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 140,
+      results: [result()],
+    }),
+    replacement,
+    'a superseded execution cannot reappear when it completes later',
+  );
+  const appendMode = prepareSqlExecutionLogForExecution(replacement, 'web-4', true);
+  assert.equal(appendMode.replacementExecutionId, undefined);
+  assert.deepEqual(appendMode.supersededExecutionIds, ['web-2']);
+  assert.deepEqual(appendMode.records.map((record) => record.executionId), ['web-3']);
+  assert.equal(
+    completeWebSqlExecution(appendMode, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 150,
+      results: [result()],
+    }),
+    appendMode,
+    'switching back to keep-history mode does not revive an execution replaced while it was running',
+  );
+  const cleared = clearSqlExecutionLog(replacement);
+  assert.equal(
+    completeWebSqlExecution(cleared, {
+      executionId: 'web-2',
+      sql: 'select 2',
+      context,
+      occurredAtEpochMs: 160,
+      results: [result()],
+    }),
+    cleared,
+    'clearing output keeps the superseded-execution guard',
+  );
+
+  const boundedSupersededExecutions = prepareSqlExecutionLogForExecution(
+    {
+      records: [],
+      activeExecutionIds: ['running-old'],
+      supersededExecutionIds: Array.from({ length: 200 }, (_, index) => `superseded-${index}`),
+    },
+    'web-new',
+    false,
+  );
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.length, 200);
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.includes('superseded-0'), false);
+  assert.equal(boundedSupersededExecutions.supersededExecutionIds?.includes('running-old'), true);
 }
 
 {
@@ -113,10 +235,48 @@ function webExecution() {
   );
   const output = state.records[0].outputs[1];
   assert.equal(output.kind === 'result' ? output.rowCount : undefined, 2);
+  assert.equal(output.kind === 'result' ? output.durationMs : undefined, 20);
   assert.equal(output.kind === 'result' ? output.resultKey : undefined, 'web-1:1:1');
   assert.equal('dataList' in output, false);
+  assert.equal(state.records[0].durationMs, 20);
   assert.equal(state.records[0].context.databaseName, 'catalog_after_use');
   assert.equal(state.records[0].context.schemaName, 'schema_after_use');
+}
+
+{
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'call multi_result_procedure()',
+    context,
+    occurredAtEpochMs: 140,
+    results: [
+      result({
+        statementSequence: 1,
+        resultSetId: 1,
+        executionMetrics: { totalDurationMs: 10 },
+      }),
+      result({
+        statementSequence: 1,
+        resultSetId: 2,
+        executionMetrics: { totalDurationMs: 15 },
+      }),
+    ],
+  });
+
+  assert.equal(state.records.length, 1);
+  assert.equal(state.records[0].durationMs, 25, 'independent result metrics are summed per statement');
+}
+
+{
+  const state = completeWebSqlExecution(webExecution(), {
+    executionId: 'web-1',
+    sql: 'select 1',
+    context,
+    occurredAtEpochMs: 140,
+    results: [result({ dataList: [[]] })],
+  });
+  const output = state.records[0].outputs[0];
+  assert.equal(output.kind === 'result' ? output.durationMs : undefined, undefined);
 }
 
 {
@@ -192,6 +352,137 @@ function webExecution() {
 }
 
 {
+  let state = prepareDesktopSqlExecutionLogForRequest(createSqlExecutionLogState(), 1, false);
+  state = prepareDesktopSqlExecutionLogForRequest(state, 2, false);
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-new',
+      eventSequence: 1,
+      occurredAtEpochMs: 175,
+      eventType: 'failed',
+      message: { message: 'new request failed' },
+    },
+    context,
+    false,
+    2,
+  );
+  assert.deepEqual(state.records.map((record) => record.executionId), ['desktop-new']);
+  const afterLateFirstEvent = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old-late',
+      eventSequence: 1,
+      occurredAtEpochMs: 180,
+      eventType: 'failed',
+      message: { message: 'old request failed late' },
+    },
+    context,
+    false,
+    1,
+  );
+  assert.equal(
+    afterLateFirstEvent,
+    state,
+    'an older Desktop request cannot replace a newer request when its first event arrives late',
+  );
+}
+
+{
+  let state = prepareDesktopSqlExecutionLogForRequest(createSqlExecutionLogState(), 1, false);
+  state = prepareDesktopSqlExecutionLogForRequest(state, 2, true);
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-new-kept',
+      eventSequence: 1,
+      occurredAtEpochMs: 181,
+      eventType: 'failed',
+      message: { message: 'new request failed' },
+    },
+    context,
+    true,
+    2,
+  );
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old-kept',
+      eventSequence: 1,
+      occurredAtEpochMs: 182,
+      eventType: 'failed',
+      message: { message: 'old request completed late' },
+    },
+    context,
+    false,
+    1,
+  );
+  assert.deepEqual(
+    state.records.map((record) => record.executionId),
+    ['desktop-new-kept', 'desktop-old-kept'],
+    'switching to keep-history mode prevents an older request from clearing the newer output',
+  );
+}
+
+{
+  let state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    createSqlExecutionLogState(),
+    {
+      executionId: 'desktop-old',
+      eventSequence: 1,
+      occurredAtEpochMs: 180,
+      eventType: 'started',
+      message: {},
+    },
+    context,
+    false,
+  );
+  state = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-failed',
+      eventSequence: 1,
+      occurredAtEpochMs: 190,
+      eventType: 'failed',
+      message: { message: 'connection binding failed' },
+    },
+    context,
+    false,
+  );
+  assert.deepEqual(state.records.map((record) => record.executionId), ['desktop-failed']);
+  assert.equal(state.records[0].status, 'failed');
+  assert.deepEqual(state.supersededExecutionIds, ['desktop-old']);
+  const afterLateFailure = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-old',
+      eventSequence: 2,
+      occurredAtEpochMs: 195,
+      eventType: 'failed',
+      message: { message: 'late failure' },
+    },
+    context,
+    true,
+  );
+  assert.equal(afterLateFailure, state, 'a superseded Desktop execution cannot reclaim replace mode');
+
+  const cancelled = reduceDesktopSqlExecutionEventWithHistoryPreference(
+    state,
+    {
+      executionId: 'desktop-cancelled',
+      eventSequence: 1,
+      occurredAtEpochMs: 200,
+      eventType: 'cancelled',
+      message: {},
+    },
+    context,
+    false,
+  );
+  assert.deepEqual(cancelled.records.map((record) => record.executionId), ['desktop-cancelled']);
+  assert.equal(cancelled.records[0].status, 'cancelled');
+}
+
+{
   let state = createSqlExecutionLogState();
   state = reduceDesktopSqlExecutionEvent(
     state,
@@ -204,7 +495,9 @@ function webExecution() {
       message: { originalSql: 'select * from t' },
     },
     context,
+    7,
   );
+  assert.equal(state.records[0].executionSequence, 7, 'desktop statement records preserve their batch sequence');
   for (const eventSequence of [2, 3]) {
     state = reduceDesktopSqlExecutionEvent(
       state,

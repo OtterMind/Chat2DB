@@ -20,16 +20,65 @@ import {
 import { getLargeCellErrorMessage } from '@/blocks/SearchResult/components/ViewData/largeCellValueMessage';
 
 import { staticMessage } from '@chat2db/ui';
+import { useGlobalStore } from '@/store/global';
+import {
+  canFreezeResultColumns,
+  canHideResultColumns,
+  getResultCellMetaAtTableColumn,
+  getResultColumnFields,
+  getResultFieldAtTableColumn,
+  getResultFrozenColumnCount,
+} from '../../columnState';
+import { isResultHeaderContext, joinContextMenuGroups } from './menuGroups';
+import { createElement } from 'react';
+import { SquarePen } from 'lucide-react';
 
 // monitors the right mouse click on a cell
 const onContextmenuCell = (props: IOnContextmenuEvent) => {
-  const { resultData, tableInstance, operationRecordUtils, onTableOperationUtils } = props;
+  const {
+    resultData,
+    tableInstance,
+    operationRecordUtils,
+    onTableOperationUtils,
+    frozenColumnFields,
+    onHideColumns,
+    onShowAllColumns,
+    onFreezeColumns,
+    onUnfreezeAllColumns,
+  } = props;
   const id = tableInstance.on('contextmenu_cell', (selectEvent) => {
+    const { dataTableSettings, updateDataTableSettings } = useGlobalStore.getState();
+    const showFieldType = dataTableSettings.showFieldType ?? true;
+    const showFieldComment = dataTableSettings.showFieldComment ?? true;
+    const currentField = getResultFieldAtTableColumn(
+      tableInstance,
+      selectEvent.col,
+      selectEvent.row,
+    );
+    const currentColumns = tableInstance.columns || [];
+    const currentFields = getResultColumnFields(currentColumns);
+    const hiddenFields = new Set(
+      currentColumns
+        .filter((column: any) => column.hide === true)
+        .map((column: any) => String(column.field)),
+    );
+    const selectedCellInfos = tableInstance.getSelectedCellInfos() || [];
+    const contextCellIsSelected = isSelected(selectEvent, selectedCellInfos);
+    const selectedFieldSet = new Set(
+      contextCellIsSelected
+        ? selectedCellInfos.flat().map((cell: any) => String(cell.field || ''))
+        : currentField
+          ? [currentField]
+          : [],
+    );
+    const columnActionTargetFields = currentFields.filter((field) => selectedFieldSet.has(field));
+    const currentFieldIsFrozen = !!currentField && frozenColumnFields.includes(currentField);
+    const hasFrozenColumn = getResultFrozenColumnCount(currentColumns, frozenColumnFields) > 1;
     const contextmenuMap = {
       [ContextmenuType.viewUpdateData]: {
         key: ContextmenuType.viewUpdateData,
         label: i18n('common.button.viewData'),
-        icon: 'icon-view-data',
+        icon: createElement(SquarePen, { size: 16 }),
         onClick: () => {
           const data = handleViewUpdateData(tableInstance, selectEvent);
           onTableOperationUtils.handleViewUpdateData?.(data);
@@ -70,7 +119,12 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         icon: 'icon-copy',
         onClick: () => {
           const record = tableInstance.getRecordByCell(selectEvent.col, selectEvent.row);
-          const cellMeta = record?.__CHAT2DB_CELL_META__?.[selectEvent.col];
+          const cellMeta = getResultCellMetaAtTableColumn(
+            tableInstance,
+            record,
+            selectEvent.col,
+            selectEvent.row,
+          );
           copyToClipboard(cellMeta?.value || selectEvent.dataValue || '');
         },
       },
@@ -80,7 +134,12 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         icon: 'icon-download',
         onClick: async () => {
           const record = tableInstance.getRecordByCell(selectEvent.col, selectEvent.row);
-          const cellMeta = record?.__CHAT2DB_CELL_META__?.[selectEvent.col];
+          const cellMeta = getResultCellMetaAtTableColumn(
+            tableInstance,
+            record,
+            selectEvent.col,
+            selectEvent.row,
+          );
           if (cellMeta?.largeValueId) {
             try {
               await downloadLargeCellValue(cellMeta.largeValueId, getLargeCellDownloadFormat(cellMeta.valueType));
@@ -102,24 +161,22 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         key: ContextmenuType.paste,
         label: i18n('common.button.paste'),
         icon: 'icon-paste',
+        disabled: currentFieldIsFrozen,
         onClick: () => {
-          handlePaste(tableInstance, operationRecordUtils);
+          handlePaste(tableInstance, operationRecordUtils, new Set(frozenColumnFields));
         },
       },
       [ContextmenuType.setNull]: {
         key: ContextmenuType.setNull,
         label: i18n('common.button.setNull'),
-        // unreal icon used as placeholder
-        icon: 'icon-chat2db-unreal',
+        disabled: currentFieldIsFrozen,
         onClick: () => {
-          handleSetNull(tableInstance);
+          handleSetNull(tableInstance, new Set(frozenColumnFields));
         },
       },
       [ContextmenuType.cloneRow]: {
         key: ContextmenuType.cloneRow,
         label: i18n('common.button.cloneRow'),
-        // unreal icon used as placeholder
-        icon: 'icon-chat2db-unreal',
         onClick: () => {
           operationRecordUtils.handleCloneRow();
         },
@@ -128,6 +185,7 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         key: ContextmenuType.deleteRow,
         label: i18n('common.button.deleteRow'),
         icon: 'icon-trash',
+        danger: true,
         onClick: () => {
           operationRecordUtils.handleDeleteRow();
         },
@@ -135,7 +193,6 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
       [ContextmenuType.copyRow]: {
         key: ContextmenuType.copyRow,
         label: i18n('common.button.copyRowAs'),
-        icon: 'icon-copy',
         children: [
           {
             key: ContextmenuType.copyRowInsert,
@@ -203,18 +260,63 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
           },
         ],
       },
+      [ContextmenuType.showFieldType]: {
+        key: ContextmenuType.showFieldType,
+        label: i18n('common.text.showFieldType'),
+        checked: showFieldType,
+        onClick: () => {
+          updateDataTableSettings({ ...dataTableSettings, showFieldType: !showFieldType });
+        },
+      },
+      [ContextmenuType.showFieldComment]: {
+        key: ContextmenuType.showFieldComment,
+        label: i18n('common.text.showFieldComment'),
+        checked: showFieldComment,
+        onClick: () => {
+          updateDataTableSettings({ ...dataTableSettings, showFieldComment: !showFieldComment });
+        },
+      },
+      [ContextmenuType.hideColumn]: {
+        key: ContextmenuType.hideColumn,
+        label: i18n(
+          columnActionTargetFields.length > 1
+            ? 'common.button.hideSelectedColumns'
+            : 'common.button.hideColumn',
+        ),
+        disabled:
+          !currentField ||
+          !canHideResultColumns(currentFields, hiddenFields, columnActionTargetFields),
+        onClick: () => onHideColumns(columnActionTargetFields),
+      },
+      [ContextmenuType.showAllColumns]: {
+        key: ContextmenuType.showAllColumns,
+        label: i18n('common.button.showAllColumns'),
+        onClick: onShowAllColumns,
+      },
+      [ContextmenuType.freezeColumn]: {
+        key: ContextmenuType.freezeColumn,
+        label: i18n('common.button.freezeColumn'),
+        disabled:
+          !currentField ||
+          !canFreezeResultColumns(currentColumns, frozenColumnFields, columnActionTargetFields),
+        onClick: () => onFreezeColumns(columnActionTargetFields),
+      },
+      [ContextmenuType.unfreezeAllColumns]: {
+        key: ContextmenuType.unfreezeAllColumns,
+        label: i18n('common.button.unfreezeAllColumns'),
+        onClick: onUnfreezeAllColumns,
+      },
     };
 
     // If the cell I right-click is within the selected range, I don’t need to select it again.
-    if (!isSelected(selectEvent, tableInstance.getSelectedCellInfos() || [])) {
+    if (!contextCellIsSelected) {
       tableInstance.selectCell(selectEvent.col, selectEvent.row);
     }
 
-    // right-click menu
-    let dropdownsList: any = [
-      contextmenuMap[ContextmenuType.copy],
-      contextmenuMap[ContextmenuType.paste],
-      contextmenuMap[ContextmenuType.copyRow],
+    // Group related actions so every context uses the same menu hierarchy.
+    let actionGroups: any[][] = [
+      [contextmenuMap[ContextmenuType.copy], contextmenuMap[ContextmenuType.paste]],
+      [contextmenuMap[ContextmenuType.copyRow]],
     ];
 
     // Case1: Right-click content at [0,0] position
@@ -227,48 +329,63 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
 
     // Case2: Meter head
     if (selectEvent.row === 0 && selectEvent.col > 0) {
-      dropdownsList = [
-        contextmenuMap[ContextmenuType.copy],
-        contextmenuMap[ContextmenuType.copyFieldName],
-        contextmenuMap[ContextmenuType.paste],
+      actionGroups = [
+        [contextmenuMap[ContextmenuType.copyFieldName]],
       ];
     }
 
     // Case3: Line number
     if (selectEvent.row > 0 && selectEvent.col === 0) {
-      dropdownsList = [
-        contextmenuMap[ContextmenuType.viewRowDetail],
-        contextmenuMap[ContextmenuType.copy],
-        contextmenuMap[ContextmenuType.paste],
-        contextmenuMap[ContextmenuType.cloneRow],
-        contextmenuMap[ContextmenuType.deleteRow],
-        contextmenuMap[ContextmenuType.copyRow],
+      actionGroups = [
+        [contextmenuMap[ContextmenuType.viewRowDetail]],
+        [
+          contextmenuMap[ContextmenuType.copy],
+          contextmenuMap[ContextmenuType.copyRow],
+          contextmenuMap[ContextmenuType.paste],
+        ],
+        [
+          contextmenuMap[ContextmenuType.cloneRow],
+          contextmenuMap[ContextmenuType.deleteRow],
+        ],
       ];
     }
 
     // Case4: Data cells in the table body
     if (selectEvent.row > 0 && selectEvent.col > 0) {
       const record = tableInstance.getRecordByCell(selectEvent.col, selectEvent.row);
-      const cellMeta = record?.__CHAT2DB_CELL_META__?.[selectEvent.col];
-      dropdownsList = [
-        ...(cellMeta?.largeValue
-          ? [
+      const cellMeta = getResultCellMetaAtTableColumn(
+        tableInstance,
+        record,
+        selectEvent.col,
+        selectEvent.row,
+      );
+      actionGroups = cellMeta?.largeValue
+        ? [
+            [
               contextmenuMap[ContextmenuType.viewRowDetail],
               ...(isDesktop ? [contextmenuMap[ContextmenuType.viewFullValue]] : []),
+            ],
+            [
               contextmenuMap[ContextmenuType.copyPreview],
               ...(isDesktop && cellMeta.largeValueId ? [contextmenuMap[ContextmenuType.saveToFile]] : []),
-            ]
-          : [
+            ],
+          ]
+        : [
+            [
               contextmenuMap[ContextmenuType.viewRowDetail],
               contextmenuMap[ContextmenuType.viewUpdateData],
-              contextmenuMap[ContextmenuType.copy],
-              contextmenuMap[ContextmenuType.paste],
               contextmenuMap[ContextmenuType.setNull],
+            ],
+            [
+              contextmenuMap[ContextmenuType.copy],
+              contextmenuMap[ContextmenuType.copyRow],
+              contextmenuMap[ContextmenuType.paste],
+            ],
+            [
               contextmenuMap[ContextmenuType.cloneRow],
               contextmenuMap[ContextmenuType.deleteRow],
-              contextmenuMap[ContextmenuType.copyRow],
-            ]),
-      ];
+            ],
+          ];
     }
 
     // If it is not editable, some menus need to be hidden
@@ -280,11 +397,33 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         ContextmenuType.copyRowInsert,
         ContextmenuType.copyRowUpdate,
       ];
-      dropdownsList = dropdownsList.filter((item) => !list.includes(item.key));
+      actionGroups = actionGroups.map((group) => group.filter((item) => !list.includes(item.key)));
       contextmenuMap[ContextmenuType.copyRow].children = contextmenuMap[ContextmenuType.copyRow].children.filter(
         (item) => !list.includes(item.key),
       );
     }
+
+    const headerContext = isResultHeaderContext(selectEvent.row, selectEvent.col);
+    const columnActions =
+      headerContext
+        ? [
+            contextmenuMap[ContextmenuType.hideColumn],
+            ...(hiddenFields.size > 0 ? [contextmenuMap[ContextmenuType.showAllColumns]] : []),
+            contextmenuMap[ContextmenuType.freezeColumn],
+            ...(hasFrozenColumn ? [contextmenuMap[ContextmenuType.unfreezeAllColumns]] : []),
+          ]
+        : [];
+    const displayActions = headerContext
+      ? [
+          contextmenuMap[ContextmenuType.showFieldType],
+          contextmenuMap[ContextmenuType.showFieldComment],
+        ]
+      : [];
+    const dropdownsList = joinContextMenuGroups(
+      ...actionGroups,
+      columnActions,
+      displayActions,
+    );
 
     if (!dropdownsList.length) {
       return;

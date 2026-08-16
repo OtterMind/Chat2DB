@@ -39,7 +39,7 @@ const handleCopyAsSqlInValues = (props: Pick<IHandleContextmenuProps, 'tableInst
       rowId: originData?.CHAT2DB_ROW_NUMBER,
       dataList: originData,
       selectCols: [field],
-      selectedCell: originData?.__CHAT2DB_CELL_META__?.[cell.col],
+      selectedCell: originData?.__CHAT2DB_CELL_META__?.[Number(field)],
     });
   }
 

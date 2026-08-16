@@ -4,6 +4,7 @@ import ai.chat2db.plugin.db2.builder.DB2SqlBuilder;
 import ai.chat2db.plugin.db2.enums.type.DB2ColumnTypeEnum;
 import ai.chat2db.plugin.db2.enums.type.DB2DefaultValueEnum;
 import ai.chat2db.plugin.db2.enums.type.DB2IndexTypeEnum;
+import ai.chat2db.plugin.db2.identifier.Db2IdentifierProcessor;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.DefaultMetaService;
@@ -18,6 +19,7 @@ import ai.chat2db.community.domain.api.model.sql.*;
 import ai.chat2db.spi.model.value.*;
 import ai.chat2db.community.domain.api.model.view.*;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.util.SortUtils;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,11 @@ import static ai.chat2db.plugin.db2.constant.SQLConstant.TABLES_SQL;
 import static ai.chat2db.plugin.db2.constant.DB2MetaDataConstants.*;
 @Slf4j
 public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
+
+    @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return Db2IdentifierProcessor.INSTANCE;
+    }
 
     @Override
     public List<Schema> schemas(Connection connection, String databaseName) {
@@ -60,14 +67,16 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String tableDDL(Connection connection, String databaseName, String schemaName, String tableName) {
-        String ddlTokenSql = String.format(GET_DDL_TOKEN, schemaName, tableName);
-        log.info("ddlSql : {}", ddlTokenSql);
+        validateDb2LookName(schemaName);
+        validateDb2LookName(tableName);
+        String db2LookOptions = String.format(DB2LOOK_OPTIONS, schemaName, tableName);
 
         log.info("try to execute PROC");
-        try (CallableStatement callableStatement = connection.prepareCall(ddlTokenSql)) {
-            callableStatement.registerOutParameter(1, Types.INTEGER);
+        try (CallableStatement callableStatement = connection.prepareCall(GET_DDL_TOKEN)) {
+            callableStatement.setString(1, db2LookOptions);
+            callableStatement.registerOutParameter(2, Types.INTEGER);
             callableStatement.executeUpdate();
-            int token = callableStatement.getInt(1);
+            int token = callableStatement.getInt(2);
             log.info("ddlToken: {}", token);
             StringBuilder ddlBuilder = new StringBuilder(2048);
             retrieveDDL(connection, token, ddlBuilder);
@@ -77,6 +86,16 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
         } catch (SQLException e) {
             log.error("Failed to get DDL for table {}.{}: {}", schemaName, tableName, e.getMessage(), e);
             return null;
+        }
+    }
+
+    /**
+     * Names are JDBC-bound as one db2look option string, but a double quote would still
+     * break out of an option argument, so reject such names up front.
+     */
+    private static void validateDb2LookName(String name) {
+        if (name != null && name.contains("\"")) {
+            throw new IllegalArgumentException("Invalid DB2 object name for DDL generation: " + name);
         }
     }
 
@@ -133,7 +152,7 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = String.format(IDX_SQL, tableName, schemaName);
+        String sql = String.format(IDX_SQL, getSQLIdentifierProcessor().escapeString(tableName), getSQLIdentifierProcessor().escapeString(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             LinkedHashMap<String, TableIndex> map = new LinkedHashMap();
             while (resultSet.next()) {
@@ -178,7 +197,7 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_DDL_SQL, schemaName, viewName);
+        String sql = String.format(VIEW_DDL_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(viewName));
         Table table = new Table();
         table.setDatabaseName(databaseName);
         table.setSchemaName(schemaName);
@@ -199,7 +218,7 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
         function.setDatabaseName(databaseName);
         function.setSchemaName(schemaName);
         function.setFunctionName(functionName);
-        String sql = String.format(ROUTINE_DDL_SQL, schemaName, functionName, 'F');
+        String sql = String.format(ROUTINE_DDL_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(functionName), 'F');
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             if (resultSet.next()) {
                 function.setFunctionBody(resultSet.getString("TEXT") + ";");
@@ -214,7 +233,7 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
         procedure.setDatabaseName(databaseName);
         procedure.setSchemaName(schemaName);
         procedure.setProcedureName(procedureName);
-        String sql = String.format(ROUTINE_DDL_SQL, schemaName, procedureName, 'P');
+        String sql = String.format(ROUTINE_DDL_SQL, getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(procedureName), 'P');
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             if (resultSet.next()) {
                 procedure.setProcedureBody(resultSet.getString("TEXT") + ";");
@@ -249,7 +268,7 @@ public class DB2MetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "\"" + name + "\"").collect(Collectors.joining("."));
+        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(Db2IdentifierProcessor.INSTANCE::quoteIdentifierAlways).collect(Collectors.joining("."));
     }
 
     @Override

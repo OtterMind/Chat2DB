@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -26,6 +27,10 @@ public class TreeNodeStorage extends SmallDataStorage<TreeNode> {
         }
     }
 
+    TreeNodeStorage(File storageFile) {
+        super(storageFile, TreeNode.class);
+    }
+
     public synchronized List<Node> getNodes() {
         List<TreeNode> treeNodes = getDataList();
         if (treeNodes == null) {
@@ -38,7 +43,7 @@ public class TreeNodeStorage extends SmallDataStorage<TreeNode> {
     }
 
     public synchronized void createTree(List<Node> nodes) {
-        if (CollectionUtils.isEmpty(nodes)) {
+        if (nodes == null) {
             return;
         }
         PropertyFilter filter = (object, name, value) -> !"data".equals(name);
@@ -64,12 +69,14 @@ public class TreeNodeStorage extends SmallDataStorage<TreeNode> {
         try {
             Thread.sleep(10);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         List<Node> nodes = getNodes();
         if (nodes == null) {
             return ActionResult.isSuccess();
         }
         if (dropToNode == null) {
+            removeNode(nodes, dragNode, false);
             nodes.add(dragNode);
             createTree(nodes);
             return ActionResult.isSuccess();
@@ -107,7 +114,7 @@ public class TreeNodeStorage extends SmallDataStorage<TreeNode> {
         }
     }
 
-    public ActionResult deleteNode(Node dragNode) {
+    public synchronized ActionResult deleteNode(Node dragNode) {
         List<Node> nodes = getNodes();
         removeNode(nodes, dragNode, true);
         createTree(nodes);

@@ -2,6 +2,7 @@ package ai.chat2db.plugin.db2.builder;
 
 import ai.chat2db.spi.constant.SQLConstants;
 
+import ai.chat2db.plugin.db2.identifier.Db2IdentifierProcessor;
 import ai.chat2db.plugin.db2.enums.type.DB2ColumnTypeEnum;
 import ai.chat2db.plugin.db2.enums.type.DB2IndexTypeEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
@@ -34,7 +35,7 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
     public String buildCreateTable(Table table, TableBuilderConfig tableBuilderConfig) {
         StringBuilder script = new StringBuilder();
 
-        script.append(SQL_CREATE_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(table.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(table.getName()).append(VALUE_DOUBLE_QUOTE_OPEN_PAREN).append(SQLConstants.LINE_SEPARATOR);
+        script.append(SQL_CREATE_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(table.getSchemaName())).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(table.getName())).append(VALUE_DOUBLE_QUOTE_OPEN_PAREN).append(SQLConstants.LINE_SEPARATOR);
 
         for (TableColumn column : table.getColumnList()) {
             if (StringUtils.isBlank(column.getName()) || StringUtils.isBlank(column.getColumnType())) {
@@ -82,13 +83,13 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
 
     private String buildTableComment(Table table) {
         StringBuilder script = new StringBuilder();
-        script.append(SQL_COMMENT_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(table.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(table.getName()).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(table.getComment()).append(SQLConstants.SINGLE_QUOTE);
+        script.append(SQL_COMMENT_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(table.getSchemaName())).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(table.getName())).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(Db2IdentifierProcessor.INSTANCE.escapeString(table.getComment())).append(SQLConstants.SINGLE_QUOTE);
         return script.toString();
     }
 
     private String buildComment(TableColumn column) {
         StringBuilder script = new StringBuilder();
-        script.append(SQL_COMMENT_COLUMN).append(SQLConstants.DOUBLE_QUOTE).append(column.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(column.getTableName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(column.getName()).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(column.getComment()).append(SQLConstants.SINGLE_QUOTE);
+        script.append(SQL_COMMENT_COLUMN).append(SQLConstants.DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(column.getSchemaName())).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(column.getTableName())).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(column.getName())).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(Db2IdentifierProcessor.INSTANCE.escapeString(column.getComment())).append(SQLConstants.SINGLE_QUOTE);
         return script.toString();
     }
 
@@ -97,8 +98,8 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
         StringBuilder script = new StringBuilder();
 
         if (!StringUtils.equalsIgnoreCase(oldTable.getName(), newTable.getName())) {
-            script.append(SQL_ALTER_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(oldTable.getSchemaName()).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(oldTable.getName()).append(SQLConstants.DOUBLE_QUOTE);
-            script.append(SQLConstants.SPACE).append(SQL_RENAME).append(SQLConstants.DOUBLE_QUOTE).append(newTable.getName()).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
+            script.append(SQL_ALTER_TABLE).append(SQLConstants.DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(oldTable.getSchemaName())).append(SQLConstants.DOUBLE_QUOTE_DOT_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(oldTable.getName())).append(SQLConstants.DOUBLE_QUOTE);
+            script.append(SQLConstants.SPACE).append(SQL_RENAME).append(SQLConstants.DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(newTable.getName())).append(SQLConstants.DOUBLE_QUOTE).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
         }
         if (!StringUtils.equalsIgnoreCase(oldTable.getComment(), newTable.getComment())) {
             script.append(SQLConstants.EMPTY).append(buildTableComment(newTable)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
@@ -159,10 +160,10 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
     @Override
     public String buildCreateSchema(Schema schema) {
         StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append(SQL_CREATE_SCHEMA + schema.getName() + SQLConstants.DOUBLE_QUOTE_SEMICOLON);
+        sqlBuilder.append(SQL_CREATE_SCHEMA + Db2IdentifierProcessor.escapeIdentifier(schema.getName()) + SQLConstants.DOUBLE_QUOTE_SEMICOLON);
 
         if (StringUtils.isNotBlank(schema.getComment())) {
-            sqlBuilder.append(SQL_COMMENT_ON_SCHEMA_DOUBLE_QUOTE).append(schema.getName()).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(schema.getComment()).append(SQLConstants.SINGLE_QUOTE_SEMICOLON);
+            sqlBuilder.append(SQL_COMMENT_ON_SCHEMA_DOUBLE_QUOTE).append(Db2IdentifierProcessor.escapeIdentifier(schema.getName())).append(VALUE_DOUBLE_QUOTE_IS_SINGLE_QUOTE).append(Db2IdentifierProcessor.INSTANCE.escapeString(schema.getComment())).append(SQLConstants.SINGLE_QUOTE_SEMICOLON);
         }
 
         return sqlBuilder.toString();
@@ -171,5 +172,22 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
     @Override
     public String buildExplain(String sql) {
         return SQL_EXPLAIN_PLAN_SET_QUERYNO_EQUAL_1_FOR + sql;
+    }
+
+    @Override
+    public String buildDropTable(ai.chat2db.spi.model.request.DropTableRequest request) {
+        return SQLConstants.DROP_TABLE_SQL_PREFIX + quoteQualifiedName(request.getDatabaseName(), request.getSchemaName(), request.getTableName());
+    }
+
+    @Override
+    public String buildTruncateTable(ai.chat2db.spi.model.request.TruncateTableRequest request) {
+        return SQLConstants.TRUNCATE_TABLE_SQL_PREFIX + quoteQualifiedName(request.getDatabaseName(), request.getSchemaName(), request.getTableName());
+    }
+
+    private static String quoteQualifiedName(String... parts) {
+        return java.util.Arrays.stream(parts)
+                .filter(StringUtils::isNotBlank)
+                .map(Db2IdentifierProcessor.INSTANCE::quoteIdentifierAlways)
+                .collect(java.util.stream.Collectors.joining(SQLConstants.DOT));
     }
 }

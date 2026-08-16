@@ -29,6 +29,10 @@ final class SqlDirectoryTreeStore {
             "csv", "tsv", "xml", "log",
             "env", "ini", "conf", "config",
             "properties", "toml");
+    private static final Set<String> SUPPORTED_IMAGE_EXTENSIONS = Set.of(
+            "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif");
+    private static final Set<String> SUPPORTED_PREVIEW_EXTENSIONS = Set.of("pdf");
+    private static final long MAX_PREVIEW_BYTES = 50L * 1024L * 1024L;
     private static final ConcurrentMap<String, Path> ROOTS = new ConcurrentHashMap<>();
 
     private SqlDirectoryTreeStore() {
@@ -54,6 +58,7 @@ final class SqlDirectoryTreeStore {
         rootNode.put("disabled", false);
         rootNode.put("sqlFile", false);
         rootNode.put("textFile", false);
+        rootNode.put("previewFile", false);
         rootNode.put("hasChildren", true);
         rootNode.put("children", listChildren(rootToken, ""));
         rootNode.put("loaded", true);
@@ -91,6 +96,7 @@ final class SqlDirectoryTreeStore {
             overflowNode.put("disabled", true);
             overflowNode.put("sqlFile", false);
             overflowNode.put("textFile", false);
+            overflowNode.put("previewFile", false);
             overflowNode.put("hasChildren", false);
             overflowNode.put("loaded", true);
             children.add(overflowNode);
@@ -176,12 +182,8 @@ final class SqlDirectoryTreeStore {
             throw new IllegalArgumentException("Selected path is not available");
         }
         String sourceFileName = source.getFileName().toString();
-        if (file && !isSupportedTextFile(sourceFileName)) {
-            throw new IllegalArgumentException("Only text files are supported");
-        }
-
         String fallbackExtension = file ? getFileExtension(sourceFileName) : "";
-        String name = file ? normalizeFileName(rawName, fallbackExtension.isEmpty() ? "sql" : fallbackExtension)
+        String name = file ? normalizeExistingFileName(rawName, fallbackExtension)
                 : normalizeDirectoryName(rawName);
         Path parent = source.getParent();
         Path target = parent.resolve(name).normalize();
@@ -226,10 +228,6 @@ final class SqlDirectoryTreeStore {
         if (!file && !directory) {
             throw new IllegalArgumentException("Selected path is not available");
         }
-        if (file && !isSupportedTextFile(target.getFileName().toString())) {
-            throw new IllegalArgumentException("Only text files are supported");
-        }
-
         Path parent = target.getParent();
         moveToTrash(target);
 
@@ -255,6 +253,33 @@ final class SqlDirectoryTreeStore {
         throw new IllegalArgumentException("Selected path is not available");
     }
 
+    static Map<String, Object> readPreview(String rootToken, String relativePath) throws IOException {
+        PreviewResource resource = resolvePreviewResource(rootToken, relativePath);
+        Map<String, Object> result = new HashMap<>();
+        result.put("mimeType", resource.mimeType());
+        result.put("size", resource.size());
+        result.put("etag", resource.etag());
+        result.put("url", PreviewResourceScheme.createUrl(rootToken, relativePath, resource.etag()));
+        return result;
+    }
+
+    static PreviewResource resolvePreviewResource(String rootToken, String relativePath) throws IOException {
+        Path root = getRoot(rootToken);
+        Path target = resolveInRoot(root, relativePath);
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
+                || !isSupportedPreviewFile(target.getFileName().toString())) {
+            throw new IllegalArgumentException("Selected file does not support preview");
+        }
+        long size = Files.size(target);
+        if (size > MAX_PREVIEW_BYTES) {
+            throw new IllegalArgumentException("Preview file exceeds the 50 MB limit");
+        }
+        long lastModifiedMillis = Files.getLastModifiedTime(target, LinkOption.NOFOLLOW_LINKS).toMillis();
+        String mimeType = getPreviewMimeType(getFileExtension(target.getFileName().toString()));
+        String etag = "\"" + Long.toHexString(size) + "-" + Long.toHexString(lastModifiedMillis) + "\"";
+        return new PreviewResource(target, mimeType, size, lastModifiedMillis, etag);
+    }
+
     private static Map<String, Object> toNode(String rootToken, Path root, Path path) throws IOException {
         Path relativePath = root.relativize(path);
         boolean symbolicLink = Files.isSymbolicLink(path);
@@ -263,6 +288,7 @@ final class SqlDirectoryTreeStore {
         String name = path.getFileName().toString();
         boolean sqlFile = file && isSqlFile(name);
         boolean textFile = file && isSupportedTextFile(name);
+        boolean previewFile = file && isSupportedPreviewFile(name);
 
         Map<String, Object> node = new HashMap<>();
         node.put("key", rootToken + ":" + relativePath);
@@ -274,6 +300,7 @@ final class SqlDirectoryTreeStore {
         node.put("disabled", false);
         node.put("sqlFile", sqlFile);
         node.put("textFile", textFile);
+        node.put("previewFile", previewFile);
         node.put("fileExtension", file ? getFileExtension(name) : "");
         node.put("hasChildren", directory);
         node.put("loaded", !directory);
@@ -287,8 +314,7 @@ final class SqlDirectoryTreeStore {
         if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return true;
         }
-        return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                && isSupportedTextFile(path.getFileName().toString());
+        return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
     }
 
     private static boolean isSqlFile(String fileName) {
@@ -297,6 +323,24 @@ final class SqlDirectoryTreeStore {
 
     private static boolean isSupportedTextFile(String fileName) {
         return SUPPORTED_TEXT_EXTENSIONS.contains(getFileExtension(fileName));
+    }
+
+    private static boolean isSupportedPreviewFile(String fileName) {
+        String extension = getFileExtension(fileName);
+        return SUPPORTED_IMAGE_EXTENSIONS.contains(extension) || SUPPORTED_PREVIEW_EXTENSIONS.contains(extension);
+    }
+
+    private static String getPreviewMimeType(String extension) {
+        return switch (extension) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "bmp" -> "image/bmp";
+            case "ico" -> "image/x-icon";
+            case "avif" -> "image/avif";
+            case "pdf" -> "application/pdf";
+            default -> "image/png";
+        };
     }
 
     private static String getFileExtension(String fileName) {
@@ -338,6 +382,14 @@ final class SqlDirectoryTreeStore {
         }
         if (hasFileExtension(name)) {
             throw new IllegalArgumentException("Only text files are supported");
+        }
+        return name + "." + fallbackExtension;
+    }
+
+    private static String normalizeExistingFileName(String rawName, String fallbackExtension) {
+        String name = normalizeDirectoryName(rawName);
+        if (hasFileExtension(name) || fallbackExtension.isEmpty()) {
+            return name;
         }
         return name + "." + fallbackExtension;
     }
@@ -388,11 +440,22 @@ final class SqlDirectoryTreeStore {
         if (!target.startsWith(root)) {
             throw new IllegalArgumentException("Path is outside of the selected SQL directory");
         }
+        Path current = root;
+        Path relativeTarget = root.relativize(target);
+        for (Path segment : relativeTarget) {
+            current = current.resolve(segment);
+            if (Files.isSymbolicLink(current)) {
+                throw new IllegalArgumentException("Symbolic links are not supported");
+            }
+        }
         Path realPath = target.toRealPath(LinkOption.NOFOLLOW_LINKS);
         if (!realPath.startsWith(root)) {
             throw new IllegalArgumentException("Path is outside of the selected SQL directory");
         }
         return realPath;
+    }
+
+    record PreviewResource(Path path, String mimeType, long size, long lastModifiedMillis, String etag) {
     }
 
     private static String getDisplayName(Path path) {

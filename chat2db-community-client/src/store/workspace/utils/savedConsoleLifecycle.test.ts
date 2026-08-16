@@ -5,6 +5,37 @@ import type { IConsole, ICreateConsole, IWorkspaceTab } from '@/typings';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from './savedConsoleLifecycle';
 import { SavedConsoleMutationCoordinator } from './savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from './savedConsolePersistence';
+import {
+  normalizeSavedConsoleName,
+  resolveInitialSavedConsoleName,
+} from '@/components/SQLEditor/helper/savedConsoleName';
+
+function assertInitialSavedConsoleNames() {
+  const workspaceName = resolveInitialSavedConsoleName({
+    workspaceTitle: '  Check replication lag  ',
+    databaseName: 'chat2db',
+    schemaName: 'public',
+    fallback: 'Untitled SQL',
+  });
+  const databaseName = resolveInitialSavedConsoleName({
+    workspaceTitle: '   ',
+    databaseName: '  chat2db  ',
+    schemaName: 'public',
+    fallback: 'Untitled SQL',
+  });
+  const fallbackName = resolveInitialSavedConsoleName({
+    fallback: '  Untitled SQL  ',
+  });
+
+  if (
+    workspaceName !== 'Check replication lag' ||
+    databaseName !== 'chat2db' ||
+    fallbackName !== 'Untitled SQL' ||
+    normalizeSavedConsoleName('   ') !== ''
+  ) {
+    throw new Error(`unexpected initial saved-console names: ${workspaceName}, ${databaseName}, ${fallbackName}`);
+  }
+}
 
 function assertRemovalPlans() {
   const openConsoleTab = {
@@ -71,16 +102,105 @@ async function testMissingRecordRecreatesSameId() {
     },
   );
 
-  if (result !== 'created' || calls.join(',') !== 'get:42,create:42') {
-    throw new Error(`unexpected missing-record recovery flow: ${result} / ${calls.join(',')}`);
+  if (result.action !== 'created' || result.consoleId !== 42 || calls.join(',') !== 'get:42,create:42') {
+    throw new Error(`unexpected missing-record recovery flow: ${JSON.stringify(result)} / ${calls.join(',')}`);
   }
   if (created?.id !== 42 || created.name !== 'Recovered query' || created.ddl !== 'select 42') {
     throw new Error(`missing-record recovery changed identity or content: ${JSON.stringify(created)}`);
   }
 }
 
+async function testDataNotFoundRecreatesWithServerId() {
+  const calls: string[] = [];
+  const result = await persistSavedConsoleRecord(
+    {
+      getSavedConsole: async ({ id }) => {
+        calls.push(`get:${id}`);
+        return Promise.reject({ errorCode: 'common.dataNotFound', errorMessage: 'no message.' });
+      },
+      createConsole: async ({ id }) => {
+        calls.push(`create:${id}`);
+        return 1081178679;
+      },
+      updateSavedConsole: async () => {
+        throw new Error('missing saved console must not use update');
+      },
+    },
+    {
+      manual: true,
+      createParams: createConsoleParams(),
+      updateParams: { id: 42, status: ConsoleStatus.RELEASE, ddl: 'select 42' },
+    },
+  );
+
+  if (result.action !== 'created' || result.consoleId !== 1081178679 || calls.join(',') !== 'get:42,create:42') {
+    throw new Error(`unexpected data-not-found recovery flow: ${JSON.stringify(result)} / ${calls.join(',')}`);
+  }
+
+  await persistSavedConsoleRecord(
+    {
+      getSavedConsole: async () => {
+        throw new Error('automatic save must not look up the saved console');
+      },
+      createConsole: async () => {
+        throw new Error('automatic save must not create another saved console');
+      },
+      updateSavedConsole: async ({ id }) => {
+        calls.push(`update:${id}`);
+      },
+    },
+    {
+      manual: false,
+      createParams: { ...createConsoleParams(), id: result.consoleId },
+      updateParams: { id: result.consoleId, status: ConsoleStatus.RELEASE, ddl: 'select 43' },
+    },
+  );
+
+  if (calls[calls.length - 1] !== 'update:1081178679') {
+    throw new Error(`created id was not available for the next save: ${calls.join(',')}`);
+  }
+}
+
+async function testUnexpectedLookupErrorPropagates() {
+  const expectedError = { errorCode: 'common.noPermission', errorMessage: 'denied' };
+  let createCalled = false;
+
+  try {
+    await persistSavedConsoleRecord(
+      {
+        getSavedConsole: async () => {
+          return Promise.reject(expectedError);
+        },
+        createConsole: async () => {
+          createCalled = true;
+          return 43;
+        },
+        updateSavedConsole: async () => {
+          throw new Error('failed lookup must not update');
+        },
+      },
+      {
+        manual: true,
+        createParams: createConsoleParams(),
+        updateParams: { id: 42, status: ConsoleStatus.RELEASE, ddl: 'select 42' },
+      },
+    );
+  } catch (error) {
+    if (error !== expectedError) {
+      throw new Error(`unexpected lookup error was replaced: ${JSON.stringify(error)}`);
+    }
+    if (createCalled) {
+      throw new Error('unexpected lookup error triggered saved-console creation');
+    }
+    return;
+  }
+
+  throw new Error('unexpected lookup error did not propagate');
+}
+
 async function testExistingRecordUpdatesWithoutCreate() {
   const calls: string[] = [];
+  let updated: (Partial<IConsole> & { id: number }) | undefined;
   const existing = createConsoleParams() as IConsole;
   const result = await persistSavedConsoleRecord(
     {
@@ -88,19 +208,29 @@ async function testExistingRecordUpdatesWithoutCreate() {
       createConsole: async () => {
         throw new Error('existing saved console must not use create');
       },
-      updateSavedConsole: async ({ id }) => {
+      updateSavedConsole: async (params) => {
+        updated = params;
+        const { id } = params;
         calls.push(`update:${id}`);
       },
     },
     {
       manual: true,
       createParams: createConsoleParams(),
-      updateParams: { id: 42, status: ConsoleStatus.RELEASE, ddl: 'select 43' },
+      updateParams: {
+        id: 42,
+        name: 'Archive expired orders',
+        status: ConsoleStatus.RELEASE,
+        ddl: 'select 43',
+      },
     },
   );
 
-  if (result !== 'updated' || calls.join(',') !== 'update:42') {
-    throw new Error(`unexpected existing-record update flow: ${result} / ${calls.join(',')}`);
+  if (result.action !== 'updated' || result.consoleId !== 42 || calls.join(',') !== 'update:42') {
+    throw new Error(`unexpected existing-record update flow: ${JSON.stringify(result)} / ${calls.join(',')}`);
+  }
+  if (updated?.name !== 'Archive expired orders' || updated.ddl !== 'select 43') {
+    throw new Error(`initial save did not update the saved-console name and SQL: ${JSON.stringify(updated)}`);
   }
 }
 
@@ -250,8 +380,11 @@ async function testFailedManualSaveKeepsDraftBlock() {
 }
 
 async function run() {
+  assertInitialSavedConsoleNames();
   assertRemovalPlans();
   await testMissingRecordRecreatesSameId();
+  await testDataNotFoundRecreatesWithServerId();
+  await testUnexpectedLookupErrorPropagates();
   await testExistingRecordUpdatesWithoutCreate();
   await testOpenAndClosedRemovalExecution();
   await testRemovalWinsOverInflightSave();

@@ -17,8 +17,6 @@ export const AIChatHeaderInPanel: FC<AIChatHeaderInPanelProps> = () => {
     chatList: state.chatList,
     currentChat: state.currentChat,
     setCurrentChat: state.setCurrentChat,
-    setOpenSettingModal: state.setOpenSettingModal,
-
     createFakeNewChat: state.createFakeNewChat,
   }));
 

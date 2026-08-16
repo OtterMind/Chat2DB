@@ -61,10 +61,18 @@ class SetTypeScriptTest {
     }
 
     @Test
-    void updateKeySkipsWhenDesiredStateIsEmpty() {
+    void updateKeyDeletesKeyWhenEveryMemberIsRemoved() {
         RedisKey oldKey = key("k", member("a", null));
         RedisKey newKey = RedisKey.builder().name("k").type("SET").build();
 
-        assertTrue(typeScript.updateKey(oldKey, newKey).isEmpty());
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
+    }
+
+    @Test
+    void updateKeyDeletesKeyWhenAllMembersAreFlaggedDeleted() {
+        RedisKey oldKey = key("k", member("a", null));
+        RedisKey newKey = key("k", member("a", ActionConstants.DELETE));
+
+        assertEquals(List.of("DEL 'k'\n"), typeScript.updateKey(oldKey, newKey));
     }
 }

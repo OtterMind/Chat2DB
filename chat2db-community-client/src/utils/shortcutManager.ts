@@ -10,7 +10,9 @@ import {
   isShortcutEventMatch,
 } from '@/constants/shortcut';
 import { useAIStore } from '@/store/ai';
-import jcefApi from '@/jcef';
+import { requestCloseActiveResultTab } from '@/service/resultTabShortcut';
+import { handleWebFrameZoom, WebFrameZoomType } from './jcefZoom';
+import { prepareGlobalShortcutHandling } from './shortcutDispatch';
 
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
@@ -59,14 +61,8 @@ class ShortcutManager {
     return ShortcutManager.instance;
   }
 
-  private handleZoom(type: 'in' | 'out' | 'reset'): void {
-    if (type === 'in') {
-      jcefApi?.webFrameSetZoom({ action: 'zoomIn' });
-    } else if (type === 'out') {
-      jcefApi?.webFrameSetZoom({ action: 'zoomOut' });
-    } else {
-      jcefApi?.webFrameSetZoom({ action: 'zoomReset' });
-    }
+  private handleZoom(type: WebFrameZoomType): void {
+    void handleWebFrameZoom(type);
   }
 
   private handleSwitchToNav(nav: 'workspace' | 'dashboard' | 'stream' | 'setting'): void {
@@ -83,6 +79,9 @@ class ShortcutManager {
     const { mainPageActiveTab, setMainPageActiveTab, setSettingPageActiveTab } = useGlobalStore.getState();
     const { deleteActiveWorkspaceTab } = useWorkspaceStore.getState();
     if (action === 'delete') {
+      if (requestCloseActiveResultTab()) {
+        return;
+      }
       if (mainPageActiveTab !== 'workspace') {
         setMainPageActiveTab({ page: 'workspace' });
         setSettingPageActiveTab(false);
@@ -169,8 +168,13 @@ class ShortcutManager {
       return;
     }
 
-    e.preventDefault();
-    this.handleShortcut(matchedConfig.action as ShortcutAction);
+    const action = matchedConfig.action as ShortcutAction;
+
+    if (!prepareGlobalShortcutHandling(e, action)) {
+      return;
+    }
+
+    this.handleShortcut(action);
   };
 
   public start(): void {

@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.plugin.sqlite.identifier.SqliteIdentifierProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -72,7 +73,7 @@ public enum SqliteIndexTypeEnum {
 
             script.append(keyword).append(" ");
 
-            script.append(buildIndexName(tableIndex)).append(SQL_ON).append(tableIndex.getTableName()).append(" ");
+            script.append(buildIndexName(tableIndex)).append(SQL_ON).append(quoteName(tableIndex.getTableName())).append(" ");
 
             script.append(buildIndexColumn(tableIndex)).append(" ");
             return script.toString();
@@ -101,8 +102,11 @@ public enum SqliteIndexTypeEnum {
         script.append("(");
         for (TableIndexColumn column : tableIndex.getColumnList()) {
             if (StringUtils.isNotBlank(column.getColumnName())) {
-                script.append("\"").append(column.getColumnName()).append("\"").append(",");
+                script.append(quoteName(column.getColumnName())).append(",");
             }
+        }
+        if (script.length() == 1) {
+            throw new IllegalArgumentException("SQLite index must contain at least one named column");
         }
         script.deleteCharAt(script.length() - 1);
         script.append(")");
@@ -111,10 +115,14 @@ public enum SqliteIndexTypeEnum {
 
     private String buildIndexName(TableIndex tableIndex) {
         if (this.equals(PRIMARY_KEY)) {
-            return tableIndex.getTableName()+"_pk";
+            return quoteName(tableIndex.getTableName() + "_pk");
         } else {
-            return "\"" + tableIndex.getName() + "\"";
+            return quoteName(tableIndex.getName());
         }
+    }
+
+    private static String quoteName(String name) {
+        return SqliteIdentifierProcessor.INSTANCE.quoteIdentifierAlways(name);
     }
 
     public String buildModifyIndex(TableIndex tableIndex) {
@@ -134,7 +142,7 @@ public enum SqliteIndexTypeEnum {
         if (SqliteIndexTypeEnum.PRIMARY_KEY.getName().equals(tableIndex.getType())) {
             return StringUtils.join(SQL_DROP_PRIMARY_KEY);
         }
-        return StringUtils.join(SQL_DROP_INDEX, tableIndex.getOldName(), "\"");
+        return StringUtils.join(SQL_DROP_INDEX, quoteName(tableIndex.getOldName()));
     }
 
     public static List<IndexType> getIndexTypes() {

@@ -3,7 +3,6 @@ import { Flex } from 'antd';
 import { EditText } from '@chat2db/ui';
 import { useChatStore } from '@/store/chat';
 import { useStyles } from './style';
-import { AIChatHeaderInPage } from './HeaderInPage';
 import { AIChatHeaderInPanel } from './HeaderInPanel';
 import { useGlobalStore } from '@/store/global';
 export interface AIChatHeaderProps {
@@ -43,4 +42,4 @@ const AIChatHeader: FC<AIChatHeaderProps> = ({ extraBtn }) => {
 };
 
 export default AIChatHeader;
-export { AIChatHeaderInPage, AIChatHeaderInPanel };
+export { AIChatHeaderInPanel };

@@ -9,12 +9,15 @@ import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
 import ai.chat2db.community.web.api.converter.db.DbWebConverter;
 import ai.chat2db.community.web.api.model.request.db.DdlCountRequest;
-import ai.chat2db.community.web.api.model.request.db.DmlRequest;
-import ai.chat2db.community.web.api.model.request.db.DmlTableRequest;
+import ai.chat2db.community.web.api.model.request.db.DdlExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.CopyInValuesRequest;
 import ai.chat2db.community.web.api.model.request.db.SelectResultUpdateRequest;
+import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
+import ai.chat2db.community.web.api.model.request.db.TableBrowseRequest;
+import ai.chat2db.community.web.api.model.request.db.TableEditExecuteRequest;
 import ai.chat2db.community.web.api.model.response.db.ExecuteResultResponse;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,9 +52,9 @@ public class DbDmlController {
      * @return list result containing execute result response.
      */
     @RequestMapping(value = "/execute", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ListResult<ExecuteResultResponse> manage(@RequestBody DmlRequest request) {
+    public ListResult<ExecuteResultResponse> manage(@Valid @RequestBody SqlEditorExecuteRequest request) {
         return ListResult.of(dbWebConverter.dto2response(
-                dmlExecutionService.execute(dbWebConverter.dmlExecutionRequest(request))));
+                dmlExecutionService.execute(dbWebConverter.sqlEditorExecutionRequest(request))));
     }
 
 
@@ -64,9 +67,9 @@ public class DbDmlController {
      * @return list result containing execute result response.
      */
     @RequestMapping(value = "/execute_table", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ListResult<ExecuteResultResponse> executeTable(@RequestBody DmlTableRequest request) {
+    public ListResult<ExecuteResultResponse> executeTable(@Valid @RequestBody TableBrowseRequest request) {
         return ListResult.of(dbWebConverter.dto2response(
-                dmlExecutionService.executeTable(dbWebConverter.tableExecutionRequest(request))));
+                dmlExecutionService.executeTable(dbWebConverter.tableBrowseExecutionRequest(request))));
     }
 
     /**
@@ -78,7 +81,8 @@ public class DbDmlController {
      * @return data result containing execute result response.
      */
     @RequestMapping(value = "/execute_update", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<ExecuteResultResponse> executeSelectResultUpdate(@RequestBody DmlRequest request) {
+    public DataResult<ExecuteResultResponse> executeSelectResultUpdate(
+            @Valid @RequestBody TableEditExecuteRequest request) {
         ExecuteResponse result = dmlExecutionService.executeUpdate(dbWebConverter.tableEditExecutionRequest(request));
         return DataResult.of(dbWebConverter.dto2response(result));
     }
@@ -92,7 +96,7 @@ public class DbDmlController {
      * @return data result containing string.
      */
     @RequestMapping(value = "/get_update_sql", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<String> getUpdateSelectResultSql(@RequestBody SelectResultUpdateRequest request) {
+    public DataResult<String> getUpdateSelectResultSql(@Valid @RequestBody SelectResultUpdateRequest request) {
         DbSelectResultUpdateRequest param = dbWebConverter.request2param(request);
         dmlExecutionService.rejectPartialLargeValueOperations(param);
         return DataResult.of(dlTemplateService.updateSelectResult(param));
@@ -107,7 +111,7 @@ public class DbDmlController {
      * @return data result containing string.
      */
     @RequestMapping(value = "/copy_update_sql", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<String> getCopySelectResultSql(@RequestBody SelectResultUpdateRequest request) {
+    public DataResult<String> getCopySelectResultSql(@Valid @RequestBody SelectResultUpdateRequest request) {
         DbSelectResultUpdateRequest param = dbWebConverter.request2param(request);
         dmlExecutionService.rejectPartialLargeValueOperations(param);
         return DataResult.of(dlTemplateService.copySelectResult(param));
@@ -122,7 +126,7 @@ public class DbDmlController {
      * @return data result containing string.
      */
     @RequestMapping(value = "/copy_in_values_sql", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<String> getCopyInValuesSql(@RequestBody CopyInValuesRequest request) {
+    public DataResult<String> getCopyInValuesSql(@Valid @RequestBody CopyInValuesRequest request) {
         DbCopyInValuesRequest param = dbWebConverter.request2param(request);
         return DataResult.of(dlTemplateService.copyInValues(param));
     }
@@ -136,8 +140,8 @@ public class DbDmlController {
      * @return data result containing execute result response.
      */
     @RequestMapping(value = "/execute_ddl", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<ExecuteResultResponse> executeDDL(@RequestBody DmlRequest request) {
-        ExecuteResponse result = dmlExecutionService.executeDdl(dbWebConverter.dmlExecutionRequest(request));
+    public DataResult<ExecuteResultResponse> executeDDL(@Valid @RequestBody DdlExecuteRequest request) {
+        ExecuteResponse result = dmlExecutionService.executeDdl(dbWebConverter.ddlExecutionRequest(request));
         return DataResult.of(dbWebConverter.dto2response(result));
     }
 
@@ -150,7 +154,7 @@ public class DbDmlController {
      * @return data result containing long.
      */
     @RequestMapping(value = "/count", method = {RequestMethod.POST, RequestMethod.PUT})
-    public DataResult<Long> count(@RequestBody DdlCountRequest request) {
+    public DataResult<Long> count(@Valid @RequestBody DdlCountRequest request) {
         return DataResult.of(dlTemplateService.count(dbWebConverter.request2param(request)));
     }
 

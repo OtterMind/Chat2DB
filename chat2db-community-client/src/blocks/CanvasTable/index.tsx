@@ -27,6 +27,8 @@ import { useGlobalStore } from '@/store/global';
 export interface ICustomOptions {
   // Whether to display the left border
   showLeftBorder?: boolean;
+  // Whether to draw a divider after the frozen data columns.
+  showFrozenColumnDivider?: boolean;
 }
 
 interface IProps {
@@ -40,6 +42,8 @@ interface IProps {
   onInit?: (tableInstance: ITableInstance) => void;
   onCopy?: () => void;
   onPaste?: () => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
 }
 
 export interface CanvasTableRef {
@@ -81,7 +85,19 @@ function isEditableElement(target: EventTarget | null): boolean {
 }
 
 const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>) => {
-  const { className, records, columns, onInit, tooltip, options = null, customOptions, onCopy, onPaste } = props;
+  const {
+    className,
+    records,
+    columns,
+    onInit,
+    tooltip,
+    options = null,
+    customOptions,
+    onCopy,
+    onPaste,
+    onKeyDown,
+    onPointerDown,
+  } = props;
   const { styles, theme, cx } = useStyles();
   const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -189,7 +205,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   // update theme
   useEffect(() => {
     if (!tableInstance) return;
-    tableInstance.theme = tableTheme;
+    tableInstance.updateTheme(tableTheme);
   }, [tableTheme]);
 
   // update records
@@ -273,7 +289,12 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   }));
 
   return (
-    <div className={cx(className, styles.container)} ref={containerRef}>
+    <div
+      className={cx(className, styles.container)}
+      ref={containerRef}
+      onKeyDown={onKeyDown}
+      onPointerDown={onPointerDown}
+    >
       <div ref={tableRef} className={styles.table} />
       <ContextMenu ref={contextMenuRef} />
       {tooltipTongs}

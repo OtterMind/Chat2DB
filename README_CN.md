@@ -19,7 +19,7 @@
 
 Chat2DB Community 是一款免费的跨平台数据库客户端,支持 Windows、macOS 和 Linux。它完全运行在你自己的机器上,提供功能完整的 SQL 工作空间,并可接入你自己的 AI 模型作为智能助手。
 
-- **30+ 种数据库** —— MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、MongoDB、Redis、SQLite、MariaDB、TiDB、Hive、DB2、Snowflake、BigQuery、Elasticsearch 等,通过插件扩展。
+- **40+ 种数据库** —— MySQL、PostgreSQL、Oracle、SQL Server、ClickHouse、MongoDB、Redis、SQLite、MariaDB、TiDB、Hive、DB2、Snowflake、BigQuery、Elasticsearch、Trino、TimescaleDB、Greenplum、YugabyteDB、CrateDB、QuestDB、Apache IoTDB、Firebird、HSQLDB、Apache Derby 等,通过插件扩展;新的 JDBC 数据库仅需配置即可接入,无需修改代码。
 - **SQL 工作空间** —— SQL 编辑、补全、格式化、执行、SQL 收藏与历史记录。
 - **AI 助手** —— 接入自定义 AI 模型,用自然语言生成、解释和优化 SQL。
 - **数据库管理** —— 元数据浏览、表和对象管理(DDL/DML)、在线编辑数据。

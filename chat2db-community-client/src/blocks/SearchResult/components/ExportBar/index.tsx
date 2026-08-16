@@ -1,11 +1,10 @@
 import { memo, useMemo } from 'react';
-import { Dropdown, MenuProps, Space } from 'antd';
-import { DownOutlined } from '@ant-design/icons';
+import { Dropdown, MenuProps } from 'antd';
+import DropdownChevronTrigger from '@/components/DropdownChevronTrigger';
 import { ExportSizeEnum, ExportTypeEnum } from '@/typings/resultTable';
 import i18n from '@/i18n';
 import sqlService, { IExportParams } from '@/service/sql';
 import { downloadFile } from '@/utils/file';
-import { useStyles } from './style';
 import { isDesktop } from '@/utils/env';
 import { IManageResultData } from '@/typings';
 import jcefApi from '@/jcef';
@@ -17,7 +16,6 @@ interface IProps {
 export default memo<IProps>((props) => {
   const { resultData } = props;
   const { executeSqlParams } = resultData;
-  const { styles } = useStyles();
   const handleExportSQLResult = async (exportType: ExportTypeEnum, exportSize: ExportSizeEnum) => {
     const params: IExportParams = {
       ...(executeSqlParams || {}),
@@ -90,10 +88,7 @@ export default memo<IProps>((props) => {
   );
   return (
     <Dropdown destroyPopupOnHide menu={{ items: exportDropdownItems }} trigger={['click']}>
-      <Space className={styles.exportBar}>
-        {i18n('common.text.export')}
-        <DownOutlined />
-      </Space>
+      <DropdownChevronTrigger>{i18n('common.text.export')}</DropdownChevronTrigger>
     </Dropdown>
   );
 });

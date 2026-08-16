@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
+import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
@@ -232,12 +233,18 @@ public class DefaultDBManager implements IDbManager {
     }
 
     private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_DISABLED);
+        DatabaseTypeEnum databaseType = DatabaseTypeEnum.from(Chat2DBContext.getConnectInfo().getDbType());
+        boolean foreignKeyChecks = databaseType != null && databaseType.isMysqlProtocolFamily();
+        if (foreignKeyChecks) {
+            asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_DISABLED);
+        }
         List<Table> tables = Chat2DBContext.getDbMetaData().tables(connection, new TablesRequest(databaseName, schemaName, null));
         for (Table table : tables) {
             exportTable(connection, databaseName, schemaName, table.getName(), asyncContext);
         }
-        asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_ENABLED);
+        if (foreignKeyChecks) {
+            asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_ENABLED);
+        }
     }
 
     @Override
@@ -303,6 +310,8 @@ public class DefaultDBManager implements IDbManager {
                     .connection(connection)
                     .sql(pageSql)
                     .batchSize(batchSize)
+                    .statementListener(asyncContext)
+                    .cancellationChecker(asyncContext::checkCancelled)
                     .consumer(resultSet -> {
                 ResultSetMetaData metaData = resultSet.getMetaData();
                 List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
@@ -341,6 +350,8 @@ public class DefaultDBManager implements IDbManager {
                 .connection(connection)
                 .sql(tableQuerySql)
                 .batchSize(batchSize)
+                .statementListener(asyncContext)
+                .cancellationChecker(asyncContext::checkCancelled)
                 .consumer(resultSet -> {
             ResultSetMetaData metaData = resultSet.getMetaData();
             List<String> columnList = ResultSetUtils.getRsHeader(resultSet);

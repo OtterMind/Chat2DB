@@ -2,7 +2,9 @@ package ai.chat2db.plugin.snowflake;
 
 import ai.chat2db.plugin.snowflake.builder.SnowflakeSqlBuilder;
 import ai.chat2db.plugin.snowflake.enums.type.*;
+import ai.chat2db.plugin.snowflake.identifier.SnowflakeIdentifierProcessor;
 import ai.chat2db.spi.IDbMetaData;
+import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
@@ -29,7 +31,10 @@ import java.util.stream.Collectors;
 import static ai.chat2db.plugin.snowflake.constant.SnowflakeMetaDataConstants.*;
 public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData {
 
-
+    @Override
+    public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
+        return SnowflakeIdentifierProcessor.INSTANCE;
+    }
 
     @Override
     public List<Schema> schemas(Connection connection, String databaseName) {
@@ -42,7 +47,8 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
 
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = String.format(VIEW_SQL, databaseName, schemaName, viewName);
+        String sql = String.format(VIEW_SQL, getSQLIdentifierProcessor().escapeString(databaseName),
+                getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(viewName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Table table = new Table();
             table.setDatabaseName(databaseName);
@@ -74,13 +80,13 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(name -> "\"" + name + "\"").collect(Collectors.joining("."));
+        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name)).map(SnowflakeIdentifierProcessor.INSTANCE::quoteIdentifierAlways).collect(Collectors.joining("."));
     }
 
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {
         StringBuilder queryBuf = new StringBuilder(SQL_SHOW_PRIMARY_KEYS);
-        queryBuf.append("\"").append(tableName).append("\"");
+        queryBuf.append(SnowflakeIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, queryBuf.toString(), resultSet -> {
             LinkedHashMap<String, TableIndex> map = new LinkedHashMap();
             while (resultSet.next()) {
@@ -129,7 +135,8 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
         if (StringUtils.isBlank(tableName)) {
             return "";
         }
-        String sql = String.format(GET_TABLE_DDL_SQL, databaseName, schemaName, tableName);
+        String sql = String.format(GET_TABLE_DDL_SQL, getSQLIdentifierProcessor().escapeString(databaseName),
+                getSQLIdentifierProcessor().escapeString(schemaName), getSQLIdentifierProcessor().escapeString(tableName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             if (resultSet.next()) {
                 return resultSet.getString(1);
@@ -144,7 +151,7 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
     @Override
     public List<Function> functions(Connection connection, String databaseName, String schemaName) {
         List<Function> functions = new ArrayList<>();
-        String sql = String.format(OBJECT_SQL, schemaName);
+        String sql = String.format(OBJECT_SQL, SnowflakeIdentifierProcessor.escapeIdentifier(schemaName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
                 Function function = new Function();
@@ -163,7 +170,8 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
     public Function function(Connection connection, @NotEmpty String databaseName, String schemaName,
                              String functionName) {
 
-        String sql = String.format(ROUTINES_SQL, schemaName, functionName);
+        String sql = String.format(ROUTINES_SQL, getSQLIdentifierProcessor().escapeString(schemaName),
+                getSQLIdentifierProcessor().escapeString(functionName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Function function = new Function();
             function.setDatabaseName(databaseName);
@@ -180,6 +188,6 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
     }
 
     public static String format(String tableName) {
-        return "\"" + tableName + "\"";
+        return SnowflakeIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
     }
 }

@@ -85,6 +85,16 @@ public interface IDbMetaData {
 
     String getMetaDataName(String... names);
 
+    /**
+     * Builds the table reference used inside generated SQL (select-table, cell value
+     * lookup, ...). Dialects that reject fully qualified names override this to drop
+     * the database or schema part; the default keeps the historical
+     * database.schema.table behaviour.
+     */
+    default String getQualifiedTableName(String databaseName, String schemaName, String tableName) {
+        return getMetaDataName(databaseName, schemaName, tableName);
+    }
+
     IValueProcessor getValueProcessor();
 
     default String resolveResultSetEditorType(String typeName, Integer type) {

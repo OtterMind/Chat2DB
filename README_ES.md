@@ -19,7 +19,7 @@
 
 Chat2DB Community es un cliente de bases de datos gratuito y multiplataforma para Windows, macOS y Linux. Se ejecuta por completo en su equipo y combina un espacio de trabajo SQL con todas las funciones con un asistente de IA que usted conecta a su propio modelo.
 
-- **Más de 30 bases de datos** — MySQL, PostgreSQL, Oracle, SQL Server, ClickHouse, MongoDB, Redis, SQLite, MariaDB, TiDB, Hive, DB2, Snowflake, BigQuery, Elasticsearch y más mediante plugins.
+- **Más de 40 bases de datos** — MySQL, PostgreSQL, Oracle, SQL Server, ClickHouse, MongoDB, Redis, SQLite, MariaDB, TiDB, Hive, DB2, Snowflake, BigQuery, Elasticsearch, Trino, TimescaleDB, Greenplum, YugabyteDB, CrateDB, QuestDB, Apache IoTDB, Firebird, HSQLDB, Apache Derby y más mediante plugins; las nuevas bases de datos JDBC se pueden añadir solo con configuración, sin cambios de código.
 - **Espacio de trabajo SQL** — edición, autocompletado, formato, ejecución, SQL guardado e historial de ejecución.
 - **Asistente de IA** — use su propio modelo de IA para generar, explicar y optimizar SQL en lenguaje natural.
 - **Gestión de bases de datos** — explore metadatos, gestione tablas y objetos (DDL/DML) y edite los datos directamente.

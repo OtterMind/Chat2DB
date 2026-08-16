@@ -20,6 +20,7 @@ import StreamSidebar from './components/StreamSidebar';
 
 import Dashboard from './dashboard';
 import DashboardMenuList from './dashboard/DashboardMenuList';
+import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
 import Stream from '../stream';
 
@@ -31,35 +32,23 @@ import aiStreamService, { IChatSession } from '@/service/aiStream';
 import { useChatStore } from '@/store/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
+import {
+  readPersistedMainPageActiveTab,
+  resolveDesktopInitialMainPage,
+  resolveInitialMainPage,
+} from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
 
 function CommunityMainPage() {
   const [navConfig, setNavConfig] = useState<INavItem[]>([]);
 
   const initNavConfig: INavItem[] = useMemo(
-    () => [
-      {
-        key: 'stream',
-        icon: 'icon-chat-alt-21',
-        isLoad: false,
-        component: <Stream />,
-        name: i18n('stream.nav.title'),
-      },
-      {
-        key: 'workspace',
-        icon: 'icon-gongxiang-',
-        isLoad: false,
-        component: <Workspace />,
-        name: i18n('workspace.title'),
-      },
-      {
-        key: 'dashboard',
-        icon: 'icon-chart-square-bar',
-        isLoad: false,
-        component: <Dashboard />,
-        name: i18n('dashboard.title'),
-      },
-    ],
+    () =>
+      createCoreMainNavItems({
+        stream: { component: <Stream />, name: i18n('stream.nav.title') },
+        workspace: { component: <Workspace />, name: i18n('workspace.title') },
+        dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
+      }),
     [],
   );
 
@@ -205,10 +194,26 @@ function CommunityMainPage() {
       const hashPath = window.location.hash.replace(/^#/, '');
       const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
       const hashPage = normalizedHashPath.split('/')[1];
-      page = hashPage || mainPageActiveTab || 'stream';
-      pathName = hashPage ? normalizedHashPath : '';
+      if (isDesktop) {
+        let persistedPage: string | undefined;
+        try {
+          persistedPage = readPersistedMainPageActiveTab(localStorage.getItem(runtimeEditionConfig.globalStoreName));
+        } catch {
+          persistedPage = undefined;
+        }
+        const initialLocation = resolveDesktopInitialMainPage(
+          normalizedHashPath,
+          persistedPage,
+          nextNavConfig.map((item) => `${item.key}`),
+        );
+        page = initialLocation.page;
+        pathName = initialLocation.pathName;
+      } else {
+        page = resolveInitialMainPage(hashPage, mainPageActiveTab);
+        pathName = hashPage ? normalizedHashPath : '';
+      }
     } else {
-      page = window.location.pathname.split('/')[1] || mainPageActiveTab;
+      page = resolveInitialMainPage(window.location.pathname.split('/')[1], mainPageActiveTab);
       pathName = window.location.pathname;
     }
 
@@ -422,6 +427,7 @@ function CommunityMainPage() {
         <div className={styles.navContainer}>
           {navConfig.map((item) => {
             const isActive = item.key === mainPageActiveTab && settingPageActiveTab === false;
+            const NavIcon = item.icon;
 
             if (!sidebarExpanded) {
               return (
@@ -431,10 +437,10 @@ function CommunityMainPage() {
                   key={item.key}
                   size={{
                     boxSize: 34,
-                    iconSize: 22,
+                    iconSize: 18,
                   }}
                   title={item.name}
-                  code={item.icon}
+                  icon={NavIcon}
                   tooltipPlacement="right"
                   onClick={() => handleNavItemClick(item)}
                 />
@@ -447,7 +453,7 @@ function CommunityMainPage() {
                 className={cx(styles.navItem, isActive && styles.navItemActive)}
                 onClick={() => handleNavItemClick(item)}
               >
-                <IconfontSvg code={item.icon} className={styles.navItemIcon} size={20} />
+                <NavIcon className={styles.navItemIcon} size={18} />
                 <span className={styles.navItemLabel}>{item.name}</span>
               </div>
             );
@@ -464,11 +470,11 @@ function CommunityMainPage() {
           <div className={styles.bottomNav}>
             {sidebarExpanded ? (
               <div className={styles.navItem} onClick={() => setSettingPageActiveTab('basic')}>
-                <IconfontSvg code="icon-adjustments" className={styles.navItemIcon} size={20} />
+                <IconfontSvg code="icon-adjustments" className={styles.navItemIcon} size={18} />
                 <span className={styles.navItemLabel}>{i18n('setting.title.setting')}</span>
               </div>
             ) : (
-              <OfflineAvatar />
+              <OfflineAvatar logoSize={24} triggerSize={34} />
             )}
           </div>
         )}

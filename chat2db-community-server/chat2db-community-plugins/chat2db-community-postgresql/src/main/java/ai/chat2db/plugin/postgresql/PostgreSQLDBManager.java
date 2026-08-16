@@ -2,13 +2,13 @@ package ai.chat2db.plugin.postgresql;
 
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.postgresql.builder.PostgreSQLSqlBuilder;
+import ai.chat2db.plugin.postgresql.identifier.PostgreSQLIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import ai.chat2db.spi.util.SqlUtils;
 import cn.hutool.core.date.DateUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -57,7 +57,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 if (StringUtils.isBlank(sequenceName)) {
                     continue;
                 }
-                String quotedSequenceName = SqlUtils.quoteObjectName(sequenceName);
+                String quotedSequenceName = qualifiedTableName(schemaName, sequenceName, false);
                 sqlBuilder.append(SQL_DROP_SEQUENCE_EXISTS).append(quotedSequenceName).append(";\n");
                 sqlBuilder.append(SQL_CREATE_SEQUENCE).append(quotedSequenceName).append("\n")
                         .append(" START WITH ").append(startValue).append("\n")
@@ -79,7 +79,9 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         StringBuilder typeBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().preExecute(connection, ENUM_TYPE_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
-                typeBuilder.append(SQL_DROP_TYPE_EXISTS).append(SqlUtils.quoteObjectName(resultSet.getString("type_name"))).append(";\n");
+                typeBuilder.append(SQL_DROP_TYPE_EXISTS)
+                        .append(qualifiedTableName(schemaName, resultSet.getString("type_name"), false))
+                        .append(";\n");
                 typeBuilder.append(resultSet.getString("ddl")).append("\n");
                 asyncContext.write(typeBuilder.toString());
             }
@@ -87,7 +89,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         typeBuilder.setLength(0);
         DefaultSQLExecutor.getInstance().preExecute(connection, UDT_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
-                String typeName = SqlUtils.quoteObjectName(resultSet.getString("type_name"));
+                String typeName = qualifiedTableName(schemaName, resultSet.getString("type_name"), false);
                 typeBuilder.append(SQL_DROP_TYPE_EXISTS).append(typeName).append(";\n");
                 typeBuilder.append(resultSet.getString("create_type_statement")).append("\n");
                 asyncContext.write(typeBuilder.toString());
@@ -109,7 +111,8 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         String tableDDL = Chat2DBContext.getDbMetaData().tableDDL(connection,
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("\n").append(SQL_DROP_TABLE_EXISTS).append(SqlUtils.quoteObjectName(tableName)).append(";").append("\n")
+        sqlBuilder.append("\n").append(SQL_DROP_TABLE_EXISTS)
+                .append(qualifiedTableName(schemaName, tableName, false)).append(";").append("\n")
                 .append(tableDDL).append("\n");
         asyncContext.write(sqlBuilder.toString());
         if (asyncContext.isContainsData()) {
@@ -126,7 +129,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 StringBuilder sqlBuilder = new StringBuilder();
                 String viewName = resultSet.getString("table_name");
                 String viewDefinition = resultSet.getString("view_definition");
-                String quotedObjectName = SqlUtils.quoteObjectName(viewName);
+                String quotedObjectName = qualifiedTableName(schemaName, viewName, false);
                 sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(quotedObjectName).append(";\n");
                 sqlBuilder.append(SQL_CREATE_REPLACE_VIEW).append(quotedObjectName).append(" AS ").append(viewDefinition).append("\n");
                 asyncContext.write(sqlBuilder.toString());
@@ -143,9 +146,9 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 String routineDefinition = resultSet.getString("function_definition");
                 String prokind = resultSet.getString("prokind");
                 if (Objects.equals("f", prokind)) {
-                    sqlBuilder.append(SQL_DROP_FUNCTION_EXISTS).append(schemaName).append(".").append(routineName).append(";\n");
+                    sqlBuilder.append(SQL_DROP_FUNCTION_EXISTS).append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)).append(".").append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(routineName)).append(";\n");
                 } else {
-                    sqlBuilder.append(SQL_DROP_PROCEDURE_EXISTS).append(schemaName).append(".").append(routineName).append(";\n");
+                    sqlBuilder.append(SQL_DROP_PROCEDURE_EXISTS).append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)).append(".").append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(routineName)).append(";\n");
                 }
                 sqlBuilder.append(routineDefinition).append(";\n\n");
                 asyncContext.write(sqlBuilder.toString());
@@ -180,7 +183,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         connectInfo.setSchemaName(null);
         Connection connection = super.getConnection(connectInfo);
         if (StringUtils.isNotBlank(schemaName)) {
-            String sql = String.format(SQL_SET_SEARCH_PATH_USER_PUBLIC, schemaName);
+            String sql = String.format(SQL_SET_SEARCH_PATH_USER_PUBLIC, PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName));
             try {
                 DefaultSQLExecutor.getInstance().execute(connection, sql);
             } catch (SQLException e) {
@@ -207,8 +210,12 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        String sql = "DROP TABLE " + SqlUtils.quoteObjectName(tableName);
-        return sql;
+        return "DROP TABLE " + qualifiedTableName(schemaName, tableName, false);
+    }
+
+    @Override
+    public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
+        return "TRUNCATE TABLE " + qualifiedTableName(schemaName, tableName, true);
     }
 
     @Override
@@ -227,13 +234,16 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
-        String sql = "";
-        if (copyData) {
-            sql = "CREATE TABLE " + SqlUtils.quoteObjectName(newTableName) + " AS TABLE " + SqlUtils.quoteObjectName(tableName) + " WITH DATA";
-        } else {
-            sql = "CREATE TABLE " + SqlUtils.quoteObjectName(newTableName) + " AS TABLE " + SqlUtils.quoteObjectName(tableName) + " WITH NO DATA";
-        }
-        DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+        DefaultSQLExecutor.getInstance().execute(connection,
+                buildCopyTableSql(schemaName, tableName, newTableName, copyData), resultSet -> null);
+    }
+
+    static String buildCopyTableSql(String schemaName, String tableName, String newTableName,
+                                    boolean copyData) {
+        String source = qualifiedTableName(schemaName, tableName, true);
+        String target = qualifiedTableName(schemaName, newTableName, true);
+        return "CREATE TABLE " + target + " AS TABLE " + source
+                + (copyData ? " WITH DATA" : " WITH NO DATA");
     }
 
     @Override
@@ -244,7 +254,25 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public void dropView(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = "DROP VIEW " + SqlUtils.quoteObjectName(schemaName) + "." + SqlUtils.quoteObjectName(viewName);
+        String sql = "DROP VIEW " + qualifiedTableName(schemaName, viewName, false);
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
+    }
+
+    private static String qualifiedTableName(String schemaName, String tableName,
+                                             boolean normalizeQuotedTable) {
+        String normalizedTable = normalizeQuotedTable ? normalizeQuotedIdentifier(tableName) : tableName;
+        String quotedTable = PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedTable);
+        if (StringUtils.isBlank(schemaName)) {
+            return quotedTable;
+        }
+        return PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)
+                + "." + quotedTable;
+    }
+
+    private static String normalizeQuotedIdentifier(String identifier) {
+        if (PostgreSQLIdentifierProcessor.INSTANCE.isQuoteIdentifier(identifier)) {
+            return PostgreSQLIdentifierProcessor.INSTANCE.removeIdentifierQuote(identifier);
+        }
+        return identifier;
     }
 }

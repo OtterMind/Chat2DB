@@ -35,6 +35,71 @@
             <groupId>ai.chat2db</groupId>
             <artifactId>chat2db-community-tdengine</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Embedded engines pinned to the same builds generic.json declares;
+             used only by in-memory integration tests. -->
+        <dependency>
+            <groupId>org.hsqldb</groupId>
+            <artifactId>hsqldb</artifactId>
+            <version>2.7.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+            <version>10.16.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbyshared</artifactId>
+            <version>10.16.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbytools</artifactId>
+            <version>10.16.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.iotdb</groupId>
+            <artifactId>iotdb-jdbc</artifactId>
+            <version>1.3.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Proves the sqlDialect fallback resolves the PostgreSQL syntax plugin. -->
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.5.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Same Jaybird build that generic.json pins for the FIREBIRD entry;
+             used only by the opt-in container integration test. -->
+        <dependency>
+            <groupId>org.firebirdsql.jdbc</groupId>
+            <artifactId>jaybird</artifactId>
+            <version>5.0.6.java11</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Matches the trinodb/trino:475 container in start-test-databases.sh;
+             used only by the opt-in container integration test. -->
+        <dependency>
+            <groupId>io.trino</groupId>
+            <artifactId>trino-jdbc</artifactId>
+            <version>475</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <resources>

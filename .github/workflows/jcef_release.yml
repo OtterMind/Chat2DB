@@ -184,6 +184,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fakeroot rpm desktop-file-utils file curl zip
 
+      - name: Test macOS native signing selection
+        if: ${{ runner.os == 'macOS' }}
+        shell: bash
+        run: bash script/package/tests/sign-macos-native-libraries-test.sh
+
       - name: Import macOS code-signing certificate
         if: ${{ runner.os == 'macOS' }}
         shell: bash
@@ -260,11 +265,51 @@ jobs:
           esac
           test -s "${dmg}"
 
+          submit_result="${RUNNER_TEMP}/notary-submit-${ARTIFACT_NAME}.json"
+          wait_result="${RUNNER_TEMP}/notary-wait-${ARTIFACT_NAME}.json"
+          submit_exit=0
           xcrun notarytool submit "${dmg}" \
             --apple-id "${MAC_APPLE_ID}" \
             --password "${MAC_APPLE_PASSWORD}" \
             --team-id "${MAC_TEAM_ID}" \
-            --wait
+            --no-wait \
+            --output-format json > "${submit_result}" || submit_exit=$?
+          cat "${submit_result}"
+
+          submission_id=$(/usr/bin/plutil -extract id raw -expect string -o - "${submit_result}" 2>/dev/null || true)
+          if [ "${submit_exit}" -ne 0 ] || [ -z "${submission_id}" ]; then
+            echo "Apple notarization submission failed: submission=${submission_id:-unknown}" >&2
+            if [ -n "${submission_id}" ]; then
+              xcrun notarytool log "${submission_id}" \
+                --apple-id "${MAC_APPLE_ID}" \
+                --password "${MAC_APPLE_PASSWORD}" \
+                --team-id "${MAC_TEAM_ID}" || true
+            fi
+            exit 1
+          fi
+
+          echo "Apple notarization submission: ${submission_id}"
+          wait_exit=0
+          xcrun notarytool wait "${submission_id}" \
+            --apple-id "${MAC_APPLE_ID}" \
+            --password "${MAC_APPLE_PASSWORD}" \
+            --team-id "${MAC_TEAM_ID}" \
+            --timeout 25m \
+            --output-format json > "${wait_result}" || wait_exit=$?
+          cat "${wait_result}"
+
+          notary_status=$(/usr/bin/plutil -extract status raw -expect string -o - "${wait_result}" 2>/dev/null || true)
+          if [ "${wait_exit}" -ne 0 ] || [ "${notary_status}" != "Accepted" ]; then
+            echo "Apple notarization failed: status=${notary_status:-unknown}, submission=${submission_id:-unknown}" >&2
+            if ! xcrun notarytool log "${submission_id}" \
+              --apple-id "${MAC_APPLE_ID}" \
+              --password "${MAC_APPLE_PASSWORD}" \
+              --team-id "${MAC_TEAM_ID}"; then
+              echo "Unable to retrieve Apple notarization log for ${submission_id}" >&2
+            fi
+            exit 1
+          fi
+
           xcrun stapler staple "${dmg}"
           xcrun stapler validate "${dmg}"
 

@@ -79,11 +79,19 @@ export interface SSERequestCallbacks<Output> {
   onStop?: () => void;
 }
 
+export interface SSERequestHandle extends Promise<void> {
+  /** Resolves when this request succeeds or is stopped, and rejects on request failure. */
+  done: Promise<void>;
+
+  /** Stops only the request represented by this handle. */
+  stop: () => void;
+}
+
 export type SSERequestFunction<Input = AnyObject, Output = SSEOutput> = (
   params: SSERequestParams & Input,
   callbacks: SSERequestCallbacks<Output>,
   transformStream?: SSEStreamProps<Output>['transformStream'],
-) => Promise<void>;
+) => SSERequestHandle;
 
 const SSERequest = (options: SSERequestOptions) => {
   if (isDesktop) {

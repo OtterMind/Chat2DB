@@ -2,6 +2,7 @@ import { openSchemaSyncModal } from '@/blocks/NewTree/functions/schemaSync';
 import { ILoadDataOptions, normalizeTreeNodeLoadResult, treeConfig } from '@/blocks/NewTree/treeConfig';
 import { TreeNodeType, initUserConfigTree } from '@/constants';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { getRuntimeEditionCapabilities } from '@/hooks/useRuntimeEditionCapabilities';
 import { dataSourceTreeService } from '@/database';
 import aiDataCollectionService from '@/service/aiDataCollection';
 import connectionService from '@/service/connection';
@@ -21,7 +22,9 @@ import {
   loadExistingTreeNodeRefresh,
   reconcileTreeInteractionAfterRefresh,
 } from './backgroundRefresh';
+import { hydrateDataSourceAfterMutation } from './dataSourceMutationRefresh';
 import { loadNamespaceTree } from './loadNamespaceTree';
+import { updateTreeData } from './treeDataUpdate';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
 
 export type FocusTreeNode = {
@@ -95,6 +98,7 @@ export interface TreeAction {
   setTreeData: (treeData: TreeState['treeData'] | any) => void;
   getTreeData: (props?: { refresh?: boolean }) => Promise<void>;
   refreshTreeData: () => Promise<void>;
+  refreshDataSourceAfterMutation: (dataSourceId: number) => Promise<void>;
   // Database structure synchronization
   schemaSync: () => void;
   setSelectedKeys: (selectedKeys: TreeState['selectedKeys']) => void;
@@ -144,35 +148,6 @@ export interface TreeAction {
 
 const backgroundRefreshTracker = new LatestTreeRefreshTracker();
 
-const updateTreeData = (
-  list: TreeNodeData[],
-  key: React.Key,
-  children: TreeNodeData[],
-  childCount?: number,
-  clearChildCount = false,
-): TreeNodeData[] => {
-  return (
-    list.map((node) => {
-      if (node.key === key) {
-        return {
-          isLeaf: false,
-          ...node,
-          children: children || [],
-          ...(clearChildCount ? { childCount: undefined } : childCount === undefined ? {} : { childCount }),
-        };
-      }
-      if (node.children) {
-        return {
-          isLeaf: false,
-          ...node,
-          children: updateTreeData(node.children, key, children, childCount, clearChildCount),
-        };
-      }
-      return node;
-    }) || []
-  );
-};
-
 export type TreeStore = TreeState & TreeAction;
 
 export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', never]], [], TreeAction> = (set, get) => ({
@@ -188,6 +163,15 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   refreshTreeData: async () => {
     await clearTreeStore();
     await get().getTreeData({ refresh: true });
+  },
+  refreshDataSourceAfterMutation: async (dataSourceId) => {
+    await hydrateDataSourceAfterMutation(dataSourceId, {
+      refreshTreeData: () => get().getTreeData({ refresh: true }),
+      getDataSourceList: () => get().dataSourceList,
+      setSelectedKeys: get().setSelectedKeys,
+      setScrollTargetKey: get().setScrollTargetKey,
+      loadData: (node) => get().handleLoadData(node),
+    });
   },
   schemaSync: () => {
     // currently selected node
@@ -269,6 +253,10 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         name: params.name,
       };
       const newTreeData = get().treeData;
+      if (!newTreeData) {
+        get().getTreeData();
+        return;
+      }
 
       const newGroup = {
         key: `group_${t.id}`,
@@ -285,12 +273,12 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       if (parentId) {
         // Expand current group
         get().setExpandedKeys([...get().expandedKeys, `group_${parentId}`]);
-        findNode(`group_${parentId}`, newTreeData!)?.children?.push(newGroup);
+        findNode(`group_${parentId}`, newTreeData)?.children?.push(newGroup);
       } else {
-        newTreeData?.push(newGroup);
+        newTreeData.push(newGroup);
       }
 
-      set({ treeData: [...newTreeData!] });
+      set({ treeData: [...newTreeData] });
       get().setEditingTreeNode(newGroup);
       get().setSelectedKeys([`group_${t.id}`]);
       get().setScrollTargetKey(`group_${t.id}`);
@@ -313,7 +301,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       if (get().searchBarValue && _treeData) {
         const visibleTreeData = filterTreeNodesForDisplay(_treeData, {
           hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-          aiDataCollectionEnabled: runtimeEditionConfig.aiDataCollection,
+          aiDataCollectionEnabled: getRuntimeEditionCapabilities().aiDataCollection,
         });
         const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
           visibleTreeData,
@@ -328,7 +316,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       if (get().searchBarValue && treeData) {
         const visibleTreeData = filterTreeNodesForDisplay(treeData, {
           hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-          aiDataCollectionEnabled: runtimeEditionConfig.aiDataCollection,
+          aiDataCollectionEnabled: getRuntimeEditionCapabilities().aiDataCollection,
         });
         const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
           visibleTreeData,
@@ -356,7 +344,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
 
     if (dataSource.spaceId) {
       const groupId = `group_${dataSource.spaceId}`;
-      findNode(groupId, newTreeData!)?.children?.push(newDataSource);
+      findNode(groupId, newTreeData)?.children?.push(newDataSource);
       get().setExpandedKeys([...get().expandedKeys, groupId]);
     } else {
       newTreeData?.push(newDataSource);
@@ -409,21 +397,24 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   editorDataSource: (dataSourceDetails) => {
     const newTreeData = get().treeData;
-    const parentNode = getParentNode(`dataSource_${dataSourceDetails.id}`, newTreeData!);
+    if (!newTreeData) {
+      get().getTreeData();
+      return;
+    }
+    const parentNode = getParentNode(`dataSource_${dataSourceDetails.id}`, newTreeData);
     const newTreeNode = neatenDataSourceTreeNode(dataSourceDetails);
     if (!newTreeNode) return;
-    // If it is a data source under group
-    if (parentNode) {
-      const index = parentNode.children?.findIndex((item) => item.key === `dataSource_${dataSourceDetails.id}`);
-      parentNode.children?.splice(index!, 1, newTreeNode);
-    } else {
-      const index = newTreeData?.findIndex((item) => item.key === `dataSource_${dataSourceDetails.id}`);
-      newTreeData?.splice(index!, 1, newTreeNode);
+    const siblings = parentNode?.children ?? newTreeData;
+    const index = siblings.findIndex((item) => item.key === `dataSource_${dataSourceDetails.id}`);
+    if (index < 0) {
+      get().getTreeData();
+      return;
     }
+    siblings.splice(index, 1, newTreeNode);
     // If it was originally expanded and needs to be collapsed
     set({
       expandedKeys: get().expandedKeys.filter((item) => item !== newTreeNode.key),
-      treeData: [...newTreeData!],
+      treeData: [...newTreeData],
     });
   },
   setIsModalVisible: (isModalVisible) => {
@@ -498,10 +489,14 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   deleteAiDataCollection: (treeNodeData, handleLoad) => {
     return aiDataCollectionService.deleteAiDataCollection({ id: treeNodeData.id! }).then(() => {
-      const parentNode = getParentNode(treeNodeData.key, get().treeData!);
-      handleLoad(parentNode, {
-        refresh: true,
-      });
+      const parentNode = getParentNode(treeNodeData.key, get().treeData);
+      if (parentNode) {
+        handleLoad(parentNode, {
+          refresh: true,
+        });
+      } else {
+        get().getTreeData();
+      }
 
       useAIStore.getState().getDataCollectionList();
     });
@@ -523,10 +518,14 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         elements,
       })
       .then(() => {
-        const parentNode = getParentNode(treeNodeData.key, get().treeData!);
-        handleLoad(parentNode, {
-          refresh: true,
-        });
+        const parentNode = getParentNode(treeNodeData.key, get().treeData);
+        if (parentNode) {
+          handleLoad(parentNode, {
+            refresh: true,
+          });
+        } else {
+          get().getTreeData();
+        }
       });
   },
   refreshAiDataCollection: (dataSourceId) => {
@@ -565,7 +564,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   updateTreeNodeDataByKey: (key, getTreeNodeKeyParams) => {
     const newTreeData = get().treeData;
-    const curNode = findNode(key, newTreeData!);
+    const curNode = findNode(key, newTreeData);
     if (curNode && curNode.children !== undefined) {
       get().handleLoadData(curNode, {
         refresh: true,
@@ -652,8 +651,8 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     connectionService.closeConnection({ id: dataSourceId }).then(() => {
       // Clear all child nodes under the current node and collapse the current node
       const newTreeData = get().treeData;
-      const curNode = findNode(`dataSource_${dataSourceId}`, newTreeData!);
-      if (curNode) {
+      const curNode = findNode(`dataSource_${dataSourceId}`, newTreeData);
+      if (curNode && newTreeData) {
         curNode.children = undefined;
         get().setTreeData([...newTreeData!]);
         const expandedKeys = get().expandedKeys || [];
@@ -666,16 +665,16 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   updateOriginalTitleByNodeId: (nodeKey, originalTitle) => {
     const newTreeData = get().treeData;
-    const curNode = findNode(nodeKey, newTreeData!);
+    const curNode = findNode(nodeKey, newTreeData);
 
-    if (curNode) {
+    if (curNode && newTreeData) {
       curNode.originalTitle = originalTitle;
       get().setTreeData([...newTreeData!]);
     }
   },
   getChildrenByNodeId: (nodeId: string) => {
     const newTreeData = get().treeData;
-    const curNode = findNode(nodeId, newTreeData!);
+    const curNode = findNode(nodeId, newTreeData);
     return curNode?.children || [];
   },
   initHiddenTreeNodeIds: () => {

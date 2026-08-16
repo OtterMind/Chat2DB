@@ -44,5 +44,9 @@ export default {
   'connection.title.importDBeaver': 'DBeaverリンクをインポート',
   'connection.import.success': '{1} つの接続を正常にインポートしました',
   'connection.import.unable.password.tips': '接続パスワードをインポートできません。インポートが完了したら、接続パスワードを再入力してください',
+  'connection.export.exporting': '接続ファイルを準備しています...',
+  'connection.export.success': '接続をエクスポートしました',
+  'connection.export.cancelled': 'エクスポートをキャンセルしました',
+  'connection.export.failed': '接続のエクスポートに失敗しました。もう一度お試しください',
   'workspace.menu.exportConnections': '接続をエクスポート',
 };

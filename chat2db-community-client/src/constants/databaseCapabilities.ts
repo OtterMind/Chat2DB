@@ -38,7 +38,11 @@ export const databaseCapabilities = {
     DatabaseTypeCode.ORACLE,
   ],
   backendCompletionSupported: [DatabaseTypeCode.MYSQL],
-  backendEditorHintsSupported: [DatabaseTypeCode.MYSQL, DatabaseTypeCode.POSTGRESQL],
+  backendEditorHintsSupported: [
+    DatabaseTypeCode.MYSQL,
+    DatabaseTypeCode.POSTGRESQL,
+    DatabaseTypeCode.GAUSSDB,
+  ],
   tableEditorMysqlBaseInfoSupported: [DatabaseTypeCode.MYSQL],
   tableEditorMysqlIndexMethodSupported: [DatabaseTypeCode.MYSQL],
   tableEditorOracleIndexColumnHidden: [DatabaseTypeCode.ORACLE],

@@ -1,17 +1,19 @@
 package ai.chat2db.plugin.oracle.enums.type;
 
-import ai.chat2db.plugin.oracle.util.OracleUtil;
+import ai.chat2db.plugin.oracle.OracleSqlGuards;
+import ai.chat2db.plugin.oracle.identifier.OracleIdentifierProcessor;
 import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.spi.util.SqlUtils;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 import static ai.chat2db.plugin.oracle.constant.OracleColumnTypeEnumConstants.*;
 public enum OracleColumnTypeEnum implements IColumnBuilder {
@@ -116,7 +118,12 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
     private ColumnType columnType;
 
     public static OracleColumnTypeEnum getByType(String dataType) {
-        return COLUMN_TYPE_MAP.get(SqlUtils.removeDigits(dataType.toUpperCase()));
+        if (StringUtils.isBlank(dataType)) {
+            return null;
+        }
+        String normalized = dataType.trim().toUpperCase(Locale.ROOT)
+                .replaceAll("\\s+", " ");
+        return COLUMN_TYPE_MAP.get(normalized);
     }
 
     private static Map<String, OracleColumnTypeEnum> COLUMN_TYPE_MAP = Maps.newHashMap();
@@ -138,13 +145,13 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildCreateColumnSql(TableColumn column) {
-        OracleColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        OracleColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return OracleUtil.quoteIdentifierIgnoreCase(column.getName()) + " " + column.getColumnType();
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append(OracleUtil.quoteIdentifierIgnoreCase(column.getName())).append(" ");
+        script.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -157,13 +164,13 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildAICreateColumnSql(TableColumn column) {
-        OracleColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        OracleColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return OracleUtil.quoteIdentifierIgnoreCase(column.getName()) + " " + column.getColumnType();
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append(OracleUtil.quoteIdentifierIgnoreCase(column.getName())).append(" ");
+        script.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
@@ -199,7 +206,7 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
             return StringUtils.join("DEFAULT NULL");
         }
 
-        return StringUtils.join("DEFAULT ", column.getDefaultValue());
+        return StringUtils.join("DEFAULT ", OracleSqlGuards.requireDefaultValue(column.getDefaultValue()));
     }
 
     private String buildDataType(TableColumn column, OracleColumnTypeEnum type) {
@@ -213,7 +220,7 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
             if (column.getColumnSize() != null && StringUtils.isEmpty(column.getUnit())) {
                 script.append("(").append(column.getColumnSize()).append(")");
             } else if (column.getColumnSize() != null && !StringUtils.isEmpty(column.getUnit())) {
-                script.append("(").append(column.getColumnSize()).append(" ").append(column.getUnit()).append(")");
+                script.append("(").append(column.getColumnSize()).append(" ").append(OracleSqlGuards.requireUnit(column.getUnit())).append(")");
             }
             return script.toString();
         }
@@ -265,25 +272,28 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
 
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-            script.append(" ").append(SQL_DROP_COLUMN).append("\"").append(tableColumn.getName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
+            script.append(" ").append(SQL_DROP_COLUMN).append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
             return script.toString();
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
             script.append(" ").append("ADD (").append(buildCreateColumnSql(tableColumn)).append(")");
             return script.toString();
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             StringBuilder script = new StringBuilder();
-            script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
+            script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
             script.append(" ").append("MODIFY (").append(buildModifyColumnSql(tableColumn, tableColumn.getOldColumn())).append(") \n");
 
-            if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
+            if (!StringUtils.equals(tableColumn.getOldName(), tableColumn.getName())) {
                 script.append(";");
-                script.append(SQL_ALTER_TABLE).append("\"").append(tableColumn.getSchemaName()).append("\".\"").append(tableColumn.getTableName()).append("\"");
-                script.append(" ").append(SQL_RENAME_COLUMN).append("\"").append(tableColumn.getOldName()).append("\"").append(" TO ").append("\"").append(tableColumn.getName()).append("\"");
+                script.append(SQL_ALTER_TABLE).append(qualifiedTableName(tableColumn));
+                script.append(" ").append(SQL_RENAME_COLUMN)
+                        .append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()))
+                        .append(" TO ")
+                        .append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
 
             }
             return script.toString();
@@ -293,23 +303,52 @@ public enum OracleColumnTypeEnum implements IColumnBuilder {
     }
 
     public String buildModifyColumnSql(TableColumn column, TableColumn oldColumn) {
-        OracleColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
+        OracleColumnTypeEnum type = getByType(column.getColumnType());
         if (type == null) {
-            return "";
+            return buildUnknownColumnSql(column);
         }
         StringBuilder script = new StringBuilder();
 
-        script.append("\"").append(column.getName()).append("\"").append(" ");
+        script.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName())).append(" ");
 
         script.append(buildDataType(column, type)).append(" ");
 
         script.append(buildDefaultValue(column, type)).append(" ");
 
-        if (oldColumn.getNullable() != column.getNullable()) {
+        if (oldColumn != null && !Objects.equals(oldColumn.getNullable(), column.getNullable())) {
             script.append(buildNullable(column, type)).append(" ");
         }
 
         return script.toString();
+    }
+
+    private static String buildUnknownColumnSql(TableColumn column) {
+        StringBuilder script = new StringBuilder();
+        script.append(OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getName()))
+                .append(" ")
+                .append(OracleSqlGuards.requireColumnTypeExpression(column.getColumnType()));
+        if (StringUtils.isNotEmpty(column.getDefaultValue())) {
+            String defaultValue = column.getDefaultValue();
+            if ("EMPTY_STRING".equalsIgnoreCase(defaultValue.trim())) {
+                script.append(" DEFAULT ''");
+            } else if ("NULL".equalsIgnoreCase(defaultValue.trim())) {
+                script.append(" DEFAULT NULL");
+            } else {
+                script.append(" DEFAULT ").append(OracleSqlGuards.requireDefaultValue(defaultValue));
+            }
+        }
+        if (column.getNullable() != null) {
+            script.append(column.getNullable() == 1 ? " NULL" : " NOT NULL");
+        }
+        return script.toString();
+    }
+
+    private static String qualifiedTableName(TableColumn column) {
+        String tableName = OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getTableName());
+        if (StringUtils.isBlank(column.getSchemaName())) {
+            return tableName;
+        }
+        return OracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getSchemaName()) + "." + tableName;
     }
 
     public static List<ColumnType> getTypes() {

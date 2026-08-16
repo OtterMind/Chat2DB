@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { ConsoleOpenedStatus, OperationColumn, TreeNodeType, WorkspaceTabType, databaseTypeList } from '@/constants';
 import { ImportExportType } from '@/constants/importExport';
 import { OrgNavType } from '@/constants/organization';
+import { ShortcutAction } from '@/constants/shortcut';
 import { TreeNodeData } from '@/typings';
 import { canImportExport } from '@/utils/env';
 
@@ -51,7 +52,8 @@ import { useOrgStore } from '@/store/organization';
 import { ILoadDataOptions, treeConfig } from '../treeConfig';
 
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
+import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
@@ -61,6 +63,7 @@ import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 interface IOperationColumnConfigItem {
   text: string;
   icon?: string;
+  shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
   handle?: () => void;
   discard?: boolean;
@@ -71,6 +74,7 @@ interface IRightClickMenu {
   key: number | string;
   onClick?: () => void;
   type: OperationColumn;
+  shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
   labelProps: {
     icon?: string;
@@ -121,6 +125,7 @@ const aiDataCollectionOperations = new Set<OperationColumn>([
 ]);
 
 export const useCreateRightClickMenu = () => {
+  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const [createAccountForm] = Form.useForm<CreateAccountValues>();
   // Read only store actions here; dynamic data must be fetched again for each operation.
   const {
@@ -198,7 +203,7 @@ export const useCreateRightClickMenu = () => {
       tableName,
       dataCollectionElementType,
     } = extraParams;
-    const hasPermission = extraParams.hasPermission ?? runtimeEditionConfig.usesFixedIdentity;
+    const { hasPermission } = resolveDataSourceAuthorization(extraParams, runtimeEditionConfig.usesFixedIdentity);
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
     // Set the current node
@@ -223,7 +228,7 @@ export const useCreateRightClickMenu = () => {
     };
 
     const refreshAfterDelete = () => {
-      const parentNode = getParentNode(treeNodeData.key, treeData!);
+      const parentNode = getParentNode(treeNodeData.key, treeData);
       handleLoadData(parentNode || treeNodeData, {
         refresh: true,
       });
@@ -699,6 +704,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.Refresh]: {
         text: i18n('common.button.refresh'),
         icon: 'icon-refresh',
+        shortcutAction: ShortcutAction.DatabaseTreeRefresh,
         handle: () => {
           handleLoadData(treeNodeData, {
             refresh: true,
@@ -781,6 +787,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.CreateTable]: {
         text: i18n('editTable.button.createTable'),
         icon: 'icon-table-add',
+        shortcutAction: ShortcutAction.DatabaseTreeCreateTable,
         handle: () => {
           addWorkspaceTab({
             id: uuid(),
@@ -805,10 +812,12 @@ export const useCreateRightClickMenu = () => {
         icon: 'icon-trash',
         handle: () => {
           deleteTable(treeNodeData, () => {
-            const parentNode = getParentNode(treeNodeData.key, treeData!);
-            handleLoadData(parentNode, {
-              refresh: true,
-            });
+            const parentNode = getParentNode(treeNodeData.key, treeData);
+            if (parentNode) {
+              handleLoadData(parentNode, {
+                refresh: true,
+              });
+            }
           });
         },
       },
@@ -885,10 +894,12 @@ export const useCreateRightClickMenu = () => {
           handelPinTable({
             treeNodeData,
           }).then(() => {
-            const parentNode = getParentNode(treeNodeData.key, treeData!);
-            handleLoadData(parentNode, {
-              refresh: true,
-            });
+            const parentNode = getParentNode(treeNodeData.key, treeData);
+            if (parentNode) {
+              handleLoadData(parentNode, {
+                refresh: true,
+              });
+            }
           });
         },
       },
@@ -897,6 +908,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.EditTable]: {
         text: i18n('workspace.menu.editTable'),
         icon: 'icon-table-edit',
+        shortcutAction: ShortcutAction.DatabaseTreeEditTable,
         handle: () => {
           const title = [tableName].filter(Boolean).join('.') + `[${dataSourceName}]`;
           const popoverContent =
@@ -916,10 +928,12 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
               submitCallback: () => {
-                const parentNode = getParentNode(treeNodeData.key, treeData!);
-                handleLoadData(parentNode, {
-                  refresh: true,
-                });
+                const parentNode = getParentNode(treeNodeData.key, treeData);
+                if (parentNode) {
+                  handleLoadData(parentNode, {
+                    refresh: true,
+                  });
+                }
               },
               popoverContent,
             },
@@ -948,6 +962,7 @@ export const useCreateRightClickMenu = () => {
       [OperationColumn.OpenTable]: {
         text: i18n('workspace.menu.openTable'),
         icon: 'icon-table',
+        shortcutAction: ShortcutAction.DatabaseTreeOpenTable,
         doubleClickTrigger: true,
         handle: () => {
           const _tableName = compatibleDataBaseName(tableName!, databaseType!);
@@ -1263,10 +1278,12 @@ export const useCreateRightClickMenu = () => {
                   copyData: false,
                 })
                 .then(() => {
-                  const parentNode = getParentNode(treeNodeData.key, treeData!);
-                  handleLoadData(parentNode, {
-                    refresh: true,
-                  });
+                  const parentNode = getParentNode(treeNodeData.key, treeData);
+                  if (parentNode) {
+                    handleLoadData(parentNode, {
+                      refresh: true,
+                    });
+                  }
                 });
             },
           },
@@ -1282,42 +1299,29 @@ export const useCreateRightClickMenu = () => {
                   copyData: true,
                 })
                 .then(() => {
-                  const parentNode = getParentNode(treeNodeData.key, treeData!);
-                  handleLoadData(parentNode, {
-                    refresh: true,
-                  });
+                  const parentNode = getParentNode(treeNodeData.key, treeData);
+                  if (parentNode) {
+                    handleLoadData(parentNode, {
+                      refresh: true,
+                    });
+                  }
                 });
             },
           },
         ],
       },
-
-      // Synchronize the database.
-      // [OperationColumn.SyncDataBase]: {
-      //   text: i18n('workspace.menu.syncDataBase'),
-      //   icon: 'icon-sparkles',
-      //   handle: () => {
-      //     staticModal.confirm({
-      //       title: i18n('ai.syncDBTable.title'),
-      //       content: i18n('ai.syncDBTable.desc'),
-      //       onOk: () => {
-      //         syncDataBase({ treeNodeData });
-      //       },
-      //     });
-      //   },
-      //   discard: treeNodeType === TreeNodeType.DATABASE && supportSchema,
-      // },
     };
 
     const generateChildren = (children: IOperationColumnConfigItem[], type, lastKey) => {
       if (!children.length) return undefined;
       const finalList: IRightClickMenu[] = [];
       children?.forEach((t, i) => {
-        if (!t.discard && (runtimeEditionConfig.aiDataCollection || !aiDataCollectionOperations.has(type))) {
+        if (!t.discard && (aiDataCollection || !aiDataCollectionOperations.has(type))) {
           finalList.push({
             key: `${lastKey}-${i}`,
             onClick: t.handle,
             type,
+            shortcutAction: t.shortcutAction,
             labelProps: {
               icon: t.icon,
               label: t.text,
@@ -1346,7 +1350,7 @@ export const useCreateRightClickMenu = () => {
         return;
       }
 
-      if (!runtimeEditionConfig.aiDataCollection && aiDataCollectionOperations.has(t)) {
+      if (!aiDataCollection && aiDataCollectionOperations.has(t)) {
         return;
       }
 
@@ -1357,6 +1361,7 @@ export const useCreateRightClickMenu = () => {
           key: i,
           onClick: concrete?.handle,
           type: t,
+          shortcutAction: concrete.shortcutAction,
           doubleClickTrigger: concrete.doubleClickTrigger,
           labelProps: {
             icon: concrete?.icon,

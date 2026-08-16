@@ -1,5 +1,6 @@
 import { INormalizedData, ChartSchema } from '@/blocks/BI/Chart/typings';
-import { ChartType, LineType, OrderByRule, OrderByType } from '../../constants';
+import { ChartType, LineType, OrderByType } from '../../constants';
+import { sortChartDataIndices } from '../sortChartData';
 
 export interface DataTreatingProps {
   data?: INormalizedData;
@@ -77,12 +78,7 @@ export const barDataTreating = (props: DataTreatingProps) => {
     const isXAxis = orderByType === OrderByType.X_AXIS;
     const dataToSort = isXAxis ? xAxisData : yAxisData;
 
-    const sortedIndices = dataToSort
-      .map((_, index) => index)
-      .sort((a, b) => {
-        const compareResult = dataToSort[a] < dataToSort[b] ? -1 : 1;
-        return orderByRule === OrderByRule.ASC ? compareResult : -compareResult;
-      });
+    const sortedIndices = sortChartDataIndices(dataToSort, orderByRule);
 
     xAxisData = sortedIndices.map((index) => xAxisData[index]);
     yAxisData = sortedIndices.map((index) => yAxisData[index]);

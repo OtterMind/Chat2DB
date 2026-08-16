@@ -10,16 +10,31 @@ import org.apache.commons.lang3.StringUtils;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 public class BigQueryDBManager extends DefaultDBManager implements IDbManager {
 
+    /**
+     * Keys this manager injects into extendInfo. A reconnect reuses the same
+     * ConnectInfo instance, so these must be stripped first to avoid duplicates.
+     */
+    private static final Set<String> MANAGED_EXTEND_INFO_KEYS =
+            Set.of("ProjectId", "OAuthServiceAcctEmail", "OAuthType", "OAuthPvtKeyPath");
+
     @Override
     public Connection getConnection(ConnectInfo connectInfo) {
-        List<KeyValue> keyValues = connectInfo.getExtendInfo();
-        if(keyValues == null){
-            keyValues =new ArrayList<>();
-        }
+        List<KeyValue> keyValues = prepareExtendInfo(connectInfo);
+        connectInfo.setExtendInfo(keyValues);
+        return super.getConnection(connectInfo);
+    }
+
+    static List<KeyValue> prepareExtendInfo(ConnectInfo connectInfo) {
+        List<KeyValue> keyValues = connectInfo.getExtendInfo() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(connectInfo.getExtendInfo());
+        keyValues.removeIf(kv -> kv != null && kv.getKey() != null
+                && MANAGED_EXTEND_INFO_KEYS.contains(kv.getKey()));
         if(StringUtils.isNotBlank(connectInfo.getProject())){
             KeyValue keyValue = new KeyValue();
             keyValue.setKey("ProjectId");
@@ -43,9 +58,7 @@ public class BigQueryDBManager extends DefaultDBManager implements IDbManager {
             keyValue1.setValue(connectInfo.getKeyfile());
             keyValues.add(keyValue1);
         }
-        connectInfo.setExtendInfo(keyValues);
-        Connection connection = super.getConnection(connectInfo);
-        return connection;
+        return keyValues;
     }
 
 }
