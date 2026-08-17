@@ -15,6 +15,10 @@ async function testExitWithoutActiveTasks() {
       calls.push('confirm');
       return true;
     },
+    cancelApplicationExit: async () => {
+      calls.push('cancel-native');
+      return true;
+    },
     requestConfirmation: () => {
       calls.push('prompt');
     },
@@ -38,6 +42,10 @@ async function testExitWithActiveTasks() {
     },
     confirmCloseWindow: async () => {
       calls.push('confirm');
+      return true;
+    },
+    cancelApplicationExit: async () => {
+      calls.push('cancel-native');
       return true;
     },
     requestConfirmation: (request) => {
@@ -71,6 +79,7 @@ async function testPrepareFailureKeepsNativeWindowOpen() {
         confirmCalled = true;
         return true;
       },
+      cancelApplicationExit: async () => true,
       requestConfirmation: () => undefined,
       onCancel: () => undefined,
     }),
@@ -94,12 +103,16 @@ async function testMissingNativeExitRequestFailsClosed() {
         calls.push('confirm');
         return false;
       },
+      cancelApplicationExit: async () => {
+        calls.push('cancel-native');
+        return true;
+      },
       requestConfirmation: () => undefined,
       onCancel: () => undefined,
     }),
     /No pending application exit request/,
   );
-  assert.deepEqual(calls, ['prepare', 'confirm', 'abort']);
+  assert.deepEqual(calls, ['prepare', 'confirm', 'abort', 'cancel-native']);
 }
 
 void Promise.all([

@@ -9,6 +9,7 @@ interface ApplicationExitOperations {
   prepareUserExit: () => Promise<void>;
   abortUserExit: () => Promise<void>;
   confirmCloseWindow: () => Promise<boolean>;
+  cancelApplicationExit: () => Promise<boolean>;
   requestConfirmation: (confirmation: ApplicationExitConfirmation) => void;
   onCancel: () => void;
 }
@@ -22,6 +23,7 @@ const finishApplicationExit = async (operations: ApplicationExitOperations) => {
     }
   } catch (error) {
     await operations.abortUserExit().catch(() => undefined);
+    await operations.cancelApplicationExit().catch(() => undefined);
     throw error;
   }
 };

@@ -12,14 +12,14 @@ import org.cef.callback.CefQueryCallback;
 
 import java.util.Map;
 
-@JcefAction(value = "confirm-close-window", method = "client-command")
-public class ConfirmCloseWindowHandler implements IJcefActionHandler {
+@JcefAction(value = "cancel-application-exit", method = "client-command")
+public class CancelApplicationExitHandler implements IJcefActionHandler {
 
     @Override
     public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) {
         JSONObject request = JSON.parseObject(consoleMessage.getMessage());
         String operationId = request == null ? null : request.getString("operationId");
-        boolean confirmed = ApplicationExitCoordinator.confirm(operationId);
-        ResponseBuilder.buildSuccessJcef(Map.of("data", confirmed), callback);
+        boolean cancelled = ApplicationExitCoordinator.cancel(operationId);
+        ResponseBuilder.buildSuccessJcef(Map.of("data", cancelled), callback);
     }
 }

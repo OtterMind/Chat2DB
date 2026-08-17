@@ -27,18 +27,28 @@ public class RestartAppHandler implements IJcefActionHandler {
                 operationId = UUID.randomUUID().toString();
             }
             IDesktopUpdater updater = DesktopUpdaterRegistry.get();
-            boolean accepted = updater.prepareRestart();
+            boolean accepted = ApplicationExitCoordinator.request(
+                    ApplicationExitCoordinator.ExitAction.RESTART.name(),
+                    operationId,
+                    () -> prepareRestart(updater)
+            );
             ResponseBuilder.buildSuccessJcef(Map.of(
                     "data", Map.of("operationId", operationId, "accepted", accepted)
             ), callback);
-            if (accepted) {
-                ApplicationExitCoordinator.request(
-                        ApplicationExitCoordinator.ExitAction.RESTART.name(),
-                        updater::exitCurrentProcessAfterResponse
-                );
-            }
         } catch (Exception exception) {
             callback.failure(500, exception.getMessage());
+        }
+    }
+
+    private boolean prepareRestart(IDesktopUpdater updater) {
+        try {
+            boolean accepted = updater.prepareRestart();
+            if (accepted) {
+                updater.exitCurrentProcessAfterResponse();
+            }
+            return accepted;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not prepare application restart", exception);
         }
     }
 }

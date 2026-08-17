@@ -11,6 +11,7 @@ import { ConsoleAction, createConsoleAction } from './slices/console/action';
 import { ModalAction, createModalAction } from './slices/modal/action';
 import {
   getPersistableActiveConsoleId,
+  getHydratedWorkspaceLayout,
   getPersistableWorkspaceLayout,
   getPersistableWorkspaceTabList,
 } from './utils/workspaceTabPersistence';
@@ -54,6 +55,14 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
         workspaceTabList,
       }),
       recentlyClosedWorkspaceTabs: getPersistableWorkspaceTabList(state.recentlyClosedWorkspaceTabs) || [],
+    };
+  },
+  merge: (persistedState, currentState) => {
+    const storedState = (persistedState || {}) as Partial<GlobalPersist>;
+    return {
+      ...currentState,
+      ...storedState,
+      layout: getHydratedWorkspaceLayout(currentState.layout, storedState.layout),
     };
   },
 };

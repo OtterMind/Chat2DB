@@ -13,17 +13,22 @@ const useApplicationExit = () => {
   useEffect(() => {
     if (!isDesktop) return;
 
-    const handleExitRequested = async () => {
-      if (handlingExitRef.current) return;
+    const handleExitRequested = async (request?: { operationId?: string }) => {
+      const operationId = request?.operationId;
+      if (!operationId || handlingExitRef.current) return;
       handlingExitRef.current = true;
+      const cancelNativeExit = () => jcefApi.cancelApplicationExit({ operationId });
       try {
         await coordinateApplicationExit({
           getActiveTaskCount: () => importExportServices.getActiveTaskCount(undefined),
           prepareUserExit: () => importExportServices.prepareUserExit(undefined),
           abortUserExit: () => importExportServices.abortUserExit(undefined),
-          confirmCloseWindow: jcefApi.confirmCloseWindow,
+          confirmCloseWindow: () => jcefApi.confirmCloseWindow({ operationId }),
+          cancelApplicationExit: cancelNativeExit,
           onCancel: () => {
-            handlingExitRef.current = false;
+            void cancelNativeExit().finally(() => {
+              handlingExitRef.current = false;
+            });
           },
           requestConfirmation: ({ activeTaskCount, onCancel, onConfirm }) => {
             useGlobalStore.getState().openUnifiedConfirmationModal({
@@ -36,6 +41,7 @@ const useApplicationExit = () => {
           },
         });
       } catch {
+        await cancelNativeExit().catch(() => undefined);
         handlingExitRef.current = false;
       }
     };

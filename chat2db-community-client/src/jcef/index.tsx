@@ -145,8 +145,11 @@ const jcefApi = {
   closeWindow: () => {
     return createJcefApi('close-window');
   },
-  confirmCloseWindow: () => {
-    return createJcefApi<boolean>('confirm-close-window');
+  confirmCloseWindow: (data: { operationId: string }) => {
+    return createJcefApi<boolean>('confirm-close-window', data);
+  },
+  cancelApplicationExit: (data: { operationId: string }) => {
+    return createJcefApi<boolean>('cancel-application-exit', data);
   },
   // Is it maximizing
   isWindowMaximized: () => {

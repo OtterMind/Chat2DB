@@ -11,7 +11,9 @@ import org.cef.browser.CefBrowser;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 public final class ApplicationExitCoordinator {
 
@@ -21,42 +23,74 @@ public final class ApplicationExitCoordinator {
         INSTALL_UPDATE
     }
 
-    private static final AtomicReference<Runnable> PENDING_EXIT = new AtomicReference<>();
+    private static final AtomicReference<PendingExit> PENDING_EXIT = new AtomicReference<>();
 
     private ApplicationExitCoordinator() {
     }
 
-    public static void request(String action) {
-        request(action, () -> execute(action));
+    public static boolean request(String action) {
+        return request(action, UUID.randomUUID().toString(), () -> {
+            execute(action);
+            return true;
+        });
     }
 
-    public static void request(String action, Runnable confirmedAction) {
+    public static boolean request(String action, String operationId, BooleanSupplier confirmedAction) {
         ExitAction validatedAction = requireAction(action);
+        String validatedOperationId = requireOperationId(operationId);
         Objects.requireNonNull(confirmedAction, "Confirmed exit action is required");
         if (!ConfigUtils.isCommunity()) {
-            confirmedAction.run();
-            return;
+            return confirmedAction.getAsBoolean();
         }
         CefBrowser browser = JcefContext.getInstance().getBrowser_();
         if (browser == null) {
-            confirmedAction.run();
-            return;
+            return confirmedAction.getAsBoolean();
         }
-        PENDING_EXIT.set(confirmedAction);
-        ConsoleResult result = ConsoleResult.builder()
-                .actionType(ActionTypeEnum.APP_EXIT_REQUESTED.getName())
-                .message(Map.of("reason", validatedAction.name()))
-                .build();
-        CallJsFunctionUtil.callHandleJavaMessage(browser, JSON.toJSONString(result));
-    }
-
-    public static boolean confirm() {
-        Runnable confirmedAction = PENDING_EXIT.getAndSet(null);
-        if (confirmedAction == null) {
+        PendingExit pendingExit = new PendingExit(validatedOperationId, confirmedAction);
+        if (!PENDING_EXIT.compareAndSet(null, pendingExit)) {
             return false;
         }
-        confirmedAction.run();
+        ConsoleResult result = ConsoleResult.builder()
+                .actionType(ActionTypeEnum.APP_EXIT_REQUESTED.getName())
+                .message(Map.of(
+                        "reason", validatedAction.name(),
+                        "operationId", validatedOperationId
+                ))
+                .build();
+        try {
+            CallJsFunctionUtil.callHandleJavaMessage(browser, JSON.toJSONString(result));
+        } catch (RuntimeException exception) {
+            PENDING_EXIT.compareAndSet(pendingExit, null);
+            throw exception;
+        }
         return true;
+    }
+
+    public static boolean confirm(String operationId) {
+        PendingExit pendingExit = takePendingExit(operationId);
+        if (pendingExit == null) {
+            return false;
+        }
+        return pendingExit.confirmedAction().getAsBoolean();
+    }
+
+    public static boolean cancel(String operationId) {
+        return takePendingExit(operationId) != null;
+    }
+
+    private static PendingExit takePendingExit(String operationId) {
+        if (operationId == null || operationId.isBlank()) {
+            return null;
+        }
+        while (true) {
+            PendingExit pendingExit = PENDING_EXIT.get();
+            if (pendingExit == null || !pendingExit.operationId().equals(operationId)) {
+                return null;
+            }
+            if (PENDING_EXIT.compareAndSet(pendingExit, null)) {
+                return pendingExit;
+            }
+        }
     }
 
     private static void execute(String action) {
@@ -82,5 +116,15 @@ public final class ApplicationExitCoordinator {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Unsupported exit action: " + action, e);
         }
+    }
+
+    private static String requireOperationId(String operationId) {
+        if (operationId == null || operationId.isBlank()) {
+            throw new IllegalArgumentException("Exit operation ID is required");
+        }
+        return operationId;
+    }
+
+    private record PendingExit(String operationId, BooleanSupplier confirmedAction) {
     }
 }

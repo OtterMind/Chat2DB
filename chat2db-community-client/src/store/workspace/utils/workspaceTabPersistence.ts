@@ -57,6 +57,20 @@ export function getPersistableWorkspaceLayout(layout: ConfigState['layout']): Co
   };
 }
 
+export function getHydratedWorkspaceLayout(
+  currentLayout: ConfigState['layout'],
+  persistedLayout: unknown,
+): ConfigState['layout'] {
+  const storedLayout =
+    persistedLayout !== null && typeof persistedLayout === 'object'
+      ? (persistedLayout as Partial<ConfigState['layout']>)
+      : {};
+  return getPersistableWorkspaceLayout({
+    ...currentLayout,
+    ...storedLayout,
+  } as ConfigState['layout']);
+}
+
 export function getPersistableWorkspaceTabList(workspaceTabList?: IWorkspaceTab[] | null) {
   if (!workspaceTabList?.length) {
     return workspaceTabList || null;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { WorkspaceTabType } from '@/constants/workspace';
 import type { IWorkspaceTab } from '@/typings/workspace';
 import {
+  getHydratedWorkspaceLayout,
   getPersistableActiveConsoleId,
   getPersistableWorkspaceLayout,
   getPersistableWorkspaceTabList,
@@ -129,6 +130,32 @@ assert.equal(
   migratedClosedLeftPanelLayout.panelLeftWidth,
   0,
   'legacy closed-left-panel state must remain closed after width-based layout migration',
+);
+
+const hydratedLegacyLayout = getHydratedWorkspaceLayout(
+  {
+    panelLeft: true,
+    panelLeftWidth: 240,
+    panelRight: false,
+    panelRightWidth: 300,
+  },
+  {
+    panelLeft: false,
+    panelLeftWidth: 260,
+    panelRight: circularPanelState,
+    panelRightWidth: Number.NaN,
+  },
+);
+
+assert.deepEqual(
+  hydratedLegacyLayout,
+  {
+    panelLeft: false,
+    panelLeftWidth: 0,
+    panelRight: false,
+    panelRightWidth: 300,
+  },
+  'hydration must normalize legacy and malformed panel values before the workspace renders',
 );
 
 console.log('workspace tab persistence tests passed');
