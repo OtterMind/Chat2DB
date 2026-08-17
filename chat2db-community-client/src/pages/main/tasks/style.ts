@@ -208,6 +208,10 @@ export const useStyles = createStyles(({ css, token }) => ({
       height: 100%;
       object-fit: cover;
     }
+    svg {
+      width: 64%;
+      height: 64%;
+    }
   `,
   runtimeBadge: css`
     display: inline-flex;

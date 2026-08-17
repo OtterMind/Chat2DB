@@ -31,6 +31,10 @@ public final class RuntimePromptBuilder {
                 .append("DATA_TABLE/METRIC and contentBase64 for FILE; never put local paths in the manifest. ")
                 .append("Each object uses artifactId, type, title, mimeType, size, sha256, content or ")
                 .append("contentBase64, optional fileName, and evidence entries containing toolAttemptId.\n");
+        prompt.append("Only include evidence when a Chat2DB Tool Gateway response returned the exact ")
+                .append("toolAttemptId. Never invent, derive, or rename evidence IDs; omit evidence when ")
+                .append("no exact Chat2DB toolAttemptId is available. An invalid optional artifact is rejected ")
+                .append("without replacing the Markdown final deliverable.\n");
         return prompt.toString().trim();
     }
 

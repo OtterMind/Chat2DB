@@ -184,7 +184,8 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         }
         List<AgentRuntimeInstance> instances = listInstances();
         for (AgentRuntimeProviderEnum provider : List.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES)) {
+                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
+                AgentRuntimeProviderEnum.DSH)) {
             if (instances.stream().anyMatch(instance -> instance.getProvider() == provider)) {
                 ensureDefaultProfile(ownerId, provider);
             }
@@ -218,9 +219,9 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         request.setName(expectedName);
         request.setTransport(AgentRuntimeTransportEnum.EXTERNAL_DAEMON);
         request.setProvider(provider);
-        request.setExecutable(defaultExecutable(provider));
+        request.setExecutable(provider.defaultExecutable());
         request.setSessionResumeEnabled(true);
-        request.setApprovalBridgeEnabled(provider == AgentRuntimeProviderEnum.HERMES);
+        request.setApprovalBridgeEnabled(provider.requiresApprovalBridge());
         request.setEnabled(true);
         request.setCreatedBy(ownerId);
         return createProfile(request);
@@ -265,8 +266,7 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
     }
 
     private String defaultProfileName(AgentRuntimeProviderEnum provider, Long ownerId) {
-        String displayName = provider == AgentRuntimeProviderEnum.CODEX ? "Codex" : "Hermes";
-        return "Chat2DB Local " + displayName + " (" + ownerId + ")";
+        return "Chat2DB Local " + provider.displayName() + " (" + ownerId + ")";
     }
 
     private void validateProfileRequest(AgentRuntimeProfileCreateRequest request) {
@@ -288,7 +288,7 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         }
         if (request.getProvider() != AgentRuntimeProviderEnum.SPRING_AI
                 && request.getTransport() != AgentRuntimeTransportEnum.EXTERNAL_DAEMON) {
-            throw new IllegalArgumentException("Codex and Hermes runtimes must use EXTERNAL_DAEMON transport");
+            throw new IllegalArgumentException("External Agent runtimes must use EXTERNAL_DAEMON transport");
         }
         if (request.getTimeoutSeconds() != null && request.getTimeoutSeconds() <= 0) {
             throw new IllegalArgumentException("runtime timeout must be positive");
@@ -315,9 +315,10 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
                 throw new IllegalArgumentException("runtime MCP configuration must be valid JSON", exception);
             }
         }
-        if (request.getProvider() == AgentRuntimeProviderEnum.HERMES
+        if (request.getProvider().requiresApprovalBridge()
                 && !Boolean.TRUE.equals(request.getApprovalBridgeEnabled())) {
-            throw new IllegalArgumentException("Hermes runtime requires the approval bridge");
+            throw new IllegalArgumentException(request.getProvider().displayName()
+                    + " runtime requires the approval bridge");
         }
     }
 
@@ -328,8 +329,8 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         if (request.getDaemonId().trim().length() > 128) {
             throw new IllegalArgumentException("runtime daemon id must not exceed 128 characters");
         }
-        if (request.getProvider() == null || request.getProvider() == AgentRuntimeProviderEnum.SPRING_AI) {
-            throw new IllegalArgumentException("external runtime provider must be CODEX or HERMES");
+        if (request.getProvider() == null || !request.getProvider().isExternal()) {
+            throw new IllegalArgumentException("external runtime provider must be CODEX, HERMES, or DSH");
         }
         if (StringUtils.isBlank(request.getProviderVersion()) || StringUtils.isBlank(request.getProtocolVersion())) {
             throw new IllegalArgumentException("runtime provider and protocol versions are required");
@@ -347,7 +348,8 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         profile.setName(request.getName().trim());
         profile.setTransport(request.getTransport());
         profile.setProvider(request.getProvider());
-        profile.setExecutable(StringUtils.defaultIfBlank(request.getExecutable(), defaultExecutable(request.getProvider())));
+        profile.setExecutable(StringUtils.defaultIfBlank(
+                request.getExecutable(), request.getProvider().defaultExecutable()));
         profile.setModel(StringUtils.trimToNull(request.getModel()));
         profile.setWorkingDirectoryPolicy(StringUtils.defaultIfBlank(
                 request.getWorkingDirectoryPolicy(), DEFAULT_WORKING_DIRECTORY_POLICY));
@@ -433,14 +435,6 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         copy.setGmtModified(source.getGmtModified());
         copy.setRevision(source.getRevision());
         return copy;
-    }
-
-    private String defaultExecutable(AgentRuntimeProviderEnum provider) {
-        return switch (provider) {
-            case CODEX -> "codex";
-            case HERMES -> "hermes";
-            case SPRING_AI -> null;
-        };
     }
 
     private Date now() {

@@ -175,7 +175,7 @@ public class AgentRuntimeControlPlaneClient {
             if (!envelope.path("success").asBoolean(false)) {
                 String code = envelope.path("errorCode").asText("common.runtimeControlError");
                 String message = envelope.path("errorMessage").asText("Runtime control plane rejected request");
-                throw new ControlPlaneException(code + ": " + message);
+                throw new ControlPlaneRejectedException(code, message);
             }
             JsonNode data = envelope.get("data");
             if (data == null || data.isNull()) {

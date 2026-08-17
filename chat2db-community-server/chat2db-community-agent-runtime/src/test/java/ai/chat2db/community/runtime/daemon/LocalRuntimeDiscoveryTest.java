@@ -20,23 +20,30 @@ class LocalRuntimeDiscoveryTest {
     Path temporaryDirectory;
 
     @Test
-    void discoversCodexAndHermesFromPathAndUsesProviderSpecificVersionCommands() throws IOException {
+    void discoversEveryExternalProviderAndUsesProviderSpecificVersionCommands() throws IOException {
         Path codex = executable("codex", "#!/bin/sh\necho 'codex-cli 0.147.0'\n");
         Path hermes = executable("hermes", "#!/bin/sh\n"
                 + "if [ \"$1\" = 'acp' ] && [ \"$2\" = '--version' ]; then echo 'Hermes ACP 0.2.0'; exit 0; fi\n"
+                + "exit 1\n");
+        Path dsh = executable("dsh", "#!/bin/sh\n"
+                + "if [ \"$1\" = '--version' ]; then echo '0.1.0-rc.6'; exit 0; fi\n"
                 + "exit 1\n");
         LocalRuntimeDiscovery discovery = new LocalRuntimeDiscovery(
                 Map.of("PATH", temporaryDirectory.toString()), temporaryDirectory);
 
         List<LocalRuntimeInstallation> installations = discovery.discover(Set.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES));
+                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
+                AgentRuntimeProviderEnum.DSH));
 
-        assertEquals(List.of(AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES),
+        assertEquals(List.of(AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
+                        AgentRuntimeProviderEnum.DSH),
                 installations.stream().map(LocalRuntimeInstallation::provider).toList());
         assertEquals(codex.toRealPath(), installations.get(0).executable());
         assertEquals("codex-cli 0.147.0", installations.get(0).version());
         assertEquals(hermes.toRealPath(), installations.get(1).executable());
         assertEquals("Hermes ACP 0.2.0", installations.get(1).version());
+        assertEquals(dsh.toRealPath(), installations.get(2).executable());
+        assertEquals("0.1.0-rc.6", installations.get(2).version());
     }
 
     @Test

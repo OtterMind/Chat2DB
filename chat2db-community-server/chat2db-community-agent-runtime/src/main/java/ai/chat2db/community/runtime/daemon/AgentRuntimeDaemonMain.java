@@ -24,7 +24,7 @@ public final class AgentRuntimeDaemonMain {
         String token = required(TOKEN_ENV);
         String providerValue = value(PROVIDER_ENV, "AUTO").toUpperCase(java.util.Locale.ROOT);
         Set<AgentRuntimeProviderEnum> providers = "AUTO".equals(providerValue)
-                ? Set.of(AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES)
+                ? Set.copyOf(ExternalRuntimeProviderCatalog.providers())
                 : Set.of(externalProvider(providerValue));
         String daemonId = value(DAEMON_ID_ENV,
                 "community-local-daemon");
@@ -35,7 +35,7 @@ public final class AgentRuntimeDaemonMain {
 
         List<LocalRuntimeInstallation> installations = new LocalRuntimeDiscovery().discover(providers);
         if (installations.isEmpty()) {
-            throw new IllegalStateException("No supported Codex or Hermes runtime was detected on this machine");
+            throw new IllegalStateException("No supported external Agent Runtime was detected on this machine");
         }
         LocalRuntimeSupervisor supervisor = new LocalRuntimeSupervisor(
                 daemonId, controlPlaneUrl, token, workspaceRoot, concurrency, installations);
@@ -51,8 +51,8 @@ public final class AgentRuntimeDaemonMain {
 
     private static AgentRuntimeProviderEnum externalProvider(String value) {
         AgentRuntimeProviderEnum provider = AgentRuntimeProviderEnum.valueOf(value);
-        if (provider != AgentRuntimeProviderEnum.CODEX && provider != AgentRuntimeProviderEnum.HERMES) {
-            throw new IllegalArgumentException("Runtime Daemon supports AUTO, CODEX, or HERMES providers");
+        if (!ExternalRuntimeProviderCatalog.providers().contains(provider)) {
+            throw new IllegalArgumentException("Runtime Daemon supports AUTO, CODEX, HERMES, or DSH providers");
         }
         return provider;
     }

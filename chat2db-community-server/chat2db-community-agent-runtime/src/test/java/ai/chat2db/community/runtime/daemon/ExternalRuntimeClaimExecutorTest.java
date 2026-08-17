@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExternalRuntimeClaimExecutorTest {
@@ -199,6 +200,38 @@ class ExternalRuntimeClaimExecutorTest {
     }
 
     @Test
+    void rejectsInvalidOptionalArtifactButStillCompletesWithFinalResponse() {
+        FakeControlPlane control = new FakeControlPlane();
+        control.rejectArtifact.set(true);
+        ExternalProviderAdapter adapter = new ExternalProviderAdapter() {
+            @Override public AgentRuntimeProviderEnum provider() { return AgentRuntimeProviderEnum.CODEX; }
+
+            @Override
+            public ProviderExecutionResult execute(ProviderExecutionRequest request, ProviderEventSink events,
+                                                   ProviderLifecycleSink lifecycle) {
+                lifecycle.started("codex-with-invalid-artifact");
+                ProviderExecutionResult result = new ProviderExecutionResult();
+                result.setFinalResponse("Report survives an invalid optional artifact");
+                result.setArtifacts(java.util.List.of(manifest("invalid-evidence", "{\"charts\":[]}")));
+                return result;
+            }
+
+            @Override public void cancel(String runId) { }
+        };
+
+        executor(control, adapter, new TaskWorkspaceManager(
+                temporaryDirectory.resolve("invalid-artifact-runtime").toAbsolutePath()))
+                .execute(claim(60_000L), Map.of());
+
+        assertNotNull(control.complete);
+        assertEquals("Report survives an invalid optional artifact", control.complete.getFinalResponse());
+        assertNull(control.fail);
+        assertEquals(AgentRuntimeEventTypeEnum.ERROR, control.event.getEventType());
+        assertEquals(Boolean.TRUE, control.event.getPayload().get("recoverable"));
+        assertEquals(3L, control.complete.getExpectedLeaseRevision());
+    }
+
+    @Test
     void bridgesProviderPermissionThroughControlPlaneBeforeResumingExecution() {
         FakeControlPlane control = new FakeControlPlane();
         AgentRuntimeRunClaim claim = claim(60_000L);
@@ -327,6 +360,7 @@ class ExternalRuntimeClaimExecutorTest {
         private final AtomicBoolean cancelOnRenew = new AtomicBoolean();
         private final AtomicInteger renewFailures = new AtomicInteger();
         private final AtomicInteger renewCalls = new AtomicInteger();
+        private final AtomicBoolean rejectArtifact = new AtomicBoolean();
         private AgentRuntimeRunStartedRequest started;
         private AgentRuntimeEventRequest event;
         private AgentRuntimeRunCompleteRequest complete;
@@ -390,6 +424,9 @@ class ExternalRuntimeClaimExecutorTest {
         public AgentRuntimeArtifactResult uploadArtifact(String runId, String leaseToken,
                                                          AgentRuntimeArtifactUploadRequest request) {
             artifactUpload = request;
+            if (rejectArtifact.get()) {
+                throw new ControlPlaneRejectedException("runtime.artifact.invalid", "invalid evidence");
+            }
             AgentArtifact artifact = new AgentArtifact();
             artifact.setId("server-artifact-1");
             artifact.setType(request.getManifest().getType());

@@ -1,9 +1,9 @@
 package ai.chat2db.community.start.agent;
 
+import ai.chat2db.community.runtime.daemon.ExternalRuntimeProviderCatalog;
 import ai.chat2db.community.runtime.daemon.LocalRuntimeDiscovery;
 import ai.chat2db.community.runtime.daemon.LocalRuntimeInstallation;
 import ai.chat2db.community.runtime.daemon.LocalRuntimeSupervisor;
-import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.web.api.util.AgentRuntimeDaemonUtils;
 import jakarta.annotation.PreDestroy;
@@ -44,10 +44,10 @@ public class CommunityDesktopAgentRuntimeLifecycle {
             log.warn("Local Agent Runtime discovery skipped because the daemon token is unavailable");
             return;
         }
-        List<LocalRuntimeInstallation> installations = new LocalRuntimeDiscovery().discover(Set.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES));
+        List<LocalRuntimeInstallation> installations = new LocalRuntimeDiscovery().discover(
+                Set.copyOf(ExternalRuntimeProviderCatalog.providers()));
         if (installations.isEmpty()) {
-            log.info("No local Codex or Hermes Runtime was detected");
+            log.info("No supported local Agent Runtime was detected");
             return;
         }
         int port = environment.getProperty("server.port", Integer.class, 10825);

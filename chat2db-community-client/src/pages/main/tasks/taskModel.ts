@@ -151,18 +151,65 @@ export interface AgentToolActivity {
   status: 'RUNNING' | 'COMPLETED' | 'FAILED';
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function dshToolData(payload: Record<string, unknown>) {
+  return asRecord(asRecord(payload.event)?.data);
+}
+
+function dshResultBlocks(payload: Record<string, unknown>): unknown[] {
+  const message = asRecord(dshToolData(payload)?.message);
+  return Array.isArray(message?.content) ? message.content : [];
+}
+
+function nestedToolText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(nestedToolText).join('');
+  const block = asRecord(value);
+  if (!block) return '';
+  const ownText = block.type === 'text' && typeof block.text === 'string' ? block.text : '';
+  return ownText + nestedToolText(block.content);
+}
+
+function dshResultContent(event: AgentRunEvent): string | undefined {
+  if (event.content) return event.content;
+  const nestedText = nestedToolText(dshResultBlocks(event.payload));
+  if (nestedText) return nestedText;
+  const view = asRecord(asRecord(event.payload.view)?.view);
+  if (typeof view?.output === 'string') return view.output;
+  return view ? JSON.stringify(view, null, 2) : undefined;
+}
+
+function dshResultCallId(payload: Record<string, unknown>): unknown {
+  const message = asRecord(dshToolData(payload)?.message);
+  const sourceId = asRecord(message?.source)?.callId;
+  if (sourceId) return sourceId;
+  return asRecord(dshResultBlocks(payload).find((block) => asRecord(block)?.toolCallId))?.toolCallId;
+}
+
+function dshResultFailed(payload: Record<string, unknown>): boolean {
+  return dshResultBlocks(payload).some((block) => asRecord(block)?.isError === true);
+}
+
 export function buildToolActivities(events: AgentRunEvent[]): AgentToolActivity[] {
   const rows: AgentToolActivity[] = [];
   const byCallId = new Map<string, AgentToolActivity>();
   events.forEach((event) => {
     if (event.type !== 'TOOL_CALL' && event.type !== 'TOOL_RESULT') return;
-    const payloadCallId = event.payload?.toolCallId;
+    const data = dshToolData(event.payload);
+    const payloadCallId = event.payload?.toolCallId
+      || (event.type === 'TOOL_CALL' ? data?.callId : dshResultCallId(event.payload));
     const callId = String(payloadCallId || event.eventId);
     if (event.type === 'TOOL_CALL') {
       const row: AgentToolActivity = {
         id: callId,
-        name: String(event.payload?.name || event.content || 'tool'),
-        arguments: typeof event.payload?.arguments === 'string' ? event.payload.arguments : undefined,
+        name: String(event.payload?.name || data?.name || event.content || 'tool'),
+        arguments: typeof event.payload?.arguments === 'string'
+          ? event.payload.arguments
+          : typeof data?.arguments === 'string' ? data.arguments : undefined,
         occurredAt: event.occurredAt,
         status: 'RUNNING',
       };
@@ -173,20 +220,20 @@ export function buildToolActivities(events: AgentRunEvent[]): AgentToolActivity[
     const resultName = String(event.payload?.name || 'tool');
     const existing = byCallId.get(callId)
       || [...rows].reverse().find((row) => row.status === 'RUNNING' && row.name === resultName);
+    const failed = event.payload?.success === false
+      || event.payload?.status === 'FAILED'
+      || dshResultFailed(event.payload);
+    const result = dshResultContent(event);
     if (existing) {
-      existing.result = event.content;
-      existing.status = event.payload?.success === false || event.payload?.status === 'FAILED'
-        ? 'FAILED'
-        : 'COMPLETED';
+      existing.result = result;
+      existing.status = failed ? 'FAILED' : 'COMPLETED';
     } else {
       rows.push({
         id: callId,
         name: String(event.payload?.name || 'tool'),
-        result: event.content,
+        result,
         occurredAt: event.occurredAt,
-        status: event.payload?.success === false || event.payload?.status === 'FAILED'
-          ? 'FAILED'
-          : 'COMPLETED',
+        status: failed ? 'FAILED' : 'COMPLETED',
       });
     }
   });

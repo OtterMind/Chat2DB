@@ -72,6 +72,20 @@ class AgentRuntimeControlServiceTest {
     }
 
     @Test
+    void createsDshProfileWithExplicitExecutableAndApprovalPolicy() {
+        AgentRuntimeProfileCreateRequest request = codexProfile();
+        request.setName("DeepSeek Harness");
+        request.setProvider(AgentRuntimeProviderEnum.DSH);
+        request.setApprovalBridgeEnabled(true);
+
+        AgentRuntimeProfile profile = service.createProfile(request);
+
+        assertEquals(AgentRuntimeProviderEnum.DSH, profile.getProvider());
+        assertEquals("dsh", profile.getExecutable());
+        assertTrue(profile.getApprovalBridgeEnabled());
+    }
+
+    @Test
     void updatesProfileWithOptimisticRevision() {
         AgentRuntimeProfile created = service.createProfile(codexProfile());
         AgentRuntimeProfileUpdateRequest update = new AgentRuntimeProfileUpdateRequest();

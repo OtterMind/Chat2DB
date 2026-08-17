@@ -1,9 +1,9 @@
 import i18n from '@/i18n';
 import type { AgentRuntimeOption } from '@/service/agent';
 import { Button, Skeleton } from 'antd';
-import { Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 
-import { RuntimeProviderLogo } from './RuntimeProviderLogo';
+import { CHAT2DB_AGENT_AVATAR, RuntimeProviderLogo, runtimeProviderName } from './RuntimeProviderLogo';
 import { useStyles } from './style';
 
 interface Props {
@@ -59,7 +59,9 @@ export default function AgentRuntimePicker({
           className={`${styles.runtimeOption} ${runtimeType !== 'EXTERNAL_AGENT' ? styles.runtimeOptionSelected : ''}`}
           onClick={() => onChange('EMBEDDED_SPRING_AI')}
         >
-          <span className={styles.runtimeOptionLogo}><Sparkles size={19} /></span>
+          <span className={styles.runtimeOptionLogo}>
+            <img src={CHAT2DB_AGENT_AVATAR} alt="Chat2DB" className={styles.runtimeProviderLogo} />
+          </span>
           <span className={styles.runtimeOptionCopy}>
             <strong>Spring AI</strong>
             <small>{i18n('task.agent.runtimeSpringHint')}</small>
@@ -83,7 +85,7 @@ export default function AgentRuntimePicker({
                 <RuntimeProviderLogo provider={option.provider} className={styles.runtimeProviderLogo} />
               </span>
               <span className={styles.runtimeOptionCopy}>
-                <strong>{option.provider === 'CODEX' ? 'Codex' : 'Hermes'}</strong>
+                <strong>{runtimeProviderName(option.provider)}</strong>
                 <small>{option.providerVersion || i18n('task.agent.runtimeLocal')}</small>
               </span>
               <span className={styles.runtimeOptionState}>
@@ -98,7 +100,7 @@ export default function AgentRuntimePicker({
           );
         })}
 
-        {loading && !options.length && [0, 1].map((item) => (
+        {loading && !options.length && [0, 1, 2].map((item) => (
           <div key={item} className={styles.runtimeOptionSkeleton}>
             <Skeleton.Avatar active size={34} shape="square" />
             <Skeleton active title={{ width: 72 }} paragraph={{ rows: 1, width: 120 }} />

@@ -19,6 +19,7 @@ public class LocalRuntimeDiscovery {
 
     static final String CODEX_PATH_ENV = "CHAT2DB_CODEX_PATH";
     static final String HERMES_PATH_ENV = "CHAT2DB_HERMES_PATH";
+    static final String DSH_PATH_ENV = "CHAT2DB_DSH_PATH";
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(15);
     private static final int MAX_VERSION_LENGTH = 128;
 
@@ -36,8 +37,7 @@ public class LocalRuntimeDiscovery {
 
     public List<LocalRuntimeInstallation> discover(Set<AgentRuntimeProviderEnum> requestedProviders) {
         List<LocalRuntimeInstallation> result = new ArrayList<>();
-        for (AgentRuntimeProviderEnum provider : List.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES)) {
+        for (AgentRuntimeProviderEnum provider : ExternalRuntimeProviderCatalog.providers()) {
             if (requestedProviders != null && !requestedProviders.contains(provider)) {
                 continue;
             }
@@ -79,10 +79,7 @@ public class LocalRuntimeDiscovery {
     String probeVersion(AgentRuntimeProviderEnum provider, Path executable) {
         List<String> command = new ArrayList<>();
         command.add(executable.toString());
-        if (provider == AgentRuntimeProviderEnum.HERMES) {
-            command.add("acp");
-        }
-        command.add("--version");
+        command.addAll(ExternalRuntimeProviderCatalog.versionArguments(provider));
         Process process = null;
         try {
             process = new ProcessBuilder(command)
@@ -180,6 +177,9 @@ public class LocalRuntimeDiscovery {
         if (provider == AgentRuntimeProviderEnum.HERMES) {
             candidates.add(userHome.resolve(".local/bin/hermes"));
         }
+        if (provider == AgentRuntimeProviderEnum.DSH) {
+            candidates.add(userHome.resolve(".local/bin/dsh"));
+        }
         return List.copyOf(candidates);
     }
 
@@ -196,11 +196,20 @@ public class LocalRuntimeDiscovery {
     }
 
     private String pathEnvironment(AgentRuntimeProviderEnum provider) {
-        return provider == AgentRuntimeProviderEnum.CODEX ? CODEX_PATH_ENV : HERMES_PATH_ENV;
+        return switch (provider) {
+            case CODEX -> CODEX_PATH_ENV;
+            case HERMES -> HERMES_PATH_ENV;
+            case DSH -> DSH_PATH_ENV;
+            case SPRING_AI -> throw new IllegalArgumentException("Spring AI has no local executable");
+        };
     }
 
     private String command(AgentRuntimeProviderEnum provider) {
-        return provider == AgentRuntimeProviderEnum.CODEX ? "codex" : "hermes";
+        String command = provider.defaultExecutable();
+        if (command == null) {
+            throw new IllegalArgumentException("Spring AI has no local executable");
+        }
+        return command;
     }
 
     private String trim(String value) {

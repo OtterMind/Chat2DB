@@ -1,8 +1,6 @@
 package ai.chat2db.community.runtime.daemon;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
-import ai.chat2db.community.runtime.codex.CodexAppServerAdapter;
-import ai.chat2db.community.runtime.hermes.HermesAcpAdapter;
 import ai.chat2db.community.runtime.provider.ExternalProviderAdapter;
 import ai.chat2db.community.runtime.workspace.TaskWorkspaceManager;
 
@@ -42,8 +40,7 @@ public class LocalRuntimeSupervisor implements AutoCloseable {
         for (LocalRuntimeInstallation installation : installations) {
             AgentRuntimeProviderEnum provider = installation.provider();
             AgentRuntimeControlPlaneClient client = new AgentRuntimeControlPlaneClient(controlPlaneUrl, token);
-            ExternalProviderAdapter adapter = provider == AgentRuntimeProviderEnum.HERMES
-                    ? new HermesAcpAdapter() : new CodexAppServerAdapter();
+            ExternalProviderAdapter adapter = ExternalRuntimeProviderCatalog.createAdapter(provider);
             Path providerWorkspace = workspaceRoot.resolve(provider.name().toLowerCase(java.util.Locale.ROOT));
             TaskWorkspaceManager workspaces = new TaskWorkspaceManager(providerWorkspace);
             ExternalRuntimeClaimExecutor executor = new ExternalRuntimeClaimExecutor(

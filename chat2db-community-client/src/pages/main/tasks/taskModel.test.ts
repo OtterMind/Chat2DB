@@ -166,5 +166,52 @@ assert.deepEqual(
   ]),
   [{ id: 'call-1', name: 'list_all_datasources', arguments: '{}', result: 'id=7; name=local', occurredAt: 1, status: 'COMPLETED' }],
 );
+assert.deepEqual(
+  buildToolActivities([
+    {
+      eventId: 'dsh-call-event',
+      runId: 'run',
+      sequence: 3,
+      type: 'TOOL_CALL',
+      content: 'bash: call-dsh-1',
+      payload: {
+        event: { data: { callId: 'call-dsh-1', name: 'bash', arguments: '{"command":"pwd"}' } },
+      },
+      occurredAt: 3,
+    },
+    {
+      eventId: 'dsh-result-event',
+      runId: 'run',
+      sequence: 4,
+      type: 'TOOL_RESULT',
+      content: '',
+      payload: {
+        event: {
+          data: {
+            message: {
+              source: { kind: 'tool', callId: 'call-dsh-1' },
+              content: [{
+                type: 'tool-result',
+                toolCallId: 'call-dsh-1',
+                content: [{ type: 'text', text: '/workspace' }],
+                isError: false,
+              }],
+            },
+          },
+        },
+      },
+      occurredAt: 4,
+    },
+  ]),
+  [{
+    id: 'call-dsh-1',
+    name: 'bash',
+    arguments: '{"command":"pwd"}',
+    result: '/workspace',
+    occurredAt: 3,
+    status: 'COMPLETED',
+  }],
+  'historical DSH tool events should expose nested arguments and results',
+);
 
 console.log('Task presentation model tests passed.');

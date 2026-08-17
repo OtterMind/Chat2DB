@@ -12,7 +12,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.time.Duration;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,10 +101,8 @@ public class AgentRuntimeDaemon implements AutoCloseable {
         request.setDaemonId(daemonId);
         request.setProvider(provider);
         request.setProviderVersion(providerVersion);
-        request.setProtocolVersion(provider == AgentRuntimeProviderEnum.HERMES
-                ? "acp-v1" : "codex-app-server-v2");
-        request.setCapabilities(Set.of("streaming", "sessionResume", "usage", "cancellation",
-                "taskWorkspace", "approvalBridge"));
+        request.setProtocolVersion(ExternalRuntimeProviderCatalog.protocolVersion(provider));
+        request.setCapabilities(ExternalRuntimeProviderCatalog.capabilities(provider));
         request.setMaxConcurrency(maxConcurrency);
         instance = controlPlane.register(request);
         if (instance == null || StringUtils.isBlank(instance.getId())) {
@@ -142,7 +139,7 @@ public class AgentRuntimeDaemon implements AutoCloseable {
             return;
         }
         String configured = StringUtils.trimToNull(claim.getRuntimeProfile().getExecutable());
-        String defaultName = provider == AgentRuntimeProviderEnum.CODEX ? "codex" : "hermes";
+        String defaultName = provider.defaultExecutable();
         if (configured == null || defaultName.equals(configured)) {
             claim.getRuntimeProfile().setExecutable(discoveredExecutable.toString());
         }

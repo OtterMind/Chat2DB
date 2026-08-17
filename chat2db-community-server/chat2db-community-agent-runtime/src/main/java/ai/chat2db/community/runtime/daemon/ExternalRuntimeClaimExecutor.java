@@ -159,9 +159,17 @@ public class ExternalRuntimeClaimExecutor {
             } else {
                 List<AgentRuntimeArtifactManifest> artifacts = new java.util.ArrayList<>(
                         result.getArtifacts() == null ? List.of() : result.getArtifacts());
-                artifacts.addAll(artifactManifestReader.read(workspace));
+                try {
+                    artifacts.addAll(artifactManifestReader.read(workspace));
+                } catch (IllegalArgumentException rejectedManifest) {
+                    lease.artifactRejected("Runtime artifact manifest is invalid and was ignored");
+                }
                 for (AgentRuntimeArtifactManifest artifact : artifacts) {
-                    lease.artifact(artifact);
+                    try {
+                        lease.artifact(artifact);
+                    } catch (ControlPlaneRejectedException rejectedArtifact) {
+                        lease.artifactRejected("Runtime artifact was rejected by Chat2DB and was ignored");
+                    }
                 }
                 lease.complete(result.getFinalResponse());
             }
@@ -369,6 +377,17 @@ public class ExternalRuntimeClaimExecutor {
                 throw new ControlPlaneException("Runtime artifact response is incomplete");
             }
             update(result.getLease());
+        }
+
+        private synchronized void artifactRejected(String message) {
+            AgentRuntimeEvent event = new AgentRuntimeEvent();
+            event.setEventId("artifact-rejected-" + UUID.randomUUID());
+            event.setRunId(claim.getRunId());
+            event.setType(ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum.ERROR);
+            event.setContent(message);
+            event.setPayload(Map.of("recoverable", true, "scope", "ARTIFACT"));
+            event.setOccurredAt(now());
+            event(event);
         }
 
         private AgentRuntimeApprovalAckRequest approvalIdentity(AgentRuntimeApproval approval) {

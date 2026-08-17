@@ -10,6 +10,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AgentDataScopeEditor from './AgentDataScopeEditor';
 import AgentRuntimePicker from './AgentRuntimePicker';
+import {
+  agentRuntimeAvatar,
+  CHAT2DB_AGENT_AVATAR,
+  isDefaultAgentAvatar,
+  runtimeProviderName,
+} from './RuntimeProviderLogo';
 import { AgentAvatar, CapabilityChips, RuntimeBadge } from './TaskPrimitives';
 import { useStyles } from './style';
 import { readAgentAvatar } from './agentAvatar';
@@ -38,6 +44,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   const [runtimeOptionsError, setRuntimeOptionsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentDefinition>();
+  const [avatarCustomized, setAvatarCustomized] = useState(false);
   const avatar = Form.useWatch('avatar', form);
   const agentName = Form.useWatch('name', form);
   const runtimeType = Form.useWatch('runtimeType', form);
@@ -135,11 +142,13 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
 
   const openEditor = (agent?: AgentDefinition) => {
     setEditingAgent(agent);
+    setAvatarCustomized(!!agent?.avatar && !isDefaultAgentAvatar(agent.avatar));
     setView('edit');
     form.setFieldsValue(agent ? {
       ...agent,
       dataScopes: agent.dataScopes.map((scope) => ({ ...scope, accessLevel: scope.tableNames.length ? 'TABLES' : 'NAMESPACE' })),
     } : {
+      avatar: CHAT2DB_AGENT_AVATAR,
       runtimeType: 'EMBEDDED_SPRING_AI', capabilities: ['METADATA_READ', 'DATA_READ'],
       dataScopes: [{ accessLevel: 'NAMESPACE', maxRows: 200, timeoutSeconds: 60, approvalMode: 'RISK_BASED' }],
       outputContract: '{"requiredArtifacts":[{"type":"REPORT","min":1}]}',
@@ -251,7 +260,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                     <RuntimeBadge agent={selectedAgent} />
                     <span>
                       {selectedAgent.runtimeType === 'EXTERNAL_AGENT'
-                        ? selectedRuntime?.provider === 'CODEX' ? 'Codex' : selectedRuntime?.provider === 'HERMES' ? 'Hermes' : i18n('task.runtime.external')
+                        ? selectedRuntime ? runtimeProviderName(selectedRuntime.provider) : i18n('task.runtime.external')
                         : 'Spring AI'}
                     </span>
                   </div>
@@ -316,14 +325,31 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                         accept="image/*"
                         showUploadList={false}
                         beforeUpload={async (file) => {
-                          try { form.setFieldValue('avatar', await readAgentAvatar(file)); }
+                          try {
+                            form.setFieldValue('avatar', await readAgentAvatar(file));
+                            setAvatarCustomized(true);
+                          }
                           catch (error: any) { feedback.error(error.message); }
                           return false;
                         }}
                       >
                         <Button icon={<UploadCloud size={14} />}>{i18n('task.agent.uploadAvatar')}</Button>
                       </Upload>
-                      {avatar && <Button type="link" danger onClick={() => form.setFieldValue('avatar', undefined)}>{i18n('task.agent.removeAvatar')}</Button>}
+                      {avatarCustomized && (
+                        <Button
+                          type="link"
+                          danger
+                          onClick={() => {
+                            form.setFieldValue(
+                              'avatar',
+                              agentRuntimeAvatar(runtimeType, runtimeProfileId, runtimeOptions),
+                            );
+                            setAvatarCustomized(false);
+                          }}
+                        >
+                          {i18n('task.agent.removeAvatar')}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 <Form.Item name="name" label={i18n('task.agent.name')} rules={[{ required: true, max: 128 }]}>
@@ -349,7 +375,13 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                   error={runtimeOptionsError}
                   onRefresh={() => void refreshRuntimeOptions()}
                   onChange={(nextRuntimeType, profileId) => {
-                    form.setFieldsValue({ runtimeType: nextRuntimeType, runtimeProfileId: profileId });
+                    form.setFieldsValue({
+                      runtimeType: nextRuntimeType,
+                      runtimeProfileId: profileId,
+                      ...(!avatarCustomized
+                        ? { avatar: agentRuntimeAvatar(nextRuntimeType, profileId, runtimeOptions) }
+                        : {}),
+                    });
                     void form.validateFields(['runtimeProfileId']);
                   }}
                 />
