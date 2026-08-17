@@ -1,5 +1,5 @@
-import { Confetti, IconButton, IconfontSvg } from '@chat2db/ui';
-import { Tooltip, type InputRef } from 'antd';
+import { Confetti } from '@chat2db/ui';
+import { type InputRef } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '@/i18n';
@@ -14,12 +14,10 @@ import { useGlobalStore } from '@/store/global';
 import { useUserStore } from '@/store/user';
 
 import CommunitySetting from '@/blocks/Setting/CommunitySetting';
-import OfflineAvatar from '@/blocks/PersonalCenter/components/OfflineAvatar';
-import CustomLayout from '@/components/CustomLayout';
+import CommunityTitleBarActions from './components/CommunityTitleBarActions';
 import StreamSidebar from './components/StreamSidebar';
 
 import Dashboard from './dashboard';
-import DashboardMenuList from './dashboard/DashboardMenuList';
 import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
 import Stream from '../stream';
@@ -54,26 +52,11 @@ function CommunityMainPage() {
 
   const showLeftContainer = useMemo(() => checkIsSharePage(), []);
 
-  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
-    return localStorage.getItem(runtimeEditionConfig.sidebarExpandedStorageKey) === 'true';
-  });
-  const toggleSidebar = useCallback(() => {
-    setSidebarExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem(runtimeEditionConfig.sidebarExpandedStorageKey, String(next));
-      return next;
-    });
-  }, []);
-  const collapseSidebar = useCallback(() => {
-    setSidebarExpanded(false);
-    localStorage.setItem(runtimeEditionConfig.sidebarExpandedStorageKey, 'false');
-  }, []);
-
   const [sidebarSessions, setSidebarSessions] = useState<IChatSession[]>([]);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchKeyword, setSidebarSearchKeyword] = useState('');
   const sidebarSearchInputRef = useRef<InputRef>(null);
-  const { styles, cx } = useStyles({ sidebarExpanded });
+  const { styles } = useStyles({});
   const { tab: settingTab } = useParams<{ tab: string }>();
 
   const { networkAbandoned, curUser } = useUserStore((state) => ({
@@ -150,28 +133,17 @@ function CommunityMainPage() {
           page === currentMainPageActiveTab &&
           !isFirst &&
           currentSettingPageActiveTab === false;
-        const shouldCollapseSidebarOnWorkspaceEnter =
-          page === 'workspace' && (currentMainPageActiveTab !== 'workspace' || isFirst);
-
         tabObject.isLoad = true;
         setNavConfig([...navConfigTmp]);
         setMainPageActiveTab({ page, pathName, searchParams });
         setSettingPageActiveTab(false);
 
-        if (shouldCollapseSidebarOnWorkspaceEnter) {
-          collapseSidebar();
-        }
-
         if (shouldToggleWorkspacePanel) {
-          if (useWorkspaceStore.getState().layout.panelLeftWidth === 0) {
-            useWorkspaceStore.getState().setPanelLeftWidth(240);
-          } else {
-            useWorkspaceStore.getState().setPanelLeftWidth(0);
-          }
+          useWorkspaceStore.getState().togglePanelLeft();
         }
       }
     },
-    [collapseSidebar, setMainPageActiveTab, setSettingPageActiveTab],
+    [setMainPageActiveTab, setSettingPageActiveTab],
   );
 
   const handleInitPage = useCallback(() => {
@@ -341,17 +313,6 @@ function CommunityMainPage() {
     }
   }, [setSettingPageActiveTab, settingTab]);
 
-  useEffect(() => {
-    if (mainPageActiveTab === 'workspace') {
-      setAppTitleBarRightComponent(<CustomLayout />);
-    } else {
-      setAppTitleBarRightComponent(false);
-    }
-    return () => {
-      setAppTitleBarRightComponent(false);
-    };
-  }, [mainPageActiveTab, setAppTitleBarRightComponent]);
-
   useUpdateEffect(() => {
     if (!navConfig) {
       return;
@@ -391,6 +352,41 @@ function CommunityMainPage() {
     [activeSessionId, handleChangePageTab, navConfig],
   );
 
+  const handleOpenSettings = useCallback(() => {
+    setSettingPageActiveTab(settingPageActiveTab === false ? 'basic' : false);
+  }, [setSettingPageActiveTab, settingPageActiveTab]);
+
+  useEffect(() => {
+    if (showLeftContainer || isEmbedIframe === IframeType.ZOER) {
+      setAppTitleBarRightComponent(false);
+      return;
+    }
+
+    setAppTitleBarRightComponent(
+      <CommunityTitleBarActions
+        navItems={navConfig}
+        activePage={mainPageActiveTab}
+        settingsActive={settingPageActiveTab !== false}
+        hideAccountActions={Boolean(isEmbedIframe)}
+        onNavigate={handleNavItemClick}
+        onOpenSettings={handleOpenSettings}
+      />,
+    );
+  }, [
+    handleNavItemClick,
+    handleOpenSettings,
+    isEmbedIframe,
+    mainPageActiveTab,
+    navConfig,
+    setAppTitleBarRightComponent,
+    settingPageActiveTab,
+    showLeftContainer,
+  ]);
+
+  useEffect(() => {
+    return () => setAppTitleBarRightComponent(false);
+  }, [setAppTitleBarRightComponent]);
+
   const showStreamSidebar =
     mainPageActiveTab === 'stream' &&
     settingPageActiveTab === false &&
@@ -399,87 +395,6 @@ function CommunityMainPage() {
 
   return (
     <div className={styles.container}>
-      <div
-        className={cx(styles.leftContainer, { [styles.leftContainerHidden]: showLeftContainer })}
-        style={{ display: isEmbedIframe === IframeType.ZOER ? 'none' : 'flex' }}
-      >
-        <div className={styles.sidebarHeader}>
-          <Tooltip
-            title={sidebarExpanded ? i18n('stream.sidebar.collapse') : i18n('stream.sidebar.expand')}
-            placement="right"
-            mouseEnterDelay={0.3}
-          >
-            <span>
-              <IconButton
-                size={{
-                  boxSize: 30,
-                  iconSize: 22,
-                }}
-                className={styles.sidebarBtn}
-                code="icon-chat-menu"
-                onClick={toggleSidebar}
-              />
-            </span>
-          </Tooltip>
-          {sidebarExpanded && <span className={styles.sidebarHeaderSpacer} />}
-        </div>
-
-        <div className={styles.navContainer}>
-          {navConfig.map((item) => {
-            const isActive = item.key === mainPageActiveTab && settingPageActiveTab === false;
-            const NavIcon = item.icon;
-
-            if (!sidebarExpanded) {
-              return (
-                <IconButton
-                  type="primary"
-                  isActive={isActive}
-                  key={item.key}
-                  size={{
-                    boxSize: 34,
-                    iconSize: 18,
-                  }}
-                  title={item.name}
-                  icon={NavIcon}
-                  tooltipPlacement="right"
-                  onClick={() => handleNavItemClick(item)}
-                />
-              );
-            }
-
-            return (
-              <div
-                key={item.key}
-                className={cx(styles.navItem, isActive && styles.navItemActive)}
-                onClick={() => handleNavItemClick(item)}
-              >
-                <NavIcon className={styles.navItemIcon} size={18} />
-                <span className={styles.navItemLabel}>{item.name}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {runtimeEditionConfig.dashboardEntry && mainPageActiveTab === 'dashboard' && (
-          <div className={styles.sessionSection}>
-            <DashboardMenuList />
-          </div>
-        )}
-
-        {!isEmbedIframe && (
-          <div className={styles.bottomNav}>
-            {sidebarExpanded ? (
-              <div className={styles.navItem} onClick={() => setSettingPageActiveTab('basic')}>
-                <IconfontSvg code="icon-adjustments" className={styles.navItemIcon} size={18} />
-                <span className={styles.navItemLabel}>{i18n('setting.title.setting')}</span>
-              </div>
-            ) : (
-              <OfflineAvatar logoSize={24} triggerSize={34} />
-            )}
-          </div>
-        )}
-      </div>
-
       {showStreamSidebar && (
         <StreamSidebar
           sessions={filteredSidebarSessions}

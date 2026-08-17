@@ -7,6 +7,7 @@ export enum JavaPushActionType {
   AUTO_PROGRESS = 'update_progress', // Automatic updates
   STARTUP_COMPLETE = 'startup_complete', // Startup completed
   IS_WINDOW_MAXIMIZED = 'is_window_maximized', // Whether the window is maximized
+  WINDOW_FULL_SCREEN_CHANGED = 'window_full_screen_changed', // Native full screen state changed
   OSS_LOGIN = 'oss_login', // OSS login requires jumping to the homepage
   SQL_EXECUTION_EVENT = 'sql_execution_event', // SQL execution events
   TERMINAL_OUTPUT = 'terminal_output', // Integrated terminal output

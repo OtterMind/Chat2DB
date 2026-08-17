@@ -3,6 +3,7 @@ import { createStyles } from 'antd-style';
 export const useStyles = createStyles(({ css, token }) => {
   return {
     appBar: css`
+      position: relative;
       flex-shrink: 0;
       display: flex;
       justify-content: space-between;
@@ -17,17 +18,49 @@ export const useStyles = createStyles(({ css, token }) => {
     windowsAppBar: css`
       height: 34px;
     `,
+    communityAppBar: css`
+      height: 36px;
+    `,
+    communityActions: css`
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      padding: 0 8px;
+      z-index: 1;
+    `,
+    communityMacWindowedActions: css`
+      padding-left: 78px;
+    `,
     logoContainer: css`
       display: flex;
       justify-content: center;
       align-items: center;
       padding-left: 12px;
-      flex:1;
+      flex: 1;
+    `,
+    communityLogoContainer: css`
+      position: absolute;
+      inset: 0;
+      padding: 0;
+      pointer-events: none;
+      z-index: 0;
     `,
     appName: css`
       font-weight: bold;
       text-align: center;
       -webkit-app-region: no-drag;
+    `,
+    communityAppName: css`
+      font-size: 14px;
+      line-height: 36px;
+      font-weight: 600;
+      -webkit-app-region: drag;
+
+      @media (max-width: 720px) {
+        display: none;
+      }
     `,
     dropdown: css`
       -webkit-app-region: no-drag;
@@ -49,7 +82,7 @@ export const useStyles = createStyles(({ css, token }) => {
       justify-content: center;
       align-items: center;
       cursor: pointer;
-      i{
+      i {
         font-size: 14px;
       }
       &:hover {

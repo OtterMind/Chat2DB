@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 // import { IconButton } from '@chat2db/ui';
 import { useStyles } from './style';
 import { Dropdown, type MenuProps } from 'antd';
@@ -6,7 +6,9 @@ import { refreshPage } from '@/utils';
 import { history } from 'umi';
 import { Platform } from '@/constants/os';
 import jcefApi from '@/jcef';
-// import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
+import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
+import { useGlobalStore } from '@/store/global';
+import { isCommunityEnv, isDesktop } from '@/utils/env';
 
 interface AppBarProps {
   className?: string;
@@ -14,6 +16,9 @@ interface AppBarProps {
 
 const AppBar = memo<AppBarProps>(({ className }) => {
   const { styles, cx } = useStyles();
+  const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
+  const isMac = window.navigator.os_type === Platform.Mac;
+  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false);
   // const [isMaximized, setIsMaximized] = useState(false);
 
   // useLayoutEffect(() => {
@@ -33,6 +38,26 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   //     JcefEventBus.off(JavaPushActionType.IS_WINDOW_MAXIMIZED);
   //   };
   // }, []);
+
+  useEffect(() => {
+    if (!isCommunityEnv || !isMac || !isDesktop) {
+      return;
+    }
+
+    const handleWindowFullScreenChange = (message: { data?: boolean } | boolean) => {
+      setIsWindowFullScreen(typeof message === 'boolean' ? message : message?.data === true);
+    };
+
+    JcefEventBus.on(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
+    jcefApi
+      .isWindowFullScreen()
+      .then(setIsWindowFullScreen)
+      .catch(() => undefined);
+
+    return () => {
+      JcefEventBus.off(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
+    };
+  }, [isMac]);
 
   const items: MenuProps['items'] = [
     {
@@ -90,7 +115,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   //   jcefApi?.closeWindow();
   // };
 
-  if (!window.navigator.os_type || window.navigator.os_type !== Platform.Mac) {
+  if (!isMac && !isCommunityEnv) {
     // const showLeftContainer = checkIsSharePage();
     // if (__WEBAPP__ && !isEmbedIframe && !showLeftContainer) {
     //   window._appTitleBarHeight = 36;
@@ -105,27 +130,41 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     // }
     window._appTitleBarHeight = 0;
     return <></>;
-  } else {
-    // TODO: jcef
-    // window._appTitleBarHeight = jcefApi.getPlatform() === Platform.Mac ? 30 : 36;
-    window._appTitleBarHeight = 30;
   }
+
+  window._appTitleBarHeight = isCommunityEnv ? 36 : 30;
 
   // When testing appBar on the web side, comment out the if else code above and open the comment code below.
   // window._appTitleBarHeight = 36;
 
   return (
     <div
-      className={cx(styles.appBar, { [styles.windowsAppBar]: window.navigator.os_type !== Platform.Mac }, className)}
+      className={cx(
+        styles.appBar,
+        {
+          [styles.windowsAppBar]: !isMac,
+          [styles.communityAppBar]: isCommunityEnv,
+        },
+        className,
+      )}
       onDoubleClick={handleDoubleClick}
     >
-      <div className={styles.logoContainer}>
-        {window.navigator.os_type !== Platform.Mac ? (
+      {isCommunityEnv && (
+        <div
+          className={cx(styles.communityActions, {
+            [styles.communityMacWindowedActions]: isMac && !isWindowFullScreen,
+          })}
+        >
+          {appTitleBarRightComponent}
+        </div>
+      )}
+      <div className={cx(styles.logoContainer, { [styles.communityLogoContainer]: isCommunityEnv })}>
+        {!isMac && !isCommunityEnv ? (
           <Dropdown destroyPopupOnHide menu={{ items }} trigger={['click']} className={styles.dropdown}>
             <div className={styles.appName}>Chat2DB</div>
           </Dropdown>
         ) : (
-          <div className={styles.appName}>Chat2DB</div>
+          <div className={cx(styles.appName, { [styles.communityAppName]: isCommunityEnv })}>Chat2DB</div>
         )}
       </div>
       {/* {window.navigator.os_type !== Platform.Mac && (

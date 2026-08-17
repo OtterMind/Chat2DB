@@ -8,6 +8,7 @@ import {
   RESULT_INSPECTOR_MAX_PANEL_RATIO,
 } from '@/store/workspace/utils/resultInspector';
 import SplitPane from 'react-split-pane';
+import { isCommunityEnv } from '@/utils/env';
 // import DragFileToApp from '@/components/DragFileToApp';
 
 // ----- components -----
@@ -75,7 +76,7 @@ const WorkspaceRight = memo(() => {
           <Fragment>{panelRight && <WorkspaceExtendBody />}</Fragment>
         </SplitPane>
       </div>
-      <WorkspaceExtendNav />
+      {!isCommunityEnv && <WorkspaceExtendNav />}
     </div>
   );
 });

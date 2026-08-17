@@ -146,6 +146,10 @@ const jcefApi = {
   isWindowMaximized: () => {
     return createJcefApi('is-window-maximized');
   },
+  // Is the macOS window in native full screen mode?
+  isWindowFullScreen: () => {
+    return createJcefApi<boolean>('is-window-full-screen');
+  },
   // Check for updates
   appCheckUpdate: () => {
     return createJcefApi<IUpdateDetail>('app-check-update');
