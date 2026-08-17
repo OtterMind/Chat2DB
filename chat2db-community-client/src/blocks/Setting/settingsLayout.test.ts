@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const settingLayoutSource = readFileSync('src/blocks/Setting/SettingLayout.tsx', 'utf8');
 const communitySettingSource = readFileSync('src/blocks/Setting/CommunitySetting.tsx', 'utf8');
 const settingSource = readFileSync('src/blocks/Setting/index.tsx', 'utf8');
+const editionUiSource = readFileSync('src/edition-ui/index.ts', 'utf8');
 const baseSettingSource = readFileSync('src/blocks/Setting/BaseSetting/index.tsx', 'utf8');
 const editorSettingSource = readFileSync('src/blocks/Setting/EditorSetting/index.tsx', 'utf8');
 const terminalSettingSource = readFileSync('src/blocks/Setting/TerminalSetting/index.tsx', 'utf8');
@@ -144,14 +145,22 @@ assert.match(
   'field search targets render on a real label element',
 );
 assert.match(settingLayoutSource, /aria-current=\{isActive \? 'page'/, 'the active settings destination is announced');
-assert.match(communitySettingSource, /<SettingLayout\b/, 'the Community entry uses the shared settings shell');
+assert.match(
+  communitySettingSource,
+  /export \{ default \} from '\.\/index'/,
+  'the Community entry reuses the complete shared settings implementation',
+);
 assert.match(settingLayoutSource, /<IconfontSvg\b/, 'settings navigation supports retained product icons');
-assert.match(communitySettingSource, /iconCode: 'icon-mcp'/, 'Community MCP retains its product icon');
-assert.match(settingSource, /iconCode: 'icon-mcp'/, 'other editions retain the MCP product icon');
-assert.match(communitySettingSource, /iconCode: 'icon-wangluo'/, 'Community proxy retains its product icon');
-assert.match(settingSource, /iconCode: 'icon-wangluo'/, 'other editions retain the proxy product icon');
-assert.match(communitySettingSource, /icon: ClipboardPen/, 'Community editor settings use ClipboardPen');
-assert.match(settingSource, /icon: ClipboardPen/, 'other editions use ClipboardPen for editor settings');
+assert.match(settingSource, /iconCode: 'icon-mcp'/, 'all editions retain the MCP product icon');
+assert.match(settingSource, /iconCode: 'icon-wangluo'/, 'all editions retain the proxy product icon');
+assert.match(settingSource, /icon: ClipboardPen/, 'all editions use ClipboardPen for editor settings');
+assert.match(settingSource, /body: <TerminalSetting \/>/, 'desktop editions inherit the shared terminal settings page');
+assert.match(
+  settingSource,
+  /editionUiExtension\.settingMenuItems/,
+  'edition-specific settings use the append-only extension',
+);
+assert.match(editionUiSource, /EditionUiExtension = \{\}/, 'Community has no private setting additions');
 assert.match(baseSettingSource, /<Palette\b/, 'the appearance group uses the Lucide palette icon');
 assert.match(baseSettingSource, /<Globe\b/, 'the language group uses the Lucide globe icon');
 assert.match(baseSettingSource, /<button[\s\S]*?aria-pressed=\{isActive\}/, 'theme choices are native buttons');
@@ -228,14 +237,9 @@ assert.match(
   'shortcut search results can expand collapsed groups',
 );
 assert.match(
-  communitySettingSource,
-  /hidePageHeader: true,[\s\S]*?body: <About \/>/,
-  'Community About renders its product information without a duplicate shared header',
-);
-assert.match(
   settingSource,
   /hidePageHeader: true,[\s\S]*?body: <About \/>/,
-  'other editions render About without a duplicate shared header',
+  'all editions render About without a duplicate shared header',
 );
 assert.doesNotMatch(
   inviteSettingSource,

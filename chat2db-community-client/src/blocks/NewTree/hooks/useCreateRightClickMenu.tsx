@@ -53,6 +53,8 @@ import { ILoadDataOptions, treeConfig } from '../treeConfig';
 
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
+import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
@@ -124,6 +126,7 @@ const aiDataCollectionOperations = new Set<OperationColumn>([
 ]);
 
 export const useCreateRightClickMenu = () => {
+  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const [createAccountForm] = Form.useForm<CreateAccountValues>();
   // Read only store actions here; dynamic data must be fetched again for each operation.
   const {
@@ -201,7 +204,7 @@ export const useCreateRightClickMenu = () => {
       tableName,
       dataCollectionElementType,
     } = extraParams;
-    const hasPermission = extraParams.hasPermission ?? runtimeEditionConfig.usesFixedIdentity;
+    const { hasPermission } = resolveDataSourceAuthorization(extraParams, runtimeEditionConfig.usesFixedIdentity);
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
     // Set the current node
@@ -1311,7 +1314,7 @@ export const useCreateRightClickMenu = () => {
       if (!children.length) return undefined;
       const finalList: IRightClickMenu[] = [];
       children?.forEach((t, i) => {
-        if (!t.discard && (runtimeEditionConfig.aiDataCollection || !aiDataCollectionOperations.has(type))) {
+        if (!t.discard && (aiDataCollection || !aiDataCollectionOperations.has(type))) {
           finalList.push({
             key: `${lastKey}-${i}`,
             onClick: t.handle,
@@ -1345,7 +1348,7 @@ export const useCreateRightClickMenu = () => {
         return;
       }
 
-      if (!runtimeEditionConfig.aiDataCollection && aiDataCollectionOperations.has(t)) {
+      if (!aiDataCollection && aiDataCollectionOperations.has(t)) {
         return;
       }
 

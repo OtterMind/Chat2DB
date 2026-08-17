@@ -9,7 +9,7 @@ export default {
     '如果你目前完全断网，可以通过以下方式获取设备证书：进入Chat2DB官网（https://chat2db-ai.com/）→登录后点击头像→设备证书',
 
   'license.offlineActivationAIWarning': '离线证书生成之后无法撤回且不可以修改设备！',
-  'license.offlineAIWarning': '离线激活的设备，将无法使用 AI 功能',
+  'license.offlineAIWarning': '离线激活不包含 Chat2DB 托管 AI 服务，仍可配置自定义模型使用本地 AI 功能',
 
   'license.deviceCertificateTitle': '设备证书',
   'license.getDeviceCertificateTitle': '获取设备证书',
@@ -26,7 +26,7 @@ export default {
   'license.deviceIdExtra': '客户端会为你自动生成设备ID，请复制过来，切勿修改',
   'license.deviceIdPlaceholder': '请填入你的设备ID',
   'license.offlineAIConfirm':
-    '请注意：离线证书生成之后无法撤回且不可以修改设备！离线激活的设备，即使联网也无法使用 AI 功能',
+    '请注意：离线证书生成之后无法撤回且不可以修改设备！离线激活不包含 Chat2DB 托管 AI 服务，仍可配置自定义模型使用本地 AI 功能',
   'license.getCertificate': '获取设备证书',
   'license.getCertificateSuccess': '获取设备证书成功',
   'license.getCertificateError': '获取设备证书失败',
@@ -39,7 +39,7 @@ export default {
   'license.permanentVersion': 'Chat2DB Local 永久版',
   'license.offlineActivationIntro': '如果你对离线激活流程不了解，',
   'license.deviceLimit': '许可证绑定设备数已达到上限',
-  'license.licenseNotSupported': '离线激活不支持AI',
+  'license.licenseNotSupported': '离线激活不支持此在线 AI 功能，请配置自定义模型后使用本地 AI 功能',
 
   'license.deactivateOnline': '解绑',
   'license.deactivateOnlineConfirm': '确定解绑吗？',

@@ -1,7 +1,13 @@
 import { openSchemaSyncModal } from '@/blocks/NewTree/functions/schemaSync';
-import { ILoadDataOptions, normalizeTreeNodeLoadResult, treeConfig } from '@/blocks/NewTree/treeConfig';
+import {
+  ILoadDataOptions,
+  ILoadDataResult,
+  normalizeTreeNodeLoadResult,
+  treeConfig,
+} from '@/blocks/NewTree/treeConfig';
 import { TreeNodeType, initUserConfigTree } from '@/constants';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { getRuntimeEditionCapabilities } from '@/hooks/useRuntimeEditionCapabilities';
 import { dataSourceTreeService } from '@/database';
 import aiDataCollectionService from '@/service/aiDataCollection';
 import connectionService from '@/service/connection';
@@ -17,12 +23,18 @@ import { StateCreator } from 'zustand/vanilla';
 import { useAIStore } from '../ai';
 import {
   applyExistingTreeNodeRefresh,
-  LatestTreeRefreshTracker,
-  loadExistingTreeNodeRefresh,
   reconcileTreeInteractionAfterRefresh,
+  reconcileTreeStateAfterRefresh,
 } from './backgroundRefresh';
-import { loadNamespaceTree } from './loadNamespaceTree';
-import { updateTreeData } from './treeDataUpdate';
+import { hydrateDataSourceAfterMutation } from './dataSourceMutationRefresh';
+import { applyHiddenTreeNodeChanges, HiddenTreeNodeStateCoordinator } from './hiddenTreeNodeState';
+import { LatestLoadCoordinator, loadNamespaceTree } from './loadNamespaceTree';
+import {
+  appendExpandedTreeKey,
+  isDataSourceTreeNodeKey,
+  removeTreeNodeByKey,
+  resolveLoadedTreeData,
+} from './treeDataUpdate';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
 
 export type FocusTreeNode = {
@@ -36,6 +48,7 @@ export type FocusTreeNode = {
 
 export interface TreeState {
   treeData: TreeNodeData[] | null;
+  treeDataRevision: number;
   focusId: number | string | null;
   focusTreeNode: FocusTreeNode;
   editingTreeNode: TreeNodeData | null;
@@ -63,6 +76,7 @@ export interface TreeState {
 
 export const initTreeState = {
   treeData: null,
+  treeDataRevision: 0,
   focusId: null,
   focusTreeNode: null,
   editingTreeNode: null,
@@ -94,8 +108,9 @@ export interface TreeAction {
   // Move a group or data source to a specified group
   moveToGroup: (props: UpdatePositionInTree) => void;
   setTreeData: (treeData: TreeState['treeData'] | any) => void;
-  getTreeData: (props?: { refresh?: boolean }) => Promise<void>;
-  refreshTreeData: () => Promise<void>;
+  getTreeData: (props?: { refresh?: boolean; force?: boolean; throwOnError?: boolean }) => Promise<boolean>;
+  refreshTreeData: () => Promise<boolean>;
+  refreshDataSourceAfterMutation: (dataSourceId: number) => Promise<void>;
   // Database structure synchronization
   schemaSync: () => void;
   setSelectedKeys: (selectedKeys: TreeState['selectedKeys']) => void;
@@ -106,7 +121,7 @@ export interface TreeAction {
   editorDataSource: (dataSource: any) => void;
   setIsModalVisible: (isModalVisible: TreeState['isModalVisible']) => void;
   setConnectionDetail: (connectionDetail: TreeState['connectionDetail']) => void;
-  handleLoadData: (nodeData: TreeNodeData, options?: ILoadDataOptions) => Promise<TreeNodeData[]>;
+  handleLoadData: (nodeData: TreeNodeData, options?: ILoadDataOptions) => Promise<ILoadDataResult>;
   setExpandedKeys: (expandedKeys: React.Key[]) => void;
   toggleExpandedKeys: (key: React.Key) => void;
   deleteDataSource: (dataSource: any) => Promise<void>;
@@ -143,7 +158,32 @@ export interface TreeAction {
   ) => void;
 }
 
-const backgroundRefreshTracker = new LatestTreeRefreshTracker();
+type RootTreeLoadResult =
+  | { committed: true }
+  | { committed: false }
+  | { committed: false; error: unknown };
+
+const rootTreeLoadCoordinator = new LatestLoadCoordinator<string, RootTreeLoadResult>(() => ({ committed: false }));
+const treeNodeLoadCoordinator = new LatestLoadCoordinator<React.Key, ILoadDataResult>(() => ({
+  children: [],
+  committed: false,
+}));
+const hiddenTreeNodeStateCoordinator = new HiddenTreeNodeStateCoordinator<
+  NonNullable<TreeState['hiddenTreeNodeIds']>
+>();
+const ROOT_TREE_REFRESH_KEY = 'root';
+let treeStoreLifecycleVersion = 0;
+
+const invalidateDataSourceTreeRequests = (dataSourceId: number) => {
+  treeNodeLoadCoordinator.invalidateMatching((key) => isDataSourceTreeNodeKey(key, dataSourceId));
+};
+
+const invalidateTreeRequests = () => {
+  treeStoreLifecycleVersion += 1;
+  rootTreeLoadCoordinator.invalidateAll();
+  treeNodeLoadCoordinator.invalidateAll();
+  hiddenTreeNodeStateCoordinator.reset();
+};
 
 export type TreeStore = TreeState & TreeAction;
 
@@ -155,11 +195,18 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     set({ currentTreeNode });
   },
   clearTreeStore: () => {
+    invalidateTreeRequests();
     set(initTreeState);
   },
-  refreshTreeData: async () => {
-    await clearTreeStore();
-    await get().getTreeData({ refresh: true });
+  refreshTreeData: () => get().getTreeData({ refresh: true }),
+  refreshDataSourceAfterMutation: async (dataSourceId) => {
+    await hydrateDataSourceAfterMutation(dataSourceId, {
+      refreshTreeData: () => get().getTreeData({ refresh: true, throwOnError: true }),
+      getDataSourceList: () => get().dataSourceList,
+      setSelectedKeys: get().setSelectedKeys,
+      setScrollTargetKey: get().setScrollTargetKey,
+      loadData: (node) => get().handleLoadData(node),
+    });
   },
   schemaSync: () => {
     // currently selected node
@@ -176,58 +223,148 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     }
     openSchemaSyncModal(selectDatabase);
   },
-  getTreeData: async (props) => {
-    set({ treeData: null });
-    get().initHiddenTreeNodeIds();
-    await loadNamespaceTree(
-      () => connectionService.getNamespaceList({ refresh: props?.refresh }),
-      (res) => {
-        const treeData = neatenTreeData(res);
+  getTreeData: (props) => {
+    const refresh = props?.refresh === true;
+    const force = props?.force === true;
+    const throwOnError = props?.throwOnError === true;
+    const loadPromise = rootTreeLoadCoordinator.run(
+      ROOT_TREE_REFRESH_KEY,
+      {
+        supersede: refresh || force,
+        priority: refresh ? 1 : 0,
+      },
+      async (isCurrent): Promise<RootTreeLoadResult> => {
+        get().initHiddenTreeNodeIds();
+        const result = await loadNamespaceTree(() => connectionService.getNamespaceList({ refresh }));
+        if (!isCurrent()) {
+          return { committed: false };
+        }
+        if (!result.ok) {
+          if (get().treeData === null) {
+            get().setTreeData([]);
+            get().generateDataSourceList([]);
+          }
+          return { committed: false, error: result.error };
+        }
+
+        if (refresh) {
+          treeNodeLoadCoordinator.invalidateAll();
+          set({ currentLoadingTreeNode: null });
+        }
+        const freshTreeData = neatenTreeData(result.items);
+        const treeData = resolveLoadedTreeData(freshTreeData, get().treeData, refresh);
         get().setTreeData(treeData);
         get().generateDataSourceList(treeData);
+        if (refresh || force) {
+          const interactionState = reconcileTreeStateAfterRefresh(
+            treeData,
+            get().selectedKeys,
+            get().currentTreeNode,
+            get().expandedKeys,
+            get().scrollTargetKey,
+          );
+          set({
+            ...interactionState,
+            treeDataRevision: get().treeDataRevision + 1,
+          });
+        }
+        return { committed: true };
       },
     );
+
+    return loadPromise.then((result) => {
+      if (!result.committed && 'error' in result && throwOnError) {
+        throw result.error;
+      }
+      return result.committed;
+    });
   },
   // Load data
   handleLoadData: (nodeData, config) => {
-    const { refresh, closeExpandTreeNode } = config || {};
-    return new Promise<any>((resolve, rj) => {
-      const { key, children, treeNodeType, extraParams } = nodeData;
-      if (children && !refresh) {
-        resolve(children);
-        return;
+    const { refresh = false, closeExpandTreeNode, preserveInteraction = false } = config || {};
+    const { key, treeNodeType } = nodeData;
+    const currentNode = findNode(key, get().treeData) || nodeData;
+    if (currentNode.children !== undefined && !refresh && !treeNodeLoadCoordinator.hasPending(key)) {
+      if (closeExpandTreeNode !== true) {
+        const expandedKeys = appendExpandedTreeKey(get().expandedKeys, key);
+        if (expandedKeys !== get().expandedKeys) {
+          get().setExpandedKeys(expandedKeys);
+        }
       }
-      get().setCurrentLoadingTreeNode(nodeData);
-      get().setCurrentTreeNode(nodeData);
-      get().setSelectedKeys([nodeData.key]);
+      return Promise.resolve({ children: currentNode.children, committed: true });
+    }
 
-      const _treeData = get().treeData;
-      const _expandedKeys = get().expandedKeys;
-      if (_treeData && _expandedKeys && key) {
-        set({ expandedKeys: removeSubkeys(_expandedKeys, _treeData, key) });
+    const interactionTreeData = preserveInteraction ? null : get().treeData;
+    if (!preserveInteraction) {
+      get().setCurrentTreeNode(currentNode);
+      get().setSelectedKeys([key]);
+    }
+
+    return treeNodeLoadCoordinator.run(key, { supersede: refresh }, async (isCurrent) => {
+      const requestNode = findNode(key, get().treeData) || nodeData;
+      if (requestNode.children !== undefined && !refresh) {
+        return { children: requestNode.children, committed: true };
       }
-      treeConfig[treeNodeType]
-        .getChildren?.({ ...extraParams, refresh })
-        .then((res) => {
-          const loadResult = normalizeTreeNodeLoadResult(res);
-          get().setCurrentLoadingTreeNode(null);
-          // If it has already been expanded, it will not be expanded again.
-          if (!get().expandedKeys.includes(key) && closeExpandTreeNode !== true) {
-            get().setExpandedKeys([...get().expandedKeys, key]);
-          }
-          get().setTreeData((origin) => {
-            return updateTreeData(origin, key, loadResult.children, loadResult.total);
-          });
-          resolve(loadResult.children);
-        })
-        .catch(() => {
-          get().setTreeData((origin) => {
-            return updateTreeData(origin, key, [], undefined, true);
-          });
-          get().toggleExpandedKeys(key);
-          get().setCurrentLoadingTreeNode(null);
-          rj();
+
+      const getChildren = treeConfig[treeNodeType].getChildren;
+      if (!getChildren) {
+        return { children: requestNode.children || [], committed: false };
+      }
+
+      get().setCurrentLoadingTreeNode(requestNode);
+
+      try {
+        const response = await getChildren({ ...requestNode.extraParams, refresh });
+        const loadResult = normalizeTreeNodeLoadResult(response);
+        if (!isCurrent()) {
+          return { children: loadResult.children, committed: false };
+        }
+
+        const latestNode = findNode(key, get().treeData);
+        if (!latestNode) {
+          return { children: loadResult.children, committed: false };
+        }
+        const children = resolveLoadedTreeData(loadResult.children, latestNode.children ?? null, refresh);
+        const currentTreeData = get().treeData;
+        if (!currentTreeData) {
+          return { children, committed: false };
+        }
+        const nextTreeData = applyExistingTreeNodeRefresh(currentTreeData, key, {
+          children,
+          total: loadResult.total,
         });
+        if (nextTreeData === currentTreeData) {
+          return { children, committed: false };
+        }
+        get().setTreeData(nextTreeData);
+        return { children, committed: true };
+      } finally {
+        if (isCurrent() && get().currentLoadingTreeNode?.key === key) {
+          get().setCurrentLoadingTreeNode(null);
+        }
+      }
+    }).then((result) => {
+      // Selection and expansion belong to each caller even when the data request is shared.
+      if (result.committed && findNode(key, get().treeData)) {
+        if (preserveInteraction && get().treeData) {
+          set(
+            reconcileTreeInteractionAfterRefresh(
+              get().treeData!,
+              get().selectedKeys,
+              get().currentTreeNode,
+            ),
+          );
+        }
+        let expandedKeys = get().expandedKeys;
+        if (interactionTreeData) {
+          expandedKeys = removeSubkeys(expandedKeys, interactionTreeData, key);
+        }
+        if (closeExpandTreeNode !== true) {
+          expandedKeys = appendExpandedTreeKey(expandedKeys, key);
+        }
+        get().setExpandedKeys(expandedKeys);
+      }
+      return result;
     });
   },
   createGroup: (parentId) => {
@@ -236,6 +373,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       parentId: parentId,
     };
     connectionService.createNamespace(params).then((res) => {
+      rootTreeLoadCoordinator.invalidate(ROOT_TREE_REFRESH_KEY);
       const t = {
         id: res,
         name: params.name,
@@ -274,12 +412,12 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   },
   moveToGroup: (params) => {
     connectionService.updatePosition(params).then(() => {
-      get().getTreeData();
+      get().getTreeData({ force: true });
     });
   },
   deleteGroup: (treeNodeData) => {
-    return connectionService.deleteNamespace({ id: treeNodeData.id! }).then(() => {
-      get().getTreeData();
+    return connectionService.deleteNamespace({ id: treeNodeData.id! }).then(async () => {
+      await get().getTreeData({ force: true });
     });
   },
   setTreeData: (treeData) => {
@@ -289,7 +427,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       if (get().searchBarValue && _treeData) {
         const visibleTreeData = filterTreeNodesForDisplay(_treeData, {
           hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-          aiDataCollectionEnabled: runtimeEditionConfig.aiDataCollection,
+          aiDataCollectionEnabled: getRuntimeEditionCapabilities().aiDataCollection,
         });
         const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
           visibleTreeData,
@@ -304,7 +442,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       if (get().searchBarValue && treeData) {
         const visibleTreeData = filterTreeNodesForDisplay(treeData, {
           hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-          aiDataCollectionEnabled: runtimeEditionConfig.aiDataCollection,
+          aiDataCollectionEnabled: getRuntimeEditionCapabilities().aiDataCollection,
         });
         const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
           visibleTreeData,
@@ -326,6 +464,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     set({ treeRef });
   },
   addDataSource: (dataSource) => {
+    rootTreeLoadCoordinator.invalidate(ROOT_TREE_REFRESH_KEY);
     const newTreeData = get().treeData;
     const newDataSource = neatenDataSourceTreeNode(dataSource)!;
     if (!newTreeData) return;
@@ -353,26 +492,26 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       connectionService
         .remove({ id: dataSource.id })
         .then(() => {
-          const newTreeData = get().treeData;
-
-          const newTreeDataAfterDelete: any = [];
-          newTreeData?.forEach((item) => {
-            if (item.treeNodeType === TreeNodeType.GROUP) {
-              const newChildren = item.children?.filter((child) => child.key !== `dataSource_${dataSource.id}`);
-              newTreeDataAfterDelete.push({
-                ...item,
-                children: newChildren,
-              });
-            } else {
-              if (item.key !== `dataSource_${dataSource.id}`) {
-                newTreeDataAfterDelete.push(item);
-              }
-            }
-          });
-          set({
-            treeData: newTreeDataAfterDelete,
-            currentTreeNode: null,
-          });
+          rootTreeLoadCoordinator.invalidate(ROOT_TREE_REFRESH_KEY);
+          invalidateDataSourceTreeRequests(dataSource.id);
+          if (
+            get().currentLoadingTreeNode &&
+            isDataSourceTreeNodeKey(get().currentLoadingTreeNode!.key, dataSource.id)
+          ) {
+            get().setCurrentLoadingTreeNode(null);
+          }
+          const newTreeDataAfterDelete = removeTreeNodeByKey(
+            get().treeData || [],
+            `dataSource_${dataSource.id}`,
+          );
+          const interactionState = reconcileTreeStateAfterRefresh(
+            newTreeDataAfterDelete,
+            get().selectedKeys,
+            get().currentTreeNode,
+            get().expandedKeys,
+            get().scrollTargetKey,
+          );
+          set({ treeData: newTreeDataAfterDelete, ...interactionState });
           get().generateDataSourceList(newTreeDataAfterDelete);
           resolve();
           // Clean up deleted data source data
@@ -384,6 +523,14 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     });
   },
   editorDataSource: (dataSourceDetails) => {
+    rootTreeLoadCoordinator.invalidate(ROOT_TREE_REFRESH_KEY);
+    invalidateDataSourceTreeRequests(dataSourceDetails.id);
+    if (
+      get().currentLoadingTreeNode &&
+      isDataSourceTreeNodeKey(get().currentLoadingTreeNode!.key, dataSourceDetails.id)
+    ) {
+      get().setCurrentLoadingTreeNode(null);
+    }
     const newTreeData = get().treeData;
     if (!newTreeData) {
       get().getTreeData();
@@ -400,10 +547,15 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     }
     siblings.splice(index, 1, newTreeNode);
     // If it was originally expanded and needs to be collapsed
-    set({
-      expandedKeys: get().expandedKeys.filter((item) => item !== newTreeNode.key),
-      treeData: [...newTreeData],
-    });
+    const nextTreeData = [...newTreeData];
+    const interactionState = reconcileTreeStateAfterRefresh(
+      nextTreeData,
+      get().selectedKeys,
+      get().currentTreeNode,
+      get().expandedKeys.filter((item) => item !== newTreeNode.key),
+      get().scrollTargetKey,
+    );
+    set({ treeData: nextTreeData, ...interactionState });
   },
   setIsModalVisible: (isModalVisible) => {
     set({ isModalVisible });
@@ -589,65 +741,37 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       return;
     }
 
-    const { treeNodeType, ...rest } = props;
-    const getChildren = treeConfig[treeNodeType].getChildren;
-    if (!getChildren) {
-      return;
-    }
-
-    const requestSequence = backgroundRefreshTracker.begin(key);
-
     try {
-      const loadResult = await loadExistingTreeNodeRefresh(treeData, key, () =>
-        getChildren({
-          ...rest,
-          refresh: true,
-        }),
-      );
-      if (!loadResult) {
-        return;
-      }
-      if (!backgroundRefreshTracker.isLatest(key, requestSequence)) {
-        return;
-      }
-
-      set((state) => {
-        if (!state.treeData) {
-          return {};
-        }
-        const refreshedTreeData = applyExistingTreeNodeRefresh(state.treeData, key, loadResult);
-        if (refreshedTreeData === state.treeData) {
-          return {};
-        }
-        const interactionState = reconcileTreeInteractionAfterRefresh(
-          refreshedTreeData,
-          state.selectedKeys,
-          state.currentTreeNode,
-        );
-        return {
-          treeData: refreshedTreeData,
-          ...interactionState,
-        };
+      await get().handleLoadData(node, {
+        refresh: true,
+        closeExpandTreeNode: true,
+        preserveInteraction: true,
       });
     } catch {
       // A background refresh must not turn a successful console save into an error.
-    } finally {
-      backgroundRefreshTracker.finish(key, requestSequence);
     }
   },
   closeConnection: (dataSourceId) => {
     connectionService.closeConnection({ id: dataSourceId }).then(() => {
+      const dataSourceKey = `dataSource_${dataSourceId}`;
+      invalidateDataSourceTreeRequests(dataSourceId);
+      if (get().currentLoadingTreeNode && isDataSourceTreeNodeKey(get().currentLoadingTreeNode!.key, dataSourceId)) {
+        get().setCurrentLoadingTreeNode(null);
+      }
       // Clear all child nodes under the current node and collapse the current node
       const newTreeData = get().treeData;
-      const curNode = findNode(`dataSource_${dataSourceId}`, newTreeData);
+      const curNode = findNode(dataSourceKey, newTreeData);
       if (curNode && newTreeData) {
         curNode.children = undefined;
-        get().setTreeData([...newTreeData!]);
-        const expandedKeys = get().expandedKeys || [];
-        const key = curNode.key;
-        if (expandedKeys.includes(key)) {
-          set({ expandedKeys: expandedKeys.filter((item) => item !== key) });
-        }
+        const nextTreeData = [...newTreeData];
+        const interactionState = reconcileTreeStateAfterRefresh(
+          nextTreeData,
+          get().selectedKeys,
+          get().currentTreeNode,
+          get().expandedKeys.filter((item) => item !== curNode.key),
+          get().scrollTargetKey,
+        );
+        set({ treeData: nextTreeData, ...interactionState });
       }
     });
   },
@@ -666,11 +790,19 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     return curNode?.children || [];
   },
   initHiddenTreeNodeIds: () => {
-    dataSourceTreeService.getTreeHiddenTreeNodeIds().then((res) => {
-      set({
-        hiddenTreeNodeIds: res,
-      });
-    });
+    if (get().hiddenTreeNodeIds !== null) {
+      return;
+    }
+    void hiddenTreeNodeStateCoordinator
+      .initialize(
+        () => dataSourceTreeService.getTreeHiddenTreeNodeIds(),
+        (hiddenTreeNodeIds) => {
+          if (get().hiddenTreeNodeIds === null) {
+            set({ hiddenTreeNodeIds });
+          }
+        },
+      )
+      .catch(() => undefined);
   },
   addOrDeleteShowTreeNodeIds: (
     dataSourceId: number,
@@ -679,30 +811,37 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       delete: (string | null | undefined)[];
     },
   ) => {
-    const _hiddenTreeNodeIds = get().hiddenTreeNodeIds || {};
-    if (!_hiddenTreeNodeIds[dataSourceId]) {
-      _hiddenTreeNodeIds[dataSourceId] = [];
-    }
-
-    if (changedKeys) {
-      // Add new node ID
-      if (changedKeys.add.length > 0) {
-        const validAddKeys = changedKeys.add.filter((key) => key != null) as string[];
-        _hiddenTreeNodeIds[dataSourceId].push(...validAddKeys);
+    const lifecycleVersion = treeStoreLifecycleVersion;
+    const applyChanges = async () => {
+      await hiddenTreeNodeStateCoordinator.initialize(
+        () => dataSourceTreeService.getTreeHiddenTreeNodeIds(),
+        (hiddenTreeNodeIds) => {
+          if (get().hiddenTreeNodeIds === null) {
+            set({ hiddenTreeNodeIds });
+          }
+        },
+      );
+      if (lifecycleVersion !== treeStoreLifecycleVersion) {
+        return;
       }
 
-      // Delete node ID
-      if (changedKeys.delete.length > 0) {
-        const validDeleteKeys = changedKeys.delete.filter((key) => key != null) as string[];
-        _hiddenTreeNodeIds[dataSourceId] = _hiddenTreeNodeIds[dataSourceId].filter(
-          (id) => !validDeleteKeys.includes(id),
-        );
-      }
-    }
+      const hiddenTreeNodeIds = get().hiddenTreeNodeIds || {};
+      const nextIds = applyHiddenTreeNodeChanges(hiddenTreeNodeIds[dataSourceId] || [], changedKeys);
+      set({
+        hiddenTreeNodeIds: {
+          ...hiddenTreeNodeIds,
+          [dataSourceId]: nextIds,
+        },
+      });
+      await hiddenTreeNodeStateCoordinator.write(() =>
+        dataSourceTreeService.updateHiddenTreeNodeIds(dataSourceId, nextIds),
+      );
+    };
 
-    // Update status and save to database
-    set({ hiddenTreeNodeIds: { ..._hiddenTreeNodeIds } });
-    dataSourceTreeService.updateHiddenTreeNodeIds(dataSourceId, _hiddenTreeNodeIds[dataSourceId]);
+    void applyChanges()
+      .catch((error) => {
+        console.error('Failed to persist hidden tree node settings', error);
+      });
   },
 });
 
@@ -733,8 +872,11 @@ export const useTreeStore = createWithEqualityFn<TreeStore>()(
 
 // Clean store
 export const clearTreeStore = () => {
+  invalidateTreeRequests();
   useTreeStore.setState({
     ...initTreeState,
     userConfigTree: useTreeStore.getState().userConfigTree,
   });
 };
+
+export const getTreeStoreLifecycleVersion = () => treeStoreLifecycleVersion;

@@ -12,8 +12,10 @@ export interface HotUpdateAction {
   updateAndRestartApp: () => void;
   // Check for updates
   handleCheckUpdate: () => Promise<boolean>;
+  // Synchronize updater-owned preferences
+  syncUpdatePreferences: () => Promise<void>;
   // Update hot update configuration
-  updateHotUpdateConfig: (property: keyof IHotUpdateConfig, value: any) => void;
+  updateHotUpdateConfig: (property: keyof IHotUpdateConfig, value: any) => Promise<void>;
 }
 
 export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtools', never]], [], HotUpdateAction> = (
@@ -28,30 +30,78 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
       get().setUpdateDetail({
         status: UpdatedStatus.Installing,
       });
-      await jcefApi.triggerInstallation();
+      try {
+        const accepted = await jcefApi.triggerInstallation();
+        if (!accepted) {
+          get().setUpdateDetail({
+            status: UpdatedStatus.UpdateFailed,
+          });
+          return;
+        }
+      } catch {
+        get().setUpdateDetail({
+          status: UpdatedStatus.UpdateFailed,
+        });
+        return;
+      }
+    }
+    try {
+      await jcefApi.restartApp();
+    } catch {
       get().setUpdateDetail({
         status: UpdatedStatus.UpdateFailed,
       });
     }
-    await jcefApi?.restartApp();
   },
-  handleCheckUpdate: () => {
+  handleCheckUpdate: async () => {
     if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
-      return Promise.resolve(false);
+      return false;
     }
-    return jcefApi.appCheckUpdate().then((res) => {
+    try {
+      const res = await jcefApi.appCheckUpdate();
       get().setUpdateDetail({
         status: res.status,
         version: res.version,
       });
-      const flag = res.status === UpdatedStatus.Available;
-      return flag;
-    });
+      return res.status === UpdatedStatus.Available;
+    } catch {
+      get().setUpdateDetail({
+        status: UpdatedStatus.UpdateFailed,
+      });
+      return false;
+    }
   },
-  updateHotUpdateConfig: (property, value) => {
+  syncUpdatePreferences: async () => {
+    if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+      return;
+    }
+    try {
+      const preferences = await jcefApi.updatePreferences();
+      set({
+        hotUpdateConfig: produce(get().hotUpdateConfig, (draft) => {
+          draft.receiveBeta = preferences.receiveBeta;
+        }),
+      });
+    } catch {
+      // Keep the last locally confirmed preference when the desktop bridge fails.
+    }
+  },
+  updateHotUpdateConfig: async (property, value) => {
+    let persistedValue = value;
+    if (property === 'receiveBeta' && isDesktop && runtimeEditionConfig.autoUpdate) {
+      try {
+        const preferences = await jcefApi.updatePreferences({ receiveBeta: Boolean(value) });
+        if (!preferences.saved) {
+          return;
+        }
+        persistedValue = preferences.receiveBeta;
+      } catch {
+        return;
+      }
+    }
     set({
       hotUpdateConfig: produce(get().hotUpdateConfig, (draft) => {
-        draft[property] = value;
+        draft[property] = persistedValue;
       }),
     });
   },

@@ -35,6 +35,7 @@ import i18n from '@/i18n';
 import { keyboardKey } from '@/utils';
 import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
+import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
 
@@ -827,26 +828,21 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           isDefault: !!item.defaultOption,
         })),
       );
-      const currentValue = selectedModel?.value;
-      const currentOption = currentValue ? result.find((item) => item.value === currentValue) : undefined;
-      const hasCurrent = !!currentOption;
-      if (currentOption && currentOption.label !== selectedModel?.label) {
-        setSelectedModel({
-          value: currentOption.value,
-          label: currentOption.label,
-        });
-        return;
-      }
-      if (!hasCurrent && result.length > 0) {
-        const defaultOption = result.find((item) => item.defaultOption) || result[0];
-        setSelectedModel({
-          value: defaultOption.value,
-          label: defaultOption.label,
-        });
+      const nextSelectedModel = resolveSelectedModel(
+        result.map((item) => ({
+          value: item.value,
+          label: item.label,
+          isDefault: !!item.defaultOption,
+        })),
+        selectedModel,
+      );
+      if (nextSelectedModel?.value !== selectedModel?.value || nextSelectedModel?.label !== selectedModel?.label) {
+        setSelectedModel(nextSelectedModel);
       }
     } catch {
       setModelOptions([]);
       setModelOptionMap({});
+      setSelectedModel(null);
       feedback.error(i18n('stream.error.loadModelList'));
     }
   }, [selectedModel?.label, selectedModel?.value, setSelectedModel]);

@@ -3,10 +3,10 @@ import CreateDatabase from '@/components/CreateDatabase';
 import { SAVED_CONSOLE_UPDATED_EVENT, TreeNodeType, type SavedConsoleUpdatedEventDetail } from '@/constants';
 import i18n from '@/i18n';
 import MainSecondaryPanel from '@/pages/main/components/MainSecondaryPanel';
-import { useTreeStore } from '@/store/tree';
+import { getTreeStoreLifecycleVersion, useTreeStore } from '@/store/tree';
 import { useWorkspaceStore } from '@/store/workspace';
 import type { TreeNodeData } from '@/typings';
-import { isCommunityEnv, isDesktop, isDesktopEnv, isWebEnv } from '@/utils/env';
+import { isCommunityEnv, isDesktop, isDesktopEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
 import feedback from '@/utils/feedback';
 import { Flex } from 'antd';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react';
@@ -20,6 +20,8 @@ import {
 } from '../../utils/activeTabLocator';
 import WorkspaceExplorer, { type WorkspaceExplorerRef } from '../WorkspaceExplorer';
 import WorkspaceLeftActionBar from '../WorkspaceLeftActionBar';
+import { shouldProbeDesktopBridge } from './desktopBridge';
+import { loadDatabaseTreePath } from './loadDatabaseTreePath';
 import { useStyles } from './style';
 
 type DatabaseLocateTarget = Extract<ActiveTabLocateTarget, { surface: 'databaseTree' }>;
@@ -131,17 +133,24 @@ const WorkspaceLeft = memo(() => {
   const explorerRef = useRef<WorkspaceExplorerRef>(null);
   const locateRequestSeqRef = useRef(0);
   const pendingManualPanelLocateRef = useRef<WorkspaceLeftPanel | null>(null);
-  const shouldProbeDesktopBridge = !isWebEnv && (isDesktopEnv || isCommunityEnv || isDesktop);
+  const canProbeDesktopBridge = shouldProbeDesktopBridge({
+    isWebEnv,
+    isDesktopEnv,
+    isOfflineEnv,
+    isCommunityEnv,
+    isDesktop,
+  });
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
   const { styles } = useStyles();
-  const showExplorerPanel = shouldProbeDesktopBridge && desktopBridgeReady;
+  const showExplorerPanel = canProbeDesktopBridge && desktopBridgeReady;
   const { activeConsoleId, workspaceTabList } = useWorkspaceStore((state) => ({
     activeConsoleId: state.activeConsoleId,
     workspaceTabList: state.workspaceTabList,
   }));
-  const { changeUserConfigTree, treeDataReady, userConfigTree } = useTreeStore((state) => ({
+  const { changeUserConfigTree, treeDataReady, treeDataRevision, userConfigTree } = useTreeStore((state) => ({
     changeUserConfigTree: state.changeUserConfigTree,
     treeDataReady: !!state.treeData,
+    treeDataRevision: state.treeDataRevision,
     userConfigTree: state.userConfigTree,
   }));
   const activePanel = resolveWorkspaceLeftPanel(userConfigTree.workspaceLeftPanel);
@@ -169,7 +178,7 @@ const WorkspaceLeft = memo(() => {
   const locateDisabled = !activeTabLocateTarget;
 
   useEffect(() => {
-    if (!shouldProbeDesktopBridge || desktopBridgeReady) {
+    if (!canProbeDesktopBridge || desktopBridgeReady) {
       return;
     }
 
@@ -191,7 +200,14 @@ const WorkspaceLeft = memo(() => {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [desktopBridgeReady, shouldProbeDesktopBridge]);
+  }, [canProbeDesktopBridge, desktopBridgeReady]);
+
+  useEffect(
+    () => () => {
+      locateRequestSeqRef.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleSavedConsoleUpdated = (event: Event) => {
@@ -227,27 +243,6 @@ const WorkspaceLeft = memo(() => {
     [],
   );
 
-  const loadDatabasePath = useCallback(async (loadPath: string[]) => {
-    for (const key of loadPath) {
-      const treeStore = useTreeStore.getState();
-      const result = findTreeNodeWithAncestors(treeStore.treeData, (node) => node.key === key);
-      if (!result) {
-        return false;
-      }
-
-      if (result.node.children === undefined && !result.node.isLeaf) {
-        try {
-          await treeStore.handleLoadData(result.node);
-        } catch {
-          return false;
-        }
-      } else {
-        treeStore.setExpandedKeys([...treeStore.expandedKeys, key]);
-      }
-    }
-    return true;
-  }, []);
-
   const locateDatabaseTree = useCallback(
     async (
       target: DatabaseLocateTarget,
@@ -257,37 +252,30 @@ const WorkspaceLeft = memo(() => {
         return 'miss';
       }
 
-      const treeStore = useTreeStore.getState();
-      const previousSelection = {
-        currentTreeNode: treeStore.currentTreeNode,
-        selectedKeys: treeStore.selectedKeys,
-      };
-      const loaded = await loadDatabasePath(target.loadPath);
-      if (options?.requestSeq !== undefined && options.requestSeq !== locateRequestSeqRef.current) {
-        treeStore.setCurrentTreeNode(previousSelection.currentTreeNode);
-        treeStore.setSelectedKeys(previousSelection.selectedKeys);
+      const lifecycleVersion = getTreeStoreLifecycleVersion();
+      const isCurrent = () =>
+        (options?.requestSeq === undefined || options.requestSeq === locateRequestSeqRef.current) &&
+        lifecycleVersion === getTreeStoreLifecycleVersion();
+      const loaded = await loadDatabaseTreePath(target.loadPath, useTreeStore.getState, isCurrent);
+      if (!isCurrent()) {
         return 'miss';
       }
       if (!loaded) {
-        treeStore.setCurrentTreeNode(previousSelection.currentTreeNode);
-        treeStore.setSelectedKeys(previousSelection.selectedKeys);
         return 'miss';
       }
 
       const result = findDatabaseLocateNode(useTreeStore.getState().treeData, target.candidates);
-      if (options?.requestSeq !== undefined && options.requestSeq !== locateRequestSeqRef.current) {
+      if (!isCurrent()) {
         return 'miss';
       }
       if (!result) {
-        treeStore.setCurrentTreeNode(previousSelection.currentTreeNode);
-        treeStore.setSelectedKeys(previousSelection.selectedKeys);
         return 'miss';
       }
 
       selectDatabaseTreeNode(result, { clearSearch: options?.clearSearch });
       return result.fallback ? 'fallback' : 'hit';
     },
-    [loadDatabasePath, selectDatabaseTreeNode],
+    [selectDatabaseTreeNode],
   );
 
   const locateActiveWorkspaceTab = useCallback(
@@ -368,7 +356,14 @@ const WorkspaceLeft = memo(() => {
       pendingManualPanelLocateRef.current = null;
     }
     void locateActiveWorkspaceTab(currentPanel, isManualPanelLocate ? { clearSearch: true } : undefined);
-  }, [activeTabLocateTarget, autoFollowActiveWorkspaceTab, currentPanel, locateActiveWorkspaceTab, treeDataReady]);
+  }, [
+    activeTabLocateTarget,
+    autoFollowActiveWorkspaceTab,
+    currentPanel,
+    locateActiveWorkspaceTab,
+    treeDataReady,
+    treeDataRevision,
+  ]);
 
   return (
     <>

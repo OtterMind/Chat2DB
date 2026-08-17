@@ -203,6 +203,11 @@ export default {
   'setting.text.alertNewVersion': '新しいバージョンが見つかったら警告してください',
   'setting.text.downloadNewVersion': '新しいバージョンが見つかったら自動的にダウンロードします',
   'setting.text.autoInstallNewVersion': '新しいバージョンが自動的にインストールされます',
+  'setting.text.receiveBetaVersion': 'Beta バージョンを受け取る',
+  'setting.text.updateRecoveryFailedTitle': 'アップデートの起動に失敗しました',
+  'setting.text.updateRecoveryFailed':
+    '{1} へのアップデートに失敗し、{2} に自動的に復元されました。Chat2DB サポート（support@chat2db.ai）に更新ログを添えてお問い合わせください。',
+  'setting.button.openUpdateLog': '更新ログを表示',
   'setting.text.updateLog': '更新ログ',
   'setting.nav.editorFontSize': 'エディタのフォントサイズ',
   'setting.nav.editorFontSizeDescribe': 'SQLエディタ内のフォントサイズを設定します',

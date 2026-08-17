@@ -10,6 +10,7 @@ import org.cef.browser.CefBrowser;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class ApplicationExitCoordinator {
@@ -20,23 +21,28 @@ public final class ApplicationExitCoordinator {
         INSTALL_UPDATE
     }
 
-    private static final AtomicReference<String> PENDING_ACTION = new AtomicReference<>();
+    private static final AtomicReference<Runnable> PENDING_EXIT = new AtomicReference<>();
 
     private ApplicationExitCoordinator() {
     }
 
     public static void request(String action) {
+        request(action, () -> execute(action));
+    }
+
+    public static void request(String action, Runnable confirmedAction) {
         ExitAction validatedAction = requireAction(action);
+        Objects.requireNonNull(confirmedAction, "Confirmed exit action is required");
         if (!ConfigUtils.isCommunity()) {
-            execute(action);
+            confirmedAction.run();
             return;
         }
         CefBrowser browser = JcefContext.getInstance().getBrowser_();
         if (browser == null) {
-            execute(action);
+            confirmedAction.run();
             return;
         }
-        PENDING_ACTION.set(validatedAction.name());
+        PENDING_EXIT.set(confirmedAction);
         ConsoleResult result = ConsoleResult.builder()
                 .actionType(ActionTypeEnum.APP_EXIT_REQUESTED.getName())
                 .message(Map.of("reason", validatedAction.name()))
@@ -45,11 +51,11 @@ public final class ApplicationExitCoordinator {
     }
 
     public static boolean confirm() {
-        String action = PENDING_ACTION.getAndSet(null);
-        if (action == null) {
+        Runnable confirmedAction = PENDING_EXIT.getAndSet(null);
+        if (confirmedAction == null) {
             return false;
         }
-        execute(action);
+        confirmedAction.run();
         return true;
     }
 

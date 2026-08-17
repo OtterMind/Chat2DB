@@ -1,7 +1,8 @@
 package ai.chat2db.community.jcef.handler.biz.update;
 
 
-import ai.chat2db.community.jcef.update.Updater;
+import ai.chat2db.community.jcef.update.DesktopUpdateCheckResult;
+import ai.chat2db.community.jcef.update.DesktopUpdaterRegistry;
 import ai.chat2db.community.jcef.annotation.JcefAction;
 import ai.chat2db.community.jcef.builder.ResponseBuilder;
 import ai.chat2db.community.jcef.enums.UpdatedStatus;
@@ -19,11 +20,11 @@ import java.util.Map;
 public class AppCheckUpdateHandler implements IJcefActionHandler {
     @Override
     public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
-        Updater.CheckResult checkResult = Updater.getInstance().appCheckUpdate();
+        DesktopUpdateCheckResult checkResult = DesktopUpdaterRegistry.get().appCheckUpdate();
         log.info(checkResult.toString());
         ResponseBuilder.buildSuccessJcef(
-                Map.of("data", Map.of("status", checkResult.isNeedsUpdate() ? UpdatedStatus.Available.getName() : UpdatedStatus.NotAvailable.getName(),
-                        "version", checkResult.isNeedsUpdate() ? checkResult.getRemoteMetadata().getVersion() : "")
+                Map.of("data", Map.of("status", checkResult.needsUpdate() ? UpdatedStatus.Available.getName() : UpdatedStatus.NotAvailable.getName(),
+                        "version", checkResult.needsUpdate() ? checkResult.version() : "")
                 ), callback);
     }
 }

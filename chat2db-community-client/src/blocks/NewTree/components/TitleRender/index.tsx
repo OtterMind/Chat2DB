@@ -11,6 +11,7 @@ import { ChevronRight, User, Users } from 'lucide-react';
 import { ContextMenuRef } from '@/components/ContextMenu';
 import Filtration from '../Filtration';
 import { splitSearchHighlight } from './highlightSearchText';
+import { resolveTreeSwitcherAction } from './switcherAction';
 
 interface IProps {
   className?: string;
@@ -84,13 +85,9 @@ const TitleRender = (props: IProps) => {
     }
     setIsLoading(true);
     // Unexpanded node, expand
-    handleLoadData(nodeData as any)
-      .then(() => {
-        setExpandedKeys([...expandedKeys, nodeData.key]);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    handleLoadData(nodeData as any).finally(() => {
+      setIsLoading(false);
+    });
   };
 
   const renderSwitcherIcon = () => {
@@ -176,14 +173,16 @@ const TitleRender = (props: IProps) => {
     if (nodeData.key !== selectedKeys[0]) {
       setSelectedKeys([nodeData.key]);
     }
-    if (isLoading) return;
-    if (!isExpanded) {
-      setIsLoading(true);
-      handleLoadData(nodeData as any).finally(() => {
-        setIsLoading(false);
-      });
+    const action = resolveTreeSwitcherAction(isLoading, isExpanded);
+    if (action === 'ignore') return;
+    if (action === 'collapse') {
+      toggleExpandedKeys(nodeData.key);
+      return;
     }
-    toggleExpandedKeys(nodeData.key);
+    setIsLoading(true);
+    handleLoadData(nodeData as any).finally(() => {
+      setIsLoading(false);
+    });
   };
 
   const renderDescribe = () => {

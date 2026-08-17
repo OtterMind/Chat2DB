@@ -33,6 +33,7 @@ const UpdateDetection = () => {
     updateDetail,
     handleCheckUpdate,
     updateAndRestartApp,
+    syncUpdatePreferences,
     setSettingPageActiveTab,
   } = useGlobalStore((state) => ({
     appConfig: state.appConfig,
@@ -42,6 +43,7 @@ const UpdateDetection = () => {
     updateDetail: state.updateDetail,
     handleCheckUpdate: state.handleCheckUpdate,
     updateAndRestartApp: state.updateAndRestartApp,
+    syncUpdatePreferences: state.syncUpdatePreferences,
     setSettingPageActiveTab: state.setSettingPageActiveTab,
   }));
 
@@ -49,6 +51,19 @@ const UpdateDetection = () => {
     maxCount: 1,
     top: createTop(),
   });
+
+  const triggerDownload = () => {
+    jcefApi
+      .triggerDownload()
+      .then((accepted) => {
+        if (!accepted) {
+          setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+        }
+      })
+      .catch(() => {
+        setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+      });
+  };
 
   useEffect(() => {
     if (!runtimeEditionConfig.autoUpdate) {
@@ -74,7 +89,17 @@ const UpdateDetection = () => {
     }
     // Check for updates, check for updates after app initialization is completed
     if (appConfig.isReady) {
-      handleCheckUpdate();
+      syncUpdatePreferences()
+        .then(() => handleCheckUpdate())
+        .catch(() => undefined);
+      jcefApi
+        .getUpdateRecoveryStatus()
+        .then((status) => {
+          if (status.failed) {
+            openRecoveryNotification(status.fromVersion, status.toVersion);
+          }
+        })
+        .catch(() => undefined);
     }
   }, [appConfig.isReady]);
 
@@ -88,12 +113,12 @@ const UpdateDetection = () => {
           openFindNewVersionNotification();
         }
         if (hotUpdateConfig.autoDownload) {
-          jcefApi.triggerDownload();
+          triggerDownload();
         }
         break;
       case UpdatedStatus.Updated:
         if (hotUpdateConfig.autoInstall) {
-          jcefApi.triggerInstallation();
+          updateAndRestartApp();
           return;
         }
         openNotificationAuto();
@@ -136,6 +161,33 @@ const UpdateDetection = () => {
         </div>
       ),
       description: btn,
+      key,
+    });
+  };
+
+  const openRecoveryNotification = (fromVersion: string, toVersion: string) => {
+    const key = 'update-recovery-failed';
+    const btn = (
+      <Button
+        type="link"
+        size="small"
+        onClick={() => {
+          jcefApi.openUpdateRecoveryLog().catch(() => undefined);
+        }}
+      >
+        {i18n('setting.button.openUpdateLog')}
+      </Button>
+    );
+    notificationApi.error({
+      className: styles.notification,
+      duration: null,
+      message: i18n('setting.text.updateRecoveryFailedTitle'),
+      description: (
+        <div>
+          <div>{i18n('setting.text.updateRecoveryFailed', toVersion, fromVersion)}</div>
+          <div>{btn}</div>
+        </div>
+      ),
       key,
     });
   };

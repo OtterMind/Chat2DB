@@ -13,6 +13,7 @@ import i18n from '@/i18n';
 import { searchTreeNodes } from '@/utils';
 import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import createRequest from '@/service/base';
 import { useUpdateEffect } from 'ahooks';
 import { debounce } from 'lodash';
@@ -74,6 +75,7 @@ const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
     );
 
     const { styles } = useStyles();
+    const { aiDataCollection } = useRuntimeEditionCapabilities();
     const showStorageMigration = !isEmbedIframe && runtimeEditionConfig.settingMenuProfile !== 'community';
     const [migrationPending, setMigrationPending] = useState(false);
 
@@ -109,14 +111,14 @@ const WorkspaceLeftActionBar = memo<WorkspaceLeftActionBarProps>(
         }
         const visibleTreeData = filterTreeNodesForDisplay(treeStore.treeData || [], {
           hiddenTreeNodeIds: treeStore.hiddenTreeNodeIds,
-          aiDataCollectionEnabled: runtimeEditionConfig.aiDataCollection,
+          aiDataCollectionEnabled: aiDataCollection,
         });
         const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(visibleTreeData, value);
         treeStore.setSearchResult(matchedNodes);
         treeStore.setSearchResultKeys(matchedKeys);
         treeStore.setExpandedKeys([...parentIdsWithMatches, ...treeStore.expandedKeys]);
       }, 300),
-      [],
+      [aiDataCollection],
     );
 
     useUpdateEffect(() => {
