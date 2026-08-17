@@ -2,6 +2,7 @@ package ai.chat2db.community.jcef.menus;
 
 import ai.chat2db.community.jcef.context.JcefContext;
 import ai.chat2db.community.jcef.utils.OSOperateUtil;
+import com.formdev.flatlaf.FlatClientProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.cef.OS;
 import org.cef.browser.CefBrowser;
@@ -32,11 +33,16 @@ public class Chat2DBMenuBar {
             return;
         }
         SwingUtilities.invokeLater(() -> {
-            JMenuBar menuBar = createMenuBar();
+            JMenuBar menuBar = shouldInstallMenuBar(frame.getRootPane()) ? createMenuBar() : null;
             frame.setJMenuBar(menuBar);
             frame.validate();
             frame.repaint();
         });
+    }
+
+    static boolean shouldInstallMenuBar(JRootPane rootPane) {
+        // FlatLaf reserves a separate row for JMenuBar in full-window-content mode.
+        return !Boolean.TRUE.equals(rootPane.getClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT));
     }
 
 

@@ -23,7 +23,6 @@ final class WindowsCommunityWindowChrome {
 
     static void configureRootPane(JRootPane rootPane) {
         rootPane.putClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT, true);
-        rootPane.putClientProperty(FlatClientProperties.MENU_BAR_EMBEDDED, true);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICON, false);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_TITLE, false);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_HEIGHT, TITLE_BAR_HEIGHT);

@@ -29,7 +29,6 @@ class WindowsCommunityWindowChromeTest {
         WindowsCommunityWindowChrome.configureRootPane(rootPane);
 
         assertEquals(true, rootPane.getClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT));
-        assertEquals(true, rootPane.getClientProperty(FlatClientProperties.MENU_BAR_EMBEDDED));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICON));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_TITLE));
         assertEquals(

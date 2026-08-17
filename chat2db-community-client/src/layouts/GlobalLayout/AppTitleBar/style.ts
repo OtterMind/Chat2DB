@@ -34,7 +34,6 @@ export const useStyles = createStyles(({ css, token }) => {
       padding-left: 78px;
     `,
     communityWindowsDesktopActions: css`
-      padding-left: 96px;
       padding-right: 144px;
     `,
     logoContainer: css`
