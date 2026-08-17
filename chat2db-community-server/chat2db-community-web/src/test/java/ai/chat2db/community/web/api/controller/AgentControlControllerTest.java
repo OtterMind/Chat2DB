@@ -4,9 +4,11 @@ import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskMessageRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskContextCreateRequest;
@@ -23,6 +25,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
 import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
@@ -195,6 +198,54 @@ class AgentControlControllerTest {
     }
 
     @Test
+    void runtimeApprovalDecisionUsesCurrentIdentityAfterTaskOwnershipCheck() {
+        AtomicReference<AgentRuntimeApprovalDecisionRequest> captured = new AtomicReference<>();
+        AgentRuntimeApproval pending = new AgentRuntimeApproval();
+        pending.setId("runtime-approval-1");
+        pending.setRunId("run-1");
+        pending.setRevision(1L);
+        AgentRun run = new AgentRun();
+        run.setId("run-1");
+        run.setTaskId("task-1");
+        IAgentDefinitionService agentService = proxy(IAgentDefinitionService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentTaskService taskService = proxy(IAgentTaskService.class, (proxy, method, args) -> {
+            if ("get".equals(method.getName())) return task("task-1", 7L);
+            throw new UnsupportedOperationException(method.getName());
+        });
+        IAgentRunService runService = proxy(IAgentRunService.class, (proxy, method, args) -> {
+            if ("get".equals(method.getName())) return run;
+            throw new UnsupportedOperationException(method.getName());
+        });
+        IAgentRuntimeDispatchService runtimeDispatch = proxy(IAgentRuntimeDispatchService.class,
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getApproval" -> pending;
+                    case "decideApproval" -> {
+                        captured.set((AgentRuntimeApprovalDecisionRequest) args[0]);
+                        yield pending;
+                    }
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
+        AgentControlController controller = new AgentControlController(agentService, taskService, runService,
+                proxy(IAgentRunCoordinator.class, (proxy, method, args) -> null),
+                proxy(IAgentArtifactService.class, (proxy, method, args) -> null),
+                proxy(IAgentToolGateway.class, (proxy, method, args) -> null),
+                proxy(IAgentArtifactPublicationService.class, (proxy, method, args) -> null),
+                proxy(IAgentTaskContextService.class, (proxy, method, args) -> null),
+                unsupportedChatTaskService(), () -> 7L, runtimeDispatch);
+        AgentRuntimeApprovalDecisionRequest request = new AgentRuntimeApprovalDecisionRequest();
+        request.setApprovalId("untrusted-id");
+        request.setExpectedRevision(1L);
+        request.setDecision(AgentApprovalDecisionEnum.APPROVE);
+        request.setDecidedBy(999L);
+
+        controller.decideRuntimeApproval("runtime-approval-1", request);
+
+        assertEquals("runtime-approval-1", captured.get().getApprovalId());
+        assertEquals(7L, captured.get().getDecidedBy());
+    }
+
+    @Test
     void continuingTaskAppendsOwnedCommentAndDispatchesUserMessageRun() {
         AtomicReference<AgentTaskContextCreateRequest> capturedContext = new AtomicReference<>();
         AtomicReference<AgentRunTriggerTypeEnum> capturedTrigger = new AtomicReference<>();
@@ -243,7 +294,7 @@ class AgentControlControllerTest {
         });
         AgentControlController controller = new AgentControlController(agentService, taskService, runService,
                 coordinator, artifactService, toolGateway, publicationService, contextService,
-                unsupportedChatTaskService(), () -> 7L);
+                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService());
         AgentTaskMessageRequest request = new AgentTaskMessageRequest();
         request.setContent("Compare the result with last month.");
 
@@ -294,7 +345,7 @@ class AgentControlControllerTest {
                 (proxy, method, args) -> List.of());
         AgentControlController controller = new AgentControlController(agentService, taskService, runService,
                 coordinator, artifactService, toolGateway, publicationService, contextService,
-                chatTaskService, () -> 7L);
+                chatTaskService, () -> 7L, unsupportedRuntimeDispatchService());
         AgentChatTaskCreateRequest request = new AgentChatTaskCreateRequest();
         request.setCreatedBy(999L);
 
@@ -332,11 +383,16 @@ class AgentControlControllerTest {
                 (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
         return new AgentControlController(agentService, taskService, runService, coordinator,
                 artifactService, toolGateway, publicationService, contextService,
-                unsupportedChatTaskService(), () -> 7L);
+                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService());
     }
 
     private IAgentChatTaskService unsupportedChatTaskService() {
         return proxy(IAgentChatTaskService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+    }
+
+    private IAgentRuntimeDispatchService unsupportedRuntimeDispatchService() {
+        return proxy(IAgentRuntimeDispatchService.class,
                 (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
     }
 

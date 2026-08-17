@@ -5,11 +5,14 @@ import ai.chat2db.community.domain.api.enums.agent.AgentApprovalModeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeProfile;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifact;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactEvidence;
@@ -28,6 +31,8 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateReques
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
+import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.lang.reflect.Proxy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -141,6 +147,50 @@ class AgentControlServiceTest {
         request.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
 
         assertThrows(IllegalArgumentException.class, () -> agentService.create(request));
+    }
+
+    @Test
+    void snapshotsExternalRuntimeProfileAndProviderIntoRun() {
+        AgentRuntimeProfile profile = new AgentRuntimeProfile();
+        profile.setId("profile-1");
+        profile.setName("Codex local");
+        profile.setTransport(AgentRuntimeTransportEnum.EXTERNAL_DAEMON);
+        profile.setProvider(AgentRuntimeProviderEnum.CODEX);
+        profile.setEnabled(true);
+        profile.setCreatedBy(7L);
+        profile.setRevision(1L);
+        IAgentRuntimeControlStorage runtimeStorage = (IAgentRuntimeControlStorage) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IAgentRuntimeControlStorage.class},
+                (proxy, method, args) -> {
+                    if ("getRuntimeProfile".equals(method.getName())) {
+                        return profile;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        AgentDefinitionServiceImpl externalAgentService = new AgentDefinitionServiceImpl(storage, runtimeStorage);
+        AgentTaskServiceImpl externalTaskService = new AgentTaskServiceImpl(storage, runtimeStorage);
+        AgentDefinitionCreateRequest agentRequest = new AgentDefinitionCreateRequest();
+        agentRequest.setName("External analyst");
+        agentRequest.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        agentRequest.setRuntimeProfileId(profile.getId());
+        agentRequest.setCreatedBy(7L);
+        AgentDefinition externalAgent = externalAgentService.create(agentRequest);
+        AgentTaskCreateRequest taskRequest = new AgentTaskCreateRequest();
+        taskRequest.setTitle("Analyze refunds with Codex");
+        taskRequest.setAssigneeAgentId(externalAgent.getId());
+        taskRequest.setCreatedBy(7L);
+
+        AgentTaskCreation creation = externalTaskService.create(taskRequest);
+
+        AgentRun initialRun = creation.getInitialRun();
+        assertEquals(profile.getId(), initialRun.getRuntimeProfileId());
+        assertEquals(AgentRuntimeProviderEnum.CODEX, initialRun.getRuntimeProvider());
+        AgentRuntimeProfile snapshot = JSON.parseObject(
+                initialRun.getRuntimeProfileSnapshot(), AgentRuntimeProfile.class);
+        assertEquals(AgentRuntimeProviderEnum.CODEX, snapshot.getProvider());
+        profile.setProvider(AgentRuntimeProviderEnum.HERMES);
+        assertEquals(AgentRuntimeProviderEnum.CODEX, JSON.parseObject(
+                initialRun.getRuntimeProfileSnapshot(), AgentRuntimeProfile.class).getProvider());
     }
 
     @Test

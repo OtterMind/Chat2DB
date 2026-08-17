@@ -1,14 +1,15 @@
 import i18n from '@/i18n';
 import { type IAIModelConfigItem, listAIModelConfigs } from '@/service/aiModelConfig';
-import agentService, { type AgentDefinition } from '@/service/agent';
+import agentService, { type AgentDefinition, type AgentRuntimeOption } from '@/service/agent';
 import connectionService from '@/service/connection';
 import type { IConnectionDetails } from '@/typings';
 import feedback from '@/utils/feedback';
 import { Alert, Button, Checkbox, Form, Input, Modal, Popconfirm, Segmented, Select, Space, Tag, Upload } from 'antd';
 import { Bot, ChevronRight, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, UploadCloud } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AgentDataScopeEditor from './AgentDataScopeEditor';
+import AgentRuntimePicker from './AgentRuntimePicker';
 import { AgentAvatar, CapabilityChips, RuntimeBadge } from './TaskPrimitives';
 import { useStyles } from './style';
 import { readAgentAvatar } from './agentAvatar';
@@ -32,10 +33,27 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   const [selectedAgentId, setSelectedAgentId] = useState<string>();
   const [dataSources, setDataSources] = useState<IConnectionDetails[]>([]);
   const [modelConfigs, setModelConfigs] = useState<IAIModelConfigItem[]>([]);
+  const [runtimeOptions, setRuntimeOptions] = useState<AgentRuntimeOption[]>([]);
+  const [runtimeOptionsLoading, setRuntimeOptionsLoading] = useState(false);
+  const [runtimeOptionsError, setRuntimeOptionsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentDefinition>();
   const avatar = Form.useWatch('avatar', form);
   const agentName = Form.useWatch('name', form);
+  const runtimeType = Form.useWatch('runtimeType', form);
+  const runtimeProfileId = Form.useWatch('runtimeProfileId', form);
+
+  const refreshRuntimeOptions = useCallback(async () => {
+    setRuntimeOptionsLoading(true);
+    try {
+      setRuntimeOptions(await agentService.listRuntimeOptions());
+      setRuntimeOptionsError(false);
+    } catch {
+      setRuntimeOptionsError(true);
+    } finally {
+      setRuntimeOptionsLoading(false);
+    }
+  }, []);
 
   const filteredAgents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -45,9 +63,11 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
     );
   }, [agents, query]);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) || filteredAgents[0];
+  const selectedRuntime = runtimeOptions.find((option) => option.profileId === selectedAgent?.runtimeProfileId);
 
   useEffect(() => {
     if (!open) return;
+    void refreshRuntimeOptions();
     void Promise.all([connectionService.getList({ pageNo: 1, pageSize: 500 }), listAIModelConfigs()])
       .then(([connectionResult, models]) => {
         setDataSources(connectionResult.data || []);
@@ -57,7 +77,13 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
         setDataSources([]);
         setModelConfigs([]);
       });
-  }, [open]);
+  }, [open, refreshRuntimeOptions]);
+
+  useEffect(() => {
+    if (!open || runtimeOptions.length || runtimeOptionsError) return;
+    const timer = window.setInterval(() => void refreshRuntimeOptions(), 3000);
+    return () => window.clearInterval(timer);
+  }, [open, refreshRuntimeOptions, runtimeOptions.length, runtimeOptionsError]);
 
   useEffect(() => {
     if (open && agents.length && !selectedAgentId) setSelectedAgentId(agents[0].id);
@@ -224,7 +250,9 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                   <div className={styles.runtimeSummary}>
                     <RuntimeBadge agent={selectedAgent} />
                     <span>
-                      {selectedAgent.runtimeType === 'EXTERNAL_AGENT' ? i18n('task.agent.runtimeProfile') : 'Spring AI'}
+                      {selectedAgent.runtimeType === 'EXTERNAL_AGENT'
+                        ? selectedRuntime?.provider === 'CODEX' ? 'Codex' : selectedRuntime?.provider === 'HERMES' ? 'Hermes' : i18n('task.runtime.external')
+                        : 'Spring AI'}
                     </span>
                   </div>
                 </div>
@@ -298,48 +326,51 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                       {avatar && <Button type="link" danger onClick={() => form.setFieldValue('avatar', undefined)}>{i18n('task.agent.removeAvatar')}</Button>}
                     </div>
                   </div>
-                <div className={styles.twoColumnForm}>
-                  <Form.Item name="name" label={i18n('task.agent.name')} rules={[{ required: true, max: 128 }]}>
-                    <Input autoFocus />
-                  </Form.Item>
-                  <Form.Item name="runtimeType" label={i18n('task.agent.runtime')} rules={[{ required: true }]}>
+                <Form.Item name="name" label={i18n('task.agent.name')} rules={[{ required: true, max: 128 }]}>
+                  <Input autoFocus />
+                </Form.Item>
+                <Form.Item name="runtimeType" hidden rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item
+                  name="runtimeProfileId"
+                  hidden
+                  rules={[{
+                    validator: (_, value) => runtimeType !== 'EXTERNAL_AGENT' || value
+                      ? Promise.resolve()
+                      : Promise.reject(new Error(i18n('task.agent.runtimeRequired'))),
+                  }]}
+                >
+                  <Input />
+                </Form.Item>
+                <AgentRuntimePicker
+                  runtimeType={runtimeType}
+                  runtimeProfileId={runtimeProfileId}
+                  options={runtimeOptions}
+                  loading={runtimeOptionsLoading}
+                  error={runtimeOptionsError}
+                  onRefresh={() => void refreshRuntimeOptions()}
+                  onChange={(nextRuntimeType, profileId) => {
+                    form.setFieldsValue({ runtimeType: nextRuntimeType, runtimeProfileId: profileId });
+                    void form.validateFields(['runtimeProfileId']);
+                  }}
+                />
+                {runtimeType !== 'EXTERNAL_AGENT' && (
+                  <Form.Item
+                    name="modelConfigId"
+                    label={i18n('task.agent.modelConfig')}
+                    extra={i18n('task.agent.modelConfigHint')}
+                  >
                     <Select
-                      options={[
-                        { value: 'EMBEDDED_SPRING_AI', label: 'Spring AI' },
-                        { value: 'EXTERNAL_AGENT', label: i18n('task.agent.externalRuntime') },
-                      ]}
+                      allowClear
+                      placeholder={i18n('task.agent.useDefaultModel')}
+                      options={modelConfigs.map((model) => ({
+                        value: model.id,
+                        label: `${model.name} · ${model.model}${
+                          model.defaultConfig ? ` · ${i18n('setting.modelConfig.default')}` : ''
+                        }`,
+                      }))}
                     />
                   </Form.Item>
-                </div>
-                <Form.Item noStyle shouldUpdate={(before, after) => before.runtimeType !== after.runtimeType}>
-                  {({ getFieldValue }) =>
-                    getFieldValue('runtimeType') === 'EXTERNAL_AGENT' ? (
-                      <Form.Item
-                        name="runtimeProfileId"
-                        label={i18n('task.agent.runtimeProfile')}
-                        rules={[{ required: true }]}
-                      >
-                        <Input />
-                      </Form.Item>
-                    ) : null
-                  }
-                </Form.Item>
-                <Form.Item
-                  name="modelConfigId"
-                  label={i18n('task.agent.modelConfig')}
-                  extra={i18n('task.agent.modelConfigHint')}
-                >
-                  <Select
-                    allowClear
-                    placeholder={i18n('task.agent.useDefaultModel')}
-                    options={modelConfigs.map((model) => ({
-                      value: model.id,
-                      label: `${model.name} · ${model.model}${
-                        model.defaultConfig ? ` · ${i18n('setting.modelConfig.default')}` : ''
-                      }`,
-                    }))}
-                  />
-                </Form.Item>
+                )}
                 <Form.Item name="description" label={i18n('task.field.description')}>
                   <Input.TextArea rows={2} maxLength={500} showCount />
                 </Form.Item>

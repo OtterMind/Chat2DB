@@ -83,7 +83,10 @@ public class AgentRunServiceImpl implements IAgentRunService {
         copy.setTaskId(source.getTaskId());
         copy.setAgentId(source.getAgentId());
         copy.setRuntimeType(source.getRuntimeType());
+        copy.setRuntimeProfileId(source.getRuntimeProfileId());
+        copy.setRuntimeProvider(source.getRuntimeProvider());
         copy.setRuntimeProfileSnapshot(source.getRuntimeProfileSnapshot());
+        copy.setProviderSessionId(source.getProviderSessionId());
         copy.setTriggerType(source.getTriggerType());
         copy.setStatus(source.getStatus());
         copy.setAttempt(source.getAttempt());

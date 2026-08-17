@@ -1006,6 +1006,8 @@ agent_artifact_dashboard_ref
 
 ### Phase 3：外部 Agent Runtime
 
+专项实施设计见 [`codex-hermes-external-runtime-plan.md`](./codex-hermes-external-runtime-plan.md)。
+
 - Runtime 注册和 Heartbeat；
 - Run claim/dispatch；
 - Task-scoped token；

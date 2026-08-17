@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactEvidence;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
@@ -79,6 +80,27 @@ class AgentArtifactServiceTest {
         assertEquals(1, updated.getVersions().get(1).getSupersedesVersion());
         assertNotEquals(updated.getVersions().get(0).getContentHash(),
                 updated.getVersions().get(1).getContentHash());
+    }
+
+    @Test
+    void retainsHistoricalEvidenceButMarksItInvalidAfterTaskScopeChanges() {
+        AgentDataScope allowed = new AgentDataScope();
+        allowed.setDataSourceId(7L);
+        creation.getTask().setDataScopeSnapshot(List.of(allowed));
+        AgentArtifactEvidence evidence = new AgentArtifactEvidence();
+        evidence.setRunId(creation.getInitialRun().getId());
+        evidence.setDataSourceId(7L);
+        evidence.setSqlSnapshot("select 1");
+        AgentArtifactDetail created = artifactService.create(reportRequest(evidence));
+
+        assertTrue(artifactService.get(created.getArtifact().getId()).getEvidence().get(0).getValid());
+
+        AgentDataScope revoked = new AgentDataScope();
+        revoked.setDataSourceId(8L);
+        creation.getTask().setDataScopeSnapshot(List.of(revoked));
+        AgentArtifactEvidence invalid = artifactService.get(created.getArtifact().getId()).getEvidence().get(0);
+        assertFalse(invalid.getValid());
+        assertFalse(invalid.getInvalidReason().isBlank());
     }
 
     @Test

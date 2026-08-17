@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.api.model.agent;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
 import lombok.Data;
 
 import java.util.Date;
@@ -18,7 +19,14 @@ public class AgentRun {
 
     private AgentRuntimeTypeEnum runtimeType;
 
+    private String runtimeProfileId;
+
+    private AgentRuntimeProviderEnum runtimeProvider;
+
     private String runtimeProfileSnapshot;
+
+    /** Provider-owned resumable session identifier, for example a Codex Thread ID. */
+    private String providerSessionId;
 
     private AgentRunTriggerTypeEnum triggerType;
 

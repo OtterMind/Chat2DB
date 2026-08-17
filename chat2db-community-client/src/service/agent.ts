@@ -45,6 +45,23 @@ export interface AgentDefinition {
   revision: number;
 }
 
+export type AgentRuntimeProvider = 'CODEX' | 'HERMES';
+
+export interface AgentRuntimeOption {
+  profileId: string;
+  profileName: string;
+  provider: AgentRuntimeProvider;
+  executable: string;
+  defaultProfile: boolean;
+  installed: boolean;
+  online: boolean;
+  status?: 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'DISABLED';
+  providerVersion?: string;
+  daemonId?: string;
+  activeRuns?: number;
+  maxConcurrency?: number;
+}
+
 export interface AgentTask {
   id: string;
   title: string;
@@ -246,6 +263,7 @@ export interface UpdateAgentDefinitionRequest extends CreateAgentDefinitionReque
 }
 
 const listAgents = createRequest<void, AgentDefinition[]>('/api/agent/definitions');
+const listRuntimeOptions = createRequest<void, AgentRuntimeOption[]>('/api/agent/runtime-options');
 const createAgent = createRequest<CreateAgentDefinitionRequest, AgentDefinition>('/api/agent/definitions', {
   method: 'post',
 });
@@ -313,6 +331,7 @@ const continueTask = createRequest<{ taskId: string; content: string; agentId?: 
 );
 
 export default {
+  listRuntimeOptions,
   listAgents,
   createAgent,
   updateAgent,

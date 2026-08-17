@@ -21,4 +21,6 @@ public class AgentArtifactEvidence {
     private Long rowCount;
     private String resultSnapshotId;
     private Date createdAt;
+    private Boolean valid;
+    private String invalidReason;
 }

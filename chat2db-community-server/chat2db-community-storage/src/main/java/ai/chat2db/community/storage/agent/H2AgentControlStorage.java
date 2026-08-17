@@ -17,6 +17,13 @@ import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeInstanceStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentDeliveryStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentGatewayPlatformEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
@@ -32,7 +39,18 @@ import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeInstance;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeProfile;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeRunLease;
+import ai.chat2db.community.domain.api.model.agent.AgentDeliveryCommand;
+import ai.chat2db.community.domain.api.model.agent.AgentExternalConversationBinding;
+import ai.chat2db.community.domain.api.model.agent.AgentGatewayChannel;
+import ai.chat2db.community.domain.api.model.agent.AgentInboundMessage;
+import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentGatewayStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
@@ -57,7 +75,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Component
-public class H2AgentControlStorage implements IAgentControlStorage {
+public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntimeControlStorage, IAgentGatewayStorage {
 
     private static final String MIGRATION_LOCATION = "classpath:db/agent/migration";
     private static final String DATABASE_NAME = "chat2db-agent";
@@ -167,6 +185,700 @@ public class H2AgentControlStorage implements IAgentControlStorage {
     }
 
     @Override
+    public AgentRuntimeProfile createRuntimeProfile(AgentRuntimeProfile profile) {
+        String sql = """
+                INSERT INTO agent_runtime_profile (
+                    id, name, transport, provider, executable, model, working_directory_policy,
+                    custom_arguments_json, environment_references_json, mcp_configuration,
+                    timeout_seconds, max_concurrency, thinking_mode, service_tier,
+                    session_resume_enabled, approval_bridge_enabled, enabled, created_by,
+                    created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindRuntimeProfile(statement, profile);
+            statement.executeUpdate();
+            return getRuntimeProfile(profile.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("create runtime profile", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeProfile updateRuntimeProfile(AgentRuntimeProfile profile, long expectedRevision) {
+        String sql = """
+                UPDATE agent_runtime_profile SET name = ?, transport = ?, provider = ?, executable = ?,
+                    model = ?, working_directory_policy = ?, custom_arguments_json = ?,
+                    environment_references_json = ?, mcp_configuration = ?, timeout_seconds = ?,
+                    max_concurrency = ?, thinking_mode = ?, service_tier = ?, session_resume_enabled = ?,
+                    approval_bridge_enabled = ?, enabled = ?, updated_at = ?, revision = ?
+                WHERE id = ? AND revision = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, profile.getName());
+            statement.setString(index++, profile.getTransport().name());
+            statement.setString(index++, profile.getProvider().name());
+            statement.setString(index++, profile.getExecutable());
+            statement.setString(index++, profile.getModel());
+            statement.setString(index++, profile.getWorkingDirectoryPolicy());
+            statement.setString(index++, JSON.toJSONString(profile.getCustomArguments()));
+            statement.setString(index++, JSON.toJSONString(profile.getEnvironmentReferences()));
+            statement.setString(index++, profile.getMcpConfiguration());
+            statement.setInt(index++, profile.getTimeoutSeconds());
+            statement.setInt(index++, profile.getMaxConcurrency());
+            statement.setString(index++, profile.getThinkingMode());
+            statement.setString(index++, profile.getServiceTier());
+            statement.setBoolean(index++, Boolean.TRUE.equals(profile.getSessionResumeEnabled()));
+            statement.setBoolean(index++, Boolean.TRUE.equals(profile.getApprovalBridgeEnabled()));
+            statement.setBoolean(index++, Boolean.TRUE.equals(profile.getEnabled()));
+            statement.setLong(index++, profile.getGmtModified().getTime());
+            statement.setLong(index++, profile.getRevision());
+            statement.setString(index++, profile.getId());
+            statement.setLong(index, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("runtime profile revision has changed: " + profile.getId());
+            }
+            return getRuntimeProfile(profile.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update runtime profile", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeProfile getRuntimeProfile(String id) {
+        return queryRuntimeProfile("SELECT * FROM agent_runtime_profile WHERE id = ?", statement ->
+                statement.setString(1, id));
+    }
+
+    @Override
+    public List<AgentRuntimeProfile> listRuntimeProfiles() {
+        String sql = "SELECT * FROM agent_runtime_profile ORDER BY updated_at DESC, id ASC";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<AgentRuntimeProfile> result = new ArrayList<>();
+            while (resultSet.next()) {
+                result.add(readRuntimeProfile(resultSet));
+            }
+            return result;
+        } catch (SQLException exception) {
+            throw storageFailure("list runtime profiles", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeInstance createRuntimeInstance(AgentRuntimeInstance instance) {
+        String sql = """
+                INSERT INTO agent_runtime_instance (
+                    id, daemon_id, provider, provider_version, protocol_version, capabilities_json,
+                    max_concurrency, active_runs, status, last_heartbeat_at, registered_at,
+                    updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindRuntimeInstance(statement, instance);
+            statement.executeUpdate();
+            return getRuntimeInstance(instance.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("create runtime instance", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeInstance updateRuntimeInstance(AgentRuntimeInstance instance, long expectedRevision) {
+        String sql = """
+                UPDATE agent_runtime_instance SET provider_version = ?, protocol_version = ?,
+                    capabilities_json = ?, max_concurrency = ?, active_runs = ?, status = ?,
+                    last_heartbeat_at = ?, updated_at = ?, revision = ?
+                WHERE id = ? AND revision = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, instance.getProviderVersion());
+            statement.setString(index++, instance.getProtocolVersion());
+            statement.setString(index++, JSON.toJSONString(instance.getCapabilities()));
+            statement.setInt(index++, instance.getMaxConcurrency());
+            statement.setInt(index++, instance.getActiveRuns());
+            statement.setString(index++, instance.getStatus().name());
+            statement.setLong(index++, instance.getLastHeartbeatAt().getTime());
+            statement.setLong(index++, instance.getGmtModified().getTime());
+            statement.setLong(index++, instance.getRevision());
+            statement.setString(index++, instance.getId());
+            statement.setLong(index, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("runtime instance revision has changed: " + instance.getId());
+            }
+            return getRuntimeInstance(instance.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update runtime instance", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeInstance heartbeatRuntimeInstance(String instanceId, String daemonId,
+                                                          AgentRuntimeInstanceStatusEnum status,
+                                                          Date heartbeatAt) {
+        String sql = """
+                UPDATE agent_runtime_instance
+                SET status = ?, last_heartbeat_at = ?, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND daemon_id = ? AND status <> 'DISABLED'
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, status.name());
+            statement.setLong(2, heartbeatAt.getTime());
+            statement.setLong(3, heartbeatAt.getTime());
+            statement.setString(4, instanceId);
+            statement.setString(5, daemonId);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException(
+                        "runtime instance is unavailable for heartbeat: " + instanceId);
+            }
+            return getRuntimeInstance(instanceId);
+        } catch (SQLException exception) {
+            throw storageFailure("heartbeat runtime instance", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeInstance getRuntimeInstance(String id) {
+        return queryRuntimeInstance("SELECT * FROM agent_runtime_instance WHERE id = ?", statement ->
+                statement.setString(1, id));
+    }
+
+    @Override
+    public AgentRuntimeInstance findRuntimeInstance(String daemonId, AgentRuntimeProviderEnum provider) {
+        return queryRuntimeInstance("SELECT * FROM agent_runtime_instance WHERE daemon_id = ? AND provider = ?",
+                statement -> {
+                    statement.setString(1, daemonId);
+                    statement.setString(2, provider.name());
+                });
+    }
+
+    @Override
+    public List<AgentRuntimeInstance> listRuntimeInstances() {
+        String sql = "SELECT * FROM agent_runtime_instance ORDER BY updated_at DESC, id ASC";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<AgentRuntimeInstance> result = new ArrayList<>();
+            while (resultSet.next()) {
+                result.add(readRuntimeInstance(resultSet));
+            }
+            return result;
+        } catch (SQLException exception) {
+            throw storageFailure("list runtime instances", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease claimRuntimeRun(String instanceId, AgentRuntimeProviderEnum provider,
+                                                String leaseTokenHash, String taskTokenHash,
+                                                Date claimedAt, Date leaseExpiresAt) {
+        String candidatesSql = """
+                SELECT r.id, r.revision
+                FROM agent_run r
+                JOIN agent_runtime_profile p ON p.id = r.runtime_profile_id
+                WHERE r.runtime_type = 'EXTERNAL_AGENT'
+                  AND r.status = 'QUEUED'
+                  AND p.transport = 'EXTERNAL_DAEMON'
+                  AND r.runtime_provider = ?
+                  AND p.enabled = TRUE
+                ORDER BY r.created_at ASC, r.id ASC
+                LIMIT 32
+                """;
+        String claimSql = """
+                UPDATE agent_run
+                SET status = 'DISPATCHED', updated_at = ?, revision = revision + 1
+                WHERE id = ? AND status = 'QUEUED' AND revision = ?
+                """;
+        String reserveSlotSql = """
+                UPDATE agent_runtime_instance
+                SET active_runs = active_runs + 1, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND provider = ? AND status IN ('ONLINE', 'DEGRADED')
+                  AND active_runs < max_concurrency
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                List<RunRevision> candidates = new ArrayList<>();
+                try (PreparedStatement statement = connection.prepareStatement(candidatesSql)) {
+                    statement.setString(1, provider.name());
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        while (resultSet.next()) {
+                            candidates.add(new RunRevision(resultSet.getString("id"), resultSet.getLong("revision")));
+                        }
+                    }
+                }
+                for (RunRevision candidate : candidates) {
+                    try (PreparedStatement statement = connection.prepareStatement(claimSql)) {
+                        statement.setLong(1, claimedAt.getTime());
+                        statement.setString(2, candidate.runId());
+                        statement.setLong(3, candidate.revision());
+                        if (statement.executeUpdate() != 1) {
+                            continue;
+                        }
+                    }
+                    try (PreparedStatement statement = connection.prepareStatement(reserveSlotSql)) {
+                        statement.setLong(1, claimedAt.getTime());
+                        statement.setString(2, instanceId);
+                        statement.setString(3, provider.name());
+                        if (statement.executeUpdate() != 1) {
+                            throw new ConcurrentModificationException(
+                                    "runtime instance has no available execution slot: " + instanceId);
+                        }
+                    }
+                    AgentRuntimeRunLease previous = queryRuntimeRunLease(connection, candidate.runId());
+                    AgentRuntimeRunLease lease = new AgentRuntimeRunLease();
+                    lease.setRunId(candidate.runId());
+                    lease.setRuntimeInstanceId(instanceId);
+                    lease.setLeaseAttempt(previous == null ? 1 : previous.getLeaseAttempt() + 1);
+                    lease.setLeaseTokenHash(leaseTokenHash);
+                    lease.setTaskTokenHash(taskTokenHash);
+                    lease.setClaimedAt(claimedAt);
+                    lease.setLeaseExpiresAt(leaseExpiresAt);
+                    lease.setLastRenewedAt(claimedAt);
+                    lease.setLastEventSequence(0L);
+                    lease.setState(AgentRuntimeLeaseStateEnum.ACTIVE);
+                    lease.setRevision(previous == null ? 1L : previous.getRevision() + 1);
+                    if (previous == null) {
+                        insertRuntimeRunLease(connection, lease);
+                    } else {
+                        replaceRuntimeRunLease(connection, lease, previous.getRevision());
+                    }
+                    connection.commit();
+                    return getRuntimeRunLease(candidate.runId());
+                }
+                connection.commit();
+                return null;
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("claim runtime run", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease getRuntimeRunLease(String runId) {
+        try (Connection connection = dataSource.getConnection()) {
+            return queryRuntimeRunLease(connection, runId);
+        } catch (SQLException exception) {
+            throw storageFailure("get runtime run lease", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease updateRuntimeRunLease(AgentRuntimeRunLease lease, long expectedRevision) {
+        try (Connection connection = dataSource.getConnection()) {
+            replaceRuntimeRunLease(connection, lease, expectedRevision);
+            return getRuntimeRunLease(lease.getRunId());
+        } catch (SQLException exception) {
+            throw storageFailure("update runtime run lease", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease startRuntimeRun(AgentRuntimeRunLease lease, long expectedLeaseRevision,
+                                                long expectedRunRevision) {
+        String runSql = """
+                UPDATE agent_run
+                SET status = 'RUNNING', started_at = COALESCE(started_at, ?), updated_at = ?, revision = revision + 1
+                WHERE id = ? AND status = 'DISPATCHED' AND revision = ?
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                replaceRuntimeRunLease(connection, lease, expectedLeaseRevision);
+                try (PreparedStatement statement = connection.prepareStatement(runSql)) {
+                    statement.setLong(1, lease.getStartedAt().getTime());
+                    statement.setLong(2, lease.getStartedAt().getTime());
+                    statement.setString(3, lease.getRunId());
+                    statement.setLong(4, expectedRunRevision);
+                    if (statement.executeUpdate() != 1) {
+                        throw new ConcurrentModificationException(
+                                "runtime run is no longer dispatchable: " + lease.getRunId());
+                    }
+                }
+                connection.commit();
+                return getRuntimeRunLease(lease.getRunId());
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("start runtime run", exception);
+        }
+    }
+
+    @Override
+    public AgentRunEvent appendRuntimeRunEvent(AgentRunEvent event, int leaseAttempt,
+                                               long runtimeSequence, Date acceptedAt,
+                                               String providerSessionId) {
+        String advanceSql = """
+                UPDATE agent_runtime_run_lease
+                SET last_event_sequence = ?, revision = revision + 1
+                WHERE run_id = ? AND lease_attempt = ? AND last_event_sequence = ?
+                  AND lease_expires_at >= ?
+                """;
+        String insertSql = """
+                INSERT INTO agent_run_event (
+                    event_id, run_id, event_type, content, payload_json,
+                    occurred_at, persisted_at, runtime_attempt, runtime_sequence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String sessionSql = """
+                UPDATE agent_run
+                SET provider_session_id = ?, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND status IN ('RUNNING', 'WAITING_APPROVAL')
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                AgentRunEvent existing = queryRunEvent(connection, event.getEventId());
+                if (existing != null) {
+                    requireMatchingRuntimeEvent(existing, event, leaseAttempt, runtimeSequence);
+                    connection.commit();
+                    return existing;
+                }
+                try (PreparedStatement statement = connection.prepareStatement(advanceSql)) {
+                    statement.setLong(1, runtimeSequence);
+                    statement.setString(2, event.getRunId());
+                    statement.setInt(3, leaseAttempt);
+                    statement.setLong(4, runtimeSequence - 1);
+                    statement.setLong(5, acceptedAt.getTime());
+                    if (statement.executeUpdate() != 1) {
+                        AgentRuntimeRunLease lease = queryRuntimeRunLease(connection, event.getRunId());
+                        if (lease == null || lease.getLeaseAttempt() != leaseAttempt) {
+                            throw new SecurityException("stale runtime run lease attempt");
+                        }
+                        if (acceptedAt.after(lease.getLeaseExpiresAt())) {
+                            throw new IllegalStateException("runtime run lease has expired");
+                        }
+                        throw new IllegalStateException("runtime event sequence must be exactly "
+                                + (lease.getLastEventSequence() + 1));
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(insertSql)) {
+                    statement.setString(1, event.getEventId());
+                    statement.setString(2, event.getRunId());
+                    statement.setString(3, event.getType().name());
+                    statement.setString(4, event.getContent());
+                    statement.setString(5, JSON.toJSONString(event.getPayload()));
+                    statement.setLong(6, event.getOccurredAt().getTime());
+                    statement.setLong(7, event.getPersistedAt().getTime());
+                    statement.setInt(8, leaseAttempt);
+                    statement.setLong(9, runtimeSequence);
+                    statement.executeUpdate();
+                }
+                if (providerSessionId != null) {
+                    try (PreparedStatement statement = connection.prepareStatement(sessionSql)) {
+                        statement.setString(1, providerSessionId);
+                        statement.setLong(2, acceptedAt.getTime());
+                        statement.setString(3, event.getRunId());
+                        if (statement.executeUpdate() != 1) {
+                            throw new ConcurrentModificationException(
+                                    "runtime run cannot persist provider session: " + event.getRunId());
+                        }
+                    }
+                }
+                connection.commit();
+                return getRunEvent(event.getEventId());
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("append runtime run event", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease requestRuntimeRunCancellation(String runId, Date requestedAt) {
+        String sql = """
+                UPDATE agent_runtime_run_lease
+                SET cancel_requested_at = ?, revision = revision + 1
+                WHERE run_id = ? AND lease_state = 'ACTIVE' AND cancel_requested_at IS NULL
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, requestedAt.getTime());
+            statement.setString(2, runId);
+            statement.executeUpdate();
+            return getRuntimeRunLease(runId);
+        } catch (SQLException exception) {
+            throw storageFailure("request runtime run cancellation", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeApproval createOrGetRuntimeApproval(AgentRuntimeApproval approval) {
+        AgentRuntimeApproval existing = findRuntimeApproval(approval.getRunId(), approval.getLeaseAttempt(),
+                approval.getProviderRequestId());
+        if (existing != null) {
+            return existing;
+        }
+        String sql = """
+                INSERT INTO agent_runtime_approval (
+                    id, run_id, lease_attempt, provider_request_id, tool_call_id, title,
+                    request_payload, allow_option_id, reject_option_id, status, requested_at,
+                    decided_by, decided_at, decision, reason, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, approval.getId());
+            statement.setString(2, approval.getRunId());
+            statement.setInt(3, approval.getLeaseAttempt());
+            statement.setString(4, approval.getProviderRequestId());
+            statement.setString(5, approval.getToolCallId());
+            statement.setString(6, approval.getTitle());
+            statement.setString(7, JSON.toJSONString(approval.getRequestPayload()));
+            statement.setString(8, approval.getAllowOptionId());
+            statement.setString(9, approval.getRejectOptionId());
+            statement.setString(10, approval.getStatus().name());
+            statement.setLong(11, approval.getRequestedAt().getTime());
+            setLong(statement, 12, approval.getDecidedBy());
+            setDate(statement, 13, approval.getDecidedAt());
+            statement.setString(14, approval.getDecision() == null ? null : approval.getDecision().name());
+            statement.setString(15, approval.getReason());
+            statement.setLong(16, approval.getRevision());
+            statement.executeUpdate();
+            return getRuntimeApproval(approval.getId());
+        } catch (SQLException exception) {
+            AgentRuntimeApproval concurrent = findRuntimeApproval(approval.getRunId(),
+                    approval.getLeaseAttempt(), approval.getProviderRequestId());
+            if (concurrent != null) {
+                return concurrent;
+            }
+            throw storageFailure("create runtime approval", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeApproval getRuntimeApproval(String approvalId) {
+        return queryRuntimeApproval("SELECT * FROM agent_runtime_approval WHERE id = ?",
+                statement -> statement.setString(1, approvalId));
+    }
+
+    @Override
+    public AgentRuntimeApproval findRuntimeApproval(String runId, int leaseAttempt,
+                                                    String providerRequestId) {
+        return queryRuntimeApproval("""
+                SELECT * FROM agent_runtime_approval
+                WHERE run_id = ? AND lease_attempt = ? AND provider_request_id = ?
+                """, statement -> {
+            statement.setString(1, runId);
+            statement.setInt(2, leaseAttempt);
+            statement.setString(3, providerRequestId);
+        });
+    }
+
+    @Override
+    public List<AgentRuntimeApproval> listRuntimeApprovals(String runId) {
+        String sql = """
+                SELECT * FROM agent_runtime_approval
+                WHERE run_id = ? ORDER BY requested_at ASC, id ASC
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, runId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentRuntimeApproval> approvals = new ArrayList<>();
+                while (resultSet.next()) {
+                    approvals.add(readRuntimeApproval(resultSet));
+                }
+                return approvals;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list runtime approvals", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeApproval updateRuntimeApproval(AgentRuntimeApproval approval, long expectedRevision) {
+        String sql = """
+                UPDATE agent_runtime_approval
+                SET status = ?, decided_by = ?, decided_at = ?, decision = ?, reason = ?, revision = ?
+                WHERE id = ? AND revision = ? AND status = 'PENDING'
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, approval.getStatus().name());
+            setLong(statement, 2, approval.getDecidedBy());
+            setDate(statement, 3, approval.getDecidedAt());
+            statement.setString(4, approval.getDecision() == null ? null : approval.getDecision().name());
+            statement.setString(5, approval.getReason());
+            statement.setLong(6, approval.getRevision());
+            statement.setString(7, approval.getId());
+            statement.setLong(8, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException(
+                        "runtime approval revision or status has changed: " + approval.getId());
+            }
+            return getRuntimeApproval(approval.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update runtime approval", exception);
+        }
+    }
+
+    @Override
+    public AgentRuntimeRunLease finishRuntimeRun(AgentRuntimeRunLease lease, AgentRunEvent terminalEvent,
+                                                 AgentRunStatusEnum targetStatus, String failureReason,
+                                                 String resultSummary, Date completedAt,
+                                                 long expectedLeaseRevision, long expectedRunRevision) {
+        String leaseSql = """
+                UPDATE agent_runtime_run_lease
+                SET last_event_sequence = ?, lease_state = ?, released_at = ?, terminal_event_id = ?,
+                    revision = revision + 1
+                WHERE run_id = ? AND runtime_instance_id = ? AND lease_attempt = ?
+                  AND revision = ? AND lease_state = 'ACTIVE' AND last_event_sequence = ?
+                  AND lease_expires_at >= ?
+                """;
+        String runSql = """
+                UPDATE agent_run
+                SET status = ?, updated_at = ?, completed_at = ?, failure_reason = ?,
+                    result_summary = ?, revision = revision + 1
+                WHERE id = ? AND revision = ?
+                  AND status IN ('DISPATCHED', 'RUNNING', 'WAITING_APPROVAL')
+                """;
+        String releaseSlotSql = """
+                UPDATE agent_runtime_instance
+                SET active_runs = CASE WHEN active_runs > 0 THEN active_runs - 1 ELSE 0 END,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ?
+                """;
+        String expireApprovalsSql = """
+                UPDATE agent_runtime_approval
+                SET status = 'EXPIRED', reason = ?, revision = revision + 1
+                WHERE run_id = ? AND status = 'PENDING'
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                AgentRuntimeRunLease current = queryRuntimeRunLease(connection, lease.getRunId());
+                if (current == null) {
+                    throw new IllegalStateException("runtime run lease not found: " + lease.getRunId());
+                }
+                if (current.getState() != AgentRuntimeLeaseStateEnum.ACTIVE) {
+                    requireMatchingTerminalLease(current, lease, terminalEvent, targetStatus);
+                    connection.commit();
+                    return current;
+                }
+                try (PreparedStatement statement = connection.prepareStatement(leaseSql)) {
+                    statement.setLong(1, terminalEvent.getRuntimeSequence());
+                    statement.setString(2, leaseState(targetStatus).name());
+                    statement.setLong(3, completedAt.getTime());
+                    statement.setString(4, terminalEvent.getEventId());
+                    statement.setString(5, lease.getRunId());
+                    statement.setString(6, lease.getRuntimeInstanceId());
+                    statement.setInt(7, lease.getLeaseAttempt());
+                    statement.setLong(8, expectedLeaseRevision);
+                    statement.setLong(9, terminalEvent.getRuntimeSequence() - 1);
+                    statement.setLong(10, completedAt.getTime());
+                    if (statement.executeUpdate() != 1) {
+                        throw new ConcurrentModificationException(
+                                "runtime run lease changed before terminal acknowledgement: " + lease.getRunId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(runSql)) {
+                    statement.setString(1, targetStatus.name());
+                    statement.setLong(2, completedAt.getTime());
+                    statement.setLong(3, completedAt.getTime());
+                    statement.setString(4, failureReason);
+                    statement.setString(5, resultSummary);
+                    statement.setString(6, lease.getRunId());
+                    statement.setLong(7, expectedRunRevision);
+                    if (statement.executeUpdate() != 1) {
+                        throw new ConcurrentModificationException(
+                                "runtime run changed before terminal acknowledgement: " + lease.getRunId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(releaseSlotSql)) {
+                    statement.setLong(1, completedAt.getTime());
+                    statement.setString(2, lease.getRuntimeInstanceId());
+                    if (statement.executeUpdate() != 1) {
+                        throw new IllegalStateException(
+                                "runtime instance slot was not reserved: " + lease.getRuntimeInstanceId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(expireApprovalsSql)) {
+                    statement.setString(1, "Run entered terminal state: " + targetStatus.name());
+                    statement.setString(2, lease.getRunId());
+                    statement.executeUpdate();
+                }
+                insertRuntimeRunEvent(connection, terminalEvent);
+                connection.commit();
+                return getRuntimeRunLease(lease.getRunId());
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("finish runtime run", exception);
+        }
+    }
+
+    @Override
+    public List<String> reconcileExpiredRuntimeRuns(Date expiredAt, int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("positive runtime reconciliation limit is required");
+        }
+        String candidatesSql = """
+                SELECT run_id FROM agent_runtime_run_lease
+                WHERE lease_state = 'ACTIVE' AND lease_expires_at < ?
+                ORDER BY lease_expires_at ASC, run_id ASC
+                LIMIT ?
+                """;
+        List<String> candidates = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(candidatesSql)) {
+            statement.setLong(1, expiredAt.getTime());
+            statement.setInt(2, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    candidates.add(resultSet.getString("run_id"));
+                }
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list expired runtime run leases", exception);
+        }
+        List<String> reconciled = new ArrayList<>();
+        for (String runId : candidates) {
+            if (reconcileExpiredRuntimeRun(runId, expiredAt)) {
+                reconciled.add(runId);
+            }
+        }
+        return reconciled;
+    }
+
+    @Override
     public AgentTaskCreation createTaskWithInitialRun(AgentTask task, AgentRun run) {
         String taskSql = """
                 INSERT INTO agent_task (
@@ -179,11 +891,12 @@ public class H2AgentControlStorage implements IAgentControlStorage {
                 """;
         String runSql = """
                 INSERT INTO agent_run (
-                    id, task_id, agent_id, runtime_type, runtime_profile_snapshot,
+                    id, task_id, agent_id, runtime_type, runtime_profile_id, runtime_provider,
+                    runtime_profile_snapshot, provider_session_id,
                     trigger_type, status, attempt, parent_run_id, created_at,
                     updated_at, started_at, completed_at, failure_reason,
                     result_summary, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -214,11 +927,12 @@ public class H2AgentControlStorage implements IAgentControlStorage {
                 """;
         String runSql = """
                 INSERT INTO agent_run (
-                    id, task_id, agent_id, runtime_type, runtime_profile_snapshot,
+                    id, task_id, agent_id, runtime_type, runtime_profile_id, runtime_provider,
+                    runtime_profile_snapshot, provider_session_id,
                     trigger_type, status, attempt, parent_run_id, created_at,
                     updated_at, started_at, completed_at, failure_reason,
                     result_summary, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -354,6 +1068,10 @@ public class H2AgentControlStorage implements IAgentControlStorage {
                 deleteByTask(connection, "DELETE FROM agent_sql_proposal WHERE run_id IN "
                         + "(SELECT id FROM agent_run WHERE task_id = ?)", taskId);
                 deleteByTask(connection, "DELETE FROM agent_run_event WHERE run_id IN "
+                        + "(SELECT id FROM agent_run WHERE task_id = ?)", taskId);
+                deleteByTask(connection, "DELETE FROM agent_runtime_approval WHERE run_id IN "
+                        + "(SELECT id FROM agent_run WHERE task_id = ?)", taskId);
+                deleteByTask(connection, "DELETE FROM agent_runtime_run_lease WHERE run_id IN "
                         + "(SELECT id FROM agent_run WHERE task_id = ?)", taskId);
                 deleteByTask(connection, "UPDATE agent_run SET parent_run_id = NULL WHERE task_id = ?", taskId);
                 deleteByTask(connection, "DELETE FROM agent_run WHERE task_id = ?", taskId);
@@ -973,6 +1691,349 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         }
     }
 
+    @Override
+    public AgentGatewayChannel createGatewayChannel(AgentGatewayChannel channel, String tokenHash) {
+        String sql = """
+                INSERT INTO agent_gateway_channel (
+                    id, name, platform, installation_ref, default_agent_id, created_by, token_hash,
+                    enabled, archived_at, created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, channel.getId());
+            statement.setString(index++, channel.getName());
+            statement.setString(index++, channel.getPlatform().name());
+            statement.setString(index++, channel.getInstallationRef());
+            statement.setString(index++, channel.getDefaultAgentId());
+            statement.setLong(index++, channel.getCreatedBy());
+            statement.setString(index++, tokenHash);
+            statement.setBoolean(index++, Boolean.TRUE.equals(channel.getEnabled()));
+            setDate(statement, index++, channel.getArchivedAt());
+            statement.setLong(index++, channel.getGmtCreate().getTime());
+            statement.setLong(index++, channel.getGmtModified().getTime());
+            statement.setLong(index, channel.getRevision());
+            statement.executeUpdate();
+            return getGatewayChannel(channel.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("create gateway channel", exception);
+        }
+    }
+
+    @Override
+    public AgentGatewayChannel getGatewayChannel(String channelId) {
+        return queryGatewayChannel("SELECT * FROM agent_gateway_channel WHERE id = ?", statement ->
+                statement.setString(1, channelId));
+    }
+
+    @Override
+    public List<AgentGatewayChannel> listGatewayChannels(Long ownerId) {
+        String sql = "SELECT * FROM agent_gateway_channel WHERE created_by = ? ORDER BY updated_at DESC, id";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, ownerId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentGatewayChannel> result = new ArrayList<>();
+                while (resultSet.next()) result.add(readGatewayChannel(resultSet));
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list gateway channels", exception);
+        }
+    }
+
+    @Override
+    public boolean matchesGatewayToken(String channelId, String tokenHash) {
+        String sql = """
+                SELECT 1 FROM agent_gateway_channel
+                WHERE id = ? AND token_hash = ? AND enabled = TRUE AND archived_at IS NULL
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, channelId);
+            statement.setString(2, tokenHash);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("authenticate gateway channel", exception);
+        }
+    }
+
+    @Override
+    public AgentExternalConversationBinding getConversationBinding(String bindingId) {
+        String sql = "SELECT * FROM agent_external_conversation_binding WHERE id = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, bindingId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readConversationBinding(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("get external conversation binding", exception);
+        }
+    }
+
+    @Override
+    public AgentExternalConversationBinding getConversationBinding(String channelId, String chatId,
+                                                                   String threadId) {
+        String sql = """
+                SELECT * FROM agent_external_conversation_binding
+                WHERE channel_id = ? AND chat_id = ? AND thread_id = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, channelId);
+            statement.setString(2, chatId);
+            statement.setString(3, threadId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readConversationBinding(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("get external conversation binding", exception);
+        }
+    }
+
+    @Override
+    public AgentExternalConversationBinding createConversationBinding(AgentExternalConversationBinding binding) {
+        String sql = """
+                INSERT INTO agent_external_conversation_binding (
+                    id, channel_id, chat_id, thread_id, session_id, archived_at,
+                    created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, binding.getId());
+            statement.setString(2, binding.getChannelId());
+            statement.setString(3, binding.getChatId());
+            statement.setString(4, binding.getThreadId());
+            statement.setString(5, binding.getSessionId());
+            setDate(statement, 6, binding.getArchivedAt());
+            statement.setLong(7, binding.getGmtCreate().getTime());
+            statement.setLong(8, binding.getGmtModified().getTime());
+            statement.setLong(9, binding.getRevision());
+            statement.executeUpdate();
+            return getConversationBinding(binding.getChannelId(), binding.getChatId(), binding.getThreadId());
+        } catch (SQLException exception) {
+            if ("23505".equals(exception.getSQLState())) {
+                AgentExternalConversationBinding existing = getConversationBinding(
+                        binding.getChannelId(), binding.getChatId(), binding.getThreadId());
+                if (existing != null) return existing;
+            }
+            throw storageFailure("create external conversation binding", exception);
+        }
+    }
+
+    @Override
+    public AgentInboundMessage getInboundMessage(String channelId, String idempotencyKey) {
+        String sql = "SELECT * FROM agent_inbound_message WHERE channel_id = ? AND idempotency_key = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, channelId);
+            statement.setString(2, idempotencyKey);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readInboundMessage(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("get inbound message", exception);
+        }
+    }
+
+    @Override
+    public AgentInboundMessage createInboundMessage(AgentInboundMessage message) {
+        String sql = """
+                INSERT INTO agent_inbound_message (
+                    id, channel_id, binding_id, event_id, message_id, idempotency_key, sender_id,
+                    sender_display_name, text, mentions_json, attachments_json, agent_id, task_id, received_at,
+                    created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, message.getId());
+            statement.setString(index++, message.getChannelId());
+            statement.setString(index++, message.getBindingId());
+            statement.setString(index++, message.getEventId());
+            statement.setString(index++, message.getMessageId());
+            statement.setString(index++, message.getIdempotencyKey());
+            statement.setString(index++, message.getSenderId());
+            statement.setString(index++, message.getSenderDisplayName());
+            statement.setString(index++, message.getText());
+            statement.setString(index++, JSON.toJSONString(message.getMentions()));
+            statement.setString(index++, JSON.toJSONString(message.getAttachments()));
+            statement.setString(index++, message.getAgentId());
+            statement.setString(index++, message.getTaskId());
+            statement.setLong(index++, message.getReceivedAt().getTime());
+            statement.setLong(index++, message.getGmtCreate().getTime());
+            statement.setLong(index++, message.getGmtModified().getTime());
+            statement.setLong(index, message.getRevision());
+            statement.executeUpdate();
+            return getInboundMessage(message.getChannelId(), message.getIdempotencyKey());
+        } catch (SQLException exception) {
+            if ("23505".equals(exception.getSQLState())) {
+                AgentInboundMessage existing = getInboundMessage(message.getChannelId(), message.getIdempotencyKey());
+                if (existing != null) return existing;
+            }
+            throw storageFailure("create inbound message", exception);
+        }
+    }
+
+    @Override
+    public AgentInboundMessage attachInboundTask(String messageId, String taskId, long expectedRevision) {
+        String sql = """
+                UPDATE agent_inbound_message SET task_id = ?, updated_at = ?, revision = ?
+                WHERE id = ? AND revision = ? AND (task_id IS NULL OR task_id = ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            long now = System.currentTimeMillis();
+            statement.setString(1, taskId);
+            statement.setLong(2, now);
+            statement.setLong(3, expectedRevision + 1);
+            statement.setString(4, messageId);
+            statement.setLong(5, expectedRevision);
+            statement.setString(6, taskId);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("inbound message revision has changed: " + messageId);
+            }
+            return queryInboundMessageById(messageId);
+        } catch (SQLException exception) {
+            throw storageFailure("attach inbound task", exception);
+        }
+    }
+
+    @Override
+    public List<AgentInboundMessage> listInboundMessagesAwaitingDelivery(String channelId) {
+        String sql = """
+                SELECT inbound.* FROM agent_inbound_message inbound
+                LEFT JOIN agent_delivery_outbox delivery ON delivery.inbound_message_id = inbound.id
+                WHERE inbound.channel_id = ? AND inbound.task_id IS NOT NULL AND delivery.id IS NULL
+                ORDER BY inbound.created_at, inbound.id
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, channelId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentInboundMessage> result = new ArrayList<>();
+                while (resultSet.next()) result.add(readInboundMessage(resultSet));
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list inbound messages awaiting delivery", exception);
+        }
+    }
+
+    @Override
+    public AgentDeliveryCommand createOrGetDelivery(AgentDeliveryCommand command) {
+        String sql = """
+                INSERT INTO agent_delivery_outbox (
+                    id, channel_id, inbound_message_id, task_id, run_id, platform, installation_ref,
+                    chat_id, thread_id, reply_to_message_id, content, attachment_refs_json, idempotency_key, status,
+                    attempt_count, next_attempt_at, lease_expires_at, platform_message_id, last_error,
+                    delivered_at, created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindDelivery(statement, command);
+            statement.executeUpdate();
+            return getDelivery(command.getId());
+        } catch (SQLException exception) {
+            if ("23505".equals(exception.getSQLState())) {
+                AgentDeliveryCommand existing = queryDeliveryByInbound(command.getInboundMessageId());
+                if (existing != null) return existing;
+            }
+            throw storageFailure("create delivery command", exception);
+        }
+    }
+
+    @Override
+    public List<AgentDeliveryCommand> claimDeliveries(String channelId, Date now, Date leaseExpiresAt, int limit) {
+        String sql = """
+                SELECT * FROM agent_delivery_outbox
+                WHERE channel_id = ?
+                  AND ((status = 'PENDING' AND next_attempt_at <= ?)
+                    OR (status = 'DELIVERING' AND lease_expires_at < ?))
+                ORDER BY created_at, id LIMIT ?
+                """;
+        List<AgentDeliveryCommand> candidates = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, channelId);
+            statement.setLong(2, now.getTime());
+            statement.setLong(3, now.getTime());
+            statement.setInt(4, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) candidates.add(readDelivery(resultSet));
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("find delivery commands", exception);
+        }
+        List<AgentDeliveryCommand> claimed = new ArrayList<>();
+        for (AgentDeliveryCommand candidate : candidates) {
+            String update = """
+                    UPDATE agent_delivery_outbox
+                    SET status = 'DELIVERING', attempt_count = attempt_count + 1,
+                        lease_expires_at = ?, updated_at = ?, revision = revision + 1
+                    WHERE id = ? AND revision = ?
+                      AND ((status = 'PENDING' AND next_attempt_at <= ?)
+                        OR (status = 'DELIVERING' AND lease_expires_at < ?))
+                    """;
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement(update)) {
+                statement.setLong(1, leaseExpiresAt.getTime());
+                statement.setLong(2, now.getTime());
+                statement.setString(3, candidate.getId());
+                statement.setLong(4, candidate.getRevision());
+                statement.setLong(5, now.getTime());
+                statement.setLong(6, now.getTime());
+                if (statement.executeUpdate() == 1) claimed.add(getDelivery(candidate.getId()));
+            } catch (SQLException exception) {
+                throw storageFailure("claim delivery command", exception);
+            }
+        }
+        return claimed;
+    }
+
+    @Override
+    public AgentDeliveryCommand getDelivery(String deliveryId) {
+        return queryDelivery("SELECT * FROM agent_delivery_outbox WHERE id = ?", statement ->
+                statement.setString(1, deliveryId));
+    }
+
+    @Override
+    public AgentDeliveryCommand updateDelivery(AgentDeliveryCommand command, long expectedRevision) {
+        String sql = """
+                UPDATE agent_delivery_outbox SET status = ?, attempt_count = ?, next_attempt_at = ?,
+                    lease_expires_at = ?, platform_message_id = ?, last_error = ?, delivered_at = ?,
+                    updated_at = ?, revision = ? WHERE id = ? AND revision = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, command.getStatus().name());
+            statement.setInt(index++, command.getAttemptCount());
+            statement.setLong(index++, command.getNextAttemptAt().getTime());
+            setDate(statement, index++, command.getLeaseExpiresAt());
+            statement.setString(index++, command.getPlatformMessageId());
+            statement.setString(index++, command.getLastError());
+            setDate(statement, index++, command.getDeliveredAt());
+            statement.setLong(index++, command.getGmtModified().getTime());
+            statement.setLong(index++, command.getRevision());
+            statement.setString(index++, command.getId());
+            statement.setLong(index, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("delivery revision has changed: " + command.getId());
+            }
+            return getDelivery(command.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update delivery command", exception);
+        }
+    }
+
     private AgentArtifactDashboardRef findArtifactDashboardRef(AgentArtifactDashboardRef reference) {
         String sql = """
                 SELECT * FROM agent_artifact_dashboard_ref
@@ -1002,6 +2063,27 @@ public class H2AgentControlStorage implements IAgentControlStorage {
     private AgentRunEvent getRunEvent(String eventId) {
         return getRunEvent("SELECT * FROM agent_run_event WHERE event_id = ?", statement ->
                 statement.setString(1, eventId));
+    }
+
+    private AgentRunEvent queryRunEvent(Connection connection, String eventId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT * FROM agent_run_event WHERE event_id = ?")) {
+            statement.setString(1, eventId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRunEvent(resultSet) : null;
+            }
+        }
+    }
+
+    private void requireMatchingRuntimeEvent(AgentRunEvent existing, AgentRunEvent requested,
+                                             int leaseAttempt, long runtimeSequence) {
+        if (!existing.getRunId().equals(requested.getRunId())
+                || existing.getRuntimeAttempt() == null
+                || existing.getRuntimeAttempt() != leaseAttempt
+                || existing.getRuntimeSequence() == null
+                || existing.getRuntimeSequence() != runtimeSequence) {
+            throw new IllegalStateException("runtime event id was already used with different fencing data");
+        }
     }
 
     private AgentRunEvent getRunEvent(String sql, SqlBinder binder) {
@@ -1237,6 +2319,385 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         });
     }
 
+    private AgentRuntimeProfile queryRuntimeProfile(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRuntimeProfile(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query runtime profile", exception);
+        }
+    }
+
+    private AgentGatewayChannel queryGatewayChannel(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readGatewayChannel(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query gateway channel", exception);
+        }
+    }
+
+    private AgentInboundMessage queryInboundMessageById(String messageId) {
+        String sql = "SELECT * FROM agent_inbound_message WHERE id = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, messageId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readInboundMessage(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query inbound message", exception);
+        }
+    }
+
+    private AgentDeliveryCommand queryDeliveryByInbound(String inboundMessageId) {
+        return queryDelivery("SELECT * FROM agent_delivery_outbox WHERE inbound_message_id = ?", statement ->
+                statement.setString(1, inboundMessageId));
+    }
+
+    private AgentDeliveryCommand queryDelivery(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readDelivery(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query delivery command", exception);
+        }
+    }
+
+    private AgentRuntimeInstance queryRuntimeInstance(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRuntimeInstance(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query runtime instance", exception);
+        }
+    }
+
+    private AgentRuntimeApproval queryRuntimeApproval(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRuntimeApproval(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query runtime approval", exception);
+        }
+    }
+
+    private AgentRuntimeRunLease queryRuntimeRunLease(Connection connection, String runId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT * FROM agent_runtime_run_lease WHERE run_id = ?")) {
+            statement.setString(1, runId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRuntimeRunLease(resultSet) : null;
+            }
+        }
+    }
+
+    private boolean reconcileExpiredRuntimeRun(String runId, Date reconciledAt) {
+        String leaseSql = """
+                UPDATE agent_runtime_run_lease
+                SET lease_state = 'EXPIRED', released_at = ?, terminal_event_id = ?, revision = revision + 1
+                WHERE run_id = ? AND lease_state = 'ACTIVE' AND lease_expires_at < ? AND revision = ?
+                """;
+        String runSql = """
+                UPDATE agent_run
+                SET status = ?, updated_at = ?, completed_at = ?, failure_reason = ?, revision = revision + 1
+                WHERE id = ? AND revision = ?
+                  AND status IN ('DISPATCHED', 'RUNNING', 'WAITING_APPROVAL')
+                """;
+        String releaseSlotSql = """
+                UPDATE agent_runtime_instance
+                SET active_runs = CASE WHEN active_runs > 0 THEN active_runs - 1 ELSE 0 END,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ?
+                """;
+        String expireApprovalsSql = """
+                UPDATE agent_runtime_approval
+                SET status = 'EXPIRED', reason = 'Runtime lease expired', revision = revision + 1
+                WHERE run_id = ? AND status = 'PENDING'
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                AgentRuntimeRunLease lease = queryRuntimeRunLease(connection, runId);
+                if (lease == null || lease.getState() != AgentRuntimeLeaseStateEnum.ACTIVE
+                        || !lease.getLeaseExpiresAt().before(reconciledAt)) {
+                    connection.commit();
+                    return false;
+                }
+                AgentRun run = queryRun(connection, runId);
+                if (run == null) {
+                    throw new IllegalStateException("active lease points to a missing run: " + runId);
+                }
+                boolean runAlreadyTerminal = terminal(run.getStatus());
+                AgentRunStatusEnum target = runAlreadyTerminal ? run.getStatus()
+                        : lease.getCancelRequestedAt() != null
+                        ? AgentRunStatusEnum.CANCELLED
+                        : lease.getStartedAt() == null ? AgentRunStatusEnum.QUEUED : AgentRunStatusEnum.UNKNOWN;
+                String eventId = "runtime-lease-expired-" + runId + "-" + lease.getLeaseAttempt();
+                try (PreparedStatement statement = connection.prepareStatement(leaseSql)) {
+                    statement.setLong(1, reconciledAt.getTime());
+                    statement.setString(2, eventId);
+                    statement.setString(3, runId);
+                    statement.setLong(4, reconciledAt.getTime());
+                    statement.setLong(5, lease.getRevision());
+                    if (statement.executeUpdate() != 1) {
+                        connection.rollback();
+                        return false;
+                    }
+                }
+                String failureReason = target == AgentRunStatusEnum.UNKNOWN
+                        ? "External runtime lease expired after the provider acknowledged start"
+                        : null;
+                if (!runAlreadyTerminal) {
+                    try (PreparedStatement statement = connection.prepareStatement(runSql)) {
+                        statement.setString(1, target.name());
+                        statement.setLong(2, reconciledAt.getTime());
+                        setDate(statement, 3, target == AgentRunStatusEnum.QUEUED ? null : reconciledAt);
+                        statement.setString(4, failureReason);
+                        statement.setString(5, runId);
+                        statement.setLong(6, run.getRevision());
+                        if (statement.executeUpdate() != 1) {
+                            throw new ConcurrentModificationException(
+                                    "runtime run changed during lease reconciliation: " + runId);
+                        }
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(releaseSlotSql)) {
+                    statement.setLong(1, reconciledAt.getTime());
+                    statement.setString(2, lease.getRuntimeInstanceId());
+                    if (statement.executeUpdate() != 1) {
+                        throw new IllegalStateException(
+                                "runtime instance slot was not reserved: " + lease.getRuntimeInstanceId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(expireApprovalsSql)) {
+                    statement.setString(1, runId);
+                    statement.executeUpdate();
+                }
+                AgentRunEvent event = new AgentRunEvent();
+                event.setEventId(eventId);
+                event.setRunId(runId);
+                event.setType(ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum.STATUS);
+                event.setContent(target.name());
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("status", target.name());
+                payload.put("reason", runAlreadyTerminal
+                        ? "LEASE_EXPIRED_AFTER_RUN_TERMINAL" : "LEASE_EXPIRED");
+                payload.put("runtimeAttempt", lease.getLeaseAttempt());
+                event.setPayload(payload);
+                event.setOccurredAt(reconciledAt);
+                event.setPersistedAt(reconciledAt);
+                event.setRuntimeAttempt(lease.getLeaseAttempt());
+                insertRuntimeRunEvent(connection, event);
+                connection.commit();
+                return true;
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("reconcile expired runtime run", exception);
+        }
+    }
+
+    private AgentRun queryRun(Connection connection, String runId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT * FROM agent_run WHERE id = ?")) {
+            statement.setString(1, runId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readRun(resultSet) : null;
+            }
+        }
+    }
+
+    private void insertRuntimeRunEvent(Connection connection, AgentRunEvent event) throws SQLException {
+        String sql = """
+                INSERT INTO agent_run_event (
+                    event_id, run_id, event_type, content, payload_json,
+                    occurred_at, persisted_at, runtime_attempt, runtime_sequence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, event.getEventId());
+            statement.setString(2, event.getRunId());
+            statement.setString(3, event.getType().name());
+            statement.setString(4, event.getContent());
+            statement.setString(5, JSON.toJSONString(event.getPayload()));
+            statement.setLong(6, event.getOccurredAt().getTime());
+            statement.setLong(7, event.getPersistedAt().getTime());
+            if (event.getRuntimeAttempt() == null) {
+                statement.setNull(8, java.sql.Types.INTEGER);
+            } else {
+                statement.setInt(8, event.getRuntimeAttempt());
+            }
+            if (event.getRuntimeSequence() == null) {
+                statement.setNull(9, java.sql.Types.BIGINT);
+            } else {
+                statement.setLong(9, event.getRuntimeSequence());
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    private void requireMatchingTerminalLease(AgentRuntimeRunLease current, AgentRuntimeRunLease requested,
+                                              AgentRunEvent event, AgentRunStatusEnum targetStatus) {
+        if (!current.getLeaseAttempt().equals(requested.getLeaseAttempt())
+                || !current.getRuntimeInstanceId().equals(requested.getRuntimeInstanceId())
+                || current.getState() != leaseState(targetStatus)
+                || !event.getEventId().equals(current.getTerminalEventId())) {
+            throw new IllegalStateException("runtime run already has a different terminal acknowledgement: "
+                    + current.getRunId());
+        }
+    }
+
+    private AgentRuntimeLeaseStateEnum leaseState(AgentRunStatusEnum status) {
+        return switch (status) {
+            case COMPLETED -> AgentRuntimeLeaseStateEnum.COMPLETED;
+            case FAILED -> AgentRuntimeLeaseStateEnum.FAILED;
+            case CANCELLED -> AgentRuntimeLeaseStateEnum.CANCELLED;
+            case UNKNOWN -> AgentRuntimeLeaseStateEnum.UNKNOWN;
+            default -> throw new IllegalArgumentException("run status is not terminal: " + status);
+        };
+    }
+
+    private boolean terminal(AgentRunStatusEnum status) {
+        return status == AgentRunStatusEnum.COMPLETED || status == AgentRunStatusEnum.FAILED
+                || status == AgentRunStatusEnum.CANCELLED || status == AgentRunStatusEnum.UNKNOWN;
+    }
+
+    private void insertRuntimeRunLease(Connection connection, AgentRuntimeRunLease lease) throws SQLException {
+        String sql = """
+                INSERT INTO agent_runtime_run_lease (
+                    run_id, runtime_instance_id, lease_attempt, lease_token_hash, task_token_hash,
+                    claimed_at, lease_expires_at, last_renewed_at, started_at,
+                    runtime_execution_id, cancel_requested_at, last_event_sequence, lease_state,
+                    released_at, terminal_event_id, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindRuntimeRunLease(statement, lease);
+            statement.executeUpdate();
+        }
+    }
+
+    private void replaceRuntimeRunLease(Connection connection, AgentRuntimeRunLease lease,
+                                        long expectedRevision) throws SQLException {
+        String sql = """
+                UPDATE agent_runtime_run_lease SET
+                    runtime_instance_id = ?, lease_attempt = ?, lease_token_hash = ?, task_token_hash = ?,
+                    claimed_at = ?, lease_expires_at = ?, last_renewed_at = ?, started_at = ?,
+                    runtime_execution_id = ?, cancel_requested_at = ?, last_event_sequence = ?,
+                    lease_state = ?, released_at = ?, terminal_event_id = ?, revision = ?
+                WHERE run_id = ? AND revision = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, lease.getRuntimeInstanceId());
+            statement.setInt(index++, lease.getLeaseAttempt());
+            statement.setString(index++, lease.getLeaseTokenHash());
+            statement.setString(index++, lease.getTaskTokenHash());
+            statement.setLong(index++, lease.getClaimedAt().getTime());
+            statement.setLong(index++, lease.getLeaseExpiresAt().getTime());
+            statement.setLong(index++, lease.getLastRenewedAt().getTime());
+            setDate(statement, index++, lease.getStartedAt());
+            statement.setString(index++, lease.getRuntimeExecutionId());
+            setDate(statement, index++, lease.getCancelRequestedAt());
+            statement.setLong(index++, lease.getLastEventSequence());
+            statement.setString(index++, lease.getState().name());
+            setDate(statement, index++, lease.getReleasedAt());
+            statement.setString(index++, lease.getTerminalEventId());
+            statement.setLong(index++, lease.getRevision());
+            statement.setString(index++, lease.getRunId());
+            statement.setLong(index, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException(
+                        "runtime run lease revision has changed: " + lease.getRunId());
+            }
+        }
+    }
+
+    private void bindRuntimeRunLease(PreparedStatement statement, AgentRuntimeRunLease lease) throws SQLException {
+        int index = 1;
+        statement.setString(index++, lease.getRunId());
+        statement.setString(index++, lease.getRuntimeInstanceId());
+        statement.setInt(index++, lease.getLeaseAttempt());
+        statement.setString(index++, lease.getLeaseTokenHash());
+        statement.setString(index++, lease.getTaskTokenHash());
+        statement.setLong(index++, lease.getClaimedAt().getTime());
+        statement.setLong(index++, lease.getLeaseExpiresAt().getTime());
+        statement.setLong(index++, lease.getLastRenewedAt().getTime());
+        setDate(statement, index++, lease.getStartedAt());
+        statement.setString(index++, lease.getRuntimeExecutionId());
+        setDate(statement, index++, lease.getCancelRequestedAt());
+        statement.setLong(index++, lease.getLastEventSequence());
+        statement.setString(index++, lease.getState().name());
+        setDate(statement, index++, lease.getReleasedAt());
+        statement.setString(index++, lease.getTerminalEventId());
+        statement.setLong(index, lease.getRevision());
+    }
+
+    private void bindRuntimeProfile(PreparedStatement statement, AgentRuntimeProfile profile) throws SQLException {
+        int index = 1;
+        statement.setString(index++, profile.getId());
+        statement.setString(index++, profile.getName());
+        statement.setString(index++, profile.getTransport().name());
+        statement.setString(index++, profile.getProvider().name());
+        statement.setString(index++, profile.getExecutable());
+        statement.setString(index++, profile.getModel());
+        statement.setString(index++, profile.getWorkingDirectoryPolicy());
+        statement.setString(index++, JSON.toJSONString(profile.getCustomArguments()));
+        statement.setString(index++, JSON.toJSONString(profile.getEnvironmentReferences()));
+        statement.setString(index++, profile.getMcpConfiguration());
+        statement.setInt(index++, profile.getTimeoutSeconds());
+        statement.setInt(index++, profile.getMaxConcurrency());
+        statement.setString(index++, profile.getThinkingMode());
+        statement.setString(index++, profile.getServiceTier());
+        statement.setBoolean(index++, Boolean.TRUE.equals(profile.getSessionResumeEnabled()));
+        statement.setBoolean(index++, Boolean.TRUE.equals(profile.getApprovalBridgeEnabled()));
+        statement.setBoolean(index++, Boolean.TRUE.equals(profile.getEnabled()));
+        setLong(statement, index++, profile.getCreatedBy());
+        statement.setLong(index++, profile.getGmtCreate().getTime());
+        statement.setLong(index++, profile.getGmtModified().getTime());
+        statement.setLong(index, profile.getRevision());
+    }
+
+    private void bindRuntimeInstance(PreparedStatement statement, AgentRuntimeInstance instance) throws SQLException {
+        int index = 1;
+        statement.setString(index++, instance.getId());
+        statement.setString(index++, instance.getDaemonId());
+        statement.setString(index++, instance.getProvider().name());
+        statement.setString(index++, instance.getProviderVersion());
+        statement.setString(index++, instance.getProtocolVersion());
+        statement.setString(index++, JSON.toJSONString(instance.getCapabilities()));
+        statement.setInt(index++, instance.getMaxConcurrency());
+        statement.setInt(index++, instance.getActiveRuns());
+        statement.setString(index++, instance.getStatus().name());
+        statement.setLong(index++, instance.getLastHeartbeatAt().getTime());
+        statement.setLong(index++, instance.getRegisteredAt().getTime());
+        statement.setLong(index++, instance.getGmtModified().getTime());
+        statement.setLong(index, instance.getRevision());
+    }
+
     private void bindAgent(PreparedStatement statement, AgentDefinition agent) throws SQLException {
         int index = 1;
         statement.setString(index++, agent.getId());
@@ -1286,7 +2747,10 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         statement.setString(index++, run.getTaskId());
         statement.setString(index++, run.getAgentId());
         statement.setString(index++, run.getRuntimeType().name());
+        statement.setString(index++, run.getRuntimeProfileId());
+        statement.setString(index++, run.getRuntimeProvider() == null ? null : run.getRuntimeProvider().name());
         statement.setString(index++, run.getRuntimeProfileSnapshot());
+        statement.setString(index++, run.getProviderSessionId());
         statement.setString(index++, run.getTriggerType().name());
         statement.setString(index++, run.getStatus().name());
         statement.setInt(index++, run.getAttempt());
@@ -1298,6 +2762,119 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         statement.setString(index++, run.getFailureReason());
         statement.setString(index++, run.getResultSummary());
         statement.setLong(index, run.getRevision());
+    }
+
+    private void bindDelivery(PreparedStatement statement, AgentDeliveryCommand command) throws SQLException {
+        int index = 1;
+        statement.setString(index++, command.getId());
+        statement.setString(index++, command.getChannelId());
+        statement.setString(index++, command.getInboundMessageId());
+        statement.setString(index++, command.getTaskId());
+        statement.setString(index++, command.getRunId());
+        statement.setString(index++, command.getPlatform().name());
+        statement.setString(index++, command.getInstallationRef());
+        statement.setString(index++, command.getChatId());
+        statement.setString(index++, command.getThreadId());
+        statement.setString(index++, command.getReplyToMessageId());
+        statement.setString(index++, command.getContent());
+        statement.setString(index++, JSON.toJSONString(command.getAttachmentRefs()));
+        statement.setString(index++, command.getIdempotencyKey());
+        statement.setString(index++, command.getStatus().name());
+        statement.setInt(index++, command.getAttemptCount());
+        statement.setLong(index++, command.getNextAttemptAt().getTime());
+        setDate(statement, index++, command.getLeaseExpiresAt());
+        statement.setString(index++, command.getPlatformMessageId());
+        statement.setString(index++, command.getLastError());
+        setDate(statement, index++, command.getDeliveredAt());
+        statement.setLong(index++, command.getGmtCreate().getTime());
+        statement.setLong(index++, command.getGmtModified().getTime());
+        statement.setLong(index, command.getRevision());
+    }
+
+    private AgentGatewayChannel readGatewayChannel(ResultSet resultSet) throws SQLException {
+        AgentGatewayChannel channel = new AgentGatewayChannel();
+        channel.setId(resultSet.getString("id"));
+        channel.setName(resultSet.getString("name"));
+        channel.setPlatform(AgentGatewayPlatformEnum.valueOf(resultSet.getString("platform")));
+        channel.setInstallationRef(resultSet.getString("installation_ref"));
+        channel.setDefaultAgentId(resultSet.getString("default_agent_id"));
+        channel.setCreatedBy(resultSet.getLong("created_by"));
+        channel.setEnabled(resultSet.getBoolean("enabled"));
+        channel.setArchivedAt(getDate(resultSet, "archived_at"));
+        channel.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        channel.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        channel.setRevision(resultSet.getLong("revision"));
+        return channel;
+    }
+
+    private AgentExternalConversationBinding readConversationBinding(ResultSet resultSet) throws SQLException {
+        AgentExternalConversationBinding binding = new AgentExternalConversationBinding();
+        binding.setId(resultSet.getString("id"));
+        binding.setChannelId(resultSet.getString("channel_id"));
+        binding.setChatId(resultSet.getString("chat_id"));
+        binding.setThreadId(resultSet.getString("thread_id"));
+        binding.setSessionId(resultSet.getString("session_id"));
+        binding.setArchivedAt(getDate(resultSet, "archived_at"));
+        binding.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        binding.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        binding.setRevision(resultSet.getLong("revision"));
+        return binding;
+    }
+
+    private AgentInboundMessage readInboundMessage(ResultSet resultSet) throws SQLException {
+        AgentInboundMessage message = new AgentInboundMessage();
+        message.setId(resultSet.getString("id"));
+        message.setChannelId(resultSet.getString("channel_id"));
+        message.setBindingId(resultSet.getString("binding_id"));
+        message.setEventId(resultSet.getString("event_id"));
+        message.setMessageId(resultSet.getString("message_id"));
+        message.setIdempotencyKey(resultSet.getString("idempotency_key"));
+        message.setSenderId(resultSet.getString("sender_id"));
+        message.setSenderDisplayName(resultSet.getString("sender_display_name"));
+        message.setText(resultSet.getString("text"));
+        List<String> mentions = JSON.parseObject(resultSet.getString("mentions_json"),
+                new TypeReference<List<String>>() { });
+        message.setMentions(mentions == null ? new ArrayList<>() : mentions);
+        List<ChatAttachment> attachments = JSON.parseObject(resultSet.getString("attachments_json"),
+                new TypeReference<List<ChatAttachment>>() { });
+        message.setAttachments(attachments == null ? new ArrayList<>() : attachments);
+        message.setAgentId(resultSet.getString("agent_id"));
+        message.setTaskId(resultSet.getString("task_id"));
+        message.setReceivedAt(new Date(resultSet.getLong("received_at")));
+        message.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        message.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        message.setRevision(resultSet.getLong("revision"));
+        return message;
+    }
+
+    private AgentDeliveryCommand readDelivery(ResultSet resultSet) throws SQLException {
+        AgentDeliveryCommand command = new AgentDeliveryCommand();
+        command.setId(resultSet.getString("id"));
+        command.setChannelId(resultSet.getString("channel_id"));
+        command.setInboundMessageId(resultSet.getString("inbound_message_id"));
+        command.setTaskId(resultSet.getString("task_id"));
+        command.setRunId(resultSet.getString("run_id"));
+        command.setPlatform(AgentGatewayPlatformEnum.valueOf(resultSet.getString("platform")));
+        command.setInstallationRef(resultSet.getString("installation_ref"));
+        command.setChatId(resultSet.getString("chat_id"));
+        command.setThreadId(resultSet.getString("thread_id"));
+        command.setReplyToMessageId(resultSet.getString("reply_to_message_id"));
+        command.setContent(resultSet.getString("content"));
+        List<String> attachmentRefs = JSON.parseObject(resultSet.getString("attachment_refs_json"),
+                new TypeReference<List<String>>() { });
+        command.setAttachmentRefs(attachmentRefs == null ? new ArrayList<>() : attachmentRefs);
+        command.setIdempotencyKey(resultSet.getString("idempotency_key"));
+        command.setStatus(AgentDeliveryStatusEnum.valueOf(resultSet.getString("status")));
+        command.setAttemptCount(resultSet.getInt("attempt_count"));
+        command.setNextAttemptAt(new Date(resultSet.getLong("next_attempt_at")));
+        command.setLeaseExpiresAt(getDate(resultSet, "lease_expires_at"));
+        command.setPlatformMessageId(resultSet.getString("platform_message_id"));
+        command.setLastError(resultSet.getString("last_error"));
+        command.setDeliveredAt(getDate(resultSet, "delivered_at"));
+        command.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        command.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        command.setRevision(resultSet.getLong("revision"));
+        return command;
     }
 
     private AgentDefinition readAgent(ResultSet resultSet) throws SQLException {
@@ -1319,6 +2896,102 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         agent.setGmtModified(new Date(resultSet.getLong("updated_at")));
         agent.setRevision(resultSet.getLong("revision"));
         return agent;
+    }
+
+    private AgentRuntimeProfile readRuntimeProfile(ResultSet resultSet) throws SQLException {
+        AgentRuntimeProfile profile = new AgentRuntimeProfile();
+        profile.setId(resultSet.getString("id"));
+        profile.setName(resultSet.getString("name"));
+        profile.setTransport(AgentRuntimeTransportEnum.valueOf(resultSet.getString("transport")));
+        profile.setProvider(AgentRuntimeProviderEnum.valueOf(resultSet.getString("provider")));
+        profile.setExecutable(resultSet.getString("executable"));
+        profile.setModel(resultSet.getString("model"));
+        profile.setWorkingDirectoryPolicy(resultSet.getString("working_directory_policy"));
+        List<String> arguments = JSON.parseArray(resultSet.getString("custom_arguments_json"), String.class);
+        profile.setCustomArguments(arguments == null ? new ArrayList<>() : new ArrayList<>(arguments));
+        Map<String, String> environmentReferences = JSON.parseObject(
+                resultSet.getString("environment_references_json"),
+                new TypeReference<Map<String, String>>() { });
+        profile.setEnvironmentReferences(environmentReferences == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(environmentReferences));
+        profile.setMcpConfiguration(resultSet.getString("mcp_configuration"));
+        profile.setTimeoutSeconds(resultSet.getInt("timeout_seconds"));
+        profile.setMaxConcurrency(resultSet.getInt("max_concurrency"));
+        profile.setThinkingMode(resultSet.getString("thinking_mode"));
+        profile.setServiceTier(resultSet.getString("service_tier"));
+        profile.setSessionResumeEnabled(resultSet.getBoolean("session_resume_enabled"));
+        profile.setApprovalBridgeEnabled(resultSet.getBoolean("approval_bridge_enabled"));
+        profile.setEnabled(resultSet.getBoolean("enabled"));
+        profile.setCreatedBy(getLong(resultSet, "created_by"));
+        profile.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        profile.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        profile.setRevision(resultSet.getLong("revision"));
+        return profile;
+    }
+
+    private AgentRuntimeInstance readRuntimeInstance(ResultSet resultSet) throws SQLException {
+        AgentRuntimeInstance instance = new AgentRuntimeInstance();
+        instance.setId(resultSet.getString("id"));
+        instance.setDaemonId(resultSet.getString("daemon_id"));
+        instance.setProvider(AgentRuntimeProviderEnum.valueOf(resultSet.getString("provider")));
+        instance.setProviderVersion(resultSet.getString("provider_version"));
+        instance.setProtocolVersion(resultSet.getString("protocol_version"));
+        LinkedHashSet<String> capabilities = JSON.parseObject(resultSet.getString("capabilities_json"),
+                new TypeReference<LinkedHashSet<String>>() { });
+        instance.setCapabilities(capabilities == null ? new LinkedHashSet<>() : capabilities);
+        instance.setMaxConcurrency(resultSet.getInt("max_concurrency"));
+        instance.setActiveRuns(resultSet.getInt("active_runs"));
+        instance.setStatus(AgentRuntimeInstanceStatusEnum.valueOf(resultSet.getString("status")));
+        instance.setLastHeartbeatAt(new Date(resultSet.getLong("last_heartbeat_at")));
+        instance.setRegisteredAt(new Date(resultSet.getLong("registered_at")));
+        instance.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        instance.setRevision(resultSet.getLong("revision"));
+        return instance;
+    }
+
+    private AgentRuntimeRunLease readRuntimeRunLease(ResultSet resultSet) throws SQLException {
+        AgentRuntimeRunLease lease = new AgentRuntimeRunLease();
+        lease.setRunId(resultSet.getString("run_id"));
+        lease.setRuntimeInstanceId(resultSet.getString("runtime_instance_id"));
+        lease.setLeaseAttempt(resultSet.getInt("lease_attempt"));
+        lease.setLeaseTokenHash(resultSet.getString("lease_token_hash"));
+        lease.setTaskTokenHash(resultSet.getString("task_token_hash"));
+        lease.setClaimedAt(new Date(resultSet.getLong("claimed_at")));
+        lease.setLeaseExpiresAt(new Date(resultSet.getLong("lease_expires_at")));
+        lease.setLastRenewedAt(new Date(resultSet.getLong("last_renewed_at")));
+        lease.setStartedAt(getDate(resultSet, "started_at"));
+        lease.setRuntimeExecutionId(resultSet.getString("runtime_execution_id"));
+        lease.setCancelRequestedAt(getDate(resultSet, "cancel_requested_at"));
+        lease.setLastEventSequence(resultSet.getLong("last_event_sequence"));
+        lease.setState(AgentRuntimeLeaseStateEnum.valueOf(resultSet.getString("lease_state")));
+        lease.setReleasedAt(getDate(resultSet, "released_at"));
+        lease.setTerminalEventId(resultSet.getString("terminal_event_id"));
+        lease.setRevision(resultSet.getLong("revision"));
+        return lease;
+    }
+
+    private AgentRuntimeApproval readRuntimeApproval(ResultSet resultSet) throws SQLException {
+        AgentRuntimeApproval approval = new AgentRuntimeApproval();
+        approval.setId(resultSet.getString("id"));
+        approval.setRunId(resultSet.getString("run_id"));
+        approval.setLeaseAttempt(resultSet.getInt("lease_attempt"));
+        approval.setProviderRequestId(resultSet.getString("provider_request_id"));
+        approval.setToolCallId(resultSet.getString("tool_call_id"));
+        approval.setTitle(resultSet.getString("title"));
+        Map<String, Object> payload = JSON.parseObject(resultSet.getString("request_payload"),
+                new TypeReference<LinkedHashMap<String, Object>>() { });
+        approval.setRequestPayload(payload == null ? new LinkedHashMap<>() : payload);
+        approval.setAllowOptionId(resultSet.getString("allow_option_id"));
+        approval.setRejectOptionId(resultSet.getString("reject_option_id"));
+        approval.setStatus(AgentRuntimeApprovalStatusEnum.valueOf(resultSet.getString("status")));
+        approval.setRequestedAt(new Date(resultSet.getLong("requested_at")));
+        approval.setDecidedBy(getLong(resultSet, "decided_by"));
+        approval.setDecidedAt(getDate(resultSet, "decided_at"));
+        String decision = resultSet.getString("decision");
+        approval.setDecision(decision == null ? null : AgentApprovalDecisionEnum.valueOf(decision));
+        approval.setReason(resultSet.getString("reason"));
+        approval.setRevision(resultSet.getLong("revision"));
+        return approval;
     }
 
     private AgentTask readTask(ResultSet resultSet) throws SQLException {
@@ -1352,7 +3025,11 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         run.setTaskId(resultSet.getString("task_id"));
         run.setAgentId(resultSet.getString("agent_id"));
         run.setRuntimeType(AgentRuntimeTypeEnum.valueOf(resultSet.getString("runtime_type")));
+        run.setRuntimeProfileId(resultSet.getString("runtime_profile_id"));
+        String runtimeProvider = resultSet.getString("runtime_provider");
+        run.setRuntimeProvider(runtimeProvider == null ? null : AgentRuntimeProviderEnum.valueOf(runtimeProvider));
         run.setRuntimeProfileSnapshot(resultSet.getString("runtime_profile_snapshot"));
+        run.setProviderSessionId(resultSet.getString("provider_session_id"));
         run.setTriggerType(AgentRunTriggerTypeEnum.valueOf(resultSet.getString("trigger_type")));
         run.setStatus(AgentRunStatusEnum.valueOf(resultSet.getString("status")));
         run.setAttempt(resultSet.getInt("attempt"));
@@ -1370,6 +3047,8 @@ public class H2AgentControlStorage implements IAgentControlStorage {
     private AgentRunEvent readRunEvent(ResultSet resultSet) throws SQLException {
         AgentRunEvent event = new AgentRunEvent();
         event.setSequence(resultSet.getLong("event_order"));
+        event.setRuntimeAttempt(getInteger(resultSet, "runtime_attempt"));
+        event.setRuntimeSequence(getLong(resultSet, "runtime_sequence"));
         event.setEventId(resultSet.getString("event_id"));
         event.setRunId(resultSet.getString("run_id"));
         event.setType(ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum.valueOf(
@@ -1561,6 +3240,11 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         return resultSet.wasNull() ? null : value;
     }
 
+    private static Integer getInteger(ResultSet resultSet, String column) throws SQLException {
+        int value = resultSet.getInt(column);
+        return resultSet.wasNull() ? null : value;
+    }
+
     private static void setDate(PreparedStatement statement, int index, Date value) throws SQLException {
         if (value == null) {
             statement.setNull(index, java.sql.Types.BIGINT);
@@ -1582,6 +3266,14 @@ public class H2AgentControlStorage implements IAgentControlStorage {
         }
     }
 
+    private static void rollbackRuntime(Connection connection, RuntimeException original) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            original.addSuppressed(rollbackFailure);
+        }
+    }
+
     private static IllegalStateException storageFailure(String operation, SQLException exception) {
         return new IllegalStateException("failed to " + operation + " in agent control store", exception);
     }
@@ -1589,5 +3281,8 @@ public class H2AgentControlStorage implements IAgentControlStorage {
     @FunctionalInterface
     private interface SqlBinder {
         void bind(PreparedStatement statement) throws SQLException;
+    }
+
+    private record RunRevision(String runId, long revision) {
     }
 }

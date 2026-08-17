@@ -4,6 +4,10 @@ import ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeInstanceStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
@@ -11,6 +15,10 @@ import ai.chat2db.community.domain.api.enums.agent.AgentArtifactContentModeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentDeliveryStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentGatewayPlatformEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRiskLevelEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
@@ -29,6 +37,15 @@ import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeInstance;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeProfile;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeRunLease;
+import ai.chat2db.community.domain.api.model.agent.AgentDeliveryCommand;
+import ai.chat2db.community.domain.api.model.agent.AgentExternalConversationBinding;
+import ai.chat2db.community.domain.api.model.agent.AgentGatewayChannel;
+import ai.chat2db.community.domain.api.model.agent.AgentInboundMessage;
+import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.h2.jdbcx.JdbcDataSource;
@@ -73,6 +90,363 @@ class H2AgentControlStorageTest {
         } finally {
             thread.setContextClassLoader(originalClassLoader);
         }
+    }
+
+    @Test
+    void persistsGatewayInboundIdempotencyAndDeliveryOutboxAcrossReopen() {
+        Path database = tempDir.resolve("gateway-store");
+        H2AgentControlStorage storage = new H2AgentControlStorage(database);
+        Date now = new Date(1_700_000_000_000L);
+        AgentDefinition agent = agent("gateway-agent-1");
+        storage.createAgent(agent);
+
+        AgentGatewayChannel channel = new AgentGatewayChannel();
+        channel.setId("gateway-channel-1"); channel.setName("Feishu local bridge");
+        channel.setPlatform(AgentGatewayPlatformEnum.FEISHU); channel.setInstallationRef("local-ref-1");
+        channel.setDefaultAgentId(agent.getId()); channel.setCreatedBy(1L); channel.setEnabled(true);
+        channel.setGmtCreate(now); channel.setGmtModified(now); channel.setRevision(1L);
+        storage.createGatewayChannel(channel, "a".repeat(64));
+        assertTrue(storage.matchesGatewayToken(channel.getId(), "a".repeat(64)));
+
+        AgentExternalConversationBinding binding = new AgentExternalConversationBinding();
+        binding.setId("binding-1"); binding.setChannelId(channel.getId()); binding.setChatId("chat-1");
+        binding.setThreadId("thread-1"); binding.setSessionId("session-1");
+        binding.setGmtCreate(now); binding.setGmtModified(now); binding.setRevision(1L);
+        storage.createConversationBinding(binding);
+
+        AgentInboundMessage inbound = new AgentInboundMessage();
+        inbound.setId("inbound-1"); inbound.setChannelId(channel.getId()); inbound.setBindingId(binding.getId());
+        inbound.setEventId("event-1"); inbound.setMessageId("message-1"); inbound.setIdempotencyKey("event-1");
+        inbound.setSenderId("sender-1"); inbound.setText("@AnalysisAgent analyze revenue");
+        inbound.setMentions(List.of("AnalysisAgent")); inbound.setAgentId(agent.getId()); inbound.setReceivedAt(now);
+        inbound.setGmtCreate(now); inbound.setGmtModified(now); inbound.setRevision(1L);
+        AgentInboundMessage persisted = storage.createInboundMessage(inbound);
+        AgentInboundMessage duplicate = storage.createInboundMessage(inbound);
+        assertEquals(persisted.getId(), duplicate.getId());
+        persisted = storage.attachInboundTask(inbound.getId(), "task-1", 1L);
+
+        AgentDeliveryCommand delivery = new AgentDeliveryCommand();
+        delivery.setId("delivery-1"); delivery.setChannelId(channel.getId());
+        delivery.setInboundMessageId(inbound.getId()); delivery.setTaskId("task-1"); delivery.setRunId("run-1");
+        delivery.setPlatform(channel.getPlatform()); delivery.setInstallationRef(channel.getInstallationRef());
+        delivery.setChatId(binding.getChatId()); delivery.setThreadId(binding.getThreadId());
+        delivery.setReplyToMessageId(inbound.getMessageId()); delivery.setContent("analysis complete");
+        delivery.setIdempotencyKey("task:task-1:final"); delivery.setStatus(AgentDeliveryStatusEnum.PENDING);
+        delivery.setAttemptCount(0); delivery.setNextAttemptAt(now); delivery.setGmtCreate(now);
+        delivery.setGmtModified(now); delivery.setRevision(1L);
+        storage.createOrGetDelivery(delivery);
+        List<AgentDeliveryCommand> claimed = storage.claimDeliveries(
+                channel.getId(), now, new Date(now.getTime() + 60_000L), 10);
+        assertEquals(1, claimed.size());
+        assertEquals(AgentDeliveryStatusEnum.DELIVERING, claimed.get(0).getStatus());
+        assertEquals(1, claimed.get(0).getAttemptCount());
+        assertEquals(List.of(), storage.listInboundMessagesAwaitingDelivery(channel.getId()));
+
+        H2AgentControlStorage reopened = new H2AgentControlStorage(database);
+        assertEquals("task-1", reopened.getInboundMessage(channel.getId(), "event-1").getTaskId());
+        assertEquals("chat-1", reopened.getConversationBinding(binding.getId()).getChatId());
+        AgentDeliveryCommand delivered = reopened.getDelivery(delivery.getId());
+        delivered.setStatus(AgentDeliveryStatusEnum.DELIVERED);
+        delivered.setLeaseExpiresAt(null); delivered.setPlatformMessageId("feishu-message-2");
+        delivered.setDeliveredAt(new Date(now.getTime() + 1_000L));
+        delivered.setGmtModified(delivered.getDeliveredAt()); delivered.setRevision(delivered.getRevision() + 1);
+        assertEquals(AgentDeliveryStatusEnum.DELIVERED,
+                reopened.updateDelivery(delivered, delivered.getRevision() - 1).getStatus());
+        assertEquals(List.of(), reopened.claimDeliveries(channel.getId(),
+                new Date(now.getTime() + 120_000L), new Date(now.getTime() + 180_000L), 10));
+        assertEquals(2L, persisted.getRevision());
+    }
+
+    @Test
+    void persistsRuntimeProfilesAndInstancesAcrossStorageReopen() {
+        Path database = tempDir.resolve("runtime-control-store");
+        H2AgentControlStorage storage = new H2AgentControlStorage(database);
+        Date now = new Date(1_700_000_000_000L);
+        AgentRuntimeProfile profile = runtimeProfile(now);
+        AgentRuntimeInstance instance = runtimeInstance(now);
+
+        storage.createRuntimeProfile(profile);
+        storage.createRuntimeInstance(instance);
+
+        H2AgentControlStorage reopened = new H2AgentControlStorage(database);
+        AgentRuntimeProfile persistedProfile = reopened.getRuntimeProfile(profile.getId());
+        AgentRuntimeInstance persistedInstance = reopened.findRuntimeInstance(
+                instance.getDaemonId(), instance.getProvider());
+        assertEquals(AgentRuntimeTransportEnum.EXTERNAL_DAEMON, persistedProfile.getTransport());
+        assertEquals(AgentRuntimeProviderEnum.CODEX, persistedProfile.getProvider());
+        assertEquals(List.of("--sandbox", "workspace-write"), persistedProfile.getCustomArguments());
+        assertEquals("secret:openai", persistedProfile.getEnvironmentReferences().get("OPENAI_API_KEY"));
+        assertEquals(instance.getId(), persistedInstance.getId());
+        assertEquals(instance.getCapabilities(), persistedInstance.getCapabilities());
+
+        profile.setMaxConcurrency(3);
+        profile.setRevision(2L);
+        profile.setGmtModified(new Date(now.getTime() + 1_000L));
+        AgentRuntimeProfile updated = reopened.updateRuntimeProfile(profile, 1L);
+        assertEquals(3, updated.getMaxConcurrency());
+        assertThrows(ConcurrentModificationException.class,
+                () -> reopened.updateRuntimeProfile(profile, 1L));
+    }
+
+    @Test
+    void persistsRuntimeApprovalIdempotentlyAndProtectsDecisionRevision() {
+        Path database = tempDir.resolve("runtime-approval-store");
+        H2AgentControlStorage storage = new H2AgentControlStorage(database);
+        Date requestedAt = new Date(1_700_000_000_000L);
+        AgentRuntimeApproval approval = runtimeApproval("external-run-1", requestedAt);
+
+        AgentRuntimeApproval created = storage.createOrGetRuntimeApproval(approval);
+        AgentRuntimeApproval duplicate = storage.createOrGetRuntimeApproval(approval);
+        assertEquals(created.getId(), duplicate.getId());
+
+        H2AgentControlStorage reopened = new H2AgentControlStorage(database);
+        AgentRuntimeApproval persisted = reopened.findRuntimeApproval(
+                approval.getRunId(), approval.getLeaseAttempt(), approval.getProviderRequestId());
+        assertEquals(Map.of("command", "git status"), persisted.getRequestPayload());
+        assertEquals(List.of(approval.getId()), reopened.listRuntimeApprovals(approval.getRunId())
+                .stream().map(AgentRuntimeApproval::getId).toList());
+
+        persisted.setStatus(AgentRuntimeApprovalStatusEnum.APPROVED);
+        persisted.setDecision(AgentApprovalDecisionEnum.APPROVE);
+        persisted.setDecidedBy(42L);
+        persisted.setDecidedAt(new Date(requestedAt.getTime() + 1_000L));
+        persisted.setReason("approved in task board");
+        persisted.setRevision(2L);
+        AgentRuntimeApproval decided = reopened.updateRuntimeApproval(persisted, 1L);
+        assertEquals(AgentRuntimeApprovalStatusEnum.APPROVED, decided.getStatus());
+        assertEquals(AgentApprovalDecisionEnum.APPROVE, decided.getDecision());
+        assertEquals(2L, decided.getRevision());
+        assertThrows(ConcurrentModificationException.class,
+                () -> reopened.updateRuntimeApproval(persisted, 1L));
+    }
+
+    @Test
+    void atomicallyClaimsExternalRunAndStartsItWithLeaseFencing() {
+        Path database = tempDir.resolve("runtime-lease-store");
+        H2AgentControlStorage storage = new H2AgentControlStorage(database);
+        Date now = new Date(1_700_000_000_000L);
+        AgentRuntimeProfile profile = runtimeProfile(now);
+        AgentRuntimeInstance instance = runtimeInstance(now);
+        instance.setMaxConcurrency(1);
+        AgentDefinition agent = agent("external-agent-1");
+        agent.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        agent.setRuntimeProfileId(profile.getId());
+        AgentTask task = task("external-task-1", agent.getId(), "external-run-1");
+        AgentRun run = run("external-run-1", task.getId(), agent.getId());
+        run.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        run.setRuntimeProfileId(profile.getId());
+        run.setRuntimeProvider(profile.getProvider());
+        run.setRuntimeProfileSnapshot(JSON.toJSONString(profile));
+
+        storage.createRuntimeProfile(profile);
+        storage.createRuntimeInstance(instance);
+        storage.createAgent(agent);
+        storage.createTaskWithInitialRun(task, run);
+
+        AgentRuntimeRunLease claimed = storage.claimRuntimeRun(instance.getId(), instance.getProvider(),
+                "a".repeat(64), "b".repeat(64), now, new Date(now.getTime() + 60_000L));
+
+        assertEquals(run.getId(), claimed.getRunId());
+        assertEquals(1, claimed.getLeaseAttempt());
+        assertEquals(AgentRunStatusEnum.DISPATCHED, storage.getRun(run.getId()).getStatus());
+        assertEquals(2L, storage.getRun(run.getId()).getRevision());
+        assertEquals(1, storage.getRuntimeInstance(instance.getId()).getActiveRuns());
+        AgentRuntimeInstance heartbeated = storage.heartbeatRuntimeInstance(instance.getId(),
+                instance.getDaemonId(), AgentRuntimeInstanceStatusEnum.DEGRADED,
+                new Date(now.getTime() + 500L));
+        assertEquals(1, heartbeated.getActiveRuns());
+        assertEquals(AgentRuntimeInstanceStatusEnum.DEGRADED, heartbeated.getStatus());
+        assertNull(storage.claimRuntimeRun(instance.getId(), instance.getProvider(),
+                "c".repeat(64), "d".repeat(64), now, new Date(now.getTime() + 60_000L)));
+
+        claimed.setStartedAt(new Date(now.getTime() + 1_000L));
+        claimed.setLastRenewedAt(claimed.getStartedAt());
+        claimed.setLeaseExpiresAt(new Date(now.getTime() + 61_000L));
+        claimed.setRuntimeExecutionId("codex-process-1");
+        claimed.setRevision(2L);
+        AgentRuntimeRunLease started = storage.startRuntimeRun(claimed, 1L, 2L);
+
+        assertEquals("codex-process-1", started.getRuntimeExecutionId());
+        assertEquals(AgentRunStatusEnum.RUNNING, storage.getRun(run.getId()).getStatus());
+        assertEquals(3L, storage.getRun(run.getId()).getRevision());
+
+        AgentRunEvent firstEvent = event("external-1-message-1", run.getId(), "partial response");
+        firstEvent.setType(ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum.SESSION_UPDATED);
+        AgentRunEvent persistedEvent = storage.appendRuntimeRunEvent(
+                firstEvent, 1, 1L, new Date(now.getTime() + 2_000L), "codex-thread-1");
+        AgentRunEvent duplicateEvent = storage.appendRuntimeRunEvent(
+                firstEvent, 1, 1L, new Date(now.getTime() + 2_000L), "codex-thread-1");
+        assertEquals(persistedEvent.getSequence(), duplicateEvent.getSequence());
+        assertEquals(1, persistedEvent.getRuntimeAttempt());
+        assertEquals(1L, persistedEvent.getRuntimeSequence());
+
+        AgentRunEvent outOfOrder = event("external-1-message-3", run.getId(), "gap");
+        assertThrows(IllegalStateException.class, () -> storage.appendRuntimeRunEvent(
+                outOfOrder, 1, 3L, new Date(now.getTime() + 3_000L), null));
+
+        H2AgentControlStorage reopened = new H2AgentControlStorage(database);
+        assertEquals(3L, reopened.getRuntimeRunLease(run.getId()).getRevision());
+        assertEquals(1L, reopened.getRuntimeRunLease(run.getId()).getLastEventSequence());
+        assertEquals("codex-process-1", reopened.getRuntimeRunLease(run.getId()).getRuntimeExecutionId());
+        assertEquals("codex-thread-1", reopened.getRun(run.getId()).getProviderSessionId());
+    }
+
+    @Test
+    void rollsBackRunClaimWhenRuntimeCapacityIsExhausted() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-capacity-store"));
+        Date now = new Date(1_700_000_000_000L);
+        AgentRuntimeProfile profile = runtimeProfile(now);
+        AgentRuntimeInstance instance = runtimeInstance(now);
+        instance.setMaxConcurrency(1);
+        instance.setActiveRuns(1);
+        AgentDefinition agent = agent("external-agent-1");
+        agent.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        agent.setRuntimeProfileId(profile.getId());
+        AgentTask task = task("external-task-1", agent.getId(), "external-run-1");
+        AgentRun run = run("external-run-1", task.getId(), agent.getId());
+        run.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        run.setRuntimeProfileId(profile.getId());
+        run.setRuntimeProvider(profile.getProvider());
+        run.setRuntimeProfileSnapshot(JSON.toJSONString(profile));
+        storage.createRuntimeProfile(profile);
+        storage.createRuntimeInstance(instance);
+        storage.createAgent(agent);
+        storage.createTaskWithInitialRun(task, run);
+
+        assertThrows(ConcurrentModificationException.class,
+                () -> storage.claimRuntimeRun(instance.getId(), instance.getProvider(),
+                        "a".repeat(64), "b".repeat(64), now, new Date(now.getTime() + 60_000L)));
+
+        assertEquals(AgentRunStatusEnum.QUEUED, storage.getRun(run.getId()).getStatus());
+        assertEquals(1L, storage.getRun(run.getId()).getRevision());
+        assertNull(storage.getRuntimeRunLease(run.getId()));
+    }
+
+    @Test
+    void atomicallyCompletesRuntimeRunPersistsTerminalEventAndReleasesSlot() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-terminal-store"));
+        Date now = new Date(1_700_000_000_000L);
+        ExternalRuntimeFixture fixture = externalRuntimeFixture(storage, now);
+        AgentRuntimeRunLease claimed = storage.claimRuntimeRun(fixture.instance().getId(),
+                fixture.instance().getProvider(), "a".repeat(64), "b".repeat(64), now,
+                new Date(now.getTime() + 60_000L));
+        AgentRuntimeRunLease started = start(storage, claimed, new Date(now.getTime() + 1_000L));
+        AgentRuntimeApproval pending = runtimeApproval(fixture.run().getId(), now);
+        storage.createOrGetRuntimeApproval(pending);
+        AgentRunEvent completed = event("external-terminal-1", fixture.run().getId(), "COMPLETED");
+        completed.setRuntimeAttempt(1);
+        completed.setRuntimeSequence(1L);
+
+        AgentRuntimeRunLease terminal = storage.finishRuntimeRun(started, completed,
+                AgentRunStatusEnum.COMPLETED, null, "final analysis",
+                new Date(now.getTime() + 2_000L), started.getRevision(),
+                storage.getRun(fixture.run().getId()).getRevision());
+
+        assertEquals(AgentRuntimeLeaseStateEnum.COMPLETED, terminal.getState());
+        assertEquals(completed.getEventId(), terminal.getTerminalEventId());
+        assertNotNull(terminal.getReleasedAt());
+        assertEquals(AgentRunStatusEnum.COMPLETED, storage.getRun(fixture.run().getId()).getStatus());
+        assertEquals("final analysis", storage.getRun(fixture.run().getId()).getResultSummary());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+        assertEquals(1, storage.listRunEvents(fixture.run().getId()).size());
+        assertEquals(AgentRuntimeApprovalStatusEnum.EXPIRED,
+                storage.getRuntimeApproval(pending.getId()).getStatus());
+
+        AgentRuntimeRunLease duplicate = storage.finishRuntimeRun(started, completed,
+                AgentRunStatusEnum.COMPLETED, null, "final analysis",
+                new Date(now.getTime() + 2_000L), started.getRevision(),
+                storage.getRun(fixture.run().getId()).getRevision());
+        assertEquals(terminal.getRevision(), duplicate.getRevision());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+    }
+
+    @Test
+    void requeuesUnstartedExpiredLeaseAndResetsEventSequenceForNextAttempt() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-requeue-store"));
+        Date now = new Date(1_700_000_000_000L);
+        ExternalRuntimeFixture fixture = externalRuntimeFixture(storage, now);
+        storage.claimRuntimeRun(fixture.instance().getId(), fixture.instance().getProvider(),
+                "a".repeat(64), "b".repeat(64), now, new Date(now.getTime() + 1_000L));
+
+        assertEquals(List.of(fixture.run().getId()),
+                storage.reconcileExpiredRuntimeRuns(new Date(now.getTime() + 2_000L), 10));
+        assertEquals(AgentRunStatusEnum.QUEUED, storage.getRun(fixture.run().getId()).getStatus());
+        assertEquals(AgentRuntimeLeaseStateEnum.EXPIRED,
+                storage.getRuntimeRunLease(fixture.run().getId()).getState());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+
+        AgentRuntimeRunLease second = storage.claimRuntimeRun(fixture.instance().getId(),
+                fixture.instance().getProvider(), "c".repeat(64), "d".repeat(64),
+                new Date(now.getTime() + 3_000L), new Date(now.getTime() + 63_000L));
+        assertEquals(2, second.getLeaseAttempt());
+        assertEquals(0L, second.getLastEventSequence());
+        assertEquals(AgentRuntimeLeaseStateEnum.ACTIVE, second.getState());
+        assertEquals(1, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+    }
+
+    @Test
+    void marksStartedExpiredLeaseUnknownAndHonorsPendingCancellation() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-expiry-store"));
+        Date now = new Date(1_700_000_000_000L);
+        ExternalRuntimeFixture fixture = externalRuntimeFixture(storage, now);
+        AgentRuntimeRunLease claimed = storage.claimRuntimeRun(fixture.instance().getId(),
+                fixture.instance().getProvider(), "a".repeat(64), "b".repeat(64), now,
+                new Date(now.getTime() + 2_000L));
+        start(storage, claimed, new Date(now.getTime() + 1_000L));
+        AgentRuntimeApproval pending = runtimeApproval(fixture.run().getId(), now);
+        storage.createOrGetRuntimeApproval(pending);
+
+        storage.reconcileExpiredRuntimeRuns(new Date(now.getTime() + 3_000L), 10);
+
+        assertEquals(AgentRunStatusEnum.UNKNOWN, storage.getRun(fixture.run().getId()).getStatus());
+        assertTrue(storage.getRun(fixture.run().getId()).getFailureReason().contains("lease expired"));
+        assertEquals(AgentRuntimeLeaseStateEnum.EXPIRED,
+                storage.getRuntimeRunLease(fixture.run().getId()).getState());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+        assertEquals(AgentRuntimeApprovalStatusEnum.EXPIRED,
+                storage.getRuntimeApproval(pending.getId()).getStatus());
+
+        H2AgentControlStorage cancelStorage = new H2AgentControlStorage(
+                tempDir.resolve("runtime-expiry-cancel-store"));
+        ExternalRuntimeFixture cancelFixture = externalRuntimeFixture(cancelStorage, now);
+        cancelStorage.claimRuntimeRun(cancelFixture.instance().getId(), cancelFixture.instance().getProvider(),
+                "c".repeat(64), "d".repeat(64), now, new Date(now.getTime() + 1_000L));
+        cancelStorage.requestRuntimeRunCancellation(cancelFixture.run().getId(),
+                new Date(now.getTime() + 500L));
+        cancelStorage.reconcileExpiredRuntimeRuns(new Date(now.getTime() + 2_000L), 10);
+        assertEquals(AgentRunStatusEnum.CANCELLED,
+                cancelStorage.getRun(cancelFixture.run().getId()).getStatus());
+        assertEquals(0, cancelStorage.getRuntimeInstance(cancelFixture.instance().getId()).getActiveRuns());
+    }
+
+    @Test
+    void reconcilesOrphanLeaseAfterRunAlreadyBecameTerminalAndRepairsCapacityFloor() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-orphan-store"));
+        Date now = new Date(1_700_000_000_000L);
+        ExternalRuntimeFixture fixture = externalRuntimeFixture(storage, now);
+        storage.claimRuntimeRun(fixture.instance().getId(), fixture.instance().getProvider(),
+                "a".repeat(64), "b".repeat(64), now, new Date(now.getTime() + 1_000L));
+
+        AgentRuntimeInstance inconsistent = storage.getRuntimeInstance(fixture.instance().getId());
+        long instanceRevision = inconsistent.getRevision();
+        inconsistent.setActiveRuns(0);
+        inconsistent.setRevision(instanceRevision + 1);
+        inconsistent.setGmtModified(new Date(now.getTime() + 500L));
+        storage.updateRuntimeInstance(inconsistent, instanceRevision);
+        AgentRun terminal = storage.getRun(fixture.run().getId());
+        long runRevision = terminal.getRevision();
+        terminal.setStatus(AgentRunStatusEnum.CANCELLED);
+        terminal.setCompletedAt(new Date(now.getTime() + 500L));
+        terminal.setGmtModified(terminal.getCompletedAt());
+        terminal.setRevision(runRevision + 1);
+        storage.updateRun(terminal, runRevision);
+
+        assertEquals(List.of(fixture.run().getId()),
+                storage.reconcileExpiredRuntimeRuns(new Date(now.getTime() + 2_000L), 10));
+        assertEquals(AgentRunStatusEnum.CANCELLED, storage.getRun(fixture.run().getId()).getStatus());
+        assertEquals(AgentRuntimeLeaseStateEnum.EXPIRED,
+                storage.getRuntimeRunLease(fixture.run().getId()).getState());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
     }
 
     @Test
@@ -188,6 +562,9 @@ class H2AgentControlStorageTest {
         storage.createAgent(agent);
         AgentTask task = task("task-1", agent.getId(), "run-1");
         storage.createTaskWithInitialRun(task, run("run-1", task.getId(), agent.getId()));
+        AgentArtifact artifact = artifact(task.getId(), "run-1");
+        storage.createArtifact(artifact,
+                artifactVersion(artifact.getId(), 1, "run-1", "archived report", null), List.of());
         task.setArchivedAt(new Date(1_700_000_000_900L));
         task.setGmtModified(task.getArchivedAt());
         task.setRevision(2L);
@@ -196,9 +573,11 @@ class H2AgentControlStorageTest {
 
         assertEquals(List.of(), storage.listTasks());
         assertEquals(List.of(archived), storage.listArchivedTasks());
+        assertNotNull(storage.getArtifact(artifact.getId()));
         storage.deleteTask(task.getId(), 2L);
         assertNull(storage.getTask(task.getId()));
         assertNull(storage.getRun("run-1"));
+        assertNull(storage.getArtifact(artifact.getId()));
     }
 
     @Test
@@ -359,6 +738,58 @@ class H2AgentControlStorageTest {
         return event;
     }
 
+    private static ExternalRuntimeFixture externalRuntimeFixture(H2AgentControlStorage storage, Date now) {
+        AgentRuntimeProfile profile = runtimeProfile(now);
+        AgentRuntimeInstance instance = runtimeInstance(now);
+        instance.setMaxConcurrency(1);
+        AgentDefinition agent = agent("external-agent-1");
+        agent.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        agent.setRuntimeProfileId(profile.getId());
+        AgentTask task = task("external-task-1", agent.getId(), "external-run-1");
+        AgentRun run = run("external-run-1", task.getId(), agent.getId());
+        run.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        run.setRuntimeProfileId(profile.getId());
+        run.setRuntimeProvider(profile.getProvider());
+        run.setRuntimeProfileSnapshot(JSON.toJSONString(profile));
+        storage.createRuntimeProfile(profile);
+        storage.createRuntimeInstance(instance);
+        storage.createAgent(agent);
+        storage.createTaskWithInitialRun(task, run);
+        return new ExternalRuntimeFixture(instance, run);
+    }
+
+    private static AgentRuntimeApproval runtimeApproval(String runId, Date requestedAt) {
+        AgentRuntimeApproval approval = new AgentRuntimeApproval();
+        approval.setId("runtime-approval-1");
+        approval.setRunId(runId);
+        approval.setLeaseAttempt(1);
+        approval.setProviderRequestId("rpc-request-1");
+        approval.setToolCallId("tool-call-1");
+        approval.setTitle("Allow shell command?");
+        approval.setRequestPayload(Map.of("command", "git status"));
+        approval.setAllowOptionId("allow-once");
+        approval.setRejectOptionId("reject-once");
+        approval.setStatus(AgentRuntimeApprovalStatusEnum.PENDING);
+        approval.setRequestedAt(requestedAt);
+        approval.setRevision(1L);
+        return approval;
+    }
+
+    private static AgentRuntimeRunLease start(H2AgentControlStorage storage, AgentRuntimeRunLease claimed,
+                                              Date startedAt) {
+        claimed.setStartedAt(startedAt);
+        claimed.setLastRenewedAt(startedAt);
+        claimed.setLeaseExpiresAt(new Date(Math.max(claimed.getLeaseExpiresAt().getTime(),
+                startedAt.getTime() + 1_000L)));
+        claimed.setRuntimeExecutionId("runtime-execution-1");
+        claimed.setRevision(claimed.getRevision() + 1);
+        return storage.startRuntimeRun(claimed, claimed.getRevision() - 1,
+                storage.getRun(claimed.getRunId()).getRevision());
+    }
+
+    private record ExternalRuntimeFixture(AgentRuntimeInstance instance, AgentRun run) {
+    }
+
     private static AgentArtifact artifact(String taskId, String runId) {
         AgentArtifact artifact = new AgentArtifact();
         artifact.setId("artifact-1");
@@ -460,6 +891,47 @@ class H2AgentControlStorageTest {
         agent.setGmtModified(now);
         agent.setRevision(1L);
         return agent;
+    }
+
+    private static AgentRuntimeProfile runtimeProfile(Date now) {
+        AgentRuntimeProfile profile = new AgentRuntimeProfile();
+        profile.setId("runtime-profile-1");
+        profile.setName("Codex local");
+        profile.setTransport(AgentRuntimeTransportEnum.EXTERNAL_DAEMON);
+        profile.setProvider(AgentRuntimeProviderEnum.CODEX);
+        profile.setExecutable("codex");
+        profile.setWorkingDirectoryPolicy("TASK_ISOLATED");
+        profile.setCustomArguments(List.of("--sandbox", "workspace-write"));
+        profile.setEnvironmentReferences(Map.of("OPENAI_API_KEY", "secret:openai"));
+        profile.setMcpConfiguration("{}");
+        profile.setTimeoutSeconds(900);
+        profile.setMaxConcurrency(1);
+        profile.setSessionResumeEnabled(true);
+        profile.setApprovalBridgeEnabled(false);
+        profile.setEnabled(true);
+        profile.setCreatedBy(1L);
+        profile.setGmtCreate(now);
+        profile.setGmtModified(now);
+        profile.setRevision(1L);
+        return profile;
+    }
+
+    private static AgentRuntimeInstance runtimeInstance(Date now) {
+        AgentRuntimeInstance instance = new AgentRuntimeInstance();
+        instance.setId("runtime-instance-1");
+        instance.setDaemonId("daemon-local");
+        instance.setProvider(AgentRuntimeProviderEnum.CODEX);
+        instance.setProviderVersion("1.2.3");
+        instance.setProtocolVersion("1");
+        instance.setCapabilities(new LinkedHashSet<>(List.of("STREAMING", "SESSION_RESUME")));
+        instance.setMaxConcurrency(2);
+        instance.setActiveRuns(0);
+        instance.setStatus(AgentRuntimeInstanceStatusEnum.ONLINE);
+        instance.setLastHeartbeatAt(now);
+        instance.setRegisteredAt(now);
+        instance.setGmtModified(now);
+        instance.setRevision(1L);
+        return instance;
     }
 
     private static AgentTask task(String id, String agentId, String runId) {

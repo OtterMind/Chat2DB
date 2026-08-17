@@ -13,7 +13,11 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateReques
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
+import com.alibaba.fastjson2.JSON;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -25,9 +29,17 @@ import java.util.UUID;
 public class AgentTaskServiceImpl implements IAgentTaskService {
 
     private final IAgentControlStorage storage;
+    private final IAgentRuntimeControlStorage runtimeStorage;
 
-    public AgentTaskServiceImpl(IAgentControlStorage storage) {
+    @Autowired
+    public AgentTaskServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
         this.storage = storage;
+        this.runtimeStorage = runtimeStorage;
+    }
+
+    AgentTaskServiceImpl(IAgentControlStorage storage) {
+        this.storage = storage;
+        this.runtimeStorage = null;
     }
 
     @Override
@@ -65,7 +77,7 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         run.setTaskId(task.getId());
         run.setAgentId(agent.getId());
         run.setRuntimeType(agent.getRuntimeType());
-        run.setRuntimeProfileSnapshot(agent.getRuntimeProfileId());
+        applyRuntimeProfile(run, agent);
         run.setTriggerType(AgentRunTriggerTypeEnum.TASK_CREATED);
         run.setStatus(AgentRunStatusEnum.QUEUED);
         run.setAttempt(1);
@@ -205,7 +217,7 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         run.setTaskId(current.getId());
         run.setAgentId(agent.getId());
         run.setRuntimeType(agent.getRuntimeType());
-        run.setRuntimeProfileSnapshot(agent.getRuntimeProfileId());
+        applyRuntimeProfile(run, agent);
         run.setTriggerType(triggerType == null ? AgentRunTriggerTypeEnum.USER_MESSAGE : triggerType);
         run.setStatus(AgentRunStatusEnum.QUEUED);
         run.setAttempt(previousRuns.size() + 1);
@@ -221,6 +233,28 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         updated.setGmtModified(now);
         updated.setRevision(current.getRevision() + 1);
         return storage.appendTaskRun(updated, run, current.getRevision());
+    }
+
+    private void applyRuntimeProfile(AgentRun run, AgentDefinition agent) {
+        run.setRuntimeProfileId(StringUtils.trimToNull(agent.getRuntimeProfileId()));
+        if (agent.getRuntimeType() != AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
+            run.setRuntimeProvider(null);
+            run.setRuntimeProfileSnapshot(null);
+            return;
+        }
+        if (runtimeStorage == null) {
+            run.setRuntimeProfileSnapshot(agent.getRuntimeProfileId());
+            return;
+        }
+        var profile = runtimeStorage.getRuntimeProfile(agent.getRuntimeProfileId());
+        if (profile == null || !Boolean.TRUE.equals(profile.getEnabled())
+                || profile.getTransport() != ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum.EXTERNAL_DAEMON
+                || profile.getProvider() == ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum.SPRING_AI
+                || !java.util.Objects.equals(profile.getCreatedBy(), agent.getCreatedBy())) {
+            throw new IllegalStateException("external agent runtime profile is unavailable");
+        }
+        run.setRuntimeProvider(profile.getProvider());
+        run.setRuntimeProfileSnapshot(JSON.toJSONString(profile));
     }
 
     private AgentTask copy(AgentTask source) {

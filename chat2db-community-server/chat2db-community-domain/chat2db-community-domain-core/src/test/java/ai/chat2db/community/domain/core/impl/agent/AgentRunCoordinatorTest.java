@@ -123,6 +123,20 @@ class AgentRunCoordinatorTest {
         assertEquals("Use the previous result and explain the reporting database.", runtime.secondRunInput.get());
     }
 
+    @Test
+    void leavesExternalRunQueuedUntilDaemonClaimsIt() {
+        Fixture fixture = fixture(new CompletingRuntime());
+        ai.chat2db.community.domain.api.model.agent.AgentRun run = fixture.creation().getInitialRun();
+        run.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+
+        fixture.coordinator().dispatch(run.getId());
+
+        assertEquals(AgentRunStatusEnum.QUEUED, fixture.runService().get(run.getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.TODO,
+                fixture.taskService().get(fixture.creation().getTask().getId()).getStatus());
+        assertTrue(fixture.coordinator().listEvents(run.getId()).isEmpty());
+    }
+
     private Fixture fixture(AgentRuntime runtime) {
         AgentControlServiceTest.MemoryAgentControlStorage storage =
                 new AgentControlServiceTest.MemoryAgentControlStorage();
@@ -148,7 +162,7 @@ class AgentRunCoordinatorTest {
         AgentArtifactServiceImpl artifactService = new AgentArtifactServiceImpl(storage);
         AgentRunCoordinatorImpl coordinator = new AgentRunCoordinatorImpl(runService, taskService, agentService,
                 new AgentContextAssemblerImpl(storage), artifactService, storage,
-                new AgentRuntimeRegistry(List.of(runtime)));
+                new AgentRuntimeRegistry(List.of(runtime)), null);
         return new Fixture(coordinator, taskService, runService, artifactService, storage, creation);
     }
 

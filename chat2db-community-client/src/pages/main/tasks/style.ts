@@ -1344,6 +1344,168 @@ export const useStyles = createStyles(({ css, token }) => ({
       grid-template-columns: 1fr;
     }
   `,
+  runtimePicker: css`
+    margin-bottom: 18px;
+  `,
+  runtimePickerHeader: css`
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    > div {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 2px;
+    }
+    span {
+      color: ${token.colorText};
+      font-size: 12px;
+      font-weight: 500;
+    }
+    small {
+      color: ${token.colorTextTertiary};
+      font-size: 11px;
+      line-height: 1.45;
+    }
+  `,
+  runtimeOptions: css`
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    @media (max-width: 720px) {
+      grid-template-columns: 1fr;
+    }
+  `,
+  runtimeOption: css`
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 66px;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadiusLG}px;
+    background: ${token.colorBgContainer};
+    color: ${token.colorText};
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    &:hover,
+    &:focus-visible {
+      border-color: ${token.colorPrimaryBorder};
+      background: ${token.colorFillQuaternary};
+      outline: none;
+    }
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
+    }
+  `,
+  runtimeOptionSelected: css`
+    border-color: ${token.colorPrimaryBorder};
+    background: ${token.colorPrimaryBg};
+    box-shadow: 0 0 0 1px ${token.colorPrimaryBorder};
+  `,
+  runtimeOptionLogo: css`
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadius}px;
+    background: ${token.colorBgElevated};
+    color: ${token.colorPrimary};
+  `,
+  runtimeProviderLogo: css`
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+  `,
+  runtimeOptionCopy: css`
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+    strong,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    strong {
+      padding-right: 16px;
+      color: ${token.colorText};
+      font-size: 12px;
+      font-weight: 600;
+    }
+    small {
+      color: ${token.colorTextTertiary};
+      font-size: 10px;
+    }
+  `,
+  runtimeOptionState: css`
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: 5px;
+    margin-top: -4px;
+    color: ${token.colorTextTertiary};
+    font-size: 10px;
+    i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: ${token.colorTextQuaternary};
+    }
+    i[data-online='true'] {
+      background: ${token.colorSuccess};
+    }
+    small {
+      margin-left: auto;
+      color: ${token.colorTextQuaternary};
+      font-family: ${token.fontFamilyCode};
+      font-size: 9px;
+    }
+  `,
+  runtimeOptionCheck: css`
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    color: ${token.colorPrimary};
+  `,
+  runtimeOptionSkeleton: css`
+    display: flex;
+    min-height: 66px;
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadiusLG}px;
+    .ant-skeleton {
+      min-width: 0;
+    }
+    .ant-skeleton-paragraph {
+      margin-block-start: 5px !important;
+    }
+    .ant-skeleton-paragraph li {
+      height: 8px !important;
+    }
+  `,
+  runtimePickerEmpty: css`
+    margin-top: 8px;
+    color: ${token.colorTextTertiary};
+    font-size: 11px;
+  `,
+  runtimePickerError: css`
+    margin-top: 8px;
+    color: ${token.colorErrorText};
+    font-size: 11px;
+  `,
   avatarEditor: css`
     display: flex;
     align-items: center;

@@ -9,7 +9,10 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreate
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionUpdateRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.alibaba.fastjson2.JSON;
 
@@ -28,14 +31,23 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
     private static final int DEFAULT_TIMEOUT_SECONDS = 60;
 
     private final IAgentControlStorage storage;
+    private final IAgentRuntimeControlStorage runtimeStorage;
 
-    public AgentDefinitionServiceImpl(IAgentControlStorage storage) {
+    @Autowired
+    public AgentDefinitionServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
         this.storage = storage;
+        this.runtimeStorage = runtimeStorage;
+    }
+
+    AgentDefinitionServiceImpl(IAgentControlStorage storage) {
+        this.storage = storage;
+        this.runtimeStorage = null;
     }
 
     @Override
     public AgentDefinition create(AgentDefinitionCreateRequest request) {
         validate(request);
+        validateRuntimeProfile(request.getRuntimeType(), request.getRuntimeProfileId(), request.getCreatedBy());
 
         Date now = new Date();
         AgentDefinition agent = new AgentDefinition();
@@ -69,6 +81,7 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
             throw new IllegalArgumentException("agent expected revision is required");
         }
         AgentDefinition current = get(request.getAgentId());
+        validateRuntimeProfile(request.getRuntimeType(), request.getRuntimeProfileId(), current.getCreatedBy());
         AgentDefinition updated = copy(current);
         applyDefinition(updated, request.getName(), request.getAvatar(), request.getDescription(), request.getStatus(),
                 request.getRuntimeType(), request.getRuntimeProfileId(), request.getModelConfigId(),
@@ -149,6 +162,23 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
             throw new IllegalArgumentException("external agent runtime profile is required");
         }
         validateOutputContract(outputContract);
+    }
+
+    private void validateRuntimeProfile(AgentRuntimeTypeEnum runtimeType, String runtimeProfileId, Long ownerId) {
+        if (runtimeType != AgentRuntimeTypeEnum.EXTERNAL_AGENT || runtimeStorage == null) {
+            return;
+        }
+        var profile = runtimeStorage.getRuntimeProfile(StringUtils.trimToEmpty(runtimeProfileId));
+        if (profile == null) {
+            throw new IllegalArgumentException("external agent runtime profile does not exist");
+        }
+        if (profile.getTransport() != AgentRuntimeTransportEnum.EXTERNAL_DAEMON
+                || !Boolean.TRUE.equals(profile.getEnabled())) {
+            throw new IllegalArgumentException("external agent runtime profile must be an enabled daemon profile");
+        }
+        if (!java.util.Objects.equals(profile.getCreatedBy(), ownerId)) {
+            throw new IllegalArgumentException("external agent runtime profile does not belong to agent owner");
+        }
     }
 
     private void applyDefinition(AgentDefinition agent, String name, String avatar, String description,

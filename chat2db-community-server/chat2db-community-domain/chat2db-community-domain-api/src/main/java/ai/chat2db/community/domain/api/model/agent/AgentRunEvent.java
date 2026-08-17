@@ -12,6 +12,12 @@ public class AgentRunEvent {
 
     private Long sequence;
 
+    /** External Runtime lease attempt; null for embedded Runtime events. */
+    private Integer runtimeAttempt;
+
+    /** Provider-local monotonically increasing sequence; null for embedded Runtime events. */
+    private Long runtimeSequence;
+
     private String eventId;
 
     private String runId;

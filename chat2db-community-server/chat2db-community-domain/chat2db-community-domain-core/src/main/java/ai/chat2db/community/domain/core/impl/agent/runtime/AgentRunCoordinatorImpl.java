@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.agent.runtime;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
@@ -24,6 +25,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentContextAssembler;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunCoordinator;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
+import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.runtime.AgentRuntime;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
@@ -53,11 +55,13 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
     private final IAgentArtifactService artifactService;
     private final IAgentControlStorage storage;
     private final AgentRuntimeRegistry runtimeRegistry;
+    private final IAgentRuntimeDispatchService externalRuntimeDispatchService;
 
     public AgentRunCoordinatorImpl(IAgentRunService runService, IAgentTaskService taskService,
                                    IAgentDefinitionService agentService, IAgentContextAssembler contextAssembler,
                                    IAgentArtifactService artifactService, IAgentControlStorage storage,
-                                   AgentRuntimeRegistry runtimeRegistry) {
+                                   AgentRuntimeRegistry runtimeRegistry,
+                                   IAgentRuntimeDispatchService externalRuntimeDispatchService) {
         this.runService = runService;
         this.taskService = taskService;
         this.agentService = agentService;
@@ -65,6 +69,7 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         this.artifactService = artifactService;
         this.storage = storage;
         this.runtimeRegistry = runtimeRegistry;
+        this.externalRuntimeDispatchService = externalRuntimeDispatchService;
     }
 
     @Override
@@ -72,6 +77,10 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         AgentRun queued = runService.get(runId);
         if (queued.getStatus() != AgentRunStatusEnum.QUEUED) {
             throw new IllegalStateException("only queued runs can be dispatched");
+        }
+        if (queued.getRuntimeType() == AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
+            // External runs remain queued until a registered daemon atomically claims them.
+            return queued;
         }
         AgentTask task = taskService.get(queued.getTaskId());
         AgentDefinition agent = agentService.get(queued.getAgentId());
@@ -141,6 +150,9 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         AgentRun current = runService.get(runId);
         if (terminal(current.getStatus())) {
             return current;
+        }
+        if (current.getRuntimeType() == AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
+            return externalRuntimeDispatchService.requestCancellation(runId);
         }
         runtimeRegistry.require(current.getRuntimeType()).cancel(runId);
         AgentRun cancelled = transitionRun(runService.get(runId), AgentRunStatusEnum.CANCELLED, null, null);

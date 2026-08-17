@@ -8,11 +8,13 @@ import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
 import ai.chat2db.community.domain.api.model.agent.AgentChatTaskCreation;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentArtifactPublishRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionUpdateRequest;
@@ -33,6 +35,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentRunCoordinator;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
 import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
@@ -67,6 +70,7 @@ public class AgentControlController {
     private final IAgentTaskContextService contextService;
     private final IAgentChatTaskService chatTaskService;
     private final IIdentityService identityService;
+    private final IAgentRuntimeDispatchService runtimeDispatchService;
 
     public AgentControlController(IAgentDefinitionService agentService, IAgentTaskService taskService,
                                   IAgentRunService runService, IAgentRunCoordinator runCoordinator,
@@ -74,7 +78,8 @@ public class AgentControlController {
                                   IAgentArtifactPublicationService publicationService,
                                   IAgentTaskContextService contextService,
                                   IAgentChatTaskService chatTaskService,
-                                  IIdentityService identityService) {
+                                  IIdentityService identityService,
+                                  IAgentRuntimeDispatchService runtimeDispatchService) {
         this.agentService = agentService;
         this.taskService = taskService;
         this.runService = runService;
@@ -85,6 +90,7 @@ public class AgentControlController {
         this.contextService = contextService;
         this.chatTaskService = chatTaskService;
         this.identityService = identityService;
+        this.runtimeDispatchService = runtimeDispatchService;
     }
 
     @PostMapping("/definitions")
@@ -277,6 +283,28 @@ public class AgentControlController {
         AgentRun run = runService.get(runId);
         requireTaskOwner(taskService.get(run.getTaskId()));
         return ListResult.of(toolGateway.listApprovals(runId));
+    }
+
+    @GetMapping("/runs/{runId}/runtime-approvals")
+    public ListResult<AgentRuntimeApproval> listRuntimeApprovals(@PathVariable String runId) {
+        AgentRun run = runService.get(runId);
+        requireTaskOwner(taskService.get(run.getTaskId()));
+        return ListResult.of(runtimeDispatchService.listApprovals(runId));
+    }
+
+    @PostMapping("/runtime-approvals/{approvalId}/decision")
+    public DataResult<AgentRuntimeApproval> decideRuntimeApproval(
+            @PathVariable String approvalId,
+            @RequestBody AgentRuntimeApprovalDecisionRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("runtime approval decision request is required");
+        }
+        AgentRuntimeApproval approval = runtimeDispatchService.getApproval(approvalId);
+        AgentRun run = runService.get(approval.getRunId());
+        requireTaskOwner(taskService.get(run.getTaskId()));
+        request.setApprovalId(approvalId);
+        request.setDecidedBy(identityService.currentUserId());
+        return DataResult.of(runtimeDispatchService.decideApproval(request));
     }
 
     @PostMapping("/approvals/{approvalId}/decision")

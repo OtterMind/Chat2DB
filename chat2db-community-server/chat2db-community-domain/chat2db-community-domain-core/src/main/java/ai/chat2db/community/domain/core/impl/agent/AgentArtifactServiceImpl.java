@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactEvidence;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactVersion;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
@@ -127,7 +128,9 @@ public class AgentArtifactServiceImpl implements IAgentArtifactService {
         AgentArtifactDetail detail = new AgentArtifactDetail();
         detail.setArtifact(artifact);
         detail.setVersions(storage.listArtifactVersions(artifactId));
-        detail.setEvidence(storage.listArtifactEvidence(artifactId));
+        List<AgentArtifactEvidence> evidence = storage.listArtifactEvidence(artifactId);
+        annotateEvidenceValidity(requireTask(artifact.getTaskId()), evidence);
+        detail.setEvidence(evidence);
         return detail;
     }
 
@@ -585,6 +588,23 @@ public class AgentArtifactServiceImpl implements IAgentArtifactService {
         if (run == null || !taskId.equals(run.getTaskId())) {
             throw new IllegalArgumentException("artifact run is outside the task");
         }
+    }
+
+    private void annotateEvidenceValidity(AgentTask task, List<AgentArtifactEvidence> evidence) {
+        for (AgentArtifactEvidence item : evidence) {
+            boolean inScope = task.getDataScopeSnapshot() != null
+                    && task.getDataScopeSnapshot().stream().anyMatch(scope -> evidenceMatches(scope, item));
+            item.setValid(inScope);
+            item.setInvalidReason(inScope ? null : "Task DataScope no longer authorizes this evidence");
+        }
+    }
+
+    private boolean evidenceMatches(AgentDataScope scope, AgentArtifactEvidence evidence) {
+        return java.util.Objects.equals(scope.getDataSourceId(), evidence.getDataSourceId())
+                && (StringUtils.isBlank(scope.getDatabaseName())
+                || java.util.Objects.equals(scope.getDatabaseName(), evidence.getDatabaseName()))
+                && (StringUtils.isBlank(scope.getSchemaName())
+                || java.util.Objects.equals(scope.getSchemaName(), evidence.getSchemaName()));
     }
 
     private AgentArtifact copy(AgentArtifact source) {
