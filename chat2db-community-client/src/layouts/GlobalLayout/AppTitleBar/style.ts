@@ -33,6 +33,10 @@ export const useStyles = createStyles(({ css, token }) => {
     communityMacWindowedActions: css`
       padding-left: 78px;
     `,
+    communityWindowsDesktopActions: css`
+      padding-left: 96px;
+      padding-right: 144px;
+    `,
     logoContainer: css`
       display: flex;
       justify-content: center;

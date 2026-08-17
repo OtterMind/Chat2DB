@@ -384,6 +384,9 @@ public class MainJFrame extends JFrame {
     private void setupGenericPlatformSpecifics(Image appIcon) {
         this.setTitle(appName);
         this.setIconImage(appIcon);
+        if (WindowsCommunityWindowChrome.isEnabled(OS.isWindows(), ConfigUtils.isCommunity())) {
+            WindowsCommunityWindowChrome.configureRootPane(getRootPane());
+        }
         applyTheme(ThemeEnum.DARK);
     }
     private static Image buildAppLogoImage() {
@@ -764,6 +767,9 @@ public class MainJFrame extends JFrame {
         }
         this.browser_ = this.client_.createBrowser(indexHtmlFile, CefRendering.DEFAULT, false);
         this.browserUI_ = browser_.getUIComponent();
+        if (WindowsCommunityWindowChrome.isEnabled(OS.isWindows(), ConfigUtils.isCommunity())) {
+            WindowsCommunityWindowChrome.configureBrowserComponent(browserUI_);
+        }
         this.browserUI_.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {

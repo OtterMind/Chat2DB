@@ -18,6 +18,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   const { styles, cx } = useStyles();
   const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
   const isMac = window.navigator.os_type === Platform.Mac;
+  const isWindows = window.navigator.os_type === Platform.Windows;
   const [isWindowFullScreen, setIsWindowFullScreen] = useState(false);
   // const [isMaximized, setIsMaximized] = useState(false);
 
@@ -152,8 +153,9 @@ const AppBar = memo<AppBarProps>(({ className }) => {
       {isCommunityEnv && (
         <div
           className={cx(styles.communityActions, {
-            [styles.communityMacWindowedActions]: isMac && !isWindowFullScreen,
-          })}
+          [styles.communityMacWindowedActions]: isMac && !isWindowFullScreen,
+          [styles.communityWindowsDesktopActions]: isWindows && isDesktop,
+        })}
         >
           {appTitleBarRightComponent}
         </div>
