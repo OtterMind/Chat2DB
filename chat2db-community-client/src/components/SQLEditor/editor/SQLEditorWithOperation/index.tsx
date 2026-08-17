@@ -1227,11 +1227,6 @@ const selectTableTreeNode = async (tableNode: TreeNodeData) => {
   const candidateTreeNodeTypes = getCandidateTreeNodeTypes(tableNode.treeNodeType);
   const loadedPathKeys: React.Key[] = [];
   let loadedTableNode: TreeNodeData | null = null;
-  const treeStore = useTreeStore.getState();
-  const previousCurrentTreeNode = treeStore.currentTreeNode;
-  const previousSelectedKeys = treeStore.selectedKeys;
-  const previousScrollTargetKey = treeStore.scrollTargetKey;
-  const previousExpandedKeys = treeStore.expandedKeys;
 
   for (const treeNodeType of candidateTreeNodeTypes) {
     const loadedCandidatePathKeys = await loadDatabaseObjectTreePath({
@@ -1256,15 +1251,12 @@ const selectTableTreeNode = async (tableNode: TreeNodeData) => {
   }
 
   if (!loadedTableNode) {
-    treeStore.setCurrentTreeNode(previousCurrentTreeNode);
-    treeStore.setSelectedKeys(previousSelectedKeys);
-    treeStore.setScrollTargetKey(previousScrollTargetKey);
-    treeStore.setExpandedKeys(previousExpandedKeys);
     return false;
   }
 
   const selectedNode = loadedTableNode;
   ensureWorkspaceLeftPanelVisible();
+  const treeStore = useTreeStore.getState();
   const expandedKeys = Array.from(new Set([...treeStore.expandedKeys, ...loadedPathKeys]));
 
   treeStore.setExpandedKeys(expandedKeys);
@@ -1298,17 +1290,17 @@ const loadDatabaseObjectTreePath = async (params: {
       continue;
     }
 
-    loadedPathKeys.push(key);
     const treeStore = useTreeStore.getState();
-    const previousCurrentTreeNode = treeStore.currentTreeNode;
-    const previousSelectedKeys = treeStore.selectedKeys;
     try {
-      await treeStore.handleLoadData(node);
-      treeStore.setCurrentTreeNode(previousCurrentTreeNode);
-      treeStore.setSelectedKeys(previousSelectedKeys);
+      const loadResult = await treeStore.handleLoadData(node, {
+        closeExpandTreeNode: true,
+        preserveInteraction: true,
+      });
+      if (!loadResult.committed) {
+        break;
+      }
+      loadedPathKeys.push(key);
     } catch {
-      treeStore.setCurrentTreeNode(previousCurrentTreeNode);
-      treeStore.setSelectedKeys(previousSelectedKeys);
       break;
     }
   }
