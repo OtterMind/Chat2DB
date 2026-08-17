@@ -34,6 +34,18 @@ async function runShortcutTests() {
   assert.equal(defaultBlockComment.action, ShortcutAction.SqlToggleBlockComment);
   assert.equal(defaultBlockComment.canModify, true);
 
+  const platformModifier = DEFAULT_SHORTCUT_CONFIG[ShortcutAction.ZoomReset].defaultBinding.split(' + ')[0];
+  assert.deepEqual(
+    [
+      ShortcutAction.SwitchToChat,
+      ShortcutAction.SwitchToWorkspace,
+      ShortcutAction.SwitchToDashboard,
+      ShortcutAction.OpenSetting,
+    ].map((action) => DEFAULT_SHORTCUT_CONFIG[action].defaultBinding),
+    [1, 2, 3, 4].map((index) => `${platformModifier} + ${index}`),
+    'top title-bar shortcuts should follow the visible Community action order',
+  );
+
   // 2. Test getEventShortcutBinding with physical key (event.code) on shifted punctuation key
   const fakeSlashShiftEvent = {
     code: 'Slash',

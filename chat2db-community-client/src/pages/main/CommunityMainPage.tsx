@@ -31,6 +31,11 @@ import { useChatStore } from '@/store/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
 import {
+  APP_TITLE_BAR_ACTION_EVENT,
+  AppTitleBarActionEventDetail,
+  isAppTitleBarAction,
+} from '@/utils/appTitleBarAction';
+import {
   readPersistedMainPageActiveTab,
   resolveDesktopInitialMainPage,
   resolveInitialMainPage,
@@ -355,6 +360,36 @@ function CommunityMainPage() {
   const handleOpenSettings = useCallback(() => {
     setSettingPageActiveTab(settingPageActiveTab === false ? 'basic' : false);
   }, [setSettingPageActiveTab, settingPageActiveTab]);
+
+  useEffect(() => {
+    const handleTitleBarAction = (event: Event) => {
+      const action = (event as CustomEvent<AppTitleBarActionEventDetail>).detail?.action;
+      if (!isAppTitleBarAction(action)) {
+        return;
+      }
+
+      // Mark valid Community title-bar actions as handled even when the entry is unavailable.
+      event.preventDefault();
+      if (showLeftContainer || isEmbedIframe === IframeType.ZOER) {
+        return;
+      }
+
+      if (action === 'settings') {
+        if (!isEmbedIframe) {
+          handleOpenSettings();
+        }
+        return;
+      }
+
+      const navItem = navConfig.find((item) => item.key === action);
+      if (navItem) {
+        handleNavItemClick(navItem);
+      }
+    };
+
+    window.addEventListener(APP_TITLE_BAR_ACTION_EVENT, handleTitleBarAction);
+    return () => window.removeEventListener(APP_TITLE_BAR_ACTION_EVENT, handleTitleBarAction);
+  }, [handleNavItemClick, handleOpenSettings, isEmbedIframe, navConfig, showLeftContainer]);
 
   useEffect(() => {
     if (showLeftContainer || isEmbedIframe === IframeType.ZOER) {
