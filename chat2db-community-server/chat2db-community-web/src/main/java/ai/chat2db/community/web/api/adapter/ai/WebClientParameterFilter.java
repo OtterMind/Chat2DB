@@ -48,6 +48,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
     private String model;
     private final Map<String, String> reasoningContentByToolCallId = new ConcurrentHashMap<>();
     private final AtomicReference<String> latestToolCallReasoningContent = new AtomicReference<>();
+    private final Map<String, ObjectNode> claudeThinkingByToolCallId = new ConcurrentHashMap<>();
+    private final AtomicReference<ObjectNode> latestClaudeToolCallThinking = new AtomicReference<>();
 
     public WebClientParameterFilter(String model) {
         this.model = model;
@@ -73,9 +75,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                         String bodyString = new String(capturedBody, StandardCharsets.UTF_8);
                         String modifiedBody = modifyRequestBody(bodyString);
                         log.info("Original Request Url: {}", request.url().toString());
-                        log.info("Original Request Headers: {}", JSON.toJSONString(request.headers()));
                         log.info("Original Request Header Summary: {}", JSON.toJSONString(summarizeHeaders(request.headers())));
-                        log.info("Original Request Body: {}", bodyString);
+                        log.debug("AI request body captured ({} bytes)", capturedBody.length);
                         DataBufferFactory bufferFactory = outputMessage.bufferFactory();
                         DataBuffer buffer = bufferFactory.wrap(modifiedBody.getBytes(StandardCharsets.UTF_8));
                         HttpHeaders headers = outputMessage.getHeaders();
@@ -116,6 +117,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                                 return Flux.fromIterable(flushClaudeStreamBuffer(claudeSseBuffer.get()))
                                         .map(this::toDataBuffer);
                             }))
+                            .doOnComplete(() -> rememberClaudeThinkingForToolCalls(
+                                    responseBodyBuilder.get().toString()))
                             .doOnError(error -> {
                                 String partialResponseBody = responseBodyBuilder.get().toString();
                                 log.error("Original Response Body,error:{},Body:{}",
@@ -127,7 +130,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                                 }
                                 String fullResponseBody = responseBodyBuilder.get().toString();
                                 rememberOpenAiReasoningForToolCalls(fullResponseBody);
-                                log.info("Original Response Body,signal:{},body:{}", signalType, fullResponseBody);
+                                log.debug("AI response body captured ({} chars), signal:{}",
+                                        fullResponseBody.length(), signalType);
                             })
                             .concatWith(Flux.defer(() -> {
                                 String body = responseBodyBuilder.get().toString();
@@ -167,6 +171,7 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                 JsonNode jsonNode = objectMapper.readTree(originalBody);
                 if (jsonNode instanceof ObjectNode) {
                     removeEmptyExtraBody(jsonNode);
+                    injectClaudeThinkingForToolUseMessages(jsonNode);
                     JsonNode message = jsonNode.get("system");
                     if(originalBody.contains(TOO_MANY_CALLS_MESSAGE)){
                        removeTools(jsonNode);
@@ -227,6 +232,92 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
         for (String toolCallId : toolCallIds) {
             if (!isBlank(toolCallId)) {
                 reasoningContentByToolCallId.put(toolCallId, reasoning);
+            }
+        }
+    }
+
+    void rememberClaudeThinkingForToolCalls(String responseBody) {
+        if (!"claude".equalsIgnoreCase(model) || isBlank(responseBody)) {
+            return;
+        }
+        Map<Integer, ObjectNode> thinkingBlocks = new java.util.LinkedHashMap<>();
+        Map<Integer, String> toolCallIds = new java.util.LinkedHashMap<>();
+        for (String payload : extractOpenAiResponsePayloads(responseBody)) {
+            try {
+                JsonNode root = objectMapper.readTree(payload);
+                int index = root.path("index").asInt(-1);
+                String eventType = firstText(root, "type");
+                JsonNode contentBlock = root.get("content_block");
+                if ("content_block_start".equals(eventType) && contentBlock != null) {
+                    String blockType = firstText(contentBlock, "type");
+                    if ("thinking".equals(blockType)) {
+                        ObjectNode block = objectMapper.createObjectNode();
+                        block.put("type", "thinking");
+                        block.put("thinking", firstText(contentBlock, "thinking"));
+                        block.put("signature", firstText(contentBlock, "signature"));
+                        thinkingBlocks.put(index, block);
+                    } else if ("tool_use".equals(blockType)) {
+                        toolCallIds.put(index, firstText(contentBlock, "id"));
+                    }
+                } else if ("content_block_delta".equals(eventType)) {
+                    JsonNode delta = root.get("delta");
+                    ObjectNode block = thinkingBlocks.get(index);
+                    if (block != null && delta != null) {
+                        String thinking = firstText(delta, "thinking");
+                        if (!isBlank(thinking)) {
+                            block.put("thinking", block.path("thinking").asText("") + thinking);
+                        }
+                        String signature = firstText(delta, "signature");
+                        if (!isBlank(signature)) {
+                            block.put("signature", block.path("signature").asText("") + signature);
+                        }
+                    }
+                }
+            } catch (Exception exception) {
+                log.debug("Ignored invalid Anthropic SSE payload while preserving thinking", exception);
+            }
+        }
+        if (thinkingBlocks.isEmpty() || toolCallIds.isEmpty()) {
+            return;
+        }
+        ObjectNode thinking = thinkingBlocks.values().iterator().next().deepCopy();
+        latestClaudeToolCallThinking.set(thinking);
+        toolCallIds.values().stream().filter(id -> !isBlank(id))
+                .forEach(id -> claudeThinkingByToolCallId.put(id, thinking.deepCopy()));
+    }
+
+    private void injectClaudeThinkingForToolUseMessages(JsonNode root) {
+        JsonNode messages = root.get("messages");
+        if (messages == null || !messages.isArray()) {
+            return;
+        }
+        for (JsonNode message : messages) {
+            if (!(message instanceof ObjectNode messageObject)
+                    || !"assistant".equalsIgnoreCase(firstText(messageObject, "role"))) {
+                continue;
+            }
+            JsonNode content = messageObject.get("content");
+            if (!(content instanceof ArrayNode contentArray) || contentArray.isEmpty()) {
+                continue;
+            }
+            boolean hasThinking = false;
+            String toolCallId = null;
+            for (JsonNode block : contentArray) {
+                String type = firstText(block, "type");
+                hasThinking |= "thinking".equals(type);
+                if ("tool_use".equals(type) && toolCallId == null) {
+                    toolCallId = firstText(block, "id");
+                }
+            }
+            if (hasThinking || toolCallId == null) {
+                continue;
+            }
+            ObjectNode thinking = claudeThinkingByToolCallId.get(toolCallId);
+            if (thinking == null) {
+                thinking = latestClaudeToolCallThinking.get();
+            }
+            if (thinking != null) {
+                contentArray.insert(0, thinking.deepCopy());
             }
         }
     }

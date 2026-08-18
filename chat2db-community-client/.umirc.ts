@@ -83,7 +83,8 @@ const createBuildProfile = () => {
   const runtimeProfile = RUNTIME_PROFILES[runtimeMode] || COMMERCIAL_PROFILE;
   const isLocalDesktop = runtimeProfile.localDesktop || LOCAL_DESKTOP_RUNTIME_MODES.includes(runtimeMode);
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const publicPath = yarn_config.public_path || process.env.UMI_PublicPath || (isLocalDesktop && !isDevelopment ? './' : '/');
+  const publicPath =
+    yarn_config.public_path || process.env.UMI_PublicPath || (isLocalDesktop && !isDevelopment ? './' : '/');
   const assetPublicPath = publicPath.endsWith('/') ? publicPath : `${publicPath}/`;
 
   return {
@@ -101,7 +102,8 @@ const createBuildProfile = () => {
 };
 
 const buildProfile = createBuildProfile();
-const disableMfsu = process.env.DISABLE_MFSU === 'true' || (process.env.NODE_ENV === 'development' && buildProfile.isCommunity);
+const disableMfsu =
+  process.env.DISABLE_MFSU === 'true' || (process.env.NODE_ENV === 'development' && buildProfile.isCommunity);
 const GLOBAL_LAYOUT_COMPONENT = buildProfile.isCommunity
   ? '@/layouts/GlobalLayout/CommunityLayout'
   : '@/layouts/GlobalLayout';
@@ -245,6 +247,22 @@ export default defineConfig({
             },
             {
               path: '/stream',
+              component: MAIN_COMPONENT,
+            },
+            {
+              path: '/tasks/schedules/:scheduleId',
+              component: MAIN_COMPONENT,
+            },
+            {
+              path: '/tasks/schedules',
+              component: MAIN_COMPONENT,
+            },
+            {
+              path: '/tasks/:taskId',
+              component: MAIN_COMPONENT,
+            },
+            {
+              path: '/tasks',
               component: MAIN_COMPONENT,
             },
             {

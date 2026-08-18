@@ -1,4 +1,13 @@
-import React, { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect, useRef, useCallback } from 'react';
+import React, {
+  memo,
+  useState,
+  forwardRef,
+  ForwardedRef,
+  useImperativeHandle,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import { Input } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
@@ -26,6 +35,9 @@ import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
+import agentService, { AgentDataScope, AgentDefinition } from '@/service/agent';
+import { AgentAvatar } from '@/pages/main/tasks/TaskPrimitives';
+import { resolveMentionTaskScopes } from './agentMentionModel';
 import useRuntimeEditionCapabilities, {
   getRuntimeEditionCapabilities,
 } from '@/hooks/useRuntimeEditionCapabilities';
@@ -50,6 +62,9 @@ export interface SendParams {
   sql?: string;
 
   attachments?: IChatAttachment[];
+  agentId?: string;
+  agentName?: string;
+  agentDataScopes?: AgentDataScope[];
 }
 
 interface ChatInputProps {
@@ -111,6 +126,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const [tableList, setTableList] = useState<ITable[]>([]);
   const [selectedTable, setSelectedTable] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<IChatAttachment[]>([]);
+  const [agents, setAgents] = useState<AgentDefinition[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentDefinition>();
   const [attachmentLoading, setAttachmentLoading] = useState(false);
   const textareaRef = useRef<TextAreaRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -187,6 +204,18 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       focusInput();
     }, 0);
   }, [focusInput, prefillInputState?.token]);
+
+  useEffect(() => {
+    if (mainPageActiveTab !== 'stream') {
+      setAgents([]);
+      setSelectedAgent(undefined);
+      return;
+    }
+    agentService
+      .listAgents(undefined as void)
+      .then((items) => setAgents((items || []).filter((agent) => agent.status === 'ACTIVE')))
+      .catch(() => setAgents([]));
+  }, [mainPageActiveTab]);
 
   useEffect(() => {
     tableListWithoutSearchKey.current = [];
@@ -349,6 +378,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         }
       : null;
 
+    const taskScopeContext =
+      contextInfo && 'dataSourceId' in contextInfo
+        ? {
+            dataSourceId: contextInfo.dataSourceId,
+            databaseName: contextInfo.databaseName,
+            schemaName: contextInfo.schemaName,
+          }
+        : null;
     const _params = {
       ..._contextInfo,
       ...params,
@@ -361,11 +398,17 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         tableType: tableList.find((s) => s.name === i)?.tableType,
       })) as any,
       attachments: finalAttachments,
+      agentId: selectedAgent?.id,
+      agentName: selectedAgent?.name,
+      agentDataScopes: selectedAgent
+        ? resolveMentionTaskScopes(selectedAgent.dataScopes || [], taskScopeContext)
+        : undefined,
     };
 
     onChatSend?.(_params);
 
     setSelectedTable([]);
+    setSelectedAgent(undefined);
     setAttachments([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -391,6 +434,10 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     // Remove deleted tables from selectedTable.
     if (removedTables.length > 0) {
       setSelectedTable((prev) => prev.filter((table) => !removedTables.includes(table)));
+    }
+
+    if (selectedAgent && !new RegExp(`@${selectedAgent.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s`).test(value)) {
+      setSelectedAgent(undefined);
     }
 
     setInputValue(value);
@@ -537,16 +584,27 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const getTableList = (info: string) => {
+  const getMentionList = (info: string) => {
+    const agentItems: SuggestionItem[] = agents.map((agent) => ({
+      label: agent.name,
+      value: `agent:${agent.id}`,
+      tableType: 'AGENT',
+      kind: 'AGENT',
+      icon: <AgentAvatar agent={agent} size={20} />,
+      extra: i18n('task.mention.agent'),
+    }));
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
       label: table.name,
       value: table.name,
       tableType: table.tableType,
+      kind: 'TABLE',
     }));
 
-    if (!info) return tables;
+    const items = [...agentItems, ...tables];
 
-    return tables.filter((item) => item.label.toLowerCase().includes(info.toLowerCase()));
+    if (!info) return items;
+
+    return items.filter((item) => item.label.toLowerCase().includes(info.toLowerCase()));
   };
 
   const getTextBeforeCursor = (input: string, cursorPosition: number) => {
@@ -564,11 +622,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     const prevIsCollection = 'dataSourceCollectionId' in prev;
     const nextIsCollection = 'dataSourceCollectionId' in next;
     if (prevIsCollection || nextIsCollection) {
-      return (
-        prevIsCollection &&
-        nextIsCollection &&
-        prev.dataSourceCollectionId === next.dataSourceCollectionId
-      );
+      return prevIsCollection && nextIsCollection && prev.dataSourceCollectionId === next.dataSourceCollectionId;
     }
 
     return (
@@ -581,7 +635,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   return (
     <AIAtMetion
       className={className}
-      items={getTableList as any}
+      items={getMentionList as any}
       onSelect={(v) => {
         const textarea = textareaRef.current;
         const cursorPos = textarea?.resizableTextArea?.textArea?.selectionStart || 0;
@@ -589,16 +643,23 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         const textBeforeCursor = inputValue.slice(0, cursorPos);
         const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
+        const mentionedAgent = v.startsWith('agent:') ? agents.find((agent) => agent.id === v.slice(6)) : undefined;
+        const mentionValue = mentionedAgent?.name || v;
+
         if (lastAtIndex !== -1) {
           const beforeAt = inputValue.slice(0, lastAtIndex);
           const afterCursor = inputValue.slice(cursorPos);
 
-          setInputValue(beforeAt + '@' + v + ' ' + afterCursor);
+          setInputValue(beforeAt + '@' + mentionValue + ' ' + afterCursor);
         } else {
-          setInputValue((prev) => prev + '@' + v + ' ');
+          setInputValue((prev) => prev + '@' + mentionValue + ' ');
         }
 
-        setSelectedTable((prev) => [...prev, v]);
+        if (mentionedAgent) {
+          setSelectedAgent(mentionedAgent);
+        } else {
+          setSelectedTable((prev) => [...prev, v]);
+        }
       }}
     >
       {({ onTrigger, onKeyDown, isOpen }) => (

@@ -24,6 +24,7 @@ import invite from './invite';
 import plugin from './plugin';
 import license from './license';
 import knowledgeManagement from './knowledgeManagement';
+import task from './task';
 
 export default {
   lang: LangType.ZH_CN,
@@ -53,4 +54,5 @@ export default {
   ...plugin,
   ...license,
   ...knowledgeManagement,
+  ...task,
 };

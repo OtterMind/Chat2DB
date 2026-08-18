@@ -125,6 +125,11 @@
             </dependency>
             <dependency>
                 <groupId>ai.chat2db</groupId>
+                <artifactId>chat2db-community-agent-runtime</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.chat2db</groupId>
                 <artifactId>chat2db-community-jcef</artifactId>
                 <version>${revision}</version>
             </dependency>

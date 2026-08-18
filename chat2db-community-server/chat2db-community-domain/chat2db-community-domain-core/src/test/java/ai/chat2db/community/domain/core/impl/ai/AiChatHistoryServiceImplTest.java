@@ -72,6 +72,28 @@ class AiChatHistoryServiceImplTest {
         assertEquals(1, service.getMessages(session.getId(), OWNER_ID).size());
     }
 
+    @Test
+    void taskDelegationMessageUsesTheRequestedIdAndIsIdempotent() {
+        AiChatHistoryServiceImpl service = new AiChatHistoryServiceImpl(
+                new ObjectMapper().findAndRegisterModules(), tempDirectory);
+        AiChatSession session = service.createSession(OWNER_ID, "delegation session");
+        AiChatMessageAddRequest request = addRequest(session.getId(), OWNER_ID, "@Agent analyze channels");
+        request.setId("delegation-message");
+        request.setMessageType("TASK_DELEGATION");
+        request.setTaskId("task-1");
+        request.setAgentId("agent-1");
+        request.setAgentName("AnalysisAgent");
+
+        var first = service.addMessage(request);
+        var retried = service.addMessage(request);
+
+        assertEquals("delegation-message", first.getId());
+        assertEquals("task-1", first.getTaskId());
+        assertEquals("AnalysisAgent", first.getAgentName());
+        assertEquals(first.getId(), retried.getId());
+        assertEquals(1, service.getMessages(session.getId(), OWNER_ID).size());
+    }
+
     private AiChatMessageAddRequest addRequest(String sessionId, Long userId, String content) {
         AiChatMessageAddRequest request = new AiChatMessageAddRequest();
         request.setSessionId(sessionId);

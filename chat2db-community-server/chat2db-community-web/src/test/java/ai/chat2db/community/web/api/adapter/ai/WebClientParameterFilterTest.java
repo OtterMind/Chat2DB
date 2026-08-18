@@ -70,4 +70,32 @@ class WebClientParameterFilterTest {
 
         assertTrue(modifiedBody.contains("\"reasoning_content\":\"Need schema first. \""));
     }
+
+    @Test
+    void shouldPreserveClaudeThinkingInToolUseFollowUpRequest() {
+        WebClientParameterFilter filter = new WebClientParameterFilter("claude");
+        filter.rememberClaudeThinkingForToolCalls("""
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":"sig"}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Need live data."}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_123","name":"list_all_datasources","input":{}}}
+
+                """);
+
+        String modifiedBody = filter.modifyRequestBody("""
+                {"messages":[
+                  {"role":"user","content":[{"type":"text","text":"list data sources"}]},
+                  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_123","name":"list_all_datasources","input":{}}]},
+                  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"[]"}]}
+                ],"stream":true}
+                """);
+
+        assertTrue(modifiedBody.contains("\"type\":\"thinking\",\"thinking\":\"Need live data.\",\"signature\":\"sig\""));
+        assertTrue(modifiedBody.indexOf("\"type\":\"thinking\"")
+                < modifiedBody.indexOf("\"type\":\"tool_use\""));
+    }
 }

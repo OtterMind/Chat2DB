@@ -10,6 +10,8 @@ import java.util.List;
 @Data
 public class AiChatMessageAddRequest {
 
+    private String id;
+
     @NotBlank
     private String sessionId;
 
@@ -24,4 +26,12 @@ public class AiChatMessageAddRequest {
     private String reasoningContent;
 
     private List<ChatAttachment> attachments;
+
+    private String messageType;
+
+    private String taskId;
+
+    private String agentId;
+
+    private String agentName;
 }

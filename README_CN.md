@@ -146,6 +146,84 @@ java -Dloader.path=chat2db-community-server/chat2db-community-start/target/lib \
 
 </details>
 
+## 外部 Agent Runtime Daemon 认证
+
+Codex、Hermes 等外部 Agent Runtime Daemon 调用
+`/api/agent/runtime/daemon/**` 时必须携带独立的 Bearer Token。启动 Chat2DB 前通过
+环境变量 `CHAT2DB_AGENT_RUNTIME_TOKEN` 配置，或使用等价 JVM 参数
+`-Dchat2db.agent.runtime.token=...`。环境变量优先；未配置时 Daemon 接口返回 503，
+无效 Token 返回 401。
+
+该 Token 只用于 Runtime Daemon 接口认证，不是 Community 数据加密密钥，也不应写入
+Runtime Profile、日志或代码仓库。
+
+Daemon 领取并启动 Run 后，Chat2DB 会另外返回一个短期有效的任务 Token。Task-scoped
+MCP Endpoint 为 `/api/agent/runtime/mcp/runs/{runId}`，按 Streamable HTTP MCP
+JSON-RPC 提供 `initialize`、`tools/list`、`tools/call` 和 `ping`。每次请求都必须通过
+`Authorization: Bearer <task-token>` 携带任务 Token；该 Token 与当前 Run 和 lease
+attempt 绑定，并在 Lease 过期或 Run 进入终态后失效。它不能用于 Daemon 控制面接口。
+
+Daemon 不把任务 Token 写入 Runtime Profile，而是仅注入
+本次子进程的 `CHAT2DB_AGENT_TASK_TOKEN` 环境变量，并使用
+Codex `bearer_token_env_var` 或 Hermes ACP HTTP Header 配置 MCP。MCP 只暴露 Task DataScope 内的数据源、数据库、
+Schema、表结构和 SQL 工具，SQL 继续经过 Capability、Proposal、Approval 和
+ToolAttempt 控制链。旧的 SQL HTTP Tool 入口仍使用
+`X-Chat2DB-Agent-Task-Token`，只作为 Daemon 兼容接口保留。
+
+当 Runtime Profile 开启 Session Resume 时，Codex Thread ID 或 Hermes Session ID 会随
+`SESSION_UPDATED` 事件持久化。只有 Agent、Provider、Runtime Profile 和完整 Profile
+Snapshot 均一致的后续 Run 才会恢复父 Run Thread。Daemon 遇到 Chat2DB 短暂重启时会在
+最后确认的 Lease 有效期内继续续租重试；Lease 硬过期后仍停止本地执行并由控制面收敛，
+不会绕过 attempt fencing 自动重放不确定操作。
+
+Community 桌面版启动后会自动扫描当前进程 `PATH`、登录 Shell 和常见安装位置，识别本机
+Codex 与 Hermes，并为当前用户建立内部 Runtime Profile。Agent 配置页面直接展示检测到的
+Runtime 卡片，不需要填写 Runtime Profile ID。可以通过 `CHAT2DB_CODEX_PATH` 或
+`CHAT2DB_HERMES_PATH` 指定自定义可执行文件位置。
+
+Codex/Hermes Runtime Daemon 也会打包为同一个独立的本地可执行 Jar。独立启动时默认使用
+`AUTO` 同时检测 Codex 与 Hermes；如需限制 Provider，可设置
+`CHAT2DB_AGENT_RUNTIME_PROVIDER=CODEX` 或 `HERMES`：
+
+```bash
+mvn -B -f chat2db-community-server/pom.xml \
+  -pl :chat2db-community-agent-runtime -am \
+  -Dmaven.test.skip=true package
+
+CHAT2DB_AGENT_RUNTIME_TOKEN='<与 Chat2DB 配置相同的 Daemon Token>' \
+java -jar chat2db-community-server/chat2db-community-agent-runtime/target/chat2db-agent-runtime-exec.jar
+
+CHAT2DB_AGENT_RUNTIME_PROVIDER=HERMES \
+CHAT2DB_AGENT_RUNTIME_TOKEN='<与 Chat2DB 配置相同的 Daemon Token>' \
+java -jar chat2db-community-server/chat2db-community-agent-runtime/target/chat2db-agent-runtime-exec.jar
+```
+
+Daemon 默认只连接 `http://127.0.0.1:10825`。可以通过
+`CHAT2DB_AGENT_RUNTIME_URL`、`CHAT2DB_AGENT_RUNTIME_PROVIDER`、`CHAT2DB_AGENT_RUNTIME_DAEMON_ID`、
+`CHAT2DB_AGENT_RUNTIME_WORKSPACE` 和 `CHAT2DB_AGENT_RUNTIME_CONCURRENCY`
+调整本地地址、稳定实例 ID、隔离工作目录和并发数。Runtime Profile 中的环境变量配置
+保存的是 Daemon 环境变量名称引用；应配置独立的 `CODEX_HOME` 或 `HERMES_HOME` 引用，
+不要转发用户完整主目录或整个进程环境。Hermes Adapter 强制移除 YOLO/Hook 自动批准环境，
+并拒绝对应启动参数。ACP 权限请求通过持久化 Approval Bridge 进入 `WAITING_APPROVAL`；
+Daemon 等待期间继续续租，用户完成决策并由 Daemon 确认消费后，才恢复原 Hermes Session。
+
+Codex 和 Hermes 可以在任务工作目录的固定 `.chat2db-artifacts.json` 文件中写入显式
+Artifact Manifest。Daemon 会在完成 Run 前逐个上传；Chat2DB 校验类型、MIME、解码后大小
+（最多 5 MiB）、SHA-256、安全文件名、lease attempt 和 Evidence DataScope。文件型 Artifact
+使用内联 Base64 并复制到 Chat2DB 管理的 H2 存储；Runtime 本地路径和符号链接 Manifest
+都会被拒绝。
+
+Daemon 会在工作目录根下维护仅包含进程身份信息的
+`.chat2db-runtime-processes.json`。异常退出后，新 Daemon 只会清理同时匹配 PID、进程启动时间
+和可执行文件名的登记进程；身份不一致会保留为隔离记录，不会因 PID 复用误杀其他进程。
+已启动但结果不确定的 Run 仍由 Lease 机制收敛为 `UNKNOWN`，不会自动重放写操作。
+
+Hermes Gateway 通过 `/api/agent/gateway/channels/**` 作为飞书、钉钉 Transport Bridge。
+用户创建 Channel 时会获得只展示一次的 Gateway Token；后续请求通过
+`X-Chat2DB-Agent-Gateway-Token` 认证，Chat2DB 只保存哈希。Gateway 负责平台验签、解密和发送，
+Chat2DB 负责 Conversation/线程绑定、入站幂等、Task/Run、最终回复和 Delivery Outbox。
+投递失败会退避重试，最多 5 次后进入死信；Gateway 不得同时自主启动第二个 Hermes Turn。
+
 ## 从源码构建
 
 ### 环境要求

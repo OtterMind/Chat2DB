@@ -29,6 +29,7 @@ import Dashboard from './dashboard';
 import DashboardMenuList from './dashboard/DashboardMenuList';
 import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
+import Tasks from './tasks';
 // import KnowledgeManagement from './knowledgeManagement';
 import Stream from '../stream';
 // import Plugin from './plugin';
@@ -62,6 +63,7 @@ function MainPage() {
     return [
       ...createCoreMainNavItems({
         stream: { component: <Stream />, name: i18n('stream.nav.title') },
+        tasks: { component: <Tasks />, name: i18n('task.title') },
         workspace: { component: <Workspace />, name: i18n('workspace.title') },
         dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
       }),
@@ -348,8 +350,8 @@ function MainPage() {
   // Listen for in-app navigation requests (e.g. from WorkspaceRightEmpty AI intro)
   useEffect(() => {
     const handler = (e: Event) => {
-      const { page } = (e as CustomEvent<{ page: string }>).detail;
-      handleChangePageTab({ page, navConfigTmp: navConfig });
+      const { page, pathName } = (e as CustomEvent<{ page: string; pathName?: string }>).detail;
+      handleChangePageTab({ page, pathName, navConfigTmp: navConfig });
     };
     window.addEventListener('app:navigateTo', handler);
     return () => window.removeEventListener('app:navigateTo', handler);

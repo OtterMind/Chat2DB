@@ -149,6 +149,101 @@ Automatic key-file creation depends on `chat2db.mode`, not `chat2db.gui`. Commun
 
 </details>
 
+## External Agent Runtime Daemon Authentication
+
+External Agent Runtime daemons such as Codex and Hermes must send a dedicated
+Bearer token when calling `/api/agent/runtime/daemon/**`. Configure it before
+starting Chat2DB with the `CHAT2DB_AGENT_RUNTIME_TOKEN` environment variable or
+the equivalent `-Dchat2db.agent.runtime.token=...` JVM property. The environment
+variable takes precedence. An unset token makes daemon endpoints return 503,
+while an invalid token returns 401.
+
+This token authenticates Runtime Daemon APIs only. It is not the Community data
+encryption key and must not be stored in Runtime Profiles, logs, or the source
+repository.
+
+After a daemon claims and starts a Run, Chat2DB returns a separate short-lived
+task token. The task-scoped Streamable HTTP MCP endpoint is
+`/api/agent/runtime/mcp/runs/{runId}` and implements `initialize`, `tools/list`,
+`tools/call`, and `ping`. Every request sends the task token as
+`Authorization: Bearer <task-token>`. It is bound to the current Run and lease
+attempt, expires with the lease or terminal Run state, and cannot authenticate
+daemon control-plane calls.
+
+The daemon never writes this token into a Runtime Profile. It injects
+`CHAT2DB_AGENT_TASK_TOKEN` only into the current child process and references it
+through Codex MCP `bearer_token_env_var` or a Hermes ACP HTTP header. MCP tools expose
+only datasource, database, schema, table metadata, and SQL operations within
+the Task DataScope. SQL still passes through Capability, Proposal, Approval,
+and ToolAttempt controls. The older SQL HTTP tool endpoint continues to use
+`X-Chat2DB-Agent-Task-Token` only as a daemon compatibility API.
+
+When Session Resume is enabled on the Runtime Profile, Codex Thread IDs or Hermes Session IDs are
+persisted with `SESSION_UPDATED` events. A later Run resumes its parent Thread
+only when the Agent, Provider, Runtime Profile, and full Profile snapshot all
+match. During a short Chat2DB restart, the Daemon retries renewal until the last
+acknowledged Lease expires; hard expiry still stops local execution and preserves
+attempt fencing instead of replaying an uncertain operation.
+
+After Community Desktop starts, it scans the process `PATH`, the login shell,
+and common installation locations for Codex and Hermes. It creates internal
+Runtime Profiles for the current user, so the Agent editor can show detected
+Runtime cards without asking for a Runtime Profile ID. Use
+`CHAT2DB_CODEX_PATH` or `CHAT2DB_HERMES_PATH` for custom executable locations.
+
+The Codex/Hermes Runtime Daemon is also built as one separate local executable.
+Standalone mode defaults to `AUTO` and detects both providers. Set
+`CHAT2DB_AGENT_RUNTIME_PROVIDER=CODEX` or `HERMES` to restrict discovery:
+
+```bash
+mvn -B -f chat2db-community-server/pom.xml \
+  -pl :chat2db-community-agent-runtime -am \
+  -Dmaven.test.skip=true package
+
+CHAT2DB_AGENT_RUNTIME_TOKEN='<same daemon token configured for Chat2DB>' \
+java -jar chat2db-community-server/chat2db-community-agent-runtime/target/chat2db-agent-runtime-exec.jar
+
+CHAT2DB_AGENT_RUNTIME_PROVIDER=HERMES \
+CHAT2DB_AGENT_RUNTIME_TOKEN='<same daemon token configured for Chat2DB>' \
+java -jar chat2db-community-server/chat2db-community-agent-runtime/target/chat2db-agent-runtime-exec.jar
+```
+
+It connects only to `http://127.0.0.1:10825` by default. Override the local
+origin, stable daemon id, isolated workspace root, or concurrency with
+`CHAT2DB_AGENT_RUNTIME_URL`, `CHAT2DB_AGENT_RUNTIME_PROVIDER`, `CHAT2DB_AGENT_RUNTIME_DAEMON_ID`,
+`CHAT2DB_AGENT_RUNTIME_WORKSPACE`, and `CHAT2DB_AGENT_RUNTIME_CONCURRENCY`.
+Runtime Profile environment entries are references to daemon environment
+variable names; use a dedicated `CODEX_HOME` or `HERMES_HOME` reference instead
+of forwarding the user's full home directory or process environment. The Hermes
+adapter strips YOLO/hook auto-approval settings and rejects their launch flags.
+ACP permission requests use the persistent Chat2DB Approval Bridge: the Run
+stays in `WAITING_APPROVAL` while the daemon keeps its lease alive, and the
+original Hermes session resumes only after a user decision is acknowledged.
+
+Codex and Hermes can publish explicit artifacts by writing a JSON array to the
+fixed `.chat2db-artifacts.json` file in the task workspace. The daemon uploads
+every manifest before completing the Run. Chat2DB verifies type, MIME, decoded
+size (up to 5 MiB), SHA-256, safe file name, lease attempt, and evidence scope.
+File artifacts use inline Base64 and are copied into Chat2DB-managed H2 storage;
+runtime-local paths and symlinked manifest files are rejected.
+
+The daemon keeps process identity metadata in
+`.chat2db-runtime-processes.json` under the workspace root. After an abnormal
+exit, a new daemon reaps only entries whose PID, process start time, and
+executable name all match. Identity mismatches remain quarantined instead of
+risking a PID-reuse kill. A started Run with an uncertain outcome still
+converges to `UNKNOWN` through lease reconciliation and is never blindly
+replayed.
+
+Hermes Gateway connects Feishu and DingTalk through the transport-only
+`/api/agent/gateway/channels/**` API. Channel creation returns a Gateway token
+once; subsequent calls use `X-Chat2DB-Agent-Gateway-Token`, while Chat2DB stores
+only its hash. The Gateway owns platform verification, decryption, and sending;
+Chat2DB owns conversation/thread binding, inbound idempotency, Task/Run state,
+the final reply, and the Delivery Outbox. Failed deliveries back off and become
+dead letters after five attempts. The Gateway must not start a second Hermes
+turn for the same managed message.
+
 ## Build from Source
 
 ### Prerequisites

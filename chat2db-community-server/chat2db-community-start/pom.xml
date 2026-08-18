@@ -38,6 +38,10 @@
         </dependency>
         <dependency>
             <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-agent-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ai.chat2db</groupId>
             <artifactId>chat2db-community-jcef</artifactId>
         </dependency>
         <!-- Services loaded at startup. -->

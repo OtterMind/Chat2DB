@@ -137,6 +137,20 @@ class AiModelConfigServiceImplStorageTest {
     }
 
     @Test
+    void unboundRuntimeUsesTheEnabledDefaultConfig() {
+        AiModelConfigServiceImpl service = service(KEY);
+        AiModelConfigSaveRequest request = saveRequest("deepseek-default", API_KEY);
+        request.setModel("deepseek-chat");
+        request.setBaseUrl("https://api.deepseek.com/v1");
+        request.setDefaultConfig(true);
+        service.saveCurrentUserConfig(request);
+
+        AiChatRuntimeResolveRequest runtimeRequest = new AiChatRuntimeResolveRequest();
+        assertEquals("deepseek-chat", service.resolveRuntimeModel(runtimeRequest).getModel());
+        assertEquals("https://api.deepseek.com", service.resolveRuntimeModel(runtimeRequest).getBaseUrl());
+    }
+
+    @Test
     void loadFailsWithWrongKey() {
         AiModelConfigServiceImpl writer = service(KEY);
         writer.saveCurrentUserConfig(saveRequest("primary", API_KEY));

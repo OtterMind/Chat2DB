@@ -55,6 +55,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     private static final String DEFAULT_GEMINI_LOCATION = "us-central1";
     private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+    private static final String DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
     private static final String DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1";
     private static final int TEST_ERROR_BODY_MAX_LENGTH = 2000;
     private static final String CONFIG_VALUE_PREFIX = "config:";
@@ -217,6 +218,9 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         if (provider == AiProviderEnum.OPENAI) {
             return testOpenAiCompatibleConfig(request, DEFAULT_OPENAI_BASE_URL);
         }
+        if (provider == AiProviderEnum.CLAUDE) {
+            return testAnthropicCompatibleConfig(request);
+        }
         if (provider == AiProviderEnum.MINIMAX) {
             String baseUrl = trimToNull(request.getBaseUrl());
             if (StringUtils.isNotBlank(baseUrl) && StringUtils.containsIgnoreCase(baseUrl, "/anthropic")) {
@@ -244,6 +248,9 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
                 if (Objects.isNull(baseConfig)) {
                     throw new BusinessException("ai.model.config.notFound");
                 }
+                if (!Boolean.TRUE.equals(defaultBoolean(baseConfig.getEnabled(), Boolean.TRUE))) {
+                    throw new BusinessException("ai.model.config.disabled");
+                }
             }
         } else if (StringUtils.isNotBlank(request.getProvider()) && StringUtils.isNotBlank(request.getModel())) {
             baseConfig = new AiModelConfig();
@@ -266,6 +273,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         } else {
             baseConfig = userConfigMap.getOrDefault(userId, new ArrayList<>()).stream()
                     .filter(c -> Boolean.TRUE.equals(c.getDefaultConfig()))
+                    .filter(c -> Boolean.TRUE.equals(defaultBoolean(c.getEnabled(), Boolean.TRUE)))
                     .findFirst()
                     .orElse(null);
             if (Objects.isNull(baseConfig)) {
@@ -520,7 +528,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     }
 
     private ModelConfigTestResponse testAnthropicCompatibleConfig(AiModelConfigSaveRequest request) {
-        String baseUrl = trimToNull(request.getBaseUrl());
+        String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), DEFAULT_ANTHROPIC_BASE_URL);
         String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/messages");
         String apiKey = resolveTestApiKey(request);
         if (StringUtils.isBlank(apiKey)) {

@@ -323,6 +323,54 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       box-shadow: 0 2px 8px ${token.colorPrimaryBg};
     `,
 
+    taskDelegationCard: css`
+      width: min(360px, 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 12px;
+      border: 1px solid ${token.colorBorderSecondary};
+      border-radius: 12px;
+      background: ${token.colorBgContainer};
+      box-shadow: ${token.boxShadowTertiary};
+    `,
+
+    taskDelegationSummary: css`
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      color: ${token.colorText};
+      font-size: 12px;
+
+      strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }
+
+      span {
+        color: ${token.colorTextSecondary};
+      }
+    `,
+
+    taskDelegationLink: css`
+      flex-shrink: 0;
+      padding: 0;
+      border: 0;
+      color: ${token.colorPrimary};
+      background: transparent;
+      font-size: 13px;
+      cursor: pointer;
+
+      &:disabled {
+        color: ${token.colorTextDisabled};
+        cursor: wait;
+      }
+    `,
+
     // AI icon.
     aiIconWrap: css`
       width: 28px;

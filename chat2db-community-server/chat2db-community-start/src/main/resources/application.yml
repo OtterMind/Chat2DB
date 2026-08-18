@@ -60,3 +60,14 @@ chat2db:
 logbook:
   include:
     - /api/**
+  obfuscate:
+    headers:
+      - Authorization
+      - X-Chat2DB-Agent-Run-Lease
+      - X-Chat2DB-Agent-Task-Token
+      - X-Chat2DB-Agent-Gateway-Token
+    json-body-fields:
+      - leaseToken
+      - taskScopedToken
+      - gatewayToken
+      - finalResponse
