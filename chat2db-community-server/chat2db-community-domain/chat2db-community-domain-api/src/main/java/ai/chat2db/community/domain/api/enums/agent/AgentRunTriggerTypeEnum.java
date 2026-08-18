@@ -5,5 +5,6 @@ public enum AgentRunTriggerTypeEnum {
     USER_MESSAGE,
     RETRY,
     MANUAL_RERUN,
-    DELEGATION
+    DELEGATION,
+    SCHEDULED
 }

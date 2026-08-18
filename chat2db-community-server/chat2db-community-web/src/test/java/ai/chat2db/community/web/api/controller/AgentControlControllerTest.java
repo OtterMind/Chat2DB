@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
@@ -37,6 +38,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -195,6 +197,11 @@ class AgentControlControllerTest {
         assertEquals("approval-1", captured.get().getApprovalId());
         assertEquals(7L, captured.get().getDecidedBy());
         assertTrue(resumedContext.get().contains("UPDATE orders"));
+
+        run.setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        resumedContext.set(null);
+        controller.decideApproval("approval-1", request);
+        assertNull(resumedContext.get(), "external runs resume through their daemon, not the embedded registry");
     }
 
     @Test

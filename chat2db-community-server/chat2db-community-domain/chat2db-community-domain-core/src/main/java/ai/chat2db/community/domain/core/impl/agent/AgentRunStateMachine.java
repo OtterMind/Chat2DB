@@ -48,6 +48,7 @@ final class AgentRunStateMachine {
                 AgentRunStatusEnum.CANCELLED,
                 AgentRunStatusEnum.UNKNOWN));
         result.put(AgentRunStatusEnum.WAITING_APPROVAL, EnumSet.of(
+                AgentRunStatusEnum.QUEUED,
                 AgentRunStatusEnum.RUNNING,
                 AgentRunStatusEnum.FAILED,
                 AgentRunStatusEnum.CANCELLED));

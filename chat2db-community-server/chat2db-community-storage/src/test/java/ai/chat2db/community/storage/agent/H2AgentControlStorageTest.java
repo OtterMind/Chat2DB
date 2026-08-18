@@ -420,6 +420,37 @@ class H2AgentControlStorageTest {
     }
 
     @Test
+    void suspendsExpiredLeaseWhileSqlApprovalIsPendingInsteadOfMarkingOutcomeUnknown() {
+        H2AgentControlStorage storage = new H2AgentControlStorage(
+                tempDir.resolve("runtime-sql-approval-expiry-store"));
+        Date now = new Date(1_700_000_000_000L);
+        ExternalRuntimeFixture fixture = externalRuntimeFixture(storage, now);
+        AgentRuntimeRunLease claimed = storage.claimRuntimeRun(fixture.instance().getId(),
+                fixture.instance().getProvider(), "a".repeat(64), "b".repeat(64), now,
+                new Date(now.getTime() + 2_000L));
+        start(storage, claimed, new Date(now.getTime() + 1_000L));
+        AgentRun waiting = storage.getRun(fixture.run().getId());
+        long waitingRevision = waiting.getRevision();
+        waiting.setStatus(AgentRunStatusEnum.WAITING_APPROVAL);
+        waiting.setGmtModified(new Date(now.getTime() + 1_100L));
+        waiting.setRevision(waitingRevision + 1);
+        storage.updateRun(waiting, waitingRevision);
+        AgentSqlProposal proposal = proposal(fixture.run().getId());
+        storage.createSqlProposal(proposal, approval(proposal));
+
+        assertEquals(List.of(fixture.run().getId()),
+                storage.reconcileExpiredRuntimeRuns(new Date(now.getTime() + 3_000L), 10));
+
+        assertEquals(AgentRunStatusEnum.WAITING_APPROVAL,
+                storage.getRun(fixture.run().getId()).getStatus());
+        assertEquals(AgentRuntimeLeaseStateEnum.SUSPENDED,
+                storage.getRuntimeRunLease(fixture.run().getId()).getState());
+        assertNull(storage.getRun(fixture.run().getId()).getCompletedAt());
+        assertNull(storage.getRun(fixture.run().getId()).getFailureReason());
+        assertEquals(0, storage.getRuntimeInstance(fixture.instance().getId()).getActiveRuns());
+    }
+
+    @Test
     void reconcilesOrphanLeaseAfterRunAlreadyBecameTerminalAndRepairsCapacityFloor() {
         H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("runtime-orphan-store"));
         Date now = new Date(1_700_000_000_000L);

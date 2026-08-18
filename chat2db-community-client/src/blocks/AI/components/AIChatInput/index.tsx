@@ -36,6 +36,7 @@ import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
 import agentService, { AgentDataScope, AgentDefinition } from '@/service/agent';
+import { AgentAvatar } from '@/pages/main/tasks/TaskPrimitives';
 import { resolveMentionTaskScopes } from './agentMentionModel';
 
 export interface SendParams {
@@ -571,6 +572,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       value: `agent:${agent.id}`,
       tableType: 'AGENT',
       kind: 'AGENT',
+      icon: <AgentAvatar agent={agent} size={20} />,
       extra: i18n('task.mention.agent'),
     }));
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({

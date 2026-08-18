@@ -213,8 +213,9 @@ public class CodexAppServerAdapter implements ExternalProviderAdapter {
                 server.put("url", endpoint.getUrl().toString());
                 server.put("bearer_token_env_var", endpoint.getBearerTokenEnvironmentVariable());
                 server.put("startup_timeout_sec", 10);
-                server.put("tool_timeout_sec", Math.max(30,
-                        profile.getTimeoutSeconds() == null ? 300 : profile.getTimeoutSeconds()));
+                // Chat2DB owns approval expiry. Keep the transport request alive
+                // while the user decides; inactivity is still enforced below.
+                server.put("tool_timeout_sec", 2_147_000);
             }
         }
         putIfNotBlank(params, "model", profile.getModel());
@@ -251,6 +252,9 @@ public class CodexAppServerAdapter implements ExternalProviderAdapter {
         int timeoutSeconds = request.getRuntimeProfile().getTimeoutSeconds() == null
                 ? DEFAULT_INACTIVITY_TIMEOUT_SECONDS : request.getRuntimeProfile().getTimeoutSeconds();
         while (true) {
+            if (request.approvalWaiting()) {
+                state.lastActivity.set(nowMillis());
+            }
             if (state.failure.isDone()) {
                 throw failure(state.failure.join());
             }

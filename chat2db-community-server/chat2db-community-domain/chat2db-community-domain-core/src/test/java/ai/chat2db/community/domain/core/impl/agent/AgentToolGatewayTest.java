@@ -6,19 +6,26 @@ import ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeRunLease;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.lang.reflect.Proxy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,6 +34,7 @@ class AgentToolGatewayTest {
 
     private AgentControlServiceTest.MemoryAgentControlStorage storage;
     private AgentRunServiceImpl runService;
+    private AgentTaskServiceImpl taskService;
     private AgentToolGatewayImpl gateway;
     private AgentTaskCreation creation;
 
@@ -34,9 +42,9 @@ class AgentToolGatewayTest {
     void setUp() {
         storage = new AgentControlServiceTest.MemoryAgentControlStorage();
         AgentDefinitionServiceImpl agentService = new AgentDefinitionServiceImpl(storage);
-        AgentTaskServiceImpl taskService = new AgentTaskServiceImpl(storage);
+        taskService = new AgentTaskServiceImpl(storage);
         runService = new AgentRunServiceImpl(storage);
-        gateway = new AgentToolGatewayImpl(storage, runService);
+        gateway = new AgentToolGatewayImpl(storage, runService, taskService);
 
         AgentDataScope scope = new AgentDataScope();
         scope.setDataSourceId(7L);
@@ -59,6 +67,11 @@ class AgentToolGatewayTest {
         running.setExpectedRevision(1L);
         running.setTargetStatus(AgentRunStatusEnum.RUNNING);
         runService.transition(running);
+        AgentTaskTransitionRequest inProgress = new AgentTaskTransitionRequest();
+        inProgress.setTaskId(creation.getTask().getId());
+        inProgress.setExpectedRevision(creation.getTask().getRevision());
+        inProgress.setTargetStatus(AgentTaskStatusEnum.IN_PROGRESS);
+        taskService.transition(inProgress);
     }
 
     @Test
@@ -85,6 +98,8 @@ class AgentToolGatewayTest {
         assertNotNull(pending.getApproval());
         assertEquals(AgentRunStatusEnum.WAITING_APPROVAL,
                 runService.get(creation.getInitialRun().getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.WAITING_APPROVAL,
+                taskService.get(creation.getTask().getId()).getStatus());
 
         AgentApprovalDecisionRequest decision = new AgentApprovalDecisionRequest();
         decision.setApprovalId(pending.getApproval().getId());
@@ -93,6 +108,8 @@ class AgentToolGatewayTest {
         decision.setDecidedBy(9L);
         assertEquals(AgentApprovalStatusEnum.APPROVED, gateway.decide(decision).getStatus());
         assertEquals(AgentRunStatusEnum.RUNNING, runService.get(creation.getInitialRun().getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
+                taskService.get(creation.getTask().getId()).getStatus());
 
         AgentSqlExecutionPermit executable = gateway.prepareSql(request);
         assertEquals(AgentSqlPermitDecisionEnum.EXECUTE, executable.getDecision());
@@ -120,6 +137,35 @@ class AgentToolGatewayTest {
         assertEquals(AgentApprovalStatusEnum.EXPIRED,
                 gateway.getApproval(first.getApproval().getId()).getStatus());
         assertEquals(AgentApprovalStatusEnum.PENDING, second.getApproval().getStatus());
+    }
+
+    @Test
+    void approvedExternalSqlRequeuesSameRunAfterItsLeaseWasSuspended() {
+        runService.get(creation.getInitialRun().getId()).setRuntimeType(AgentRuntimeTypeEnum.EXTERNAL_AGENT);
+        AgentRuntimeRunLease suspended = new AgentRuntimeRunLease();
+        suspended.setRunId(creation.getInitialRun().getId());
+        suspended.setState(AgentRuntimeLeaseStateEnum.SUSPENDED);
+        IAgentRuntimeControlStorage runtimeStorage = (IAgentRuntimeControlStorage) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IAgentRuntimeControlStorage.class},
+                (proxy, method, args) -> {
+                    if ("getRuntimeRunLease".equals(method.getName())) return suspended;
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        gateway.setRuntimeStorage(runtimeStorage);
+        AgentSqlExecutionPermit pending = gateway.prepareSql(
+                request("external-write", "update refunds set status = 'REVIEW' where id = 1"));
+
+        AgentApprovalDecisionRequest decision = new AgentApprovalDecisionRequest();
+        decision.setApprovalId(pending.getApproval().getId());
+        decision.setExpectedRevision(1L);
+        decision.setDecision(AgentApprovalDecisionEnum.APPROVE);
+        decision.setDecidedBy(9L);
+        gateway.decide(decision);
+
+        assertEquals(AgentRunStatusEnum.QUEUED,
+                runService.get(creation.getInitialRun().getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
+                taskService.get(creation.getTask().getId()).getStatus());
     }
 
     private AgentSqlToolRequest request(String callId, String sql) {

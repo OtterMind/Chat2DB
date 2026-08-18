@@ -2,6 +2,7 @@ import i18n from '@/i18n';
 import type { AgentDefinition, AgentRun, AgentRunStatus } from '@/service/agent';
 import { Tag, Tooltip } from 'antd';
 import { CircleCheck, CircleDashed, CircleDot, Cloud, Cpu, PauseCircle, TriangleAlert, XCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { avatarRuntimeProvider, RuntimeProviderLogo } from './RuntimeProviderLogo';
 import { useStyles } from './style';
@@ -21,6 +22,24 @@ export function AgentAvatar({ agent, size = 28 }: { agent?: AgentDefinition; siz
       ) : (
         label.slice(0, 2).toUpperCase()
       )}
+    </span>
+  );
+}
+
+export function AgentIdentity({
+  agent,
+  fallback,
+  avatarSize = 22,
+}: {
+  agent?: AgentDefinition;
+  fallback?: ReactNode;
+  avatarSize?: number;
+}) {
+  const { styles } = useStyles();
+  return (
+    <span className={styles.agentIdentity} title={agent?.name || (typeof fallback === 'string' ? fallback : undefined)}>
+      <AgentAvatar agent={agent} size={avatarSize} />
+      <span>{agent?.name || fallback || '?'}</span>
     </span>
   );
 }

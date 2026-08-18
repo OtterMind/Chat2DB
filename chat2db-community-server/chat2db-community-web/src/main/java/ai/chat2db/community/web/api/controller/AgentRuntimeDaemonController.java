@@ -20,6 +20,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunComple
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCancelAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeArtifactUploadRequest;
@@ -83,6 +84,14 @@ public class AgentRuntimeDaemonController {
             @RequestHeader(AgentRuntimeDaemonUtils.RUN_LEASE_HEADER) String leaseToken,
             @RequestBody AgentRuntimeRunStartedRequest request) {
         return DataResult.of(dispatchService.markStarted(runId, leaseToken, request));
+    }
+
+    @PostMapping("/runs/{runId}/suspend-for-sql-approval")
+    public DataResult<AgentRuntimeLeaseStatus> suspendForSqlApproval(
+            @PathVariable String runId,
+            @RequestHeader(AgentRuntimeDaemonUtils.RUN_LEASE_HEADER) String leaseToken,
+            @RequestBody AgentRuntimeRunSuspendRequest request) {
+        return DataResult.of(dispatchService.suspendForSqlApproval(runId, leaseToken, request));
     }
 
     @PostMapping("/runs/{runId}/events")
@@ -161,6 +170,7 @@ public class AgentRuntimeDaemonController {
         AiToolContextRequest trustedContext = new AiToolContextRequest();
         trustedContext.setAgentRunId(scope.getRunId());
         trustedContext.setAgentDataScopes(scope.getDataScopes());
+        trustedContext.setWaitForApprovalDecision(false);
         request.setAiToolContextRequest(trustedContext);
         return DataResult.of(aiToolService.executeSql(request));
     }

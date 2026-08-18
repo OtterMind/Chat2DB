@@ -9,6 +9,8 @@ import { Bot, ChevronRight, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2,
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AgentDataScopeEditor from './AgentDataScopeEditor';
+import ApprovalModeTag from './ApprovalModeTag';
+import AgentOutputContractEditor from './AgentOutputContractEditor';
 import AgentRuntimePicker from './AgentRuntimePicker';
 import {
   agentRuntimeAvatar,
@@ -19,6 +21,8 @@ import {
 import { AgentAvatar, CapabilityChips, RuntimeBadge } from './TaskPrimitives';
 import { useStyles } from './style';
 import { readAgentAvatar } from './agentAvatar';
+import { parseAgentOutputContract, serializeAgentOutputContract } from './agentOutputContract';
+import { dataSourceDisplayName } from './taskDataSource';
 
 interface Props {
   open: boolean;
@@ -45,6 +49,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   const [submitting, setSubmitting] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentDefinition>();
   const [avatarCustomized, setAvatarCustomized] = useState(false);
+  const [outputContractExtras, setOutputContractExtras] = useState<Record<string, unknown>>({});
   const avatar = Form.useWatch('avatar', form);
   const agentName = Form.useWatch('name', form);
   const runtimeType = Form.useWatch('runtimeType', form);
@@ -120,7 +125,11 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
           approvalMode: scope.approvalMode,
           allowProduction: !!scope.allowProduction,
         })),
-        outputContract: values.outputContract,
+        outputContract: serializeAgentOutputContract(
+          values.outputRequirements,
+          values.outputRequiredSections,
+          outputContractExtras,
+        ),
       };
       const agent = editingAgent
         ? await agentService.updateAgent({
@@ -141,17 +150,22 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   };
 
   const openEditor = (agent?: AgentDefinition) => {
+    const outputContract = parseAgentOutputContract(agent?.outputContract);
     setEditingAgent(agent);
     setAvatarCustomized(!!agent?.avatar && !isDefaultAgentAvatar(agent.avatar));
+    setOutputContractExtras(outputContract.extras);
     setView('edit');
     form.setFieldsValue(agent ? {
       ...agent,
       dataScopes: agent.dataScopes.map((scope) => ({ ...scope, accessLevel: scope.tableNames.length ? 'TABLES' : 'NAMESPACE' })),
+      outputRequirements: outputContract.outputRequirements,
+      outputRequiredSections: outputContract.outputRequiredSections,
     } : {
       avatar: CHAT2DB_AGENT_AVATAR,
       runtimeType: 'EMBEDDED_SPRING_AI', capabilities: ['METADATA_READ', 'DATA_READ'],
       dataScopes: [{ accessLevel: 'NAMESPACE', maxRows: 200, timeoutSeconds: 60, approvalMode: 'RISK_BASED' }],
-      outputContract: '{"requiredArtifacts":[{"type":"REPORT","min":1}]}',
+      outputRequirements: outputContract.outputRequirements,
+      outputRequiredSections: outputContract.outputRequiredSections,
     });
   };
 
@@ -278,16 +292,22 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                   </h4>
                   <div className={styles.inspectorScopes}>
                     {selectedAgent.dataScopes.map((scope, index) => {
-                      const source = dataSources.find((item) => item.id === scope.dataSourceId);
                       return (
                         <div key={`${scope.dataSourceId}-${index}`}>
-                          <strong>{source?.alias || i18n('task.scope.datasource', scope.dataSourceId)}</strong>
+                          <strong>
+                            {dataSourceDisplayName(
+                              scope.dataSourceId,
+                              dataSources,
+                              i18n('task.scope.datasourceUnavailable', scope.dataSourceId),
+                            )}
+                          </strong>
                           <span>{[scope.databaseName || '*', scope.schemaName || '*'].join(' / ')}</span>
                           <small>
                             {scope.tableNames.length
                               ? i18n('task.scope.tableCount', scope.tableNames.length)
                               : i18n('task.scope.namespaceWide')}
                           </small>
+                          <ApprovalModeTag mode={scope.approvalMode} />
                         </div>
                       );
                     })}
@@ -428,7 +448,17 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                 <Form.Item name="capabilities" rules={[{ required: true }]}>
                   <Checkbox.Group
                     className={styles.capabilityGrid}
-                    options={capabilities.map((value) => ({ value, label: value }))}
+                    options={capabilities.map((value) => ({
+                      value,
+                      label: (
+                        <span className={styles.capabilityLabel}>
+                          <code>{value}</code>
+                          <small>
+                            {i18n(`task.agent.capability.${value.toLowerCase()}` as Parameters<typeof i18n>[0])}
+                          </small>
+                        </span>
+                      ),
+                    }))}
                   />
                 </Form.Item>
               </section>
@@ -439,9 +469,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                     <p>{i18n('task.agent.outputContractHint')}</p>
                   </div>
                 </div>
-                <Form.Item name="outputContract">
-                  <Input.TextArea rows={5} />
-                </Form.Item>
+                <AgentOutputContractEditor form={form} />
               </section>
             </aside>
           </div>

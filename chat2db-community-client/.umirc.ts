@@ -250,6 +250,14 @@ export default defineConfig({
               component: MAIN_COMPONENT,
             },
             {
+              path: '/tasks/schedules/:scheduleId',
+              component: MAIN_COMPONENT,
+            },
+            {
+              path: '/tasks/schedules',
+              component: MAIN_COMPONENT,
+            },
+            {
               path: '/tasks/:taskId',
               component: MAIN_COMPONENT,
             },

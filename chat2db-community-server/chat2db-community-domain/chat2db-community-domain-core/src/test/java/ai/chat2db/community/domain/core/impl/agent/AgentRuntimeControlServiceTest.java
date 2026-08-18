@@ -335,6 +335,14 @@ class AgentRuntimeControlServiceTest {
         }
 
         @Override
+        public AgentRuntimeRunLease suspendRuntimeRun(AgentRuntimeRunLease lease, AgentRunEvent suspendEvent,
+                                                       ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum targetRunStatus,
+                                                       java.util.Date suspendedAt, long expectedLeaseRevision,
+                                                       long expectedRunRevision) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<String> reconcileExpiredRuntimeRuns(java.util.Date expiredAt, int limit) {
             throw new UnsupportedOperationException();
         }

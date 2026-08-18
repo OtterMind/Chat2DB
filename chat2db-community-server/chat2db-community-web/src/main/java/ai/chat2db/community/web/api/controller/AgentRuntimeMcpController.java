@@ -211,6 +211,10 @@ public class AgentRuntimeMcpController {
         AiToolContextRequest context = new AiToolContextRequest();
         context.setAgentRunId(scope.getRunId());
         context.setAgentDataScopes(scope.getDataScopes() == null ? List.of() : List.copyOf(scope.getDataScopes()));
+        // External Runtime calls must not keep an HTTP/MCP request open for the
+        // whole human approval window. The daemon suspends the current lease
+        // and resumes the same Run after the decision instead.
+        context.setWaitForApprovalDecision(false);
         return context;
     }
 

@@ -25,9 +25,14 @@ final class AgentTaskStateMachine {
         transitions.put(AgentTaskStatusEnum.BACKLOG,
                 EnumSet.of(AgentTaskStatusEnum.TODO, AgentTaskStatusEnum.CANCELLED));
         transitions.put(AgentTaskStatusEnum.TODO,
-                EnumSet.of(AgentTaskStatusEnum.IN_PROGRESS, AgentTaskStatusEnum.CANCELLED));
+                EnumSet.of(AgentTaskStatusEnum.IN_PROGRESS, AgentTaskStatusEnum.BLOCKED,
+                        AgentTaskStatusEnum.CANCELLED));
         transitions.put(AgentTaskStatusEnum.IN_PROGRESS,
-                EnumSet.of(AgentTaskStatusEnum.IN_REVIEW, AgentTaskStatusEnum.BLOCKED,
+                EnumSet.of(AgentTaskStatusEnum.WAITING_APPROVAL, AgentTaskStatusEnum.IN_REVIEW,
+                        AgentTaskStatusEnum.BLOCKED,
+                        AgentTaskStatusEnum.CANCELLED));
+        transitions.put(AgentTaskStatusEnum.WAITING_APPROVAL,
+                EnumSet.of(AgentTaskStatusEnum.IN_PROGRESS, AgentTaskStatusEnum.BLOCKED,
                         AgentTaskStatusEnum.CANCELLED));
         transitions.put(AgentTaskStatusEnum.IN_REVIEW,
                 EnumSet.of(AgentTaskStatusEnum.IN_PROGRESS, AgentTaskStatusEnum.DONE,

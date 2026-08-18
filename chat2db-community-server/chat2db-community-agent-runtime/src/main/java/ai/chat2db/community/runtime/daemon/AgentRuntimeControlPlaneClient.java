@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunClaimR
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeArtifactUploadRequest;
@@ -82,6 +83,12 @@ public class AgentRuntimeControlPlaneClient {
     public AgentRuntimeLeaseStatus renew(String runId, String leaseToken,
                                          AgentRuntimeLeaseRenewRequest request) {
         return post("/runs/" + segment(runId) + "/lease/renew",
+                request, leaseToken, AgentRuntimeLeaseStatus.class);
+    }
+
+    public AgentRuntimeLeaseStatus suspendForSqlApproval(String runId, String leaseToken,
+                                                          AgentRuntimeRunSuspendRequest request) {
+        return post("/runs/" + segment(runId) + "/suspend-for-sql-approval",
                 request, leaseToken, AgentRuntimeLeaseStatus.class);
     }
 

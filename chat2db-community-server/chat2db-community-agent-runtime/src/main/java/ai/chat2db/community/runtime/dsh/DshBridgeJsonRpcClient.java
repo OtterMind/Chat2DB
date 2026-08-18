@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 final class DshBridgeJsonRpcClient implements Closeable {
@@ -51,6 +52,10 @@ final class DshBridgeJsonRpcClient implements Closeable {
     }
 
     JsonNode request(String method, JsonNode params, Duration timeout) {
+        return request(method, params, timeout, () -> false);
+    }
+
+    JsonNode request(String method, JsonNode params, Duration timeout, BooleanSupplier pauseTimeout) {
         if (closed.get()) {
             throw new IllegalStateException("DSH Runtime Bridge connection is closed");
         }
@@ -64,10 +69,22 @@ final class DshBridgeJsonRpcClient implements Closeable {
         message.set("params", params == null ? mapper.createObjectNode() : params);
         try {
             write(message);
-            return response.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (TimeoutException exception) {
+            long remainingMillis = timeout.toMillis();
+            while (remainingMillis > 0L) {
+                long sliceMillis = Math.min(250L, remainingMillis);
+                long startedAt = System.nanoTime();
+                try {
+                    return response.get(sliceMillis, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException ignored) {
+                    if (!pauseTimeout.getAsBoolean()) {
+                        long elapsedMillis = Math.max(1L,
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
+                        remainingMillis -= elapsedMillis;
+                    }
+                }
+            }
             pending.remove(id);
-            throw new IllegalStateException("DSH Runtime Bridge request timed out: " + method, exception);
+            throw new IllegalStateException("DSH Runtime Bridge request timed out: " + method);
         } catch (ExecutionException exception) {
             Throwable cause = exception.getCause();
             if (cause instanceof RuntimeException runtimeException) {

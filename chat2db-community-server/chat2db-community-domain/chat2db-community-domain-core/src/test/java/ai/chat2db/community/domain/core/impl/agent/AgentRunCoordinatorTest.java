@@ -66,7 +66,7 @@ class AgentRunCoordinatorTest {
 
         assertEquals(AgentRunStatusEnum.FAILED,
                 fixture.runService().get(fixture.creation().getInitialRun().getId()).getStatus());
-        assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
+        assertEquals(AgentTaskStatusEnum.BLOCKED,
                 fixture.taskService().get(fixture.creation().getTask().getId()).getStatus());
         assertEquals(AgentRuntimeEventTypeEnum.ERROR,
                 fixture.coordinator().listEvents(fixture.creation().getInitialRun().getId()).get(2).getType());

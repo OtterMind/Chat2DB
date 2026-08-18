@@ -225,7 +225,8 @@ public class HermesAcpAdapter implements ExternalProviderAdapter {
                 .put("text", promptBuilder.build(request.getStartRequest()));
         int timeoutSeconds = request.getRuntimeProfile().getTimeoutSeconds() == null
                 ? DEFAULT_TIMEOUT_SECONDS : request.getRuntimeProfile().getTimeoutSeconds();
-        return client.request("session/prompt", params, Duration.ofSeconds(timeoutSeconds));
+        return client.request("session/prompt", params, Duration.ofSeconds(timeoutSeconds),
+                request::approvalWaiting);
     }
 
     private ProviderExecutionResult result(ExecutionState state, JsonNode promptResult) {

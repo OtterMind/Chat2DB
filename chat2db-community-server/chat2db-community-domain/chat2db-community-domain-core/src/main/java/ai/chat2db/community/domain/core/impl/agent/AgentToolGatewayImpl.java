@@ -7,15 +7,19 @@ import ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRiskLevelEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeRunLease;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
@@ -23,11 +27,15 @@ import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
+import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import ai.chat2db.community.domain.core.impl.ai.AgentToolScopePolicy;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -52,10 +60,19 @@ public class AgentToolGatewayImpl implements IAgentToolGateway {
 
     private final IAgentControlStorage storage;
     private final IAgentRunService runService;
+    private final IAgentTaskService taskService;
+    private IAgentRuntimeControlStorage runtimeStorage;
 
-    public AgentToolGatewayImpl(IAgentControlStorage storage, IAgentRunService runService) {
+    public AgentToolGatewayImpl(IAgentControlStorage storage, IAgentRunService runService,
+                                IAgentTaskService taskService) {
         this.storage = storage;
         this.runService = runService;
+        this.taskService = taskService;
+    }
+
+    @Autowired(required = false)
+    void setRuntimeStorage(IAgentRuntimeControlStorage runtimeStorage) {
+        this.runtimeStorage = runtimeStorage;
     }
 
     @Override
@@ -185,13 +202,40 @@ public class AgentToolGatewayImpl implements IAgentToolGateway {
         AgentRun run = runService.get(current.getRunId());
         if (request.getDecision() == AgentApprovalDecisionEnum.APPROVE) {
             if (run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL) {
-                transitionRun(run, AgentRunStatusEnum.RUNNING, null);
+                if (run.getRuntimeType() == AgentRuntimeTypeEnum.EXTERNAL_AGENT
+                        && hasReleasedExternalLease(run.getId())) {
+                    transitionRun(run, AgentRunStatusEnum.QUEUED, null);
+                    moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                            AgentTaskStatusEnum.IN_PROGRESS);
+                } else if (run.getRuntimeType() != AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
+                    transitionRun(run, AgentRunStatusEnum.RUNNING, null);
+                    moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                            AgentTaskStatusEnum.IN_PROGRESS);
+                }
             }
         } else if (run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL) {
-            transitionRun(run, AgentRunStatusEnum.FAILED, "SQL proposal was rejected");
+            if (run.getRuntimeType() == AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
+                if (hasReleasedExternalLease(run.getId())) {
+                    transitionRun(run, AgentRunStatusEnum.QUEUED, null);
+                    moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                            AgentTaskStatusEnum.IN_PROGRESS);
+                }
+            } else {
+                transitionRun(run, AgentRunStatusEnum.FAILED, "SQL proposal was rejected");
+                moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                        AgentTaskStatusEnum.BLOCKED);
+            }
         }
         persistApprovalDecisionEvent(persisted);
         return persisted;
+    }
+
+    private boolean hasReleasedExternalLease(String runId) {
+        if (runtimeStorage == null) {
+            return false;
+        }
+        AgentRuntimeRunLease lease = runtimeStorage.getRuntimeRunLease(runId);
+        return lease == null || lease.getState() != AgentRuntimeLeaseStateEnum.ACTIVE;
     }
 
     @Override
@@ -385,7 +429,21 @@ public class AgentToolGatewayImpl implements IAgentToolGateway {
     private void moveRunToWaitingApproval(AgentRun run) {
         if (run.getStatus() == AgentRunStatusEnum.RUNNING) {
             transitionRun(run, AgentRunStatusEnum.WAITING_APPROVAL, null);
+            moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.IN_PROGRESS,
+                    AgentTaskStatusEnum.WAITING_APPROVAL);
         }
+    }
+
+    private void moveTaskTo(String taskId, AgentTaskStatusEnum expected, AgentTaskStatusEnum target) {
+        AgentTask task = taskService.get(taskId);
+        if (task.getStatus() != expected) {
+            return;
+        }
+        AgentTaskTransitionRequest transition = new AgentTaskTransitionRequest();
+        transition.setTaskId(taskId);
+        transition.setExpectedRevision(task.getRevision());
+        transition.setTargetStatus(target);
+        taskService.transition(transition);
     }
 
     private AgentRun transitionRun(AgentRun run, AgentRunStatusEnum target, String failureReason) {

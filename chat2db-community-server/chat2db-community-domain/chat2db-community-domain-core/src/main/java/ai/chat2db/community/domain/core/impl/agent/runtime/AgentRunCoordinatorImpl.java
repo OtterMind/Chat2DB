@@ -32,6 +32,7 @@ import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import java.util.ConcurrentModificationException;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -314,7 +315,46 @@ public class AgentRunCoordinatorImpl implements IAgentRunCoordinator {
         transition.setTargetStatus(target);
         transition.setFailureReason(failureReason);
         transition.setResultSummary(resultSummary);
-        return runService.transition(transition);
+        AgentRun transitioned = runService.transition(transition);
+        syncTerminalTask(transitioned);
+        return transitioned;
+    }
+
+    private void syncTerminalTask(AgentRun run) {
+        AgentTaskStatusEnum target = switch (run.getStatus()) {
+            case FAILED, UNKNOWN -> AgentTaskStatusEnum.BLOCKED;
+            case CANCELLED -> AgentTaskStatusEnum.CANCELLED;
+            default -> null;
+        };
+        if (target == null) {
+            return;
+        }
+        for (int attempt = 0; attempt < 2; attempt++) {
+            AgentTask task = taskService.get(run.getTaskId());
+            if (task.getStatus() == target || task.getStatus() == AgentTaskStatusEnum.DONE
+                    || task.getStatus() == AgentTaskStatusEnum.CANCELLED) {
+                return;
+            }
+            if (target == AgentTaskStatusEnum.BLOCKED
+                    && task.getStatus() != AgentTaskStatusEnum.TODO
+                    && task.getStatus() != AgentTaskStatusEnum.IN_PROGRESS
+                    && task.getStatus() != AgentTaskStatusEnum.WAITING_APPROVAL
+                    && task.getStatus() != AgentTaskStatusEnum.IN_REVIEW) {
+                return;
+            }
+            AgentTaskTransitionRequest transition = new AgentTaskTransitionRequest();
+            transition.setTaskId(task.getId());
+            transition.setExpectedRevision(task.getRevision());
+            transition.setTargetStatus(target);
+            try {
+                taskService.transition(transition);
+                return;
+            } catch (ConcurrentModificationException conflict) {
+                if (attempt == 1) {
+                    throw conflict;
+                }
+            }
+        }
     }
 
     private String completedAnswerSummary(String runId) {

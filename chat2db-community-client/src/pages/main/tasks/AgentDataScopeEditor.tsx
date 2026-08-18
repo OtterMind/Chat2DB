@@ -2,11 +2,12 @@ import i18n from '@/i18n';
 import connectionService from '@/service/connection';
 import sqlService from '@/service/sql';
 import type { IConnectionDetails } from '@/typings';
-import { Button, Form, InputNumber, Radio, Select, Switch } from 'antd';
+import { Alert, Button, Form, InputNumber, Radio, Select, Switch } from 'antd';
 import { Database, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useStyles } from './style';
+import { dataSourceDisplayName } from './taskDataSource';
 
 interface ScopeRowProps {
   field: { key: number; name: number };
@@ -92,7 +93,14 @@ function ScopeRow({ field, form, dataSources, onRemove }: ScopeRowProps) {
             showSearch
             optionFilterProp="label"
             placeholder={i18n('task.scope.datasourcePlaceholder')}
-            options={dataSources.map((item) => ({ value: item.id, label: item.alias }))}
+            options={dataSources.map((item) => ({
+              value: item.id,
+              label: dataSourceDisplayName(
+                item.id,
+                dataSources,
+                i18n('task.scope.datasourceUnavailable', item.id),
+              ),
+            }))}
             onChange={() => form.setFieldValue(['dataScopes', field.name, 'databaseName'], undefined)}
           />
         </Form.Item>
@@ -157,8 +165,19 @@ function ScopeRow({ field, form, dataSources, onRemove }: ScopeRowProps) {
         <Form.Item name={[field.name, 'timeoutSeconds']} label={i18n('task.agent.timeout')}>
           <InputNumber min={1} />
         </Form.Item>
-        <Form.Item name={[field.name, 'approvalMode']} label={i18n('task.agent.approvalMode')}>
-          <Select options={['NEVER', 'RISK_BASED', 'ALWAYS'].map((value) => ({ value, label: value }))} />
+        <Form.Item
+          name={[field.name, 'approvalMode']}
+          label={i18n('task.agent.approvalMode.scope')}
+          extra={i18n('task.agent.approvalMode.scopeHint')}
+        >
+          <Select
+            options={(['NEVER', 'RISK_BASED', 'ALWAYS'] as const).map((value) => ({
+              value,
+              label: `${value} · ${i18n(
+                `task.agent.approvalMode.${value.toLowerCase()}` as Parameters<typeof i18n>[0],
+              )}`,
+            }))}
+          />
         </Form.Item>
         <Form.Item
           name={[field.name, 'allowProduction']}
@@ -215,6 +234,12 @@ export default function AgentDataScopeEditor({ form, dataSources }: AgentDataSco
               {i18n('task.agent.addScope')}
             </Button>
           </div>
+          <Alert
+            type="info"
+            showIcon
+            message={i18n('task.agent.approvalMode.scopeNotice')}
+            description={i18n('task.agent.approvalMode.capabilityNotice')}
+          />
           {fields.map((field) => (
             <ScopeRow
               key={field.key}

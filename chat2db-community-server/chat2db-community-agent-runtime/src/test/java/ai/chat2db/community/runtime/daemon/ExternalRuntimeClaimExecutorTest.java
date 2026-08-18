@@ -3,6 +3,7 @@ package ai.chat2db.community.runtime.daemon;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeEventTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApprovalResult;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeArtifactManifest;
@@ -25,6 +26,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCancel
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.runtime.provider.ExternalProviderAdapter;
 import ai.chat2db.community.runtime.provider.ProviderEventSink;
 import ai.chat2db.community.runtime.provider.ProviderExecutionException;
@@ -89,13 +91,16 @@ class ExternalRuntimeClaimExecutorTest {
                 event.setEventId("message-1");
                 event.setRunId(request.getRunId());
                 event.setType(AgentRuntimeEventTypeEnum.MESSAGE_DELTA);
-                event.setContent("answer");
+                event.setContent("answer task-secret");
+                event.setPayload(Map.of(
+                        "authorization", "Bearer task-secret",
+                        "nested", java.util.List.of(Map.of("command", "TOKEN=task-secret"))));
                 event.setOccurredAt(Date.from(NOW));
                 events.emit(event);
                 ProviderExecutionResult result = new ProviderExecutionResult();
                 result.setSessionId("thread-1");
                 result.setTurnId("turn-1");
-                result.setFinalResponse("# Report");
+                result.setFinalResponse("# Report\nTOKEN=task-secret");
                 result.setArtifacts(java.util.List.of(manifest("runtime-chart-1", "{\"charts\":[]}")));
                 return result;
             }
@@ -111,8 +116,11 @@ class ExternalRuntimeClaimExecutorTest {
         assertEquals(1L, control.event.getSequence());
         assertEquals(2L, control.event.getExpectedLeaseRevision());
         assertEquals(2L, control.complete.getSequence());
-        assertEquals(3L, control.complete.getExpectedLeaseRevision());
-        assertEquals("# Report", control.complete.getFinalResponse());
+        assertEquals(4L, control.complete.getExpectedLeaseRevision());
+        assertEquals("answer [REDACTED]", control.event.getContent());
+        assertEquals("Bearer [REDACTED]", control.event.getPayload().get("authorization"));
+        assertFalse(control.event.getPayload().toString().contains("task-secret"));
+        assertEquals("# Report\nTOKEN=[REDACTED]", control.complete.getFinalResponse());
         assertEquals("runtime-chart-1", control.artifactUpload.getManifest().getArtifactId());
         assertFalse(Files.exists(temporaryDirectory.resolve("runtime/run-run-1-attempt-1")));
     }
@@ -146,7 +154,7 @@ class ExternalRuntimeClaimExecutorTest {
 
         assertFalse(runner.isAlive());
         assertNotNull(control.cancelAck);
-        assertEquals(3L, control.cancelAck.getExpectedLeaseRevision());
+        assertEquals(4L, control.cancelAck.getExpectedLeaseRevision());
         assertEquals(1L, control.cancelAck.getSequence());
     }
 
@@ -170,7 +178,7 @@ class ExternalRuntimeClaimExecutorTest {
 
         assertEquals("exit 17", control.fail.getFailureReason());
         assertTrue(control.fail.getOutcomeUnknown());
-        assertEquals(2L, control.fail.getExpectedLeaseRevision());
+        assertEquals(3L, control.fail.getExpectedLeaseRevision());
     }
 
     @Test
@@ -228,7 +236,7 @@ class ExternalRuntimeClaimExecutorTest {
         assertNull(control.fail);
         assertEquals(AgentRuntimeEventTypeEnum.ERROR, control.event.getEventType());
         assertEquals(Boolean.TRUE, control.event.getPayload().get("recoverable"));
-        assertEquals(3L, control.complete.getExpectedLeaseRevision());
+        assertEquals(4L, control.complete.getExpectedLeaseRevision());
     }
 
     @Test
@@ -270,7 +278,36 @@ class ExternalRuntimeClaimExecutorTest {
         assertEquals("runtime-approval-1", control.approvalAck.getApprovalId());
         assertEquals(2L, control.approvalAck.getExpectedApprovalRevision());
         assertEquals("approved result", control.complete.getFinalResponse());
-        assertEquals(5L, control.complete.getExpectedLeaseRevision());
+        assertEquals(6L, control.complete.getExpectedLeaseRevision());
+    }
+
+    @Test
+    void suspendsLeaseInsteadOfCompletingWhenSqlApprovalContinuationExists() {
+        FakeControlPlane control = new FakeControlPlane();
+        control.sqlContinuationOnRenew.set(true);
+        ExternalProviderAdapter adapter = new ExternalProviderAdapter() {
+            @Override public AgentRuntimeProviderEnum provider() { return AgentRuntimeProviderEnum.CODEX; }
+
+            @Override
+            public ProviderExecutionResult execute(ProviderExecutionRequest request, ProviderEventSink events,
+                                                   ProviderLifecycleSink lifecycle) {
+                lifecycle.started("thread-awaiting-sql");
+                ProviderExecutionResult result = new ProviderExecutionResult();
+                result.setFinalResponse("SQL approval required");
+                return result;
+            }
+
+            @Override public void cancel(String runId) { }
+        };
+
+        executor(control, adapter, new TaskWorkspaceManager(
+                temporaryDirectory.resolve("sql-approval-runtime").toAbsolutePath()))
+                .execute(claim(60_000L), Map.of());
+
+        assertNotNull(control.suspend);
+        assertEquals(3L, control.suspend.getExpectedLeaseRevision());
+        assertNull(control.complete);
+        assertNull(control.fail);
     }
 
     @Test
@@ -361,6 +398,7 @@ class ExternalRuntimeClaimExecutorTest {
         private final AtomicInteger renewFailures = new AtomicInteger();
         private final AtomicInteger renewCalls = new AtomicInteger();
         private final AtomicBoolean rejectArtifact = new AtomicBoolean();
+        private final AtomicBoolean sqlContinuationOnRenew = new AtomicBoolean();
         private AgentRuntimeRunStartedRequest started;
         private AgentRuntimeEventRequest event;
         private AgentRuntimeRunCompleteRequest complete;
@@ -369,6 +407,7 @@ class ExternalRuntimeClaimExecutorTest {
         private AgentRuntimeApprovalRequest approvalRequest;
         private AgentRuntimeApprovalAckRequest approvalAck;
         private AgentRuntimeArtifactUploadRequest artifactUpload;
+        private AgentRuntimeRunSuspendRequest suspend;
 
         private FakeControlPlane() {
             super(URI.create("http://127.0.0.1:10825/"), "daemon-secret");
@@ -388,7 +427,13 @@ class ExternalRuntimeClaimExecutorTest {
             if (renewFailures.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
                 throw new ControlPlaneException("control plane restarting");
             }
-            return status(++revision, cancelOnRenew.get());
+            AgentRuntimeLeaseStatus status = status(++revision, cancelOnRenew.get());
+            if (sqlContinuationOnRenew.get()) {
+                status.setRunStatus(AgentRunStatusEnum.WAITING_APPROVAL);
+                status.setApprovalDecisionPending(true);
+                status.setSqlContinuationAvailable(true);
+            }
+            return status;
         }
 
         @Override
@@ -455,6 +500,17 @@ class ExternalRuntimeClaimExecutorTest {
                                                         AgentRuntimeRunCancelAckRequest request) {
             cancelAck = request;
             return new AgentRuntimeRunTerminalResult();
+        }
+
+        @Override
+        public AgentRuntimeLeaseStatus suspendForSqlApproval(String runId, String leaseToken,
+                                                              AgentRuntimeRunSuspendRequest request) {
+            suspend = request;
+            AgentRuntimeLeaseStatus status = status(++revision, false);
+            status.setRunStatus(AgentRunStatusEnum.WAITING_APPROVAL);
+            status.setSqlContinuationAvailable(true);
+            status.setState(ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum.SUSPENDED);
+            return status;
         }
 
         private AgentRuntimeLeaseStatus status(long value, boolean cancelRequested) {

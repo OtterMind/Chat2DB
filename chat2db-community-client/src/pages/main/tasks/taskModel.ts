@@ -240,12 +240,15 @@ export function buildToolActivities(events: AgentRunEvent[]): AgentToolActivity[
   return rows;
 }
 
+export type TaskBoardColumnKey = 'backlog' | 'active' | 'approval' | 'review' | 'complete';
+
 export const TASK_BOARD_COLUMNS: Array<{
-  key: string;
+  key: TaskBoardColumnKey;
   statuses: AgentTaskStatus[];
 }> = [
   { key: 'backlog', statuses: ['BACKLOG', 'TODO'] },
   { key: 'active', statuses: ['IN_PROGRESS', 'BLOCKED'] },
+  { key: 'approval', statuses: ['WAITING_APPROVAL'] },
   { key: 'review', statuses: ['IN_REVIEW'] },
   { key: 'complete', statuses: ['DONE', 'CANCELLED'] },
 ];
@@ -253,12 +256,20 @@ export const TASK_BOARD_COLUMNS: Array<{
 export const TASK_TRANSITIONS: Record<AgentTaskStatus, AgentTaskStatus[]> = {
   BACKLOG: ['TODO', 'CANCELLED'],
   TODO: ['IN_PROGRESS', 'CANCELLED'],
-  IN_PROGRESS: ['IN_REVIEW', 'BLOCKED', 'CANCELLED'],
+  IN_PROGRESS: ['WAITING_APPROVAL', 'IN_REVIEW', 'BLOCKED', 'CANCELLED'],
+  WAITING_APPROVAL: ['IN_PROGRESS', 'BLOCKED', 'CANCELLED'],
   IN_REVIEW: ['IN_PROGRESS', 'DONE', 'BLOCKED', 'CANCELLED'],
   BLOCKED: ['IN_PROGRESS', 'CANCELLED'],
   DONE: [],
   CANCELLED: [],
 };
+
+export function taskPriorityLevel(priority?: number): 0 | 10 | 20 | 30 {
+  if (!priority || priority <= 0) return 0;
+  if (priority < 20) return 10;
+  if (priority < 30) return 20;
+  return 30;
+}
 
 export function groupTasks(tasks: AgentTask[]) {
   return TASK_BOARD_COLUMNS.map((column) => ({

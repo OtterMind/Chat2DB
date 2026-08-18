@@ -38,4 +38,11 @@ public class AiToolContextRequest {
     private List<AgentDataScope> agentDataScopes;
 
     private String agentRunId;
+
+    /**
+     * Keep an Agent SQL tool call open while its approval is pending. External
+     * Runtime MCP calls enable this so the provider receives the approved SQL
+     * result in the original tool call and can continue the same turn.
+     */
+    private Boolean waitForApprovalDecision;
 }

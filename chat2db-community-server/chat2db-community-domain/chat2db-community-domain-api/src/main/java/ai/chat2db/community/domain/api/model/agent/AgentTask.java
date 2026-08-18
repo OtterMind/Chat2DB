@@ -33,6 +33,12 @@ public class AgentTask {
 
     private String originMessageId;
 
+    private String originScheduleId;
+
+    private String originScheduleExecutionId;
+
+    private Date plannedAt;
+
     private List<AgentDataScope> dataScopeSnapshot = new ArrayList<>();
 
     private Date dataScopeSyncedAt;

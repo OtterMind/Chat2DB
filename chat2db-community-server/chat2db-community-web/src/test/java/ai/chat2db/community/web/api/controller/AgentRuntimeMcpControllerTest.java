@@ -95,6 +95,7 @@ class AgentRuntimeMcpControllerTest {
                 body.path("result").path("content").get(0).path("text").asText());
         assertEquals("run-1", captured.get().getAiToolContextRequest().getAgentRunId());
         assertEquals(List.of(dataScope), captured.get().getAiToolContextRequest().getAgentDataScopes());
+        assertFalse(captured.get().getAiToolContextRequest().getWaitForApprovalDecision());
         assertEquals(42L, captured.get().getDataSourceId());
         assertEquals("analytics", captured.get().getDatabaseName());
     }

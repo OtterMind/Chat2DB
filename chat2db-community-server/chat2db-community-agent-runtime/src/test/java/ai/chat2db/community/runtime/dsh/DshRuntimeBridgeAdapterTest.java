@@ -137,8 +137,14 @@ class DshRuntimeBridgeAdapterTest {
         assertEquals("task-secret", environment.get().get("CHAT2DB_AGENT_TASK_TOKEN"));
         assertEquals("/fake/dsh", requests.get(0).path("params").path("executable").asText());
         assertTrue(requests.get(1).path("params").path("prompt").asText().contains("Immutable Context"));
+        assertTrue(requests.get(1).path("params").path("prompt").asText()
+                .contains("mcp__chat2db_task_tools__"));
+        assertTrue(requests.get(1).path("params").path("prompt").asText()
+                .contains("never use bash, curl"));
         String patch = Files.readString(workspace.resolve(".chat2db-dsh-mcp.patch.yml"));
+        assertTrue(patch.startsWith("- insert:\n    - id: chat2db-mcp-0\n"));
         assertTrue(patch.contains("@deepseek-ai/dsh-mcp-client"));
+        assertTrue(patch.contains("toolCallTimeoutMs: 2147000000"));
         assertTrue(patch.contains("process.env.CHAT2DB_AGENT_TASK_TOKEN"));
         assertFalse(patch.contains("task-secret"));
     }

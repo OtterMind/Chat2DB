@@ -63,6 +63,49 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow: auto;
     padding: 14px 16px 18px;
   `,
+  taskFilters: css`
+    display: grid;
+    grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 0.8fr) minmax(220px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadiusLG}px;
+    background: ${token.colorBgContainer};
+    @media (max-width: 900px) {
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width: 560px) {
+      grid-template-columns: 1fr;
+    }
+  `,
+  agentIdentity: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: middle;
+    > span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `,
+  agentFilterTag: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 150px;
+    vertical-align: middle;
+    > span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `,
   board: css`
     display: flex;
     gap: 10px;
@@ -1090,6 +1133,17 @@ export const useStyles = createStyles(({ css, token }) => ({
       white-space: nowrap;
     }
   `,
+  scopeSnapshotHint: css`
+    margin: 2px 0 5px;
+    color: ${token.colorTextTertiary};
+    font-size: 10px;
+    line-height: 1.5;
+  `,
+  scopeApprovalTag: css`
+    width: fit-content;
+    margin-top: 5px;
+    font-size: 10px;
+  `,
   mutedText: css`
     color: ${token.colorTextQuaternary};
     font-size: 11px;
@@ -1268,7 +1322,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     gap: 8px;
     > div {
       display: grid;
-      grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 1fr) auto;
+      grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 1fr) auto auto;
       gap: 10px;
       align-items: center;
       padding: 9px 10px;
@@ -1528,14 +1582,62 @@ export const useStyles = createStyles(({ css, token }) => ({
   capabilityGrid: css`
     display: grid;
     grid-template-columns: 1fr;
-    gap: 4px;
+    gap: 3px;
     .ant-checkbox-wrapper {
+      display: flex;
+      align-items: flex-start;
       margin-inline-start: 0;
       padding: 7px 8px;
       border-radius: ${token.borderRadius}px;
       &:hover {
         background: ${token.colorFillQuaternary};
       }
+    }
+  `,
+  capabilityLabel: css`
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+    code {
+      color: ${token.colorText};
+      font-family: ${token.fontFamilyCode};
+      font-size: 11px;
+      font-weight: 600;
+    }
+    small {
+      color: ${token.colorTextTertiary};
+      font-size: 10px;
+      line-height: 1.45;
+    }
+  `,
+  outputContractEditor: css`
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    > .ant-form-item {
+      margin-bottom: 0;
+    }
+  `,
+  outputRequirementList: css`
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  `,
+  outputRequirementRow: css`
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px 32px;
+    align-items: start;
+    gap: 6px;
+    .ant-form-item {
+      margin-bottom: 0;
+    }
+    .ant-input-number,
+    .ant-input-number-group-wrapper {
+      width: 100%;
+    }
+    @media (max-width: 480px) {
+      grid-template-columns: minmax(0, 1fr) 105px 32px;
     }
   `,
   studioFooter: css`

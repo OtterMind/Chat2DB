@@ -13,6 +13,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.model.request.agent.AgentApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentArtifactPublishRequest;
@@ -319,7 +320,8 @@ public class AgentControlController {
         request.setApprovalId(approvalId);
         request.setDecidedBy(identityService.currentUserId());
         AgentApproval decided = toolGateway.decide(request);
-        if (decided.getDecision() == AgentApprovalDecisionEnum.APPROVE) {
+        if (decided.getDecision() == AgentApprovalDecisionEnum.APPROVE
+                && run.getRuntimeType() != AgentRuntimeTypeEnum.EXTERNAL_AGENT) {
             AgentSqlProposal proposal = toolGateway.listProposals(run.getId()).stream()
                     .filter(candidate -> Objects.equals(candidate.getId(), decided.getProposalId()))
                     .findFirst()

@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApprovalResult;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeArtifactManifest;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeArtifactResult;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeEventAccepted;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeLeaseStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeRunClaim;
@@ -16,6 +17,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCancel
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeArtifactUploadRequest;
@@ -35,6 +37,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,6 +135,7 @@ public class ExternalRuntimeClaimExecutor {
             request.setWorkingDirectory(workspace);
             request.setMcpEndpoints(resolveMcpEndpoints(claim));
             request.setApprovalHandler(lease::approval);
+            request.setApprovalWaitingSupplier(lease::waitingForApproval);
             LinkedHashMap<String, String> executionEnvironment = new LinkedHashMap<>(resolvedEnvironment);
             executionEnvironment.put(TASK_TOKEN_ENV, claim.getTaskScopedToken());
             request.setEnvironment(Map.copyOf(executionEnvironment));
@@ -156,6 +160,8 @@ public class ExternalRuntimeClaimExecutor {
             Throwable renewalFailure = fatalLeaseFailure.get();
             if (renewalFailure != null) {
                 lease.fail("Runtime lease coordination failed: " + safeMessage(renewalFailure), true);
+            } else if (lease.shouldSuspendForSqlApproval()) {
+                lease.suspendForSqlApproval();
             } else {
                 List<AgentRuntimeArtifactManifest> artifacts = new java.util.ArrayList<>(
                         result.getArtifacts() == null ? List.of() : result.getArtifacts());
@@ -175,7 +181,9 @@ public class ExternalRuntimeClaimExecutor {
             }
         } catch (ProviderExecutionException failure) {
             stopRenewer(renewer);
-            if (lease.cancelRequested.get() && failure.getFailureKind() == ProviderFailureKind.CANCELLED) {
+            if (lease.shouldSuspendForSqlApproval()) {
+                lease.suspendForSqlApproval();
+            } else if (lease.cancelRequested.get() && failure.getFailureKind() == ProviderFailureKind.CANCELLED) {
                 lease.cancelAck();
             } else {
                 boolean outcomeUnknown = failure.getFailureKind() == ProviderFailureKind.PROCESS_EXIT
@@ -184,7 +192,11 @@ public class ExternalRuntimeClaimExecutor {
             }
         } catch (RuntimeException failure) {
             stopRenewer(renewer);
-            lease.fail(safeMessage(failure), fatalLeaseFailure.get() != null);
+            if (lease.shouldSuspendForSqlApproval()) {
+                lease.suspendForSqlApproval();
+            } else {
+                lease.fail(safeMessage(failure), fatalLeaseFailure.get() != null);
+            }
         } finally {
             stopRenewer(renewer);
             processRegistry.unregister(daemonId, claim.getRunId(), claim.getLeaseAttempt());
@@ -202,11 +214,14 @@ public class ExternalRuntimeClaimExecutor {
     }
 
     private long renewalInterval(AgentRuntimeRunClaim claim) {
-        if (claim.getLeaseExpiresAt() == null) {
-            return 15_000L;
+        long leaseInterval = claim.getLeaseExpiresAt() == null
+                ? 15_000L : Math.max(250L,
+                Math.min(20_000L, (claim.getLeaseExpiresAt().getTime() - clock.millis()) / 3L));
+        Integer timeoutSeconds = claim.getRuntimeProfile().getTimeoutSeconds();
+        if (timeoutSeconds == null || timeoutSeconds <= 0) {
+            return leaseInterval;
         }
-        long remaining = claim.getLeaseExpiresAt().getTime() - clock.millis();
-        return Math.max(1_000L, Math.min(20_000L, remaining / 3L));
+        return Math.max(250L, Math.min(leaseInterval, timeoutSeconds * 250L));
     }
 
     private void stopRenewer(ScheduledExecutorService renewer) {
@@ -261,6 +276,9 @@ public class ExternalRuntimeClaimExecutor {
     private final class LeaseCoordinator {
         private final AgentRuntimeRunClaim claim;
         private final AtomicBoolean cancelRequested = new AtomicBoolean();
+        private final AtomicBoolean approvalDecisionPending = new AtomicBoolean();
+        private final AtomicBoolean sqlContinuationAvailable = new AtomicBoolean();
+        private final AtomicReference<AgentRunStatusEnum> runStatus = new AtomicReference<>();
         private long revision;
         private long sequence;
         private long leaseExpiresAtMillis;
@@ -297,8 +315,8 @@ public class ExternalRuntimeClaimExecutor {
             request.setSequence(++sequence);
             request.setEventId(event.getEventId());
             request.setEventType(event.getType());
-            request.setContent(event.getContent());
-            request.setPayload(event.getPayload());
+            request.setContent(redact(event.getContent()));
+            request.setPayload(redactMap(event.getPayload()));
             request.setOccurredAt(event.getOccurredAt() == null ? now() : event.getOccurredAt());
             AgentRuntimeEventAccepted accepted = controlPlane.event(
                     claim.getRunId(), claim.getLeaseToken(), request);
@@ -315,8 +333,8 @@ public class ExternalRuntimeClaimExecutor {
                 leaseIdentity(request);
                 request.setProviderRequestId(providerRequest.getProviderRequestId());
                 request.setToolCallId(providerRequest.getToolCallId());
-                request.setTitle(providerRequest.getTitle());
-                request.setRequestPayload(providerRequest.getPayload());
+                request.setTitle(redact(providerRequest.getTitle()));
+                request.setRequestPayload(redactMap(providerRequest.getPayload()));
                 request.setAllowOptionId(providerRequest.getAllowOptionId());
                 request.setRejectOptionId(providerRequest.getRejectOptionId());
                 AgentRuntimeApprovalResult result = controlPlane.requestApproval(
@@ -409,14 +427,14 @@ public class ExternalRuntimeClaimExecutor {
         private synchronized void complete(String finalResponse) {
             AgentRuntimeRunCompleteRequest request = new AgentRuntimeRunCompleteRequest();
             terminalIdentity(request);
-            request.setFinalResponse(finalResponse);
+            request.setFinalResponse(redact(finalResponse));
             controlPlane.complete(claim.getRunId(), claim.getLeaseToken(), request);
         }
 
         private synchronized void fail(String reason, boolean outcomeUnknown) {
             AgentRuntimeRunFailRequest request = new AgentRuntimeRunFailRequest();
             terminalIdentity(request);
-            request.setFailureReason(reason);
+            request.setFailureReason(redact(reason));
             request.setOutcomeUnknown(outcomeUnknown);
             controlPlane.fail(claim.getRunId(), claim.getLeaseToken(), request);
         }
@@ -427,11 +445,66 @@ public class ExternalRuntimeClaimExecutor {
             controlPlane.cancelAck(claim.getRunId(), claim.getLeaseToken(), request);
         }
 
+        private synchronized void suspendForSqlApproval() {
+            AgentRuntimeRunSuspendRequest request = new AgentRuntimeRunSuspendRequest();
+            terminalIdentity(request);
+            update(controlPlane.suspendForSqlApproval(
+                    claim.getRunId(), claim.getLeaseToken(), request));
+        }
+
+        private boolean shouldSuspendForSqlApproval() {
+            try {
+                synchronized (this) {
+                    if (!expired()) {
+                        renew();
+                    }
+                }
+            } catch (ControlPlaneException ignored) {
+                // Use the last acknowledged status while the lease is still
+                // valid. The terminal/suspend call remains revision-fenced.
+            }
+            return runStatus.get() == AgentRunStatusEnum.WAITING_APPROVAL
+                    && sqlContinuationAvailable.get();
+        }
+
         private void terminalIdentity(ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunTerminalRequest request) {
             leaseIdentity(request);
             request.setSequence(++sequence);
             request.setEventId("daemon-terminal-" + UUID.randomUUID());
             request.setOccurredAt(now());
+        }
+
+        private String redact(String value) {
+            if (value == null || StringUtils.isBlank(claim.getTaskScopedToken())) {
+                return value;
+            }
+            return value.replace(claim.getTaskScopedToken(), "[REDACTED]");
+        }
+
+        private Map<String, Object> redactMap(Map<String, Object> values) {
+            if (values == null || values.isEmpty()) {
+                return values;
+            }
+            LinkedHashMap<String, Object> redacted = new LinkedHashMap<>();
+            values.forEach((key, value) -> redacted.put(key, redactValue(value)));
+            return redacted;
+        }
+
+        private Object redactValue(Object value) {
+            if (value instanceof String text) {
+                return redact(text);
+            }
+            if (value instanceof Map<?, ?> map) {
+                LinkedHashMap<String, Object> redacted = new LinkedHashMap<>();
+                map.forEach((key, item) -> redacted.put(redact(String.valueOf(key)), redactValue(item)));
+                return redacted;
+            }
+            if (value instanceof Iterable<?> iterable) {
+                ArrayList<Object> redacted = new ArrayList<>();
+                iterable.forEach(item -> redacted.add(redactValue(item)));
+                return redacted;
+            }
+            return value;
         }
 
         private void leaseIdentity(AgentRuntimeLeaseRenewRequest request) {
@@ -448,6 +521,15 @@ public class ExternalRuntimeClaimExecutor {
             if (status.getLeaseExpiresAt() != null) {
                 leaseExpiresAtMillis = status.getLeaseExpiresAt().getTime();
             }
+            if (status.getRunStatus() != null) {
+                runStatus.set(status.getRunStatus());
+            }
+            approvalDecisionPending.set(Boolean.TRUE.equals(status.getApprovalDecisionPending()));
+            sqlContinuationAvailable.set(Boolean.TRUE.equals(status.getSqlContinuationAvailable()));
+        }
+
+        private boolean waitingForApproval() {
+            return approvalDecisionPending.get();
         }
 
         private synchronized boolean expired() {

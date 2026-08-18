@@ -17,8 +17,9 @@ import agentService, {
   type AgentTaskDetail,
   type AgentTaskStatus,
 } from '@/service/agent';
+import connectionService from '@/service/connection';
 import { getDashboardList } from '@/service/dashboard';
-import type { IChartItem, IDashboardItem } from '@/typings';
+import type { IChartItem, IConnectionDetails, IDashboardItem } from '@/typings';
 import feedback from '@/utils/feedback';
 import {
   Alert,
@@ -43,10 +44,12 @@ import dayjs from 'dayjs';
 import {
   ArrowLeft,
   Archive,
+  CalendarClock,
   ChevronRight,
   CircleCheck,
   CircleDot,
   CircleEllipsis,
+  CircleHelp,
   CirclePause,
   ExternalLink,
   FileBarChart,
@@ -59,6 +62,7 @@ import {
   Plus,
   RefreshCw,
   Rows3,
+  Search,
   Send,
   Settings2,
   ShieldCheck,
@@ -79,7 +83,10 @@ import {
   currentArtifactVersion,
   extractAgentChartPresentation,
   groupTasks,
+  taskPriorityLevel,
+  TASK_BOARD_COLUMNS,
   TASK_TRANSITIONS,
+  type TaskBoardColumnKey,
   upsertTask,
 } from './taskModel';
 import {
@@ -89,7 +96,12 @@ import {
 } from './taskNavigation';
 import { useStyles } from './style';
 import AgentManagerModal from './AgentManagerModal';
-import { AgentAvatar, RunStatusMark, RuntimeBadge } from './TaskPrimitives';
+import ApprovalModeTag from './ApprovalModeTag';
+import TaskSchedulePage from './TaskSchedulePage';
+import { AgentAvatar, AgentIdentity, RunStatusMark, RuntimeBadge } from './TaskPrimitives';
+import { parseTaskScheduleRoute, taskScheduleRoutePath } from './taskScheduleModel';
+import { dataSourceDisplayName } from './taskDataSource';
+import { filterTasks } from './taskFilters';
 
 type ViewMode = 'board' | 'list';
 
@@ -97,6 +109,7 @@ const statusColor: Record<AgentTaskStatus, string> = {
   BACKLOG: 'default',
   TODO: 'blue',
   IN_PROGRESS: 'processing',
+  WAITING_APPROVAL: 'warning',
   IN_REVIEW: 'purple',
   BLOCKED: 'error',
   DONE: 'success',
@@ -106,9 +119,14 @@ const statusColor: Record<AgentTaskStatus, string> = {
 const boardColumnIcon = {
   backlog: CircleEllipsis,
   active: CircleDot,
+  approval: CircleHelp,
   review: CirclePause,
   complete: CircleCheck,
 };
+
+function priorityLabel(priority?: number) {
+  return i18n(`task.priority.${taskPriorityLevel(priority)}` as Parameters<typeof i18n>[0]);
+}
 
 function statusLabel(status: string) {
   const key = `task.status.${status.toLowerCase()}` as Parameters<typeof i18n>[0];
@@ -117,6 +135,20 @@ function statusLabel(status: string) {
 
 function formatTime(value?: string | number) {
   return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : i18n('task.value.none');
+}
+
+function currentTaskRoutePath() {
+  return window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
+}
+
+function pushTaskRoute(path: string) {
+  const url = new URL(window.location.href);
+  if (url.hash) {
+    url.hash = path;
+  } else {
+    url.pathname = path;
+  }
+  window.history.pushState({}, '', url.toString());
 }
 
 function buildChartDetail(chartJson: Record<string, unknown>): IChartItem {
@@ -177,7 +209,7 @@ function TaskCard({ task, agent, onOpen }: { task: AgentTask; agent?: AgentDefin
         </div>
         <span className={styles.priorityMark}>
           <Flag size={11} />
-          {task.priority}
+          {priorityLabel(task.priority)}
         </span>
       </div>
     </button>
@@ -187,11 +219,12 @@ function TaskCard({ task, agent, onOpen }: { task: AgentTask; agent?: AgentDefin
 interface ArtifactViewProps {
   detail: AgentArtifactDetail;
   publications: AgentTaskDetail['dashboardPublications'];
+  dataSources: IConnectionDetails[];
   onPublish: (artifact: AgentArtifactDetail, chartIndex: number) => void;
   hasStructuredChartArtifact: boolean;
 }
 
-function ArtifactView({ detail, publications, onPublish, hasStructuredChartArtifact }: ArtifactViewProps) {
+function ArtifactView({ detail, publications, dataSources, onPublish, hasStructuredChartArtifact }: ArtifactViewProps) {
   const { styles } = useStyles();
   const version = currentArtifactVersion(detail);
   const chartPresentation = extractAgentChartPresentation(artifactMarkdown(detail));
@@ -272,7 +305,15 @@ function ArtifactView({ detail, publications, onPublish, hasStructuredChartArtif
                 size="small"
                 column={2}
                 items={[
-                  { key: 'datasource', label: i18n('task.evidence.datasource'), children: evidence.dataSourceId },
+                  {
+                    key: 'datasource',
+                    label: i18n('task.evidence.datasource'),
+                    children: dataSourceDisplayName(
+                      evidence.dataSourceId,
+                      dataSources,
+                      i18n('task.scope.datasourceUnavailable', evidence.dataSourceId),
+                    ),
+                  },
                   {
                     key: 'scope',
                     label: i18n('task.evidence.scope'),
@@ -325,15 +366,20 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<AgentTask[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
+  const [dataSources, setDataSources] = useState<IConnectionDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [taskTitleFilter, setTaskTitleFilter] = useState('');
+  const [taskAgentFilter, setTaskAgentFilter] = useState<string[]>([]);
+  const [taskStatusFilter, setTaskStatusFilter] = useState<TaskBoardColumnKey[]>([]);
   const [archiveView, setArchiveView] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [detail, setDetail] = useState<AgentTaskDetail>();
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRequestTaskId = useRef<string>();
   const [createOpen, setCreateOpen] = useState(false);
+  const [scheduleRoute, setScheduleRoute] = useState(() => parseTaskScheduleRoute(currentTaskRoutePath()));
   const [agentManagerOpen, setAgentManagerOpen] = useState(false);
   const [publishTarget, setPublishTarget] = useState<{ artifact: AgentArtifactDetail; chartIndex: number }>();
   const [dashboards, setDashboards] = useState<IDashboardItem[]>([]);
@@ -348,7 +394,21 @@ export default function Tasks() {
   const [pastRunsOpen, setPastRunsOpen] = useState(false);
 
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
-  const groupedTasks = useMemo(() => groupTasks(tasks), [tasks]);
+  const filteredTasks = useMemo(
+    () => filterTasks(tasks, {
+      title: taskTitleFilter,
+      agentIds: taskAgentFilter,
+      boardColumns: taskStatusFilter,
+    }),
+    [taskAgentFilter, taskStatusFilter, taskTitleFilter, tasks],
+  );
+  const groupedTasks = useMemo(() => groupTasks(filteredTasks), [filteredTasks]);
+  const hasTaskFilters = Boolean(taskTitleFilter.trim() || taskAgentFilter.length || taskStatusFilter.length);
+  const clearTaskFilters = () => {
+    setTaskTitleFilter('');
+    setTaskAgentFilter([]);
+    setTaskStatusFilter([]);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -394,6 +454,12 @@ export default function Tasks() {
   }, [load]);
 
   useEffect(() => {
+    void connectionService.getList({ pageNo: 1, pageSize: 500 })
+      .then((result) => setDataSources(result.data || []))
+      .catch(() => setDataSources([]));
+  }, []);
+
+  useEffect(() => {
     const handleTaskCreated = (event: Event) => {
       const created = (event as CustomEvent<AgentTaskDetail>).detail;
       if (!created?.task) return;
@@ -405,8 +471,25 @@ export default function Tasks() {
   }, []);
 
   useEffect(() => {
-    const routePath = window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
+    const routePath = currentTaskRoutePath();
     const path = routePath.split('/');
+    const nextScheduleRoute = parseTaskScheduleRoute(routePath);
+    if (nextScheduleRoute.open) {
+      if (
+        !scheduleRoute.open
+        || scheduleRoute.createMode !== nextScheduleRoute.createMode
+        || scheduleRoute.scheduleId !== nextScheduleRoute.scheduleId
+      ) {
+        setScheduleRoute(nextScheduleRoute);
+      }
+      if (archiveView) setArchiveView(false);
+      if (selectedTaskId) {
+        setSelectedTaskId(undefined);
+        setDetail(undefined);
+      }
+      return;
+    }
+    if (scheduleRoute.open) setScheduleRoute(nextScheduleRoute);
     if (path[1] === 'tasks' && path[2] === 'archive') {
       if (!archiveView) setArchiveView(true);
       if (selectedTaskId) {
@@ -435,20 +518,29 @@ export default function Tasks() {
     if (path[1] === 'tasks' && !path[2] && archiveView) setArchiveView(false);
   });
 
+  const openSchedules = useCallback((scheduleId?: string) => {
+    const path = taskScheduleRoutePath(scheduleId);
+    setScheduleRoute(parseTaskScheduleRoute(path));
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    setArchiveView(false);
+    pushTaskRoute(path);
+  }, []);
+
+  const closeSchedules = useCallback(() => {
+    setScheduleRoute({ open: false, createMode: false });
+    pushTaskRoute('/tasks');
+  }, []);
+
   const openTask = useCallback(
     (taskId: string, initialDetail?: AgentTaskDetail) => {
+      setScheduleRoute({ open: false, createMode: false });
       setSelectedTaskId(taskId);
       if (initialDetail) {
         setDetail(initialDetail);
         setDetailLoading(false);
       }
-      const url = new URL(window.location.href);
-      if (url.hash) {
-        url.hash = `/tasks/${taskId}`;
-      } else {
-        url.pathname = `/tasks/${taskId}`;
-      }
-      window.history.pushState({}, '', url.toString());
+      pushTaskRoute(`/tasks/${taskId}`);
       if (!initialDetail) {
         void loadDetail(taskId);
       }
@@ -459,27 +551,16 @@ export default function Tasks() {
   const closeTask = useCallback(() => {
     setSelectedTaskId(undefined);
     setDetail(undefined);
-    const url = new URL(window.location.href);
-    if (url.hash) {
-      url.hash = '/tasks';
-    } else {
-      url.pathname = '/tasks';
-    }
-    window.history.pushState({}, '', url.toString());
+    pushTaskRoute('/tasks');
   }, []);
 
   const openArchive = useCallback((open: boolean) => {
     setArchiveView(open);
+    setScheduleRoute({ open: false, createMode: false });
     setSelectedTaskId(undefined);
     setDetail(undefined);
-    const url = new URL(window.location.href);
     const path = open ? '/tasks/archive' : '/tasks';
-    if (url.hash) {
-      url.hash = path;
-    } else {
-      url.pathname = path;
-    }
-    window.history.pushState({}, '', url.toString());
+    pushTaskRoute(path);
   }, []);
 
   const openOriginConversation = useCallback(async () => {
@@ -811,7 +892,13 @@ export default function Tasks() {
                     <div className={styles.scopeList}>
                       {detail.task.dataScopeSnapshot.map((scope, index) => (
                         <div className={styles.scope} key={`${scope.dataSourceId}-${index}`}>
-                          <strong>{i18n('task.scope.datasource', scope.dataSourceId)}</strong>
+                          <strong>
+                            {dataSourceDisplayName(
+                              scope.dataSourceId,
+                              dataSources,
+                              i18n('task.scope.datasourceUnavailable', scope.dataSourceId),
+                            )}
+                          </strong>
                           <div>
                             {[scope.databaseName, scope.schemaName].filter(Boolean).join(' / ') ||
                               i18n('task.scope.all')}
@@ -821,6 +908,7 @@ export default function Tasks() {
                               ? i18n('task.scope.tableCount', scope.tableNames.length)
                               : i18n('task.scope.namespaceWide')}
                           </div>
+                          <ApprovalModeTag mode={scope.approvalMode} />
                         </div>
                       ))}
                     </div>
@@ -856,7 +944,7 @@ export default function Tasks() {
                     )}
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.field.priority')}</span>
-                      <span>{detail.task.priority}</span>
+                      <span>{priorityLabel(detail.task.priority)}</span>
                     </div>
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.field.origin')}</span>
@@ -897,6 +985,7 @@ export default function Tasks() {
                     key={artifact.artifact.id}
                     detail={artifact}
                     publications={detail.dashboardPublications}
+                    dataSources={dataSources}
                     onPublish={openPublish}
                     hasStructuredChartArtifact={detail.artifacts.some(
                       (item) => item.artifact.createdByRunId === artifact.artifact.createdByRunId
@@ -1062,7 +1151,18 @@ export default function Tasks() {
 
   return (
     <div className={styles.container}>
-      {selectedTaskId ? (
+      {scheduleRoute.open ? (
+        <TaskSchedulePage
+          agents={agents}
+          dataSources={dataSources}
+          scheduleId={scheduleRoute.scheduleId}
+          createMode={scheduleRoute.createMode}
+          onBack={closeSchedules}
+          onCreate={() => openSchedules()}
+          onSelectSchedule={openSchedules}
+          onOpenTask={openTask}
+        />
+      ) : selectedTaskId ? (
         <>
           <header className={styles.detailPageHeader}>
             <Button type="text" icon={<ArrowLeft size={16} />} onClick={closeTask}>
@@ -1127,6 +1227,7 @@ export default function Tasks() {
                             key={artifact.artifact.id}
                             detail={artifact}
                             publications={detail.dashboardPublications}
+                            dataSources={dataSources}
                             onPublish={openPublish}
                             hasStructuredChartArtifact={detail.artifacts.some(
                               (item) => item.artifact.createdByRunId === artifact.artifact.createdByRunId
@@ -1342,8 +1443,28 @@ export default function Tasks() {
                       <span>{i18n('task.agent.runtime')}</span>
                       <RuntimeBadge agent={selectedAgent} run={currentRun} />
                     </div>
-                    <div className={styles.propertyRow}><span>{i18n('task.field.priority')}</span><span>{detail.task.priority}</span></div>
-                    <div className={styles.propertyRow}><span>{i18n('task.field.origin')}</span><span>{detail.task.originType}</span></div>
+                    <div className={styles.propertyRow}>
+                      <span>{i18n('task.field.priority')}</span>
+                      <span>{priorityLabel(detail.task.priority)}</span>
+                    </div>
+                    <div className={styles.propertyRow}>
+                      <span>{i18n('task.field.origin')}</span>
+                      {detail.task.originType === 'SCHEDULE' ? (
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => openSchedules(detail.task.originScheduleId)}
+                        >
+                          {i18n('task.schedule.origin')}
+                        </Button>
+                      ) : <span>{detail.task.originType}</span>}
+                    </div>
+                    {detail.task.plannedAt && (
+                      <div className={styles.propertyRow}>
+                        <span>{i18n('task.schedule.plannedAt')}</span>
+                        <span>{formatTime(detail.task.plannedAt)}</span>
+                      </div>
+                    )}
                   </div>
                   <div className={styles.inspectorSection}>
                     <button
@@ -1397,17 +1518,30 @@ export default function Tasks() {
                         </Tag>
                       ) : null}
                     </div>
+                    <div className={styles.scopeSnapshotHint}>
+                      {i18n('task.scope.effectiveSnapshotHint')}
+                    </div>
                     {detail.task.dataScopeSnapshot.length ? (
                       <>
                         {detail.task.dataScopeSnapshot.map((scope, index) => (
                           <div className={styles.inspectorScope} key={`${scope.dataSourceId}-${index}`}>
                             <ShieldCheck size={13} />
                             <div>
-                              <strong>{i18n('task.scope.datasource', scope.dataSourceId)}</strong>
+                              <strong>
+                                {dataSourceDisplayName(
+                                  scope.dataSourceId,
+                                  dataSources,
+                                  i18n('task.scope.datasourceUnavailable', scope.dataSourceId),
+                                )}
+                              </strong>
                               <span>
                                 {[scope.databaseName, scope.schemaName].filter(Boolean).join(' / ')
                                   || i18n('task.scope.all')}
                               </span>
+                              <ApprovalModeTag
+                                mode={scope.approvalMode}
+                                className={styles.scopeApprovalTag}
+                              />
                             </div>
                           </div>
                         ))}
@@ -1451,7 +1585,13 @@ export default function Tasks() {
               <h1 className={styles.title}>
                 {archiveView ? i18n('task.archive.records') : i18n('task.title')}
               </h1>
-              <span className={styles.count}>{archiveView ? archivedTasks.length : tasks.length}</span>
+              <span className={styles.count}>
+                {archiveView
+                  ? archivedTasks.length
+                  : hasTaskFilters
+                    ? i18n('task.filter.resultCount', filteredTasks.length, tasks.length)
+                    : tasks.length}
+              </span>
             </div>
             <p>{archiveView ? i18n('task.archive.hint') : i18n('task.board.hint')}</p>
           </div>
@@ -1477,6 +1617,9 @@ export default function Tasks() {
           <Tooltip title={i18n('task.action.refresh')}>
             <Button icon={<RefreshCw size={15} />} onClick={() => void load()} />
           </Tooltip>
+          <Button icon={<CalendarClock size={15} />} onClick={() => openSchedules()}>
+            {i18n('task.schedule.title')}
+          </Button>
           <Button icon={<Settings2 size={15} />} onClick={() => setAgentManagerOpen(true)}>
             {i18n('task.agent.manage')}
           </Button>
@@ -1487,6 +1630,63 @@ export default function Tasks() {
           </header>
 
           <main className={styles.content}>
+        {!archiveView && (
+          <div className={styles.taskFilters} role="search" aria-label={i18n('task.filter.title')}>
+            <Input
+              allowClear
+              value={taskTitleFilter}
+              prefix={<Search size={14} aria-hidden="true" />}
+              placeholder={i18n('task.filter.titlePlaceholder')}
+              onChange={(event) => setTaskTitleFilter(event.target.value)}
+            />
+            <Select
+              mode="multiple"
+              maxTagCount="responsive"
+              showSearch
+              optionFilterProp="label"
+              value={taskAgentFilter}
+              placeholder={i18n('task.filter.agentPlaceholder')}
+              options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              onChange={setTaskAgentFilter}
+              optionRender={(option) => {
+                const agent = agentById.get(String(option.value));
+                return <AgentIdentity agent={agent} fallback={option.label} />;
+              }}
+              tagRender={({ value, label, closable, onClose }) => (
+                <Tag
+                  bordered={false}
+                  closable={closable}
+                  onClose={onClose}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                >
+                  <span className={styles.agentFilterTag}>
+                    <AgentAvatar agent={agentById.get(String(value))} size={17} />
+                    <span>{label}</span>
+                  </span>
+                </Tag>
+              )}
+            />
+            <Select
+              mode="multiple"
+              maxTagCount="responsive"
+              value={taskStatusFilter}
+              placeholder={i18n('task.filter.statusPlaceholder')}
+              options={TASK_BOARD_COLUMNS.map((column) => ({
+                value: column.key,
+                label: i18n(`task.column.${column.key}` as Parameters<typeof i18n>[0]),
+              }))}
+              onChange={setTaskStatusFilter}
+            />
+            {hasTaskFilters && (
+              <Button type="text" onClick={clearTaskFilters}>
+                {i18n('task.filter.clear')}
+              </Button>
+            )}
+          </div>
+        )}
         {archiveView ? (
           archivedTasks.length ? (
             <Table
@@ -1527,6 +1727,10 @@ export default function Tasks() {
               {i18n('task.create.first')}
             </Button>
           </Empty>
+        ) : !filteredTasks.length ? (
+          <Empty description={i18n('task.filter.empty')}>
+            <Button onClick={clearTaskFilters}>{i18n('task.filter.clear')}</Button>
+          </Empty>
         ) : viewMode === 'board' ? (
           <div className={styles.board}>
             {groupedTasks.map((group) => (
@@ -1562,7 +1766,7 @@ export default function Tasks() {
           <Table
             rowKey="id"
             size="middle"
-            dataSource={tasks}
+            dataSource={filteredTasks}
             onRow={(task) => ({ onClick: () => openTask(task.id), style: { cursor: 'pointer' } })}
             columns={[
               { title: i18n('task.field.title'), dataIndex: 'title' },
@@ -1621,7 +1825,15 @@ export default function Tasks() {
             <Form.Item name="assigneeAgentId" label={null} rules={[{ required: true }]}>
               <Select
                 style={{ minWidth: 180 }}
+                showSearch
+                optionFilterProp="label"
                 options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+                optionRender={(option) => (
+                  <AgentIdentity agent={agentById.get(String(option.value))} fallback={option.label} />
+                )}
+                labelRender={({ value, label }) => (
+                  <AgentIdentity agent={agentById.get(String(value))} fallback={label} />
+                )}
                 onChange={(agentId) => {
                   const nextAgent = agentById.get(agentId);
                   createForm.setFieldValue('scopeIndexes', (nextAgent?.dataScopes || []).map((_, index) => index));
@@ -1648,7 +1860,13 @@ export default function Tasks() {
                     mode="multiple"
                     options={(formAgent?.dataScopes || []).map((scope, index) => ({
                       value: index,
-                      label: `${scope.dataSourceId} / ${scope.databaseName || '*'} / ${scope.schemaName || '*'}`,
+                      label: `${dataSourceDisplayName(
+                        scope.dataSourceId,
+                        dataSources,
+                        i18n('task.scope.datasourceUnavailable', scope.dataSourceId),
+                      )} / ${scope.databaseName || '*'} / ${scope.schemaName || '*'} · ${i18n(
+                        'task.scope.approvalShort', scope.approvalMode || 'RISK_BASED',
+                      )}`,
                     }))}
                     placeholder={i18n('task.scope.selectPlaceholder')}
                   />

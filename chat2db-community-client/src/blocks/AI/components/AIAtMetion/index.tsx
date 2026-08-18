@@ -74,9 +74,8 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
     return (
       <Flex align="center" gap={4} justify="space-between">
         <Flex align="center" gap={4} className={styles.optionTitle}>
-          {/* {node.icon} */}
           {node.kind === 'AGENT' ? (
-            <Bot size={16} />
+            node.icon || <Bot size={16} />
           ) : (
             <IconfontSvg
               size="md"

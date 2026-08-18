@@ -9,11 +9,14 @@ import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactContentModeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifact;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactEvidence;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactVersion;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
@@ -47,6 +50,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunClaimR
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalAckRequest;
@@ -170,7 +174,11 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         startRequest.setTask(task);
         startRequest.setAgent(agent);
         startRequest.setCurrentInput(currentUserInput(run, task.getId()));
-        startRequest.setAssembledContext(contextAssembler.assemble(agent, task, taskService.listRuns(task.getId())));
+        String assembledContext = contextAssembler.assemble(agent, task, taskService.listRuns(task.getId()));
+        if (lease.getLeaseAttempt() > 1) {
+            assembledContext += sqlApprovalContinuation(run.getId());
+        }
+        startRequest.setAssembledContext(assembledContext);
 
         AgentRuntimeRunClaim claim = new AgentRuntimeRunClaim();
         claim.setRunId(run.getId());
@@ -405,6 +413,8 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         AgentRuntimeApproval persisted = runtimeStorage.createOrGetRuntimeApproval(approval);
         requireMatchingApprovalRequest(persisted, approval);
         moveRunTo(runId, AgentRunStatusEnum.WAITING_APPROVAL);
+        moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.IN_PROGRESS,
+                AgentTaskStatusEnum.WAITING_APPROVAL);
         return approvalResult(persisted, runtimeStorage.getRuntimeRunLease(runId));
     }
 
@@ -429,6 +439,9 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
                 .anyMatch(candidate -> candidate.getStatus() == AgentRuntimeApprovalStatusEnum.PENDING);
         if (!hasAnotherPendingApproval) {
             moveRunTo(runId, AgentRunStatusEnum.RUNNING);
+            AgentRun run = runService.get(runId);
+            moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                    AgentTaskStatusEnum.IN_PROGRESS);
         }
         return approvalResult(approval, runtimeStorage.getRuntimeRunLease(runId));
     }
@@ -553,6 +566,51 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
     }
 
     @Override
+    public AgentRuntimeLeaseStatus suspendForSqlApproval(String runId, String leaseToken,
+                                                         AgentRuntimeRunSuspendRequest request) {
+        validateTerminalRequest(request);
+        AgentRuntimeRunLease lease = requireLeaseIdentity(runId, leaseToken, request);
+        if (lease.getState() != AgentRuntimeLeaseStateEnum.ACTIVE) {
+            if (lease.getState() != AgentRuntimeLeaseStateEnum.SUSPENDED
+                    || !externalEventId(lease.getLeaseAttempt(), request.getEventId())
+                    .equals(lease.getTerminalEventId())) {
+                throw new IllegalStateException("runtime run already has a different lease outcome: " + runId);
+            }
+            return status(lease);
+        }
+        if (now().after(lease.getLeaseExpiresAt())) {
+            throw new IllegalStateException("runtime run lease has expired");
+        }
+        requireExpectedLeaseRevision(lease, request.getExpectedLeaseRevision());
+        AgentRun run = runService.get(runId);
+        if (run.getStatus() != AgentRunStatusEnum.WAITING_APPROVAL || !hasSqlContinuation(runId)) {
+            throw new IllegalStateException("runtime run has no resumable SQL approval continuation");
+        }
+        AgentRunStatusEnum target = hasDecidedSqlContinuation(runId)
+                ? AgentRunStatusEnum.QUEUED : AgentRunStatusEnum.WAITING_APPROVAL;
+        AgentRunEvent event = new AgentRunEvent();
+        event.setEventId(externalEventId(lease.getLeaseAttempt(), request.getEventId()));
+        event.setRunId(runId);
+        event.setRuntimeAttempt(lease.getLeaseAttempt());
+        event.setRuntimeSequence(request.getSequence());
+        event.setType(AgentRuntimeEventTypeEnum.STATUS);
+        event.setContent(target.name());
+        event.setPayload(Map.of(
+                "status", target.name(),
+                "reason", "SQL_APPROVAL_CONTINUATION_SUSPENDED",
+                "runtimeAttempt", lease.getLeaseAttempt()));
+        event.setOccurredAt(request.getOccurredAt());
+        event.setPersistedAt(now());
+        AgentRuntimeRunLease suspended = runtimeStorage.suspendRuntimeRun(
+                lease, event, target, now(), request.getExpectedLeaseRevision(), run.getRevision());
+        if (target == AgentRunStatusEnum.QUEUED) {
+            moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                    AgentTaskStatusEnum.IN_PROGRESS);
+        }
+        return status(suspended);
+    }
+
+    @Override
     public AgentRun requestCancellation(String runId) {
         AgentRun run = runService.get(runId);
         if (terminal(run.getStatus())) {
@@ -566,7 +624,9 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
             transition.setRunId(runId);
             transition.setExpectedRevision(run.getRevision());
             transition.setTargetStatus(AgentRunStatusEnum.CANCELLED);
-            return runService.transition(transition);
+            AgentRun cancelled = runService.transition(transition);
+            syncTerminalTask(cancelled);
+            return cancelled;
         }
         AgentRuntimeRunLease lease = runtimeStorage.requestRuntimeRunCancellation(runId, now());
         if (lease == null || lease.getState() != AgentRuntimeLeaseStateEnum.ACTIVE) {
@@ -577,7 +637,17 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
 
     @Override
     public int reconcileExpiredLeases(int limit) {
-        return runtimeStorage.reconcileExpiredRuntimeRuns(now(), limit).size();
+        List<String> reconciledRunIds = runtimeStorage.reconcileExpiredRuntimeRuns(now(), limit);
+        reconciledRunIds.forEach(runId -> {
+            AgentRun run = runService.get(runId);
+            if (run.getStatus() == AgentRunStatusEnum.QUEUED) {
+                moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.WAITING_APPROVAL,
+                        AgentTaskStatusEnum.IN_PROGRESS);
+            } else {
+                syncTerminalTask(run);
+            }
+        });
+        return reconciledRunIds.size();
     }
 
     private AgentRuntimeRunTerminalResult finish(String runId, String leaseToken,
@@ -589,7 +659,9 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         String eventId = externalEventId(lease.getLeaseAttempt(), request.getEventId());
         if (lease.getState() != AgentRuntimeLeaseStateEnum.ACTIVE) {
             requireMatchingTerminalAcknowledgement(lease, targetStatus, eventId);
-            return terminalResult(runService.get(runId), lease);
+            AgentRun terminalRun = runService.get(runId);
+            syncTerminalTask(terminalRun);
+            return terminalResult(terminalRun, lease);
         }
         if (now().after(lease.getLeaseExpiresAt())) {
             throw new IllegalStateException("runtime run lease has expired");
@@ -624,7 +696,9 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         AgentRuntimeRunLease finished = runtimeStorage.finishRuntimeRun(
                 lease, event, targetStatus, failureReason, truncateSummary(resultSummary), now(),
                 request.getExpectedLeaseRevision(), run.getRevision());
-        return terminalResult(runService.get(runId), finished);
+        AgentRun terminalRun = runService.get(runId);
+        syncTerminalTask(terminalRun);
+        return terminalResult(terminalRun, finished);
     }
 
     private void validateTerminalRequest(AgentRuntimeRunTerminalRequest request) {
@@ -1149,6 +1223,18 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         runService.transition(transition);
     }
 
+    private void moveTaskTo(String taskId, AgentTaskStatusEnum expected, AgentTaskStatusEnum target) {
+        AgentTask task = taskService.get(taskId);
+        if (task.getStatus() != expected) {
+            return;
+        }
+        AgentTaskTransitionRequest transition = new AgentTaskTransitionRequest();
+        transition.setTaskId(taskId);
+        transition.setExpectedRevision(task.getRevision());
+        transition.setTargetStatus(target);
+        taskService.transition(transition);
+    }
+
     private AgentRuntimeApprovalResult approvalResult(AgentRuntimeApproval approval,
                                                       AgentRuntimeRunLease lease) {
         AgentRuntimeApprovalResult result = new AgentRuntimeApprovalResult();
@@ -1185,9 +1271,129 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         status.setLeaseRevision(lease.getRevision());
         status.setLeaseExpiresAt(lease.getLeaseExpiresAt());
         status.setCancelRequested(lease.getCancelRequestedAt() != null);
+        AgentRun run = runService.get(lease.getRunId());
+        status.setRunStatus(run.getStatus());
+        ApprovalContinuationState continuation = run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL
+                ? approvalContinuationState(run.getId()) : new ApprovalContinuationState(false, false);
+        status.setApprovalDecisionPending(continuation.approvalDecisionPending());
+        status.setSqlContinuationAvailable(continuation.sqlContinuationAvailable());
         status.setState(lease.getState());
         status.setReleasedAt(lease.getReleasedAt());
         return status;
+    }
+
+    private ApprovalContinuationState approvalContinuationState(String runId) {
+        List<AgentSqlProposal> activeProposals = agentStorage.listSqlProposals(runId).stream()
+                .filter(proposal -> proposal.getStatus() == AgentSqlProposalStatusEnum.ACTIVE)
+                .toList();
+        Set<String> activeProposalIds = activeProposals.stream()
+                .map(AgentSqlProposal::getId).collect(java.util.stream.Collectors.toSet());
+        List<AgentApproval> sqlApprovals = agentStorage.listApprovals(runId).stream()
+                .filter(approval -> activeProposalIds.contains(approval.getProposalId()))
+                .toList();
+        boolean sqlDecisionPending = sqlApprovals.stream()
+                .anyMatch(approval -> approval.getStatus() == AgentApprovalStatusEnum.PENDING);
+        boolean sqlContinuationAvailable = sqlApprovals.stream().anyMatch(approval ->
+                approval.getStatus() == AgentApprovalStatusEnum.PENDING
+                        || approval.getStatus() == AgentApprovalStatusEnum.APPROVED
+                        || approval.getStatus() == AgentApprovalStatusEnum.REJECTED);
+        boolean runtimeDecisionPending = runtimeStorage.listRuntimeApprovals(runId).stream()
+                .anyMatch(approval -> approval.getStatus() == AgentRuntimeApprovalStatusEnum.PENDING);
+        return new ApprovalContinuationState(
+                sqlDecisionPending || runtimeDecisionPending, sqlContinuationAvailable);
+    }
+
+    private boolean hasSqlContinuation(String runId) {
+        return approvalContinuationState(runId).sqlContinuationAvailable();
+    }
+
+    private boolean hasDecidedSqlContinuation(String runId) {
+        Set<String> activeProposalIds = agentStorage.listSqlProposals(runId).stream()
+                .filter(proposal -> proposal.getStatus() == AgentSqlProposalStatusEnum.ACTIVE)
+                .map(AgentSqlProposal::getId).collect(java.util.stream.Collectors.toSet());
+        return agentStorage.listApprovals(runId).stream().anyMatch(approval ->
+                activeProposalIds.contains(approval.getProposalId())
+                        && (approval.getStatus() == AgentApprovalStatusEnum.APPROVED
+                        || approval.getStatus() == AgentApprovalStatusEnum.REJECTED));
+    }
+
+    private String sqlApprovalContinuation(String runId) {
+        Map<String, AgentSqlProposal> proposals = agentStorage.listSqlProposals(runId).stream()
+                .filter(proposal -> proposal.getStatus() == AgentSqlProposalStatusEnum.ACTIVE)
+                .collect(java.util.stream.Collectors.toMap(AgentSqlProposal::getId, proposal -> proposal));
+        List<AgentApproval> decisions = agentStorage.listApprovals(runId).stream()
+                .filter(approval -> approval.getStatus() == AgentApprovalStatusEnum.APPROVED
+                        || approval.getStatus() == AgentApprovalStatusEnum.REJECTED)
+                .filter(approval -> proposals.containsKey(approval.getProposalId()))
+                .toList();
+        if (decisions.isEmpty()) {
+            return "";
+        }
+        StringBuilder context = new StringBuilder("\n\n## SQL Approval Continuation\n")
+                .append("Continue this same Run using the user's persisted SQL approval decision.\n");
+        for (AgentApproval decision : decisions) {
+            AgentSqlProposal proposal = proposals.get(decision.getProposalId());
+            context.append("- decision=").append(decision.getStatus());
+            context.append(", datasourceId=").append(proposal.getDataSourceId());
+            if (StringUtils.isNotBlank(proposal.getDatabaseName())) {
+                context.append(", database=").append(proposal.getDatabaseName());
+            }
+            if (StringUtils.isNotBlank(proposal.getSchemaName())) {
+                context.append(", schema=").append(proposal.getSchemaName());
+            }
+            context.append("\n```sql\n").append(proposal.getSqlSnapshot()).append("\n```\n");
+            if (decision.getStatus() == AgentApprovalStatusEnum.APPROVED) {
+                context.append("Call execute_sql with this exact SQL and target. Chat2DB will execute it ")
+                        .append("idempotently or replay its saved result; do not request approval again.\n");
+            } else {
+                context.append("The user rejected this SQL. Do not execute it; explain the outcome or choose a safe alternative.\n");
+            }
+        }
+        return context.toString();
+    }
+
+    private record ApprovalContinuationState(boolean approvalDecisionPending,
+                                             boolean sqlContinuationAvailable) {
+    }
+
+    private void syncTerminalTask(AgentRun run) {
+        if (run == null) {
+            return;
+        }
+        AgentTaskStatusEnum target = switch (run.getStatus()) {
+            case FAILED, UNKNOWN -> AgentTaskStatusEnum.BLOCKED;
+            case CANCELLED -> AgentTaskStatusEnum.CANCELLED;
+            default -> null;
+        };
+        if (target == null) {
+            return;
+        }
+        for (int attempt = 0; attempt < 2; attempt++) {
+            AgentTask task = taskService.get(run.getTaskId());
+            if (task.getStatus() == target || task.getStatus() == AgentTaskStatusEnum.DONE
+                    || task.getStatus() == AgentTaskStatusEnum.CANCELLED) {
+                return;
+            }
+            if (target == AgentTaskStatusEnum.BLOCKED
+                    && task.getStatus() != AgentTaskStatusEnum.TODO
+                    && task.getStatus() != AgentTaskStatusEnum.IN_PROGRESS
+                    && task.getStatus() != AgentTaskStatusEnum.WAITING_APPROVAL
+                    && task.getStatus() != AgentTaskStatusEnum.IN_REVIEW) {
+                return;
+            }
+            AgentTaskTransitionRequest transition = new AgentTaskTransitionRequest();
+            transition.setTaskId(task.getId());
+            transition.setExpectedRevision(task.getRevision());
+            transition.setTargetStatus(target);
+            try {
+                taskService.transition(transition);
+                return;
+            } catch (ConcurrentModificationException conflict) {
+                if (attempt == 1) {
+                    throw conflict;
+                }
+            }
+        }
     }
 
     private AgentRuntimeRunLease copyLease(AgentRuntimeRunLease source) {

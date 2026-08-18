@@ -110,6 +110,7 @@ class CodexAppServerAdapterTest {
         assertEquals("http://127.0.0.1:10825/api/agent/runtime/mcp/runs/run-1",
                 mcp.path("url").asText());
         assertEquals("CHAT2DB_AGENT_TASK_TOKEN", mcp.path("bearer_token_env_var").asText());
+        assertEquals(2_147_000, mcp.path("tool_timeout_sec").asInt());
         JsonNode turnParams = requests.get(3).path("params");
         assertTrue(turnParams.path("input").get(0).path("text").asText().contains("Immutable Context"));
         assertFalse(turnParams.path("input").get(0).path("text").asText().contains("password"));

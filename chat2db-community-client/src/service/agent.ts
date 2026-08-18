@@ -2,7 +2,7 @@ import createRequest from './base';
 import type { IChatAttachment } from './aiAttachment';
 import type { IChatMessage } from './aiStream';
 
-export type AgentTaskStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'BLOCKED' | 'DONE' | 'CANCELLED';
+export type AgentTaskStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'WAITING_APPROVAL' | 'IN_REVIEW' | 'BLOCKED' | 'DONE' | 'CANCELLED';
 
 export type AgentRunStatus =
   | 'QUEUED'
@@ -70,9 +70,12 @@ export interface AgentTask {
   status: AgentTaskStatus;
   priority: number;
   assigneeAgentId: string;
-  originType: 'CHAT' | 'BOARD' | 'CONSOLE' | 'API';
+  originType: 'CHAT' | 'BOARD' | 'CONSOLE' | 'API' | 'SCHEDULE';
   originSessionId?: string;
   originMessageId?: string;
+  originScheduleId?: string;
+  originScheduleExecutionId?: string;
+  plannedAt?: string | number;
   dataScopeSnapshot: AgentDataScope[];
   dataScopeSyncedAt?: string | number;
   dataScopeSyncedFromAgentRevision?: number;
@@ -82,6 +85,76 @@ export interface AgentTask {
   completedAt?: string | number;
   archivedAt?: string | number;
   revision: number;
+}
+
+export type AgentTaskScheduleType = 'ONCE' | 'CRON';
+export type AgentTaskScheduleStatus = 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+export type AgentTaskScheduleExecutionStatus = 'CLAIMED' | 'TASK_CREATED' | 'DISPATCHED' | 'SKIPPED' | 'FAILED';
+
+export interface AgentTaskSchedule {
+  id: string;
+  name: string;
+  taskTitle: string;
+  taskDescription?: string;
+  acceptanceCriteria?: string;
+  assigneeAgentId: string;
+  priority: number;
+  dataScopeSnapshot: AgentDataScope[];
+  scheduleType: AgentTaskScheduleType;
+  scheduledAt?: string | number;
+  cronExpression?: string;
+  timezone: string;
+  status: AgentTaskScheduleStatus;
+  concurrencyPolicy: 'SKIP';
+  catchUpPolicy: 'LATEST_ONLY';
+  nextRunAt?: string | number;
+  lastRunAt?: string | number;
+  createdBy: number;
+  gmtCreate: string | number;
+  gmtModified: string | number;
+  revision: number;
+}
+
+export interface AgentTaskScheduleExecution {
+  id: string;
+  scheduleId: string;
+  source: 'SCHEDULE' | 'MANUAL';
+  plannedAt: string | number;
+  status: AgentTaskScheduleExecutionStatus;
+  taskId?: string;
+  runId?: string;
+  attempt: number;
+  reasonCode?: string;
+  failureReason?: string;
+  taskLinkState?: 'AVAILABLE' | 'ARCHIVED' | 'DELETED';
+  taskStatus?: AgentTaskStatus;
+  runStatus?: AgentRunStatus;
+  runFailureReason?: string;
+  resultSummary?: string;
+  gmtCreate: string | number;
+  gmtModified: string | number;
+  revision: number;
+}
+
+export interface AgentTaskScheduleDetail {
+  schedule: AgentTaskSchedule;
+  executions: AgentTaskScheduleExecution[];
+}
+
+export interface SaveAgentTaskScheduleRequest {
+  scheduleId?: string;
+  expectedRevision?: number;
+  name: string;
+  taskTitle: string;
+  taskDescription?: string;
+  acceptanceCriteria?: string;
+  assigneeAgentId: string;
+  priority: number;
+  dataScopeSnapshot: AgentDataScope[];
+  scheduleType: AgentTaskScheduleType;
+  scheduledAt?: string;
+  cronExpression?: string;
+  timezone: string;
 }
 
 export interface AgentRun {
@@ -282,6 +355,32 @@ const createTaskFromChat = createRequest<CreateAgentChatTaskRequest, AgentChatTa
   '/api/agent/tasks/from-chat',
   { method: 'post' },
 );
+const listTaskSchedules = createRequest<void, AgentTaskSchedule[]>('/api/agent/task-schedules');
+const getTaskSchedule = createRequest<{ scheduleId: string }, AgentTaskScheduleDetail>(
+  '/api/agent/task-schedules/:scheduleId',
+);
+const createTaskSchedule = createRequest<SaveAgentTaskScheduleRequest, AgentTaskScheduleDetail>(
+  '/api/agent/task-schedules', { method: 'post' },
+);
+const updateTaskSchedule = createRequest<SaveAgentTaskScheduleRequest, AgentTaskScheduleDetail>(
+  '/api/agent/task-schedules/:scheduleId', { method: 'post' },
+);
+const previewTaskSchedule = createRequest<
+  { expression: string; timezone: string },
+  { nextRuns: Array<string | number> }
+>('/api/agent/task-schedules/cron-preview');
+const pauseTaskSchedule = createRequest<{ scheduleId: string; expectedRevision: number }, AgentTaskSchedule>(
+  '/api/agent/task-schedules/:scheduleId/pause', { method: 'post' },
+);
+const resumeTaskSchedule = createRequest<{ scheduleId: string; expectedRevision: number }, AgentTaskSchedule>(
+  '/api/agent/task-schedules/:scheduleId/resume', { method: 'post' },
+);
+const archiveTaskSchedule = createRequest<{ scheduleId: string; expectedRevision: number }, AgentTaskSchedule>(
+  '/api/agent/task-schedules/:scheduleId/archive', { method: 'post' },
+);
+const runTaskScheduleNow = createRequest<{ scheduleId: string }, AgentTaskScheduleExecution>(
+  '/api/agent/task-schedules/:scheduleId/run-now', { method: 'post' },
+);
 const transitionTask = createRequest<
   { taskId: string; expectedRevision: number; targetStatus: AgentTaskStatus },
   AgentTask
@@ -341,6 +440,15 @@ export default {
   getTask,
   createTask,
   createTaskFromChat,
+  listTaskSchedules,
+  getTaskSchedule,
+  createTaskSchedule,
+  updateTaskSchedule,
+  previewTaskSchedule,
+  pauseTaskSchedule,
+  resumeTaskSchedule,
+  archiveTaskSchedule,
+  runTaskScheduleNow,
   transitionTask,
   syncTaskScopes,
   archiveTask,

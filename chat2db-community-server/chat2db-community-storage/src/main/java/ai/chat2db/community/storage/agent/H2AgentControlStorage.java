@@ -17,6 +17,14 @@ import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskLinkStateEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleCatchUpPolicyEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleConcurrencyPolicyEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleExecutionSourceEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleExecutionStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleReasonCodeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskScheduleTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeInstanceStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
@@ -39,6 +47,9 @@ import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
+import ai.chat2db.community.domain.api.model.agent.AgentTaskSchedule;
+import ai.chat2db.community.domain.api.model.agent.AgentTaskScheduleClaim;
+import ai.chat2db.community.domain.api.model.agent.AgentTaskScheduleExecution;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeInstance;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeProfile;
@@ -51,6 +62,7 @@ import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import ai.chat2db.community.domain.api.service.storage.IAgentGatewayStorage;
 import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
+import ai.chat2db.community.domain.api.service.storage.IAgentTaskScheduleStorage;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
@@ -73,9 +85,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Component
-public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntimeControlStorage, IAgentGatewayStorage {
+public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntimeControlStorage,
+        IAgentGatewayStorage, IAgentTaskScheduleStorage {
 
     private static final String MIGRATION_LOCATION = "classpath:db/agent/migration";
     private static final String DATABASE_NAME = "chat2db-agent";
@@ -846,6 +860,109 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
     }
 
     @Override
+    public AgentRuntimeRunLease suspendRuntimeRun(AgentRuntimeRunLease lease, AgentRunEvent suspendEvent,
+                                                  AgentRunStatusEnum targetRunStatus, Date suspendedAt,
+                                                  long expectedLeaseRevision, long expectedRunRevision) {
+        if (targetRunStatus != AgentRunStatusEnum.WAITING_APPROVAL
+                && targetRunStatus != AgentRunStatusEnum.QUEUED) {
+            throw new IllegalArgumentException("approval suspension target must remain waiting or become queued");
+        }
+        String leaseSql = """
+                UPDATE agent_runtime_run_lease
+                SET last_event_sequence = ?, lease_state = 'SUSPENDED', released_at = ?, terminal_event_id = ?,
+                    revision = revision + 1
+                WHERE run_id = ? AND runtime_instance_id = ? AND lease_attempt = ?
+                  AND revision = ? AND lease_state = 'ACTIVE' AND last_event_sequence = ?
+                  AND lease_expires_at >= ?
+                """;
+        String runSql = """
+                UPDATE agent_run
+                SET status = ?, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ? AND status = 'WAITING_APPROVAL'
+                """;
+        String releaseSlotSql = """
+                UPDATE agent_runtime_instance
+                SET active_runs = CASE WHEN active_runs > 0 THEN active_runs - 1 ELSE 0 END,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ?
+                """;
+        String expireRuntimeApprovalsSql = """
+                UPDATE agent_runtime_approval
+                SET status = 'EXPIRED', reason = 'Provider suspended for SQL approval continuation',
+                    revision = revision + 1
+                WHERE run_id = ? AND status = 'PENDING'
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                AgentRuntimeRunLease current = queryRuntimeRunLease(connection, lease.getRunId());
+                if (current == null) {
+                    throw new IllegalStateException("runtime run lease not found: " + lease.getRunId());
+                }
+                if (current.getState() != AgentRuntimeLeaseStateEnum.ACTIVE) {
+                    if (current.getState() != AgentRuntimeLeaseStateEnum.SUSPENDED
+                            || !Objects.equals(current.getTerminalEventId(), suspendEvent.getEventId())) {
+                        throw new IllegalStateException(
+                                "runtime run already has a different lease outcome: " + lease.getRunId());
+                    }
+                    connection.commit();
+                    return current;
+                }
+                try (PreparedStatement statement = connection.prepareStatement(leaseSql)) {
+                    statement.setLong(1, suspendEvent.getRuntimeSequence());
+                    statement.setLong(2, suspendedAt.getTime());
+                    statement.setString(3, suspendEvent.getEventId());
+                    statement.setString(4, lease.getRunId());
+                    statement.setString(5, lease.getRuntimeInstanceId());
+                    statement.setInt(6, lease.getLeaseAttempt());
+                    statement.setLong(7, expectedLeaseRevision);
+                    statement.setLong(8, suspendEvent.getRuntimeSequence() - 1);
+                    statement.setLong(9, suspendedAt.getTime());
+                    if (statement.executeUpdate() != 1) {
+                        throw new ConcurrentModificationException(
+                                "runtime run lease changed before approval suspension: " + lease.getRunId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(runSql)) {
+                    statement.setString(1, targetRunStatus.name());
+                    statement.setLong(2, suspendedAt.getTime());
+                    statement.setString(3, lease.getRunId());
+                    statement.setLong(4, expectedRunRevision);
+                    if (statement.executeUpdate() != 1) {
+                        throw new ConcurrentModificationException(
+                                "runtime run changed before approval suspension: " + lease.getRunId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(releaseSlotSql)) {
+                    statement.setLong(1, suspendedAt.getTime());
+                    statement.setString(2, lease.getRuntimeInstanceId());
+                    if (statement.executeUpdate() != 1) {
+                        throw new IllegalStateException(
+                                "runtime instance slot was not reserved: " + lease.getRuntimeInstanceId());
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement(expireRuntimeApprovalsSql)) {
+                    statement.setString(1, lease.getRunId());
+                    statement.executeUpdate();
+                }
+                insertRuntimeRunEvent(connection, suspendEvent);
+                connection.commit();
+                return getRuntimeRunLease(lease.getRunId());
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("suspend runtime run for SQL approval", exception);
+        }
+    }
+
+    @Override
     public List<String> reconcileExpiredRuntimeRuns(Date expiredAt, int limit) {
         if (limit <= 0) {
             throw new IllegalArgumentException("positive runtime reconciliation limit is required");
@@ -879,15 +996,413 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
     }
 
     @Override
+    public AgentTaskSchedule createSchedule(AgentTaskSchedule schedule) {
+        String sql = """
+                INSERT INTO agent_task_schedule (
+                    id, name, task_title, task_description, acceptance_criteria,
+                    assignee_agent_id, priority, data_scope_snapshot_json,
+                    schedule_type, scheduled_at, cron_expression, timezone, status,
+                    concurrency_policy, catch_up_policy, next_run_at, last_run_at,
+                    created_by, created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindSchedule(statement, schedule);
+            statement.executeUpdate();
+            return getSchedule(schedule.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("create agent task schedule", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskSchedule updateSchedule(AgentTaskSchedule schedule, long expectedRevision) {
+        String sql = """
+                UPDATE agent_task_schedule SET
+                    name = ?, task_title = ?, task_description = ?, acceptance_criteria = ?,
+                    assignee_agent_id = ?, priority = ?, data_scope_snapshot_json = ?,
+                    schedule_type = ?, scheduled_at = ?, cron_expression = ?, timezone = ?,
+                    status = ?, concurrency_policy = ?, catch_up_policy = ?,
+                    next_run_at = ?, last_run_at = ?, updated_at = ?, revision = ?
+                WHERE id = ? AND revision = ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, schedule.getName());
+            statement.setString(index++, schedule.getTaskTitle());
+            statement.setString(index++, schedule.getTaskDescription());
+            statement.setString(index++, schedule.getAcceptanceCriteria());
+            statement.setString(index++, schedule.getAssigneeAgentId());
+            statement.setInt(index++, schedule.getPriority());
+            statement.setString(index++, JSON.toJSONString(schedule.getDataScopeSnapshot()));
+            statement.setString(index++, schedule.getScheduleType().name());
+            setDate(statement, index++, schedule.getScheduledAt());
+            statement.setString(index++, schedule.getCronExpression());
+            statement.setString(index++, schedule.getTimezone());
+            statement.setString(index++, schedule.getStatus().name());
+            statement.setString(index++, schedule.getConcurrencyPolicy().name());
+            statement.setString(index++, schedule.getCatchUpPolicy().name());
+            setDate(statement, index++, schedule.getNextRunAt());
+            setDate(statement, index++, schedule.getLastRunAt());
+            statement.setLong(index++, schedule.getGmtModified().getTime());
+            statement.setLong(index++, schedule.getRevision());
+            statement.setString(index++, schedule.getId());
+            statement.setLong(index, expectedRevision);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("schedule revision has changed: " + schedule.getId());
+            }
+            return getSchedule(schedule.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update agent task schedule", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskSchedule getSchedule(String id) {
+        return querySchedule("SELECT * FROM agent_task_schedule WHERE id = ?", statement ->
+                statement.setString(1, id));
+    }
+
+    @Override
+    public List<AgentTaskSchedule> listSchedules(Long createdBy) {
+        String sql = """
+                SELECT * FROM agent_task_schedule
+                WHERE created_by = ? ORDER BY updated_at DESC, id ASC
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            setLong(statement, 1, createdBy);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentTaskSchedule> result = new ArrayList<>();
+                while (resultSet.next()) result.add(readSchedule(resultSet));
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list agent task schedules", exception);
+        }
+    }
+
+    @Override
+    public List<AgentTaskSchedule> listDueSchedules(Date dueAt, int limit) {
+        String sql = """
+                SELECT * FROM agent_task_schedule
+                WHERE status = 'ACTIVE' AND next_run_at IS NOT NULL AND next_run_at <= ?
+                ORDER BY next_run_at ASC, id ASC LIMIT ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, dueAt.getTime());
+            statement.setInt(2, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentTaskSchedule> result = new ArrayList<>();
+                while (resultSet.next()) result.add(readSchedule(resultSet));
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list due agent task schedules", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskScheduleClaim claimExecution(AgentTaskScheduleExecution execution, Date now) {
+        String insert = """
+                INSERT INTO agent_task_schedule_execution (
+                    id, schedule_id, source, planned_at, status, task_id, run_id,
+                    attempt, lease_token, lease_expires_at, reason_code, failure_reason,
+                    created_at, updated_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(insert)) {
+            bindScheduleExecution(statement, execution);
+            statement.executeUpdate();
+            return new AgentTaskScheduleClaim(getExecution(execution.getId()), true);
+        } catch (SQLException exception) {
+            if (!"23505".equals(exception.getSQLState())) {
+                throw storageFailure("claim agent task schedule execution", exception);
+            }
+        }
+
+        AgentTaskScheduleExecution existing = findExecution(
+                execution.getScheduleId(), execution.getPlannedAt(), execution.getSource());
+        if (existing == null || existing.getStatus() != AgentTaskScheduleExecutionStatusEnum.CLAIMED
+                || existing.getLeaseExpiresAt() == null || !existing.getLeaseExpiresAt().before(now)) {
+            return new AgentTaskScheduleClaim(existing, false);
+        }
+        String reclaim = """
+                UPDATE agent_task_schedule_execution SET attempt = attempt + 1,
+                    lease_token = ?, lease_expires_at = ?, updated_at = ?, revision = revision + 1,
+                    reason_code = NULL, failure_reason = NULL
+                WHERE id = ? AND revision = ? AND status = 'CLAIMED' AND lease_expires_at < ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(reclaim)) {
+            statement.setString(1, execution.getLeaseToken());
+            statement.setLong(2, execution.getLeaseExpiresAt().getTime());
+            statement.setLong(3, now.getTime());
+            statement.setString(4, existing.getId());
+            statement.setLong(5, existing.getRevision());
+            statement.setLong(6, now.getTime());
+            boolean claimed = statement.executeUpdate() == 1;
+            return new AgentTaskScheduleClaim(getExecution(existing.getId()), claimed);
+        } catch (SQLException exception) {
+            throw storageFailure("reclaim agent task schedule execution", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskScheduleExecution getExecution(String id) {
+        AgentTaskScheduleExecution execution = queryExecution(
+                "SELECT * FROM agent_task_schedule_execution WHERE id = ?", statement ->
+                        statement.setString(1, id));
+        resolveTaskLinkState(execution);
+        return execution;
+    }
+
+    @Override
+    public List<AgentTaskScheduleExecution> listExecutions(String scheduleId) {
+        String sql = """
+                SELECT * FROM agent_task_schedule_execution
+                WHERE schedule_id = ? ORDER BY planned_at DESC, id ASC
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, scheduleId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentTaskScheduleExecution> result = new ArrayList<>();
+                while (resultSet.next()) {
+                    AgentTaskScheduleExecution execution = readScheduleExecution(resultSet);
+                    resolveTaskLinkState(execution);
+                    result.add(execution);
+                }
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list agent task schedule executions", exception);
+        }
+    }
+
+    @Override
+    public List<AgentTaskScheduleExecution> listRecoverableExecutions(Date now, int limit) {
+        String sql = """
+                SELECT * FROM agent_task_schedule_execution
+                WHERE status = 'TASK_CREATED'
+                   OR (status = 'CLAIMED' AND lease_expires_at < ?)
+                ORDER BY updated_at ASC, id ASC LIMIT ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, now.getTime());
+            statement.setInt(2, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<AgentTaskScheduleExecution> result = new ArrayList<>();
+                while (resultSet.next()) result.add(readScheduleExecution(resultSet));
+                return result;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("list recoverable schedule executions", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskCreation createScheduledTask(AgentTaskSchedule schedule,
+                                                 AgentTaskScheduleExecution execution,
+                                                 AgentTask task, AgentRun run,
+                                                 Date nextRunAt, long expectedScheduleRevision,
+                                                 long expectedExecutionRevision, String leaseToken) {
+        String taskSql = """
+                INSERT INTO agent_task (
+                    id, title, description, acceptance_criteria, status, priority,
+                    assignee_agent_id, created_by, origin_type, origin_session_id,
+                    origin_message_id, origin_schedule_id, origin_schedule_execution_id, planned_at,
+                    data_scope_snapshot_json, data_scope_synced_at,
+                    data_scope_synced_from_agent_revision, current_run_id,
+                    created_at, updated_at, completed_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String runSql = """
+                INSERT INTO agent_run (
+                    id, task_id, agent_id, runtime_type, runtime_profile_id, runtime_provider,
+                    runtime_profile_snapshot, provider_session_id, trigger_type, status,
+                    attempt, parent_run_id, created_at, updated_at, started_at,
+                    completed_at, failure_reason, result_summary, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String executionSql = """
+                UPDATE agent_task_schedule_execution SET status = 'TASK_CREATED', task_id = ?, run_id = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ? AND lease_token = ? AND status = 'CLAIMED'
+                """;
+        String scheduleSql = """
+                UPDATE agent_task_schedule SET status = ?, next_run_at = ?, last_run_at = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ? AND status <> 'ARCHIVED'
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement taskStatement = connection.prepareStatement(taskSql);
+                 PreparedStatement runStatement = connection.prepareStatement(runSql);
+                 PreparedStatement executionStatement = connection.prepareStatement(executionSql);
+                 PreparedStatement scheduleStatement = connection.prepareStatement(scheduleSql)) {
+                bindTask(taskStatement, task);
+                taskStatement.executeUpdate();
+                bindRun(runStatement, run);
+                runStatement.executeUpdate();
+                executionStatement.setString(1, task.getId());
+                executionStatement.setString(2, run.getId());
+                executionStatement.setLong(3, task.getGmtCreate().getTime());
+                executionStatement.setString(4, execution.getId());
+                executionStatement.setLong(5, expectedExecutionRevision);
+                executionStatement.setString(6, leaseToken);
+                if (executionStatement.executeUpdate() != 1) {
+                    throw new ConcurrentModificationException("schedule execution lease changed: " + execution.getId());
+                }
+                scheduleStatement.setString(1, schedule.getStatus().name());
+                setDate(scheduleStatement, 2, nextRunAt);
+                scheduleStatement.setLong(3, execution.getPlannedAt().getTime());
+                scheduleStatement.setLong(4, task.getGmtCreate().getTime());
+                scheduleStatement.setString(5, schedule.getId());
+                scheduleStatement.setLong(6, expectedScheduleRevision);
+                if (scheduleStatement.executeUpdate() != 1) {
+                    throw new ConcurrentModificationException("schedule revision changed: " + schedule.getId());
+                }
+                connection.commit();
+                return new AgentTaskCreation(getTask(task.getId()), getRun(run.getId()));
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("create scheduled task", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskScheduleExecution finishExecutionWithoutTask(AgentTaskSchedule schedule,
+                                                                 AgentTaskScheduleExecution execution,
+                                                                 Date nextRunAt,
+                                                                 long expectedScheduleRevision,
+                                                                 long expectedExecutionRevision,
+                                                                 String leaseToken) {
+        String executionSql = """
+                UPDATE agent_task_schedule_execution SET status = ?, reason_code = ?, failure_reason = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ? AND lease_token = ? AND status = 'CLAIMED'
+                """;
+        String scheduleSql = """
+                UPDATE agent_task_schedule SET status = ?, next_run_at = ?, last_run_at = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ? AND status <> 'ARCHIVED'
+                """;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement executionStatement = connection.prepareStatement(executionSql);
+                 PreparedStatement scheduleStatement = connection.prepareStatement(scheduleSql)) {
+                executionStatement.setString(1, execution.getStatus().name());
+                executionStatement.setString(2, execution.getReasonCode() == null
+                        ? null : execution.getReasonCode().name());
+                executionStatement.setString(3, execution.getFailureReason());
+                executionStatement.setLong(4, execution.getGmtModified().getTime());
+                executionStatement.setString(5, execution.getId());
+                executionStatement.setLong(6, expectedExecutionRevision);
+                executionStatement.setString(7, leaseToken);
+                if (executionStatement.executeUpdate() != 1) {
+                    throw new ConcurrentModificationException("schedule execution lease changed: " + execution.getId());
+                }
+                scheduleStatement.setString(1, schedule.getStatus().name());
+                setDate(scheduleStatement, 2, nextRunAt);
+                scheduleStatement.setLong(3, execution.getPlannedAt().getTime());
+                scheduleStatement.setLong(4, execution.getGmtModified().getTime());
+                scheduleStatement.setString(5, schedule.getId());
+                scheduleStatement.setLong(6, expectedScheduleRevision);
+                if (scheduleStatement.executeUpdate() != 1) {
+                    throw new ConcurrentModificationException("schedule revision changed: " + schedule.getId());
+                }
+                connection.commit();
+                return getExecution(execution.getId());
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (RuntimeException exception) {
+                rollbackRuntime(connection, exception);
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("finish schedule execution without task", exception);
+        }
+    }
+
+    @Override
+    public AgentTaskScheduleExecution updateExecution(AgentTaskScheduleExecution execution,
+                                                      long expectedRevision, String leaseToken) {
+        String sql = """
+                UPDATE agent_task_schedule_execution SET status = ?, task_id = ?, run_id = ?,
+                    lease_expires_at = ?, reason_code = ?, failure_reason = ?,
+                    updated_at = ?, revision = ?
+                WHERE id = ? AND revision = ? AND (? IS NULL OR lease_token = ?)
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, execution.getStatus().name());
+            statement.setString(2, execution.getTaskId());
+            statement.setString(3, execution.getRunId());
+            setDate(statement, 4, execution.getLeaseExpiresAt());
+            statement.setString(5, execution.getReasonCode() == null ? null : execution.getReasonCode().name());
+            statement.setString(6, execution.getFailureReason());
+            statement.setLong(7, execution.getGmtModified().getTime());
+            statement.setLong(8, execution.getRevision());
+            statement.setString(9, execution.getId());
+            statement.setLong(10, expectedRevision);
+            statement.setString(11, leaseToken);
+            statement.setString(12, leaseToken);
+            if (statement.executeUpdate() != 1) {
+                throw new ConcurrentModificationException("schedule execution revision changed: " + execution.getId());
+            }
+            return getExecution(execution.getId());
+        } catch (SQLException exception) {
+            throw storageFailure("update schedule execution", exception);
+        }
+    }
+
+    @Override
+    public boolean hasActiveExecutionTask(String scheduleId) {
+        String sql = """
+                SELECT 1 FROM agent_task t JOIN agent_run r ON r.id = t.current_run_id
+                WHERE t.origin_schedule_id = ? AND t.archived_at IS NULL
+                  AND r.status IN ('QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL')
+                LIMIT 1
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, scheduleId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("check active schedule task", exception);
+        }
+    }
+
+    @Override
     public AgentTaskCreation createTaskWithInitialRun(AgentTask task, AgentRun run) {
         String taskSql = """
                 INSERT INTO agent_task (
                     id, title, description, acceptance_criteria, status, priority,
                     assignee_agent_id, created_by, origin_type, origin_session_id,
-                    origin_message_id, data_scope_snapshot_json, data_scope_synced_at,
+                    origin_message_id, origin_schedule_id, origin_schedule_execution_id, planned_at,
+                    data_scope_snapshot_json, data_scope_synced_at,
                     data_scope_synced_from_agent_revision, current_run_id,
                     created_at, updated_at, completed_at, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String runSql = """
                 INSERT INTO agent_run (
@@ -2331,6 +2846,58 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         }
     }
 
+    private AgentTaskSchedule querySchedule(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readSchedule(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query agent task schedule", exception);
+        }
+    }
+
+    private AgentTaskScheduleExecution queryExecution(String sql, SqlBinder binder) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? readScheduleExecution(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw storageFailure("query agent task schedule execution", exception);
+        }
+    }
+
+    private AgentTaskScheduleExecution findExecution(String scheduleId, Date plannedAt,
+                                                     AgentTaskScheduleExecutionSourceEnum source) {
+        return queryExecution("""
+                SELECT * FROM agent_task_schedule_execution
+                WHERE schedule_id = ? AND planned_at = ? AND source = ?
+                """, statement -> {
+            statement.setString(1, scheduleId);
+            statement.setLong(2, plannedAt.getTime());
+            statement.setString(3, source.name());
+        });
+    }
+
+    private void resolveTaskLinkState(AgentTaskScheduleExecution execution) {
+        if (execution == null || execution.getTaskId() == null) return;
+        AgentTask task = getTask(execution.getTaskId());
+        execution.setTaskLinkState(task == null ? AgentTaskLinkStateEnum.DELETED
+                : task.getArchivedAt() == null ? AgentTaskLinkStateEnum.AVAILABLE
+                : AgentTaskLinkStateEnum.ARCHIVED);
+        if (task == null) return;
+        execution.setTaskStatus(task.getStatus());
+        AgentRun run = execution.getRunId() == null ? null : getRun(execution.getRunId());
+        if (run != null) {
+            execution.setRunStatus(run.getStatus());
+            execution.setRunFailureReason(run.getFailureReason());
+            execution.setResultSummary(run.getResultSummary());
+        }
+    }
+
     private AgentGatewayChannel queryGatewayChannel(String sql, SqlBinder binder) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -2410,7 +2977,7 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
     private boolean reconcileExpiredRuntimeRun(String runId, Date reconciledAt) {
         String leaseSql = """
                 UPDATE agent_runtime_run_lease
-                SET lease_state = 'EXPIRED', released_at = ?, terminal_event_id = ?, revision = revision + 1
+                SET lease_state = ?, released_at = ?, terminal_event_id = ?, revision = revision + 1
                 WHERE run_id = ? AND lease_state = 'ACTIVE' AND lease_expires_at < ? AND revision = ?
                 """;
         String runSql = """
@@ -2444,17 +3011,27 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
                     throw new IllegalStateException("active lease points to a missing run: " + runId);
                 }
                 boolean runAlreadyTerminal = terminal(run.getStatus());
+                AgentApprovalStatusEnum sqlContinuation = run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL
+                        ? querySqlContinuationStatus(connection, runId) : null;
                 AgentRunStatusEnum target = runAlreadyTerminal ? run.getStatus()
                         : lease.getCancelRequestedAt() != null
                         ? AgentRunStatusEnum.CANCELLED
+                        : sqlContinuation == AgentApprovalStatusEnum.PENDING
+                        ? AgentRunStatusEnum.WAITING_APPROVAL
+                        : (sqlContinuation == AgentApprovalStatusEnum.APPROVED
+                        || sqlContinuation == AgentApprovalStatusEnum.REJECTED)
+                        ? AgentRunStatusEnum.QUEUED
                         : lease.getStartedAt() == null ? AgentRunStatusEnum.QUEUED : AgentRunStatusEnum.UNKNOWN;
+                AgentRuntimeLeaseStateEnum reconciledLeaseState = sqlContinuation == null
+                        ? AgentRuntimeLeaseStateEnum.EXPIRED : AgentRuntimeLeaseStateEnum.SUSPENDED;
                 String eventId = "runtime-lease-expired-" + runId + "-" + lease.getLeaseAttempt();
                 try (PreparedStatement statement = connection.prepareStatement(leaseSql)) {
-                    statement.setLong(1, reconciledAt.getTime());
-                    statement.setString(2, eventId);
-                    statement.setString(3, runId);
-                    statement.setLong(4, reconciledAt.getTime());
-                    statement.setLong(5, lease.getRevision());
+                    statement.setString(1, reconciledLeaseState.name());
+                    statement.setLong(2, reconciledAt.getTime());
+                    statement.setString(3, eventId);
+                    statement.setString(4, runId);
+                    statement.setLong(5, reconciledAt.getTime());
+                    statement.setLong(6, lease.getRevision());
                     if (statement.executeUpdate() != 1) {
                         connection.rollback();
                         return false;
@@ -2467,7 +3044,8 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
                     try (PreparedStatement statement = connection.prepareStatement(runSql)) {
                         statement.setString(1, target.name());
                         statement.setLong(2, reconciledAt.getTime());
-                        setDate(statement, 3, target == AgentRunStatusEnum.QUEUED ? null : reconciledAt);
+                        setDate(statement, 3, target == AgentRunStatusEnum.QUEUED
+                                || target == AgentRunStatusEnum.WAITING_APPROVAL ? null : reconciledAt);
                         statement.setString(4, failureReason);
                         statement.setString(5, runId);
                         statement.setLong(6, run.getRevision());
@@ -2496,8 +3074,9 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
                 event.setContent(target.name());
                 Map<String, Object> payload = new LinkedHashMap<>();
                 payload.put("status", target.name());
-                payload.put("reason", runAlreadyTerminal
-                        ? "LEASE_EXPIRED_AFTER_RUN_TERMINAL" : "LEASE_EXPIRED");
+                payload.put("reason", sqlContinuation != null
+                        ? "SQL_APPROVAL_CONTINUATION_LEASE_EXPIRED"
+                        : runAlreadyTerminal ? "LEASE_EXPIRED_AFTER_RUN_TERMINAL" : "LEASE_EXPIRED");
                 payload.put("runtimeAttempt", lease.getLeaseAttempt());
                 event.setPayload(payload);
                 event.setOccurredAt(reconciledAt);
@@ -2517,6 +3096,27 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
             }
         } catch (SQLException exception) {
             throw storageFailure("reconcile expired runtime run", exception);
+        }
+    }
+
+    private AgentApprovalStatusEnum querySqlContinuationStatus(Connection connection, String runId)
+            throws SQLException {
+        String sql = """
+                SELECT a.status
+                FROM agent_approval a
+                JOIN agent_sql_proposal p ON p.id = a.proposal_id
+                WHERE a.run_id = ? AND p.status = 'ACTIVE'
+                  AND a.status IN ('PENDING', 'APPROVED', 'REJECTED')
+                ORDER BY CASE a.status WHEN 'APPROVED' THEN 0 WHEN 'REJECTED' THEN 0 ELSE 1 END,
+                         a.requested_at ASC
+                LIMIT 1
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, runId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next()
+                        ? AgentApprovalStatusEnum.valueOf(resultSet.getString("status")) : null;
+            }
         }
     }
 
@@ -2718,6 +3318,51 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         statement.setLong(index, agent.getRevision());
     }
 
+    private void bindSchedule(PreparedStatement statement, AgentTaskSchedule schedule) throws SQLException {
+        int index = 1;
+        statement.setString(index++, schedule.getId());
+        statement.setString(index++, schedule.getName());
+        statement.setString(index++, schedule.getTaskTitle());
+        statement.setString(index++, schedule.getTaskDescription());
+        statement.setString(index++, schedule.getAcceptanceCriteria());
+        statement.setString(index++, schedule.getAssigneeAgentId());
+        statement.setInt(index++, schedule.getPriority());
+        statement.setString(index++, JSON.toJSONString(schedule.getDataScopeSnapshot()));
+        statement.setString(index++, schedule.getScheduleType().name());
+        setDate(statement, index++, schedule.getScheduledAt());
+        statement.setString(index++, schedule.getCronExpression());
+        statement.setString(index++, schedule.getTimezone());
+        statement.setString(index++, schedule.getStatus().name());
+        statement.setString(index++, schedule.getConcurrencyPolicy().name());
+        statement.setString(index++, schedule.getCatchUpPolicy().name());
+        setDate(statement, index++, schedule.getNextRunAt());
+        setDate(statement, index++, schedule.getLastRunAt());
+        statement.setLong(index++, schedule.getCreatedBy());
+        statement.setLong(index++, schedule.getGmtCreate().getTime());
+        statement.setLong(index++, schedule.getGmtModified().getTime());
+        statement.setLong(index, schedule.getRevision());
+    }
+
+    private void bindScheduleExecution(PreparedStatement statement,
+                                       AgentTaskScheduleExecution execution) throws SQLException {
+        int index = 1;
+        statement.setString(index++, execution.getId());
+        statement.setString(index++, execution.getScheduleId());
+        statement.setString(index++, execution.getSource().name());
+        statement.setLong(index++, execution.getPlannedAt().getTime());
+        statement.setString(index++, execution.getStatus().name());
+        statement.setString(index++, execution.getTaskId());
+        statement.setString(index++, execution.getRunId());
+        statement.setInt(index++, execution.getAttempt());
+        statement.setString(index++, execution.getLeaseToken());
+        setDate(statement, index++, execution.getLeaseExpiresAt());
+        statement.setString(index++, execution.getReasonCode() == null ? null : execution.getReasonCode().name());
+        statement.setString(index++, execution.getFailureReason());
+        statement.setLong(index++, execution.getGmtCreate().getTime());
+        statement.setLong(index++, execution.getGmtModified().getTime());
+        statement.setLong(index, execution.getRevision());
+    }
+
     private void bindTask(PreparedStatement statement, AgentTask task) throws SQLException {
         int index = 1;
         statement.setString(index++, task.getId());
@@ -2731,6 +3376,9 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         statement.setString(index++, task.getOriginType().name());
         statement.setString(index++, task.getOriginSessionId());
         statement.setString(index++, task.getOriginMessageId());
+        statement.setString(index++, task.getOriginScheduleId());
+        statement.setString(index++, task.getOriginScheduleExecutionId());
+        setDate(statement, index++, task.getPlannedAt());
         statement.setString(index++, JSON.toJSONString(task.getDataScopeSnapshot()));
         setDate(statement, index++, task.getDataScopeSyncedAt());
         setLong(statement, index++, task.getDataScopeSyncedFromAgentRevision());
@@ -3007,6 +3655,9 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         task.setOriginType(AgentTaskOriginTypeEnum.valueOf(resultSet.getString("origin_type")));
         task.setOriginSessionId(resultSet.getString("origin_session_id"));
         task.setOriginMessageId(resultSet.getString("origin_message_id"));
+        task.setOriginScheduleId(resultSet.getString("origin_schedule_id"));
+        task.setOriginScheduleExecutionId(resultSet.getString("origin_schedule_execution_id"));
+        task.setPlannedAt(getDate(resultSet, "planned_at"));
         task.setDataScopeSnapshot(readScopes(resultSet.getString("data_scope_snapshot_json")));
         task.setDataScopeSyncedAt(getDate(resultSet, "data_scope_synced_at"));
         task.setDataScopeSyncedFromAgentRevision(getLong(resultSet, "data_scope_synced_from_agent_revision"));
@@ -3017,6 +3668,55 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         task.setArchivedAt(getDate(resultSet, "archived_at"));
         task.setRevision(resultSet.getLong("revision"));
         return task;
+    }
+
+    private AgentTaskSchedule readSchedule(ResultSet resultSet) throws SQLException {
+        AgentTaskSchedule schedule = new AgentTaskSchedule();
+        schedule.setId(resultSet.getString("id"));
+        schedule.setName(resultSet.getString("name"));
+        schedule.setTaskTitle(resultSet.getString("task_title"));
+        schedule.setTaskDescription(resultSet.getString("task_description"));
+        schedule.setAcceptanceCriteria(resultSet.getString("acceptance_criteria"));
+        schedule.setAssigneeAgentId(resultSet.getString("assignee_agent_id"));
+        schedule.setPriority(resultSet.getInt("priority"));
+        schedule.setDataScopeSnapshot(readScopes(resultSet.getString("data_scope_snapshot_json")));
+        schedule.setScheduleType(AgentTaskScheduleTypeEnum.valueOf(resultSet.getString("schedule_type")));
+        schedule.setScheduledAt(getDate(resultSet, "scheduled_at"));
+        schedule.setCronExpression(resultSet.getString("cron_expression"));
+        schedule.setTimezone(resultSet.getString("timezone"));
+        schedule.setStatus(AgentTaskScheduleStatusEnum.valueOf(resultSet.getString("status")));
+        schedule.setConcurrencyPolicy(AgentTaskScheduleConcurrencyPolicyEnum.valueOf(
+                resultSet.getString("concurrency_policy")));
+        schedule.setCatchUpPolicy(AgentTaskScheduleCatchUpPolicyEnum.valueOf(
+                resultSet.getString("catch_up_policy")));
+        schedule.setNextRunAt(getDate(resultSet, "next_run_at"));
+        schedule.setLastRunAt(getDate(resultSet, "last_run_at"));
+        schedule.setCreatedBy(getLong(resultSet, "created_by"));
+        schedule.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        schedule.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        schedule.setRevision(resultSet.getLong("revision"));
+        return schedule;
+    }
+
+    private AgentTaskScheduleExecution readScheduleExecution(ResultSet resultSet) throws SQLException {
+        AgentTaskScheduleExecution execution = new AgentTaskScheduleExecution();
+        execution.setId(resultSet.getString("id"));
+        execution.setScheduleId(resultSet.getString("schedule_id"));
+        execution.setSource(AgentTaskScheduleExecutionSourceEnum.valueOf(resultSet.getString("source")));
+        execution.setPlannedAt(new Date(resultSet.getLong("planned_at")));
+        execution.setStatus(AgentTaskScheduleExecutionStatusEnum.valueOf(resultSet.getString("status")));
+        execution.setTaskId(resultSet.getString("task_id"));
+        execution.setRunId(resultSet.getString("run_id"));
+        execution.setAttempt(resultSet.getInt("attempt"));
+        execution.setLeaseToken(resultSet.getString("lease_token"));
+        execution.setLeaseExpiresAt(getDate(resultSet, "lease_expires_at"));
+        String reason = resultSet.getString("reason_code");
+        execution.setReasonCode(reason == null ? null : AgentTaskScheduleReasonCodeEnum.valueOf(reason));
+        execution.setFailureReason(resultSet.getString("failure_reason"));
+        execution.setGmtCreate(new Date(resultSet.getLong("created_at")));
+        execution.setGmtModified(new Date(resultSet.getLong("updated_at")));
+        execution.setRevision(resultSet.getLong("revision"));
+        return execution;
     }
 
     private AgentRun readRun(ResultSet resultSet) throws SQLException {

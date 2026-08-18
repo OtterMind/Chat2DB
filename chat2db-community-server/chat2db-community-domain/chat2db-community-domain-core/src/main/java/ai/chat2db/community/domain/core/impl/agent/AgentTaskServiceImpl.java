@@ -270,6 +270,9 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         copy.setOriginType(source.getOriginType());
         copy.setOriginSessionId(source.getOriginSessionId());
         copy.setOriginMessageId(source.getOriginMessageId());
+        copy.setOriginScheduleId(source.getOriginScheduleId());
+        copy.setOriginScheduleExecutionId(source.getOriginScheduleExecutionId());
+        copy.setPlannedAt(source.getPlannedAt());
         copy.setDataScopeSnapshot(AgentScopePolicy.copyScopes(source.getDataScopeSnapshot()));
         copy.setDataScopeSyncedAt(source.getDataScopeSyncedAt());
         copy.setDataScopeSyncedFromAgentRevision(source.getDataScopeSyncedFromAgentRevision());

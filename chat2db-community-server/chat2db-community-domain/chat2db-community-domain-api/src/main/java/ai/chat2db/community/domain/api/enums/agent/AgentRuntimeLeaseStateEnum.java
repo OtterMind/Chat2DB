@@ -6,5 +6,6 @@ public enum AgentRuntimeLeaseStateEnum {
     FAILED,
     CANCELLED,
     UNKNOWN,
+    SUSPENDED,
     EXPIRED
 }

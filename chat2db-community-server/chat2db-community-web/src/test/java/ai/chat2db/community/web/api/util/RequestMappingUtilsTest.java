@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -104,6 +105,23 @@ class RequestMappingUtilsTest {
         }
     }
 
+    @Test
+    void registersMethodMappingsWithoutAnExplicitPathAtTheControllerRoot() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(RootMethodController.class);
+            context.refresh();
+            new ApplicationContextUtil().setApplicationContext(context);
+
+            RequestMappingInfo getMapping = RequestMappingUtils.getRequestMappingInfo("/api/root", "GET");
+            RequestMappingInfo postMapping = RequestMappingUtils.getRequestMappingInfo("/api/root", "POST");
+
+            assertNotNull(getMapping);
+            assertEquals("list", getMapping.getMethod());
+            assertNotNull(postMapping);
+            assertEquals("create", postMapping.getMethod());
+        }
+    }
+
     private void resetRequestMappings() throws Exception {
         Field initialized = RequestMappingUtils.class.getDeclaredField("initialized");
         initialized.setAccessible(true);
@@ -135,6 +153,21 @@ class RequestMappingUtilsTest {
 
         @GetMapping("/bare")
         public String bare() {
+            return "ok";
+        }
+    }
+
+    @RestController
+    @RequestMapping("/api/root")
+    static class RootMethodController {
+
+        @GetMapping
+        public String list() {
+            return "ok";
+        }
+
+        @PostMapping
+        public String create() {
             return "ok";
         }
     }

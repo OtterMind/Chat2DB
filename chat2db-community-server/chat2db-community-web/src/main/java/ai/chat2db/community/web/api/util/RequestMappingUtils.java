@@ -78,8 +78,9 @@ public class RequestMappingUtils {
 
     private static void addRequestMappingInfoMap(Map<String, List<RequestMappingInfo>> mappings, String prefixUrl,
             Class<?> beanClass, Method method, String[] values, RequestMethod... requestMethods) {
-        if (values != null && values.length > 0) {
-            for (String value : values) {
+        String[] mappingValues = values == null || values.length == 0 ? new String[]{""} : values;
+        if (mappingValues.length > 0) {
+            for (String value : mappingValues) {
                 RequestMappingInfo requestMappingInfo = new RequestMappingInfo();
                 if (requestMethods != null) {
                     List<String> names = Arrays.stream(requestMethods).map(RequestMethod::name).collect(Collectors.toList());

@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 @Data
 public class ProviderExecutionRequest {
@@ -20,6 +21,7 @@ public class ProviderExecutionRequest {
     private Path workingDirectory;
     private String resumeSessionId;
     private ProviderApprovalHandler approvalHandler;
+    private BooleanSupplier approvalWaitingSupplier = () -> false;
     private List<ProviderMcpEndpoint> mcpEndpoints = new ArrayList<>();
 
     /**
@@ -28,4 +30,8 @@ public class ProviderExecutionRequest {
      * to the Chat2DB control plane or logs.
      */
     private Map<String, String> environment = new LinkedHashMap<>();
+
+    public boolean approvalWaiting() {
+        return approvalWaitingSupplier != null && approvalWaitingSupplier.getAsBoolean();
+    }
 }

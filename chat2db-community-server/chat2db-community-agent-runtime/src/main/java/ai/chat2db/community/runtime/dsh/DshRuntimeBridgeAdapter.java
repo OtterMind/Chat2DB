@@ -112,7 +112,8 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
                 initialize(client, request, patch, customArguments);
                 JsonNode result;
                 try {
-                    result = client.request("turn/start", turnParams(request), executionTimeout(request));
+                    result = client.request("turn/start", turnParams(request), executionTimeout(request),
+                            request::approvalWaiting);
                 } catch (DshBridgeJsonRpcClient.DshBridgeException exception) {
                     ProviderFailureKind kind = exception.code() == -32800
                             ? ProviderFailureKind.CANCELLED : ProviderFailureKind.PROTOCOL_ERROR;
@@ -170,7 +171,19 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
     private ObjectNode turnParams(ProviderExecutionRequest request) {
         ObjectNode params = mapper.createObjectNode();
         params.put("cwd", request.getWorkingDirectory().toString());
-        params.put("prompt", promptBuilder.build(request.getStartRequest()));
+        params.put("prompt", promptBuilder.build(request.getStartRequest()) + """
+
+
+                ## DSH Tool Routing
+
+                Use the supplied Chat2DB MCP tools whose names start with
+                `mcp__chat2db_task_tools__` for metadata and data operations. Call these tools directly;
+                never use bash, curl, or another subprocess to invoke the Chat2DB Tool Gateway. Gateway
+                credentials are preconfigured for the current Run. Never inspect, print, copy, or include
+                credentials or environment-variable values in messages, artifacts, commands, or reports.
+                If the Chat2DB MCP tools are unavailable, report that integration error succinctly without
+                attempting a shell-based workaround.
+                """.trim());
         if (StringUtils.isNotBlank(request.getResumeSessionId())) {
             params.put("resumeSessionId", request.getResumeSessionId().trim());
         }
@@ -355,7 +368,7 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
 
     private Path writeMcpPatch(ProviderExecutionRequest request) {
         if (request.getMcpEndpoints().isEmpty()) return null;
-        StringBuilder yaml = new StringBuilder();
+        StringBuilder yaml = new StringBuilder("- insert:\n");
         int index = 0;
         for (ProviderMcpEndpoint endpoint : request.getMcpEndpoints()) {
             String serverName = endpoint.getName();
@@ -365,16 +378,17 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
                     || !tokenEnvironmentVariable.matches("[A-Za-z_][A-Za-z0-9_]*")) {
                 throw new IllegalArgumentException("DSH MCP endpoint contains an invalid name");
             }
-            yaml.append("- id: chat2db-mcp-").append(index++).append('\n')
-                    .append("  name: '@deepseek-ai/dsh-mcp-client'\n")
-                    .append("  config:\n")
-                    .append("    serverName: ").append(jsonString(serverName)).append('\n')
-                    .append("    transport: streamable-http\n")
-                    .append("    url: ").append(jsonString(endpoint.getUrl().toString())).append('\n')
-                    .append("    headers:\n")
-                    .append("      Authorization: !!js '`Bearer ${process.env.")
+            yaml.append("    - id: chat2db-mcp-").append(index++).append('\n')
+                    .append("      name: '@deepseek-ai/dsh-mcp-client'\n")
+                    .append("      config:\n")
+                    .append("        serverName: ").append(jsonString(serverName)).append('\n')
+                    .append("        transport: streamable-http\n")
+                    .append("        url: ").append(jsonString(endpoint.getUrl().toString())).append('\n')
+                    .append("        headers:\n")
+                    .append("          Authorization: !!js '`Bearer ${process.env.")
                     .append(tokenEnvironmentVariable).append("}`'\n")
-                    .append("    failOnStartupError: true\n");
+                    .append("        toolCallTimeoutMs: 2147000000\n")
+                    .append("        failOnStartupError: true\n");
         }
         Path patch = request.getWorkingDirectory().resolve(".chat2db-dsh-mcp.patch.yml");
         try {

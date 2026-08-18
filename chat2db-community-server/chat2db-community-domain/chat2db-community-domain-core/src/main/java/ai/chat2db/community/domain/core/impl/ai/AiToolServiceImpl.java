@@ -27,14 +27,19 @@ import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
@@ -82,6 +87,8 @@ public class AiToolServiceImpl implements IAiToolService {
     private IWorkspaceStorageFacade workspaceStorageFacade;
     @Autowired
     private IAgentToolGateway agentToolGateway;
+    @Autowired
+    private IAgentRunService agentRunService;
     private static final int DEFAULT_SQL_PAGE_SIZE = 200;
     private static final int MAX_SQL_PAGE_SIZE = 500;
     private static final int MAX_SQL_RESULT_ROWS = 50;
@@ -234,11 +241,14 @@ public class AiToolServiceImpl implements IAiToolService {
         int resolvedPageSize = normalizePageSize(pageSize, agentScope);
         String trimmedSql = sql.trim();
         AgentSqlExecutionPermit permit = prepareAgentSql(toolContext, trimmedSql, profile);
+        permit = waitForAgentSqlApproval(toolContext, trimmedSql, profile, permit);
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED) {
             return emitToolResult(toolContext, "execute_sql", "SQL approval required. approvalId="
                     + permit.getApproval().getId() + "; proposalVersion="
                     + permit.getProposal().getProposalVersion() + "; risk="
-                    + permit.getProposal().getRiskLevel() + ". Execution is paused until the user decides.");
+                    + permit.getProposal().getRiskLevel()
+                    + ". Do not retry before the user decides. This Runtime turn may finish; "
+                    + "Chat2DB will resume the same Run after approval.");
         }
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.DENIED) {
             return emitToolResult(toolContext, "execute_sql", permit.getMessage());
@@ -319,6 +329,41 @@ public class AiToolServiceImpl implements IAiToolService {
         request.setDatabaseName(profile.getDatabaseName());
         request.setSchemaName(profile.getSchemaName());
         return agentToolGateway.prepareSql(request);
+    }
+
+    private AgentSqlExecutionPermit waitForAgentSqlApproval(AiToolContextRequest toolContext, String sql,
+                                                             ConnectionProfile profile,
+                                                             AgentSqlExecutionPermit permit) {
+        if (permit == null
+                || permit.getDecision() != AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED
+                || toolContext == null
+                || !Boolean.TRUE.equals(toolContext.getWaitForApprovalDecision())) {
+            return permit;
+        }
+        String approvalId = permit.getApproval() == null ? null : permit.getApproval().getId();
+        if (StringUtils.isBlank(approvalId)) {
+            throw new IllegalStateException("SQL approval response omitted approval id");
+        }
+        while (true) {
+            AgentApproval approval = agentToolGateway.getApproval(approvalId);
+            if (approval.getStatus() != AgentApprovalStatusEnum.PENDING) {
+                return prepareAgentSql(toolContext, sql, profile);
+            }
+            AgentRun run = agentRunService.get(toolContext.getAgentRunId());
+            if (run.getStatus() != AgentRunStatusEnum.WAITING_APPROVAL
+                    && run.getStatus() != AgentRunStatusEnum.RUNNING) {
+                AgentSqlExecutionPermit stopped = new AgentSqlExecutionPermit();
+                stopped.setDecision(AgentSqlPermitDecisionEnum.DENIED);
+                stopped.setMessage("SQL execution stopped because the Agent Run is no longer active");
+                return stopped;
+            }
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("SQL approval wait was interrupted", exception);
+            }
+        }
     }
 
     private void recordSqlResult(String sql, ListResult<ExecuteResponse> executeResult) {

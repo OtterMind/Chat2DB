@@ -67,5 +67,9 @@ public interface IAgentRuntimeControlStorage {
                                           String resultSummary, java.util.Date completedAt,
                                           long expectedLeaseRevision, long expectedRunRevision);
 
+    AgentRuntimeRunLease suspendRuntimeRun(AgentRuntimeRunLease lease, AgentRunEvent suspendEvent,
+                                           AgentRunStatusEnum targetRunStatus, java.util.Date suspendedAt,
+                                           long expectedLeaseRevision, long expectedRunRevision);
+
     List<String> reconcileExpiredRuntimeRuns(java.util.Date expiredAt, int limit);
 }

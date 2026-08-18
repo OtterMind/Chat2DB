@@ -1,17 +1,21 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRiskLevelEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +23,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,6 +57,39 @@ class AiToolServiceAgentGatewayTest {
         assertTrue(result.contains("proposalVersion=3"));
         assertEquals("run-1", captured.get().getRunId());
         assertEquals(7L, captured.get().getDataSourceId());
+    }
+
+    @Test
+    void externalRuntimeSqlContinuesInOriginalToolCallAfterApproval() throws Exception {
+        AgentApproval approval = new AgentApproval();
+        approval.setId("approval-1");
+        AtomicReference<AgentApprovalStatusEnum> approvalStatus =
+                new AtomicReference<>(AgentApprovalStatusEnum.PENDING);
+        AgentSqlExecutionPermit pending = new AgentSqlExecutionPermit();
+        pending.setDecision(AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED);
+        pending.setApproval(approval);
+
+        AgentSqlExecutionPermit replay = new AgentSqlExecutionPermit();
+        replay.setDecision(AgentSqlPermitDecisionEnum.REPLAY_RESULT);
+        replay.setReplayResult("approved channel count: 6");
+        AtomicInteger prepares = new AtomicInteger();
+        AiToolServiceImpl service = service(
+                request -> prepares.getAndIncrement() == 0 ? pending : replay,
+                () -> {
+                    approval.setStatus(approvalStatus.get());
+                    return approval;
+                });
+        set(service, "agentRunService", runService(AgentRunStatusEnum.WAITING_APPROVAL));
+        AiExecuteSqlRequest request = request("run-1", "SELECT COUNT(*) FROM channels", 7L);
+        request.getAiToolContextRequest().setWaitForApprovalDecision(true);
+
+        CompletableFuture<String> result = CompletableFuture.supplyAsync(() -> service.executeSql(request));
+        Thread.sleep(100L);
+        assertTrue(!result.isDone());
+        approvalStatus.set(AgentApprovalStatusEnum.APPROVED);
+
+        assertEquals("approved channel count: 6", result.get(2, TimeUnit.SECONDS));
+        assertEquals(2, prepares.get());
     }
 
     @Test
@@ -97,12 +138,21 @@ class AiToolServiceAgentGatewayTest {
     }
 
     private AiToolServiceImpl service(SqlPrepare prepare) throws Exception {
+        return service(prepare, () -> {
+            throw new UnsupportedOperationException("getApproval");
+        });
+    }
+
+    private AiToolServiceImpl service(SqlPrepare prepare, Supplier<AgentApproval> approval) throws Exception {
         AiToolServiceImpl service = new AiToolServiceImpl();
         IAgentToolGateway gateway = (IAgentToolGateway) Proxy.newProxyInstance(
                 getClass().getClassLoader(), new Class<?>[]{IAgentToolGateway.class},
                 (proxy, method, args) -> {
                     if ("prepareSql".equals(method.getName())) {
                         return prepare.apply((AgentSqlToolRequest) args[0]);
+                    }
+                    if ("getApproval".equals(method.getName())) {
+                        return approval.get();
                     }
                     throw new UnsupportedOperationException(method.getName());
                 });
@@ -122,6 +172,20 @@ class AiToolServiceAgentGatewayTest {
         set(service, "agentToolGateway", gateway);
         set(service, "connectionContextService", connectionService);
         return service;
+    }
+
+    private IAgentRunService runService(AgentRunStatusEnum status) {
+        return (IAgentRunService) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IAgentRunService.class},
+                (proxy, method, args) -> {
+                    if ("get".equals(method.getName())) {
+                        AgentRun run = new AgentRun();
+                        run.setId((String) args[0]);
+                        run.setStatus(status);
+                        return run;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
     }
 
     private AiExecuteSqlRequest request(String runId, String sql, Long dataSourceId) {

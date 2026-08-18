@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunClaimR
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeArtifactUploadRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
@@ -62,6 +63,9 @@ public interface IAgentRuntimeDispatchService {
 
     AgentRuntimeRunTerminalResult acknowledgeCancellation(String runId, String leaseToken,
                                                            AgentRuntimeRunCancelAckRequest request);
+
+    AgentRuntimeLeaseStatus suspendForSqlApproval(String runId, String leaseToken,
+                                                  AgentRuntimeRunSuspendRequest request);
 
     AgentRun requestCancellation(String runId);
 

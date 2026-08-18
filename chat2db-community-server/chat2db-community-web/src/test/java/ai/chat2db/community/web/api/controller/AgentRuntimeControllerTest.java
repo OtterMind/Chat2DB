@@ -24,6 +24,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunComple
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCancelAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStartedRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeControlService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
@@ -35,7 +36,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentRuntimeControllerTest {
 
@@ -125,7 +128,7 @@ class AgentRuntimeControllerTest {
                         capturedInstanceId.set((String) args[0]);
                         yield new AgentRuntimeRunClaim();
                     }
-                    case "renewLease", "markStarted" -> {
+                    case "renewLease", "markStarted", "suspendForSqlApproval" -> {
                         capturedRunId.set((String) args[0]);
                         capturedLeaseToken.set((String) args[1]);
                         yield new AgentRuntimeLeaseStatus();
@@ -158,6 +161,7 @@ class AgentRuntimeControllerTest {
         controller.claim("instance-1", new AgentRuntimeRunClaimRequest());
         controller.renewLease("run-1", "lease-secret", new AgentRuntimeLeaseRenewRequest());
         controller.markStarted("run-1", "lease-secret", new AgentRuntimeRunStartedRequest());
+        controller.suspendForSqlApproval("run-1", "lease-secret", new AgentRuntimeRunSuspendRequest());
         controller.appendEvent("run-1", "lease-secret", new AgentRuntimeEventRequest());
         controller.uploadArtifact("run-1", "lease-secret", new AgentRuntimeArtifactUploadRequest());
         controller.requestApproval("run-1", "lease-secret", new AgentRuntimeApprovalRequest());
@@ -212,6 +216,7 @@ class AgentRuntimeControllerTest {
         assertEquals("path-run", capturedRunId.get());
         assertEquals("task-secret", capturedTaskToken.get());
         assertEquals("authorized-run", capturedSql.get().getAiToolContextRequest().getAgentRunId());
+        assertFalse(capturedSql.get().getAiToolContextRequest().getWaitForApprovalDecision());
     }
 
     private AgentRuntimeProfile profile(String id, Long createdBy) {

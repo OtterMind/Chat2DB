@@ -13,6 +13,8 @@ import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifact;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDetail;
@@ -31,6 +33,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentArtifactVersion;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeArtifactEvidenceRef;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
@@ -41,6 +44,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunStarte
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCompleteRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunCancelAckRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunFailRequest;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspendRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeApprovalDecisionRequest;
@@ -104,6 +108,8 @@ class AgentRuntimeDispatchServiceTest {
     private AgentToolAttempt evidenceAttempt;
     private AgentSqlProposal evidenceProposal;
     private AtomicReference<AgentArtifactCreateRequest> artifactRequest;
+    private List<AgentSqlProposal> sqlProposals;
+    private List<AgentApproval> sqlApprovals;
 
     @BeforeEach
     void setUp() {
@@ -152,6 +158,8 @@ class AgentRuntimeDispatchServiceTest {
         reportMarkdown = new AtomicReference<>();
         artifacts = new LinkedHashMap<>();
         artifactRequest = new AtomicReference<>();
+        sqlProposals = List.of();
+        sqlApprovals = List.of();
         AgentDataScope scope = new AgentDataScope();
         scope.setDataSourceId(7L);
         scope.setDatabaseName("sales");
@@ -210,6 +218,8 @@ class AgentRuntimeDispatchServiceTest {
 
         assertEquals(2L, service.renewLease(run.getId(), claim.getLeaseToken(), wrongToken)
                 .getLeaseRevision());
+        assertEquals(AgentRunStatusEnum.DISPATCHED,
+                service.renewLease(run.getId(), claim.getLeaseToken(), wrongToken).getRunStatus());
         assertEquals(2L, service.renewLease(run.getId(), claim.getLeaseToken(), wrongToken)
                 .getLeaseRevision());
         assertEquals(2L, runtimeStorage.lease.getRevision());
@@ -357,6 +367,7 @@ class AgentRuntimeDispatchServiceTest {
                 service.acknowledgeCancellation(run.getId(), claim.getLeaseToken(), acknowledgement)
                         .getRunStatus());
         assertEquals(AgentRuntimeLeaseStateEnum.CANCELLED, runtimeStorage.lease.getState());
+        assertEquals(AgentTaskStatusEnum.CANCELLED, task.getStatus());
         assertEquals(0, instance.getActiveRuns());
         assertEquals(AgentRunStatusEnum.CANCELLED,
                 service.acknowledgeCancellation(run.getId(), claim.getLeaseToken(), acknowledgement)
@@ -371,6 +382,7 @@ class AgentRuntimeDispatchServiceTest {
 
         assertEquals(AgentRunStatusEnum.CANCELLED, service.requestCancellation(run.getId()).getStatus());
         assertEquals(2L, run.getRevision());
+        assertEquals(AgentTaskStatusEnum.CANCELLED, task.getStatus());
         assertNull(runtimeStorage.lease);
     }
 
@@ -388,6 +400,7 @@ class AgentRuntimeDispatchServiceTest {
                 service.fail(run.getId(), claim.getLeaseToken(), failure).getRunStatus());
         assertEquals(AgentRuntimeLeaseStateEnum.FAILED, runtimeStorage.lease.getState());
         assertEquals("provider process exited with code 17", run.getFailureReason());
+        assertEquals(AgentTaskStatusEnum.BLOCKED, task.getStatus());
         assertEquals(0, instance.getActiveRuns());
         assertFalse(reportCreated.get());
     }
@@ -412,7 +425,9 @@ class AgentRuntimeDispatchServiceTest {
         AgentRuntimeApprovalResult pending = service.requestApproval(
                 run.getId(), claim.getLeaseToken(), approvalRequest);
         assertEquals(AgentRuntimeApprovalStatusEnum.PENDING, pending.getApproval().getStatus());
+        assertEquals(AgentRunStatusEnum.WAITING_APPROVAL, pending.getLease().getRunStatus());
         assertEquals(AgentRunStatusEnum.WAITING_APPROVAL, run.getStatus());
+        assertEquals(AgentTaskStatusEnum.WAITING_APPROVAL, task.getStatus());
         assertEquals(pending.getApproval().getId(), service.requestApproval(
                 run.getId(), claim.getLeaseToken(), approvalRequest).getApproval().getId());
 
@@ -433,6 +448,52 @@ class AgentRuntimeDispatchServiceTest {
                 service.acknowledgeApproval(run.getId(), claim.getLeaseToken(), ack)
                         .getApproval().getStatus());
         assertEquals(AgentRunStatusEnum.RUNNING, run.getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void suspendsApprovedSqlContinuationAndReclaimsSameRunWithExactSqlContext() {
+        AgentRuntimeDispatchServiceImpl service = serviceAt(NOW,
+                "lease-token-1", "task-token-1", "lease-token-2", "task-token-2");
+        AgentRuntimeRunClaim first = service.claim(instance.getId(), claimRequest());
+        service.markStarted(run.getId(), first.getLeaseToken(), startedRequest(1L));
+        run.setProviderSessionId("codex-thread-1");
+        run.setStatus(AgentRunStatusEnum.WAITING_APPROVAL);
+        run.setRevision(run.getRevision() + 1);
+        task.setStatus(AgentTaskStatusEnum.WAITING_APPROVAL);
+        task.setRevision(task.getRevision() + 1);
+
+        AgentSqlProposal proposal = new AgentSqlProposal();
+        proposal.setId("proposal-1");
+        proposal.setRunId(run.getId());
+        proposal.setProposalVersion(1);
+        proposal.setSqlSnapshot("UPDATE channels SET status = 1 WHERE id = 9");
+        proposal.setDataSourceId(7L);
+        proposal.setDatabaseName("sales");
+        proposal.setSchemaName("public");
+        proposal.setStatus(AgentSqlProposalStatusEnum.ACTIVE);
+        AgentApproval approval = new AgentApproval();
+        approval.setId("approval-1");
+        approval.setRunId(run.getId());
+        approval.setProposalId(proposal.getId());
+        approval.setStatus(AgentApprovalStatusEnum.APPROVED);
+        sqlProposals = List.of(proposal);
+        sqlApprovals = List.of(approval);
+
+        AgentRuntimeRunSuspendRequest suspend = terminalRequest(
+                new AgentRuntimeRunSuspendRequest(), 1L, "sql-approval-suspend");
+        suspend.setExpectedLeaseRevision(runtimeStorage.lease.getRevision());
+        assertEquals(AgentRuntimeLeaseStateEnum.SUSPENDED,
+                service.suspendForSqlApproval(run.getId(), first.getLeaseToken(), suspend).getState());
+        assertEquals(AgentRunStatusEnum.QUEUED, run.getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS, task.getStatus());
+        assertEquals(0, instance.getActiveRuns());
+
+        AgentRuntimeRunClaim resumed = service.claim(instance.getId(), claimRequest());
+        assertEquals(2, resumed.getLeaseAttempt());
+        assertTrue(resumed.getStartRequest().getAssembledContext().contains("SQL Approval Continuation"));
+        assertTrue(resumed.getStartRequest().getAssembledContext().contains(proposal.getSqlSnapshot()));
+        assertEquals("codex-thread-1", resumed.getResumeSessionId());
     }
 
     @Test
@@ -548,6 +609,8 @@ class AgentRuntimeDispatchServiceTest {
                         case "appendRunEvent" -> args[0];
                         case "getToolAttempt" -> evidenceAttempt;
                         case "getSqlProposal" -> evidenceProposal;
+                        case "listSqlProposals" -> sqlProposals;
+                        case "listApprovals" -> sqlApprovals;
                         default -> throw new UnsupportedOperationException(method.getName());
                     };
                 });
@@ -721,10 +784,11 @@ class AgentRuntimeDispatchServiceTest {
         public AgentRuntimeRunLease claimRuntimeRun(String instanceId, AgentRuntimeProviderEnum provider,
                                                     String leaseTokenHash, String taskTokenHash,
                                                     Date claimedAt, Date leaseExpiresAt) {
+            int nextAttempt = lease == null ? 1 : lease.getLeaseAttempt() + 1;
             lease = new AgentRuntimeRunLease();
             lease.setRunId(run.getId());
             lease.setRuntimeInstanceId(instanceId);
-            lease.setLeaseAttempt(1);
+            lease.setLeaseAttempt(nextAttempt);
             lease.setLeaseTokenHash(leaseTokenHash);
             lease.setTaskTokenHash(taskTokenHash);
             lease.setClaimedAt(claimedAt);
@@ -843,6 +907,26 @@ class AgentRuntimeDispatchServiceTest {
             run.setRevision(run.getRevision() + 1);
             instance.setActiveRuns(instance.getActiveRuns() - 1);
             event = terminalEvent;
+            return lease;
+        }
+
+        @Override
+        public AgentRuntimeRunLease suspendRuntimeRun(AgentRuntimeRunLease updated, AgentRunEvent suspendEvent,
+                                                       AgentRunStatusEnum targetRunStatus, Date suspendedAt,
+                                                       long expectedLeaseRevision, long expectedRunRevision) {
+            if (lease.getRevision() != expectedLeaseRevision || run.getRevision() != expectedRunRevision
+                    || suspendEvent.getRuntimeSequence() != lease.getLastEventSequence() + 1) {
+                throw new ConcurrentModificationException();
+            }
+            lease.setState(AgentRuntimeLeaseStateEnum.SUSPENDED);
+            lease.setReleasedAt(suspendedAt);
+            lease.setTerminalEventId(suspendEvent.getEventId());
+            lease.setLastEventSequence(suspendEvent.getRuntimeSequence());
+            lease.setRevision(lease.getRevision() + 1);
+            run.setStatus(targetRunStatus);
+            run.setRevision(run.getRevision() + 1);
+            instance.setActiveRuns(instance.getActiveRuns() - 1);
+            event = suspendEvent;
             return lease;
         }
 

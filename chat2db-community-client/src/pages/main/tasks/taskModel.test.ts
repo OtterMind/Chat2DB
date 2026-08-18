@@ -14,9 +14,15 @@ import {
   currentArtifactVersion,
   extractAgentChartPresentation,
   groupTasks,
+  taskPriorityLevel,
   TASK_TRANSITIONS,
   upsertTask,
 } from './taskModel';
+
+assert.equal(taskPriorityLevel(0), 0);
+assert.equal(taskPriorityLevel(10), 10);
+assert.equal(taskPriorityLevel(25), 20);
+assert.equal(taskPriorityLevel(30), 30);
 
 const task = (id: string, status: AgentTask['status']): AgentTask =>
   ({
@@ -33,12 +39,13 @@ const task = (id: string, status: AgentTask['status']): AgentTask =>
 const groups = groupTasks([
   task('todo', 'TODO'),
   task('running', 'IN_PROGRESS'),
+  task('approval', 'WAITING_APPROVAL'),
   task('review', 'IN_REVIEW'),
   task('done', 'DONE'),
 ]);
 assert.deepEqual(
   groups.map((group) => group.tasks.map((item) => item.id)),
-  [['todo'], ['running'], ['review'], ['done']],
+  [['todo'], ['running'], ['approval'], ['review'], ['done']],
   'task board should group lifecycle states without losing tasks',
 );
 

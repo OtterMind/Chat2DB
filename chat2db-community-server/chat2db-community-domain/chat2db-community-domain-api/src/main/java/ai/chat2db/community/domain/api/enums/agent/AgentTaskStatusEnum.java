@@ -4,6 +4,7 @@ public enum AgentTaskStatusEnum {
     BACKLOG,
     TODO,
     IN_PROGRESS,
+    WAITING_APPROVAL,
     IN_REVIEW,
     BLOCKED,
     DONE,
