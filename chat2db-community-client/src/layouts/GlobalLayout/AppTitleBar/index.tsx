@@ -115,6 +115,9 @@ const AppBar = memo<AppBarProps>(({ className }) => {
 
   const handleToggleMaximizeWindow = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
+    if (event.detail > 1) {
+      return;
+    }
     jcefApi
       .handleDoubleClickAppBar()
       .then(syncWindowMaximized)
