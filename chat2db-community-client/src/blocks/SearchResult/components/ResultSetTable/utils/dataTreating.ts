@@ -29,7 +29,14 @@ const handleDataDisplay = (params: {
     field,
     hide: hiddenFields?.has(field) ?? false,
     title: '',
-    headerCustomRender,
+    headerCustomRender: (args: { rect?: { width?: number } }) =>
+      createResultHeaderCustomRender({
+        data,
+        theme,
+        fontSize: customFontSize,
+        visibility,
+        availableWidth: args.rect?.width,
+      }),
     headerStyle: {
       padding: [
         8,

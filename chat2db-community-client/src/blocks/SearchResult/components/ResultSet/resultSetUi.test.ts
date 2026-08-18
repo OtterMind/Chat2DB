@@ -16,6 +16,7 @@ import {
   canHideResultColumns,
   getNextFrozenResultColumnFields,
   getResultCellMetaAtTableColumn,
+  getResultColumnNameAtTableColumn,
   getResultColumnDisplayOrder,
   getResultFrozenColumnCount,
   hideResultColumnFields,
@@ -55,6 +56,14 @@ const rowDetailSource = readFileSync(
 );
 const resultSetSource = readFileSync(
   'src/blocks/SearchResult/components/ResultSet/index.tsx',
+  'utf8',
+);
+const headerTooltipSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/hooks/useHeaderTooltip.tsx',
+  'utf8',
+);
+const resultColumnDataTreatingSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/utils/dataTreating.ts',
   'utf8',
 );
 
@@ -233,7 +242,7 @@ test('field type and comment rows are enabled by default and can be hidden indep
   ]);
 });
 
-test('result headers render available metadata values as lines without hover or labels', () => {
+test('result headers render available metadata values as lines without labels', () => {
   assert.equal(
     getResultColumnTitle({
       dataType: 'STRING' as any,
@@ -276,6 +285,40 @@ test('result header custom render fixes row positions and applies semantic color
       { text: '--', fill: '#888888', fontSize: 13, fontWeight: 400, y: 63 },
     ],
   );
+});
+
+test('resized result headers use the live cell width without expanding their initial recommendation', () => {
+  const theme = {
+    colorText: '#111111',
+    colorPrimary: '#1677ff',
+    colorTextSecondary: '#888888',
+    fontFamily: 'Inter',
+  } as any;
+  const longName = 'a'.repeat(800);
+  const initialRender = createResultHeaderCustomRender({
+    data: { dataType: 'STRING' as any, name: longName },
+    fontSize: 13,
+    theme,
+  });
+  const resizedRender = createResultHeaderCustomRender({
+    data: { dataType: 'STRING' as any, name: longName },
+    fontSize: 13,
+    theme,
+    availableWidth: 720,
+  });
+
+  assert.equal(initialRender.expectedWidth, 360);
+  assert.equal(initialRender.elements[0].maxLineWidth, 302);
+  assert.equal(resizedRender.expectedWidth, 360);
+  assert.equal(resizedRender.elements[0].maxLineWidth, 662);
+  assert.match(resultColumnDataTreatingSource, /availableWidth: args\.rect\?\.width/);
+});
+
+test('result header tooltip preserves complete metadata and wraps long identifiers', () => {
+  assert.match(headerTooltipSource, /getHeaderMetadataRows\(originalData\)/);
+  assert.match(headerTooltipSource, /\{item\.value\}/);
+  assert.match(headerTooltipSource, /overflow-wrap: anywhere;/);
+  assert.doesNotMatch(headerTooltipSource, /text-overflow: ellipsis;/);
 });
 
 test('pinned result tabs survive replacement while unpinned results are discarded', () => {
@@ -400,6 +443,19 @@ test('cell metadata lookup resolves the stable field after an earlier column is 
     getHeaderField: (col: number) => (col === 1 ? '2' : undefined),
   } as any;
   assert.equal(getResultCellMetaAtTableColumn(table, record, 1, 1)?.value, 'second');
+});
+
+test('column-name lookup copies original metadata after columns are reordered', () => {
+  const table = {
+    columns: [
+      { field: '2', originalData: { name: 'second_column' } },
+      { field: '1', originalData: { name: 'first_column' } },
+    ],
+    getHeaderField: (col: number) => (col === 1 ? '2' : '1'),
+  } as any;
+
+  assert.equal(getResultColumnNameAtTableColumn(table, 1), 'second_column');
+  assert.equal(getResultColumnNameAtTableColumn(table, 2), 'first_column');
 });
 
 test('clearing a selection never restores an active cell from a pending frame', () => {
