@@ -56,8 +56,8 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     communityMenuLogo: css`
       display: block;
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       border-radius: 6px;
       object-fit: contain;
       flex-shrink: 0;
@@ -67,9 +67,10 @@ export const useStyles = createStyles(({ css, token }) => {
       align-items: center;
       gap: 2px;
       height: 100%;
-      margin-left: 4px;
     `,
     communityMenuItem: css`
+      display: inline-flex;
+      align-items: center;
       height: 30px;
       padding: 0 9px;
       border: 0;

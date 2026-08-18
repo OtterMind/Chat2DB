@@ -4,7 +4,7 @@ import { AlignJustify } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 
 import communityLogo from '@/assets/logo/pro/logo.png';
-import { COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
+import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
@@ -113,16 +113,7 @@ const CommunityAppMenu = () => {
   return (
     <div ref={menuRef} className={styles.communityMenuContent} onDoubleClick={stopWindowGesture}>
       <img className={styles.communityMenuLogo} src={communityLogo} alt="Chat2DB" />
-      <IconButton
-        type="primary"
-        size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
-        title={i18n('common.menu.main')}
-        icon={AlignJustify}
-        isActive={expanded}
-        tooltipPlacement="bottom"
-        onClick={toggleExpanded}
-      />
-      {expanded && (
+      {expanded ? (
         <div className={styles.communityMenuBar}>
           <Dropdown
             destroyPopupOnHide
@@ -157,6 +148,15 @@ const CommunityAppMenu = () => {
             </button>
           </Dropdown>
         </div>
+      ) : (
+        <IconButton
+          type="primary"
+          size={COMMUNITY_MAIN_ACTION_BUTTON_SIZE}
+          title={i18n('common.menu.main')}
+          icon={AlignJustify}
+          tooltipPlacement="bottom"
+          onClick={toggleExpanded}
+        />
       )}
     </div>
   );
