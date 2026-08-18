@@ -227,7 +227,7 @@ export default {
   'workspace.format.json.compress': 'JSON 압축',
   'workspace.menu.copyDataSource': '데이터 소스 복사',
   'workspace.explorer.title': '파일',
-  'workspace.explorer.databases': '데이터 브라우저',
+  'workspace.explorer.dataSources': '데이터 소스',
   'workspace.action.storageMigration': '저장소 마이그레이션',
   'workspace.action.storageMigrationPending': '로컬 데이터 지금 마이그레이션',
   'workspace.openSessions.title': '열린 세션',

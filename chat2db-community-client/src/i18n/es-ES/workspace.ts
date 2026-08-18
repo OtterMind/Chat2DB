@@ -229,7 +229,7 @@ export default {
   'workspace.format.json.compress': 'Comprimir JSON',
   'workspace.menu.copyDataSource': 'Copiar fuente de datos',
   'workspace.explorer.title': 'Archivos',
-  'workspace.explorer.databases': 'Explorador de datos',
+  'workspace.explorer.dataSources': 'Fuentes de datos',
   'workspace.action.storageMigration': 'Migracion de almacenamiento',
   'workspace.action.storageMigrationPending': 'Migrar datos locales ahora',
   'workspace.openSessions.title': 'Sesiones abiertas',

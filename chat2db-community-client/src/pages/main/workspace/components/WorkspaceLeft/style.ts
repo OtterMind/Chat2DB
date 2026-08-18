@@ -21,52 +21,46 @@ export const useStyles = createStyles(({ css, token }) => {
     resourceSwitcher: css`
       display: flex;
       align-items: center;
+      justify-content: space-between;
       flex-shrink: 0;
       height: 42px;
-      padding: 0 16px;
+      padding: 0 8px 0 12px;
       border-bottom: 1px solid ${token.colorBorderLayout};
     `,
-    resourceTabs: css`
-      display: flex;
+    resourceSelector: css`
+      display: inline-flex;
       align-items: center;
-      gap: 18px;
-      height: 100%;
+      gap: 6px;
       min-width: 0;
-    `,
-    resourceTitle: css`
-      position: relative;
-      height: 100%;
-      padding: 0;
-      border: none;
+      height: 30px;
+      padding: 0 6px;
+      border: 0;
+      border-radius: 6px;
+      color: ${token.colorText};
       background: transparent;
-      color: ${token.colorTextTertiary};
-      font-size: 14px;
-      font-weight: 500;
       cursor: pointer;
-      transition: color 0.15s;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0;
 
       &:hover {
-        color: ${token.colorText};
+        background: ${token.colorFillTertiary};
       }
 
-      &::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 2px;
-        border-radius: 2px 2px 0 0;
-        background: transparent;
+      &:focus-visible {
+        outline: 2px solid ${token.colorPrimaryBorder};
+        outline-offset: 1px;
       }
     `,
-    resourceTitleActive: css`
-      color: ${token.colorText};
-      font-weight: 600;
-
-      &::after {
-        background: ${token.colorPrimary};
-      }
+    resourceSelectorLabel: css`
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `,
+    resourceMenuItem: css`
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     `,
     noConnectionList: css`
       height: 100%;

@@ -1,6 +1,6 @@
 import { createStyles } from 'antd-style';
 
-export const useStyles = createStyles(({ css, token }) => ({
+export const useStyles = createStyles(({ css }) => ({
   toolbar: css`
     display: flex;
     align-items: center;
@@ -22,11 +22,5 @@ export const useStyles = createStyles(({ css, token }) => ({
     &::-webkit-scrollbar {
       display: none;
     }
-  `,
-  layoutActions: css`
-    flex-shrink: 0;
-    margin-left: 4px;
-    padding-left: 6px;
-    border-left: 1px solid ${token.colorBorderSecondary};
   `,
 }));

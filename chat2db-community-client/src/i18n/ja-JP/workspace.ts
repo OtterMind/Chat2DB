@@ -226,7 +226,7 @@ export default {
   'workspace.format.json.compress': 'JSONを圧縮',
   'workspace.menu.copyDataSource': 'データソースをコピー',
   'workspace.explorer.title': 'ファイル',
-  'workspace.explorer.databases': 'データブラウザー',
+  'workspace.explorer.dataSources': 'データソース',
   'workspace.action.storageMigration': 'ストレージ移行',
   'workspace.action.storageMigrationPending': 'ローカルデータを早めに移行',
   'workspace.openSessions.title': '開いているセッション',
