@@ -66,8 +66,8 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     communityMenuLogo: css`
       display: block;
-      width: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.iconSize}px;
-      height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.iconSize}px;
+      width: 20px;
+      height: 20px;
       border-radius: 4px;
       object-fit: contain;
     `,
