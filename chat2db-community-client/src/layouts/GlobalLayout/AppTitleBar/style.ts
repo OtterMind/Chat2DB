@@ -1,5 +1,7 @@
 import { createStyles } from 'antd-style';
 
+import { COMMUNITY_MAIN_ACTION_BAR_WIDTH, COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
+
 export const useStyles = createStyles(({ css, token }) => {
   return {
     appBar: css`
@@ -40,7 +42,7 @@ export const useStyles = createStyles(({ css, token }) => {
     communityMenu: css`
       position: absolute;
       top: 0;
-      left: 4px;
+      left: ${(COMMUNITY_MAIN_ACTION_BAR_WIDTH - COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize) / 2}px;
       z-index: 2;
       display: flex;
       align-items: center;
@@ -56,8 +58,8 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     communityMenuLogo: css`
       display: block;
-      width: 30px;
-      height: 30px;
+      width: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
+      height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
       border-radius: 6px;
       object-fit: contain;
       flex-shrink: 0;

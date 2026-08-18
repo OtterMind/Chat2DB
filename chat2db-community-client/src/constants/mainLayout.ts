@@ -5,6 +5,8 @@ export const COMMUNITY_TITLE_BAR_BUTTON_SIZE = {
   strokeWidth: 2,
 } as const;
 
+export const COMMUNITY_MAIN_ACTION_BAR_WIDTH = 44;
+
 export const COMMUNITY_MAIN_ACTION_BUTTON_SIZE = {
   boxSize: 30,
   iconSize: 18,

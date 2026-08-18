@@ -8,7 +8,7 @@ import { canImportExport, isDesktop } from '@/utils/env';
 import { useAIStore } from '@/store/ai';
 import AIButton from '@/blocks/AI/components/AIButton';
 import { TaskCenterModals } from '@/blocks/ImportAndExport/components/TaskCenter';
-import { COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
+import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE, COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
 import TaskCenterStatusBadge from '../TaskCenterStatusBadge';
 import QuickTerminalButton from './QuickTerminalButton';
 
@@ -31,6 +31,8 @@ export default (props: IProps) => {
     showPanel: state.showPanel,
   }));
   const recordPanelActive = isWorkspaceRecordCode(currentWorkspaceExtend);
+  const buttonSize =
+    orientation === 'horizontal' ? COMMUNITY_MAIN_ACTION_BUTTON_SIZE : COMMUNITY_TITLE_BAR_BUTTON_SIZE;
 
   const changeExtend = (code: string) => {
     if (currentWorkspaceExtend === code) {
@@ -51,7 +53,7 @@ export default (props: IProps) => {
           <IconButton
             key={item.code}
             type="primary"
-            size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
+            size={buttonSize}
             title={item.title}
             tooltipPlacement={tooltipPlacement}
             {...(typeof item.icon === 'string' ? { code: item.icon } : { icon: item.icon })}
@@ -65,7 +67,7 @@ export default (props: IProps) => {
         <TaskCenterStatusBadge>
           <IconButton
             type="primary"
-            size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
+            size={buttonSize}
             title={workspaceRecordEntryConfig.title}
             tooltipPlacement={tooltipPlacement}
             {...(typeof workspaceRecordEntryConfig.icon === 'string'
@@ -79,10 +81,10 @@ export default (props: IProps) => {
           />
         </TaskCenterStatusBadge>
         {isDesktop && orientation === 'vertical' && (
-          <QuickTerminalButton size={COMMUNITY_TITLE_BAR_BUTTON_SIZE} tooltipPlacement={tooltipPlacement} />
+          <QuickTerminalButton size={buttonSize} tooltipPlacement={tooltipPlacement} />
         )}
         <AIButton
-          size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
+          size={buttonSize}
           onClick={() => {
             setCurrentWorkspaceExtend(null);
             useAIStore.getState().togglePanel();

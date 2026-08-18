@@ -1,11 +1,13 @@
 import { createStyles } from 'antd-style';
 
+import { COMMUNITY_MAIN_ACTION_BAR_WIDTH } from '@/constants/mainLayout';
+
 export const useStyles = createStyles(({ css, token }) => ({
   actionBar: css`
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 44px;
+    width: ${COMMUNITY_MAIN_ACTION_BAR_WIDTH}px;
     flex-shrink: 0;
     box-sizing: border-box;
     padding: 6px 0;
