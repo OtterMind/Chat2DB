@@ -14,6 +14,7 @@ import { useGlobalStore } from '@/store/global';
 import { useUserStore } from '@/store/user';
 
 import CommunitySetting from '@/blocks/Setting/CommunitySetting';
+import CommunityMainActionBar from './components/CommunityMainActionBar';
 import CommunityTitleBarActions from './components/CommunityTitleBarActions';
 import StreamSidebar from './components/StreamSidebar';
 
@@ -392,27 +393,21 @@ function CommunityMainPage() {
   }, [handleNavItemClick, handleOpenSettings, isEmbedIframe, navConfig, showLeftContainer]);
 
   useEffect(() => {
-    if (showLeftContainer || isEmbedIframe === IframeType.ZOER) {
+    const shouldShowWorkspaceTitleBarActions =
+      !showLeftContainer &&
+      isEmbedIframe !== IframeType.ZOER &&
+      mainPageActiveTab === 'workspace' &&
+      settingPageActiveTab === false;
+
+    if (!shouldShowWorkspaceTitleBarActions) {
       setAppTitleBarRightComponent(false);
       return;
     }
 
-    setAppTitleBarRightComponent(
-      <CommunityTitleBarActions
-        navItems={navConfig}
-        activePage={mainPageActiveTab}
-        settingsActive={settingPageActiveTab !== false}
-        hideAccountActions={Boolean(isEmbedIframe)}
-        onNavigate={handleNavItemClick}
-        onOpenSettings={handleOpenSettings}
-      />,
-    );
+    setAppTitleBarRightComponent(<CommunityTitleBarActions />);
   }, [
-    handleNavItemClick,
-    handleOpenSettings,
     isEmbedIframe,
     mainPageActiveTab,
-    navConfig,
     setAppTitleBarRightComponent,
     settingPageActiveTab,
     showLeftContainer,
@@ -427,9 +422,21 @@ function CommunityMainPage() {
     settingPageActiveTab === false &&
     !showLeftContainer &&
     isEmbedIframe !== IframeType.ZOER;
+  const showMainActionBar = !showLeftContainer && isEmbedIframe !== IframeType.ZOER;
 
   return (
     <div className={styles.container}>
+      {showMainActionBar && (
+        <CommunityMainActionBar
+          navItems={navConfig}
+          activePage={mainPageActiveTab}
+          settingsActive={settingPageActiveTab !== false}
+          hideSettings={Boolean(isEmbedIframe)}
+          onNavigate={handleNavItemClick}
+          onOpenSettings={handleOpenSettings}
+        />
+      )}
+
       {showStreamSidebar && (
         <StreamSidebar
           sessions={filteredSidebarSessions}

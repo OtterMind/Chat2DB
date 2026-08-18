@@ -28,6 +28,7 @@ export const useStyles = createStyles(({ css, token }) => {
       min-width: 0;
       height: 100%;
       padding: 0 8px;
+      box-sizing: border-box;
       z-index: 1;
     `,
     communityMacWindowedActions: css`
@@ -74,20 +75,32 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
 
     windowsActionBar: css`
+      position: absolute;
+      top: 0;
+      right: 0;
       display: flex;
+      width: 144px;
+      height: 100%;
+      z-index: 2;
       -webkit-app-region: no-drag;
     `,
     windowsAction: css`
-      width: 34px !important;
-      height: 34px !important;
-      border-radius: 0px !important;
       display: flex;
       justify-content: center;
       align-items: center;
+      width: 48px;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      color: ${token.colorText};
+      background: transparent;
       cursor: pointer;
-      i {
-        font-size: 14px;
+
+      svg {
+        display: block;
       }
+
       &:hover {
         background-color: ${token.controlItemBgHover};
       }
@@ -95,7 +108,7 @@ export const useStyles = createStyles(({ css, token }) => {
     closeAction: css`
       &:hover {
         background-color: ${token.colorError};
-        color: #fff;
+        color: ${token.colorWhite};
       }
     `,
   };

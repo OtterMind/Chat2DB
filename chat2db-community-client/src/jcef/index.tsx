@@ -153,7 +153,7 @@ const jcefApi = {
   },
   // Is it maximizing
   isWindowMaximized: () => {
-    return createJcefApi('is-window-maximized');
+    return createJcefApi<boolean>('is-window-maximized');
   },
   // Is the macOS window in native full screen mode?
   isWindowFullScreen: () => {
