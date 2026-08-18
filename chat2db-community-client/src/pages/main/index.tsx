@@ -121,8 +121,7 @@ function MainPage() {
   const { curOrg } = useOrgStore((state) => ({
     curOrg: state.curOrg,
   }));
-  const { networkAbandoned, setPricingModalStatus, setSubscriptType, curUser } = useUserStore((state) => ({
-    networkAbandoned: state.networkAbandoned,
+  const { setPricingModalStatus, setSubscriptType, curUser } = useUserStore((state) => ({
     setPricingModalStatus: state.setPricingModalStatus,
     setSubscriptType: state.setSubscriptType,
     curUser: state.curUser,
@@ -262,12 +261,6 @@ function MainPage() {
       _initNavConfig = _initNavConfig.filter((item) => item.key !== 'knowledge-management');
     }
 
-    if (networkAbandoned) {
-      // plugin || knowledge-management || stream || chat || team || dashboard
-      const filterKeys = ['plugin', 'knowledge-management', 'stream', 'chat', 'team', 'dashboard'];
-      _initNavConfig = _initNavConfig.filter((item) => !filterKeys.includes(item.key));
-    }
-
     setNavConfig(_initNavConfig);
 
     let page = '';
@@ -311,7 +304,7 @@ function MainPage() {
       navConfigTmp: _initNavConfig,
       isFirst: true,
     });
-  }, [curOrg?.type, handleChangePageTab, initNavConfig, isCN, mainPageActiveTab, networkAbandoned]);
+  }, [curOrg?.type, handleChangePageTab, initNavConfig, isCN, mainPageActiveTab]);
 
   // Load sessions when the chat entry is active.
   useEffect(() => {

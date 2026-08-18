@@ -22,6 +22,10 @@ assert.equal(
   createRedisKeyViewModeStorageKey('community', 'community'),
   'chat2db.community.community.redis.key-view-mode.v1',
 );
+assert.equal(
+  createRedisKeyViewModeStorageKey('enterprise', 'offline'),
+  'chat2db.enterprise.offline.redis.key-view-mode.v1',
+);
 
 assert.equal(readRedisKeyViewMode(undefined, storageKey), 'list');
 assert.equal(readRedisKeyViewMode(storage, storageKey), 'list');

@@ -1,10 +1,10 @@
 import AIButton from '@/blocks/AI/components/AIButton';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { canShareDashboard } from '@/edition-ui/runtimeCapabilities';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
 import { useUserStore } from '@/store/user';
-import { OrganizationType } from '@/typings/enterprise/organization';
 import { copyToClipboard } from '@/utils';
 import { IconButton, staticMessage } from '@chat2db/ui';
 import { memo } from 'react';
@@ -22,6 +22,7 @@ export default memo<IProps>((props) => {
   const { curUser } = useUserStore((state) => ({
     curUser: state.curUser,
   }));
+  const capabilities = useRuntimeEditionCapabilities();
 
   const handleShare = () => {
     if (!dashboardId) return;
@@ -31,10 +32,10 @@ export default memo<IProps>((props) => {
 
   return (
     <>
-      {runtimeEditionConfig.dashboardShare && curUser?.currentOrganization?.type !== OrganizationType.PERSONAL && (
+      {canShareDashboard(capabilities, curUser?.currentOrganization?.type) && (
         <IconButton code="icon-share" title="share" size="md" onClick={handleShare} />
       )}
-      {runtimeEditionConfig.dashboardHostedAiGenerate && (
+      {capabilities.dashboardHostedAiGenerate && (
         <AIButton
           size="md"
           onClick={() => {

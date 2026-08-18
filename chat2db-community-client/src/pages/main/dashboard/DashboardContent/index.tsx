@@ -1,6 +1,6 @@
 import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/EditorChartModal';
 import { chartDetailNormalization } from '@/blocks/BI/utils/dataTreating';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import { createChart } from '@/service/dashboard';
 import { useDashboardStore } from '@/store/dashboard/store';
@@ -36,6 +36,7 @@ export default memo<IProps>((props) => {
   const draggableModalAcceptPlace = useRef<HTMLDivElement>(null);
 
   const { styles } = useStyles();
+  const capabilities = useRuntimeEditionCapabilities();
   const dashboardContentRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, { enterFullscreen, exitFullscreen }] = useFullscreen(dashboardContentRef);
 
@@ -91,7 +92,7 @@ export default memo<IProps>((props) => {
   };
 
   const showCommercialDashboardActions =
-    isEditPermission && (runtimeEditionConfig.dashboardShare || runtimeEditionConfig.dashboardHostedAiGenerate);
+    isEditPermission && (capabilities.dashboardShare || capabilities.dashboardHostedAiGenerate);
 
   if (!currentDashboard) {
     return (
