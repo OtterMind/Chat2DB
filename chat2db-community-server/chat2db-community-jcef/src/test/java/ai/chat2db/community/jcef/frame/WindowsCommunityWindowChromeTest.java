@@ -31,6 +31,9 @@ class WindowsCommunityWindowChromeTest {
         assertEquals(true, rootPane.getClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICON));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_TITLE));
+        assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICONIFFY));
+        assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_MAXIMIZE));
+        assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_CLOSE));
         assertEquals(
                 WindowsCommunityWindowChrome.TITLE_BAR_HEIGHT,
                 rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_HEIGHT)
@@ -39,7 +42,7 @@ class WindowsCommunityWindowChromeTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void shouldOnlyTreatTheTopCenterAsNativeCaption() {
+    void shouldTreatTopBarSpaceBetweenWebControlsAsNativeCaption() {
         JPanel browserComponent = new JPanel();
         browserComponent.setSize(1000, 800);
 
@@ -48,8 +51,11 @@ class WindowsCommunityWindowChromeTest {
         Function<Point, Boolean> captionHitTest = (Function<Point, Boolean>) browserComponent.getClientProperty(
                 FlatClientProperties.COMPONENT_TITLE_BAR_CAPTION
         );
-        assertFalse(captionHitTest.apply(new Point(100, 10)));
+        assertFalse(captionHitTest.apply(new Point(20, 10)));
+        assertTrue(captionHitTest.apply(new Point(100, 10)));
         assertTrue(captionHitTest.apply(new Point(500, 10)));
+        assertTrue(captionHitTest.apply(new Point(679, 10)));
+        assertFalse(captionHitTest.apply(new Point(680, 10)));
         assertFalse(captionHitTest.apply(new Point(900, 10)));
         assertFalse(captionHitTest.apply(new Point(500, WindowsCommunityWindowChrome.TITLE_BAR_HEIGHT)));
     }

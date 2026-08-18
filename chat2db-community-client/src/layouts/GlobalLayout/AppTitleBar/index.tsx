@@ -9,6 +9,7 @@ import jcefApi from '@/jcef';
 import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
+import CommunityAppMenu from './CommunityAppMenu';
 
 interface AppBarProps {
   className?: string;
@@ -104,8 +105,19 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     },
   ];
 
-  const handleDoubleClick = async () => {
-    jcefApi?.handleDoubleClickAppBar();
+  const toggleWindowMaximized = useCallback(() => {
+    return jcefApi.handleDoubleClickAppBar().then((maximized) => {
+      if (isWindows) {
+        setIsMaximized(maximized);
+      }
+    });
+  }, [isWindows]);
+
+  const handleDoubleClick = () => {
+    if (!isDesktop) {
+      return;
+    }
+    toggleWindowMaximized().catch(() => undefined);
   };
 
   const handleMinimizeWindow = (event: MouseEvent<HTMLButtonElement>) => {
@@ -118,10 +130,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     if (event.detail > 1) {
       return;
     }
-    jcefApi
-      .handleDoubleClickAppBar()
-      .then(syncWindowMaximized)
-      .catch(() => undefined);
+    toggleWindowMaximized().catch(() => undefined);
   };
 
   const handleCloseWindow = (event: MouseEvent<HTMLButtonElement>) => {
@@ -163,6 +172,11 @@ const AppBar = memo<AppBarProps>(({ className }) => {
       )}
       onDoubleClick={handleDoubleClick}
     >
+      {isCommunityEnv && isWindows && isDesktop && (
+        <div className={styles.communityMenu}>
+          <CommunityAppMenu />
+        </div>
+      )}
       {isCommunityEnv && (
         <div
           className={cx(styles.communityActions, {

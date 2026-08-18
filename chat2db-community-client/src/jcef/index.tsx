@@ -139,7 +139,7 @@ const jcefApi = {
   },
   // Double-click the AppBar
   handleDoubleClickAppBar: () => {
-    return createJcefApi('double-click-app-bar');
+    return createJcefApi<boolean>('double-click-app-bar');
   },
   // close window
   closeWindow: () => {

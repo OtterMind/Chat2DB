@@ -37,6 +37,21 @@ export const useStyles = createStyles(({ css, token }) => {
     communityWindowsDesktopActions: css`
       padding-right: 144px;
     `,
+    communityMenu: css`
+      position: absolute;
+      top: 0;
+      left: 4px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      height: 100%;
+      -webkit-app-region: no-drag;
+    `,
+    communityMenuTrigger: css`
+      display: flex;
+      align-items: center;
+      -webkit-app-region: no-drag;
+    `,
     logoContainer: css`
       display: flex;
       justify-content: center;

@@ -11,8 +11,8 @@ import java.util.function.Function;
 final class WindowsCommunityWindowChrome {
 
     static final int TITLE_BAR_HEIGHT = 36;
-    private static final int CAPTION_START_PERCENT = 35;
-    private static final int CAPTION_END_PERCENT = 65;
+    private static final int WEB_APP_MENU_RESERVED_WIDTH = 40;
+    private static final int WEB_TRAILING_ACTIONS_RESERVED_WIDTH = 320;
 
     private WindowsCommunityWindowChrome() {
     }
@@ -25,6 +25,11 @@ final class WindowsCommunityWindowChrome {
         rootPane.putClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT, true);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICON, false);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_TITLE, false);
+        // The visible window controls are rendered by the web title bar. Keeping FlatLaf's
+        // invisible controls would create overlapping native hit targets on Windows.
+        rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICONIFFY, false);
+        rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_MAXIMIZE, false);
+        rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_SHOW_CLOSE, false);
         rootPane.putClientProperty(FlatClientProperties.TITLE_BAR_HEIGHT, TITLE_BAR_HEIGHT);
     }
 
@@ -40,8 +45,7 @@ final class WindowsCommunityWindowChrome {
         if (point == null || width <= 0 || point.y < 0 || point.y >= TITLE_BAR_HEIGHT) {
             return false;
         }
-        int captionStart = width * CAPTION_START_PERCENT / 100;
-        int captionEnd = width * CAPTION_END_PERCENT / 100;
-        return point.x >= captionStart && point.x < captionEnd;
+        return point.x >= WEB_APP_MENU_RESERVED_WIDTH
+                && point.x < width - WEB_TRAILING_ACTIONS_RESERVED_WIDTH;
     }
 }
