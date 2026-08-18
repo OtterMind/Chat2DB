@@ -47,10 +47,44 @@ export const useStyles = createStyles(({ css, token }) => {
       height: 100%;
       -webkit-app-region: no-drag;
     `,
-    communityMenuTrigger: css`
+    communityMenuContent: css`
       display: flex;
       align-items: center;
+      gap: 2px;
+      height: 100%;
       -webkit-app-region: no-drag;
+    `,
+    communityMenuLogo: css`
+      display: block;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      object-fit: contain;
+      flex-shrink: 0;
+    `,
+    communityMenuBar: css`
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 100%;
+      margin-left: 4px;
+    `,
+    communityMenuItem: css`
+      height: 30px;
+      padding: 0 9px;
+      border: 0;
+      border-radius: 4px;
+      color: ${token.colorText};
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        color: ${token.colorPrimary};
+        background-color: ${token.controlItemBgHover};
+        outline: none;
+      }
     `,
     logoContainer: css`
       display: flex;

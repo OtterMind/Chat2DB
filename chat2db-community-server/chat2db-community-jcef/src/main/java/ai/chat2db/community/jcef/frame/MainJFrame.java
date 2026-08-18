@@ -769,6 +769,7 @@ public class MainJFrame extends JFrame {
         this.browserUI_ = browser_.getUIComponent();
         if (WindowsCommunityWindowChrome.isEnabled(OS.isWindows(), ConfigUtils.isCommunity())) {
             WindowsCommunityWindowChrome.configureBrowserComponent(browserUI_);
+            WindowsCommunityWindowChrome.installWindowDragging(this, browserUI_);
         }
         this.browserUI_.addMouseListener(new MouseAdapter() {
             @Override

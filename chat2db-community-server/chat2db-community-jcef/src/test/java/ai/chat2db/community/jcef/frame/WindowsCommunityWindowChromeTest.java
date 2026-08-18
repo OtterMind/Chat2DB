@@ -52,7 +52,8 @@ class WindowsCommunityWindowChromeTest {
                 FlatClientProperties.COMPONENT_TITLE_BAR_CAPTION
         );
         assertFalse(captionHitTest.apply(new Point(20, 10)));
-        assertTrue(captionHitTest.apply(new Point(100, 10)));
+        assertFalse(captionHitTest.apply(new Point(100, 10)));
+        assertTrue(captionHitTest.apply(new Point(220, 10)));
         assertTrue(captionHitTest.apply(new Point(500, 10)));
         assertTrue(captionHitTest.apply(new Point(679, 10)));
         assertFalse(captionHitTest.apply(new Point(680, 10)));
@@ -63,5 +64,17 @@ class WindowsCommunityWindowChromeTest {
     @Test
     void shouldIgnoreNonSwingBrowserComponents() {
         WindowsCommunityWindowChrome.configureBrowserComponent(new java.awt.Canvas());
+    }
+
+    @Test
+    void shouldMoveWindowByThePointerDelta() {
+        assertEquals(
+                new Point(130, 175),
+                WindowsCommunityWindowChrome.draggedWindowLocation(
+                        new Point(100, 200),
+                        new Point(400, 300),
+                        new Point(430, 275)
+                )
+        );
     }
 }

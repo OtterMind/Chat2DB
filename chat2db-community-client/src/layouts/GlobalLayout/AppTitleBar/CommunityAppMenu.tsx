@@ -1,8 +1,9 @@
 import { IconButton } from '@chat2db/ui';
 import { Dropdown, type MenuProps } from 'antd';
 import { AlignJustify } from 'lucide-react';
-import { useMemo, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 
+import communityLogo from '@/assets/logo/pro/logo.png';
 import { COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
@@ -15,67 +16,149 @@ import { useStyles } from './style';
 const CommunityAppMenu = () => {
   const { styles } = useStyles();
   const appUrlConfig = useGlobalStore((state) => state.appUrlConfig);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [openMenu, setOpenMenu] = useState<'view' | 'help' | null>(null);
 
-  const items = useMemo<MenuProps['items']>(
+  const closeMenu = useCallback(() => {
+    setExpanded(false);
+    setOpenMenu(null);
+  }, []);
+
+  const runAndClose = useCallback(
+    (action: () => unknown) => () => {
+      closeMenu();
+      action();
+    },
+    [closeMenu],
+  );
+
+  const viewItems = useMemo<MenuProps['items']>(
     () => [
       {
-        key: 'view',
-        label: i18n('common.menu.view'),
-        children: [
-          {
-            key: 'refresh',
-            label: i18n('common.text.refreshPage'),
-            onClick: refreshPage,
-          },
-        ],
-      },
-      {
-        key: 'help',
-        label: i18n('common.menu.help'),
-        children: [
-          {
-            key: 'open-log',
-            label: i18n('common.menu.openLog'),
-            onClick: () => jcefApi.openLog(),
-          },
-          { type: 'divider' },
-          {
-            key: 'visit-website',
-            label: i18n('common.menu.visitWebsite'),
-            onClick: () => openWebPage(appUrlConfig.WEBSITE_URL),
-          },
-          {
-            key: 'view-docs',
-            label: i18n('common.menu.viewDocs'),
-            onClick: () => openWebPage(appUrlConfig.DOCS_URL),
-          },
-          {
-            key: 'view-changelog',
-            label: i18n('common.menu.viewChangelog'),
-            onClick: () => openWebPage(appUrlConfig.CHANGE_LOG_URL),
-          },
-        ],
+        key: 'refresh',
+        label: i18n('common.text.refreshPage'),
+        onClick: runAndClose(refreshPage),
       },
     ],
-    [appUrlConfig.CHANGE_LOG_URL, appUrlConfig.DOCS_URL, appUrlConfig.WEBSITE_URL],
+    [runAndClose],
+  );
+
+  const helpItems = useMemo<MenuProps['items']>(
+    () => [
+      {
+        key: 'open-log',
+        label: i18n('common.menu.openLog'),
+        onClick: runAndClose(() => jcefApi.openLog()),
+      },
+      { type: 'divider' },
+      {
+        key: 'visit-website',
+        label: i18n('common.menu.visitWebsite'),
+        onClick: runAndClose(() => openWebPage(appUrlConfig.WEBSITE_URL)),
+      },
+      {
+        key: 'view-docs',
+        label: i18n('common.menu.viewDocs'),
+        onClick: runAndClose(() => openWebPage(appUrlConfig.DOCS_URL)),
+      },
+      {
+        key: 'view-changelog',
+        label: i18n('common.menu.viewChangelog'),
+        onClick: runAndClose(() => openWebPage(appUrlConfig.CHANGE_LOG_URL)),
+      },
+    ],
+    [appUrlConfig.CHANGE_LOG_URL, appUrlConfig.DOCS_URL, appUrlConfig.WEBSITE_URL, runAndClose],
   );
 
   const stopWindowGesture = (event: MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
   };
 
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+
+    const handleDocumentMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || menuRef.current?.contains(target)) {
+        return;
+      }
+      if (target instanceof Element && target.closest('.ant-dropdown')) {
+        return;
+      }
+      closeMenu();
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
+  }, [closeMenu, expanded]);
+
+  const toggleExpanded = () => {
+    setExpanded((current) => {
+      if (current) {
+        setOpenMenu(null);
+      }
+      return !current;
+    });
+  };
+
+  const switchOpenMenu = (menu: 'view' | 'help') => {
+    if (openMenu) {
+      setOpenMenu(menu);
+    }
+  };
+
   return (
-    <Dropdown destroyPopupOnHide menu={{ items }} placement="bottomLeft" trigger={['click']}>
-      <div className={styles.communityMenuTrigger} onClick={stopWindowGesture} onDoubleClick={stopWindowGesture}>
-        <IconButton
-          type="primary"
-          size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
-          title={i18n('common.menu.main')}
-          icon={AlignJustify}
-          tooltipPlacement="bottom"
-        />
-      </div>
-    </Dropdown>
+    <div ref={menuRef} className={styles.communityMenuContent} onDoubleClick={stopWindowGesture}>
+      <img className={styles.communityMenuLogo} src={communityLogo} alt="Chat2DB" />
+      <IconButton
+        type="primary"
+        size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
+        title={i18n('common.menu.main')}
+        icon={AlignJustify}
+        isActive={expanded}
+        tooltipPlacement="bottom"
+        onClick={toggleExpanded}
+      />
+      {expanded && (
+        <div className={styles.communityMenuBar}>
+          <Dropdown
+            destroyPopupOnHide
+            menu={{ items: viewItems }}
+            open={openMenu === 'view'}
+            placement="bottomLeft"
+            trigger={['click']}
+            onOpenChange={(open) => setOpenMenu(open ? 'view' : null)}
+          >
+            <button
+              type="button"
+              className={styles.communityMenuItem}
+              onMouseEnter={() => switchOpenMenu('view')}
+            >
+              {i18n('common.menu.view')}
+            </button>
+          </Dropdown>
+          <Dropdown
+            destroyPopupOnHide
+            menu={{ items: helpItems }}
+            open={openMenu === 'help'}
+            placement="bottomLeft"
+            trigger={['click']}
+            onOpenChange={(open) => setOpenMenu(open ? 'help' : null)}
+          >
+            <button
+              type="button"
+              className={styles.communityMenuItem}
+              onMouseEnter={() => switchOpenMenu('help')}
+            >
+              {i18n('common.menu.help')}
+            </button>
+          </Dropdown>
+        </div>
+      )}
+    </div>
   );
 };
 
