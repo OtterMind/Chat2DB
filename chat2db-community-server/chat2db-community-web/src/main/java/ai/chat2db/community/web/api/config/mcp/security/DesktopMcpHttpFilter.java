@@ -34,7 +34,7 @@ public class DesktopMcpHttpFilter extends OncePerRequestFilter {
             return;
         }
         String path = request.getRequestURI();
-        if (path != null && (path.equals("/mcp") || path.startsWith("/mcp/"))) {
+        if (allowedPath(path)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -47,5 +47,12 @@ public class DesktopMcpHttpFilter extends OncePerRequestFilter {
 
     private boolean isDesktopGuiMcpMode() {
         return ConfigUtils.isDesktop() && ConfigUtils.isShowGUI() && SystemSettingsUtil.isMcpEnabled();
+    }
+
+    static boolean allowedPath(String path) {
+        return path != null && (path.equals("/mcp") || path.startsWith("/mcp/")
+                || path.startsWith("/api/agent/runtime/daemon/")
+                || path.startsWith("/api/agent/runtime/mcp/runs/")
+                || path.startsWith("/api/agent/gateway/channels/"));
     }
 }

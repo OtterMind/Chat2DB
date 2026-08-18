@@ -64,7 +64,12 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         String content = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getContent();
         String reasoningContent = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getReasoningContent();
         List<ChatAttachment> attachments = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getAttachments();
-        return addMessageLocal(sessionId, userId, role, content, reasoningContent, attachments);
+        return addMessageLocal(addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getId(),
+                sessionId, userId, role, content, reasoningContent, attachments,
+                addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getMessageType(),
+                addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getTaskId(),
+                addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getAgentId(),
+                addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getAgentName());
     }
 
 
@@ -114,14 +119,35 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         return session;
     }
 
-    private synchronized AiChatMessage addMessageLocal(String sessionId, Long userId, String role, String content,
+    private synchronized AiChatMessage addMessageLocal(String requestedId, String sessionId, Long userId,
+                                                       String role, String content,
                                                        String reasoningContent,
-                                                       List<ChatAttachment> attachments) {
+                                                       List<ChatAttachment> attachments,
+                                                       String messageType, String taskId,
+                                                       String agentId, String agentName) {
         if (!ownsSession(userId, sessionId)) {
             throw new BusinessException("ai.chat.history.sessionNotOwned", new Object[]{sessionId});
         }
+        List<AiChatMessage> messages = loadMessages(sessionId);
+        if (StringUtils.isNotBlank(requestedId)) {
+            AiChatMessage existing = messages.stream()
+                    .filter(message -> requestedId.trim().equals(message.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existing != null) {
+                if (!Objects.equals(existing.getTaskId(), taskId)
+                        || !Objects.equals(existing.getContent(), content)
+                        || !Objects.equals(existing.getRole(), role)
+                        || !Objects.equals(existing.getMessageType(), StringUtils.trimToNull(messageType))
+                        || !Objects.equals(existing.getAgentId(), StringUtils.trimToNull(agentId))
+                        || !Objects.equals(existing.getAgentName(), StringUtils.trimToNull(agentName))) {
+                    throw new IllegalStateException("chat message id is already used by different content");
+                }
+                return existing;
+            }
+        }
         AiChatMessage message = new AiChatMessage();
-        message.setId(UUID.randomUUID().toString());
+        message.setId(StringUtils.isBlank(requestedId) ? UUID.randomUUID().toString() : requestedId.trim());
         message.setSessionId(sessionId);
         message.setRole(role);
         message.setContent(content);
@@ -129,9 +155,12 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         if (attachments != null) {
             message.setAttachments(new ArrayList<>(attachments));
         }
+        message.setMessageType(StringUtils.trimToNull(messageType));
+        message.setTaskId(StringUtils.trimToNull(taskId));
+        message.setAgentId(StringUtils.trimToNull(agentId));
+        message.setAgentName(StringUtils.trimToNull(agentName));
         message.setGmtCreate(LocalDateTime.now());
 
-        List<AiChatMessage> messages = loadMessages(sessionId);
         messages.add(message);
         persistMessages(sessionId, messages);
         touchSession(userId, sessionId);

@@ -26,10 +26,20 @@ import ai.chat2db.community.domain.api.model.request.operation.OpsSqlOperationLo
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
+import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
+import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
+import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
@@ -75,6 +85,10 @@ public class AiToolServiceImpl implements IAiToolService {
     private IDbSqlService sqlService;
     @Autowired
     private IWorkspaceStorageFacade workspaceStorageFacade;
+    @Autowired
+    private IAgentToolGateway agentToolGateway;
+    @Autowired
+    private IAgentRunService agentRunService;
     private static final int DEFAULT_SQL_PAGE_SIZE = 200;
     private static final int MAX_SQL_PAGE_SIZE = 500;
     private static final int MAX_SQL_RESULT_ROWS = 50;
@@ -94,8 +108,13 @@ public class AiToolServiceImpl implements IAiToolService {
             return emitToolResult(toolContext, "list_all_datasources", "No datasources found.");
         }
 
+        List<AgentDataScope> agentScopes = agentScopes(toolContext);
+        boolean agentRun = isAgentRun(toolContext);
         return emitToolResult(toolContext, "list_all_datasources", result.getData().stream()
                 .filter(Objects::nonNull)
+                .filter(dataSource -> (!agentRun && agentScopes.isEmpty())
+                        || agentScopes.stream().anyMatch(scope ->
+                        Objects.equals(scope.getDataSourceId(), dataSource.getId())))
                 .map(dataSource -> {
                     List<String> parts = new ArrayList<>();
                     parts.add("id=" + dataSource.getId());
@@ -116,6 +135,7 @@ public class AiToolServiceImpl implements IAiToolService {
         String schemaName = aiListTablesRequest == null ? null : aiListTablesRequest.getSchemaName();
         AiToolContextRequest toolContext = aiListTablesRequest == null ? null : aiListTablesRequest.getAiToolContextRequest();
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
         try {
             connectionContextService.bindProfile(profile);
             DbTablePageQueryRequest queryParam = DbTablePageQueryRequest.builder()
@@ -127,6 +147,12 @@ public class AiToolServiceImpl implements IAiToolService {
                     .refresh(false)
                     .build();
             List<SimpleTable> result = tableService.queryTables(queryParam);
+            if (CollectionUtils.isNotEmpty(result) && agentScope != null) {
+                result = result.stream()
+                        .filter(table -> table != null
+                                && AgentToolScopePolicy.allowsTable(agentScope, table.getName()))
+                        .toList();
+            }
             if (CollectionUtils.isEmpty(result)) {
                 return emitToolResult(toolContext, "list_all_tables", "No tables found.");
             }
@@ -140,6 +166,10 @@ public class AiToolServiceImpl implements IAiToolService {
     public String listAllDatabases(Long dataSourceId,
             AiToolContextRequest toolContext) {
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, null, null);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
+        if (agentScope != null && StringUtils.isNotBlank(agentScope.getDatabaseName())) {
+            return emitToolResult(toolContext, "list_all_databases", agentScope.getDatabaseName());
+        }
         try {
             connectionContextService.bindProfile(profile);
             DbDatabaseQueryAllRequest queryParam = DbDatabaseQueryAllRequest.builder()
@@ -167,6 +197,10 @@ public class AiToolServiceImpl implements IAiToolService {
         String targetDatabase = StringUtils.defaultIfBlank(databaseName, profile.getDatabaseName());
         if (StringUtils.isBlank(targetDatabase)) {
             return emitToolResult(toolContext, "list_all_schemas", "databaseName is required for listing schemas.");
+        }
+        AgentDataScope agentScope = agentScope(toolContext, profile);
+        if (agentScope != null && StringUtils.isNotBlank(agentScope.getSchemaName())) {
+            return emitToolResult(toolContext, "list_all_schemas", agentScope.getSchemaName());
         }
         try {
             connectionContextService.bindProfile(profile);
@@ -202,11 +236,31 @@ public class AiToolServiceImpl implements IAiToolService {
             return emitToolResult(toolContext, "execute_sql", "sql is empty.");
         }
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
-        int resolvedPageSize = normalizePageSize(pageSize);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
+        AgentToolScopePolicy.requireSql(agentScope, sql);
+        int resolvedPageSize = normalizePageSize(pageSize, agentScope);
         String trimmedSql = sql.trim();
-        String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
-        if (StringUtils.isNotBlank(unsafeSqlMessage)) {
-            return emitToolResult(toolContext, "execute_sql", unsafeSqlMessage);
+        AgentSqlExecutionPermit permit = prepareAgentSql(toolContext, trimmedSql, profile);
+        permit = waitForAgentSqlApproval(toolContext, trimmedSql, profile, permit);
+        if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED) {
+            return emitToolResult(toolContext, "execute_sql", "SQL approval required. approvalId="
+                    + permit.getApproval().getId() + "; proposalVersion="
+                    + permit.getProposal().getProposalVersion() + "; risk="
+                    + permit.getProposal().getRiskLevel()
+                    + ". Do not retry before the user decides. This Runtime turn may finish; "
+                    + "Chat2DB will resume the same Run after approval.");
+        }
+        if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.DENIED) {
+            return emitToolResult(toolContext, "execute_sql", permit.getMessage());
+        }
+        if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.REPLAY_RESULT) {
+            return emitToolResult(toolContext, "execute_sql", permit.getReplayResult());
+        }
+        if (permit == null) {
+            String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
+            if (StringUtils.isNotBlank(unsafeSqlMessage)) {
+                return emitToolResult(toolContext, "execute_sql", unsafeSqlMessage);
+            }
         }
 
         boolean operationLogged = false;
@@ -224,17 +278,22 @@ public class AiToolServiceImpl implements IAiToolService {
             executeParam.setErrorContinue(false);
 
             ListResult<ExecuteResponse> executeResult = wrapExecuteResults(dlTemplateService.execute(executeParam));
-            OpsSqlOperationLogListResultRequest sqlOperationLogListResultRequest = OpsSqlOperationLogListResultRequest.of(
-                    trimmedSql, executeResult.getSuccess(), executeResult.getErrorMessage(), executeResult.getData(),
-                    SqlOperationLogSourceEnum.AI_TOOL.name());
-            sqlOperationLogRecorder.recordListResultAsync(sqlOperationLogListResultRequest);
-            operationLogged = true;
             if (Objects.isNull(executeResult) || !executeResult.success()) {
-                return emitToolResult(toolContext, "execute_sql", "SQL execution failed: "
-                        + (Objects.isNull(executeResult) ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage())));
+                String error = Objects.isNull(executeResult)
+                        ? "unknown error" : StringUtils.defaultString(executeResult.getErrorMessage());
+                if (executeResult != null) {
+                    recordSqlResult(trimmedSql, executeResult);
+                    operationLogged = true;
+                }
+                markAgentSqlFailed(permit, error, false);
+                return emitToolResult(toolContext, "execute_sql", "SQL execution failed: " + error);
             }
+            recordSqlResult(trimmedSql, executeResult);
+            operationLogged = true;
             if (CollectionUtils.isEmpty(executeResult.getData())) {
-                return emitToolResult(toolContext, "execute_sql", "SQL executed successfully with no result.");
+                String result = "SQL executed successfully with no result.";
+                markAgentSqlSucceeded(permit, result);
+                return emitToolResult(toolContext, "execute_sql", result);
             }
 
             StringBuilder output = new StringBuilder(2048);
@@ -243,14 +302,91 @@ public class AiToolServiceImpl implements IAiToolService {
                 output.append("## Result ").append(index++).append("\n");
                 output.append(formatExecuteResponse(item)).append("\n\n");
             }
-            return emitToolResult(toolContext, "execute_sql", output.toString().trim());
+            String result = output.toString().trim();
+            markAgentSqlSucceeded(permit, result);
+            return emitToolResult(toolContext, "execute_sql", result);
         } catch (RuntimeException e) {
+            markAgentSqlFailed(permit, e.getMessage(), permit != null
+                    && Boolean.TRUE.equals(permit.getAttempt().getWriteOperation()));
             if (!operationLogged) {
                 sqlOperationLogRecorder.recordFailureAsync(trimmedSql, SqlOperationLogSourceEnum.AI_TOOL.name(), e.getMessage());
             }
             throw e;
         } finally {
             connectionContextService.clear();
+        }
+    }
+
+    private AgentSqlExecutionPermit prepareAgentSql(AiToolContextRequest toolContext, String sql,
+                                                     ConnectionProfile profile) {
+        if (toolContext == null || StringUtils.isBlank(toolContext.getAgentRunId())) {
+            return null;
+        }
+        AgentSqlToolRequest request = new AgentSqlToolRequest();
+        request.setRunId(toolContext.getAgentRunId());
+        request.setSql(sql);
+        request.setDataSourceId(profile.getDataSourceId());
+        request.setDatabaseName(profile.getDatabaseName());
+        request.setSchemaName(profile.getSchemaName());
+        return agentToolGateway.prepareSql(request);
+    }
+
+    private AgentSqlExecutionPermit waitForAgentSqlApproval(AiToolContextRequest toolContext, String sql,
+                                                             ConnectionProfile profile,
+                                                             AgentSqlExecutionPermit permit) {
+        if (permit == null
+                || permit.getDecision() != AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED
+                || toolContext == null
+                || !Boolean.TRUE.equals(toolContext.getWaitForApprovalDecision())) {
+            return permit;
+        }
+        String approvalId = permit.getApproval() == null ? null : permit.getApproval().getId();
+        if (StringUtils.isBlank(approvalId)) {
+            throw new IllegalStateException("SQL approval response omitted approval id");
+        }
+        while (true) {
+            AgentApproval approval = agentToolGateway.getApproval(approvalId);
+            if (approval.getStatus() != AgentApprovalStatusEnum.PENDING) {
+                return prepareAgentSql(toolContext, sql, profile);
+            }
+            AgentRun run = agentRunService.get(toolContext.getAgentRunId());
+            if (run.getStatus() != AgentRunStatusEnum.WAITING_APPROVAL
+                    && run.getStatus() != AgentRunStatusEnum.RUNNING) {
+                AgentSqlExecutionPermit stopped = new AgentSqlExecutionPermit();
+                stopped.setDecision(AgentSqlPermitDecisionEnum.DENIED);
+                stopped.setMessage("SQL execution stopped because the Agent Run is no longer active");
+                return stopped;
+            }
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("SQL approval wait was interrupted", exception);
+            }
+        }
+    }
+
+    private void recordSqlResult(String sql, ListResult<ExecuteResponse> executeResult) {
+        OpsSqlOperationLogListResultRequest logRequest = OpsSqlOperationLogListResultRequest.of(
+                sql, executeResult.getSuccess(), executeResult.getErrorMessage(), executeResult.getData(),
+                SqlOperationLogSourceEnum.AI_TOOL.name());
+        sqlOperationLogRecorder.recordListResultAsync(logRequest);
+    }
+
+    private void markAgentSqlSucceeded(AgentSqlExecutionPermit permit, String result) {
+        if (permit != null && permit.getAttempt() != null) {
+            agentToolGateway.markSucceeded(permit.getAttempt().getId(), result);
+        }
+    }
+
+    private void markAgentSqlFailed(AgentSqlExecutionPermit permit, String error, boolean outcomeUnknown) {
+        if (permit != null && permit.getAttempt() != null) {
+            try {
+                agentToolGateway.markFailed(permit.getAttempt().getId(), error, outcomeUnknown);
+            } catch (RuntimeException stateFailure) {
+                log.error("failed to persist agent tool attempt failure, attemptId={}",
+                        permit.getAttempt().getId(), stateFailure);
+            }
         }
     }
     public String getTablesSchema(AiGetTablesSchemaRequest aiGetTablesSchemaRequest) {
@@ -273,8 +409,12 @@ public class AiToolServiceImpl implements IAiToolService {
         if (CollectionUtils.isEmpty(normalized)) {
             return emitToolResult(toolContext, "get_tables_schema", "tableNames is empty.");
         }
-
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
+        AgentDataScope agentScope = agentScope(toolContext, profile);
+        if (agentScope != null
+                && normalized.stream().anyMatch(table -> !AgentToolScopePolicy.allowsTable(agentScope, table))) {
+            throw new IllegalArgumentException("requested table is outside the Agent Task data scope");
+        }
         try {
             connectionContextService.bindProfile(profile);
             StringBuilder ddlBuilder = new StringBuilder(4096);
@@ -601,11 +741,8 @@ public class AiToolServiceImpl implements IAiToolService {
         return normalized;
     }
 
-    private int normalizePageSize(Integer pageSize) {
-        if (Objects.isNull(pageSize) || pageSize <= 0) {
-            return DEFAULT_SQL_PAGE_SIZE;
-        }
-        return Math.min(pageSize, MAX_SQL_PAGE_SIZE);
+    private int normalizePageSize(Integer pageSize, AgentDataScope agentScope) {
+        return AgentToolScopePolicy.capRows(agentScope, pageSize, DEFAULT_SQL_PAGE_SIZE, MAX_SQL_PAGE_SIZE);
     }
 
     private String buildNonQueryExecutionMessage(String sql, ConnectionProfile profile) {
@@ -710,15 +847,84 @@ public class AiToolServiceImpl implements IAiToolService {
         if (StringUtils.isBlank(resolvedSchemaName) && contextProfile != null) {
             resolvedSchemaName = contextProfile.getSchemaName();
         }
+        List<AgentDataScope> scopes = agentScopes(toolContext);
+        if (Objects.isNull(resolvedDataSourceId) && scopes.size() == 1) {
+            resolvedDataSourceId = scopes.get(0).getDataSourceId();
+        }
         if (Objects.nonNull(resolvedDataSourceId)) {
+            AgentDataScope scope = resolveAgentScope(toolContext, resolvedDataSourceId,
+                    resolvedDatabaseName, resolvedSchemaName);
+            if (scope != null) {
+                if (StringUtils.isBlank(resolvedDatabaseName)) {
+                    resolvedDatabaseName = scope.getDatabaseName();
+                }
+                if (StringUtils.isBlank(resolvedSchemaName)) {
+                    resolvedSchemaName = scope.getSchemaName();
+                }
+                AgentToolScopePolicy.requireConnection(scope, resolvedDataSourceId,
+                        resolvedDatabaseName, resolvedSchemaName);
+            }
             final Long scopedDataSourceId = resolvedDataSourceId;
             final String scopedDatabaseName = resolvedDatabaseName;
             final String scopedSchemaName = resolvedSchemaName;
             return invokeWithRequestContext(toolContext,
                     () -> buildProfile(scopedDataSourceId, scopedDatabaseName, scopedSchemaName));
         }
+        if (isAgentRun(toolContext) && scopes.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Multiple Agent Task data scopes are authorized. Provide dataSourceId for this tool call.");
+        }
         throw new IllegalArgumentException(
                 "No database connection context found. Call list_all_datasources first, then provide dataSourceId/databaseName.");
+    }
+
+    private AgentDataScope agentScope(AiToolContextRequest toolContext, ConnectionProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        return resolveAgentScope(toolContext, profile.getDataSourceId(),
+                profile.getDatabaseName(), profile.getSchemaName());
+    }
+
+    private AgentDataScope resolveAgentScope(AiToolContextRequest toolContext, Long dataSourceId,
+                                             String databaseName, String schemaName) {
+        List<AgentDataScope> scopes = agentScopes(toolContext);
+        if (scopes.isEmpty()) {
+            if (isAgentRun(toolContext)) {
+                throw new IllegalArgumentException("No database tools are authorized for this Agent Task");
+            }
+            return null;
+        }
+        List<AgentDataScope> matches = scopes.stream()
+                .filter(scope -> Objects.equals(scope.getDataSourceId(), dataSourceId))
+                .filter(scope -> matchesScopeName(scope.getDatabaseName(), databaseName))
+                .filter(scope -> matchesScopeName(scope.getSchemaName(), schemaName))
+                .toList();
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException(
+                    "Database target must resolve to exactly one authorized Agent Task data scope");
+        }
+        return matches.get(0);
+    }
+
+    private List<AgentDataScope> agentScopes(AiToolContextRequest toolContext) {
+        if (toolContext == null) {
+            return List.of();
+        }
+        if (CollectionUtils.isNotEmpty(toolContext.getAgentDataScopes())) {
+            return toolContext.getAgentDataScopes();
+        }
+        return toolContext.getAgentDataScope() == null
+                ? List.of() : List.of(toolContext.getAgentDataScope());
+    }
+
+    private boolean isAgentRun(AiToolContextRequest toolContext) {
+        return toolContext != null && StringUtils.isNotBlank(toolContext.getAgentRunId());
+    }
+
+    private boolean matchesScopeName(String authorized, String requested) {
+        return StringUtils.isBlank(requested) || StringUtils.isBlank(authorized)
+                || authorized.equalsIgnoreCase(requested);
     }
 
     private ConnectionProfile resolveConnectionProfile(AiToolContextRequest toolContext) {

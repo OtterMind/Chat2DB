@@ -1,13 +1,14 @@
 import editionUiExtension from '@/edition-ui';
 import { appendEditionSettingMenuItems } from '@/edition-ui/settingMenus';
 import i18n from '@/i18n';
-import { ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
+import { Bot, ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import About from './About';
 import BaseSetting from './BaseSetting';
 import EditorSetting from './EditorSetting';
 import McpSetting from './McpSetting';
 import NetworkProxySetting from './NetworkProxySetting';
+import ModelConfigSetting from './ModelConfigSetting';
 import SettingLayout, { type SettingMenuItem } from './SettingLayout';
 
 // ---- store -----
@@ -72,6 +73,14 @@ function Setting() {
             },
           ]
         : []),
+      {
+        title: i18n('setting.modelConfig.title'),
+        describe: i18n('setting.modelConfig.pageDescribe'),
+        group: 'services' as const,
+        icon: Bot,
+        body: <ModelConfigSetting />,
+        code: 'modelConfig',
+      },
       ...(runtimeEditionConfig.networkProxySetting
         ? [
             {

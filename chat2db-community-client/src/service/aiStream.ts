@@ -30,6 +30,10 @@ export interface IChatMessage {
   content: string;
   reasoningContent?: string;
   attachments?: IChatAttachment[];
+  messageType?: 'TASK_DELEGATION';
+  taskId?: string;
+  agentId?: string;
+  agentName?: string;
   gmtCreate: string;
 }
 

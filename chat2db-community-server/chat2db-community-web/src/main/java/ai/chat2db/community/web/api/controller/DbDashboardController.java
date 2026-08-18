@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.chart.Chart;
 import ai.chat2db.community.domain.api.model.chart.Dashboard;
 import ai.chat2db.community.domain.api.service.dashboard.IDashboardService;
+import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
+import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.annotation.NotCliRuntime;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -25,9 +27,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class DbDashboardController {
 
     private final IDashboardService dashboardService;
+    private final IAgentArtifactPublicationService agentPublicationService;
+    private final IIdentityService identityService;
 
-    public DbDashboardController(IDashboardService dashboardService) {
+    public DbDashboardController(IDashboardService dashboardService,
+                                 IAgentArtifactPublicationService agentPublicationService,
+                                 IIdentityService identityService) {
         this.dashboardService = dashboardService;
+        this.agentPublicationService = agentPublicationService;
+        this.identityService = identityService;
     }
 
     @GetMapping("/dashboard/list")
@@ -67,6 +75,9 @@ public class DbDashboardController {
 
     @GetMapping("/chart/detail")
     public DataResult<Chart> getChartDetail(ChartDetailRequest request) {
+        if (Boolean.TRUE.equals(request.getRefresh())) {
+            agentPublicationService.authorizeRefresh(request.getChartId(), identityService.currentUserId());
+        }
         return DataResult.of(dashboardService.getChartDetail(request.getChartId(),
                 Boolean.TRUE.equals(request.getRefresh())));
     }

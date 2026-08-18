@@ -34,10 +34,16 @@ import { useStyles } from './style';
 import i18n from '@/i18n';
 import { keyboardKey } from '@/utils';
 import { cx } from 'antd-style';
-import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
+import agentService from '@/service/agent';
+import { takePendingConversationTarget } from '@/utils/conversationNavigation';
+import { removeAgentMention } from './components/AIChatInput/agentMentionModel';
+import {
+  cacheAgentTaskDetail,
+  notifyAgentTaskCreated,
+} from '@/pages/main/tasks/taskNavigation';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -135,30 +141,34 @@ function normalizeAiMarkdown(content: string) {
 
 /** applies format repair rules to normal text segments outside code fences */
 function normalizeTextSegment(text: string) {
-  return text
-    // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
-    // This avoids damaging inline ## fragments such as URL anchors.
-    .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
-    .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
-    // The title at the beginning of the line is missing a space (###1. → ### 1.)
-    .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
-    // Move a separator stuck to a sentence onto its own line (text---\n).
-    // It must end the line and cannot be preceded by |, :, or whitespace.
-    // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
-    .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
-    .replace(/((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g, (segment) =>
-      Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
-        .map(([, date, value]) => `- ${date}: ${value}`)
-        .join('\n') + '\n',
-    )
-    // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
-    .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
-    // Split list items attached to the previous sentence into standalone items.
-    // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
-    .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
-    .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
-    .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
-    .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2');
+  return (
+    text
+      // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
+      // This avoids damaging inline ## fragments such as URL anchors.
+      .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
+      .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
+      // The title at the beginning of the line is missing a space (###1. → ### 1.)
+      .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
+      // Move a separator stuck to a sentence onto its own line (text---\n).
+      // It must end the line and cannot be preceded by |, :, or whitespace.
+      // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
+      .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
+      .replace(
+        /((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g,
+        (segment) =>
+          Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
+            .map(([, date, value]) => `- ${date}: ${value}`)
+            .join('\n') + '\n',
+      )
+      // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
+      .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
+      // Split list items attached to the previous sentence into standalone items.
+      // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
+      .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
+      .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
+      .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
+      .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2')
+  );
 }
 
 /** Table name click callback Context, used by MarkdownCodeBlock */
@@ -312,6 +322,10 @@ interface IChatItem {
   content: string;
   attachments?: IChatAttachment[];
   traceEntries?: ITraceEntry[];
+  messageType?: 'TASK_DELEGATION';
+  taskId?: string;
+  agentId?: string;
+  agentName?: string;
 }
 
 interface IChatRound {
@@ -373,9 +387,7 @@ function parseTraceEntries(raw?: string): ITraceEntry[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed
-      .map((item) => normalizeTraceEntry(item))
-      .filter((item): item is ITraceEntry => !!item);
+    return parsed.map((item) => normalizeTraceEntry(item)).filter((item): item is ITraceEntry => !!item);
   } catch {
     return raw.trim()
       ? [
@@ -500,8 +512,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [openingTaskId, setOpeningTaskId] = useState<string>();
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
-  const [openSettings, setOpenSettings] = useState(false);
+  const setSettingPageActiveTab = useGlobalStore((state) => state.setSettingPageActiveTab);
   const [sessionLoading, setSessionLoading] = useState(false);
   const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
 
@@ -545,74 +558,83 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }, delay);
   }, []);
 
-  const correctMessageTopAlignment = useCallback((messageId: string) => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const messageRect = messageElement.getBoundingClientRect();
-    const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
+  const correctMessageTopAlignment = useCallback(
+    (messageId: string) => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
 
-    if (Math.abs(delta) <= 1) {
-      return;
-    }
+      if (Math.abs(delta) <= 1) {
+        return;
+      }
 
-    lockScrollTracking('auto');
-    container.scrollTop += delta;
-  }, [lockScrollTracking]);
+      lockScrollTracking('auto');
+      container.scrollTop += delta;
+    },
+    [lockScrollTracking],
+  );
 
-  const scrollMessageToTop = useCallback((messageId: string, behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return false;
-    }
-    lockScrollTracking(behavior);
-    const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
-    container.scrollTo({
-      top: nextScrollTop,
-      behavior,
-    });
-
-    if (topAlignmentTimerRef.current !== null) {
-      window.clearTimeout(topAlignmentTimerRef.current);
-      topAlignmentTimerRef.current = null;
-    }
-
-    if (behavior === 'smooth') {
-      topAlignmentTimerRef.current = window.setTimeout(() => {
-        correctMessageTopAlignment(messageId);
-        topAlignmentTimerRef.current = null;
-      }, INITIAL_VIEWPORT_ANIMATION_MS);
-    } else {
-      requestAnimationFrame(() => {
-        correctMessageTopAlignment(messageId);
-      });
-    }
-
-    return true;
-  }, [correctMessageTopAlignment, lockScrollTracking]);
-
-  const scrollMessageListToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    if (!container) {
-      return;
-    }
-    lockScrollTracking(behavior);
-    if (bottomSentinelRef.current) {
-      bottomSentinelRef.current.scrollIntoView({
-        block: 'end',
+  const scrollMessageToTop = useCallback(
+    (messageId: string, behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return false;
+      }
+      lockScrollTracking(behavior);
+      const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
+      container.scrollTo({
+        top: nextScrollTop,
         behavior,
       });
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior,
-    });
-  }, [lockScrollTracking]);
+
+      if (topAlignmentTimerRef.current !== null) {
+        window.clearTimeout(topAlignmentTimerRef.current);
+        topAlignmentTimerRef.current = null;
+      }
+
+      if (behavior === 'smooth') {
+        topAlignmentTimerRef.current = window.setTimeout(() => {
+          correctMessageTopAlignment(messageId);
+          topAlignmentTimerRef.current = null;
+        }, INITIAL_VIEWPORT_ANIMATION_MS);
+      } else {
+        requestAnimationFrame(() => {
+          correctMessageTopAlignment(messageId);
+        });
+      }
+
+      return true;
+    },
+    [correctMessageTopAlignment, lockScrollTracking],
+  );
+
+  const scrollMessageListToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      if (!container) {
+        return;
+      }
+      lockScrollTracking(behavior);
+      if (bottomSentinelRef.current) {
+        bottomSentinelRef.current.scrollIntoView({
+          block: 'end',
+          behavior,
+        });
+        return;
+      }
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    },
+    [lockScrollTracking],
+  );
 
   const getMessageListContentHeight = useCallback(() => {
     const container = messageListRef.current;
@@ -683,26 +705,28 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!container) {
       return;
     }
-    const isAtBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
   }, [setAutoFollow]);
 
-  const setMessageElement = useCallback((id: string, node: HTMLDivElement | null) => {
-    if (node) {
-      messageElementMapRef.current.set(id, node);
-      if (pendingViewportAnchorRef.current === id) {
-        requestAnimationFrame(() => {
-          const anchored = scrollMessageToTop(id);
-          if (anchored && pendingViewportAnchorRef.current === id) {
-            pendingViewportAnchorRef.current = null;
-          }
-        });
+  const setMessageElement = useCallback(
+    (id: string, node: HTMLDivElement | null) => {
+      if (node) {
+        messageElementMapRef.current.set(id, node);
+        if (pendingViewportAnchorRef.current === id) {
+          requestAnimationFrame(() => {
+            const anchored = scrollMessageToTop(id);
+            if (anchored && pendingViewportAnchorRef.current === id) {
+              pendingViewportAnchorRef.current = null;
+            }
+          });
+        }
+        return;
       }
-      return;
-    }
-    messageElementMapRef.current.delete(id);
-  }, [scrollMessageToTop]);
+      messageElementMapRef.current.delete(id);
+    },
+    [scrollMessageToTop],
+  );
 
   const flushPendingBuffer = useCallback(() => {
     return;
@@ -849,7 +873,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     loadModelOptions();
-  }, []);
+    const refreshModels = () => void loadModelOptions();
+    window.addEventListener('chat2db:model-config-changed', refreshModels);
+    return () => window.removeEventListener('chat2db:model-config-changed', refreshModels);
+  }, [loadModelOptions]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1227,7 +1254,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Load a historical conversation by session ID.
 
   const handleLoadSessionById = useCallback(
-    async (sessionId: string, title?: string) => {
+    async (sessionId: string, title?: string, messageId?: string) => {
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1249,8 +1276,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
       setAutoFollow(true);
       chatInputRef.current?.resetAttachments();
-      pendingViewportAnchorRef.current = null;
-      pendingInitialBottomSyncRef.current = true;
+      pendingViewportAnchorRef.current = messageId || null;
+      pendingInitialBottomSyncRef.current = !messageId;
       initialViewportAnimatingRef.current = false;
       if (initialViewportAnimationTimerRef.current !== null) {
         window.clearTimeout(initialViewportAnimationTimerRef.current);
@@ -1310,6 +1337,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           content: m.content,
           attachments: m.attachments,
           traceEntries: parseTraceEntries(m.reasoningContent),
+          messageType: m.messageType,
+          taskId: m.taskId,
+          agentId: m.agentId,
+          agentName: m.agentName,
         }));
         const latestInProgressSession = inProgressSessionRef.current;
         const shouldRestoreHiddenInProgress =
@@ -1370,7 +1401,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!isPanel) {
       const chatId = getChatIdFromPath();
       if (chatId) {
-        handleLoadSessionById(chatId);
+        const target = takePendingConversationTarget(chatId);
+        handleLoadSessionById(chatId, undefined, target?.messageId);
       }
     }
   }, []);
@@ -1393,8 +1425,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title } = (e as CustomEvent).detail;
-      handleLoadSessionById(sessionId, title);
+      const { sessionId, title, messageId } = (e as CustomEvent).detail;
+      const target = takePendingConversationTarget(sessionId);
+      handleLoadSessionById(sessionId, title, messageId || target?.messageId);
     };
 
     window.addEventListener('stream:loadSession', handleLoadEvent);
@@ -1409,6 +1442,56 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     async (params: SendParams) => {
       const content = (params.input || '').trim();
       if (!content) return;
+
+      if (params.agentId) {
+        const taskDescription = removeAgentMention(content, params.agentName);
+        if (!taskDescription) {
+          feedback.warning(i18n('task.mention.empty'));
+          return;
+        }
+        try {
+          const messageId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`;
+          const created = await agentService.createTaskFromChat({
+            sessionId: currentSessionIdRef.current || undefined,
+            messageId,
+            content,
+            taskDescription,
+            assigneeAgentId: params.agentId,
+            dataScopeSnapshot: params.agentDataScopes || [],
+            attachments: params.attachments,
+          });
+          const delegatedMessage: IChatItem = {
+            id: created.message.id,
+            role: 'user',
+            content: created.message.content,
+            attachments: created.message.attachments,
+            messageType: created.message.messageType,
+            taskId: created.message.taskId,
+            agentId: created.message.agentId,
+            agentName: created.message.agentName,
+          };
+          setMessages((current) => {
+            const next = current.some((item) => item.id === delegatedMessage.id)
+              ? current
+              : [...current, delegatedMessage];
+            messagesRef.current = next;
+            return next;
+          });
+          if (!currentSessionIdRef.current) {
+            currentSessionIdRef.current = created.sessionId;
+            setCurrentSessionId(created.sessionId);
+            if (!isPanel) setChatIdInPath(created.sessionId);
+          }
+          notifyAgentTaskCreated(created.taskDetail);
+          window.dispatchEvent(new CustomEvent('stream:sessionsChanged'));
+          feedback.success(i18n('task.mention.created'));
+        } catch {
+          feedback.error(i18n('task.mention.failed'));
+        }
+        return;
+      }
 
       const selectedValue = params.model || selectedModel?.value;
       if (!selectedValue) {
@@ -1525,8 +1608,30 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       selectedModel?.value,
       request,
       scrollMessageListToBottom,
+      isPanel,
+      setChatIdInPath,
     ],
   );
+
+  const openDelegatedTask = useCallback(async (message: IChatItem) => {
+    if (!message.taskId || openingTaskId) return;
+    setOpeningTaskId(message.taskId);
+    try {
+      const taskDetail = await agentService.getTask({ taskId: message.taskId });
+      if (taskDetail.task.archivedAt) {
+        feedback.warning(i18n('task.delegation.archived'));
+        return;
+      }
+      cacheAgentTaskDetail(taskDetail);
+      window.dispatchEvent(new CustomEvent('app:navigateTo', {
+        detail: { page: 'tasks', pathName: `/tasks/${message.taskId}` },
+      }));
+    } catch {
+      feedback.warning(i18n('task.delegation.unavailable'));
+    } finally {
+      setOpeningTaskId(undefined);
+    }
+  }, [openingTaskId]);
 
   // Handle externally triggered messages, such as context-menu actions.
 
@@ -1745,12 +1850,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
-  const renderThoughtStrip = (
-    traceEntries: ITraceEntry[],
-    traceKey: string,
-    active = false,
-    pulse = false,
-  ) => {
+  const renderThoughtStrip = (traceEntries: ITraceEntry[], traceKey: string, active = false, pulse = false) => {
     const hasEntries = traceEntries.length > 0;
     const expanded = !!expandedTraceMap[traceKey];
     const previewText = getTracePreview(traceEntries[traceEntries.length - 1]);
@@ -1845,6 +1945,24 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                       </div>
                     ) : null}
                     <div className={styles.userBubble}>{round.user.content}</div>
+                    {round.user.messageType === 'TASK_DELEGATION' && round.user.taskId ? (
+                      <div className={styles.taskDelegationCard}>
+                        <div className={styles.taskDelegationSummary}>
+                          <strong>{i18n('task.delegation.created', round.user.taskId.slice(0, 6).toUpperCase())}</strong>
+                          <span>{round.user.agentName ? `@${round.user.agentName}` : i18n('task.mention.agent')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.taskDelegationLink}
+                          disabled={openingTaskId === round.user.taskId}
+                          onClick={() => void openDelegatedTask(round.user!)}
+                        >
+                          {openingTaskId === round.user.taskId
+                            ? i18n('task.delegation.loading')
+                            : i18n('task.delegation.open')}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -2031,7 +2149,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 }
                 modelOptions={modelOptions}
                 showCustomModelEntry
-                onCustomModelClick={() => setOpenSettings(true)}
+                onCustomModelClick={() => setSettingPageActiveTab('modelConfig')}
                 customModelText={i18n('setting.modelConfig.entry')}
                 prefillInputState={prefillInputState}
                 autoFocus={isDesktop}
@@ -2040,11 +2158,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           </div>
         </div>
       )}
-      <AIModelConfigModal
-        open={openSettings}
-        onClose={() => setOpenSettings(false)}
-        onChanged={loadModelOptions}
-      />
     </div>
   );
 }

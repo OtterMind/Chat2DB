@@ -97,6 +97,11 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
           keywords: [i18n('setting.networkProxy.testConnection'), 'test url', 'connection test'],
         },
       ];
+    case 'modelConfig':
+      return [
+        settingItem('modelConfig.protocol', 'setting.modelConfig.protocol', ['OpenAI', 'Anthropic', 'API']),
+        settingItem('modelConfig.endpoint', 'setting.modelConfig.baseUrl', ['endpoint', 'base url', 'api key']),
+      ];
     case 'personal':
       return [
         settingItem('personal.profile', 'setting.nav.personalInformation', ['profile', 'avatar', 'display name']),

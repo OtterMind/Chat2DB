@@ -269,7 +269,8 @@ public class ConsoleHelper {
                 return result;
             }
             Object c = ApplicationContextUtil.getBeanOfType(iRequestMappingInfo.getController());
-            Object[] o = getValues(message.getMessage(), iRequestMappingInfo.getParams(),result);
+            Object[] o = getValues(message.getMessage(), iRequestMappingInfo.getParams(), result,
+                    iRequestMappingInfo.getPathVariables());
             Class controllerClass = iRequestMappingInfo.getController();
             String method = iRequestMappingInfo.getMethod();
             Class[] params = iRequestMappingInfo.getParams();
@@ -376,33 +377,37 @@ public class ConsoleHelper {
 
 
     public static Object[] getValues(String message, Class[] clazzArray,ConsoleResult result) {
-        Object o = null;
+        return getValues(message, clazzArray, result, Collections.emptyMap());
+    }
+
+    public static Object[] getValues(String message, Class[] clazzArray, ConsoleResult result,
+                                     Map<Integer, String> pathVariables) {
         if (clazzArray == null || clazzArray.length == 0) {
             return null;
         }
         Object[] values = new Object[clazzArray.length];
-        if (clazzArray.length == 1) {
-            Class clazz = clazzArray[0];
-            if (ClassUtils.isPrimitiveOrWrapper(clazz) || String.class.equals(clazz)) {
+        for (int index = 0; index < clazzArray.length; index++) {
+            Class clazz = clazzArray[index];
+            if (pathVariables != null && pathVariables.containsKey(index)) {
+                values[index] = ConvertUtils.convert(pathVariables.get(index), clazz);
+            } else if (ClassUtils.isPrimitiveOrWrapper(clazz) || String.class.equals(clazz)) {
                 Map<String, Object> value = JSON.parseObject(message, Map.class);
                 if (value != null && !value.isEmpty()) {
-                    values[0] = ConvertUtils.convert(value.values().iterator().next(), clazz);
+                    values[index] = ConvertUtils.convert(value.values().iterator().next(), clazz);
                 } else {
-                    values[0] = null;
+                    values[index] = null;
                 }
             } else if (MultipartFile.class.equals(clazz)) {
-                values[0] = getFile(message);
+                values[index] = getFile(message);
             } else if (MultipartFile[].class.equals(clazz)) {
-                values[0] = getFiles(message);
-            }else if(ChatRequest.class.equals(clazz)){
+                values[index] = getFiles(message);
+            } else if (ChatRequest.class.equals(clazz)) {
                 ChatRequest param = (ChatRequest)getObject(message, ChatRequest.class);
                 param.setConsoleResult(result);
-                values[0] = param;
+                values[index] = param;
             } else {
-                values[0] = getObject(message, clazz);
+                values[index] = getObject(message, clazz);
             }
-        } else {
-            throw new RuntimeException("not support");
         }
         return values;
     }

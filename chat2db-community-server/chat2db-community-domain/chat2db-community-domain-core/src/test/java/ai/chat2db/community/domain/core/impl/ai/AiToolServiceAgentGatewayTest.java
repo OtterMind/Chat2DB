@@ -1,0 +1,221 @@
+package ai.chat2db.community.domain.core.impl.ai;
+
+import ai.chat2db.community.domain.api.enums.agent.AgentRiskLevelEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentSqlExecutionPermit;
+import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.request.agent.AgentSqlToolRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
+import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
+import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
+import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class AiToolServiceAgentGatewayTest {
+
+    @Test
+    void pausesAgentSqlBeforeDatabaseExecutionWhenApprovalIsRequired() throws Exception {
+        AtomicReference<AgentSqlToolRequest> captured = new AtomicReference<>();
+        AgentSqlExecutionPermit permit = new AgentSqlExecutionPermit();
+        permit.setDecision(AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED);
+        AgentApproval approval = new AgentApproval();
+        approval.setId("approval-1");
+        permit.setApproval(approval);
+        AgentSqlProposal proposal = new AgentSqlProposal();
+        proposal.setProposalVersion(3);
+        proposal.setRiskLevel(AgentRiskLevelEnum.HIGH);
+        permit.setProposal(proposal);
+
+        AiToolServiceImpl service = service(request -> {
+            captured.set(request);
+            return permit;
+        });
+        String result = service.executeSql(request("run-1", "UPDATE orders SET status='DONE'", 7L));
+
+        assertTrue(result.contains("approvalId=approval-1"));
+        assertTrue(result.contains("proposalVersion=3"));
+        assertEquals("run-1", captured.get().getRunId());
+        assertEquals(7L, captured.get().getDataSourceId());
+    }
+
+    @Test
+    void externalRuntimeSqlContinuesInOriginalToolCallAfterApproval() throws Exception {
+        AgentApproval approval = new AgentApproval();
+        approval.setId("approval-1");
+        AtomicReference<AgentApprovalStatusEnum> approvalStatus =
+                new AtomicReference<>(AgentApprovalStatusEnum.PENDING);
+        AgentSqlExecutionPermit pending = new AgentSqlExecutionPermit();
+        pending.setDecision(AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED);
+        pending.setApproval(approval);
+
+        AgentSqlExecutionPermit replay = new AgentSqlExecutionPermit();
+        replay.setDecision(AgentSqlPermitDecisionEnum.REPLAY_RESULT);
+        replay.setReplayResult("approved channel count: 6");
+        AtomicInteger prepares = new AtomicInteger();
+        AiToolServiceImpl service = service(
+                request -> prepares.getAndIncrement() == 0 ? pending : replay,
+                () -> {
+                    approval.setStatus(approvalStatus.get());
+                    return approval;
+                });
+        set(service, "agentRunService", runService(AgentRunStatusEnum.WAITING_APPROVAL));
+        AiExecuteSqlRequest request = request("run-1", "SELECT COUNT(*) FROM channels", 7L);
+        request.getAiToolContextRequest().setWaitForApprovalDecision(true);
+
+        CompletableFuture<String> result = CompletableFuture.supplyAsync(() -> service.executeSql(request));
+        Thread.sleep(100L);
+        assertTrue(!result.isDone());
+        approvalStatus.set(AgentApprovalStatusEnum.APPROVED);
+
+        assertEquals("approved channel count: 6", result.get(2, TimeUnit.SECONDS));
+        assertEquals(2, prepares.get());
+    }
+
+    @Test
+    void replaysPersistedAttemptResultWithoutOpeningDatabaseConnection() throws Exception {
+        AgentSqlExecutionPermit permit = new AgentSqlExecutionPermit();
+        permit.setDecision(AgentSqlPermitDecisionEnum.REPLAY_RESULT);
+        permit.setReplayResult("persisted rows");
+        AiToolServiceImpl service = service(request -> permit);
+
+        assertEquals("persisted rows", service.executeSql(request("run-1", "SELECT * FROM orders", 7L)));
+    }
+
+    @Test
+    void routesAgentSqlToTheMatchingScopeAcrossMultipleDatasources() throws Exception {
+        AtomicReference<AgentSqlToolRequest> captured = new AtomicReference<>();
+        AgentSqlExecutionPermit permit = new AgentSqlExecutionPermit();
+        permit.setDecision(AgentSqlPermitDecisionEnum.REPLAY_RESULT);
+        permit.setReplayResult("warehouse rows");
+        AiToolServiceImpl service = service(request -> {
+            captured.set(request);
+            return permit;
+        });
+
+        AiExecuteSqlRequest request = request("run-1", "SELECT * FROM inventory", 8L);
+        request.setDatabaseName("warehouse");
+        request.getAiToolContextRequest().setAgentDataScope(null);
+        request.getAiToolContextRequest().setAgentDataScopes(List.of(
+                scope(7L, "sales"), scope(8L, "warehouse")));
+
+        assertEquals("warehouse rows", service.executeSql(request));
+        assertEquals(8L, captured.get().getDataSourceId());
+        assertEquals("warehouse", captured.get().getDatabaseName());
+    }
+
+    @Test
+    void rejectsDatasourceOutsideAllAgentScopes() throws Exception {
+        AiToolServiceImpl service = service(request -> {
+            throw new AssertionError("unauthorized SQL must not reach the Agent Tool Gateway");
+        });
+        AiExecuteSqlRequest request = request("run-1", "SELECT * FROM inventory", 9L);
+        request.getAiToolContextRequest().setAgentDataScope(null);
+        request.getAiToolContextRequest().setAgentDataScopes(List.of(
+                scope(7L, "sales"), scope(8L, "warehouse")));
+
+        assertThrows(IllegalArgumentException.class, () -> service.executeSql(request));
+    }
+
+    private AiToolServiceImpl service(SqlPrepare prepare) throws Exception {
+        return service(prepare, () -> {
+            throw new UnsupportedOperationException("getApproval");
+        });
+    }
+
+    private AiToolServiceImpl service(SqlPrepare prepare, Supplier<AgentApproval> approval) throws Exception {
+        AiToolServiceImpl service = new AiToolServiceImpl();
+        IAgentToolGateway gateway = (IAgentToolGateway) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IAgentToolGateway.class},
+                (proxy, method, args) -> {
+                    if ("prepareSql".equals(method.getName())) {
+                        return prepare.apply((AgentSqlToolRequest) args[0]);
+                    }
+                    if ("getApproval".equals(method.getName())) {
+                        return approval.get();
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        IDbConnectionContextService connectionService = (IDbConnectionContextService) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IDbConnectionContextService.class},
+                (proxy, method, args) -> {
+                    if ("buildProfile".equals(method.getName())) {
+                        DbConnectionContextRequest request = (DbConnectionContextRequest) args[0];
+                        ConnectionProfile profile = new ConnectionProfile();
+                        profile.setDataSourceId(request.getDataSourceId());
+                        profile.setDatabaseName(request.getDatabaseName());
+                        profile.setSchemaName(request.getSchemaName());
+                        return profile;
+                    }
+                    throw new AssertionError("database connection must not be used: " + method.getName());
+                });
+        set(service, "agentToolGateway", gateway);
+        set(service, "connectionContextService", connectionService);
+        return service;
+    }
+
+    private IAgentRunService runService(AgentRunStatusEnum status) {
+        return (IAgentRunService) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IAgentRunService.class},
+                (proxy, method, args) -> {
+                    if ("get".equals(method.getName())) {
+                        AgentRun run = new AgentRun();
+                        run.setId((String) args[0]);
+                        run.setStatus(status);
+                        return run;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    private AiExecuteSqlRequest request(String runId, String sql, Long dataSourceId) {
+        AgentDataScope scope = scope(dataSourceId, null);
+        AiToolContextRequest context = new AiToolContextRequest();
+        context.setAgentRunId(runId);
+        context.setAgentDataScope(scope);
+        AiExecuteSqlRequest request = new AiExecuteSqlRequest();
+        request.setSql(sql);
+        request.setDataSourceId(dataSourceId);
+        request.setAiToolContextRequest(context);
+        return request;
+    }
+
+    private AgentDataScope scope(Long dataSourceId, String databaseName) {
+        AgentDataScope scope = new AgentDataScope();
+        scope.setDataSourceId(dataSourceId);
+        scope.setDatabaseName(databaseName);
+        scope.setMaxRows(100);
+        return scope;
+    }
+
+    private void set(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    @FunctionalInterface
+    private interface SqlPrepare {
+        AgentSqlExecutionPermit apply(AgentSqlToolRequest request);
+    }
+}

@@ -24,6 +24,7 @@ import team from './team';
 import plugin from './plugin';
 import license from './license';
 import knowledgeManagement from './knowledgeManagement';
+import task from '../en-US/task';
 
 export default {
   lang: LangType.EN_US,
@@ -52,4 +53,5 @@ export default {
   ...plugin,
   ...license,
   ...knowledgeManagement,
+  ...task,
 };

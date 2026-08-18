@@ -1,9 +1,12 @@
 package ai.chat2db.community.domain.api.model.request.ai;
 
+import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.tools.model.Context;
 import jakarta.validation.Valid;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 public class AiToolContextRequest {
@@ -19,4 +22,27 @@ public class AiToolContextRequest {
 
     @Valid
     private Context requestContext;
+
+    /**
+     * Present only for Agent Runs. Generic Chat requests retain their existing
+     * connection-context behavior.
+     */
+    @Valid
+    private AgentDataScope agentDataScope;
+
+    /**
+     * Authorized Task scopes for Agent Runs. A database tool call must resolve
+     * its target to exactly one entry before accessing a connection.
+     */
+    @Valid
+    private List<AgentDataScope> agentDataScopes;
+
+    private String agentRunId;
+
+    /**
+     * Keep an Agent SQL tool call open while its approval is pending. External
+     * Runtime MCP calls enable this so the provider receives the approved SQL
+     * result in the original tool call and can continue the same turn.
+     */
+    private Boolean waitForApprovalDecision;
 }

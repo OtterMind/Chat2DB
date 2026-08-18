@@ -12,6 +12,7 @@ import ai.chat2db.community.tools.network.NetworkProxyUtil;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.tools.util.McpRuntimeStatus;
 import ai.chat2db.community.web.api.config.console.WebJcefServerBridge;
+import ai.chat2db.community.web.api.util.AgentRuntimeDaemonUtils;
 import io.micrometer.context.ContextRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
@@ -24,9 +25,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.stereotype.Indexed;
 import reactor.core.publisher.Hooks;
 import reactor.util.context.ReactorContextAccessor;
-
 import java.io.PrintStream;
+import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 
 
 @SpringBootApplication
@@ -41,6 +43,7 @@ public class Application {
     public static void main(String[] args) {
         initializeCommunityRuntimeMode();
         validateCommunityEncryptionKey();
+        initializeLocalAgentRuntimeToken();
         log.info("Starting Application, args: {}", Arrays.toString(args));
         log.info("Chat2DB runtime mode: {}, networkStatus: {}, basePath: {}",
                 ConfigUtils.getRuntimeMode(), ConfigUtils.getNetworkStatus(), ConfigUtils.getBasePath());
@@ -50,16 +53,19 @@ public class Application {
         NetworkProxyUtil.applySavedSettingsToJvm();
         boolean cliRuntimeMode = isCliRuntimeMode();
         boolean mcpEnabled = !cliRuntimeMode && SystemSettingsUtil.isMcpEnabled();
+        boolean localAgentRuntimeEnabled = isLocalAgentRuntimeEnabled(cliRuntimeMode);
         McpRuntimeStatus.initialize(mcpEnabled);
         System.setProperty("spring.ai.mcp.server.enabled", String.valueOf(mcpEnabled));
-        if (cliRuntimeMode || (ConfigUtils.isDesktop() && ConfigUtils.isShowGUI() && mcpEnabled)) {
+        if (cliRuntimeMode || localAgentRuntimeEnabled
+                || (ConfigUtils.isDesktop() && ConfigUtils.isShowGUI() && mcpEnabled)) {
             System.setProperty("server.address", "127.0.0.1");
         }
         if (!cliRuntimeMode && ConfigUtils.isShowGUI()) {
             MainJFrame.getInstance().start(args);
         }
         SpringApplication app = new SpringApplication(Application.class);
-        if (!cliRuntimeMode && ConfigUtils.isDesktop() && ConfigUtils.isRelease() && !mcpEnabled) {
+        if (!cliRuntimeMode && ConfigUtils.isDesktop() && ConfigUtils.isRelease()
+                && !mcpEnabled && !localAgentRuntimeEnabled) {
             app.setWebApplicationType(WebApplicationType.NONE);
         }
         try {
@@ -83,9 +89,26 @@ public class Application {
         }
     }
 
+    private static void initializeLocalAgentRuntimeToken() {
+        if (!ConfigUtils.isCommunity() || !ConfigUtils.isDesktop()
+                || org.apache.commons.lang3.StringUtils.isNotBlank(AgentRuntimeDaemonUtils.runtimeToken())) {
+            return;
+        }
+        byte[] token = new byte[32];
+        new SecureRandom().nextBytes(token);
+        System.setProperty(AgentRuntimeDaemonUtils.TOKEN_PROPERTY,
+                Base64.getUrlEncoder().withoutPadding().encodeToString(token));
+    }
+
     private static boolean isCliRuntimeMode() {
         return Boolean.parseBoolean(System.getProperty("chat2db.cli.runtime"))
                 || "cli".equalsIgnoreCase(System.getProperty("chat2db.runtime.mode"));
+    }
+
+    private static boolean isLocalAgentRuntimeEnabled(boolean cliRuntimeMode) {
+        return !cliRuntimeMode && ConfigUtils.isCommunity() && ConfigUtils.isDesktop()
+                && Boolean.parseBoolean(System.getProperty(
+                "chat2db.agent.runtime.auto-discovery", "true"));
     }
 
     private static void initializeContextPropagation() {

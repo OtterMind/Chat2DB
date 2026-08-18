@@ -47,6 +47,7 @@ class AiModelConfigServiceImplBaseUrlTest {
     @ParameterizedTest
     @CsvSource({
             "OPENAI, https://api.openai.com/v1/chat/completions",
+            "CLAUDE, https://api.anthropic.com/v1/messages",
             "MINIMAX, https://api.minimax.io/v1/chat/completions"
     })
     void connectionTestUsesProviderDefaultBaseUrl(String provider, String expectedEndpoint) {
@@ -57,6 +58,12 @@ class AiModelConfigServiceImplBaseUrlTest {
     void minimaxConnectionTestKeepsCustomBaseUrl() {
         assertEquals("https://api.minimax.chat/v1/chat/completions",
                 testEndpoint("MINIMAX", "https://api.minimax.chat/v1"));
+    }
+
+    @Test
+    void anthropicConnectionTestToleratesTrailingV1() {
+        assertEquals("https://anthropic.example.com/v1/messages",
+                testEndpoint("CLAUDE", "https://anthropic.example.com/v1"));
     }
 
     private String resolveBaseUrl(String provider, String baseUrl) {

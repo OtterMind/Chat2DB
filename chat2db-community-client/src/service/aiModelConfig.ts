@@ -1,8 +1,9 @@
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { isCommunityEnv } from '@/utils/env';
 import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
-export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'MINIMAX';
+export type AIProvider = 'OPENAI' | 'CLAUDE';
 
 export interface IAIModelConfigItem {
   id: string;
@@ -121,7 +122,7 @@ const ensureOneDefaultConfig = (configs: IAIModelConfigItem[]) => {
   return configs;
 };
 
-const createLocalModelOption = (config: IAIModelConfigItem): IModelOptionItem => ({
+const createModelOption = (config: IAIModelConfigItem): IModelOptionItem => ({
   value: `config:${config.id}`,
   label: config.name || config.model,
   provider: config.provider,
@@ -131,7 +132,48 @@ const createLocalModelOption = (config: IAIModelConfigItem): IModelOptionItem =>
   defaultOption: !!config.defaultConfig,
 });
 
+let communityMigration: Promise<void> | undefined;
+
+const migrateCommunityModelConfigs = async () => {
+  if (!isCommunityEnv) return;
+  if (!communityMigration) {
+    communityMigration = (async () => {
+      const localConfigs = loadLocalConfigs();
+      if (!localConfigs.length) return;
+
+      // Save the default entry last so the backend preserves the same default
+      // after importing every browser-local configuration.
+      const ordered = [...localConfigs].sort((a, b) => Number(!!a.defaultConfig) - Number(!!b.defaultConfig));
+      for (const config of ordered) {
+        await saveRemoteModelConfig({
+          id: config.id,
+          name: config.name,
+          provider: config.provider,
+          model: config.model,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          projectId: config.projectId,
+          location: config.location,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          enabled: config.enabled,
+          defaultConfig: config.defaultConfig,
+        });
+      }
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    })().catch((error) => {
+      communityMigration = undefined;
+      throw error;
+    });
+  }
+  return communityMigration;
+};
+
 export const listAIModelConfigs = async () => {
+  if (isCommunityEnv) {
+    await migrateCommunityModelConfigs();
+    return (await listRemoteModelConfigs(undefined as void)) || [];
+  }
   if (runtimeEditionConfig.localPersistence) {
     return loadLocalConfigs();
   }
@@ -139,6 +181,10 @@ export const listAIModelConfigs = async () => {
 };
 
 export const saveAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
+  if (isCommunityEnv) {
+    await migrateCommunityModelConfigs();
+    return saveRemoteModelConfig(payload);
+  }
   if (!runtimeEditionConfig.localPersistence) {
     return saveRemoteModelConfig(payload);
   }
@@ -177,6 +223,11 @@ export const saveAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
 };
 
 export const deleteAIModelConfig = async (id: string) => {
+  if (isCommunityEnv) {
+    await migrateCommunityModelConfigs();
+    await deleteRemoteModelConfig({ id });
+    return;
+  }
   if (!runtimeEditionConfig.localPersistence) {
     await deleteRemoteModelConfig({ id });
     return;
@@ -188,7 +239,7 @@ export const deleteAIModelConfig = async (id: string) => {
 
 export const testAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
   const nextPayload = { ...payload };
-  if (runtimeEditionConfig.localPersistence && !nextPayload.apiKey?.trim() && nextPayload.id) {
+  if (!isCommunityEnv && runtimeEditionConfig.localPersistence && !nextPayload.apiKey?.trim() && nextPayload.id) {
     const localConfig = loadLocalConfigs().find((item) => item.id === nextPayload.id);
     if (localConfig?.apiKey?.trim()) {
       nextPayload.apiKey = localConfig.apiKey.trim();
@@ -198,6 +249,10 @@ export const testAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
 };
 
 export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> => {
+  if (isCommunityEnv) {
+    const configs = await listAIModelConfigs();
+    return configs.filter((item) => item.enabled !== false).map(createModelOption);
+  }
   const presetOptions = runtimeEditionConfig.remoteAiModelOptions
     ? (await aiStreamService.getModelOptions(undefined as void)) || []
     : [];
@@ -208,7 +263,7 @@ export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> =
 
   const localOptions = loadLocalConfigs()
     .filter((item) => item.enabled !== false)
-    .map(createLocalModelOption);
+    .map(createModelOption);
 
   const merged = [...localOptions, ...presetOptions];
   if (!merged.some((item) => item.defaultOption) && merged.length > 0) {
@@ -218,7 +273,7 @@ export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> =
 };
 
 export const resolveModelRequestPayload = async (option: IModelOptionItem) => {
-  if (runtimeEditionConfig.localPersistence && option.customOption && option.modelConfigId) {
+  if (!isCommunityEnv && runtimeEditionConfig.localPersistence && option.customOption && option.modelConfigId) {
     const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);
     if (!config) {
       return null;
