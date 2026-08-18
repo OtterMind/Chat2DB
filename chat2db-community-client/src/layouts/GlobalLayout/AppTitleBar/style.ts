@@ -56,13 +56,20 @@ export const useStyles = createStyles(({ css, token }) => {
       height: 100%;
       -webkit-app-region: no-drag;
     `,
-    communityMenuLogo: css`
-      display: block;
+    communityMenuLogoSlot: css`
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
       height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
-      border-radius: 6px;
-      object-fit: contain;
       flex-shrink: 0;
+    `,
+    communityMenuLogo: css`
+      display: block;
+      width: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.iconSize}px;
+      height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.iconSize}px;
+      border-radius: 4px;
+      object-fit: contain;
     `,
     communityMenuBar: css`
       display: flex;

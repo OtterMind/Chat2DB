@@ -112,7 +112,9 @@ const CommunityAppMenu = () => {
 
   return (
     <div ref={menuRef} className={styles.communityMenuContent} onDoubleClick={stopWindowGesture}>
-      <img className={styles.communityMenuLogo} src={communityLogo} alt="Chat2DB" />
+      <span className={styles.communityMenuLogoSlot}>
+        <img className={styles.communityMenuLogo} src={communityLogo} alt="Chat2DB" />
+      </span>
       {expanded ? (
         <div className={styles.communityMenuBar}>
           <Dropdown
