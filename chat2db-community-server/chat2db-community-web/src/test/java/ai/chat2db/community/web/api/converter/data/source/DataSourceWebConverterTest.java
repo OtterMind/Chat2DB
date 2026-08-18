@@ -107,6 +107,16 @@ class DataSourceWebConverterTest {
     }
 
     @Test
+    void mapsIdentityColorFromCreateRequest() {
+        DataSourceCreateRequest request = new DataSourceCreateRequest();
+        request.setIdentityColor("#12AB34");
+
+        DataSourceResponse response = DataSourceWebConverter.INSTANCE.request2response(request);
+
+        assertEquals("#12AB34", response.getIdentityColor());
+    }
+
+    @Test
     void mapsIdentityColorToDatasourceAndLightweightResponses() {
         Environment environment = Environment.builder()
                 .id(2L)
