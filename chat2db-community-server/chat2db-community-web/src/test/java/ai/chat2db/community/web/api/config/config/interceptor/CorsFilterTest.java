@@ -9,24 +9,19 @@ class CorsFilterTest {
 
     @Test
     void releaseAllowsOnlyKnownFrontendOriginsOrMissingOrigin() {
-        assertTrue(CorsFilter.allowCommunityOrigin(null, true));
-        assertTrue(CorsFilter.allowCommunityOrigin("", true));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8888", true));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8889", true));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://localhost:10825", true));
+        assertTrue(CorsFilter.allowCommunityOrigin(null, false));
+        assertTrue(CorsFilter.allowCommunityOrigin("", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8888", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8889", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://localhost:10825", false));
 
-        assertFalse(CorsFilter.allowCommunityOrigin("https://example.com", true));
-        assertFalse(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000", true));
+        assertFalse(CorsFilter.allowCommunityOrigin("https://example.com", false));
+        assertFalse(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000", false));
     }
 
     @Test
-    void developmentAllowsLoopbackOriginsOnAnyPort() {
-        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8890", false));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://localhost:3000", false));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://[::1]:5173", false));
-
-        assertFalse(CorsFilter.allowCommunityOrigin("https://example.com", false));
-        assertFalse(CorsFilter.allowCommunityOrigin("http://127.0.0.1.example.com:8890", false));
-        assertFalse(CorsFilter.allowCommunityOrigin("ftp://127.0.0.1:8890", false));
+    void developmentAllowsAllOrigins() {
+        assertTrue(CorsFilter.allowCommunityOrigin("https://example.com", true));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000", true));
     }
 }

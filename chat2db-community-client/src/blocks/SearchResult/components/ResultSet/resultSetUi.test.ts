@@ -16,6 +16,7 @@ import {
   canHideResultColumns,
   getNextFrozenResultColumnFields,
   getResultCellMetaAtTableColumn,
+  getResultColumnNameAtTableColumn,
   getResultColumnDisplayOrder,
   getResultFrozenColumnCount,
   hideResultColumnFields,
@@ -23,7 +24,11 @@ import {
   orderResultColumns,
   updateHiddenResultColumnFields,
 } from '../ResultSetTable/columnState';
-import { resolveResultSelectionActiveCell } from '../ResultSetTable/selectionState';
+import {
+  resolveResultInspectorActiveCell,
+  resolveResultSelectionActiveCell,
+} from '../ResultSetTable/selectionState';
+import { areResultCellValuesEquivalent } from './inspectorState';
 import {
   isResultHeaderContext,
   joinContextMenuGroups,
@@ -45,6 +50,22 @@ const resultTableStyleSource = readFileSync(
   'src/blocks/SearchResult/components/ResultSetTable/style.ts',
   'utf8',
 );
+const rowDetailSource = readFileSync(
+  'src/blocks/SearchResult/components/RowDetail/index.tsx',
+  'utf8',
+);
+const resultSetSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSet/index.tsx',
+  'utf8',
+);
+const headerTooltipSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/hooks/useHeaderTooltip.tsx',
+  'utf8',
+);
+const resultColumnDataTreatingSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/utils/dataTreating.ts',
+  'utf8',
+);
 
 test('more-tabs and export chevrons share one aligned trailing slot', () => {
   assert.match(exportBarSource, /<DropdownChevronTrigger>\{i18n\('common\.text\.export'\)\}/);
@@ -56,6 +77,11 @@ test('more-tabs and export chevrons share one aligned trailing slot', () => {
   );
   assert.match(resultToolbarStyleSource, /toolBar:[\s\S]*?padding: 0;/);
   assert.match(resultToolbarStyleSource, /toolBarRight:[\s\S]*?height: 100%;[\s\S]*?align-items: center;/);
+});
+
+test('query result export sends the concrete table as the task target', () => {
+  assert.match(exportBarSource, /const tableName = resultData\.tableName \|\| params\.tableName;/);
+  assert.match(exportBarSource, /tableNames: tableName \? \[tableName\] : undefined,/);
 });
 
 test('manage-columns title exposes an aligned localized help tooltip', () => {
@@ -101,6 +127,55 @@ test('result search escape and close action use the same close lifecycle', () =>
   });
 
   assert.deepEqual(calls, ['close']);
+});
+
+test('record field focus updates the cell used by the value inspector', () => {
+  assert.match(rowDetailSource, /onFocus=\{\(\) => handleFieldActivate\(item\)\}/);
+  assert.match(rowDetailSource, /onActiveFieldChange\?\.\(\{[\s\S]*?field: item\.field,[\s\S]*?\}\);/);
+  assert.match(resultSetSource, /onActiveFieldChange=\{handleRowDetailActiveFieldChange\}/);
+  assert.match(resultSetSource, /const lastActiveCell = lastActiveCellRef\.current;/);
+});
+
+test('unchanged typed values do not produce a row-detail cell update', () => {
+  assert.equal(areResultCellValuesEquivalent(42, '42'), true);
+  assert.equal(areResultCellValuesEquivalent(true, 'true'), true);
+  assert.equal(areResultCellValuesEquivalent(false, 'false'), true);
+  assert.equal(areResultCellValuesEquivalent(null, null), true);
+  assert.equal(areResultCellValuesEquivalent(undefined, null), true);
+  assert.equal(areResultCellValuesEquivalent(42, '43'), false);
+  assert.equal(areResultCellValuesEquivalent(null, ''), false);
+});
+
+test('value refresh preserves the inspector field while real table selection replaces it', () => {
+  const inspectorField = { row: 1, field: '2' };
+  const oldTableField = { row: 1, field: '1' };
+  const newTableField = { row: 2, field: '3' };
+
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, oldTableField, 'value-change'),
+    inspectorField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, newTableField, 'table-selection'),
+    newTableField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(inspectorField, oldTableField, 'table-selection', true),
+    inspectorField,
+  );
+  assert.equal(
+    resolveResultInspectorActiveCell(undefined, newTableField, 'value-change'),
+    newTableField,
+  );
+});
+
+test('result table advances inspector interaction revisions for pointer and keyboard input', () => {
+  const resultSetTableSource = readFileSync(
+    'src/blocks/SearchResult/components/ResultSetTable/index.tsx',
+    'utf8',
+  );
+  assert.match(resultSetTableSource, /onPointerDown=\{handleTablePointerDown\}/);
+  assert.match(resultSetTableSource, /onKeyDown=\{handleTableKeyDown\}/);
 });
 
 test('column metadata contains each available name, type, and comment row', () => {
@@ -167,7 +242,7 @@ test('field type and comment rows are enabled by default and can be hidden indep
   ]);
 });
 
-test('result headers render available metadata values as lines without hover or labels', () => {
+test('result headers render available metadata values as lines without labels', () => {
   assert.equal(
     getResultColumnTitle({
       dataType: 'STRING' as any,
@@ -210,6 +285,40 @@ test('result header custom render fixes row positions and applies semantic color
       { text: '--', fill: '#888888', fontSize: 13, fontWeight: 400, y: 63 },
     ],
   );
+});
+
+test('resized result headers use the live cell width without expanding their initial recommendation', () => {
+  const theme = {
+    colorText: '#111111',
+    colorPrimary: '#1677ff',
+    colorTextSecondary: '#888888',
+    fontFamily: 'Inter',
+  } as any;
+  const longName = 'a'.repeat(800);
+  const initialRender = createResultHeaderCustomRender({
+    data: { dataType: 'STRING' as any, name: longName },
+    fontSize: 13,
+    theme,
+  });
+  const resizedRender = createResultHeaderCustomRender({
+    data: { dataType: 'STRING' as any, name: longName },
+    fontSize: 13,
+    theme,
+    availableWidth: 720,
+  });
+
+  assert.equal(initialRender.expectedWidth, 360);
+  assert.equal(initialRender.elements[0].maxLineWidth, 302);
+  assert.equal(resizedRender.expectedWidth, 360);
+  assert.equal(resizedRender.elements[0].maxLineWidth, 662);
+  assert.match(resultColumnDataTreatingSource, /availableWidth: args\.rect\?\.width/);
+});
+
+test('result header tooltip preserves complete metadata and wraps long identifiers', () => {
+  assert.match(headerTooltipSource, /getHeaderMetadataRows\(originalData\)/);
+  assert.match(headerTooltipSource, /\{item\.value\}/);
+  assert.match(headerTooltipSource, /overflow-wrap: anywhere;/);
+  assert.doesNotMatch(headerTooltipSource, /text-overflow: ellipsis;/);
 });
 
 test('pinned result tabs survive replacement while unpinned results are discarded', () => {
@@ -334,6 +443,19 @@ test('cell metadata lookup resolves the stable field after an earlier column is 
     getHeaderField: (col: number) => (col === 1 ? '2' : undefined),
   } as any;
   assert.equal(getResultCellMetaAtTableColumn(table, record, 1, 1)?.value, 'second');
+});
+
+test('column-name lookup copies original metadata after columns are reordered', () => {
+  const table = {
+    columns: [
+      { field: '2', originalData: { name: 'second_column' } },
+      { field: '1', originalData: { name: 'first_column' } },
+    ],
+    getHeaderField: (col: number) => (col === 1 ? '2' : '1'),
+  } as any;
+
+  assert.equal(getResultColumnNameAtTableColumn(table, 1), 'second_column');
+  assert.equal(getResultColumnNameAtTableColumn(table, 2), 'first_column');
 });
 
 test('clearing a selection never restores an active cell from a pending frame', () => {

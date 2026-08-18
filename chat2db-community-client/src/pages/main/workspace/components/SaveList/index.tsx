@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import i18n from '@/i18n';
 import { Input, Modal } from 'antd';
-import { ChevronRight, Search, Trash2 } from 'lucide-react';
-import { IconButton, IconfontSvg } from '@chat2db/ui';
+import { ChevronRight, Trash2 } from 'lucide-react';
+import { IconfontSvg } from '@chat2db/ui';
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuEntry, ContextMenuIntent } from '@/components/ContextMenu/core';
 import LoadingContent from '@/components/Loading/LoadingContent';
@@ -13,6 +13,8 @@ import { useStyles } from './style';
 import { useWorkspaceStore } from '@/store/workspace';
 import MenuLabel from '@/components/MenuLabel';
 import { emitSavedConsoleRecordUpdated } from '@/utils/savedConsoleEvents';
+import PanelToolbar from '@/components/PanelToolbar';
+import WorkspaceHeaderSearch from '../WorkspaceHeaderSearch';
 
 type SavedConsoleTreeNodeType = 'dataSource' | 'database' | 'schema' | 'console';
 
@@ -31,6 +33,10 @@ interface SavedConsoleContextSnapshot {
 }
 
 type SavedConsoleContextIntent = ContextMenuIntent<SavedConsoleContextSnapshot>;
+
+interface SaveListProps {
+  headerLeading?: React.ReactNode;
+}
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -138,16 +144,14 @@ function createConsoleTree(consoleList?: IConsole[] | null): SavedConsoleTreeNod
   return Array.from(dataSourceMap.values());
 }
 
-const SaveList = () => {
+const SaveList = ({ headerLeading }: SaveListProps) => {
   const {
     styles,
     cx,
     theme: { appearance },
   } = useStyles();
-  const [searching, setSearching] = useState<boolean>(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
-  const inputRef = useRef<any>();
   const hasInitializedExpandedKeysRef = useRef(false);
   const previousGroupKeysRef = useRef<string[]>([]);
   const consoleList = useWorkspaceStore((state) => state.savedConsoleList);
@@ -199,23 +203,6 @@ const SaveList = () => {
       return nextKeys;
     });
   }, [consoleTree]);
-
-  useEffect(() => {
-    if (searching) {
-      inputRef.current!.focus({ cursor: 'start' });
-    }
-  }, [searching]);
-
-  function onBlur() {
-    if (!inputRef.current.input.value) {
-      setSearching(false);
-      setSearchKeyword('');
-    }
-  }
-
-  function onChange(value: string) {
-    setSearchKeyword(value);
-  }
 
   function openConsole(item: IConsole) {
     const params: any = {
@@ -430,23 +417,16 @@ const SaveList = () => {
     <>
       <PortalContextMenu intent={contextMenu} actions={contextMenuActions} onClose={closeContextMenu} />
       <div className={styles.saveModule}>
-        <div className={styles.header}>
-          <div className={cx(styles.headerContent, searching && styles.headerContentHidden)}>
-            <div>{i18n('workspace.title.savedConsole')}</div>
-            <IconButton size={{ boxSize: 24, iconSize: 14 }} onClick={() => setSearching(true)} icon={Search} />
-          </div>
-          <div className={cx(styles.headerSearch, !searching && styles.headerSearchHidden)}>
-            <Input
-              ref={inputRef}
-              size="small"
-              placeholder={i18n('common.text.search')}
-              prefix={<Search size={14} />}
-              onBlur={onBlur}
-              onChange={(e) => onChange(e.target.value)}
-              allowClear
+        <PanelToolbar
+          leading={headerLeading ?? <div>{i18n('workspace.title.savedConsole')}</div>}
+          trailing={
+            <WorkspaceHeaderSearch
+              active={false}
+              value={searchKeyword}
+              onChange={setSearchKeyword}
             />
-          </div>
-        </div>
+          }
+        />
         <div className={styles.saveBoxList}>
           <LoadingContent className={styles.loadingContent} data={consoleList ? filteredTree : consoleList} handleEmpty>
             <div className={styles.treeList}>{filteredTree.map((node) => renderTreeNode(node))}</div>

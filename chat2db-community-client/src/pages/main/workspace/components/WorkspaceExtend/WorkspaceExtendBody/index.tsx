@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { extendConfig } from '../config';
+import { extendConfig, isWorkspaceRecordCode } from '../config';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useStyles } from './style';
 import { useAIStore } from '@/store/ai';
@@ -8,6 +8,7 @@ import {
   isWorkspaceResultInspectorCode,
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
+import WorkspaceRecordSwitcher from '../WorkspaceRecordSwitcher';
 
 export default () => {
   const { styles } = useStyles();
@@ -37,7 +38,7 @@ export default () => {
 
   return Component ? (
     <div className={styles.currentWorkspaceExtendBox}>
-      <Component />
+      <Component headerLeading={isWorkspaceRecordCode(currentWorkspaceExtend) ? <WorkspaceRecordSwitcher /> : null} />
     </div>
   ) : (
     false

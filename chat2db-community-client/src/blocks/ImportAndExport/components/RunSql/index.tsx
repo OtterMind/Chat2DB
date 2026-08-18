@@ -5,6 +5,8 @@ import { Form, Input } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import { isDevelopment } from '@/utils/env';
+import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
+import { ImportTaskParams } from '@/service/importExport';
 
 interface IProps {
   className?: string;
@@ -12,7 +14,7 @@ interface IProps {
 }
 
 export interface RunSqlRef {
-  getValues: () => any;
+  getValues: () => ImportTaskParams | null;
 }
 
 // const codeOptions = [
@@ -61,12 +63,15 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
 
   useImperativeHandle(ref, () => ({
     getValues: () => {
-      const { dataSourceId, databaseName, schemaName } = runSqlBoundInfo!;
+      if (!runSqlBoundInfo) return null;
+      const { dataSourceId, databaseName, schemaName } = runSqlBoundInfo;
       return {
         dataSourceId,
         databaseName,
         schemaName,
-        fileName: fileUrlList[0] || formValues.fileUrl,
+        taskType: ImportExportTaskType.SQL_FILE_IMPORT,
+        sourceFile: fileUrlList[0] || formValues.fileUrl,
+        format: ImportExportFileType.SQL,
       };
     },
   }));

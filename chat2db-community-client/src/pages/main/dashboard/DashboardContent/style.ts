@@ -64,6 +64,14 @@ export const useStyles = createStyles(({ css, token }) => {
       width: fit-content;
       ${vatStyles.singleLine}
     `,
+    dashboardMenu: css`
+      width: 260px;
+      height: 320px;
+    `,
+    dashboardMenuTrigger: css`
+      display: inline-flex;
+      flex-shrink: 0;
+    `,
     headerRight: css`
       flex-shrink: 0;
       display: flex;

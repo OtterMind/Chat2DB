@@ -45,6 +45,7 @@ export interface CommonState {
     title: string;
     content?: React.ReactNode;
     onOk: (inputConfirmText?: string) => Promise<void>;
+    onCancel?: () => void;
     needDoubleConfirmText?: string;
     needInputConfirmText?: string;
     inputConfirmLabel?: React.ReactNode;

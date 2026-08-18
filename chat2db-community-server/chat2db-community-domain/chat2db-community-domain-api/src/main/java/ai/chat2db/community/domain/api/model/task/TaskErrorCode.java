@@ -1,0 +1,15 @@
+package ai.chat2db.community.domain.api.model.task;
+
+public enum TaskErrorCode {
+    TASK_EXECUTOR_REJECTED,
+    TASK_INTERNAL_ERROR,
+    ARTIFACT_PUBLISH_FAILED,
+    APPLICATION_TERMINATED,
+    USER_EXITED,
+    DATABASE_QUERY_FAILED,
+    FILE_NOT_FOUND,
+    FILE_READ_FAILED,
+    FILE_WRITE_FAILED,
+    EXPORT_FAILED,
+    IMPORT_FAILED
+}

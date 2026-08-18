@@ -106,7 +106,6 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     searchBar: css`
       width: 100%;
-      border-radius: 4px;
     `,
     treeSelect: css`
       .ant-tree-checkbox {

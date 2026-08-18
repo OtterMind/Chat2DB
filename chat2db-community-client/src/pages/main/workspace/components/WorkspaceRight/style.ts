@@ -21,10 +21,5 @@ export const useStyles = createStyles(({ css, token }) => {
       flex: 1;
       height: 0px;
     `,
-    masterScopeBottom: css`
-      height: fit-content;
-      flex-shrink: 0;
-      background: ${token.colorFillQuaternary};
-    `,
   };
 });

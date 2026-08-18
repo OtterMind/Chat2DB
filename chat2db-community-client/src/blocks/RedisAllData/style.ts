@@ -58,7 +58,6 @@ export const useStyles = createStyles(({ css, token }) => {
     searchBar: css`
       flex: 1;
       height: 24px;
-      border-radius: 4px;
     `,
     tableCell: css`
       flex: 1;

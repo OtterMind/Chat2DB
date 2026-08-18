@@ -20,8 +20,9 @@ export const createResultHeaderCustomRender = (params: {
   theme: Omit<Theme, 'prefixCls'>;
   fontSize: number;
   visibility?: HeaderMetadataVisibility;
+  availableWidth?: number;
 }) => {
-  const { data, theme, fontSize, visibility } = params;
+  const { data, theme, fontSize, visibility, availableWidth } = params;
   const rows = getHeaderMetadataRows(data, visibility);
   const lineHeight = fontSize + 9;
   const getRowFontSize = (key: HeaderMetadataKey) => (key === 'fieldName' ? fontSize + 1 : fontSize);
@@ -38,6 +39,10 @@ export const createResultHeaderCustomRender = (params: {
     fieldType: theme.colorPrimary,
     fieldComment: theme.colorTextSecondary,
   };
+  const renderWidth =
+    typeof availableWidth === 'number' && Number.isFinite(availableWidth) && availableWidth > 0
+      ? availableWidth
+      : expectedWidth;
 
   return {
     elements: rows.map((row, index) => ({
@@ -51,7 +56,7 @@ export const createResultHeaderCustomRender = (params: {
       y: 8 + lineHeight * index + lineHeight / 2,
       textBaseline: 'middle' as const,
       ellipsis: true,
-      maxLineWidth: expectedWidth - HEADER_ICON_SPACE,
+      maxLineWidth: Math.max(24, renderWidth - HEADER_ICON_SPACE),
     })),
     expectedHeight,
     expectedWidth,

@@ -7,14 +7,11 @@ import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationPageQueryRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.storage.converter.StorageConverterImpl;
 import ai.chat2db.community.storage.large.ConsoleStorage;
 import ai.chat2db.community.storage.large.OperationLogStorage;
-import ai.chat2db.community.storage.large.TaskStorage;
 import ai.chat2db.community.storage.small.DataSourceStorage;
 import ai.chat2db.community.tools.security.AesGcmUtil;
 import org.junit.jupiter.api.BeforeAll;
@@ -51,8 +48,6 @@ class LocalWorkspaceStoragePaginationTest {
                 ConsoleStorage.INSTANCE::delete);
         clear(OperationLogStorage.INSTANCE.getDataList().stream().map(OperationLog::getId).toList(),
                 OperationLogStorage.INSTANCE::delete);
-        clear(TaskStorage.INSTANCE.getDataList().stream().map(Task::getId).toList(),
-                TaskStorage.INSTANCE::delete);
         clear(DataSourceStorage.INSTANCE.getDataList().stream().map(DataSource::getId).toList(),
                 DataSourceStorage.INSTANCE::delete);
     }
@@ -103,27 +98,6 @@ class LocalWorkspaceStoragePaginationTest {
     }
 
     @Test
-    void taskListReturnsOnlyTheRequestedSlice() {
-        for (int i = 0; i < 3; i++) {
-            TaskStorage.INSTANCE.save(new Task());
-        }
-        TaskRecordPageRequest request = new TaskRecordPageRequest();
-        request.setPageNo(1);
-        request.setPageSize(2);
-
-        PageResponse<Task> page1 = workspaceStorage.taskList(request);
-        assertEquals(2, page1.getData().size());
-        assertEquals(3L, page1.getTotal());
-        assertTrue(page1.getHasNextPage());
-
-        request.setPageNo(2);
-        PageResponse<Task> page2 = workspaceStorage.taskList(request);
-        assertEquals(1, page2.getData().size());
-        assertEquals(3L, page2.getTotal());
-        assertFalse(page2.getHasNextPage());
-    }
-
-    @Test
     void listDataSourcesReturnsOnlyTheRequestedSlice() {
         for (int i = 0; i < 3; i++) {
             DataSourceStorage.INSTANCE.save(new DataSource());
@@ -142,20 +116,6 @@ class LocalWorkspaceStoragePaginationTest {
         assertEquals(1, page2.getData().size());
         assertEquals(3L, page2.getTotal());
         assertFalse(page2.getHasNextPage());
-    }
-
-    @Test
-    void hugePageNumberReturnsEmptyPageInsteadOfOverflowingOffset() {
-        TaskStorage.INSTANCE.save(new Task());
-        TaskRecordPageRequest request = new TaskRecordPageRequest();
-        request.setPageNo(Integer.MAX_VALUE);
-        request.setPageSize(2);
-
-        PageResponse<Task> page = workspaceStorage.taskList(request);
-
-        assertTrue(page.getData().isEmpty());
-        assertEquals(1L, page.getTotal());
-        assertFalse(page.getHasNextPage());
     }
 
     @Test

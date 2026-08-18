@@ -10,18 +10,19 @@ import {
   getLastRenderedTerminalSequence,
   setLastRenderedTerminalSequence,
 } from '@/utils/terminalBuffer';
+import { createTerminalAttachmentLifecycle } from './terminalAttachmentLifecycle';
 
 interface TerminalTabProps {
   sessionId: string;
 }
 
+const terminalAttachmentLifecycle = createTerminalAttachmentLifecycle({
+  attach: (params) => jcefApi.attachTerminal(params),
+  detach: (params) => jcefApi.detachTerminal(params),
+});
+
 const TerminalTab = memo(({ sessionId }: TerminalTabProps) => {
   const terminalRef = useRef<IXtermRef>(null);
-  const consumerIdRef = useRef(
-    `${sessionId}:${Date.now()}:${Math.random()
-      .toString(36)
-      .slice(2)}`,
-  );
   const [exited, setExited] = useState(false);
   const themeId = useGlobalStore(
     (state) => state.terminalSettings?.themeId || DEFAULT_TERMINAL_SETTINGS.themeId,
@@ -58,17 +59,19 @@ const TerminalTab = memo(({ sessionId }: TerminalTabProps) => {
     };
     JcefEventBus.on(outputEvent, handleOutput);
     JcefEventBus.on(exitEvent, handleExit);
-    const consumerId = consumerIdRef.current;
-    const attachPromise = jcefApi.attachTerminal({ sessionId, consumerId }).catch((error) => {
+    let active = true;
+    const attachment = terminalAttachmentLifecycle.acquire(sessionId);
+    attachment.attached.catch((error) => {
       console.error('attach terminal error', error);
-      setExited(true);
+      if (active) {
+        setExited(true);
+      }
     });
     return () => {
+      active = false;
       JcefEventBus.off(outputEvent, handleOutput);
       JcefEventBus.off(exitEvent, handleExit);
-      attachPromise.finally(() => {
-        jcefApi.detachTerminal({ sessionId, consumerId }).catch(() => undefined);
-      });
+      attachment.release();
     };
   }, [sessionId]);
 

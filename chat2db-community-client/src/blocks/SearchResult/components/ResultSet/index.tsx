@@ -9,7 +9,7 @@ import useSqlExecutor from '@/hooks/useSqlExecutor';
 import executeSql from '@/service/executeSql';
 import SQLPreviewExecute, { SQLPreviewExecuteRef } from '../SQLPreviewExecute';
 import ViewData, { ViewDataRef } from '../ViewData';
-import RowDetail, { IChangeDataParams, RowDetailRef } from '../RowDetail';
+import RowDetail, { IChangeDataParams, IViewDataParams, RowDetailRef } from '../RowDetail';
 import SelectionAggregates from '../SelectionAggregates';
 import { IManageResultData } from '@/typings';
 import { Button, Spin, Tabs, Tooltip } from 'antd';
@@ -30,12 +30,16 @@ import { useGlobalStore } from '@/store/global';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
 import {
-  DEFAULT_RESULT_INSPECTOR_MODE,
+  createResultInspectorModeStorageKey,
   getResultInspectorTabs,
+  getResultInspectorPreferenceStorage,
   getWorkspaceResultInspectorCode,
+  persistResultInspectorMode,
+  readResultInspectorMode,
   ResultInspectorMode,
   ResultInspectorTab,
   shouldClearInactiveResultInspector,
+  subscribeResultInspectorMode,
   toggleResultInspectorMode,
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
@@ -50,12 +54,19 @@ import {
   getResultCellMetaAtTableColumn,
   getResultFieldAtTableColumn,
 } from '../ResultSetTable/columnState';
+import { resolveResultInspectorActiveCell } from '../ResultSetTable/selectionState';
+import { areResultCellValuesEquivalent } from './inspectorState';
 
 interface IProps {
   resultData: IManageResultData;
   active: boolean;
   viewTable?: boolean;
 }
+
+const RESULT_INSPECTOR_MODE_STORAGE_KEY = createResultInspectorModeStorageKey(
+  'community',
+  __RUNTIME_ENV__,
+);
 
 export default memo<IProps>(
   (props) => {
@@ -82,13 +93,20 @@ export default memo<IProps>(
     const feSearchRef = useRef<FESearchRef>(null);
     const [orderByText, setOrderByText] = useState<string>('');
     const [submitLoading, setSubmitLoading] = useState(false);
-    const [inspectorMode, setInspectorMode] = useState<ResultInspectorMode>(DEFAULT_RESULT_INSPECTOR_MODE);
+    const [inspectorMode, setInspectorMode] = useState<ResultInspectorMode>(() =>
+      readResultInspectorMode(
+        getResultInspectorPreferenceStorage(),
+        RESULT_INSPECTOR_MODE_STORAGE_KEY,
+      ),
+    );
     const [inspectorTab, setInspectorTab] = useState<ResultInspectorTab>('row');
     const [inspectorModalOpen, setInspectorModalOpen] = useState(false);
     const [inspectorPortalTarget, setInspectorPortalTarget] = useState<HTMLElement | null>(null);
     const [selectedValues, setSelectedValues] = useState<unknown[]>([]);
     const [selectedRowCount, setSelectedRowCount] = useState(0);
-    const [lastActiveCell, setLastActiveCell] = useState<IResultSetSelection['activeCell']>();
+    const lastActiveCellRef = useRef<IResultSetSelection['activeCell']>();
+    const inspectorActiveCellRef = useRef<IResultSetSelection['activeCell']>();
+    const inspectorOpenInteractionRevisionRef = useRef(0);
     const currentWorkspaceExtend = useWorkspaceStore((state) => state.currentWorkspaceExtend);
     const inspectorExtendCode = useMemo(() => getWorkspaceResultInspectorCode(searchAreaId), [searchAreaId]);
     const inspectorSidebarOpen = currentWorkspaceExtend === inspectorExtendCode;
@@ -99,6 +117,21 @@ export default memo<IProps>(
       [shortcutOverrides],
     );
 
+    const setLastActiveCell = useCallback((activeCell: IResultSetSelection['activeCell']) => {
+      lastActiveCellRef.current = activeCell;
+    }, []);
+
+    const setInspectorActiveCell = useCallback((activeCell: IResultSetSelection['activeCell']) => {
+      inspectorActiveCellRef.current = activeCell;
+      lastActiveCellRef.current = activeCell;
+    }, []);
+
+    const clearActiveCell = useCallback(() => {
+      inspectorActiveCellRef.current = undefined;
+      lastActiveCellRef.current = undefined;
+      inspectorOpenInteractionRevisionRef.current = 0;
+    }, []);
+
     useEffect(() => {
       setResultData(props.resultData);
     }, [props.resultData]);
@@ -106,21 +139,32 @@ export default memo<IProps>(
     useEffect(() => {
       setSelectedValues([]);
       setSelectedRowCount(0);
-      setLastActiveCell(undefined);
+      clearActiveCell();
       setInspectorModalOpen(false);
       const workspaceStore = useWorkspaceStore.getState();
       if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
         workspaceStore.setCurrentWorkspaceExtend(null);
       }
-    }, [inspectorExtendCode, resultData]);
+    }, [clearActiveCell, inspectorExtendCode, resultData]);
 
     const closeInspector = useCallback(() => {
+      clearActiveCell();
       setInspectorModalOpen(false);
       const workspaceStore = useWorkspaceStore.getState();
       if (workspaceStore.currentWorkspaceExtend === inspectorExtendCode) {
         workspaceStore.setCurrentWorkspaceExtend(null);
       }
-    }, [inspectorExtendCode]);
+    }, [clearActiveCell, inspectorExtendCode]);
+
+    useEffect(
+      () =>
+        subscribeResultInspectorMode((storageKey, mode) => {
+          if (storageKey === RESULT_INSPECTOR_MODE_STORAGE_KEY) {
+            setInspectorMode(mode);
+          }
+        }),
+      [],
+    );
 
     useEffect(() => {
       const workspaceStore = useWorkspaceStore.getState();
@@ -396,7 +440,9 @@ export default memo<IProps>(
               ? record?.__CHAT2DB_CELL_META__?.[Number(field)]
               : getResultCellMetaAtTableColumn(params.tableInstance, record, recordCol, params.row)),
         };
-        setLastActiveCell({
+        inspectorOpenInteractionRevisionRef.current =
+          resultSetTableRef.current?.getInteractionRevision() ?? 0;
+        setInspectorActiveCell({
           tableInstance: params.tableInstance,
           col: tableCol,
           row: params.row,
@@ -414,7 +460,7 @@ export default memo<IProps>(
           });
         }, 0);
       },
-      [activateInspector, inspectorMode, isResultFieldFrozen, resultData?.canEdit],
+      [activateInspector, inspectorMode, isResultFieldFrozen, resultData?.canEdit, setInspectorActiveCell],
     );
 
     const openRowInspector = useCallback((params) => {
@@ -424,7 +470,9 @@ export default memo<IProps>(
       const field = params.field || getResultFieldAtTableColumn(params.tableInstance, params.col, params.row);
       const tableCol = field ? params.tableInstance.getTableIndexByField(field) : params.col;
       const record = params.tableInstance.getRecordByCell(tableCol >= 1 ? tableCol : 1, params.row);
-      setLastActiveCell({
+      inspectorOpenInteractionRevisionRef.current =
+        resultSetTableRef.current?.getInteractionRevision() ?? 0;
+      setInspectorActiveCell({
         tableInstance: params.tableInstance,
         col: tableCol,
         row: params.row,
@@ -437,7 +485,7 @@ export default memo<IProps>(
         const targetRef = targetMode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef;
         targetRef.current?.openPanel(params);
       }, 0);
-    }, [activateInspector, inspectorMode]);
+    }, [activateInspector, inspectorMode, setInspectorActiveCell]);
 
     const onTableOperationUtils = useMemo(() => {
       return {
@@ -509,7 +557,7 @@ export default memo<IProps>(
       if (
         !originData ||
         originData.__CHAT2DB_CELL_META__?.[Number(sourceField)]?.largeValue ||
-        currentValue === value
+        areResultCellValuesEquivalent(currentValue, value)
       ) {
         return;
       }
@@ -529,36 +577,77 @@ export default memo<IProps>(
       });
     }, [isResultFieldFrozen]);
 
+    const handleRowDetailActiveFieldChange = useCallback((params: IViewDataParams) => {
+      setInspectorActiveCell({
+        tableInstance: params.tableInstance,
+        col: params.col,
+        row: params.row,
+        rowId: params.rowId,
+        field: params.field,
+      });
+    }, [setInspectorActiveCell]);
+
     const handleSelectionChange = useCallback(
       (selection: IResultSetSelection) => {
         setSelectedValues(selection.values);
         setSelectedRowCount(selection.rowCount);
-        if (!selection.activeCell) {
-          setLastActiveCell(undefined);
+        const preserveInspectorForTableSelection =
+          selection.cause === 'table-selection' &&
+          !!inspectorActiveCellRef.current &&
+          selection.interactionRevision <= inspectorOpenInteractionRevisionRef.current;
+        const activeCell = resolveResultInspectorActiveCell(
+          inspectorActiveCellRef.current,
+          selection.activeCell,
+          selection.cause,
+          preserveInspectorForTableSelection,
+        );
+        if (selection.cause === 'table-selection' && !preserveInspectorForTableSelection) {
+          inspectorActiveCellRef.current = undefined;
+        }
+        if (!activeCell) {
+          clearActiveCell();
           closeInspector();
           return;
         }
-        setLastActiveCell(selection.activeCell);
+        setLastActiveCell(activeCell);
+        if (
+          inspectorActiveCellRef.current &&
+          (selection.cause === 'value-change' || preserveInspectorForTableSelection)
+        ) {
+          return;
+        }
         if (inspectorOpen) {
           if (inspectorTab === 'row') {
             const targetRef = inspectorMode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef;
-            targetRef.current?.openPanel(selection.activeCell);
+            targetRef.current?.openPanel(activeCell);
           } else if (inspectorTab === 'value') {
-            openValueInspector(selection.activeCell);
+            openValueInspector(activeCell);
           }
         }
       },
-      [closeInspector, inspectorMode, inspectorOpen, inspectorTab, openValueInspector],
+      [
+        clearActiveCell,
+        closeInspector,
+        inspectorMode,
+        inspectorOpen,
+        inspectorTab,
+        openValueInspector,
+        setLastActiveCell,
+      ],
     );
 
     const handleInspectorTabChange = useCallback(
       (key: string, targetMode: ResultInspectorMode = inspectorMode) => {
         const nextTab = key as ResultInspectorTab;
         setInspectorTab(nextTab);
-        if (nextTab === 'aggregates' || !lastActiveCell) {
+        if (nextTab === 'aggregates') {
           return;
         }
         setTimeout(() => {
+          const lastActiveCell = lastActiveCellRef.current;
+          if (!lastActiveCell) {
+            return;
+          }
           const field =
             lastActiveCell.field ||
             getResultFieldAtTableColumn(lastActiveCell.tableInstance, lastActiveCell.col, lastActiveCell.row);
@@ -573,7 +662,7 @@ export default memo<IProps>(
             lastActiveCell.rowId !== undefined &&
             String(record?.CHAT2DB_ROW_NUMBER) !== String(lastActiveCell.rowId)
           ) {
-            setLastActiveCell(undefined);
+            clearActiveCell();
             closeInspector();
             return;
           }
@@ -593,11 +682,16 @@ export default memo<IProps>(
           });
         }, 0);
       },
-      [closeInspector, inspectorMode, isResultFieldFrozen, lastActiveCell, resultData?.canEdit],
+      [clearActiveCell, closeInspector, inspectorMode, isResultFieldFrozen, resultData?.canEdit],
     );
 
     const handleInspectorModeSwitch = useCallback(() => {
       const nextMode = toggleResultInspectorMode(inspectorMode);
+      persistResultInspectorMode(
+        getResultInspectorPreferenceStorage(),
+        RESULT_INSPECTOR_MODE_STORAGE_KEY,
+        nextMode,
+      );
       activateInspector(inspectorTab, nextMode);
       handleInspectorTabChange(inspectorTab, nextMode);
     }, [activateInspector, handleInspectorTabChange, inspectorMode, inspectorTab]);
@@ -636,6 +730,7 @@ export default memo<IProps>(
               ref={mode === 'sidebar' ? sidebarRowDetailRef : modalRowDetailRef}
               resultData={resultData}
               isFieldReadOnly={isResultFieldFrozen}
+              onActiveFieldChange={handleRowDetailActiveFieldChange}
               onChangeData={handleRowDetailChangeData}
               onViewData={openValueInspector}
             />

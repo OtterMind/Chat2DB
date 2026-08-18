@@ -9,7 +9,9 @@ import { SelectedModelOption } from '@/store/ai/slices/model/initialState';
 import {
   appendCustomModelEntryOption,
   isCustomModelEntryOption,
+  isModelOptionAvailable,
   ModelSelectOption,
+  shouldOpenCustomModelDirectly,
 } from './modelSelectOptions';
 
 interface AIModelSelectProps {
@@ -44,6 +46,10 @@ const AIModelSelect = ({
     }
   }, [options, modelList?.length]);
 
+  const selectOptions = options !== undefined ? options : modelList;
+  const openCustomModelDirectly =
+    !!onCustomModelClick && shouldOpenCustomModelDirectly(selectOptions, showCustomModelEntry);
+
   // Handle select change
   const handleChange = (selectedValue: { value: string; label: React.ReactNode }) => {
     if (isCustomModelEntryOption(selectedValue.value)) {
@@ -63,6 +69,9 @@ const AIModelSelect = ({
 
   // handles the drop-down box opening event
   const handleDropdownVisibleChange = (open: boolean) => {
+    if (open && openCustomModelDirectly) {
+      return;
+    }
     if (open && (!modelList || modelList.length === 0)) {
       if (options !== undefined) {
         return;
@@ -71,7 +80,24 @@ const AIModelSelect = ({
     }
   };
 
-  const selectOptions = options !== undefined ? options : modelList;
+  const handleDirectCustomModelMouseDown = (event: React.MouseEvent<HTMLElement>) => {
+    if (!openCustomModelDirectly) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onCustomModelClick?.();
+  };
+
+  const handleDirectCustomModelKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!openCustomModelDirectly || !['Enter', ' ', 'ArrowDown'].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onCustomModelClick?.();
+  };
+
   const customModelEntry =
     showCustomModelEntry && onCustomModelClick ? (
       <div className={styles.customModelEntry}>
@@ -90,19 +116,27 @@ const AIModelSelect = ({
     customModelEntry,
     selectOptions?.length ? styles.customModelOption : undefined,
   );
+  const visibleSelectedModel =
+    options === undefined || isModelOptionAvailable(selectOptions, selectedModel) ? selectedModel : undefined;
+  const placeholder = showCustomModelEntry
+    ? customModelText || i18n('setting.modelConfig.entry')
+    : i18n('ai.select.model');
 
   return (
     <Select
       popupMatchSelectWidth={false}
       className={styles.modelSelect}
       popupClassName={styles.popupSelect}
+      open={openCustomModelDirectly ? false : undefined}
+      onMouseDown={handleDirectCustomModelMouseDown}
+      onKeyDown={handleDirectCustomModelKeyDown}
       variant="borderless"
       labelInValue
-      value={selectedModel && selectedModel.label ? selectedModel : undefined}
+      value={visibleSelectedModel?.label ? visibleSelectedModel : undefined}
       onChange={handleChange}
       options={optionsWithCustomModelEntry}
       size="small"
-      placeholder={i18n('ai.select.model')}
+      placeholder={placeholder}
       suffixIcon={<ChevronDown size={14} />}
       onDropdownVisibleChange={handleDropdownVisibleChange}
     />

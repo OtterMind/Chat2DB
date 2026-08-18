@@ -1,8 +1,6 @@
 package ai.chat2db.community.web.api.config.web.interceptor;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Set;
 
 import ai.chat2db.community.tools.util.ConfigUtils;
@@ -13,6 +11,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +27,12 @@ public class CorsFilter implements Filter {
             "http://localhost:10825"
     );
 
+    private final boolean devProfileActive;
+
+    public CorsFilter(Environment environment) {
+        this.devProfileActive = environment.matchesProfiles("dev");
+    }
+
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
         throws IOException, ServletException {
@@ -35,7 +40,7 @@ public class CorsFilter implements Filter {
         HttpServletRequest request = (HttpServletRequest)req;
         String origin = request.getHeader(HttpHeaders.ORIGIN);
 
-        if (ConfigUtils.isCommunity() && !allowCommunityOrigin(origin, ConfigUtils.isRelease())) {
+        if (ConfigUtils.isCommunity() && !allowCommunityOrigin(origin, devProfileActive)) {
             response.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
@@ -46,35 +51,8 @@ public class CorsFilter implements Filter {
         chain.doFilter(req, res);
     }
 
-    static boolean allowCommunityOrigin(String origin, boolean releaseProfile) {
-        if (origin == null || origin.isBlank() || COMMUNITY_ALLOWED_ORIGINS.contains(origin)) {
-            return true;
-        }
-        return !releaseProfile && isLoopbackOrigin(origin);
-    }
-
-    private static boolean isLoopbackOrigin(String origin) {
-        try {
-            URI uri = new URI(origin);
-            String scheme = uri.getScheme();
-            String host = uri.getHost();
-            if (scheme == null || host == null || uri.getUserInfo() != null
-                    || uri.getRawQuery() != null || uri.getRawFragment() != null
-                    || (uri.getRawPath() != null && !uri.getRawPath().isEmpty())) {
-                return false;
-            }
-            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-                return false;
-            }
-            String normalizedHost = host.startsWith("[") && host.endsWith("]")
-                    ? host.substring(1, host.length() - 1)
-                    : host;
-            return "localhost".equalsIgnoreCase(normalizedHost)
-                    || "127.0.0.1".equals(normalizedHost)
-                    || "::1".equals(normalizedHost);
-        } catch (URISyntaxException ignored) {
-            return false;
-        }
+    static boolean allowCommunityOrigin(String origin, boolean devProfileActive) {
+        return devProfileActive || origin == null || origin.isBlank() || COMMUNITY_ALLOWED_ORIGINS.contains(origin);
     }
 
     private static void setCorsHeaders(HttpServletResponse response, String origin) {

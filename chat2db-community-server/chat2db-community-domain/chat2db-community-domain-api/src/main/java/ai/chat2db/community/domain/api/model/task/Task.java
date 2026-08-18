@@ -1,71 +1,49 @@
 package ai.chat2db.community.domain.api.model.task;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.Date;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Task {
-
 
     private Long id;
 
+    private String type;
 
-    private Date gmtCreate;
+    private String name;
 
+    private String status;
 
-    private Date gmtModified;
+    private Integer progress;
 
+    private String stage;
 
-    private Long dataSourceId;
+    private String progressMessage;
 
+    private TaskTargetSnapshot target;
 
-    private String databaseName;
+    private String errorCode;
 
+    private String errorMessage;
 
-    private String schemaName;
-
-
-    private String tableName;
-
-
-    private String deleted;
-
+    private String artifactId;
 
     private Long userId;
 
-
     private Long organizationId;
 
+    private Date createdAt;
 
-    private String taskType;
+    private Date startedAt;
 
+    private Date finishedAt;
 
-    private String taskStatus;
-
-
-    private String taskProgress;
-
-
-    private String progress;
-
-
-    private String progressDesc;
-
-
-    private String taskName;
-
-
-    private String downloadUrl;
-
-
-    private byte[] content;
-
-
-    private String infoLog;
-
-
-    private String errorLog;
-
-
-    private String currentProgress;
+    private Date updatedAt;
 }

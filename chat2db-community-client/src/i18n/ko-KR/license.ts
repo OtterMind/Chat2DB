@@ -8,7 +8,8 @@ export default {
   'license.offlineCertificateInstruction':
     '완전한 오프라인 환경에서는 다음 단계로 기기 인증서를 받을 수 있습니다. Chat2DB 공식 웹사이트(https://chat2db-ai.com/)로 이동 → 로그인 후 아바타 클릭 → 기기 인증서',
   'license.offlineActivationAIWarning': '오프라인 인증서를 생성하면 취소할 수 없으며 기기를 변경할 수 없습니다!',
-  'license.offlineAIWarning': '오프라인으로 활성화한 기기에서는 AI 기능을 사용할 수 없습니다',
+  'license.offlineAIWarning':
+    '오프라인 활성화에는 Chat2DB 호스팅 AI 서비스가 포함되지 않습니다. 사용자 지정 모델을 설정하면 로컬 AI 기능을 사용할 수 있습니다',
 
   'license.deviceCertificateTitle': '기기 인증서',
   'license.getDeviceCertificateTitle': '기기 인증서 받기',
@@ -25,7 +26,7 @@ export default {
   'license.deviceIdExtra': '클라이언트가 기기 ID를 자동으로 생성합니다. 수정하지 말고 그대로 복사해 주세요',
   'license.deviceIdPlaceholder': '기기 ID를 입력해 주세요',
   'license.offlineAIConfirm':
-    '주의: 오프라인 인증서를 생성하면 취소할 수 없으며 기기를 변경할 수 없습니다! 오프라인으로 활성화한 기기는 인터넷에 연결되어 있어도 AI 기능을 사용할 수 없습니다',
+    '주의: 오프라인 인증서를 생성하면 취소할 수 없으며 기기를 변경할 수 없습니다! 오프라인 활성화에는 Chat2DB 호스팅 AI 서비스가 포함되지 않습니다. 사용자 지정 모델을 설정하면 로컬 AI 기능을 사용할 수 있습니다',
   'license.getCertificate': '기기 인증서 받기',
   'license.getCertificateSuccess': '기기 인증서를 받았습니다',
   'license.getCertificateError': '기기 인증서를 가져오지 못했습니다',
@@ -38,7 +39,8 @@ export default {
   'license.permanentVersion': 'Chat2DB Local 평생 버전',
   'license.offlineActivationIntro': '오프라인 활성화 절차가 익숙하지 않다면,',
   'license.deviceLimit': '라이선스의 기기 연결 한도에 도달했습니다',
-  'license.licenseNotSupported': '오프라인 활성화에서는 AI가 지원되지 않습니다',
+  'license.licenseNotSupported':
+    '이 온라인 AI 기능은 오프라인 활성화에서 사용할 수 없습니다. 사용자 지정 모델을 설정하여 로컬 AI 기능을 사용해 주세요',
   'license.deactivateOnline': '비활성화',
   'license.deactivateOnlineConfirm': '비활성화하시겠습니까?',
   'license.deactivateOnlineSuccess': '비활성화되었습니다',

@@ -37,7 +37,11 @@ import { useStyles } from './style';
 
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { isDesktop, isHashHistoryEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
-import { resolveInitialMainPage } from '@/utils/mainPageNavigation';
+import {
+  readPersistedMainPageActiveTab,
+  resolveDesktopInitialMainPage,
+  resolveInitialMainPage,
+} from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
 // import { refreshPage } from '@/utils';
 import { SubscriptionType } from '@/constants/subscriptionType';
@@ -115,8 +119,7 @@ function MainPage() {
   const { curOrg } = useOrgStore((state) => ({
     curOrg: state.curOrg,
   }));
-  const { networkAbandoned, setPricingModalStatus, setSubscriptType, curUser } = useUserStore((state) => ({
-    networkAbandoned: state.networkAbandoned,
+  const { setPricingModalStatus, setSubscriptType, curUser } = useUserStore((state) => ({
     setPricingModalStatus: state.setPricingModalStatus,
     setSubscriptType: state.setSubscriptType,
     curUser: state.curUser,
@@ -256,12 +259,6 @@ function MainPage() {
       _initNavConfig = _initNavConfig.filter((item) => item.key !== 'knowledge-management');
     }
 
-    if (networkAbandoned) {
-      // plugin || knowledge-management || stream || chat || team || dashboard
-      const filterKeys = ['plugin', 'knowledge-management', 'stream', 'chat', 'team', 'dashboard'];
-      _initNavConfig = _initNavConfig.filter((item) => !filterKeys.includes(item.key));
-    }
-
     setNavConfig(_initNavConfig);
 
     let page = '';
@@ -271,8 +268,24 @@ function MainPage() {
       const hashPath = window.location.hash.replace(/^#/, '');
       const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
       const hashPage = normalizedHashPath.split('/')[1];
-      page = resolveInitialMainPage(hashPage, mainPageActiveTab);
-      pathName = hashPage ? normalizedHashPath : '';
+      if (isDesktop) {
+        const availablePages = _initNavConfig.map((item) => `${item.key}`);
+        let persistedPage: string | undefined;
+        try {
+          persistedPage = readPersistedMainPageActiveTab(
+            localStorage.getItem(runtimeEditionConfig.globalStoreName),
+            availablePages,
+          );
+        } catch {
+          persistedPage = undefined;
+        }
+        const initialLocation = resolveDesktopInitialMainPage(normalizedHashPath, persistedPage, availablePages);
+        page = initialLocation.page;
+        pathName = initialLocation.pathName;
+      } else {
+        page = resolveInitialMainPage(hashPage, mainPageActiveTab);
+        pathName = hashPage ? normalizedHashPath : '';
+      }
     } else {
       page = resolveInitialMainPage(window.location.pathname.split('/')[1], mainPageActiveTab);
       pathName = window.location.pathname;
@@ -289,7 +302,7 @@ function MainPage() {
       navConfigTmp: _initNavConfig,
       isFirst: true,
     });
-  }, [curOrg?.type, handleChangePageTab, initNavConfig, isCN, mainPageActiveTab, networkAbandoned]);
+  }, [curOrg?.type, handleChangePageTab, initNavConfig, isCN, mainPageActiveTab]);
 
   // Load sessions when the chat entry is active.
   useEffect(() => {

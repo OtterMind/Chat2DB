@@ -12,8 +12,18 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -23,26 +33,32 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     private static final String DB_STORAGE_PATH = ConfigUtils.getEnvBasePath()
             + File.separator + "storage";
 
-    private ConcurrentSkipListMap<Long, T> dataMap = new ConcurrentSkipListMap<>();
+    protected final ConcurrentSkipListMap<Long, T> dataMap = new ConcurrentSkipListMap<>();
 
 
-    private String storageDir;
+    protected final String storageDir;
 
-    private String filePath;
+    protected final String filePath;
 
-    private String name;
-
-    private int limit;
+    private final int limit;
 
     protected LargeDataStorage(String name, Class<T> clazz, int limit) {
         this(name, clazz, limit, DB_STORAGE_PATH);
     }
 
     protected LargeDataStorage(String name, Class<T> clazz, int limit, String storageBasePath) {
-        this.storageDir = storageBasePath + File.separator + name;
-        this.filePath = storageDir + File.separator + name + ".json";
+        this(name, name, clazz, limit, storageBasePath);
+    }
+
+    protected LargeDataStorage(String storageDirectoryName, String indexName, Class<T> clazz, int limit) {
+        this(storageDirectoryName, indexName, clazz, limit, DB_STORAGE_PATH);
+    }
+
+    protected LargeDataStorage(String storageDirectoryName, String indexName, Class<T> clazz, int limit,
+            String storageBasePath) {
+        this.storageDir = storageBasePath + File.separator + storageDirectoryName;
+        this.filePath = storageDir + File.separator + indexName + ".json";
         this.limit = limit;
-        this.name = name;
         if (!FileUtil.exist(filePath)) {
             FileUtil.writeUtf8String("", filePath);
         } else {
@@ -63,7 +79,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
         }
     }
 
-    private String detailFilePath(Long id) {
+    protected String detailFilePath(Long id) {
         return storageDir + File.separator + id + ".json";
     }
 
@@ -87,7 +103,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return null;
         }
         try {
-            if (dataMap.size() >= limit) {
+            if (limit > 0 && dataMap.size() >= limit) {
                 Map.Entry<Long, T> entry = dataMap.pollFirstEntry();
                 if (entry != null) {
                     saveDataList();
@@ -96,9 +112,11 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             }
             Long id = LocalStorageConverter.ensureId(data, this::generateId);
 
-            dataMap.put(id, data);
-            FileUtil.appendUtf8String(id + "\n", filePath);
             saveDetailData(id, data);
+            if (!dataMap.containsKey(id)) {
+                FileUtil.appendUtf8String(id + "\n", filePath);
+            }
+            dataMap.put(id, data);
 
             return id;
         } catch (Exception e) {
@@ -114,7 +132,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return;
         }
         try {
-            FileUtil.writeUtf8String(JSON.toJSONString(data), detailFilePath(id));
+            writeUtf8Atomically(Path.of(detailFilePath(id)), JSON.toJSONString(data));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -136,6 +154,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
                 return;
             }
             before = getAfterSave(before, data);
+            dataMap.put(id, before);
             saveDetailData(id, before);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -165,19 +184,106 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
     protected void saveDataList() {
         try {
-            List<Long> dataList = dataMap.keySet().stream().toList();
-            if (CollectionUtils.isNotEmpty(dataList)) {
-                String data = dataList.stream().map(String::valueOf).collect(Collectors.joining("\n"));
-                FileUtil.writeUtf8String(data + "\n", filePath);
-            } else {
-                FileUtil.writeUtf8String("", filePath);
-            }
+            saveDataListOrThrow();
         } catch (Exception e) {
             log.error("saveDataList error", e);
         }
     }
 
+    protected void saveDataListOrThrow() {
+        List<Long> dataList = dataMap.keySet().stream().toList();
+        String data = CollectionUtils.isNotEmpty(dataList)
+                ? dataList.stream().map(String::valueOf).collect(Collectors.joining("\n")) + "\n"
+                : "";
+        try {
+            writeUtf8Atomically(Path.of(filePath), data);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public Long generateId() {
         return IdUtil.generateId();
+    }
+
+    protected synchronized void replaceData(Long id, T data) {
+        if (id == null || data == null || !dataMap.containsKey(id)) {
+            return;
+        }
+        saveDetailData(id, data);
+        dataMap.put(id, data);
+    }
+
+    protected synchronized void upsertDataStrict(Long id, T data) {
+        if (id == null || data == null) {
+            throw new IllegalArgumentException("id and data are required");
+        }
+        T previous = dataMap.get(id);
+        saveDetailData(id, data);
+        dataMap.put(id, data);
+        if (previous != null) {
+            return;
+        }
+        try {
+            saveDataListOrThrow();
+        } catch (RuntimeException e) {
+            dataMap.remove(id);
+            deleteDetailData(id);
+            throw e;
+        }
+    }
+
+    protected synchronized T removeDataStrict(Long id) {
+        if (id == null) {
+            return null;
+        }
+        T removed = dataMap.remove(id);
+        if (removed == null) {
+            return null;
+        }
+        try {
+            saveDataListOrThrow();
+            Files.deleteIfExists(Path.of(detailFilePath(id)));
+            return removed;
+        } catch (Exception e) {
+            dataMap.put(id, removed);
+            try {
+                saveDetailData(id, removed);
+                saveDataListOrThrow();
+            } catch (RuntimeException rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e instanceof RuntimeException runtimeException
+                    ? runtimeException : new RuntimeException(e);
+        }
+    }
+
+    protected static void writeUtf8Atomically(Path target, String content) throws IOException {
+        Path absoluteTarget = target.toAbsolutePath();
+        Path directory = absoluteTarget.getParent();
+        if (directory != null) {
+            Files.createDirectories(directory);
+        }
+        Path temporary = absoluteTarget.resolveSibling(
+                "." + absoluteTarget.getFileName() + "." + UUID.randomUUID() + ".tmp");
+        try {
+            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+            try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE)) {
+                ByteBuffer buffer = ByteBuffer.wrap(bytes);
+                while (buffer.hasRemaining()) {
+                    channel.write(buffer);
+                }
+                channel.force(true);
+            }
+            try {
+                Files.move(temporary, absoluteTarget, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, absoluteTarget, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 }

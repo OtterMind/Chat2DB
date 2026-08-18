@@ -1,86 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import classnames from 'classnames';
-import i18n from '@/i18n';
-import { extendConfig } from '../config';
-import { IconButton, staticMessage } from '@chat2db/ui';
+import { isWorkspaceRecordCode, standaloneExtendConfig, workspaceRecordEntryConfig } from '../config';
+import { IconButton } from '@chat2db/ui';
 import { useWorkspaceStore } from '@/store/workspace';
-import { useImportExportStore } from '@/store/importExport';
 import { useStyles } from './style';
 import { canImportExport, isDesktop } from '@/utils/env';
-import { Divider } from 'antd';
 import { useAIStore } from '@/store/ai';
 import AIButton from '@/blocks/AI/components/AIButton';
-import { Terminal } from 'lucide-react';
-import { useGlobalStore } from '@/store/global';
-import jcefApi from '@/jcef';
-import { createQuickTerminalTab } from './quickTerminal';
-import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
-
-interface IToolbar {
-  code: string;
-  title: string;
-  icon: any;
-  components: any;
-}
+import { TaskCenterModals } from '@/blocks/ImportAndExport/components/TaskCenter';
+import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE, COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
+import TaskCenterStatusBadge from '../TaskCenterStatusBadge';
+import QuickTerminalButton from './QuickTerminalButton';
 
 interface IProps {
-  className?: any;
+  className?: string;
+  orientation?: 'vertical' | 'horizontal';
 }
 
 export default (props: IProps) => {
-  const { className } = props;
-  const { styles } = useStyles();
-  const [creatingTerminal, setCreatingTerminal] = useState(false);
-  const terminalShellId = useGlobalStore((state) => state.terminalSettings.shellId);
-  const terminalOpenPosition = useGlobalStore(
-    (state) => state.terminalSettings.openPosition || DEFAULT_TERMINAL_SETTINGS.openPosition,
-  );
-  const { addWorkspaceTab, currentWorkspaceExtend, setCurrentWorkspaceExtend } = useWorkspaceStore((state) => {
+  const { className, orientation = 'vertical' } = props;
+  const { styles } = useStyles({ orientation });
+  const tooltipPlacement = orientation === 'horizontal' ? 'bottom' : 'left';
+  const { currentWorkspaceExtend, setCurrentWorkspaceExtend } = useWorkspaceStore((state) => {
     return {
-      addWorkspaceTab: state.addWorkspaceTab,
       currentWorkspaceExtend: state.currentWorkspaceExtend,
       setCurrentWorkspaceExtend: state.setCurrentWorkspaceExtend,
-    };
-  });
-  const { showExportToolbar, setShowExportToolbar } = useImportExportStore((state) => {
-    return {
-      showExportToolbar: state.showExportToolbar,
-      setShowExportToolbar: state.setShowExportToolbar,
     };
   });
   const { showPanel: showAIPanel } = useAIStore((state) => ({
     showPanel: state.showPanel,
   }));
+  const recordPanelActive = isWorkspaceRecordCode(currentWorkspaceExtend);
+  const buttonSize =
+    orientation === 'horizontal' ? COMMUNITY_MAIN_ACTION_BUTTON_SIZE : COMMUNITY_TITLE_BAR_BUTTON_SIZE;
 
-  const changeExtend = (item: IToolbar) => {
-    if (currentWorkspaceExtend === item.code) {
+  const changeExtend = (code: string) => {
+    if (currentWorkspaceExtend === code) {
       setCurrentWorkspaceExtend(null);
       return;
     }
-    setCurrentWorkspaceExtend(item.code);
-  };
-
-  const createTerminal = async () => {
-    if (creatingTerminal) {
-      return;
-    }
-    setCreatingTerminal(true);
-    try {
-      const terminal = await jcefApi.createTerminal({
-        columns: 100,
-        rows: 30,
-        shellId: terminalShellId,
-      });
-      addWorkspaceTab(
-        createQuickTerminalTab(terminal, i18n('workspace.terminal.title'), terminalOpenPosition),
-        { activate: terminalOpenPosition === 'tab' },
-      );
-    } catch (error) {
-      console.error('create terminal error', error);
-      staticMessage.error(i18n('workspace.localSqlFileTree.openTerminalFailed'));
-    } finally {
-      setCreatingTerminal(false);
-    }
+    setCurrentWorkspaceExtend(code);
   };
 
   useEffect(() => {
@@ -90,58 +49,49 @@ export default (props: IProps) => {
   return (
     <div className={classnames(className, styles.workspaceExtendNav)}>
       <div className={styles.topBox}>
-        {extendConfig.map((item, index) => {
-          return (
-            <IconButton
-              size="lg"
-              key={index}
-              title={item.title}
-              tooltipPlacement="left"
-              code={item.icon}
-              isActive={currentWorkspaceExtend === item.code}
-              onClick={() => {
-                changeExtend(item);
-                useAIStore.getState().setShowPanel(false);
-              }}
-            />
-          );
-        })}
-        <Divider style={{ margin: '8px 0px' }} />
-
-        {isDesktop && (
+        {standaloneExtendConfig.map((item) => (
+          <IconButton
+            key={item.code}
+            type="primary"
+            size={buttonSize}
+            title={item.title}
+            tooltipPlacement={tooltipPlacement}
+            {...(typeof item.icon === 'string' ? { code: item.icon } : { icon: item.icon })}
+            isActive={currentWorkspaceExtend === item.code}
+            onClick={() => {
+              changeExtend(item.code);
+              useAIStore.getState().setShowPanel(false);
+            }}
+          />
+        ))}
+        <TaskCenterStatusBadge>
           <IconButton
             type="primary"
-            size={{ boxSize: 28, iconSize: 18, borderRadius: 6, strokeWidth: 2 }}
-            title={i18n('workspace.terminal.title')}
-            tooltipPlacement="left"
-            icon={Terminal}
-            spin={creatingTerminal}
-            disabled={creatingTerminal}
-            onClick={createTerminal}
+            size={buttonSize}
+            title={workspaceRecordEntryConfig.title}
+            tooltipPlacement={tooltipPlacement}
+            {...(typeof workspaceRecordEntryConfig.icon === 'string'
+              ? { code: workspaceRecordEntryConfig.icon }
+              : { icon: workspaceRecordEntryConfig.icon })}
+            isActive={recordPanelActive}
+            onClick={() => {
+              setCurrentWorkspaceExtend(recordPanelActive ? null : workspaceRecordEntryConfig.code);
+              useAIStore.getState().setShowPanel(false);
+            }}
           />
+        </TaskCenterStatusBadge>
+        {isDesktop && orientation === 'vertical' && (
+          <QuickTerminalButton size={buttonSize} tooltipPlacement={tooltipPlacement} />
         )}
         <AIButton
+          size={buttonSize}
           onClick={() => {
             setCurrentWorkspaceExtend(null);
             useAIStore.getState().togglePanel();
           }}
         />
       </div>
-      <div className={styles.bottomBox}>
-        {canImportExport && (
-          <IconButton
-            size="lg"
-            title={i18n('workspace.title.exportProgressBar')}
-            tooltipPlacement="left"
-            code="icon-export-details"
-            isActive={showExportToolbar}
-            onClick={() => setShowExportToolbar(!showExportToolbar)}
-          />
-        )}
-
-        {/* <Tooltip title={i18n('workspace.title.ai')} placement="left">
-        </Tooltip> */}
-      </div>
+      {canImportExport && <TaskCenterModals />}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import ai.chat2db.community.jcef.enums.ActionTypeEnum;
 import ai.chat2db.community.jcef.enums.UpdatedStatus;
 import ai.chat2db.community.jcef.enums.update.UpdateActionType;
 import ai.chat2db.community.jcef.listener.IProgressListener;
+import ai.chat2db.community.jcef.utils.ApplicationExitCoordinator;
 import ai.chat2db.community.jcef.utils.CallJsFunctionUtil;
 import ai.chat2db.community.jcef.utils.OSOperateUtil;
 import ai.chat2db.community.tools.exception.BusinessException;
@@ -143,6 +144,10 @@ public class Updater {
     }
 
     public void restartApp() throws IOException {
+        ApplicationExitCoordinator.request(ApplicationExitCoordinator.ExitAction.RESTART.name());
+    }
+
+    public void restartAppNow() throws IOException {
         if (prepareRestart()) {
             System.exit(0);
         }
@@ -793,6 +798,10 @@ public class Updater {
         }
     }
     public void triggerInstallationWithAuxiliaryProcess() {
+        ApplicationExitCoordinator.request(ApplicationExitCoordinator.ExitAction.INSTALL_UPDATE.name());
+    }
+
+    public void triggerInstallationWithAuxiliaryProcessNow() {
         progressDialog.appendLog("Preparing for update via auxiliary process...");
         try {
             UpdatePlan plan = new UpdatePlan();

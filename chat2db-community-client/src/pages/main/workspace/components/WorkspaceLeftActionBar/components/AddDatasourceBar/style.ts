@@ -2,7 +2,11 @@ import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
-    addDatasourceBar: css``,
+    addDatasourceButton: css`
+      .chat2db-iconfont {
+        transform: translateX(-2px);
+      }
+    `,
     datasourceOverlay: css`
       background-color: ${token.colorBgBase};
       border-radius: ${token.borderRadius}px;

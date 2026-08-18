@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbDmlExportRequest;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.function.LongConsumer;
 
 /**
  * Exports relational DML data.
@@ -35,7 +36,13 @@ public interface IDbDmlExportService {
      *
      * @param dbDmlExportRequest DML export parameters.
      * @param outputStream target output stream.
+     * @param statementListener observes the active JDBC statement.
+     * @param cancellationChecker checks whether the export was cancelled.
+     * @param exportedRowsListener receives the number of newly exported rows.
+     * @param fileFinalizationListener runs after the query is consumed and before the output writer is finalized.
      * @throws IOException when export content cannot be written.
      */
-    void export(DbDmlExportRequest dbDmlExportRequest, OutputStream outputStream) throws IOException;
+    void export(DbDmlExportRequest dbDmlExportRequest, OutputStream outputStream,
+            ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
+            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) throws IOException;
 }

@@ -1,10 +1,11 @@
 package ai.chat2db.community.jcef.handler.biz.update;
 
-
-import ai.chat2db.community.jcef.update.Updater;
 import ai.chat2db.community.jcef.annotation.JcefAction;
 import ai.chat2db.community.jcef.builder.ResponseBuilder;
 import ai.chat2db.community.jcef.handler.biz.IJcefActionHandler;
+import ai.chat2db.community.jcef.update.DesktopUpdaterRegistry;
+import ai.chat2db.community.jcef.update.IDesktopUpdater;
+import ai.chat2db.community.jcef.utils.ApplicationExitCoordinator;
 import ai.chat2db.community.tools.console.ConsoleMessage;
 import ai.chat2db.community.tools.console.ConsoleResult;
 import com.alibaba.fastjson2.JSON;
@@ -25,16 +26,29 @@ public class RestartAppHandler implements IJcefActionHandler {
             if (operationId == null || operationId.isBlank()) {
                 operationId = UUID.randomUUID().toString();
             }
-            Updater updater = Updater.getInstance();
-            boolean accepted = updater.prepareRestart();
+            IDesktopUpdater updater = DesktopUpdaterRegistry.get();
+            boolean accepted = ApplicationExitCoordinator.request(
+                    ApplicationExitCoordinator.ExitAction.RESTART.name(),
+                    operationId,
+                    () -> prepareRestart(updater)
+            );
             ResponseBuilder.buildSuccessJcef(Map.of(
                     "data", Map.of("operationId", operationId, "accepted", accepted)
             ), callback);
+        } catch (Exception exception) {
+            callback.failure(500, exception.getMessage());
+        }
+    }
+
+    private boolean prepareRestart(IDesktopUpdater updater) {
+        try {
+            boolean accepted = updater.prepareRestart();
             if (accepted) {
                 updater.exitCurrentProcessAfterResponse();
             }
+            return accepted;
         } catch (Exception exception) {
-            callback.failure(500, exception.getMessage());
+            throw new IllegalStateException("Could not prepare application restart", exception);
         }
     }
 }

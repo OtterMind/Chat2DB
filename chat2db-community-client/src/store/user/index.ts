@@ -83,7 +83,7 @@ export const createUserAction: StateCreator<UserStore, [['zustand/devtools', nev
     const res = await oauthServices.getUserInfo();
     set({
       curUser: res,
-      networkAbandoned: res?.networkAbandoned,
+      networkAbandoned: Boolean(res?.networkAbandoned),
     });
     if (isOfflineEnv) {
       const { setCurOrg } = useOrgStore.getState();

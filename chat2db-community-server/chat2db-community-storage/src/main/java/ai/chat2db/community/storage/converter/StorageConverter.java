@@ -6,11 +6,8 @@ import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.Type;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationPageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
 import org.mapstruct.Mapper;
@@ -29,10 +26,6 @@ public abstract class StorageConverter {
     public abstract WorkspaceDataSourceNamespace dataSourceNamespace2workspace(DataSourceNamespace namespace);
 
     public abstract PinTable pinTableParam2model(DbTablePinRequest param);
-
-    public abstract Task taskCreateParam2model(TaskRecordCreateRequest param);
-
-    public abstract Task taskUpdateParam2model(TaskRecordUpdateRequest param);
 
     public abstract Operation operationPageParam2model(OpsOperationPageQueryRequest param);
 

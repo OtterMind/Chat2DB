@@ -4,8 +4,8 @@ import ai.chat2db.plugin.oracle.identifier.OracleIdentifierProcessor;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.account.*;
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.*;
 import ai.chat2db.community.domain.api.model.form.*;
 import ai.chat2db.community.domain.api.model.metadata.*;
@@ -42,105 +42,112 @@ public class OracleDBManager extends DefaultDBManager implements IDbManager {
 
 
 
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting tables");
-        exportTables(connection, databaseName, schemaName, asyncContext);
-        asyncContext.setProgress(50);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting views");
-        exportViews(connection, asyncContext, schemaName);
-        asyncContext.setProgress(60);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting producers");
-        exportProcedures(connection, schemaName, asyncContext);
-        asyncContext.setProgress(90);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting functions");
-        exportFunctions(connection, schemaName, asyncContext);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        context.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
+        logDatabaseObjectExportStarted(context, "tables");
+        exportTables(connection, databaseName, schemaName, containData, context);
+        logDatabaseObjectExportCompleted(context, "tables");
+        reportExportProgress(context, 50);
+        logDatabaseObjectExportStarted(context, "views");
+        exportViews(connection, context, schemaName);
+        logDatabaseObjectExportCompleted(context, "views");
+        reportExportProgress(context, 60);
+        logDatabaseObjectExportStarted(context, "procedures");
+        exportProcedures(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "procedures");
+        reportExportProgress(context, 90);
+        logDatabaseObjectExportStarted(context, "functions");
+        exportFunctions(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "functions");
     }
 
-    private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTables(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
         try (ResultSet resultSet = connection.getMetaData().getTables(null, schemaName, null, new String[]{"TABLE", "SYSTEM TABLE"})) {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
-                exportTable(connection, databaseName, schemaName, tableName, asyncContext);
+                exportTable(connection, databaseName, schemaName, tableName, containData, context);
             }
         }
     }
 
 
-    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) throws SQLException {
+    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
+            boolean containData, TaskExecutionContext context) throws SQLException {
         String tableDDL = Chat2DBContext.getDbMetaData().tableDDL(connection,
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         String sqlBuilder = "DROP TABLE " + qualifiedName(schemaName, tableName, false) + ";\n" + tableDDL + "\n";
-        asyncContext.write(sqlBuilder);
-        if (asyncContext.isContainsData()) {
-            exportTableData(connection, databaseName, schemaName, tableName, asyncContext);
+        context.write(sqlBuilder);
+        if (containData) {
+            exportTableData(connection, databaseName, schemaName, tableName, context);
         }
 
     }
 
 
-    private void exportViews(Connection connection, AsyncContext asyncContext, String schemaName) throws SQLException {
+    private void exportViews(Connection connection, TaskExecutionContext context, String schemaName) throws SQLException {
         try (ResultSet resultSet = connection.getMetaData().getTables(null, schemaName, null, new String[]{"VIEW"})) {
             while (resultSet.next()) {
                 String viewName = resultSet.getString("TABLE_NAME");
-                exportView(connection, asyncContext, schemaName, viewName);
+                exportView(connection, context, schemaName, viewName);
             }
         }
     }
 
-    private void exportView(Connection connection, AsyncContext asyncContext, String schemaName, String viewName) {
+    private void exportView(Connection connection, TaskExecutionContext context, String schemaName, String viewName) {
         Table view = Chat2DBContext.getDbMetaData().view(connection, new ViewMetadataRequest(null, schemaName, viewName));
-        asyncContext.write(view.getDdl() + ";" + "\n");
+        context.write(view.getDdl() + ";" + "\n");
     }
 
-    private void exportProcedures(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportProcedures(Connection connection, String schemaName, TaskExecutionContext context) {
         List<Procedure> procedures = Chat2DBContext.getDbMetaData().procedures(connection, null, schemaName);
         if (CollectionUtils.isNotEmpty(procedures)) {
             for (Procedure procedure : procedures) {
                 String procedureName = procedure.getProcedureName();
-                exportProcedure(connection, schemaName, procedureName, asyncContext);
+                exportProcedure(connection, schemaName, procedureName, context);
             }
         }
 
     }
 
-    private void exportProcedure(Connection connection, String schemaName, String procedureName, AsyncContext asyncContext) {
+    private void exportProcedure(Connection connection, String schemaName, String procedureName, TaskExecutionContext context) {
         Procedure procedure = Chat2DBContext.getDbMetaData().procedure(connection,
                 new ProcedureMetadataRequest(null, schemaName, procedureName));
-        asyncContext.write(procedure.getProcedureBody() + "\n");
+        context.write(procedure.getProcedureBody() + "\n");
 
     }
 
-    private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTriggers(Connection connection, String schemaName, TaskExecutionContext context) throws SQLException {
         String sql = String.format(SQL_SELECT_TRIGGER_NAME_ALL_TRIGGERS, OracleIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 String triggerName = resultSet.getString("TRIGGER_NAME");
-                exportTrigger(connection, schemaName, triggerName, asyncContext);
+                exportTrigger(connection, schemaName, triggerName, context);
             }
         }
     }
 
-    private void exportTrigger(Connection connection, String schemaName, String triggerName, AsyncContext asyncContext) {
+    private void exportTrigger(Connection connection, String schemaName, String triggerName, TaskExecutionContext context) {
         Trigger trigger = Chat2DBContext.getDbMetaData().trigger(connection,
                 new TriggerMetadataRequest(null, schemaName, triggerName));
-        asyncContext.write(trigger.getTriggerBody() + ";" + "\n");
+        context.write(trigger.getTriggerBody() + ";" + "\n");
 
     }
 
-    private void exportFunctions(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportFunctions(Connection connection, String schemaName, TaskExecutionContext context) throws SQLException {
         try (ResultSet resultSet = connection.getMetaData().getFunctions(null, schemaName, null)) {
             while (resultSet.next()) {
                 String functionName = resultSet.getString("FUNCTION_NAME");
-                exportFunction(connection, schemaName, functionName, asyncContext);
+                exportFunction(connection, schemaName, functionName, context);
             }
         }
     }
 
-    private void exportFunction(Connection connection, String schemaName, String functionName, AsyncContext asyncContext) {
+    private void exportFunction(Connection connection, String schemaName, String functionName, TaskExecutionContext context) {
         Function function = Chat2DBContext.getDbMetaData().function(connection,
                 new FunctionMetadataRequest(null, schemaName, functionName));
-        asyncContext.write(function.getFunctionBody() + "\n");
+        context.write(function.getFunctionBody() + "\n");
     }
 
 
@@ -184,8 +191,8 @@ public class OracleDBManager extends DefaultDBManager implements IDbManager {
     }
 
     @Override
-    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
-        exportTableData(connection, databaseName, schemaName, tableName, asyncContext, 10000);
+    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, TaskExecutionContext context) {
+        exportTableData(connection, databaseName, schemaName, tableName, context, 10000);
     }
 
     @Override

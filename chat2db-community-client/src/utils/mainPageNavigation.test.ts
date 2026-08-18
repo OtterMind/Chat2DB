@@ -38,6 +38,16 @@ assert.equal(
   undefined,
   'invalid persisted state should fall back without blocking startup',
 );
+assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"team"}}', ['stream', 'workspace', 'team']),
+  'team',
+  'commercial entries can be restored when they are present in the current navigation',
+);
+assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"team"}}', ['stream', 'workspace']),
+  undefined,
+  'persisted entries that are not currently available are ignored',
+);
 assert.deepEqual(
   resolveDesktopInitialMainPage('/', 'dashboard'),
   { page: 'dashboard', pathName: '/dashboard' },
@@ -67,6 +77,11 @@ assert.deepEqual(
   resolveDesktopInitialMainPage('/stream/session-1', 'dashboard'),
   { page: 'stream', pathName: '/stream/session-1' },
   'a chat-session deep link should take precedence over the last selected page',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/stream', 'team', ['stream', 'workspace', 'team']),
+  { page: 'team', pathName: '/team' },
+  'commercial desktop startup restores the last available edition entry',
 );
 assert.deepEqual(
   resolveDesktopInitialMainPage('/dashboard/share/dashboard-1', 'workspace'),

@@ -1,19 +1,10 @@
 import createRequest from './base';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
-import { ImportExportTaskDetails } from '@/typings/importExport';
+import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
+import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 
-export interface ImportSqlFileParams extends IDatabaseBaseInfo {
-  fileName: string;
-}
-
-export interface ImportOtherFileParams extends IDatabaseBaseInfo {
-  fileName: string;
-  tableName: string;
-  containsHeader: boolean;
-}
-
-export interface ExportSqlFileParams extends IDatabaseBaseInfo {
+export interface GenerateJavaClassParams extends IDatabaseBaseInfo {
   exportPath: string;
   tableName?: string;
   scope?: 'ALL' | 'SCHEMA' | 'TABLE';
@@ -23,34 +14,100 @@ export interface ExportSqlFileParams extends IDatabaseBaseInfo {
 export interface TaskListParams {
   pageNo: number;
   pageSize: number;
+  status?: string;
 }
 
-const importSqlFile = createRequest<ImportSqlFileParams, number>('/api/import/sql_file', { method: 'post' });
-const importOtherFile = createRequest<ImportOtherFileParams, number>('/api/import/other_file', { method: 'post' });
+export interface TaskSubmissionResponse {
+  taskId: number;
+}
 
-const exportSqlFile = createRequest<ExportSqlFileParams, number>('/api/export/sql_file', { method: 'post' });
-const exportOtherFile = createRequest<IDatabaseBaseInfo, number>('/api/export/other_file', { method: 'post' });
+export interface TaskEventListParams {
+  taskId: number;
+  afterSequence?: number;
+  beforeSequence?: number;
+  limit: number;
+}
 
-const getTaskList = createRequest<TaskListParams, IPageResponse<ImportExportTaskDetails>>('/api/task/list', {
+export interface TaskIdParams {
+  taskId: number;
+}
+
+export type ExportTaskType =
+  | ImportExportTaskType.QUERY_RESULT_EXPORT
+  | ImportExportTaskType.SQL_EXPORT
+  | ImportExportTaskType.TABLE_DATA_EXPORT;
+
+export type ImportTaskType = ImportExportTaskType.DATA_FILE_IMPORT | ImportExportTaskType.SQL_FILE_IMPORT;
+
+export interface ExportTaskParams extends IDatabaseBaseInfo {
+  taskType: ExportTaskType;
+  taskName?: string;
+  tableNames?: string[];
+  sql?: string;
+  originalSql?: string;
+  resultSetId?: number;
+  exportSize?: string;
+  format: ImportExportFileType;
+  scope?: 'ALL' | 'SCHEMA' | 'TABLE';
+  containData?: boolean;
+  containsHeader?: boolean;
+  exportPath?: string;
+  suggestedFileName?: string;
+}
+
+export interface ImportTaskParams extends IDatabaseBaseInfo {
+  taskType: ImportTaskType;
+  taskName?: string;
+  tableName?: string;
+  sourceFile: string;
+  displayFileName?: string;
+  format: ImportExportFileType;
+  dataTimeFormat?: string;
+}
+
+const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });
+const submitImport = createRequest<ImportTaskParams, TaskSubmissionResponse>('/api/tasks/import', { method: 'post' });
+
+const getTaskList = createRequest<TaskListParams, IPageResponse<ImportExportTaskDetails>>('/api/tasks/list', {
   method: 'get',
   errorLevel: false,
 });
-const getTaskDetails = createRequest<{ id: number }, ImportExportTaskDetails>('/api/task/get', { method: 'get' });
+const getTaskDetails = createRequest<TaskIdParams, ImportExportTaskDetails>('/api/tasks/get', {
+  method: 'get',
+  errorLevel: false,
+});
+const getTaskEvents = createRequest<TaskEventListParams, ImportExportTaskEvent[]>('/api/tasks/events', {
+  method: 'get',
+  errorLevel: false,
+});
 
-const stopTask = createRequest<{ id: string }, void>('/api/task/stop', { method: 'get' });
+const cancelTask = createRequest<TaskIdParams, ImportExportTaskDetails>('/api/tasks/cancel', { method: 'post' });
+const deleteTask = createRequest<TaskIdParams, void>('/api/tasks/delete', { method: 'delete' });
+const getActiveTaskCount = createRequest<void, number>('/api/tasks/active-count', { method: 'get', errorLevel: false });
+const prepareUserExit = createRequest<void, void>('/api/tasks/prepare-user-exit', {
+  method: 'post',
+  errorLevel: 'toast',
+});
+const abortUserExit = createRequest<void, void>('/api/tasks/abort-user-exit', {
+  method: 'post',
+  errorLevel: false,
+});
 
 // Generate Java classes
-const generateJavaClass = createRequest<ExportSqlFileParams, number>('/api/rdb/table/generate/class', {
+const generateJavaClass = createRequest<GenerateJavaClassParams, number>('/api/rdb/table/generate/class', {
   method: 'post',
 });
 
 export default {
-  importSqlFile,
-  importOtherFile,
-  exportSqlFile,
-  exportOtherFile,
+  submitExport,
+  submitImport,
   getTaskList,
   getTaskDetails,
-  stopTask,
+  getTaskEvents,
+  cancelTask,
+  deleteTask,
+  getActiveTaskCount,
+  prepareUserExit,
+  abortUserExit,
   generateJavaClass,
 };

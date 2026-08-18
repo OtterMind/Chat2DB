@@ -150,32 +150,59 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             Function<JDBCDataValue, String> valueFunction,
             boolean limitSize,
             Integer resultSetId) {
+        execute(connection, sql, headerConsumer, rowConsumer, valueFunction, limitSize, resultSetId, null, null);
+    }
+
+    public void execute(
+            Connection connection, String sql,
+            Consumer<List<Header>> headerConsumer,
+            Consumer<List<String>> rowConsumer,
+            Function<JDBCDataValue, String> valueFunction,
+            boolean limitSize,
+            Integer resultSetId,
+            ISqlExecutionStatementListener statementListener,
+            Runnable cancellationChecker) {
         Assert.notNull(sql, "SQL must not be null");
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            boolean query = stmt.execute();
-            int resultCount = 0;
-            while (true) {
-                if (query) {
-                    resultCount++;
-                    if (resultSetId == null || resultCount == resultSetId) {
-                        writeExportResultSet(stmt, headerConsumer, rowConsumer, valueFunction, limitSize);
+        checkTaskCancellation(cancellationChecker);
+        PreparedStatement stmt = null;
+        try {
+            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            stmt = preparedStatement;
+            notifyStatementCreated(statementListener, preparedStatement);
+            try (preparedStatement) {
+                checkTaskCancellation(cancellationChecker);
+                boolean query = preparedStatement.execute();
+                int resultCount = 0;
+                while (true) {
+                    checkTaskCancellation(cancellationChecker);
+                    if (query) {
+                        resultCount++;
+                        if (resultSetId == null || resultCount == resultSetId) {
+                            writeExportResultSet(preparedStatement, headerConsumer, rowConsumer, valueFunction,
+                                    limitSize,
+                                    cancellationChecker);
+                            return;
+                        }
+                    } else if (preparedStatement.getUpdateCount() == -1) {
                         return;
                     }
-                } else if (stmt.getUpdateCount() == -1) {
-                    return;
+                    query = preparedStatement.getMoreResults();
                 }
-                query = stmt.getMoreResults();
             }
         } catch (SQLException e) {
+            checkTaskCancellation(cancellationChecker);
             log.error("execute:{}", sql, e);
             throw new RuntimeException(e);
+        } finally {
+            notifyStatementClosed(statementListener, stmt);
         }
     }
 
     private void writeExportResultSet(Statement stmt, Consumer<List<Header>> headerConsumer,
                                       Consumer<List<String>> rowConsumer,
                                       Function<JDBCDataValue, String> valueFunction,
-                                      boolean limitSize) throws SQLException {
+                                      boolean limitSize,
+                                      Runnable cancellationChecker) throws SQLException {
         ResultSet rs = null;
         try {
             rs = stmt.getResultSet();
@@ -191,6 +218,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             headerConsumer.accept(headerList);
 
             while (rs.next()) {
+                checkTaskCancellation(cancellationChecker);
                 List<String> row = new ArrayList<>();
                 for (int i = 1; i <= col; i++) {
                     if (chat2dbAutoRowIdIndex == i) {
