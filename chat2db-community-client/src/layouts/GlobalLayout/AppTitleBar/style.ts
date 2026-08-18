@@ -1,6 +1,10 @@
 import { createStyles } from 'antd-style';
 
-import { COMMUNITY_MAIN_ACTION_BAR_WIDTH, COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
+import {
+  COMMUNITY_MAIN_ACTION_BAR_WIDTH,
+  COMMUNITY_MAIN_ACTION_BUTTON_SIZE,
+  COMMUNITY_TITLE_BAR_HEIGHT,
+} from '@/constants/mainLayout';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
@@ -21,7 +25,7 @@ export const useStyles = createStyles(({ css, token }) => {
       height: 34px;
     `,
     communityAppBar: css`
-      height: 36px;
+      height: ${COMMUNITY_TITLE_BAR_HEIGHT}px;
     `,
     communityActions: css`
       display: flex;
@@ -117,7 +121,7 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     communityAppName: css`
       font-size: 14px;
-      line-height: 36px;
+      line-height: ${COMMUNITY_TITLE_BAR_HEIGHT}px;
       font-weight: 600;
       -webkit-app-region: drag;
 

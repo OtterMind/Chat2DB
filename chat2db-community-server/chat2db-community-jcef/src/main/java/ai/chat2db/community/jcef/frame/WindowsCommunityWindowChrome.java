@@ -15,7 +15,7 @@ import java.util.function.Function;
 
 final class WindowsCommunityWindowChrome {
 
-    static final int TITLE_BAR_HEIGHT = 36;
+    static final int TITLE_BAR_HEIGHT = 34;
     private static final int WEB_APP_MENU_RESERVED_WIDTH = 220;
     private static final int WEB_TRAILING_ACTIONS_RESERVED_WIDTH = 320;
 

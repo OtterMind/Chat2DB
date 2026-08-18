@@ -10,6 +10,7 @@ import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
 import CommunityAppMenu from './CommunityAppMenu';
+import { COMMUNITY_TITLE_BAR_HEIGHT } from '@/constants/mainLayout';
 
 interface AppBarProps {
   className?: string;
@@ -141,9 +142,16 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   if (!isMac && !isCommunityEnv) {
     // const showLeftContainer = checkIsSharePage();
     // if (__WEBAPP__ && !isEmbedIframe && !showLeftContainer) {
-    //   window._appTitleBarHeight = 36;
+    //   window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
     //   return (
-    //     <div style={{ height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    //     <div
+    //       style={{
+    //         height: COMMUNITY_TITLE_BAR_HEIGHT,
+    //         display: 'flex',
+    //         alignItems: 'center',
+    //         justifyContent: 'center',
+    //       }}
+    //     >
     //       {i18n('common.text.pleaseDownloadClient')}
     //       <Button type="link" href={appUrlConfig.DOWNLOAD_URL} target="_blank">
     //         {i18n('common.button.download')}
@@ -155,10 +163,10 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     return <></>;
   }
 
-  window._appTitleBarHeight = isCommunityEnv ? 36 : 30;
+  window._appTitleBarHeight = isCommunityEnv ? COMMUNITY_TITLE_BAR_HEIGHT : 30;
 
   // When testing appBar on the web side, comment out the if else code above and open the comment code below.
-  // window._appTitleBarHeight = 36;
+  // window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
 
   return (
     <div

@@ -1,3 +1,5 @@
+export const COMMUNITY_TITLE_BAR_HEIGHT = 34;
+
 export const COMMUNITY_TITLE_BAR_BUTTON_SIZE = {
   boxSize: 34,
   iconSize: 18,

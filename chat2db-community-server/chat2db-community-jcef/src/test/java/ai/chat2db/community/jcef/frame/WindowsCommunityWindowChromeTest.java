@@ -34,6 +34,7 @@ class WindowsCommunityWindowChromeTest {
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_ICONIFFY));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_MAXIMIZE));
         assertEquals(false, rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_SHOW_CLOSE));
+        assertEquals(34, WindowsCommunityWindowChrome.TITLE_BAR_HEIGHT);
         assertEquals(
                 WindowsCommunityWindowChrome.TITLE_BAR_HEIGHT,
                 rootPane.getClientProperty(FlatClientProperties.TITLE_BAR_HEIGHT)
