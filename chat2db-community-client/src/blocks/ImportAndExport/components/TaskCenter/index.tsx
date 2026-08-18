@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, type ReactNode, useEffect, useState } from 'react';
 import { useStyles } from './style';
 import { IconButton, Empty, EmptyImage } from '@chat2db/ui';
 import { Progress, Spin, Tooltip } from 'antd';
@@ -12,9 +12,10 @@ import { ImportExportTaskStatus } from '@/constants/importExport';
 import dayjs from 'dayjs';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
-import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, Trash2 } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, RotateCw, Trash2 } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import type { ImportExportTaskDetails } from '@/typings/importExport';
+import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
 
 const TASK_STATUS_I18N_KEYS = {
   [ImportExportTaskStatus.PENDING]: 'workspace.task.status.pending',
@@ -58,7 +59,11 @@ const formatTaskDuration = (
   return `${seconds}${i18n('common.text.second')}`;
 };
 
-export default memo(() => {
+interface TaskCenterProps {
+  headerLeading?: ReactNode;
+}
+
+export default memo<TaskCenterProps>(({ headerLeading }) => {
   const { styles } = useStyles();
   const [now, setNow] = useState(() => Date.now());
   const [highlightedTaskIds] = useState<Set<number>>(
@@ -127,10 +132,16 @@ export default memo(() => {
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.title}>
-        <span>{i18n('workspace.title.exportProgressBar')}</span>
-        <IconButton code="icon-refresh" size={18} onClick={() => void getTaskList()} />
-      </div>
+      <PanelToolbar
+        leading={headerLeading ?? <span>{i18n('workspace.title.exportProgressBar')}</span>}
+        trailing={
+          <IconButton
+            icon={RotateCw}
+            size={PANEL_TOOLBAR_BUTTON_SIZE}
+            onClick={() => void getTaskList()}
+          />
+        }
+      />
 
       <div
         className={styles.listWrapper}

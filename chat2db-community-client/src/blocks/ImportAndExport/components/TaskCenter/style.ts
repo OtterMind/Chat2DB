@@ -59,17 +59,6 @@ export const useStyles = createStyles(({ css, token, cx }) => {
       flex-direction: column;
       background: ${token.colorBgContainer};
     `,
-    title: css`
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-sizing: border-box;
-      height: 36px;
-      padding: 0 12px;
-      border-bottom: 1px solid ${token.colorBorderLayout};
-      font-weight: 600;
-      background: ${token.colorBgContainer};
-    `,
     listWrapper: css`
       flex: 1;
       height: 0;

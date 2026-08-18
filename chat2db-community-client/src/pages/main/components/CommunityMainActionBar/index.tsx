@@ -1,10 +1,12 @@
 import { IconButton } from '@chat2db/ui';
-import { Tooltip } from 'antd';
+import { Settings } from 'lucide-react';
 
-import Logo from '@/components/Logo';
 import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
 import i18n from '@/i18n';
 import type { INavItem } from '@/typings/main';
+import { isDesktop } from '@/utils/env';
+
+import QuickTerminalButton from '../../workspace/components/WorkspaceExtend/WorkspaceExtendNav/QuickTerminalButton';
 
 import { useStyles } from './style';
 
@@ -25,7 +27,14 @@ const CommunityMainActionBar = ({
   onNavigate,
   onOpenSettings,
 }: CommunityMainActionBarProps) => {
-  const { styles, cx } = useStyles();
+  const { styles } = useStyles();
+
+  const handleBeforeCreateTerminal = () => {
+    const workspaceItem = navItems.find((item) => item.key === 'workspace');
+    if (workspaceItem && (activePage !== 'workspace' || settingsActive)) {
+      onNavigate(workspaceItem);
+    }
+  };
 
   return (
     <aside className={styles.actionBar}>
@@ -44,17 +53,27 @@ const CommunityMainActionBar = ({
         ))}
       </nav>
 
-      {!hideSettings && (
-        <Tooltip title={i18n('setting.title.setting')} placement="right" mouseEnterDelay={0.3}>
-          <button
-            type="button"
-            aria-pressed={settingsActive}
-            className={cx(styles.settingsAction, settingsActive && styles.settingsActionActive)}
-            onClick={onOpenSettings}
-          >
-            <Logo size={22} />
-          </button>
-        </Tooltip>
+      {(isDesktop || !hideSettings) && (
+        <div className={styles.bottomActions}>
+          {isDesktop && (
+            <QuickTerminalButton
+              size={COMMUNITY_MAIN_ACTION_BUTTON_SIZE}
+              tooltipPlacement="right"
+              onBeforeCreate={handleBeforeCreateTerminal}
+            />
+          )}
+          {!hideSettings && (
+            <IconButton
+              type="primary"
+              isActive={settingsActive}
+              size={COMMUNITY_MAIN_ACTION_BUTTON_SIZE}
+              title={i18n('setting.title.setting')}
+              icon={Settings}
+              tooltipPlacement="right"
+              onClick={onOpenSettings}
+            />
+          )}
+        </div>
       )}
     </aside>
   );

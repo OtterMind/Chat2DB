@@ -9,21 +9,6 @@ export const useStyles = createStyles(({ css, token }) => {
       overflow: hidden;
       flex-direction: column;
     `,
-    searchWrap: css`
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-      height: 42px;
-      padding: 0 10px;
-      border-bottom: 1px solid ${token.colorBorderLayout};
-      box-sizing: border-box;
-    `,
-    searchBar: css`
-      width: 100%;
-      max-width: 100%;
-      background-color: ${token.colorFillTertiary};
-      height: 25px;
-    `,
     splitPaneContainer: css`
       position: relative;
       flex: 1;

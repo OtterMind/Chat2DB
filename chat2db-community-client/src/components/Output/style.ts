@@ -10,20 +10,6 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-direction: column;
       background: ${token.colorBgContainer};
     `,
-    outputTitle: css`
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 36px;
-      padding: 0px 12px;
-      font-weight: 600;
-      box-sizing: border-box;
-      border-bottom: 1px solid ${token.colorBorderLayout};
-      background: ${token.colorBgContainer};
-    `,
     outputContent: css`
       padding: 8px;
       overflow-y: auto;

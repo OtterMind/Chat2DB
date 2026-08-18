@@ -1,5 +1,4 @@
 import { createStyles } from 'antd-style';
-import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
 
 export const useStyles = createStyles(({ css, token }) => ({
   actionBar: css`
@@ -13,35 +12,19 @@ export const useStyles = createStyles(({ css, token }) => ({
     border-right: 1px solid ${token.colorBorderLayout};
     background-color: ${token.colorBgBase};
     user-select: none;
+    --community-main-action-gap: 8px;
   `,
   navigationActions: css`
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: var(--community-main-action-gap);
   `,
-  settingsAction: css`
+  bottomActions: css`
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    width: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
-    height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
+    gap: var(--community-main-action-gap);
     margin-top: auto;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    cursor: pointer;
-
-    &:hover {
-      background-color: ${token.colorFillTertiary};
-    }
-  `,
-  settingsActionActive: css`
-    background-color: ${token.colorPrimaryBg};
-
-    &:hover {
-      background-color: ${token.colorPrimaryBg};
-    }
   `,
 }));

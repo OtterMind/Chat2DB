@@ -31,33 +31,44 @@ export const globalComponents: {
   [GlobalComponents.task_center]: TaskCenter,
 };
 
-export const extendConfig: IToolbar[] = [
+export const standaloneExtendConfig: IToolbar[] = [
   {
     code: 'info',
     title: i18n('common.title.info'),
     icon: Info,
     components: GlobalExtendComponents,
   },
-  {
-    code: 'executiveLog',
-    title: i18n('common.title.executiveLogging'),
-    icon: RotateCcwClock,
-    components: globalComponents.executiveLog,
-  },
-  {
-    code: 'saveList',
-    title: i18n('workspace.title.savedConsole'),
-    icon: Bookmark,
-    components: globalComponents.saveList,
-  },
+];
+
+export const workspaceRecordEntryConfig: IToolbar = {
+  code: GlobalComponents.executive_log,
+  title: i18n('common.title.executiveLogging'),
+  icon: RotateCcwClock,
+  components: globalComponents[GlobalComponents.executive_log],
+};
+
+export const workspaceRecordConfig: IToolbar[] = [
+  workspaceRecordEntryConfig,
   ...(canImportExport
     ? [
         {
           code: GlobalComponents.task_center,
           title: i18n('workspace.title.exportProgressBar'),
           icon: ListTodo,
-          components: globalComponents.taskCenter,
+          components: globalComponents[GlobalComponents.task_center],
         },
       ]
     : []),
+  {
+    code: GlobalComponents.save_list,
+    title: i18n('workspace.title.savedConsole'),
+    icon: Bookmark,
+    components: globalComponents[GlobalComponents.save_list],
+  },
 ];
+
+export const extendConfig: IToolbar[] = [...standaloneExtendConfig, ...workspaceRecordConfig];
+
+export function isWorkspaceRecordCode(code?: string | null) {
+  return workspaceRecordConfig.some((item) => item.code === code);
+}

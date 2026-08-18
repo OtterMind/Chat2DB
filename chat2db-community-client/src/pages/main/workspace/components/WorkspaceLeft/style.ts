@@ -23,17 +23,19 @@ export const useStyles = createStyles(({ css, token }) => {
       align-items: center;
       justify-content: space-between;
       flex-shrink: 0;
-      height: 42px;
-      padding: 0 8px 0 12px;
+      height: 36px;
+      box-sizing: border-box;
+      padding: 0 8px 0 6px;
       border-bottom: 1px solid ${token.colorBorderLayout};
     `,
     resourceSelector: css`
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 2px;
       min-width: 0;
       height: 30px;
-      padding: 0 6px;
+      margin-left: -4px;
+      padding: 0 4px;
       border: 0;
       border-radius: 6px;
       color: ${token.colorText};
@@ -43,7 +45,8 @@ export const useStyles = createStyles(({ css, token }) => {
       font-weight: 600;
       letter-spacing: 0;
 
-      &:hover {
+      &:hover,
+      &.ant-dropdown-open {
         background: ${token.colorFillTertiary};
       }
 
@@ -56,6 +59,15 @@ export const useStyles = createStyles(({ css, token }) => {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    `,
+    resourceHeaderActions: css`
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      margin-left: 8px;
     `,
     resourceMenuItem: css`
       display: inline-flex;

@@ -8,10 +8,8 @@ import { useWorkspaceStore } from '@/store/workspace';
 import type { TreeNodeData } from '@/typings';
 import { isCommunityEnv, isDesktop, isDesktopEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
 import feedback from '@/utils/feedback';
-import { COMMUNITY_TITLE_BAR_BUTTON_SIZE } from '@/constants/mainLayout';
-import { IconButton } from '@chat2db/ui';
 import { Dropdown, Flex, type MenuProps } from 'antd';
-import { ChevronDown, Database, Folder, PanelLeft, type LucideIcon } from 'lucide-react';
+import { ChevronDown, Database, Folder, type LucideIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react';
 import {
   getActiveTabLocateTargetForPanel,
@@ -22,7 +20,9 @@ import {
   type WorkspaceLeftPanel,
 } from '../../utils/activeTabLocator';
 import WorkspaceExplorer, { type WorkspaceExplorerRef } from '../WorkspaceExplorer';
+import WorkspaceHeaderSearch from '../WorkspaceHeaderSearch';
 import WorkspaceLeftActionBar from '../WorkspaceLeftActionBar';
+import WorkspaceTreeSearch from '../WorkspaceTreeSearch';
 import { shouldProbeDesktopBridge } from './desktopBridge';
 import { loadDatabaseTreePath } from './loadDatabaseTreePath';
 import { useStyles } from './style';
@@ -144,11 +144,11 @@ const WorkspaceLeft = memo(() => {
     isDesktop,
   });
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
+  const [explorerSearchKeyword, setExplorerSearchKeyword] = useState('');
   const { styles } = useStyles();
   const showExplorerPanel = canProbeDesktopBridge && desktopBridgeReady;
-  const { activeConsoleId, togglePanelLeft, workspaceTabList } = useWorkspaceStore((state) => ({
+  const { activeConsoleId, workspaceTabList } = useWorkspaceStore((state) => ({
     activeConsoleId: state.activeConsoleId,
-    togglePanelLeft: state.togglePanelLeft,
     workspaceTabList: state.workspaceTabList,
   }));
   const { changeUserConfigTree, treeDataReady, treeDataRevision, userConfigTree } = useTreeStore((state) => ({
@@ -183,7 +183,6 @@ const WorkspaceLeft = memo(() => {
     ? panelOptions
     : panelOptions.filter((item) => item.value === 'database');
   const currentPanelOption = panelOptions.find((item) => item.value === currentPanel) || panelOptions[0];
-  const CurrentPanelIcon = currentPanelOption.icon;
   const panelMenuItems: MenuProps['items'] = visiblePanelOptions.map((item) => {
     const OptionIcon = item.icon;
     return {
@@ -403,26 +402,31 @@ const WorkspaceLeft = memo(() => {
               trigger={['click']}
             >
               <button type="button" className={styles.resourceSelector} aria-label={currentPanelOption.label}>
-                <CurrentPanelIcon aria-hidden size={16} strokeWidth={1.8} />
                 <span className={styles.resourceSelectorLabel}>{currentPanelOption.label}</span>
                 <ChevronDown aria-hidden size={14} strokeWidth={1.8} />
               </button>
             </Dropdown>
-            {isCommunityEnv && (
-              <IconButton
-                size={COMMUNITY_TITLE_BAR_BUTTON_SIZE}
-                title={i18n('stream.sidebar.collapse')}
-                tooltipPlacement="bottom"
-                icon={PanelLeft}
-                onClick={() => togglePanelLeft()}
-              />
-            )}
+            <div className={styles.resourceHeaderActions}>
+              {currentPanel === 'database' && <WorkspaceTreeSearch />}
+              {currentPanel === 'explorer' && (
+                <WorkspaceHeaderSearch
+                  active
+                  onChange={setExplorerSearchKeyword}
+                  value={explorerSearchKeyword}
+                />
+              )}
+            </div>
           </div>
         )}
         {showExplorerPanel ? (
           <>
             <div className={[styles.panelPane, currentPanel === 'explorer' ? styles.panelPaneActive : ''].join(' ')}>
-              <WorkspaceExplorer ref={explorerRef} active={currentPanel === 'explorer'} />
+              <WorkspaceExplorer
+                ref={explorerRef}
+                active={currentPanel === 'explorer'}
+                searchKeyword={explorerSearchKeyword}
+                onSearchKeywordChange={setExplorerSearchKeyword}
+              />
             </div>
             <div className={[styles.panelPane, currentPanel === 'database' ? styles.panelPaneActive : ''].join(' ')}>
               <WorkspaceLeftActionBar
