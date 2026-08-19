@@ -12,7 +12,7 @@ import ai.chat2db.community.domain.api.service.task.ITaskNcxImportService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.core.impl.ncx.cipher.CommonCipher;
-import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DefaultValueEncryptor;
+import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DbeaverCredentialsResolver;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.excel.util.FileUtils;
@@ -30,10 +30,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -121,6 +119,8 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
         Document metaTree;
         int n = 0;
         List<String> projects = new ArrayList<>();
+        // Request-scoped: each project's credential file is decrypted once and never outlives this import.
+        DbeaverCredentialsResolver credentialsResolver = new DbeaverCredentialsResolver(masterPassword);
         try (ZipFile zipFile = new ZipFile(file, ZipFile.OPEN_READ)) {
             ZipEntry metaEntry = zipFile.getEntry(ExportConstants.META_FILENAME);
             if (metaEntry == null) {
@@ -140,13 +140,19 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                 for (Element projectElement : projectList) {
                     String projectName = projectElement.getAttribute(ExportConstants.ATTR_NAME);
                     String config = ConfigUtils.getBasePath() + File.separator + projectName + File.separator + ExportConstants.CONFIG_FILE;
+                    // Registered before extraction so a failure mid-import still removes the extracted copy.
+                    projects.add(projectName);
                     importDbeaverConfig(new File(config),
                             projectElement,
                             ExportConstants.DIR_PROJECTS + "/" + projectName + "/",
                             zipFile);
-                    projects.add(projectName);
+                    JSONObject credentialsJson = credentialsResolver.resolve(
+                            new File(config + File.separator + ExportConstants.CONFIG_CREDENTIALS_FILE));
                     File json = new File(config + File.separator + ExportConstants.CONFIG_DATASOURCE_FILE);
-                    JSONObject jsonObject = JSON.parseObject(new FileInputStream(json));
+                    JSONObject jsonObject;
+                    try (InputStream dataSourceStream = new FileInputStream(json)) {
+                        jsonObject = JSON.parseObject(dataSourceStream);
+                    }
                     JSONObject connections = jsonObject.getJSONObject(ExportConstants.DIR_CONNECTIONS);
                     Set<String> keys = connections.keySet();
                     for (String key : keys) {
@@ -166,7 +172,6 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                         DataBaseTypeEnum dataBaseType = DataBaseTypeEnum.matchType(provider.toUpperCase());
                         WorkspaceDataSource dataSourceDO;
                         if (null != dataBaseType) {
-                            JSONObject credentialsJson = parseDbeaverCredentials(config, masterPassword);
                             dataSourceDO = new WorkspaceDataSource();
                             dataSourceDO.setAlias(configurations.getString("name"));
                             dataSourceDO.setHost(configuration.getString("host"));
@@ -175,17 +180,7 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                             SSHInfo sshInfo = new SSHInfo();
                             sshInfo.setUse(false);
                             dataSourceDO.setSsh(sshInfo);
-                            if (null != credentialsJson) {
-                                JSONObject userInfo = credentialsJson.getJSONObject(key);
-                                if (null != userInfo) {
-                                    JSONObject userPassword = userInfo.getJSONObject(connection);
-                                    if (null != userPassword) {
-                                        dataSourceDO.setUser(userPassword.getString("user"));
-                                        String password = userPassword.getString("password");
-                                        dataSourceDO.setPassword(password);
-                                    }
-                                }
-                            }
+                            applyDbeaverCredentials(dataSourceDO, credentialsJson, key);
                             dataSourceDO.setType(dataBaseType.name());
                             n++;
                             insertDatasource(dataSourceDO);
@@ -193,49 +188,13 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                     }
                 }
             }
+        } finally {
+            // Extracted projects hold decrypted credentials, so remove every one of them and the upload.
+            FileUtils.delete(file);
+            projects.forEach(v -> FileUtils.delete(new File(ConfigUtils.getBasePath() + File.separator + v)));
         }
-        FileUtils.delete(file);
-        projects.forEach(v -> FileUtils.delete(new File(ConfigUtils.getBasePath() + File.separator + v)));
         vo.setCount(n);
         return vo;
-    }
-
-    /**
-     * 解析 DBeaver 导出的凭据文件(credentials-config.json)。
-     * 依次尝试 DBeaver 默认本地密钥、用户提供的主密码(密钥 = 主密码 UTF-8 前 16 字节,
-     * 与 DBeaver DefaultValueEncryptor#makeSecretKeyFromPassword 一致);
-     * 均失败时返回 null,连接不带账号密码继续导入,由用户在导入后手动填写。
-     */
-    private JSONObject parseDbeaverCredentials(String config, String masterPassword) throws IOException {
-        File credentials = new File(config + File.separator + ExportConstants.CONFIG_CREDENTIALS_FILE);
-        if (!credentials.exists()) {
-            log.warn("DBeaver credentials file not found, connections will be imported without passwords.");
-            return null;
-        }
-        byte[] encrypted = Files.readAllBytes(credentials.toPath());
-        JSONObject credentialsJson = tryDecryptDbeaverCredentials(new DefaultValueEncryptor(DefaultValueEncryptor.getLocalSecretKey()), encrypted);
-        if (credentialsJson != null) {
-            return credentialsJson;
-        }
-        if (StringUtils.isNotBlank(masterPassword)) {
-            credentialsJson = tryDecryptDbeaverCredentials(
-                    new DefaultValueEncryptor(DefaultValueEncryptor.makeSecretKeyFromPassword(masterPassword)), encrypted);
-            if (credentialsJson != null) {
-                log.info("DBeaver credentials decrypted with the provided master password.");
-                return credentialsJson;
-            }
-        }
-        log.warn("Unable to decrypt DBeaver credentials, connections will be imported without passwords.");
-        return null;
-    }
-
-    private JSONObject tryDecryptDbeaverCredentials(DefaultValueEncryptor encryptor, byte[] encrypted) {
-        try {
-            return JSON.parseObject(encryptor.decryptValue(encrypted));
-        } catch (Exception e) {
-            log.warn("Failed to decrypt DBeaver credentials: {}", e.getMessage());
-            return null;
-        }
     }
 
     @SneakyThrows
@@ -408,6 +367,35 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                 FileUtil.writeFromStream(zipFile.getInputStream(resourceEntry), file, true);
             }
         }
+    }
+
+    /**
+     * Copies the user and password of one DBeaver connection out of the project's decrypted
+     * credentials. A connection legitimately has no entry when "save password" was disabled for it,
+     * and the whole document is absent when it could not be decrypted, so both cases leave the
+     * datasource without credentials rather than failing the import.
+     *
+     * @param dataSource      datasource being imported.
+     * @param credentialsJson decrypted credentials of the owning project, may be null.
+     * @param connectionId    DBeaver connection id used as the credential key.
+     */
+    private static void applyDbeaverCredentials(WorkspaceDataSource dataSource, JSONObject credentialsJson, String connectionId) {
+        if (null == credentialsJson) {
+            return;
+        }
+        JSONObject userPassword;
+        try {
+            JSONObject userInfo = credentialsJson.getJSONObject(connectionId);
+            userPassword = null == userInfo ? null : userInfo.getJSONObject(connection);
+        } catch (Exception e) { // impl-contract: fallback - a malformed credential entry imports that connection without a password.
+            log.warn("Skipping malformed DBeaver credential entry: {}", e.getMessage());
+            return;
+        }
+        if (null == userPassword) {
+            return;
+        }
+        dataSource.setUser(userPassword.getString("user"));
+        dataSource.setPassword(userPassword.getString("password"));
     }
 
     private void insertDatasource(WorkspaceDataSource request) {

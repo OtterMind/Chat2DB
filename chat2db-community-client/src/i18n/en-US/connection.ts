@@ -44,7 +44,8 @@ export default {
   'connection.title.importDBeaver': 'Import DBeaver connections',
   'connection.import.success': 'Successfully imported {1} connections',
   'connection.import.unable.password.tips': 'We cannot import connection passwords. After the import is complete, please re-enter the connection password',
-  'connection.import.dbeaver.masterPassword.placeholder': 'DBeaver master password (optional, used to decrypt connection passwords)',
+  'connection.import.dbeaver.masterPassword.placeholder':
+    'DBeaver master password (optional, used to decrypt connection passwords)',
   'connection.export.exporting': 'Preparing connection file...',
   'connection.export.success': 'Connections exported successfully',
   'connection.export.cancelled': 'Export cancelled',

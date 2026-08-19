@@ -87,7 +87,11 @@ public class DbConverterController {
      *
      * @param file uploaded file for the request.
      * @param masterPassword optional DBeaver master password, used to decrypt connection credentials
-     *                       when the default local key does not match. May be null.
+     *                       when the default local key does not match. May be null. Request-scoped:
+     *                       it is handed to the import service and is never stored or logged. It
+     *                       travels in the request form like the connection passwords the datasource
+     *                       endpoints already accept, so it relies on the loopback-only deployment
+     *                       boundary documented in SECURITY.md.
      * @return data result containing upload response.
      */
     @SneakyThrows

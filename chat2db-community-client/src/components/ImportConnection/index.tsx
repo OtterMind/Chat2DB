@@ -83,7 +83,7 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     };
 
     if (type === ImportConnectionType.DBEAVER && masterPassword) {
-      // DBeaver 设置过主密码时,凭据需用主密码解密才能导入
+      // DBeaver encrypts saved credentials with the master password when one is set.
       params = {
         ...params,
         masterPassword,

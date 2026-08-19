@@ -21,7 +21,9 @@ public interface ITaskNcxImportService {
      * @param file uploaded DBP file.
      * @param masterPassword optional DBeaver master password, used to decrypt connection credentials
      *                       when the default local key does not match (e.g. master password is set in DBeaver).
-     *                       May be null.
+     *                       May be null, in which case connections whose credentials cannot be decrypted
+     *                       are imported without a user or password. The value is used only while this
+     *                       call runs and is never persisted, logged, or returned.
      * @return import response.
      */
     NcxImportResponse dbpUploadFile(File file, String masterPassword);
