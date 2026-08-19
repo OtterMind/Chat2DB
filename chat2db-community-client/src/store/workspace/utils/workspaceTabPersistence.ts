@@ -1,5 +1,6 @@
 import { WorkspaceTabType } from '@/constants/workspace';
 import { IWorkspaceTab } from '@/typings/workspace';
+import { initConfigState, type ConfigState } from '../slices/config/initialState';
 
 /**
  * Maximum number of workspace tabs persisted to localStorage. The in-memory
@@ -14,6 +15,62 @@ function capPersistedTabs(tabs: IWorkspaceTab[]): IWorkspaceTab[] {
   return tabs.length > MAX_PERSISTED_TABS ? tabs.slice(-MAX_PERSISTED_TABS) : tabs;
 }
 
+function createPersistenceReplacer() {
+  const ancestors: unknown[] = [];
+
+  return function (this: unknown, _key: string, value: unknown) {
+    if (typeof value === 'function' || typeof value === 'bigint') {
+      return undefined;
+    }
+    if (typeof Node !== 'undefined' && value instanceof Node) {
+      return undefined;
+    }
+    if (value !== null && typeof value === 'object') {
+      while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+        ancestors.pop();
+      }
+      if (ancestors.includes(value)) {
+        return undefined;
+      }
+      ancestors.push(value);
+    }
+    return value;
+  };
+}
+
+export function getPersistableWorkspaceLayout(layout: ConfigState['layout']): ConfigState['layout'] {
+  const normalizedPanelLeftWidth =
+    typeof layout.panelLeftWidth === 'number' && Number.isFinite(layout.panelLeftWidth)
+      ? Math.max(0, layout.panelLeftWidth)
+      : initConfigState.layout.panelLeftWidth;
+  const panelLeftWidth = layout.panelLeft === false ? 0 : normalizedPanelLeftWidth;
+  const panelRightWidth =
+    typeof layout.panelRightWidth === 'number' && Number.isFinite(layout.panelRightWidth)
+      ? Math.max(0, layout.panelRightWidth)
+      : initConfigState.layout.panelRightWidth;
+
+  return {
+    panelLeft: panelLeftWidth > 0,
+    panelLeftWidth,
+    panelRight: typeof layout.panelRight === 'boolean' ? layout.panelRight : false,
+    panelRightWidth,
+  };
+}
+
+export function getHydratedWorkspaceLayout(
+  currentLayout: ConfigState['layout'],
+  persistedLayout: unknown,
+): ConfigState['layout'] {
+  const storedLayout =
+    persistedLayout !== null && typeof persistedLayout === 'object'
+      ? (persistedLayout as Partial<ConfigState['layout']>)
+      : {};
+  return getPersistableWorkspaceLayout({
+    ...currentLayout,
+    ...storedLayout,
+  } as ConfigState['layout']);
+}
+
 export function getPersistableWorkspaceTabList(workspaceTabList?: IWorkspaceTab[] | null) {
   if (!workspaceTabList?.length) {
     return workspaceTabList || null;
@@ -25,22 +82,12 @@ export function getPersistableWorkspaceTabList(workspaceTabList?: IWorkspaceTab[
   const cappedTabs = capPersistedTabs(persistableTabs);
 
   try {
-    return JSON.parse(
-      JSON.stringify(cappedTabs, (_key, value) => {
-        if (typeof value === 'function') {
-          return undefined;
-        }
-        return value;
-      }),
-    ) as IWorkspaceTab[];
+    return JSON.parse(JSON.stringify(cappedTabs, createPersistenceReplacer())) as IWorkspaceTab[];
   } catch {
     return cappedTabs.map((tab) => ({
       id: tab.id,
       type: tab.type,
       title: tab.title,
-      uniqueData: tab.uniqueData
-        ? Object.fromEntries(Object.entries(tab.uniqueData).filter(([, value]) => typeof value !== 'function'))
-        : undefined,
     }));
   }
 }

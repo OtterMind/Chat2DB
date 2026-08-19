@@ -1,7 +1,7 @@
 import useTrimTreeData from '@/blocks/NewTree/hooks/useTrimTreeData';
 import { ILoadDataOptions, switchIcon, treeConfig } from '@/blocks/NewTree/treeConfig';
 import { TreeNodeType, databaseMap } from '@/constants';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import { useAIStore } from '@/store/ai';
 import { useTreeStore } from '@/store/tree';
@@ -10,7 +10,7 @@ import { IDBContextInfo } from '@/typings/database';
 import { findNode } from '@/utils';
 import { IconfontSvg } from '@chat2db/ui';
 import { Cascader, Tooltip } from 'antd';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
 
@@ -39,6 +39,7 @@ interface IProps {
 
 const AICascaderSource = (props: IProps) => {
   const { contextInfo, onChange, onFileSelect } = props;
+  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const {
     styles,
     theme: { appearance },
@@ -48,6 +49,12 @@ const AICascaderSource = (props: IProps) => {
     getDataCollectionList: state.getDataCollectionList,
   }));
   const treeData = useTrimTreeData();
+
+  useEffect(() => {
+    if (!aiDataCollection && contextInfo && 'dataSourceCollectionId' in contextInfo) {
+      onChange?.(null);
+    }
+  }, [aiDataCollection, contextInfo, onChange]);
 
   const { handleLoadData } = useTreeStore((state) => ({
     handleLoadData: state.handleLoadData,
@@ -108,7 +115,7 @@ const AICascaderSource = (props: IProps) => {
         isLeaf: true,
       },
     ];
-    if (runtimeEditionConfig.aiDataCollection) {
+    if (aiDataCollection) {
       nextOptions.splice(2, 0, {
         originalTitle: i18n('common.text.aiDataCollection'),
         key: 'dataCollection',
@@ -122,7 +129,7 @@ const AICascaderSource = (props: IProps) => {
       });
     }
     return nextOptions;
-  }, [treeData, dataCollectionList]);
+  }, [aiDataCollection, treeData, dataCollectionList]);
 
   const loadData = (selectedOptions: any) => {
     const data = selectedOptions[selectedOptions.length - 1];
@@ -181,7 +188,7 @@ const AICascaderSource = (props: IProps) => {
       return;
     }
     // ai data set
-    if (runtimeEditionConfig.aiDataCollection && _value[0] === 'dataCollection') {
+    if (aiDataCollection && _value[0] === 'dataCollection') {
       onChange?.({
         dataSourceCollectionId: Number(_value[1]),
       });
@@ -283,7 +290,7 @@ const AICascaderSource = (props: IProps) => {
   };
 
   const handleDropdownVisibleChange = (visible: boolean) => {
-    if (visible && runtimeEditionConfig.aiDataCollection) {
+    if (visible && aiDataCollection) {
       // calls getDataCollectionList when the drop-down menu is opened
       getDataCollectionList();
     }

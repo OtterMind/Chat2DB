@@ -39,9 +39,6 @@ public enum QuestionTypeEnum implements IBaseEnum<String> {
     CRUD_GENERATION("Generate CRUD"),
 
 
-    DATA_INSERT("Insert data"),
-
-
     @Deprecated
     DASHBOARD_GENERATION("Generate dashboard"),
 

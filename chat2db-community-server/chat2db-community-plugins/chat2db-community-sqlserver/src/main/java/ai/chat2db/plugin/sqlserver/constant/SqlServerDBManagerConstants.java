@@ -2,7 +2,6 @@ package ai.chat2db.plugin.sqlserver.constant;
 
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.model.request.TableMetadataRequest;

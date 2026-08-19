@@ -4,7 +4,6 @@ import java.sql.Connection;
 
 import ai.chat2db.plugin.mysql.MysqlDBManager;
 import ai.chat2db.spi.IDbManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 
 
 public final class MariaDBManagerConstants {

@@ -23,7 +23,11 @@ export type ISelect = {
 export interface IFormItem {
   defaultValue: any;
   inputType: InputType;
-  labelName: ILocalizedConnectionText,
+  labelName?: ILocalizedConnectionText,
+  labelKey?:
+    | 'workspace.identityColor.label'
+    | 'workspace.watermark.label'
+    | 'workspace.watermark.contentLabel';
   name: string;
   required: boolean;
   selected?: any;
@@ -31,6 +35,7 @@ export interface IFormItem {
   labelTextAlign?: 'right';
   disabled?: boolean;
   placeholder?: ILocalizedConnectionText;
+  placeholderKey?: 'workspace.watermark.contentPlaceholder';
   styles?: {
     width?: string; // Form width; percentages are recommended and the default is 100%.
     // Form-label width for English; pixels are recommended and the default is 70px.
@@ -39,6 +44,13 @@ export interface IFormItem {
   },
   hidden?: boolean;
   fileTypes?: string[];
+  maxLength?: number;
+  helpKey?: 'workspace.identityColor.help' | 'workspace.watermark.help';
+  visibleWhen?: {
+    name: string;
+    value: any;
+  };
+  layoutGroup?: 'dataSourceIdentity';
 }
 
 // Data-source connection form JSON configuration.

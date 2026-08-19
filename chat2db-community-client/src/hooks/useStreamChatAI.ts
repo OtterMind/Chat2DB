@@ -47,9 +47,6 @@ const aiRequestSet: GetPromptToken = {
   [QuestionType.CRUD_GENERATION]: {
     getPromptToken: MagicStickService.generateCRUD,
   },
-  [QuestionType.DATA_INSERT]: {
-    getPromptToken: MagicStickService.generateTestData,
-  },
   [QuestionType.NL_TO_CREATE_TABLE]: {
     getPromptToken: MagicStickService.textToCreateTable,
   },

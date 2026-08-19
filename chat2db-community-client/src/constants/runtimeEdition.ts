@@ -6,6 +6,7 @@ import type { GlobalAppConfig } from '@/typings/settings';
 import { RUNTIME_ENV, isCommunityEnv, isDesktop, isDesktopEnv, isOfflineEnv } from '@/utils/env';
 
 export type SettingMenuProfile = 'commercial' | 'local' | 'community';
+export type ClientStorageEdition = 'enterprise' | 'community';
 
 export interface RuntimeEditionConfig {
   mode: string;
@@ -33,6 +34,7 @@ export interface RuntimeEditionConfig {
   feedbackEntry: boolean;
   languageRegionRestricted: boolean;
   settingMenuProfile: SettingMenuProfile;
+  clientStorageEdition: ClientStorageEdition;
   globalStoreName: string;
   userStoreName: string;
   orgStoreName: string;
@@ -91,6 +93,7 @@ const commonConfig: RuntimeEditionConfig = {
   feedbackEntry: true,
   languageRegionRestricted: true,
   settingMenuProfile: 'commercial',
+  clientStorageEdition: 'enterprise',
   globalStoreName: 'Chat2DB_Global_Store',
   userStoreName: 'Chat2DB_User_Store',
   orgStoreName: 'Chat2DB_Org_Store',
@@ -138,32 +141,9 @@ const localConfig: RuntimeEditionConfig = {
   dashboardHostedAiGenerate: true,
   feedbackEntry: false,
   settingMenuProfile: 'local',
-  globalStoreName: 'Chat2DB_Local_Global_Store',
-  userStoreName: 'Chat2DB_Local_User_Store',
-  orgStoreName: 'Chat2DB_Local_Org_Store',
-  workspaceStoreName: 'Chat2DB_Local_Workspace_Store',
-  aiStoreName: 'Chat2DB_Local_AI_Store',
-  treeStoreName: 'Chat2DB_Local_Tree_Store',
-  localStorageVersionKey: 'app-local-storage-versions-local',
-  aiModelConfigStorageKey: 'chat2db_ai_model_configs',
-  loginRedirectStorageKey: 'chat2db-local-login-redirect-url',
-  desktopResponseHeaderStorageKey: 'Chat2db_Local',
-  sidebarExpandedStorageKey: 'chat2db_local_sidebar_expanded',
-  notificationPopupStorageKey: 'chat2db-local-popedNotification',
-  contentDiffDisabledSurfacesStorageKey: 'chat2db.local.contentDiff.disabledSurfaces',
-  googleAdsSignupPendingStorageKey: 'gads_signup_pending_local',
-  googleAdsSignupOnceStorageKeyPrefix: 'gads_signup_local',
-  googleAdsPurchaseOnceStorageKeyPrefix: 'gads_purchase_local',
-  pricingAutoPopupStorageKey: 'pricing-auto-popup-dismissed-at-local',
-  dailyPopupStorageKeyPrefix: 'chat2db-local-popup',
-  currentWorkspaceDatabaseStorageKey: 'chat2db-local-current-workspace-database',
-  currentConnectionStorageKey: 'chat2db-local-cur-connection',
-  activeConsoleIdStorageKey: 'chat2db-local-active-console-id',
-  currentPageStorageKey: 'chat2db-local-curPage',
-  indexedDbKeyPrefix: 'chat2db_local',
-  dexieDatabaseName: 'chat2db_local_database',
-  localSqlDirectoryPathStorageKey: 'chat2db.local.localSqlFileTree.rootPath',
-  localSqlDirectoryPathsStorageKey: 'chat2db.local.localSqlFileTree.rootPaths',
+  aiModelConfigStorageKey: 'chat2db_v3_model_configs',
+  loginRedirectStorageKey: 'loginRedirectUrl',
+  indexedDbKeyPrefix: '',
 };
 
 const communityConfig: RuntimeEditionConfig = {
@@ -193,6 +173,7 @@ const communityConfig: RuntimeEditionConfig = {
   feedbackEntry: false,
   languageRegionRestricted: false,
   settingMenuProfile: 'community',
+  clientStorageEdition: 'community',
   globalStoreName: 'Chat2DB_Community_Global_Store',
   userStoreName: 'Chat2DB_Community_User_Store',
   orgStoreName: 'Chat2DB_Community_Org_Store',

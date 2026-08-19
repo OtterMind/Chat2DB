@@ -232,11 +232,6 @@ export interface IExportParams extends IDmlResultRequest {
   exportType: ExportTypeEnum;
   exportSize: ExportSizeEnum;
 }
-/**
- * Export-Table
- */
-const exportResultTable = createRequest<IExportParams, any>('/api/rdb/dml/export', { method: 'post' });
-
 /** Get the view list */
 const getViewList = createRequest<IGetTableListParams, IPageResponse<IRoutines>>('/api/rdb/view/list', {
   method: 'get',
@@ -398,10 +393,7 @@ const executeRoutineMigration = createRequest<IRoutineMigrationParams, { success
 const executeUpdateDataSql = createRequest<
   ITableEditExecuteRequest,
   { success: boolean; message: string; sql: string }
->(
-  '/api/rdb/dml/execute_update',
-  { method: 'post', errorLevel: false },
-);
+>('/api/rdb/dml/execute_update', { method: 'post', errorLevel: false });
 
 /** Get the interface for modifying table data */
 const getExecuteUpdateSql = createRequest<any, string>('/api/rdb/dml/get_update_sql', { method: 'post' });
@@ -547,10 +539,8 @@ export default {
   addTablePin,
   deleteTablePin,
   getDMLCount,
-  // exportResultTable
   getAllTableList,
   getAllFieldByTable,
-  exportResultTable,
   checkIsSelectSQL,
   getImportPreview,
   executeImportWithMapping,

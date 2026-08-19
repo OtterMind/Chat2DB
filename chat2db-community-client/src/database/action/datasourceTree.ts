@@ -26,17 +26,8 @@ class DataSourceTreeService {
 
   // Modify the hiddenTreeNodeIds of a datasourceId
   async updateHiddenTreeNodeIds(datasourceId: number, hiddenTreeNodeIds: string[]) {
-    // If there is no data source, initialize it first
-    let existData = await this.getTreeHiddenTreeNodeIds();
-    if (!existData[datasourceId]) {
-      await this.initFilter(datasourceId);
-      existData = await this.getTreeHiddenTreeNodeIds();
-    }
-
-    await db.dataSourceTree
-      .where('datasourceId')
-      .equals(datasourceId)
-      .modify({ hiddenTreeNodeIds });
+    const data = DataSourceTreeSchema.parse({ datasourceId, hiddenTreeNodeIds });
+    await db.dataSourceTree.put(data);
   }
 
   // add or delete

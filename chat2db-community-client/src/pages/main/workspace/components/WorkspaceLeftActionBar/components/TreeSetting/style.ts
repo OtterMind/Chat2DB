@@ -2,6 +2,13 @@ import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
+    trigger: css`
+      color: ${token.colorTextTertiary};
+
+      &:hover {
+        color: ${token.colorTextSecondary};
+      }
+    `,
     datasourceOverlay: css`
       background-color: ${token.colorBgBase};
       border-radius: ${token.borderRadius}px;

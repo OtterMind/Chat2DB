@@ -7,6 +7,7 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.domain.api.model.ncx.NcxImportResponse;
+import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.service.task.ITaskNcxImportService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
@@ -372,6 +373,7 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
         if (request.getEnvironmentId() == null) {
             request.setEnvironmentId(1L);
         }
+        request.setIdentityColor(DataSourceIdentityColorUtils.normalize(request.getIdentityColor()));
         workspaceStorageFacade.createDataSource(request);
     }
 }

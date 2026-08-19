@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
+import java.util.List;
+
 
 @Data
 @SuperBuilder
@@ -40,6 +42,8 @@ public class Header {
     private String columnType;
 
     private String editorType;
+
+    private List<ResultSetEditorOption> editorOptions;
 
     private String columnName;
 

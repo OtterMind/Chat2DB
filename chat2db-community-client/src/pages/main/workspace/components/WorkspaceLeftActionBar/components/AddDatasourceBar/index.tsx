@@ -1,10 +1,12 @@
 import i18n from '@/i18n';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { ConfigProvider, Dropdown, Input, Modal, Tooltip } from 'antd';
+import { Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 import ConnectionEdit, { submitType } from '@/components/ConnectionEdit';
+import { applyConnectionIdentityColorUpdate } from '@/components/ConnectionEdit/identityColorUpdate';
 import FileUploadModal, { importConfigList } from '@/components/ImportConnection';
 import { ImportConnectionType } from '@/constants/database';
 import connectionService from '@/service/connection';
@@ -15,6 +17,12 @@ import { getDynamicDatabaseVersion, subscribeDynamicDatabases } from '@/utils/dy
 
 // ----- store -----
 import { useTreeStore } from '@/store/tree';
+import { WORKSPACE_TREE_TOOLBAR_BUTTON_SIZE } from '../../constants';
+
+const ADD_DATASOURCE_BUTTON_SIZE = {
+  ...WORKSPACE_TREE_TOOLBAR_BUTTON_SIZE,
+  iconSize: 20,
+} as const;
 
 interface IProps {}
 
@@ -32,23 +40,21 @@ export default memo<IProps>(() => {
 
   const {
     createGroup,
-    addDataSource,
-    editorDataSource,
     isModalVisible,
     setIsModalVisible,
     connectionDetail,
     setConnectionDetail,
     refreshTreeData,
+    refreshDataSourceAfterMutation,
   } = useTreeStore((state) => ({
     createGroup: state.createGroup,
-    addDataSource: state.addDataSource,
-    editorDataSource: state.editorDataSource,
     connectionDetail: state.connectionDetail,
     setConnectionDetail: state.setConnectionDetail,
     isModalVisible: state.isModalVisible,
     setIsModalVisible: state.setIsModalVisible,
     currentTreeNode: state.currentTreeNode,
     refreshTreeData: state.refreshTreeData,
+    refreshDataSourceAfterMutation: state.refreshDataSourceAfterMutation,
   }));
 
   const databaseTypeListMenu = useMemo(() => {
@@ -90,7 +96,7 @@ export default memo<IProps>(() => {
             autoFocus
             size="small"
             placeholder={i18n('common.text.searchPlaceholder')}
-            prefix={<IconfontSvg code="icon-search" size={14} />}
+            prefix={<Search aria-hidden size={14} />}
             value={databaseSearchKeyword}
             onChange={(event) => {
               setDatabaseSearchKeyword(event.target.value);
@@ -180,9 +186,18 @@ export default memo<IProps>(() => {
         .update({
           ...dataSource,
         })
-        .then((res) => {
+        .then(async (res) => {
+          const updatedDataSource = await applyConnectionIdentityColorUpdate(
+            res,
+            connectionDetail?.identityColor,
+            dataSource.identityColor,
+            connectionService.updateIdentityColor,
+          );
           setIsModalVisible(false);
-          editorDataSource(res);
+          if (updatedDataSource?.id) {
+            await refreshDataSourceAfterMutation(updatedDataSource.id);
+          }
+          return updatedDataSource;
         });
     } else {
       return connectionService
@@ -190,10 +205,10 @@ export default memo<IProps>(() => {
           ...dataSource,
           spaceId: connectionDetail?.spaceId,
         })
-        .then((res: any) => {
+        .then(async (res: any) => {
           setIsModalVisible(false);
-          if (res) {
-            addDataSource({ ...res, spaceId: connectionDetail?.spaceId });
+          if (res?.id) {
+            await refreshDataSourceAfterMutation(res.id);
           }
         });
     }
@@ -242,13 +257,18 @@ export default memo<IProps>(() => {
           }}
         >
           <Tooltip title={i18n('workspace.tips.createDatabase')} mouseEnterDelay={0.6}>
-            <IconButton size="sm" key="create-datasource" code="icon-add-subscript" />
+            <IconButton
+              className={styles.addDatasourceButton}
+              size={ADD_DATASOURCE_BUTTON_SIZE}
+              key="create-datasource"
+              code="icon-add-subscript"
+            />
           </Tooltip>
         </Dropdown>
       </ConfigProvider>
       <Modal
-        width="80%"
-        style={{ maxWidth: '900px', minWidth: '800px' }}
+        width="90%"
+        style={{ maxWidth: '1200px', minWidth: '800px' }}
         title={renderTitle()}
         footer={null}
         open={isModalVisible}

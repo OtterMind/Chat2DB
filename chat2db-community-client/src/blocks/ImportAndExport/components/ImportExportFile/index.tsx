@@ -5,8 +5,9 @@ import { Form, Input, Select } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import { IconButton } from '@chat2db/ui';
-import { ImportExportType, ImportExportFileType } from '@/constants/importExport';
-import { isDevelopment } from '@/utils/env';
+import { ImportExportType, ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
+import { ExportTaskParams, ImportTaskParams } from '@/service/importExport';
+import { isDesktop, isDevelopment } from '@/utils/env';
 import jcefApi from '@/jcef';
 
 interface IProps {
@@ -16,13 +17,20 @@ interface IProps {
 }
 
 export interface ImportExportFileRef {
-  getValues: () => any;
+  getValues: () => ExportTaskParams | ImportTaskParams | null;
+}
+
+interface ImportExportFormValue {
+  exportType: ImportExportFileType;
+  containsHeader: boolean;
+  fileUrl?: string;
 }
 
 const exportTypeOptions = [
   { label: 'CSV', value: ImportExportFileType.CSV, accept: '.csv' },
   { label: 'XLSX', value: ImportExportFileType.XLSX, accept: '.xlsx' },
   { label: 'XLS', value: ImportExportFileType.XLS, accept: '.xls' },
+  { label: 'JSON', value: ImportExportFileType.JSON, accept: '.json' },
   { label: 'SQL', value: ImportExportFileType.SQL, accept: '.sql' },
 ];
 
@@ -32,8 +40,8 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   const [form] = Form.useForm();
   const [fileUrlList, setFileUrlList] = useState<string[]>([]);
   const [exportLocation, setExportLocation] = useState<string>('');
-  const [formValue, setFormValue] = useState<any>({
-    exportType: 'CSV',
+  const [formValue, setFormValue] = useState<ImportExportFormValue>({
+    exportType: ImportExportFileType.CSV,
     containsHeader: true,
   });
 
@@ -64,13 +72,13 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   // file list changes
   useEffect(() => {
     if (isImport) {
-      setIsReady && setIsReady(!!fileUrlList.length || formValue.fileUrl);
+      setIsReady?.(!!(fileUrlList.length || formValue.fileUrl));
     }
   }, [fileUrlList, formValue]);
 
   useEffect(() => {
     if (isExport) {
-      setIsReady && setIsReady(!!exportLocation || formValue.fileUrl);
+      setIsReady?.(!isDesktop || !!exportLocation || !!formValue.fileUrl);
     }
   }, [exportLocation, formValue]);
 
@@ -84,23 +92,32 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
 
   useImperativeHandle(ref, () => ({
     getValues: () => {
-      const { dataSourceId, databaseName, schemaName, tableName } = importExportDataBoundInfo || {};
-      const values: any = {
+      if (!importExportDataBoundInfo) return null;
+      const { dataSourceId, databaseName, schemaName, tableName } = importExportDataBoundInfo;
+      const commonValues = {
         dataSourceId,
         databaseName,
         schemaName,
-        containsHeader: formValue.containsHeader,
+        format: formValue.exportType,
       };
       if (isExport) {
-        values.tableNames = [tableName];
-        values.exportPath = exportLocation || formValue.fileUrl;
-        values.exportType = formValue.exportType;
-      } else {
-        values.tableName = tableName;
-        values.fileName = fileUrlList[0] || formValue.fileUrl;
-        values.importType = formValue.exportType;
+        return {
+          ...commonValues,
+          taskType: ImportExportTaskType.TABLE_DATA_EXPORT,
+          tableNames: [tableName],
+          containsHeader: formValue.containsHeader,
+          exportPath: exportLocation || formValue.fileUrl,
+        };
       }
-      return values;
+      return {
+        ...commonValues,
+        taskType:
+          formValue.exportType === ImportExportFileType.SQL
+            ? ImportExportTaskType.SQL_FILE_IMPORT
+            : ImportExportTaskType.DATA_FILE_IMPORT,
+        tableName,
+        sourceFile: fileUrlList[0] || formValue.fileUrl || '',
+      };
     },
   }));
 
@@ -132,13 +149,13 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       <Form.Item label={`${i18n('workspace.importExport.fileType')}:`} name="exportType">
         <Select options={exportTypeOptions} />
       </Form.Item>
-      {isExport && (
+      {isExport && isDesktop && (
         <Form.Item label={`${i18n('workspace.importExport.exportLocation')}:`} name="exportLocation">
           <div className={styles.exportLocationBox}>
             <Input autoComplete="off" disabled value={exportLocation} />
             <IconButton
               className={styles.iconButton}
-              size={{ boxSize: 30, iconSize: 22, borderRadius: 6 } as any}
+              size={{ boxSize: 30, iconSize: 22, borderRadius: 6 }}
               code="icon-folder"
               onClick={handleSelectExportLocation}
             />

@@ -14,8 +14,10 @@ export default memo(() => {
   const { dashboardId: dashboardIdString } = useParams<{ dashboardId: string }>();
   const dashboardId = useMemo(() => (dashboardIdString ? Number(dashboardIdString) : undefined), [dashboardIdString]);
   const { styles } = useStyles();
-  const { getDashboardById } = useDashboardStore((state) => ({
+  const { dashboardList, getDashboardById, queryDashboardList } = useDashboardStore((state) => ({
+    dashboardList: state.dashboardList,
     getDashboardById: state.getDashboardById,
+    queryDashboardList: state.queryDashboardList,
   }));
   const { showPanel: showAIPanel } = useAIStore((state) => ({
     showPanel: state.showPanel,
@@ -34,8 +36,12 @@ export default memo(() => {
   useEffect(() => {
     if (dashboardId) {
       getDashboardById(Number(dashboardId));
+      return;
     }
-  }, []);
+    if (!dashboardList.length) {
+      queryDashboardList();
+    }
+  }, [dashboardId, dashboardList.length, getDashboardById, queryDashboardList]);
 
   if (isSharePage) {
     return <DashboardContent isShare={isSharePage} />;

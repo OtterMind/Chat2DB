@@ -1,5 +1,7 @@
 import i18n from '@/i18n';
 import { Form } from 'antd';
+import { SquarePen } from 'lucide-react';
+import { type ReactNode, useRef } from 'react';
 import { v4 as uuid } from 'uuid';
 
 import { ConsoleOpenedStatus, OperationColumn, TreeNodeType, WorkspaceTabType, databaseTypeList } from '@/constants';
@@ -10,7 +12,6 @@ import { TreeNodeData } from '@/typings';
 import { canImportExport } from '@/utils/env';
 
 // ----- store -----
-import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
 import { useImportExportStore } from '@/store/importExport';
 import { useTreeStore } from '@/store/tree';
@@ -53,19 +54,34 @@ import { ILoadDataOptions, treeConfig } from '../treeConfig';
 
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
+import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
+import { DataSourceIdentityColorRequestRegistry } from '../dataSourceIdentityColorRequest';
+import DataSourceColorMenuItem from '../components/DataSourceColorMenuItem';
+import { withDataSourceColorMenuOption } from '../dataSourceColorMenu';
+import { isDangerousTreeOperation } from '../treeMenuDanger';
+
+export interface MenuLabelRenderContext {
+  closeMenu: () => void;
+  setInteractionOpen: (open: boolean) => void;
+  registerFocusTarget: (focus: () => void) => () => void;
+}
 
 // Some operations are not supported by the database and need to be excluded.
 interface IOperationColumnConfigItem {
   text: string;
-  icon?: string;
+  icon?: string | ReactNode;
   shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
   handle?: () => void;
   discard?: boolean;
+  keepOpen?: boolean;
+  danger?: boolean;
+  renderLabel?: (context: MenuLabelRenderContext) => ReactNode;
   children?: IOperationColumnConfigItem[];
 }
 
@@ -75,9 +91,12 @@ interface IRightClickMenu {
   type: OperationColumn;
   shortcutAction?: ShortcutAction;
   doubleClickTrigger?: boolean;
+  keepOpen?: boolean;
+  danger?: boolean;
   labelProps: {
-    icon?: string;
+    icon?: string | ReactNode;
     label: string;
+    renderLabel?: (context: MenuLabelRenderContext) => ReactNode;
   };
   children?: IRightClickMenu[];
 }
@@ -92,7 +111,8 @@ type CreateRightClickMenu = (
  */
 function handleMenuOptions(treeNodeType, databaseType) {
   const databaseDropMenuConfig = dropMenuConfig[databaseType] || dropMenuConfig['DEFAULT'];
-  return databaseDropMenuConfig[treeNodeType] || dropMenuConfig['DEFAULT'][treeNodeType] || [];
+  const menuOptions = databaseDropMenuConfig[treeNodeType] || dropMenuConfig['DEFAULT'][treeNodeType] || [];
+  return withDataSourceColorMenuOption(menuOptions, treeNodeType);
 }
 
 // Node that can be double-clicked
@@ -124,7 +144,9 @@ const aiDataCollectionOperations = new Set<OperationColumn>([
 ]);
 
 export const useCreateRightClickMenu = () => {
+  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const [createAccountForm] = Form.useForm<CreateAccountValues>();
+  const identityColorRequestRegistryRef = useRef(new DataSourceIdentityColorRequestRegistry());
   // Read only store actions here; dynamic data must be fetched again for each operation.
   const {
     setEditingTreeNode,
@@ -133,8 +155,8 @@ export const useCreateRightClickMenu = () => {
     deleteGroup,
     setIsModalVisible,
     setConnectionDetail,
-    setCurrentTreeNode,
     deleteDataSource,
+    updateDataSourceIdentity,
     deleteAiDataCollection,
     deleteAiDataCollectionElement,
     closeConnection,
@@ -146,8 +168,8 @@ export const useCreateRightClickMenu = () => {
       deleteGroup: state.deleteGroup,
       setIsModalVisible: state.setIsModalVisible,
       setConnectionDetail: state.setConnectionDetail,
-      setCurrentTreeNode: state.setCurrentTreeNode,
       deleteDataSource: state.deleteDataSource,
+      updateDataSourceIdentity: state.updateDataSourceIdentity,
       deleteAiDataCollection: state.deleteAiDataCollection,
       deleteAiDataCollectionElement: state.deleteAiDataCollectionElement,
       closeConnection: state.closeConnection,
@@ -163,16 +185,16 @@ export const useCreateRightClickMenu = () => {
     };
   });
 
-  const { setImportExportDataBoundInfo, setRunSqlBoundInfo, getTaskList, openLogModal, setShowExportToolbar } =
-    useImportExportStore((state) => {
+  const { setImportExportDataBoundInfo, setRunSqlBoundInfo, getTaskList, openLogModal } = useImportExportStore(
+    (state) => {
       return {
         setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
         setRunSqlBoundInfo: state.setRunSqlBoundInfo,
         getTaskList: state.getTaskList,
         openLogModal: state.openLogModal,
-        setShowExportToolbar: state.setShowExportToolbar,
       };
-    });
+    },
+  );
 
   const { openUnifiedConfirmationModal, setMainPageActiveTab } = useGlobalStore((state) => {
     return {
@@ -200,13 +222,44 @@ export const useCreateRightClickMenu = () => {
       schemaName,
       tableName,
       dataCollectionElementType,
+      environmentId,
+      environment,
+      identityColor,
     } = extraParams;
-    const hasPermission = extraParams.hasPermission ?? runtimeEditionConfig.usesFixedIdentity;
+    const { hasPermission } = resolveDataSourceAuthorization(extraParams, runtimeEditionConfig.usesFixedIdentity);
+
+    const persistIdentityColor = (nextIdentityColor: string | null) => {
+      const targetDataSourceId = dataSourceId!;
+      const requestRegistry = identityColorRequestRegistryRef.current;
+      const requestToken = requestRegistry.begin(targetDataSourceId, identityColor ?? null);
+      updateDataSourceIdentity({ id: targetDataSourceId, identityColor: nextIdentityColor });
+      return requestRegistry
+        .enqueue(targetDataSourceId, () =>
+          connectionService.updateIdentityColor({ id: targetDataSourceId, identityColor: nextIdentityColor }),
+        )
+        .then((response) => {
+          requestRegistry.confirm(targetDataSourceId, response.identityColor);
+          if (!requestRegistry.isLatest(requestToken)) {
+            return response;
+          }
+          updateDataSourceIdentity(response);
+          staticMessage.success(i18n('workspace.identityColor.saveSuccess'));
+          return response;
+        })
+        .catch((error) => {
+          if (!requestRegistry.isLatest(requestToken)) {
+            return Promise.reject(error);
+          }
+          updateDataSourceIdentity({
+            id: targetDataSourceId,
+            identityColor: requestRegistry.getConfirmedColor(targetDataSourceId),
+          });
+          staticMessage.error(i18n('workspace.identityColor.saveFailed'));
+          return Promise.reject(error);
+        });
+    };
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
-    // Set the current node
-    setCurrentTreeNode(treeNodeData);
-
     const handelOpenCreateDatabaseModal = (type: 'database' | 'schema') => {
       const relyOnParams = {
         databaseType: treeNodeData.extraParams.databaseType!,
@@ -322,7 +375,7 @@ export const useCreateRightClickMenu = () => {
       // copyName
       [OperationColumn.CopyName]: {
         text: i18n('common.button.copyName'),
-        icon: 'icon-copy',
+        icon: <span aria-hidden="true" style={{ display: 'inline-block', width: 20, height: 20 }} />,
         handle: () => {
           copyToClipboard(treeNodeData.originalTitle);
         },
@@ -609,7 +662,7 @@ export const useCreateRightClickMenu = () => {
       // Remove a table from the AI data collection.
       [OperationColumn.RemoveAiDataCollectionElement]: {
         text: i18n('workspace.menu.removeAiDataCollectionElement'),
-        icon: 'icon-sort-ascending',
+        icon: 'icon-trash',
         handle: () => {
           openUnifiedConfirmationModal({
             title: i18n('common.text.removeConfirm'),
@@ -661,7 +714,7 @@ export const useCreateRightClickMenu = () => {
 
       [OperationColumn.EditSource]: {
         text: i18n('workspace.menu.editSource'),
-        icon: 'icon-edit',
+        icon: <SquarePen size={20} />,
         handle: () => {
           connectionService.getDetails({ id: dataSourceId! }).then((res) => {
             if (res) {
@@ -671,6 +724,33 @@ export const useCreateRightClickMenu = () => {
           });
         },
         discard: !hasPermission,
+      },
+
+      [OperationColumn.SetDataSourceColor]: {
+        text: i18n('workspace.identityColor.label'),
+        discard: !hasPermission,
+        keepOpen: true,
+        renderLabel: ({ closeMenu, setInteractionOpen, registerFocusTarget }) => {
+          const finishSelection = (nextIdentityColor: string | null) => {
+            setInteractionOpen(false);
+            void persistIdentityColor(nextIdentityColor).catch(() => undefined);
+            closeMenu();
+          };
+          return (
+            <DataSourceColorMenuItem
+              identityColor={identityColor}
+              onSelect={finishSelection}
+              onEscape={closeMenu}
+              registerFocusTarget={registerFocusTarget}
+              onPickerOpenChange={(open) => {
+                setInteractionOpen(open);
+                if (!open) {
+                  closeMenu();
+                }
+              }}
+            />
+          );
+        },
       },
 
       // Copy the data source.
@@ -685,6 +765,7 @@ export const useCreateRightClickMenu = () => {
                 ...res,
                 id: undefined,
                 alias: `${res.alias}_copy`,
+                identityColor: null,
                 password: '', // Clear the password.
                 ConsoleOpenedStatus: 'n' as const,
               };
@@ -719,6 +800,8 @@ export const useCreateRightClickMenu = () => {
           createConsole({
             dataSourceId: dataSourceId!,
             dataSourceName: dataSourceName!,
+            environmentId,
+            environment,
             databaseType: databaseType!,
             databaseName,
             schemaName,
@@ -853,35 +936,6 @@ export const useCreateRightClickMenu = () => {
         text: i18n('workspace.menu.GenerateCRUD'),
         icon: 'icon-sparkles',
         handle: () => {},
-      },
-
-      // Generate test data.
-      [OperationColumn.GenerateTestData]: {
-        text: i18n('workspace.menu.GenerateTestData'),
-        icon: 'icon-sparkles',
-        handle: () => {
-          // Set the database context first so the AI panel uses the current data source.
-          const page = useGlobalStore.getState().mainPageActiveTab as 'workspace' | 'dashboard' | 'chat' | 'stream';
-          useAIStore.getState().setCascaderData(page, {
-            dataSourceId: treeNodeData.extraParams!.dataSourceId!,
-            databaseName: treeNodeData.extraParams!.databaseName,
-            schemaName: treeNodeData.extraParams?.schemaName,
-          });
-          useAIStore.getState().setShowPanel(true);
-          // Trigger the new AI system to send a message through an event.
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent('stream:sendMessage', {
-                detail: {
-                  input: i18n('ai.insertData.title', treeNodeData.originalTitle),
-                  dataSourceId: treeNodeData.extraParams!.dataSourceId!,
-                  databaseName: treeNodeData.extraParams!.databaseName,
-                  schemaName: treeNodeData.extraParams?.schemaName,
-                },
-              }),
-            );
-          }, 100);
-        },
       },
 
       // Pin to the top.
@@ -1145,7 +1199,6 @@ export const useCreateRightClickMenu = () => {
                 scope: 'SCHEMA',
                 getTaskList,
                 openLogModal,
-                setShowExportToolbar,
               });
             },
           },
@@ -1160,7 +1213,6 @@ export const useCreateRightClickMenu = () => {
                 scope: 'TABLE',
                 getTaskList,
                 openLogModal,
-                setShowExportToolbar,
               });
             },
           },
@@ -1175,7 +1227,6 @@ export const useCreateRightClickMenu = () => {
                 scope: 'ALL',
                 getTaskList,
                 openLogModal,
-                setShowExportToolbar,
               });
             },
           },
@@ -1314,15 +1365,18 @@ export const useCreateRightClickMenu = () => {
       if (!children.length) return undefined;
       const finalList: IRightClickMenu[] = [];
       children?.forEach((t, i) => {
-        if (!t.discard && (runtimeEditionConfig.aiDataCollection || !aiDataCollectionOperations.has(type))) {
+        if (!t.discard && (aiDataCollection || !aiDataCollectionOperations.has(type))) {
           finalList.push({
             key: `${lastKey}-${i}`,
             onClick: t.handle,
             type,
             shortcutAction: t.shortcutAction,
+            keepOpen: t.keepOpen,
+            danger: t.danger,
             labelProps: {
               icon: t.icon,
               label: t.text,
+              renderLabel: t.renderLabel,
             },
             children: generateChildren(t.children || [], type, `${lastKey}-${i}`),
           });
@@ -1348,7 +1402,7 @@ export const useCreateRightClickMenu = () => {
         return;
       }
 
-      if (!runtimeEditionConfig.aiDataCollection && aiDataCollectionOperations.has(t)) {
+      if (!aiDataCollection && aiDataCollectionOperations.has(t)) {
         return;
       }
 
@@ -1361,9 +1415,12 @@ export const useCreateRightClickMenu = () => {
           type: t,
           shortcutAction: concrete.shortcutAction,
           doubleClickTrigger: concrete.doubleClickTrigger,
+          keepOpen: concrete.keepOpen,
+          danger: concrete.danger || isDangerousTreeOperation(t),
           labelProps: {
             icon: concrete?.icon,
             label: concrete?.text,
+            renderLabel: concrete?.renderLabel,
           },
           children: generateChildren(concrete?.children || [], t, i),
         });

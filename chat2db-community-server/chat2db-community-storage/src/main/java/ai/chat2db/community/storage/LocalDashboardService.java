@@ -14,7 +14,7 @@ import ai.chat2db.community.domain.api.service.db.IDbDlTemplateService;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.storage.small.ChartStorage;
 import ai.chat2db.community.storage.small.DashboardStorage;
-import ai.chat2db.community.tools.annotation.CommunityRuntimeOnly;
+import ai.chat2db.community.tools.annotation.LocalPersistenceRuntimeOnly;
 import ai.chat2db.community.tools.exception.BusinessException;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @Service
-@CommunityRuntimeOnly
+@LocalPersistenceRuntimeOnly
 public class LocalDashboardService implements IDashboardService {
 
     private static final int DEFAULT_CHART_REFRESH_PAGE_SIZE = 200;

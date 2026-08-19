@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.enums.plugin.AuthenticationTypeEnum;
+import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePreConnectRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
@@ -9,6 +10,7 @@ import ai.chat2db.community.domain.api.service.db.IDbDataSourceService;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.community.tools.exception.DataNotFoundException;
 import ai.chat2db.community.tools.exception.NeedLoggedInBusinessException;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.security.AesGcmUtil;
@@ -36,17 +38,22 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
 
     private final IWorkspaceStorageFacade workspaceStorageFacade;
     private final IDbDataSourceService dataSourceService;
+    private final DataSourceEnvironmentEnricher environmentEnricher;
 
     public DbWorkspaceDataSourceServiceImpl(IWorkspaceStorageFacade workspaceStorageFacade,
-            IDbDataSourceService dataSourceService) {
+            IDbDataSourceService dataSourceService,
+            DataSourceEnvironmentEnricher environmentEnricher) {
         this.workspaceStorageFacade = workspaceStorageFacade;
         this.dataSourceService = dataSourceService;
+        this.environmentEnricher = environmentEnricher;
     }
 
     @Override
     public PageResponse<WorkspaceDataSource> listDataSources(DbDataSourcePageQueryRequest request) {
         try {
-            return workspaceStorageFacade.listDataSources(request);
+            PageResponse<WorkspaceDataSource> page = workspaceStorageFacade.listDataSources(request);
+            return PageResponse.of(environmentEnricher.enrichWorkspaceDataSources(page.getData()),
+                    page.getTotal(), page.getPageNo(), page.getPageSize());
         } catch (Exception e) {
             if (request != null && !request.isRefresh()) {
                 log.error("datasource.list.fallback", e);
@@ -63,7 +70,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
 
     @Override
     public WorkspaceDataSource queryDisplayDataSourceById(Long id, Boolean requestPassword) {
-        WorkspaceDataSource dataSource = copyDataSource(queryDataSourceById(id, requestPassword));
+        WorkspaceDataSource dataSource = environmentEnricher.enrich(queryDataSourceById(id, requestPassword));
         decryptSensitiveFields(dataSource);
         return dataSource;
     }
@@ -83,6 +90,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
 
     @Override
     public WorkspaceDataSource createDataSource(WorkspaceDataSource dataSource) {
+        normalizeDataSourceIdentityColor(dataSource);
         validateSupportedDataSource(dataSource);
         applyDefaultDriverConfig(dataSource);
         Long dataSourceId = workspaceStorageFacade.createDataSource(dataSource);
@@ -91,10 +99,22 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
 
     @Override
     public WorkspaceDataSource updateDataSource(WorkspaceDataSource dataSource) {
+        normalizeDataSourceIdentityColor(dataSource);
         applyDefaultDriverConfig(dataSource);
         workspaceStorageFacade.updateDataSource(dataSource);
         dataSourceService.removeConnection(dataSource.getId());
         return queryDisplayDataSourceById(dataSource.getId(), false);
+    }
+
+    @Override
+    public WorkspaceDataSource updateDataSourceIdentityColor(Long id, String identityColor) {
+        String normalizedIdentityColor = DataSourceIdentityColorUtils.normalize(identityColor);
+        workspaceStorageFacade.updateDataSourceIdentityColor(id, normalizedIdentityColor);
+        WorkspaceDataSource dataSource = environmentEnricher.enrich(queryDataSourceById(id, false));
+        if (dataSource == null) {
+            throw new DataNotFoundException();
+        }
+        return dataSource;
     }
 
     @Override
@@ -146,6 +166,12 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
                 && ("H2".equalsIgnoreCase(dataSource.getType())
                 || "SQLite".equalsIgnoreCase(dataSource.getType()))) {
             throw new BusinessException("web.not.support.db.type");
+        }
+    }
+
+    private void normalizeDataSourceIdentityColor(WorkspaceDataSource dataSource) {
+        if (dataSource != null) {
+            dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         }
     }
 

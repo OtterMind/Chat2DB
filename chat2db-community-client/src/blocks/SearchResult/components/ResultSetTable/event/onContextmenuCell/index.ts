@@ -25,6 +25,7 @@ import {
   canFreezeResultColumns,
   canHideResultColumns,
   getResultCellMetaAtTableColumn,
+  getResultColumnNameAtTableColumn,
   getResultColumnFields,
   getResultFieldAtTableColumn,
   getResultFrozenColumnCount,
@@ -51,6 +52,11 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
     const showFieldType = dataTableSettings.showFieldType ?? true;
     const showFieldComment = dataTableSettings.showFieldComment ?? true;
     const currentField = getResultFieldAtTableColumn(
+      tableInstance,
+      selectEvent.col,
+      selectEvent.row,
+    );
+    const currentColumnName = getResultColumnNameAtTableColumn(
       tableInstance,
       selectEvent.col,
       selectEvent.row,
@@ -154,7 +160,9 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         label: i18n('workspace.menu.copyColumnName'),
         icon: 'icon-copy',
         onClick: () => {
-          handleCopy(tableInstance, selectEvent.dataValue);
+          if (currentColumnName !== undefined) {
+            copyToClipboard(currentColumnName);
+          }
         },
       },
       [ContextmenuType.paste]: {

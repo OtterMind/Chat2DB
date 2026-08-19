@@ -2,17 +2,21 @@ package ai.chat2db.community.storage.small;
 
 import ai.chat2db.community.domain.api.enums.NodeTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
+import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
 import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import com.google.common.collect.Lists;
 import org.apache.commons.collections4.CollectionUtils;
+import org.springframework.beans.BeanUtils;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -22,6 +26,10 @@ public class DataSourceStorage extends SmallDataStorage<DataSource> {
 
     protected DataSourceStorage() {
         super("datasource", DataSource.class);
+    }
+
+    protected DataSourceStorage(File storageFile) {
+        super(storageFile, DataSource.class);
     }
 
     @Override
@@ -153,13 +161,74 @@ public class DataSourceStorage extends SmallDataStorage<DataSource> {
         return nodes;
     }
 
-    public Long save(DataSource dataSource) {
-        Long id = super.save(dataSource);
+    @Override
+    public synchronized Long save(DataSource dataSource) {
+        if (dataSource == null) {
+            return null;
+        }
+        dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
+        Long originalId = dataSource.getId();
+        DataSource previous = originalId == null ? null : dataMap.get(originalId);
+        Long id;
+        try {
+            id = super.save(dataSource);
+        } catch (RuntimeException exception) {
+            Long assignedId = dataSource.getId();
+            if (assignedId != null) {
+                if (previous == null) {
+                    dataMap.remove(assignedId);
+                } else {
+                    dataMap.put(assignedId, previous);
+                }
+            }
+            throw exception;
+        }
         createDataSourceNode(id, dataSource.getSpaceId());
         return id;
     }
 
-    private synchronized void createDataSourceNode(Long datasourceId, Long namespaceId) {
+    @Override
+    public synchronized void update(DataSource dataSource) {
+        if (dataSource == null || dataSource.getId() == null) {
+            return;
+        }
+        DataSource current = dataMap.get(dataSource.getId());
+        if (current == null) {
+            return;
+        }
+        DataSource update = copyDataSource(dataSource);
+        update.setIdentityColor(DataSourceIdentityColorUtils.normalize(update.getIdentityColor()));
+        DataSource replacement = getAfterSave(copyDataSource(current), update);
+        // Full connection updates never own the shared identity color.
+        replacement.setIdentityColor(current.getIdentityColor());
+        persistReplacement(dataSource.getId(), replacement);
+    }
+
+    public synchronized boolean updateIdentityColor(Long id, String identityColor) {
+        DataSource current = dataMap.get(id);
+        if (current == null) {
+            return false;
+        }
+        DataSource replacement = copyDataSource(current);
+        replacement.setIdentityColor(DataSourceIdentityColorUtils.normalize(identityColor));
+        persistReplacement(id, replacement);
+        return true;
+    }
+
+    private void persistReplacement(Long id, DataSource replacement) {
+        Map<Long, DataSource> persistedData = new TreeMap<>(dataMap);
+        persistedData.put(id, replacement);
+        saveDataList(new ArrayList<>(persistedData.values()));
+        dataMap.put(id, replacement);
+    }
+
+    private DataSource copyDataSource(DataSource source) {
+        DataSource copy = new DataSource();
+        BeanUtils.copyProperties(source, copy);
+        return copy;
+    }
+
+    protected synchronized void createDataSourceNode(Long datasourceId, Long namespaceId) {
         Node dropToNode = null;
         if (namespaceId != null && namespaceId > 0) {
             dropToNode = new Node();

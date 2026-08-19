@@ -3,7 +3,7 @@ package ai.chat2db.plugin.sqlserver;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
@@ -50,57 +50,65 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
 
 
     @Override
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) {
-        asyncContext.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
-        asyncContext.info(DateUtil.formatDateTime(new Date())+":Exporting tables");
-        exportTables(connection, databaseName, schemaName, asyncContext);
-        asyncContext.setProgress(50);
-        asyncContext.info(DateUtil.formatDateTime(new Date())+":Exporting views");
-        exportViews(connection, databaseName, schemaName, asyncContext);
-        asyncContext.setProgress(60);
-        asyncContext.info(DateUtil.formatDateTime(new Date())+":Exporting producers");
-        exportProcedures(connection, schemaName, asyncContext);
-        asyncContext.setProgress(70);
-        asyncContext.info(DateUtil.formatDateTime(new Date())+":Exporting triggers");
-        exportTriggers(connection, schemaName, asyncContext);
-        asyncContext.setProgress(80);
-        asyncContext.info(DateUtil.formatDateTime(new Date())+":Exporting functions");
-        exportFunctions(connection, schemaName, asyncContext);
-        asyncContext.setProgress(90);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) {
+        context.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
+        logDatabaseObjectExportStarted(context, "tables");
+        exportTables(connection, databaseName, schemaName, containData, context);
+        logDatabaseObjectExportCompleted(context, "tables");
+        reportExportProgress(context, 50);
+        logDatabaseObjectExportStarted(context, "views");
+        exportViews(connection, databaseName, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "views");
+        reportExportProgress(context, 60);
+        logDatabaseObjectExportStarted(context, "procedures");
+        exportProcedures(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "procedures");
+        reportExportProgress(context, 70);
+        logDatabaseObjectExportStarted(context, "triggers");
+        exportTriggers(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "triggers");
+        reportExportProgress(context, 80);
+        logDatabaseObjectExportStarted(context, "functions");
+        exportFunctions(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "functions");
+        reportExportProgress(context, 90);
     }
 
-    private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) {
+    private void exportTables(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, ORDER_TABLES_SQL, new String[]{schemaName, schemaName, schemaName}, resultSet -> {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
-                exportTable(connection, databaseName, schemaName, tableName, asyncContext);
+                exportTable(connection, databaseName, schemaName, tableName, containData, context);
             }
         });
     }
 
 
-    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
+    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
+            boolean containData, TaskExecutionContext context) {
         String tableDDL = Chat2DBContext.getDbMetaData().tableDDL(connection,
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(SQL_DROP_TABLE_EXISTS)
                 .append(buildFullTableName(null, schemaName, tableName)).append(";").append("\ngo\n")
                 .append(tableDDL);
-        asyncContext.write(sqlBuilder.toString());
-        if (asyncContext.isContainsData()) {
-            exportTableData(connection, databaseName, schemaName, tableName, asyncContext);
+        context.write(sqlBuilder.toString());
+        if (containData) {
+            exportTableData(connection, databaseName, schemaName, tableName, context);
         } else {
-            asyncContext.write("go \n");
+            context.write("go \n");
         }
     }
     @Override
-    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
-        exportTableData(connection, databaseName, schemaName, tableName, asyncContext, 10000);
-        asyncContext.write("go \n");
+    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, TaskExecutionContext context) {
+        exportTableData(connection, databaseName, schemaName, tableName, context, 10000);
+        context.write("go \n");
     }
 
 
-    private void exportViews(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) {
+    private void exportViews(Connection connection, String databaseName, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, VIEWS_DDL_SQL, new String[]{schemaName, databaseName}, resultSet -> {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -109,24 +117,24 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
                         .append(";\n").append("go").append("\n")
                         .append(resultSet.getString("VIEW_DEFINITION")).append(";").append("\n")
                         .append("go").append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         });
     }
 
 
-    private void exportFunctions(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportFunctions(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, ROUTINES_SQL, new String[]{"FN", schemaName}, resultSet -> {
             while (resultSet.next()) {
                 String functionName = resultSet.getString("name");
-                exportFunction(connection, schemaName, functionName, asyncContext);
+                exportFunction(connection, schemaName, functionName, context);
             }
         });
 
     }
 
     private void exportFunction(Connection connection, String schemaName, String functionName,
-                                AsyncContext asyncContext) {
+                                TaskExecutionContext context) {
         String sql = String.format(ROUTINES_DDL_SQL,
                 "'SQL_SCALAR_FUNCTION', 'SQL_TABLE_VALUED_FUNCTION'",
                 SqlServerIdentifierProcessor.INSTANCE.escapeString(functionName),
@@ -139,23 +147,23 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
                         SqlServerIdentifierProcessor.INSTANCE.escapeString(qualifiedName), qualifiedName));
                 sqlBuilder.append(resultSet.getString("definition"))
                         .append("\n").append("go").append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         });
     }
 
 
-    private void exportProcedures(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportProcedures(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, ROUTINES_SQL, new String[]{"P", schemaName}, resultSet -> {
             while (resultSet.next()) {
                 String procedureName = resultSet.getString("name");
-                exportProcedure(connection, schemaName, procedureName, asyncContext);
+                exportProcedure(connection, schemaName, procedureName, context);
             }
         });
     }
 
     private void exportProcedure(Connection connection, String schemaName, String procedureName,
-                                 AsyncContext asyncContext) throws SQLException {
+                                 TaskExecutionContext context) throws SQLException {
         String sql = String.format(ROUTINES_DDL_SQL, "'SQL_STORED_PROCEDURE'",
                 SqlServerIdentifierProcessor.INSTANCE.escapeString(procedureName),
                 SqlServerIdentifierProcessor.INSTANCE.escapeString(schemaName));
@@ -166,18 +174,18 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
                 sqlBuilder.append(String.format(DROP_PROCEDURE_SQL,
                         SqlServerIdentifierProcessor.INSTANCE.escapeString(qualifiedName), qualifiedName));
                 sqlBuilder.append(resultSet.getString("definition")).append("\n").append("go").append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
 
             }
         }
     }
 
-    private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportTriggers(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, TRIGGERS_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append(resultSet.getString("triggerDefinition")).append("\n").append("go").append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         });
     }

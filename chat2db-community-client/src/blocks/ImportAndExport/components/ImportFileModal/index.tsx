@@ -6,11 +6,12 @@ import ImportExportFile, { ImportExportFileRef } from '../ImportExportFile';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices from '@/service/importExport';
-import { ImportExportType } from '@/constants/importExport';
+import { ImportExportTaskStatus, ImportExportType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import ImportMappingContent from '@/blocks/ImportAndExport/components/ImportMappingContent';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
 
 interface IProps {
   className?: string;
@@ -24,12 +25,12 @@ export default memo<IProps>((_props) => {
   const [importFilePath, setImportFilePath] = useState<string>('');
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
-      return {
-        importExportDataBoundInfo: state.importExportDataBoundInfo,
-        setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
-        getTaskList: state.getTaskList,
-      };
-    });
+    return {
+      importExportDataBoundInfo: state.importExportDataBoundInfo,
+      setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
+      getTaskList: state.getTaskList,
+    };
+  });
 
   useEffect(() => {
     if (!importExportDataBoundInfo) {
@@ -39,14 +40,13 @@ export default memo<IProps>((_props) => {
   }, [importExportDataBoundInfo]);
 
   const handleRunSQl = () => {
-    const api =
-      importExportDataBoundInfo?.type === ImportExportType.IMPORT
-        ? importExportServices.importOtherFile
-        : importExportServices.exportOtherFile;
-    const params = importExportFileRef.current?.getValues() || {};
-    api(params).then((res) => {
-      setTaskId(res);
-      getTaskList({ visible: true });
+    const params = importExportFileRef.current?.getValues();
+    if (!params) return;
+    const request =
+      'sourceFile' in params ? importExportServices.submitImport(params) : importExportServices.submitExport(params);
+    request.then((res) => {
+      setTaskId(res.taskId);
+      getTaskList();
     });
   };
 
@@ -76,22 +76,24 @@ export default memo<IProps>((_props) => {
   };
 
   const handleOpenFile = () => {
-    jcefApi.revealInExplorer(taskDetails?.downloadUrl);
+    if (!taskDetails?.artifactId) return;
+    if (isDesktop) {
+      jcefApi.revealInExplorer(taskDetails.artifactId);
+      return;
+    }
+    window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
   };
 
   const logRenderFooter = () => (
     <ModalFooterButton
       footerLeft={
         <>
-          {importExportDataBoundInfo?.type === ImportExportType.EXPORT && taskDetails?.downloadUrl && (
-            <Button
-              icon={<IconfontSvg code="icon-folder" />}
-              disabled={!taskDetails?.downloadUrl}
-              onClick={handleOpenFile}
-            >
-              {i18n('workspace.text.openFile')}
-            </Button>
-          )}
+          {importExportDataBoundInfo?.type === ImportExportType.EXPORT &&
+            taskDetails?.status === ImportExportTaskStatus.SUCCESS && (
+              <Button icon={<IconfontSvg code="icon-folder" />} onClick={handleOpenFile}>
+                {i18n('workspace.text.openFile')}
+              </Button>
+            )}
         </>
       }
       footerRight={
@@ -108,7 +110,7 @@ export default memo<IProps>((_props) => {
     />
   );
 
-  const finish = (_taskDetails: ImportExportTaskDetails) => {
+  const handleTaskChange = (_taskDetails: ImportExportTaskDetails) => {
     setTaskDetails(_taskDetails);
   };
 
@@ -132,7 +134,7 @@ export default memo<IProps>((_props) => {
       }}
     >
       {taskId ? (
-        <Log finish={finish} taskId={taskId} />
+        <Log onTaskChange={handleTaskChange} taskId={taskId} />
       ) : importExportDataBoundInfo?.type === ImportExportType.IMPORT && importFilePath ? (
         <ImportMappingContent
           dataSourceId={importExportDataBoundInfo.dataSourceId}

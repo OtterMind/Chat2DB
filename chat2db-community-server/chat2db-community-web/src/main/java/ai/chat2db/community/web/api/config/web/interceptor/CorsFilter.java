@@ -11,6 +11,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,12 @@ public class CorsFilter implements Filter {
             "http://localhost:10825"
     );
 
+    private final boolean devProfileActive;
+
+    public CorsFilter(Environment environment) {
+        this.devProfileActive = environment.matchesProfiles("dev");
+    }
+
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
         throws IOException, ServletException {
@@ -33,7 +40,7 @@ public class CorsFilter implements Filter {
         HttpServletRequest request = (HttpServletRequest)req;
         String origin = request.getHeader(HttpHeaders.ORIGIN);
 
-        if (ConfigUtils.isCommunity() && !allowCommunityOrigin(origin)) {
+        if (ConfigUtils.isCommunity() && !allowCommunityOrigin(origin, devProfileActive)) {
             response.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
@@ -44,8 +51,8 @@ public class CorsFilter implements Filter {
         chain.doFilter(req, res);
     }
 
-    static boolean allowCommunityOrigin(String origin) {
-        return origin == null || origin.isBlank() || COMMUNITY_ALLOWED_ORIGINS.contains(origin);
+    static boolean allowCommunityOrigin(String origin, boolean devProfileActive) {
+        return devProfileActive || origin == null || origin.isBlank() || COMMUNITY_ALLOWED_ORIGINS.contains(origin);
     }
 
     private static void setCorsHeaders(HttpServletResponse response, String origin) {

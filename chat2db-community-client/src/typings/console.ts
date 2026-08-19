@@ -1,10 +1,16 @@
 import { ConsoleStatus, DatabaseTypeCode, WorkspaceTabType, ConsoleOpenedStatus } from '@/constants';
+import type { IConnectionEnv } from './connection';
 
 export interface ICreateConsoleParams {
   name?: string;
   ddl?: string;
   dataSourceId: number;
   dataSourceName: string;
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   databaseType: DatabaseTypeCode;
   databaseName?: string;
   schemaName?: string;
@@ -20,6 +26,11 @@ export interface IConsole {
   ddl: string; // sql in console
   dataSourceId?: number; // Data source id
   dataSourceName?: string; // Data source name
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   type?: DatabaseTypeCode; // Database type
   databaseName?: string; // Database name
   schemaName?: string; // schema name

@@ -4,6 +4,14 @@
   overflow: hidden;
 }
 
+.workspaceTabIdentityIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+}
+
 .splitTabBox {
   position: relative;
   height: 100%;
@@ -84,10 +92,7 @@
   z-index: 1;
   border-radius: 6px;
   opacity: 0.9;
-  transition:
-    inset 120ms ease,
-    width 120ms ease,
-    height 120ms ease;
+  transition: inset 120ms ease, width 120ms ease, height 120ms ease;
   pointer-events: none;
 }
 
@@ -133,7 +138,6 @@
   opacity: 0.96;
   transform: translateY(2px) rotate(1deg);
   cursor: grabbing;
-
 }
 
 .workspaceTabDragOverlayIcon {

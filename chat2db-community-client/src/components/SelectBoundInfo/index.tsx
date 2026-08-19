@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, memo, Fragment } from 'react';
+import { useEffect, useMemo, useRef, useState, memo, Fragment } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Dropdown, Input } from 'antd';
 import { useStyles } from './style';
@@ -7,9 +7,20 @@ import { normalizeTreeNodeLoadResult, treeConfig, switchIcon } from '@/blocks/Ne
 import isEqual from 'lodash/isEqual';
 import { IconfontSvg, ToolbarBtn } from '@chat2db/ui';
 import { useTreeStore } from '@/store/tree';
-import { TreeNodeData } from '@/typings';
+import { TreeNodeData, type IConnectionEnv } from '@/typings';
 import { getDatabaseSupport } from '@/utils/database';
 import i18n from '@/i18n';
+import DataSourceIdentityMark from '@/components/DataSourceIdentityMark';
+import {
+  activateCascadeRequestGuard,
+  beginCascadeRequest,
+  createCascadeRequestGuard,
+  disposeCascadeRequestGuard,
+  getCascadeRequestContextKey,
+  invalidateCascadeRequest,
+  isCascadeRequestCurrent,
+} from './cascadeRequestGuard';
+import { createCachedDataSourceSelection } from './dataSourceSelection';
 
 export interface EachOption {
   value?: string; // Currently selected value.
@@ -18,6 +29,13 @@ export interface EachOption {
   options: any[]; // Options for the current item.
   treeNodeType: TreeNodeType; // Current item type.
   databaseType?: DatabaseTypeCode; // Selected database type.
+  dataSourceId?: number;
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
+  searchText?: string;
   hasPermission?: boolean; // Whether the data source is accessible.
   display?: boolean; // Whether to show the item.
 }
@@ -25,6 +43,11 @@ export interface EachOption {
 export interface BoundInfo {
   dataSourceId?: number;
   dataSourceName?: string;
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   databaseType?: DatabaseTypeCode;
   databaseName?: string;
   schemaName?: string;
@@ -42,14 +65,21 @@ interface IProps {
   mustHaveValue?: boolean;
 }
 
+interface CascadeOptionsState {
+  contextKey: string;
+  options: any[];
+}
+
 // Generate options.
 const generateOptions = (treeDataList: TreeNodeData[] | null, allowEmpty, styles) => {
   if (!treeDataList?.length) return [];
   const options: any = treeDataList.map((item) => {
+    const environmentName = item.extraParams.environment?.shortName || item.extraParams.environment?.name;
     return {
       label: (
         <span>
           {item.originalTitle}
+          {environmentName && <span className={styles.environmentName}>{environmentName}</span>}
           {!item.extraParams.hasPermission && item.treeNodeType === TreeNodeType.DATA_SOURCE && (
             <span className={styles.noPermission}>({i18n('common.text.noPermission')})</span>
           )}
@@ -61,6 +91,16 @@ const generateOptions = (treeDataList: TreeNodeData[] | null, allowEmpty, styles
       key: item.id?.toString() || item.originalTitle,
       treeNodeType: item.treeNodeType,
       databaseType: item.extraParams.databaseType,
+      dataSourceId: item.extraParams.dataSourceId,
+      environmentId: item.extraParams.environmentId,
+      environment: item.extraParams.environment,
+      identityColor: item.extraParams.identityColor,
+      watermarkEnabled: item.extraParams.watermarkEnabled,
+      watermarkContent: item.extraParams.watermarkContent,
+      searchText: [item.originalTitle, environmentName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase(),
       hasPermission: item.extraParams.hasPermission,
     };
   });
@@ -85,16 +125,25 @@ const SelectBoundInfo = memo(
       getTreeData: s.getTreeData,
     }));
     const [selectedList, setSelectedList] = useState<EachOption[]>([]);
-    const [databaseOptions, setDatabaseOptions] = useState<any>([]);
-    const [schemaOptions, setSchemaOptions] = useState<any>([]);
+    const [databaseOptionsState, setDatabaseOptionsState] = useState<CascadeOptionsState>({
+      contextKey: '',
+      options: [],
+    });
+    const [schemaOptionsState, setSchemaOptionsState] = useState<CascadeOptionsState>({
+      contextKey: '',
+      options: [],
+    });
+    const cascadeRequestGuardRef = useRef(createCascadeRequestGuard());
+    const boundInfoRef = useRef(boundInfo);
+    boundInfoRef.current = boundInfo;
 
     const getOptions = (treeNodeType: TreeNodeType, _boundInfo?) => {
-      return treeConfig[treeNodeType]?.getChildren
-        ?.({ ...(_boundInfo || boundInfo), needAiDataCollections: false })
+      return treeConfig[treeNodeType]
+        ?.getChildren?.({ ...(_boundInfo || boundInfo), needAiDataCollections: false })
         .then((result) => normalizeTreeNodeLoadResult(result).children);
     };
 
-  // Check whether the current data source is accessible.
+    // Check whether the current data source is accessible.
     const getDatasourceHasPermission = (dataSourceId: number) => {
       let hasPermission = false;
       dataSourceList?.forEach((item) => {
@@ -110,7 +159,7 @@ const SelectBoundInfo = memo(
       if (dataSourceList === null) {
         getTreeData();
       }
-    }, [dataSourceList]);
+    }, [dataSourceList, getTreeData]);
 
     const dataSourceOptions = useMemo(() => {
       return generateOptions(dataSourceList, false, styles);
@@ -121,55 +170,157 @@ const SelectBoundInfo = memo(
       return getDatasourceHasPermission(boundInfo.dataSourceId!);
     }, [dataSourceList, boundInfo.dataSourceId]);
 
-    useEffect(() => {
-      if (!dataSourceOptions.length || !boundInfo.dataSourceId || !isValidDataSource) return;
-      getOptions(TreeNodeType.DATA_SOURCE)?.then((res) => {
-        setDatabaseOptions(generateOptions(res, allowEmpty, styles));
-      });
-    }, [dataSourceOptions, boundInfo.dataSourceId]);
+    const databaseOptions = useMemo(
+      () =>
+        databaseOptionsState.contextKey === getCascadeRequestContextKey('database', boundInfo)
+          ? databaseOptionsState.options
+          : [],
+      [databaseOptionsState, boundInfo.dataSourceId],
+    );
+    const schemaOptions = useMemo(
+      () =>
+        schemaOptionsState.contextKey === getCascadeRequestContextKey('schema', boundInfo)
+          ? schemaOptionsState.options
+          : [],
+      [schemaOptionsState, boundInfo.dataSourceId, boundInfo.databaseName],
+    );
 
     useEffect(() => {
-      if (!databaseOptions.length) return;
-      getOptions(TreeNodeType.DATABASE)?.then((res) => {
-        setSchemaOptions(generateOptions(res, allowEmpty, styles));
-      });
-    }, [databaseOptions]);
+      activateCascadeRequestGuard(cascadeRequestGuardRef.current);
+      return () => {
+        disposeCascadeRequestGuard(cascadeRequestGuardRef.current);
+      };
+    }, []);
 
     useEffect(() => {
-  // Disable all selections when no data source exists.
-      if (!dataSourceOptions.length) {
-        setSelectedList([]);
+      const requestContext = { ...boundInfo };
+      if (!dataSourceOptions.length || !requestContext.dataSourceId || !isValidDataSource) {
+        invalidateCascadeRequest(cascadeRequestGuardRef.current, 'database');
+        setDatabaseOptionsState({
+          contextKey: getCascadeRequestContextKey('database', requestContext),
+          options: [],
+        });
         return;
       }
 
-  // Return selectable configuration when binding information is absent.
+      const requestToken = beginCascadeRequest(cascadeRequestGuardRef.current, 'database', requestContext);
+      getOptions(TreeNodeType.DATA_SOURCE, requestContext)
+        ?.then((res) => {
+          if (!isCascadeRequestCurrent(cascadeRequestGuardRef.current, requestToken, boundInfoRef.current)) {
+            return;
+          }
+          setDatabaseOptionsState({
+            contextKey: requestToken.contextKey,
+            options: generateOptions(res, allowEmpty, styles),
+          });
+        })
+        .catch(() => {
+          if (!isCascadeRequestCurrent(cascadeRequestGuardRef.current, requestToken, boundInfoRef.current)) {
+            return;
+          }
+          setDatabaseOptionsState({ contextKey: requestToken.contextKey, options: [] });
+        });
+
+      return () => {
+        invalidateCascadeRequest(cascadeRequestGuardRef.current, 'database');
+      };
+    }, [dataSourceOptions, boundInfo.dataSourceId, boundInfo.databaseType, isValidDataSource]);
+
+    useEffect(() => {
+      const requestContext = { ...boundInfo };
+      const { supportDatabase, supportSchema } = getDatabaseSupport(requestContext.databaseType);
+      if (
+        !requestContext.dataSourceId ||
+        !isValidDataSource ||
+        !supportSchema ||
+        (supportDatabase && !requestContext.databaseName)
+      ) {
+        invalidateCascadeRequest(cascadeRequestGuardRef.current, 'schema');
+        setSchemaOptionsState({
+          contextKey: getCascadeRequestContextKey('schema', requestContext),
+          options: [],
+        });
+        return;
+      }
+
+      const requestToken = beginCascadeRequest(cascadeRequestGuardRef.current, 'schema', requestContext);
+      getOptions(TreeNodeType.DATABASE, requestContext)
+        ?.then((res) => {
+          if (!isCascadeRequestCurrent(cascadeRequestGuardRef.current, requestToken, boundInfoRef.current)) {
+            return;
+          }
+          setSchemaOptionsState({
+            contextKey: requestToken.contextKey,
+            options: generateOptions(res, allowEmpty, styles),
+          });
+        })
+        .catch(() => {
+          if (!isCascadeRequestCurrent(cascadeRequestGuardRef.current, requestToken, boundInfoRef.current)) {
+            return;
+          }
+          setSchemaOptionsState({ contextKey: requestToken.contextKey, options: [] });
+        });
+
+      return () => {
+        invalidateCascadeRequest(cascadeRequestGuardRef.current, 'schema');
+      };
+    }, [boundInfo.dataSourceId, boundInfo.databaseName, boundInfo.databaseType, isValidDataSource]);
+
+    useEffect(() => {
+      const cachedDataSourceSelection = createCachedDataSourceSelection(boundInfo);
+      // Disable all selections when no data source exists.
+      if (!dataSourceOptions.length) {
+        setSelectedList(
+          allowSelectDataSource && boundInfo.dataSourceId
+            ? [
+                {
+                  ...cachedDataSourceSelection,
+                  options: [],
+                  treeNodeType: TreeNodeType.DATA_SOURCE,
+                },
+              ]
+            : [],
+        );
+        return;
+      }
+
+      // Return selectable configuration when binding information is absent.
       const { dataSourceId, databaseName, schemaName, databaseType } = boundInfo;
 
-  // Initialize data-source options.
+      // Initialize data-source options.
       const _defaultSelectedList: EachOption[] = [];
       if (allowSelectDataSource) {
+        const selectedDataSourceOption = dataSourceOptions.find((item) => item.value === dataSourceId?.toString());
         _defaultSelectedList.push({
-          value: dataSourceId?.toString() || '',
-  // Resolve dataSourceName from dataSourceId when the name is missing.
-          label: dataSourceOptions.find((item) => item.value === dataSourceId?.toString())?.label || '',
+          ...cachedDataSourceSelection,
+          ...selectedDataSourceOption,
+          value: selectedDataSourceOption?.value || cachedDataSourceSelection.value,
+          // Resolve dataSourceName from dataSourceId when the name is missing.
+          label: selectedDataSourceOption?.label || cachedDataSourceSelection.label,
+          title: selectedDataSourceOption?.title || cachedDataSourceSelection.title,
+          dataSourceId: selectedDataSourceOption?.dataSourceId ?? cachedDataSourceSelection.dataSourceId,
           options: dataSourceOptions,
           treeNodeType: TreeNodeType.DATA_SOURCE,
           databaseType,
         });
       }
-  // Return only the data-source option when no data source is selected.
+      // Return only the data-source option when no data source is selected.
       if (!databaseType) {
         setSelectedList(_defaultSelectedList);
         return;
       }
 
-  // Generate database and schema options from the configuration.
+      // Generate database and schema options from the configuration.
       const { supportDatabase, supportSchema } = getDatabaseSupport(databaseType);
 
       if (supportDatabase) {
         if (mustHaveValue && !databaseName && databaseOptions.length) {
+          const latestBoundInfo = boundInfoRef.current;
+          if (latestBoundInfo.dataSourceId !== dataSourceId || latestBoundInfo.databaseName) {
+            return;
+          }
           props.onChangeDBInfo({
-            ...boundInfo,
+            ...latestBoundInfo,
             databaseName: databaseOptions[0].value,
           });
           return;
@@ -184,8 +335,16 @@ const SelectBoundInfo = memo(
 
       if (supportSchema) {
         if (mustHaveValue && !schemaName && schemaOptions.length) {
+          const latestBoundInfo = boundInfoRef.current;
+          if (
+            latestBoundInfo.dataSourceId !== dataSourceId ||
+            latestBoundInfo.databaseName !== databaseName ||
+            latestBoundInfo.schemaName
+          ) {
+            return;
+          }
           props.onChangeDBInfo({
-            ...boundInfo,
+            ...latestBoundInfo,
             schemaName: schemaOptions[0].value,
           });
           return;
@@ -201,59 +360,39 @@ const SelectBoundInfo = memo(
     }, [boundInfo, dataSourceList, databaseOptions, schemaOptions]);
 
     const handleOptionChange = (option: EachOption) => {
-      let requestNodeType: any = undefined;
-      let setOptionsFN: any = null;
       let _boundInfo = { ...boundInfo };
-    // Handle a data-source change.
+      // Handle a data-source change.
       if (option.treeNodeType === TreeNodeType.DATA_SOURCE) {
         _boundInfo = {
           ..._boundInfo,
           dataSourceId: Number(option.value),
           dataSourceName: option.title,
+          environmentId: option.environmentId,
+          environment: option.environment,
+          identityColor: option.identityColor,
+          watermarkEnabled: option.watermarkEnabled,
+          watermarkContent: option.watermarkContent,
           databaseType: option.databaseType,
           databaseName: undefined,
           schemaName: undefined,
         };
-        const supportDatabase = databaseMap[option.databaseType!].supportDatabase;
-        requestNodeType = TreeNodeType.DATA_SOURCE;
-        setOptionsFN = supportDatabase ? setDatabaseOptions : setSchemaOptions;
-        setDatabaseOptions([]);
-        setSchemaOptions([]);
         props.onChangeDBInfo(_boundInfo);
-        if (!option.value) {
-          return;
-        }
       } else if (option.treeNodeType === TreeNodeType.DATABASE) {
-    // Handle a database change.
+        // Handle a database change.
         _boundInfo = {
           ..._boundInfo,
           databaseName: option.value,
           schemaName: undefined,
         };
-        requestNodeType = TreeNodeType.DATABASE;
-        setOptionsFN = setSchemaOptions;
-        setSchemaOptions([]);
         props.onChangeDBInfo(_boundInfo);
-        if (!option.value) {
-          return;
-        }
       } else if (option.treeNodeType === TreeNodeType.SCHEMA) {
-    // Handle a schema change.
+        // Handle a schema change.
         _boundInfo = {
           ..._boundInfo,
           schemaName: option.value,
         };
         props.onChangeDBInfo(_boundInfo);
-        if (!option.value) {
-          return;
-        }
       }
-
-      const datasourceHasPermission = getDatasourceHasPermission(_boundInfo.dataSourceId!);
-      if (!requestNodeType || !datasourceHasPermission) return;
-      getOptions(requestNodeType, _boundInfo)?.then((res) => {
-        setOptionsFN(generateOptions(res, allowEmpty, styles));
-      });
     };
 
     return (
@@ -287,12 +426,10 @@ const DropdownItem = memo((props: DropdownProps) => {
   // Filter options.
   const filteredOptions = useMemo(() => {
     if (!searchText) return options;
+    const normalizedSearchText = searchText.toLowerCase();
     return options.filter((item) => {
-      const labelText = item.label?.props?.children?.[1]?.toString().toLowerCase();
-      const titleText = item.title?.toLowerCase();
       return (
-        (labelText && labelText.includes(searchText.toLowerCase())) ||
-        (titleText && titleText.includes(searchText.toLowerCase()))
+        item.searchText?.includes(normalizedSearchText) || item.title?.toLowerCase().includes(normalizedSearchText)
       );
     });
   }, [options, searchText]);
@@ -301,12 +438,15 @@ const DropdownItem = memo((props: DropdownProps) => {
   const currentIcon = useMemo(() => {
     if (eachOption.treeNodeType === TreeNodeType.DATA_SOURCE) {
       return (
-        <IconfontSvg
-          size="md"
-          existDark={databaseMap[eachOption.databaseType!]?.iconExistDark}
-          appearance={appearance}
-          code={databaseMap[eachOption.databaseType!]?.icon}
-        />
+        <span className={styles.dataSourceIdentityIcon}>
+          <DataSourceIdentityMark dataSourceId={eachOption.dataSourceId} size={7} />
+          <IconfontSvg
+            size="md"
+            existDark={databaseMap[eachOption.databaseType!]?.iconExistDark}
+            appearance={appearance}
+            code={databaseMap[eachOption.databaseType!]?.icon}
+          />
+        </span>
       );
     }
 
@@ -360,12 +500,15 @@ const DropdownItem = memo((props: DropdownProps) => {
                 label: (
                   <div className={styles.dropdownItemLabel}>
                     {eachOption.treeNodeType === TreeNodeType.DATA_SOURCE && (
-                      <IconfontSvg
-                        size="md"
-                        existDark={databaseMap[item.databaseType!]?.iconExistDark}
-                        appearance={appearance}
-                        code={databaseMap[item.databaseType!]?.icon}
-                      />
+                      <span className={styles.dataSourceIdentityIcon}>
+                        <DataSourceIdentityMark dataSourceId={item.dataSourceId} size={7} />
+                        <IconfontSvg
+                          size="md"
+                          existDark={databaseMap[item.databaseType!]?.iconExistDark}
+                          appearance={appearance}
+                          code={databaseMap[item.databaseType!]?.icon}
+                        />
+                      </span>
                     )}
                     {item?.label}
                   </div>

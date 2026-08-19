@@ -1,12 +1,18 @@
 import { TreeNodeType, DatabaseTypeCode } from '@/constants';
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
 import { TreeDataNode as AntdTreeDataNode } from 'antd';
+import type { IConnectionEnv } from './connection';
 
 export interface IExtraParams {
   groupId?: number;
   dataSourceId?: number;
   databaseType?: DatabaseTypeCode;
   dataSourceName?: string;
+  environmentId?: number | null;
+  environment?: IConnectionEnv | null;
+  identityColor?: string | null;
+  watermarkEnabled?: boolean | null;
+  watermarkContent?: string | null;
   supportDatabase?: boolean;
   supportSchema?: boolean;
   databaseName?: string;
@@ -19,6 +25,7 @@ export interface IExtraParams {
   user?: string;
   host?: string;
   aiDataCollectionId?: number;
+  storageType?: string;
   hasPermission?: boolean;
   isAdmin?: boolean;
   dataCollectionElementType?: DataCollectionElementType;

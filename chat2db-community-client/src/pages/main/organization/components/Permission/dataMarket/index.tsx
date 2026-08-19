@@ -8,7 +8,7 @@ import { IPageParams } from '@/typings';
 import { useStyles } from './style';
 import { IDataSourceCollection } from '@/typings/dataMarket';
 import DataMarketModal from './dataModal';
-import { SearchBar } from '@chat2db/ui';
+import SearchBar from '@/components/SearchBar';
 import { ColumnsType } from 'antd/es/table';
 
 const DataMarket = () => {

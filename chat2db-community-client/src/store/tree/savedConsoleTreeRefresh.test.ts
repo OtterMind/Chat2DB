@@ -1,9 +1,8 @@
 import {
   applyExistingTreeNodeRefresh,
   createSavedConsoleTreeNodeKey,
-  LatestTreeRefreshTracker,
-  loadExistingTreeNodeRefresh,
   reconcileTreeInteractionAfterRefresh,
+  reconcileTreeStateAfterRefresh,
 } from './backgroundRefresh';
 import type { TreeNodeData } from '@/typings';
 import { SAVED_CONSOLE_UPDATED_EVENT } from '@/constants/workspace';
@@ -58,13 +57,10 @@ async function testRefreshPreservesTreeInteractionState() {
   };
   const refreshedConsole = createSavedConsoleLeaf(42, 'Updated saved query');
 
-  const result = await loadExistingTreeNodeRefresh(state.treeData, savedConsoleKey, async () => ({
+  const result = {
     children: [refreshedConsole],
     total: 1,
-  }));
-  if (!result) {
-    throw new Error('expected an existing saved-console node to refresh');
-  }
+  };
   const refreshedTreeData = applyExistingTreeNodeRefresh(state.treeData, savedConsoleKey, result);
   const nextState = {
     ...state,
@@ -93,13 +89,10 @@ async function testRefreshClearsDeletedSavedConsoleSelection() {
     currentTreeNode: selectedNode,
     selectedKeys: [selectedNode.key],
   };
-  const result = await loadExistingTreeNodeRefresh(state.treeData, savedConsoleKey, async () => ({
+  const result = {
     children: [],
     total: 0,
-  }));
-  if (!result) {
-    throw new Error('expected an existing saved-console node to refresh');
-  }
+  };
   const refreshedTreeData = applyExistingTreeNodeRefresh(state.treeData, savedConsoleKey, result);
   const interactionState = reconcileTreeInteractionAfterRefresh(
     refreshedTreeData,
@@ -112,57 +105,92 @@ async function testRefreshClearsDeletedSavedConsoleSelection() {
   }
 }
 
+function testTreeStateReconciliationClearsRemovedInteractionTargets() {
+  const retainedNode = {
+    key: 'group_retained',
+    treeNodeType: 'group' as TreeNodeData['treeNodeType'],
+    isLeaf: false,
+    extraParams: {},
+    children: [],
+  } as TreeNodeData;
+  const removedNode = createSavedConsoleLeaf(42, 'Removed query');
+  const interactionState = reconcileTreeStateAfterRefresh(
+    [retainedNode],
+    [removedNode.key, retainedNode.key],
+    removedNode,
+    [savedConsoleKey, retainedNode.key],
+    removedNode.key,
+  );
+
+  if (
+    interactionState.currentTreeNode !== null ||
+    interactionState.selectedKeys.length !== 1 ||
+    interactionState.selectedKeys[0] !== retainedNode.key ||
+    interactionState.expandedKeys.length !== 1 ||
+    interactionState.expandedKeys[0] !== retainedNode.key ||
+    interactionState.scrollTargetKey !== null
+  ) {
+    throw new Error(`removed tree interaction targets survived reconciliation: ${JSON.stringify(interactionState)}`);
+  }
+}
+
+function testTreeStateReconciliationDropsExpandedNodesWithoutLoadedChildren() {
+  const unloadedDataSource = {
+    key: 'dataSource_1',
+    treeNodeType: 'dataSource' as TreeNodeData['treeNodeType'],
+    isLeaf: false,
+    extraParams: { dataSourceId: 1 },
+  } as TreeNodeData;
+  const group = {
+    key: 'group_1',
+    treeNodeType: 'group' as TreeNodeData['treeNodeType'],
+    isLeaf: false,
+    extraParams: {},
+    children: [unloadedDataSource],
+  } as TreeNodeData;
+
+  const interactionState = reconcileTreeStateAfterRefresh(
+    [group],
+    [],
+    null,
+    [group.key, unloadedDataSource.key],
+    null,
+  );
+
+  if (interactionState.expandedKeys.length !== 1 || interactionState.expandedKeys[0] !== group.key) {
+    throw new Error(`unloaded child remained expanded: ${JSON.stringify(interactionState.expandedKeys)}`);
+  }
+}
+
 async function testRefreshesCollapsedDirectoryWithoutExpandingIt() {
   const state = {
     treeData: [createSavedConsoleNode()],
     selectedKeys: ['table_orders'],
     expandedKeys: [] as string[],
   };
-  let requestCount = 0;
-  const result = await loadExistingTreeNodeRefresh(state.treeData, savedConsoleKey, async () => {
-    requestCount += 1;
-    return {
-      children: [
-        {
-          key: `${savedConsoleKey}-console_43`,
-          id: 43,
-          originalTitle: 'New saved query',
-          treeNodeType: 'saveConsole' as TreeNodeData['treeNodeType'],
-          isLeaf: true,
-          extraParams: { dataSourceId: 1, databaseName: 'chat2db' },
-        },
-      ],
-      total: 1,
-    };
-  });
-  if (!result) {
-    throw new Error('expected a collapsed saved-console directory to refresh');
-  }
+  const result = {
+    children: [
+      {
+        key: `${savedConsoleKey}-console_43`,
+        id: 43,
+        originalTitle: 'New saved query',
+        treeNodeType: 'saveConsole' as TreeNodeData['treeNodeType'],
+        isLeaf: true,
+        extraParams: { dataSourceId: 1, databaseName: 'chat2db' },
+      },
+    ],
+    total: 1,
+  };
   const nextState = {
     ...state,
     treeData: applyExistingTreeNodeRefresh(state.treeData, savedConsoleKey, result),
   };
 
-  if (requestCount !== 1 || nextState.treeData[0].children?.[0].id !== 43) {
+  if (nextState.treeData[0].children?.[0].id !== 43) {
     throw new Error('collapsed saved-console directory did not receive refreshed children');
   }
   if (nextState.expandedKeys !== state.expandedKeys || nextState.expandedKeys.length !== 0) {
     throw new Error('background refresh expanded the collapsed saved-console directory');
-  }
-}
-
-async function testRefreshSkipsUnavailableNodes() {
-  let requestCount = 0;
-  const load = async () => {
-    requestCount += 1;
-    return { children: [] };
-  };
-
-  await loadExistingTreeNodeRefresh(null, savedConsoleKey, load);
-  await loadExistingTreeNodeRefresh([createSelectedNode()], savedConsoleKey, load);
-
-  if (requestCount !== 0) {
-    throw new Error(`expected unavailable nodes to skip refresh, got ${requestCount} requests`);
   }
 }
 
@@ -177,30 +205,6 @@ function testSavedConsoleKeysAreStable() {
   const secondKey = createSavedConsoleTreeNodeKey(params);
   if (firstKey !== secondKey || firstKey.includes('uuid_')) {
     throw new Error(`saved-console tree key is not stable: ${firstKey} / ${secondKey}`);
-  }
-}
-
-function testLatestRefreshSequenceWins() {
-  const tracker = new LatestTreeRefreshTracker();
-  const firstRequest = tracker.begin(savedConsoleKey);
-  const secondRequest = tracker.begin(savedConsoleKey);
-  const otherRequest = tracker.begin('other-saved-console-key');
-
-  if (tracker.isLatest(savedConsoleKey, firstRequest)) {
-    throw new Error('older saved-console refresh was accepted');
-  }
-  if (!tracker.isLatest(savedConsoleKey, secondRequest) || !tracker.isLatest('other-saved-console-key', otherRequest)) {
-    throw new Error('latest saved-console refresh was rejected');
-  }
-
-  tracker.finish(savedConsoleKey, firstRequest);
-  if (!tracker.isLatest(savedConsoleKey, secondRequest)) {
-    throw new Error('an older refresh cleared the latest request');
-  }
-  tracker.finish(savedConsoleKey, secondRequest);
-  const nextRequest = tracker.begin(savedConsoleKey);
-  if (nextRequest === firstRequest || tracker.isLatest(savedConsoleKey, firstRequest)) {
-    throw new Error('completed refresh sequence was reused');
   }
 }
 
@@ -270,11 +274,11 @@ Promise.all([
   testRefreshPreservesTreeInteractionState(),
   testRefreshClearsDeletedSavedConsoleSelection(),
   testRefreshesCollapsedDirectoryWithoutExpandingIt(),
-  testRefreshSkipsUnavailableNodes(),
 ])
   .then(() => {
     testSavedConsoleKeysAreStable();
-    testLatestRefreshSequenceWins();
+    testTreeStateReconciliationClearsRemovedInteractionTargets();
+    testTreeStateReconciliationDropsExpandedNodesWithoutLoadedChildren();
     testSavedConsoleUpdateEventScope();
     testRenamedSavedConsoleEmitsScopedUpdate();
   })

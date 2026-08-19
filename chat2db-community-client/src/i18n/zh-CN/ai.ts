@@ -25,9 +25,6 @@ export default {
   'ai.aiType.CURDGeneration.title': 'CURD生成',
   'ai.aiType.CURDGeneration.desc': '生成CURD',
 
-  'ai.aiType.InsertData.title': '生成测试数据',
-  'ai.aiType.InsertData.desc': '插入测试数据',
-
   'ai.action.pin': '插入代码到编辑框',
 
   'ai.common.think': 'AI正在破解问题...  🤔💭',
@@ -42,8 +39,6 @@ export default {
   'ai.select.databaseOrDataCollection': '请选择数据库或数据集',
   'ai.select.globalDatabaseScope': '全局查询（不选择数据源）',
   'ai.select.model': '请选择模型',
-  'ai.insertData.title': '为 {1} 生成测试数据',
-  'ai.insertData.error.title': '修复错误 {1}',
   'ai.sqlDebug.prefill': '请帮我诊断下面 SQL 的报错原因，并给出可执行的修复建议。\n\nSQL:\n{1}\n\n错误信息:\n{2}',
 
   'ai.codeBlock.run.title': '该代码涉及修改数据库，确定要执行吗？',

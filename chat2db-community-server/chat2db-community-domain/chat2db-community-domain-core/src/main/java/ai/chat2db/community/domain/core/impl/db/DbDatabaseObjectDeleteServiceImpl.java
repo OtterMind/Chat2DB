@@ -160,10 +160,13 @@ public class DbDatabaseObjectDeleteServiceImpl implements IDbDatabaseObjectDelet
     }
 
     private void reconnectForDatabaseDelete(String dbType) {
-        if (!DatabaseTypeEnum.POSTGRESQL.name().equalsIgnoreCase(dbType)) {
+        if (DatabaseTypeEnum.MYSQL.name().equalsIgnoreCase(dbType)) {
+            connectionContextService.rebindCurrentDatabase(null);
             return;
         }
-        connectionContextService.rebindCurrentDatabase(maintenanceDatabase());
+        if (DatabaseTypeEnum.POSTGRESQL.name().equalsIgnoreCase(dbType)) {
+            connectionContextService.rebindCurrentDatabase(maintenanceDatabase());
+        }
     }
 
     private String requireName(String name, String fieldName) {

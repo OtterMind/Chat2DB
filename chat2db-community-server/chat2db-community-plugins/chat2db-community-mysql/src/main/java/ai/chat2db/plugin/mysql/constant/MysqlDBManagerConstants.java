@@ -4,7 +4,6 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.plugin.mysql.builder.MysqlSqlBuilder;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.constant.SQLConstants;

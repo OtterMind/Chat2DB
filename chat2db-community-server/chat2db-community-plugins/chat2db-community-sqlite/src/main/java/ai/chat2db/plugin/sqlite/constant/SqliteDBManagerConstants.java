@@ -2,7 +2,6 @@ package ai.chat2db.plugin.sqlite.constant;
 
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import cn.hutool.core.date.DateUtil;
 
 import java.sql.Connection;

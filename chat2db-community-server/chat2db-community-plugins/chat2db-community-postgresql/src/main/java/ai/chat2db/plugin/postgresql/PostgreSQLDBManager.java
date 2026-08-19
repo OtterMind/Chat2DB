@@ -4,7 +4,7 @@ import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.postgresql.builder.PostgreSQLSqlBuilder;
 import ai.chat2db.plugin.postgresql.identifier.PostgreSQLIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
@@ -25,25 +25,34 @@ import static ai.chat2db.plugin.postgresql.constant.PostgreSQLDBManagerConstants
 @Slf4j
 public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager {
 
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
-        exportTypes(connection, schemaName, asyncContext);
-        exportSequences(connection, schemaName, asyncContext);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting tables");
-        exportTables(connection, databaseName, schemaName, asyncContext);
-        asyncContext.setProgress(50);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting views");
-        exportViews(connection, schemaName, asyncContext);
-        asyncContext.setProgress(60);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting routines");
-        exportRoutines(connection, schemaName, asyncContext);
-        asyncContext.setProgress(90);
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + ":Exporting producers");
-        exportTriggers(connection, schemaName, asyncContext);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        context.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
+        logDatabaseObjectExportStarted(context, "types");
+        exportTypes(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "types");
+        logDatabaseObjectExportStarted(context, "sequences");
+        exportSequences(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "sequences");
+        logDatabaseObjectExportStarted(context, "tables");
+        exportTables(connection, databaseName, schemaName, containData, context);
+        logDatabaseObjectExportCompleted(context, "tables");
+        reportExportProgress(context, 50);
+        logDatabaseObjectExportStarted(context, "views");
+        exportViews(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "views");
+        reportExportProgress(context, 60);
+        logDatabaseObjectExportStarted(context, "routines");
+        exportRoutines(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "routines");
+        reportExportProgress(context, 90);
+        logDatabaseObjectExportStarted(context, "triggers");
+        exportTriggers(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "triggers");
     }
 
 
-    private void exportSequences(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportSequences(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, SEQUENCES_SQL, new String[]{schemaName}, resultSet -> {
             StringBuilder sqlBuilder = new StringBuilder(150);
             while (resultSet.next()) {
@@ -68,14 +77,14 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                         .append(isCycled ? " CYCLE" : "NO CYCLE").append("\n")
                         .append(";\n");
 
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
                 sqlBuilder.setLength(0);
             }
 
         });
     }
 
-    private void exportTypes(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportTypes(Connection connection, String schemaName, TaskExecutionContext context) {
         StringBuilder typeBuilder = new StringBuilder();
         DefaultSQLExecutor.getInstance().preExecute(connection, ENUM_TYPE_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
@@ -83,7 +92,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                         .append(qualifiedTableName(schemaName, resultSet.getString("type_name"), false))
                         .append(";\n");
                 typeBuilder.append(resultSet.getString("ddl")).append("\n");
-                asyncContext.write(typeBuilder.toString());
+                context.write(typeBuilder.toString());
             }
         });
         typeBuilder.setLength(0);
@@ -92,38 +101,40 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 String typeName = qualifiedTableName(schemaName, resultSet.getString("type_name"), false);
                 typeBuilder.append(SQL_DROP_TYPE_EXISTS).append(typeName).append(";\n");
                 typeBuilder.append(resultSet.getString("create_type_statement")).append("\n");
-                asyncContext.write(typeBuilder.toString());
+                context.write(typeBuilder.toString());
                 typeBuilder.setLength(0);
             }
         });
     }
 
-    private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) {
+    private void exportTables(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, TABLES_SQL, new String[]{schemaName, schemaName}, resultSet -> {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
-                exportTable(connection, databaseName, schemaName, tableName, asyncContext);
+                exportTable(connection, databaseName, schemaName, tableName, containData, context);
             }
         });
     }
 
-    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
+    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
+            boolean containData, TaskExecutionContext context) {
         String tableDDL = Chat2DBContext.getDbMetaData().tableDDL(connection,
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append("\n").append(SQL_DROP_TABLE_EXISTS)
                 .append(qualifiedTableName(schemaName, tableName, false)).append(";").append("\n")
                 .append(tableDDL).append("\n");
-        asyncContext.write(sqlBuilder.toString());
-        if (asyncContext.isContainsData()) {
-            exportTableData(connection, databaseName, schemaName, tableName, asyncContext);
+        context.write(sqlBuilder.toString());
+        if (containData) {
+            exportTableData(connection, databaseName, schemaName, tableName, context);
         }
 
 
     }
 
 
-    private void exportViews(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportViews(Connection connection, String schemaName, TaskExecutionContext context) throws SQLException {
         DefaultSQLExecutor.getInstance().preExecute(connection, VIEWS_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -132,13 +143,13 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 String quotedObjectName = qualifiedTableName(schemaName, viewName, false);
                 sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(quotedObjectName).append(";\n");
                 sqlBuilder.append(SQL_CREATE_REPLACE_VIEW).append(quotedObjectName).append(" AS ").append(viewDefinition).append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         });
 
     }
 
-    private void exportRoutines(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportRoutines(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, ROUTINES_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
@@ -151,16 +162,16 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                     sqlBuilder.append(SQL_DROP_PROCEDURE_EXISTS).append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName)).append(".").append(PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(routineName)).append(";\n");
                 }
                 sqlBuilder.append(routineDefinition).append(";\n\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
                 sqlBuilder.setLength(0);
             }
         });
     }
 
-    private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) {
+    private void exportTriggers(Connection connection, String schemaName, TaskExecutionContext context) {
         DefaultSQLExecutor.getInstance().preExecute(connection, TRIGGERS_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
-                asyncContext.write(resultSet.getString("trigger_definition") + ";\n");
+                context.write(resultSet.getString("trigger_definition") + ";\n");
             }
         });
 
@@ -247,8 +258,8 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
     }
 
     @Override
-    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
-        exportTableData(connection, databaseName, schemaName, tableName, asyncContext, 10000);
+    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, TaskExecutionContext context) {
+        exportTableData(connection, databaseName, schemaName, tableName, context, 10000);
     }
 
 

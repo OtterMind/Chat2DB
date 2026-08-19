@@ -16,15 +16,23 @@ import { useStyles } from './style';
 // About Us
 export default function AboutUs() {
   const { styles } = useStyles();
-  const { appUrlConfig, hotUpdateConfig, updateDetail, updateHotUpdateConfig, updateAndRestartApp, handleCheckUpdate } =
-    useGlobalStore((state) => ({
-      appUrlConfig: state.appUrlConfig,
-      hotUpdateConfig: state.hotUpdateConfig,
-      updateDetail: state.updateDetail,
-      updateHotUpdateConfig: state.updateHotUpdateConfig,
-      updateAndRestartApp: state.updateAndRestartApp,
-      handleCheckUpdate: state.handleCheckUpdate,
-    }));
+  const {
+    appUrlConfig,
+    hotUpdateConfig,
+    updateDetail,
+    updateHotUpdateConfig,
+    updateAndRestartApp,
+    handleCheckUpdate,
+    setUpdateDetail,
+  } = useGlobalStore((state) => ({
+    appUrlConfig: state.appUrlConfig,
+    hotUpdateConfig: state.hotUpdateConfig,
+    updateDetail: state.updateDetail,
+    updateHotUpdateConfig: state.updateHotUpdateConfig,
+    updateAndRestartApp: state.updateAndRestartApp,
+    handleCheckUpdate: state.handleCheckUpdate,
+    setUpdateDetail: state.setUpdateDetail,
+  }));
 
   const jumpDoc = () => {
     let CHANGE_LOG_URL = appUrlConfig.CHANGE_LOG_URL;
@@ -39,8 +47,25 @@ export default function AboutUs() {
       if (available) {
         return;
       }
+      if (useGlobalStore.getState().updateDetail.status === UpdatedStatus.UpdateFailed) {
+        staticMessage.error(i18n('common.text.failure'));
+        return;
+      }
       staticMessage.info(i18n('setting.text.notAvailable'));
     });
+  };
+
+  const triggerDownload = () => {
+    jcefApi
+      .triggerDownload()
+      .then((accepted) => {
+        if (!accepted) {
+          setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+        }
+      })
+      .catch(() => {
+        setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+      });
   };
 
   const updateButton = useMemo(() => {
@@ -50,13 +75,7 @@ export default function AboutUs() {
     switch (updateDetail.status) {
       case UpdatedStatus.Available:
         return (
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => {
-              jcefApi.triggerDownload();
-            }}
-          >
+          <Button type="primary" size="small" onClick={triggerDownload}>
             {i18n('setting.button.startDownloading')}
           </Button>
         );
@@ -151,6 +170,14 @@ export default function AboutUs() {
                 checked={hotUpdateConfig.autoInstall}
               >
                 {i18n('setting.text.autoInstallNewVersion')}
+              </Checkbox>
+              <Checkbox
+                onChange={(e) => {
+                  updateHotUpdateConfig('receiveBeta', e.target.checked);
+                }}
+                checked={Boolean(hotUpdateConfig.receiveBeta)}
+              >
+                {i18n('setting.text.receiveBetaVersion')}
               </Checkbox>
             </div>
           </div>

@@ -1,6 +1,7 @@
 package ai.chat2db.community.start.test.api;
 
 import ai.chat2db.community.start.test.common.BaseTest;
+import ai.chat2db.community.tools.constant.JdbcDriverConstants;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.MethodOrderer;
@@ -55,7 +56,10 @@ public class ConfigOnlyDatabaseApiFlowTest extends BaseTest {
             Path m2Jar = Path.of(originalHome, ".m2", "repository", "org", "hsqldb", "hsqldb",
                     "2.7.3", "hsqldb-2.7.3.jar");
             if (Files.isRegularFile(m2Jar)) {
-                Path libDir = home.resolve(".chat2db-community").resolve("jdbc-lib");
+                Path libDir = Path.of(JdbcDriverConstants.DRIVER_LIB_PATH).toAbsolutePath().normalize();
+                if (!libDir.startsWith(home.toAbsolutePath().normalize())) {
+                    throw new IOException("test JDBC directory escaped the temporary user home: " + libDir);
+                }
                 Files.createDirectories(libDir);
                 Files.copy(m2Jar, libDir.resolve("hsqldb-2.7.3.jar"));
                 driverSeeded = true;

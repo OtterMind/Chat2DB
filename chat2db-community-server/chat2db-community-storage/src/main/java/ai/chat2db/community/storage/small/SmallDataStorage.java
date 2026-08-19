@@ -121,7 +121,10 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     protected synchronized void saveDataList() {
-        List<T> dataList = getDataList();
+        saveDataList(getDataList());
+    }
+
+    protected synchronized void saveDataList(List<T> dataList) {
         StringBuilder content = new StringBuilder();
         for (T data : dataList) {
             content.append(JSON.toJSONString(data)).append('\n');

@@ -13,6 +13,7 @@ import { useAIStore } from '@/store/ai';
 import { requestCloseActiveResultTab } from '@/service/resultTabShortcut';
 import { handleWebFrameZoom, WebFrameZoomType } from './jcefZoom';
 import { prepareGlobalShortcutHandling } from './shortcutDispatch';
+import { AppTitleBarAction, requestAppTitleBarAction } from './appTitleBarAction';
 
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
@@ -66,6 +67,11 @@ class ShortcutManager {
   }
 
   private handleSwitchToNav(nav: 'workspace' | 'dashboard' | 'stream' | 'setting'): void {
+    const titleBarAction: AppTitleBarAction = nav === 'setting' ? 'settings' : nav;
+    if (requestAppTitleBarAction(titleBarAction)) {
+      return;
+    }
+
     const { setMainPageActiveTab, setSettingPageActiveTab } = useGlobalStore.getState();
     if (nav === 'setting') {
       setSettingPageActiveTab('basic');

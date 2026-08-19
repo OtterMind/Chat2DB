@@ -70,6 +70,15 @@ public class DataSource {
     private Environment environment;
 
 
+    private String identityColor;
+
+
+    private Boolean watermarkEnabled;
+
+
+    private String watermarkContent;
+
+
     private String kind;
 
 
