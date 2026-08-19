@@ -1,6 +1,6 @@
 package ai.chat2db.plugin.mariadb;
 
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
@@ -23,7 +23,7 @@ class MariaDBManagerTest {
 
         @Override
         protected void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
-                                       AsyncContext asyncContext, int batchSize) {
+                                       TaskExecutionContext context, int batchSize) {
             this.batchSize = batchSize;
         }
     }

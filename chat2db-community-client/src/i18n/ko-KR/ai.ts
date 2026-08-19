@@ -25,9 +25,6 @@ export default {
   'ai.aiType.CURDGeneration.title': 'CRUD 생성',
   'ai.aiType.CURDGeneration.desc': 'CRUD를 생성합니다',
 
-  'ai.aiType.InsertData.title': '테스트 데이터 생성',
-  'ai.aiType.InsertData.desc': '테스트 데이터를 삽입합니다',
-
   'ai.action.pin': '편집기에 코드 삽입',
 
   'ai.common.think': 'AI가 문제를 해결하고 있습니다... 🤔💭',
@@ -43,8 +40,6 @@ export default {
   'ai.select.databaseOrDataCollection': '데이터베이스 또는 데이터 컬렉션을 선택해 주세요',
   'ai.select.globalDatabaseScope': '전체 쿼리(데이터 소스를 선택하지 않음)',
   'ai.select.model': '모델을 선택해 주세요',
-  'ai.insertData.title': '{1}의 테스트 데이터 생성',
-  'ai.insertData.error.title': '{1}의 오류 수정',
   'ai.sqlDebug.prefill': '다음 SQL 오류를 진단하고 실행 가능한 수정 방법을 제시해 주세요.\n\nSQL:\n{1}\n\n오류:\n{2}',
   'ai.codeBlock.run.title': '이 코드는 데이터베이스를 수정합니다. 실행하시겠습니까?',
   'ai.codeBlock.run.desction': '중요한 항목을 실수로 제거하지 않는지 확인해 주세요.',

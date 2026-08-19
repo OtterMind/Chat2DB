@@ -26,6 +26,45 @@ export const useStyles = createStyles(({ css, token }) => {
       height: 0px;
       border-top: 1px solid ${colorBorderLayout};
     `,
+    watermarkLayer: css`
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      overflow: hidden;
+      pointer-events: none;
+      user-select: none;
+
+      @media print {
+        display: none;
+      }
+    `,
+    watermarkItem: css`
+      align-self: center;
+      justify-self: center;
+      width: min(260px, 82%);
+      transform: rotate(-24deg);
+      text-align: center;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    `,
+    watermarkTitle: css`
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+    `,
+    watermarkSubtitle: css`
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+    `,
+    watermarkStatus: css`
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.35;
+    `,
     monacoEditorError: css`
       display: flex;
       align-items: center;

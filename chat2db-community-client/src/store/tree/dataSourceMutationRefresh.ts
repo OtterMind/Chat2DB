@@ -2,7 +2,7 @@ import { TreeNodeData } from '@/typings';
 import type { Key } from 'react';
 
 interface DataSourceMutationRefreshDependencies {
-  refreshTreeData: () => Promise<void>;
+  refreshTreeData: () => Promise<boolean>;
   getDataSourceList: () => TreeNodeData[] | null;
   setSelectedKeys: (keys: Key[]) => void;
   setScrollTargetKey: (key: Key | null) => void;
@@ -13,7 +13,11 @@ export async function hydrateDataSourceAfterMutation(
   dataSourceId: number,
   dependencies: DataSourceMutationRefreshDependencies,
 ): Promise<TreeNodeData | null> {
-  await dependencies.refreshTreeData();
+  const refreshed = await dependencies.refreshTreeData();
+  if (!refreshed) {
+    return null;
+  }
+
   const dataSource =
     dependencies
       .getDataSourceList()

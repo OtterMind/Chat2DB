@@ -1,9 +1,10 @@
 import type { ITableInstance } from '@/blocks/CanvasTable/typings';
-import type { IResultCell } from '@/typings/database';
+import type { IResultCell, ITableHeaderItem } from '@/typings/database';
 
 export interface ResultColumnLike {
   field?: unknown;
   hide?: boolean;
+  originalData?: ITableHeaderItem;
 }
 
 const normalizeField = (field: ResultColumnLike['field']): string | undefined => {
@@ -194,6 +195,25 @@ export function getResultFieldAtTableColumn(
   row = 0,
 ): string | undefined {
   return normalizeField(tableInstance.getHeaderField(col, row) as string | number | undefined);
+}
+
+export function getResultColumnAtTableColumn<T extends ResultColumnLike>(
+  tableInstance: Pick<ITableInstance, 'getHeaderField'> & { columns?: readonly T[] },
+  col: number,
+  row = 0,
+): T | undefined {
+  const field = getResultFieldAtTableColumn(tableInstance, col, row);
+  return field === undefined
+    ? undefined
+    : tableInstance.columns?.find((column) => normalizeField(column.field) === field);
+}
+
+export function getResultColumnNameAtTableColumn(
+  tableInstance: Pick<ITableInstance, 'getHeaderField'> & { columns?: readonly ResultColumnLike[] },
+  col: number,
+  row = 0,
+): string | undefined {
+  return getResultColumnAtTableColumn(tableInstance, col, row)?.originalData?.name;
 }
 
 export function getResultCellMetaAtTableColumn(

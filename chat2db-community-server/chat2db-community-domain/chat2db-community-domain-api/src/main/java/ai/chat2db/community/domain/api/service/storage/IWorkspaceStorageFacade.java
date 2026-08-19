@@ -7,17 +7,14 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationPageQueryRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
+import ai.chat2db.community.tools.exception.storage.UnsupportedStorageCapabilityException;
 
 import java.util.List;
 
@@ -57,6 +54,17 @@ public interface IWorkspaceStorageFacade {
      * @return updated datasource identifier.
      */
     Long updateDataSource(WorkspaceDataSource dataSource);
+
+    /**
+     * Updates only the shared identity color of a datasource.
+     *
+     * @param id datasource identifier.
+     * @param identityColor normalized nullable identity color.
+     * @return updated datasource identifier.
+     */
+    default Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        throw UnsupportedStorageCapabilityException.forCapability("updateDataSourceIdentityColor");
+    }
 
     /**
      * Lists workspace datasources with pagination and filters.
@@ -139,37 +147,6 @@ public interface IWorkspaceStorageFacade {
      * @param request table pin data to remove.
      */
     void deletePinTable(PinTable request);
-
-    /**
-     * Lists workspace tasks with pagination and filters.
-     *
-     * @param taskRecordPageRequest task page query parameters.
-     * @return paged task records.
-     */
-    PageResponse<Task> taskList(TaskRecordPageRequest taskRecordPageRequest);
-
-    /**
-     * Returns a workspace task by identifier.
-     *
-     * @param id task identifier.
-     * @return task record, or null when no matching task exists.
-     */
-    Task getTask(Long id);
-
-    /**
-     * Creates a workspace task.
-     *
-     * @param taskRecordCreateRequest task creation parameters.
-     * @return created task identifier.
-     */
-    Long createTask(TaskRecordCreateRequest taskRecordCreateRequest);
-
-    /**
-     * Updates a workspace task.
-     *
-     * @param taskRecordUpdateRequest task update parameters.
-     */
-    void updateTask(TaskRecordUpdateRequest taskRecordUpdateRequest);
 
     /**
      * Creates an operation log record.

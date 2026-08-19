@@ -1,6 +1,6 @@
 import { ConsoleStatus, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { DataCollectionElementType } from '@/constants/aiDataCollection';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { getRuntimeEditionCapabilities } from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import accountAdminService from '@/service/accountAdmin';
 import aiDataCollectionService from '@/service/aiDataCollection';
@@ -21,6 +21,13 @@ export interface ILoadDataOptions {
   refresh?: boolean;
   // Turn off the expansion of tree nodes
   closeExpandTreeNode?: boolean;
+  // Load children without changing the user's current selection or collapsing descendants.
+  preserveInteraction?: boolean;
+}
+
+export interface ILoadDataResult {
+  children: TreeNodeData[];
+  committed: boolean;
 }
 
 export const switchIcon: Partial<{
@@ -243,6 +250,12 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 extraParams: {
                   databaseType: t.type,
                   dataSourceId: t.id,
+                  dataSourceName: t.alias,
+                  environmentId: t.environmentId ?? t.environment?.id ?? null,
+                  environment: t.environment ?? null,
+                  identityColor: t.identityColor ?? null,
+                  watermarkEnabled: t.watermarkEnabled ?? null,
+                  watermarkContent: t.watermarkContent ?? null,
                 },
               };
             });
@@ -261,6 +274,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
   [TreeNodeType.DATA_SOURCE]: {
     getChildren: (extraParams: any) => {
       return new Promise((r, j) => {
+        const { aiDataCollection } = getRuntimeEditionCapabilities();
         const { dataSourceId, databaseType, needAiDataCollections: extraParamsNeedAiDataCollections } = extraParams;
         const { supportDatabase, supportSchema, needAiDataCollections } = getDatabaseSupport(databaseType);
         const accountNode: TreeNodeData | null = canUseAccountManage(databaseType)
@@ -334,7 +348,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
             data.push(accountNode);
           }
           if (
-            runtimeEditionConfig.aiDataCollection &&
+            aiDataCollection &&
             needAiDataCollections !== false &&
             extraParamsNeedAiDataCollections !== false
           ) {
@@ -369,7 +383,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 data.push(accountNode);
               }
               if (
-                runtimeEditionConfig.aiDataCollection &&
+                aiDataCollection &&
                 needAiDataCollections !== false &&
                 extraParamsNeedAiDataCollections !== false
               ) {
@@ -406,7 +420,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                 data.push(accountNode);
               }
               if (
-                runtimeEditionConfig.aiDataCollection &&
+                aiDataCollection &&
                 needAiDataCollections !== false &&
                 extraParamsNeedAiDataCollections !== false
               ) {

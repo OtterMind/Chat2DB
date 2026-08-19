@@ -6,30 +6,6 @@ interface TreeNodeRefreshResult {
   total?: number;
 }
 
-type TreeNodeRefreshLoader = () => Promise<TreeNodeData[] | TreeNodeRefreshResult>;
-
-export class LatestTreeRefreshTracker {
-  private readonly sequences = new Map<Key, number>();
-  private nextSequence = 0;
-
-  begin(key: Key): number {
-    this.nextSequence += 1;
-    const sequence = this.nextSequence;
-    this.sequences.set(key, sequence);
-    return sequence;
-  }
-
-  isLatest(key: Key, sequence: number): boolean {
-    return this.sequences.get(key) === sequence;
-  }
-
-  finish(key: Key, sequence: number) {
-    if (this.isLatest(key, sequence)) {
-      this.sequences.delete(key);
-    }
-  }
-}
-
 export function createSavedConsoleTreeNodeKey(params: {
   dataSourceId?: number;
   databaseName?: string;
@@ -75,21 +51,18 @@ export function reconcileTreeInteractionAfterRefresh(
   };
 }
 
-export async function loadExistingTreeNodeRefresh(
-  treeData: TreeNodeData[] | null,
-  key: Key,
-  load: TreeNodeRefreshLoader,
-): Promise<TreeNodeRefreshResult | undefined> {
-  if (!treeData) {
-    return undefined;
-  }
-  const node = findTreeNode(key, treeData);
-  if (!node) {
-    return undefined;
-  }
-
-  const result = await load();
-  return Array.isArray(result) ? { children: result } : result;
+export function reconcileTreeStateAfterRefresh(
+  treeData: TreeNodeData[],
+  selectedKeys: Key[],
+  currentTreeNode: TreeNodeData | null,
+  expandedKeys: Key[],
+  scrollTargetKey: Key | null,
+) {
+  return {
+    ...reconcileTreeInteractionAfterRefresh(treeData, selectedKeys, currentTreeNode),
+    expandedKeys: expandedKeys.filter((key) => findTreeNode(key, treeData)?.children !== undefined),
+    scrollTargetKey: scrollTargetKey && findTreeNode(scrollTargetKey, treeData) ? scrollTargetKey : null,
+  };
 }
 
 export function applyExistingTreeNodeRefresh(

@@ -66,7 +66,18 @@ export default function StreamPage() {
   const pinIdRef = React.useRef(0);
 
   const handlePinSql = useCallback((sql: string, context: ITableClickContext) => {
-    const { dataSourceId, databaseName, schemaName, databaseType, dataSourceName } = context;
+    const {
+      dataSourceId,
+      databaseName,
+      schemaName,
+      databaseType,
+      dataSourceName,
+      environmentId,
+      environment,
+      identityColor,
+      watermarkEnabled,
+      watermarkContent,
+    } = context;
     if (!dataSourceId || !databaseType) return;
 
     const name = `${[databaseName || schemaName].filter(Boolean).join('-')}${
@@ -82,6 +93,11 @@ export default function StreamPage() {
       databaseType,
       databaseName,
       schemaName,
+      environmentId,
+      environment,
+      identityColor,
+      watermarkEnabled,
+      watermarkContent,
       status: ConsoleStatus.DRAFT,
       connectable: true,
       ...getDatabaseSupport(databaseType),

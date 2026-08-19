@@ -4,7 +4,6 @@ import ai.chat2db.plugin.dm.enums.type.DMIndexTypeEnum;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;

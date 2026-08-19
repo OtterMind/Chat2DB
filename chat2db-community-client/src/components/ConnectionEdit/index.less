@@ -21,6 +21,134 @@
   }
 }
 
+.formLabelWithHelp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.formHelpIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  line-height: 0;
+  cursor: help;
+  outline: none;
+
+  &:focus-visible {
+    color: var(--color-primary);
+  }
+}
+
+.identitySettingsRow {
+  --identity-field-gap: 8px;
+  --identity-group-gap: 20px;
+
+  container: connection-identity / inline-size;
+  display: grid;
+  grid-template-columns:
+    [environment] 272px
+    [environment-end] var(--identity-group-gap)
+    [color] max-content
+    [color-end] var(--identity-group-gap)
+    [watermark] max-content
+    [watermark-end] minmax(var(--identity-group-gap), 1fr)
+    [content-label] max-content
+    [content-label-end] var(--identity-field-gap)
+    [content-control] minmax(160px, calc(30% - var(--identity-port-label-width)))
+    [content-control-end];
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.identitySettingsItem {
+  min-width: 0;
+}
+
+.identitySettingsField {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.identitySettingsLabel {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.identitySettingsEnvironment {
+  grid-column: environment;
+
+  :global {
+    .ant-form-item {
+      margin-bottom: 0;
+    }
+
+    .ant-form-item-control,
+    .ant-form-item-control-input,
+    .ant-form-item-control-input-content {
+      min-width: 0;
+    }
+
+    .ant-select {
+      width: 100%;
+    }
+  }
+}
+
+.identitySettingsColor {
+  grid-column: color;
+}
+
+.identitySettingsWatermark {
+  grid-column: watermark;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.identitySettingsContent {
+  display: contents;
+
+  .identitySettingsField {
+    display: contents;
+  }
+
+  .identitySettingsLabel {
+    grid-column: content-label;
+  }
+
+  :global {
+    .ant-input {
+      grid-column: content-control;
+      width: 100%;
+      min-width: 0;
+    }
+  }
+}
+
+.identitySettingsPlaceholder {
+  grid-column: content-label / content-control-end;
+  display: block;
+}
+
+@media (max-width: 1200px) {
+  .identitySettingsRow {
+    --identity-field-gap: 6px;
+    --identity-group-gap: 12px;
+  }
+}
+
 .labelTextAlign {
   :global {
     .custom-form-item {

@@ -2,6 +2,10 @@ import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, token }) => {
   return {
+    resultContent: css`
+      height: 100%;
+      min-height: 0;
+    `,
     successResult: css`
       height: 100%;
       .successResultContent {

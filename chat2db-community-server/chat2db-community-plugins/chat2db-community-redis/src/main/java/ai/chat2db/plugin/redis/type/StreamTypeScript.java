@@ -56,7 +56,7 @@ public class StreamTypeScript extends BaseTypeScript implements ITypeScript {
             }
             rs.setStreamValues(streamValues);
         });
-        String ttl = RedisScriptExecutor.getInstance().getTtl(redisKey.getName());
+        String ttl = RedisScriptExecutor.getInstance().getTtl(connection, redisKey.getName());
         if (StringUtils.isNotBlank(ttl)) {
             rs.setTtl(Long.parseLong(ttl));
         } else {

@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -174,6 +175,20 @@ class DatabaseObjectDeleteServiceImplTest {
         assertThrows(BusinessException.class, () -> service.executeSchemaDelete(
                 schemaExecute("App_DB", "Tenant_Schema", "tenant_schema")));
         assertTrue(dbManager.droppedSchemas.isEmpty());
+    }
+
+    @Test
+    void mySqlDatabaseDeleteRebindsFromTargetDatabaseToServerLevelConnection() {
+        RecordingDBManager dbManager = registerPlugin("MYSQL", true, false,
+                List.of(database("app_db")), List.of());
+        RecordingConnectionContextService connectionContextService = new RecordingConnectionContextService(
+                "MYSQL", "app_db");
+        DbDatabaseObjectDeleteServiceImpl service = new DbDatabaseObjectDeleteServiceImpl(connectionContextService);
+
+        service.executeDatabaseDelete(databaseExecute("app_db", "app_db"));
+
+        assertEquals(List.of("app_db"), dbManager.droppedDatabases);
+        assertNull(connectionContextService.currentProfile().getDatabaseName());
     }
 
     @Test

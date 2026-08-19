@@ -13,7 +13,7 @@ import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/Ed
 import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/DingChartModal';
 import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
-import { Columns3Cog } from 'lucide-react';
+import { Columns3Cog, RotateCw } from 'lucide-react';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -23,6 +23,13 @@ export enum ToolbarOperationType {
   UPDATE_SUBMIT = 'updateSubmit',
   EXECUTE_SQL = 'executeSql',
 }
+
+const RESULT_TOOLBAR_BUTTON_SIZE = {
+  boxSize: 24,
+  iconSize: 16,
+  borderRadius: 4,
+  strokeWidth: 2,
+} as const;
 
 interface IProps {
   resultData: IManageResultData;
@@ -141,18 +148,20 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
       </div>
       <div className={cx(styles.toolBarItem)}>
         <IconButton
+          className={styles.toolbarAction}
           title={i18n('common.button.refresh') + `${keyboardKey.command} + R`}
           onClick={handleRefresh}
-          size="sm"
-          code="icon-refresh"
+          size={RESULT_TOOLBAR_BUTTON_SIZE}
+          icon={RotateCw}
         />
       </div>
       {activeFilterCount >= 2 && onClearAllFilters && (
         <div className={cx(styles.toolBarItem)}>
           <IconButton
+            className={styles.toolbarAction}
             title={i18n('workspace.text.clearAllFilters', activeFilterCount)}
             onClick={onClearAllFilters}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-data-filter"
           />
         </div>
@@ -161,50 +170,55 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
         <div className={cx(styles.toolBarItem, styles.editTableDataBar)}>
           {/* Add a row. */}
           <IconButton
+            className={styles.toolbarAction}
             title={i18n('editTableData.tips.addRow')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.ADD_BLANK_ROW);
             }}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-add"
           />
           {/* Delete a row. */}
           <IconButton
+            className={styles.toolbarAction}
             title={i18n('editTableData.tips.deleteRow')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.DELETE_ROW);
             }}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-minus"
           />
           {/* Undo. */}
           <IconButton
+            className={styles.toolbarAction}
             // disabled={revokeDisableBarState}
             title={i18n('editTableData.tips.revert')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.REVOKE);
             }}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-revert-edit"
           />
           {/* View SQL. */}
           <IconButton
+            className={styles.toolbarAction}
             disabled={!hasOperationRecord}
             title={i18n('editTableData.tips.previewPendingChanges')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.VIEW_SQL);
             }}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-view-sql"
           />
           {/* Submit for execution. */}
           <IconButton
+            className={styles.toolbarAction}
             disabled={!hasOperationRecord}
             title={i18n('editTableData.tips.submit') + `${keyboardKey.command} + S`}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.UPDATE_SUBMIT);
             }}
-            size="sm"
+            size={RESULT_TOOLBAR_BUTTON_SIZE}
             code="icon-submit-edit"
           />
         </div>
@@ -218,8 +232,8 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
               onClick={() => {
                 createChart();
               }}
-              size="sm"
-              className={styles.createChartIcon}
+              size={RESULT_TOOLBAR_BUTTON_SIZE}
+              className={styles.toolbarAction}
               icon={ChartNoAxesCombined}
             />
             <EditorChartModal
@@ -235,8 +249,8 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
         <IconButton
           title={i18n('common.text.showHideColumns')}
           onClick={onManageColumns}
-          size="sm"
-          className={styles.createChartIcon}
+          size={RESULT_TOOLBAR_BUTTON_SIZE}
+          className={styles.toolbarAction}
           icon={Columns3Cog}
         />
       </div>

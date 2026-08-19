@@ -9,7 +9,8 @@ export default {
     'Si no dispone de conexión, puede obtener el certificado del dispositivo siguiendo estos pasos: vaya al sitio web oficial de Chat2DB (https://chat2db-ai.com/) → inicie sesión y haga clic en el avatar → Certificado del dispositivo',
   'license.offlineActivationAIWarning':
     'Una vez generado el certificado sin conexión, no se puede revocar ni cambiar el dispositivo.',
-  'license.offlineAIWarning': 'Los dispositivos activados sin conexión no podrán usar las funciones de IA',
+  'license.offlineAIWarning':
+    'La activación sin conexión no incluye los servicios de IA alojados por Chat2DB. Puede configurar un modelo personalizado para usar las funciones de IA locales',
 
   'license.deviceCertificateTitle': 'Certificado del dispositivo',
   'license.getDeviceCertificateTitle': 'Obtener certificado del dispositivo',
@@ -28,7 +29,7 @@ export default {
     'El cliente generará automáticamente un ID de dispositivo; cópielo sin modificarlo',
   'license.deviceIdPlaceholder': 'Introduzca el ID del dispositivo',
   'license.offlineAIConfirm':
-    'Tenga en cuenta que, una vez generado el certificado sin conexión, no se puede revocar ni cambiar el dispositivo. Los dispositivos activados sin conexión no pueden utilizar funciones de IA aunque se conecten a Internet',
+    'Tenga en cuenta que, una vez generado el certificado sin conexión, no se puede revocar ni cambiar el dispositivo. La activación sin conexión no incluye los servicios de IA alojados por Chat2DB. Puede configurar un modelo personalizado para usar las funciones de IA locales',
   'license.getCertificate': 'Obtener certificado del dispositivo',
   'license.getCertificateSuccess': 'Certificado del dispositivo obtenido correctamente',
   'license.getCertificateError': 'No se pudo obtener el certificado del dispositivo',
@@ -41,7 +42,8 @@ export default {
   'license.permanentVersion': 'Versión de por vida de Chat2DB Local',
   'license.offlineActivationIntro': 'Si no conoce el proceso de activación sin conexión,',
   'license.deviceLimit': 'Se alcanzó el límite de dispositivos vinculados a la licencia',
-  'license.licenseNotSupported': 'La activación sin conexión no admite IA',
+  'license.licenseNotSupported':
+    'Esta función de IA en línea no está disponible con la activación sin conexión. Configure un modelo personalizado para usar las funciones de IA locales',
   'license.deactivateOnline': 'Desactivar',
   'license.deactivateOnlineConfirm': '¿Confirma que desea desactivar?',
   'license.deactivateOnlineSuccess': 'Desactivación correcta',

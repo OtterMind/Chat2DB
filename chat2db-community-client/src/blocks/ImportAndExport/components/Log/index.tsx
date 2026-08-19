@@ -1,29 +1,62 @@
-import { memo, useEffect, useRef, useState, forwardRef, ForwardedRef, useImperativeHandle } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  UIEvent,
+  WheelEvent,
+} from 'react';
+import { useSize } from 'ahooks';
+import VirtualList, { type ListRef } from 'rc-virtual-list';
 import { useStyles } from './style';
-import { Progress } from 'antd';
+import { Spin } from 'antd';
 import importExportServices from '@/service/importExport';
-import { ImportExportTaskDetails } from '@/typings/importExport';
-import { ImportExportTaskStatus } from '@/constants/importExport';
-import dayjs from 'dayjs';
+import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
+import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/importExport';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
+import {
+  mergeTaskEvents,
+  TASK_EVENT_INITIAL_PAGE_SIZE,
+  TASK_EVENT_PAGE_SIZE,
+} from '@/store/importExport/taskCenterUtils';
+import { ConsoleOutputEmpty, ConsoleOutputMessageLine } from '@/components/ConsoleOutput';
 
 interface IProps {
   className?: string;
   taskId: number;
-  finish?: (taskDetails: ImportExportTaskDetails) => void;
+  onTaskChange?: (taskDetails: ImportExportTaskDetails) => void;
 }
 
-export interface LogRef {}
+const LEGACY_EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}:?\s*/;
 
-const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
+const formatEventMessage = (message?: string) => message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
+
+interface ScrollRestore {
+  anchorSequence: number;
+  scrollTop: number;
+}
+
+const Log = (props: IProps) => {
   const { taskId } = props;
   const { styles } = useStyles();
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
-  const timer = useRef<NodeJS.Timeout>();
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const timerNumber = useRef<number>(500);
-  const requestGenerationRef = useRef(0);
+  const [events, setEvents] = useState<ImportExportTaskEvent[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [followLatest, setFollowLatest] = useState(true);
+  const [eventsLoadFailed, setEventsLoadFailed] = useState(false);
+  const onTaskChangeRef = useRef(props.onTaskChange);
+  const viewportContainerRef = useRef<HTMLDivElement>(null);
+  const virtualListRef = useRef<ListRef>(null);
+  const eventsRef = useRef<ImportExportTaskEvent[]>([]);
+  const hasOlderEventsRef = useRef(false);
+  const loadingOlderRef = useRef(false);
+  const taskGenerationRef = useRef(0);
+  const scrollRestoreRef = useRef<ScrollRestore>();
+  const viewportSize = useSize(viewportContainerRef);
   const { getTaskList } = useImportExportStore((state) => {
     return {
       getTaskList: state.getTaskList,
@@ -31,83 +64,261 @@ const Log = forwardRef((props: IProps, ref: ForwardedRef<LogRef>) => {
   });
 
   useEffect(() => {
-    const requestGeneration = requestGenerationRef.current + 1;
-    requestGenerationRef.current = requestGeneration;
-    timerNumber.current = 500;
-    getTaskDetails(requestGeneration);
-    return () => {
-      requestGenerationRef.current += 1;
-      // clear timer
-      if (timer.current) {
-        clearTimeout(timer.current);
-      }
-    };
-  }, [taskId]);
-
-  const getTaskDetails = (requestGeneration: number) => {
-    // clear timer
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-    // Get task details
-    importExportServices.getTaskDetails({ id: taskId }).then((res) => {
-      if (requestGeneration !== requestGenerationRef.current) {
-        return;
-      }
-      // Setup task details
-      setTaskDetails(res);
-      // If the task status is INIT, PROCESSING, RUNNING, continue to poll for task details
-      if (
-        [ImportExportTaskStatus.INIT, ImportExportTaskStatus.PROCESSING, ImportExportTaskStatus.RUNNING].includes(
-          res.taskStatus,
-        )
-      ) {
-        //
-        timer.current = setTimeout(() => {
-          getTaskDetails(requestGeneration);
-        }, timerNumber.current);
-        // timer time increment
-        timerNumber.current = timerNumber.current + 1000;
-        return;
-      }
-      // If the task status is FINISHED, execute the finish callback
-      if (res.taskStatus === ImportExportTaskStatus.FINISHED) {
-        props.finish?.(res);
-      }
-      // Get task list
-      getTaskList({ visible: true });
-    });
-  };
-
-  useImperativeHandle(ref, () => ({}));
+    onTaskChangeRef.current = props.onTaskChange;
+  }, [props.onTaskChange]);
 
   useEffect(() => {
-    // Scroll to the bottom of the log element when taskDetails?.infoLog changes
-    logEndRef.current?.scrollTo({
-      top: logEndRef.current.scrollHeight,
-      behavior: 'smooth',
-    } as ScrollToOptions);
-  }, [taskDetails?.infoLog]);
+    let active = true;
+    const generation = ++taskGenerationRef.current;
+    let latestSequence = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setTaskDetails(undefined);
+    setEvents([]);
+    eventsRef.current = [];
+    hasOlderEventsRef.current = false;
+    loadingOlderRef.current = false;
+    scrollRestoreRef.current = undefined;
+    setInitialLoading(true);
+    setLoadingOlder(false);
+    setFollowLatest(true);
+    setEventsLoadFailed(false);
+
+    const updateEvents = (incomingEvents: ImportExportTaskEvent[]) => {
+      if (!incomingEvents.length) return;
+      setEvents((currentEvents) => {
+        const mergedEvents = mergeTaskEvents(currentEvents, incomingEvents);
+        eventsRef.current = mergedEvents;
+        return mergedEvents;
+      });
+    };
+
+    const poll = async () => {
+      let details: ImportExportTaskDetails;
+      try {
+        details = await importExportServices.getTaskDetails({ taskId });
+      } catch {
+        if (active) timer = setTimeout(poll, 1500);
+        return;
+      }
+      if (!active) return;
+
+      setTaskDetails(details);
+      onTaskChangeRef.current?.(details);
+
+      let newEvents: ImportExportTaskEvent[] = [];
+      let eventsLoaded = true;
+      try {
+        newEvents = await importExportServices.getTaskEvents({
+          taskId,
+          afterSequence: latestSequence,
+          limit: TASK_EVENT_PAGE_SIZE,
+        });
+      } catch {
+        eventsLoaded = false;
+      }
+      if (!active) return;
+
+      setEventsLoadFailed(!eventsLoaded);
+      if (eventsLoaded && newEvents.length) {
+        latestSequence = Math.max(latestSequence, ...newEvents.map((event) => event.sequence));
+        updateEvents(newEvents);
+      }
+
+      const hasMoreNewEvents = eventsLoaded && newEvents.length === TASK_EVENT_PAGE_SIZE;
+      if (hasMoreNewEvents || ACTIVE_TASK_STATUSES.includes(details.status) || !eventsLoaded) {
+        timer = setTimeout(poll, hasMoreNewEvents ? 0 : eventsLoaded ? 1000 : 1500);
+        return;
+      }
+      getTaskList();
+    };
+
+    const initialize = async () => {
+      try {
+        const [details, latestEvents] = await Promise.all([
+          importExportServices.getTaskDetails({ taskId }),
+          importExportServices.getTaskEvents({ taskId, limit: TASK_EVENT_INITIAL_PAGE_SIZE }),
+        ]);
+        if (!active) return;
+
+        const initialEvents = mergeTaskEvents([], latestEvents);
+        latestSequence = initialEvents.at(-1)?.sequence || 0;
+        eventsRef.current = initialEvents;
+        hasOlderEventsRef.current = (initialEvents[0]?.sequence || 0) > 1;
+        setTaskDetails(details);
+        setEvents(initialEvents);
+        setEventsLoadFailed(false);
+        setInitialLoading(false);
+        onTaskChangeRef.current?.(details);
+
+        timer = setTimeout(poll, ACTIVE_TASK_STATUSES.includes(details.status) ? 1000 : 0);
+      } catch {
+        if (!active) return;
+        setEventsLoadFailed(true);
+        timer = setTimeout(initialize, 1500);
+      }
+    };
+
+    initialize();
+    return () => {
+      active = false;
+      if (taskGenerationRef.current === generation) taskGenerationRef.current += 1;
+      if (timer) clearTimeout(timer);
+    };
+  }, [getTaskList, taskId]);
+
+  const loadOlderEvents = useCallback(async () => {
+    const currentEvents = eventsRef.current;
+    const earliestSequence = currentEvents[0]?.sequence;
+    if (!earliestSequence || !hasOlderEventsRef.current || loadingOlderRef.current) return;
+
+    const generation = taskGenerationRef.current;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    setFollowLatest(false);
+    try {
+      const olderEvents = await importExportServices.getTaskEvents({
+        taskId,
+        beforeSequence: earliestSequence,
+        limit: TASK_EVENT_PAGE_SIZE,
+      });
+      if (generation !== taskGenerationRef.current) return;
+
+      setEventsLoadFailed(false);
+      hasOlderEventsRef.current = (olderEvents[0]?.sequence || 0) > 1;
+      if (!olderEvents.length) {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+        return;
+      }
+
+      const scrollInfo = virtualListRef.current?.getScrollInfo();
+      if (scrollInfo) {
+        scrollRestoreRef.current = {
+          anchorSequence: earliestSequence,
+          scrollTop: scrollInfo.y,
+        };
+      }
+      setEvents((existingEvents) => {
+        const mergedEvents = mergeTaskEvents(existingEvents, olderEvents);
+        eventsRef.current = mergedEvents;
+        return mergedEvents;
+      });
+    } catch {
+      if (generation !== taskGenerationRef.current) return;
+      setEventsLoadFailed(true);
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [taskId]);
+
+  useLayoutEffect(() => {
+    const scrollRestore = scrollRestoreRef.current;
+    const virtualList = virtualListRef.current;
+    if (!virtualList) return;
+
+    if (scrollRestore) {
+      virtualList.scrollTo({
+        key: scrollRestore.anchorSequence,
+        align: 'top',
+        offset: scrollRestore.scrollTop,
+      });
+      scrollRestoreRef.current = undefined;
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+      return;
+    }
+
+    if (followLatest && events.length) {
+      virtualList.scrollTo({ index: events.length - 1, align: 'bottom' });
+    }
+  }, [events, followLatest, viewportSize?.height]);
+
+  const handleScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const viewport = event.currentTarget;
+      setFollowLatest(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 24);
+      if (viewport.scrollTop <= 32) loadOlderEvents();
+    },
+    [loadOlderEvents],
+  );
+
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      const scrollTop = virtualListRef.current?.getScrollInfo().y || 0;
+      if (event.deltaY < 0 && scrollTop <= 32) loadOlderEvents();
+    },
+    [loadOlderEvents],
+  );
+
+  if (initialLoading || !taskDetails) {
+    return (
+      <div className={styles.loading}>
+        <Spin size="large" />
+        <span>{eventsLoadFailed ? i18n('workspace.task.events.loadFailed') : i18n('common.text.loading')}</span>
+      </div>
+    );
+  }
+
+  const fallbackErrorEvent: ImportExportTaskEvent[] =
+    !events.length && taskDetails.errorMessage
+      ? [
+          {
+            eventId: -1,
+            taskId,
+            sequence: -1,
+            level: 'ERROR',
+            code: taskDetails.errorCode || ImportExportTaskStatus.FAILED,
+            message: taskDetails.errorMessage,
+            createdAt: taskDetails.finishedAt || taskDetails.updatedAt || taskDetails.createdAt,
+          },
+        ]
+      : [];
+  const visibleEvents = events.length ? events : fallbackErrorEvent;
 
   return (
     <div className={styles.log}>
-      <div className={styles.logList}>
-        <div className={styles.logListItem}>
-          <div className={styles.logListItemLabel}>{i18n('workspace.text.taskName')}：</div>
-          <div className={styles.logListItemValue}>{taskDetails?.taskName}</div>
+      {loadingOlder && (
+        <div className={styles.olderLoading}>
+          <Spin size="small" />
+          <span>{i18n('common.text.loading')}</span>
         </div>
-        <div className={styles.logListItem}>
-          <div className={styles.logListItemLabel}>{i18n('workspace.text.startTime')}：</div>
-          <div className={styles.logListItemValue}>{dayjs(taskDetails?.gmtCreate).format('YYYY-MM-DD HH:mm:ss')}</div>
+      )}
+      <div className={styles.eventConsole} onWheel={handleWheel}>
+        <div className={styles.virtualListContainer} ref={viewportContainerRef}>
+          {!!visibleEvents.length && (
+            <VirtualList
+              ref={virtualListRef}
+              className={styles.virtualList}
+              data={visibleEvents}
+              height={Math.max(1, Math.round(viewportSize?.height || 1))}
+              itemHeight={20}
+              itemKey="sequence"
+              onScroll={handleScroll}
+              showScrollBar="optional"
+            >
+              {(event) => (
+                <ConsoleOutputMessageLine
+                  className={styles.virtualListItem}
+                  timestamp={event.createdAt}
+                  level={event.level}
+                  message={formatEventMessage(event.message)}
+                />
+              )}
+            </VirtualList>
+          )}
+          {!visibleEvents.length && eventsLoadFailed && (
+            <ConsoleOutputEmpty>{i18n('workspace.task.events.loadFailed')}</ConsoleOutputEmpty>
+          )}
+          {!visibleEvents.length && !eventsLoadFailed && (
+            <ConsoleOutputEmpty>{i18n('workspace.task.events.empty')}</ConsoleOutputEmpty>
+          )}
         </div>
+        {!!visibleEvents.length && eventsLoadFailed && (
+          <div className={styles.loadFailed}>{i18n('workspace.task.events.loadFailed')}</div>
+        )}
       </div>
-      <div className={styles.logBody} ref={logEndRef}>
-        {taskDetails?.infoLog}
-        {taskDetails?.errorLog}
-      </div>
-      <Progress size="small" percent={Number(taskDetails?.taskProgress || 0)} showInfo={false} />
     </div>
   );
-});
+};
 
 export default memo(Log);

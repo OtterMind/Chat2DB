@@ -41,6 +41,12 @@ public class DataSourceUpdateRequest {
     private Integer environmentId;
 
 
+    private Boolean watermarkEnabled;
+
+
+    private String watermarkContent;
+
+
     private String host;
 
 

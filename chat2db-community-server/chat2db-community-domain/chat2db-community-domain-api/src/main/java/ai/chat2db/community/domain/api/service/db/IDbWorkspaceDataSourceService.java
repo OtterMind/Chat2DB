@@ -42,6 +42,15 @@ public interface IDbWorkspaceDataSourceService {
     WorkspaceDataSource updateDataSource(WorkspaceDataSource dataSource);
 
     /**
+     * Updates only the shared identity color of a datasource.
+     *
+     * @param id datasource identifier.
+     * @param identityColor nullable {@code #RRGGBB} color; null clears the custom color.
+     * @return updated datasource identity fields prepared for the web boundary.
+     */
+    WorkspaceDataSource updateDataSourceIdentityColor(Long id, String identityColor);
+
+    /**
      * Deletes a datasource and clears its runtime connection.
      *
      * @param id datasource identifier.

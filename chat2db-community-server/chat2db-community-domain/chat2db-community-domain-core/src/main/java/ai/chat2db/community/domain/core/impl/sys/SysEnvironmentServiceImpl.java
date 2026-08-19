@@ -23,8 +23,14 @@ public class SysEnvironmentServiceImpl implements ISysEnvironmentService {
             .color("RED")
             .build();
 
+    private static final Environment DEV = Environment.builder()
+            .id(3L)
+            .name("DEV")
+            .shortName("Development Environment")
+            .build();
+
     @Override
     public List<Environment> listAll() {
-        return List.of(TEST, RELEASE);
+        return List.of(TEST, DEV, RELEASE);
     }
 }

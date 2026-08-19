@@ -37,7 +37,7 @@ public class StringTypeScript extends BaseTypeScript implements ITypeScript {
                 }
             }
         });
-        String ttl = RedisScriptExecutor.getInstance().getTtl(redisKey.getName());
+        String ttl = RedisScriptExecutor.getInstance().getTtl(connection, redisKey.getName());
         if (StringUtils.isNotBlank(ttl)) {
             rs.setTtl(Long.parseLong(ttl));
         } else {
