@@ -9,6 +9,60 @@ export const useStyles = createStyles(({ css, token }) => ({
     min-width: 0;
     background: ${token.colorBgLayout};
   `,
+  taskWorkspaceTabs: css`
+    flex: none;
+    border-bottom: 1px solid ${token.colorBorderSecondary};
+    background: ${token.colorBgContainer};
+  `,
+  taskWorkspaceTabIcon: css`
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    margin-right: 6px;
+  `,
+  taskWorkspaceContent: css`
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  `,
+  taskWorkspacePane: css`
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    &[hidden] {
+      display: none;
+    }
+  `,
+  fullPageForm: css`
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    background: ${token.colorBgLayout};
+  `,
+  fullPageFormBody: css`
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 24px 28px 40px;
+    @media (max-width: 720px) {
+      padding: 18px 16px 28px;
+    }
+  `,
+  taskCreatePageForm: css`
+    width: min(100%, 860px);
+    margin: 18px auto 0;
+    padding: 24px;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadiusLG}px;
+    background: ${token.colorBgContainer};
+  `,
   header: css`
     display: flex;
     align-items: center;
@@ -63,15 +117,21 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow: auto;
     padding: 14px 16px 18px;
   `,
+  contentWithFilters: css`
+    padding-top: 0;
+  `,
   taskFilters: css`
+    position: sticky;
+    top: 0;
+    z-index: 10;
     display: grid;
     grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 0.8fr) minmax(220px, 1fr) auto;
     gap: 8px;
     align-items: center;
-    margin-bottom: 12px;
-    padding: 10px;
-    border: 1px solid ${token.colorBorderSecondary};
-    border-radius: ${token.borderRadiusLG}px;
+    margin: 0 -16px 12px;
+    padding: 10px 16px;
+    border: 0;
+    border-bottom: 1px solid ${token.colorBorderSecondary};
     background: ${token.colorBgContainer};
     @media (max-width: 900px) {
       grid-template-columns: 1fr 1fr;
@@ -334,6 +394,7 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
   detailPageHeader: css`
     display: flex;
+    flex: none;
     min-height: 52px;
     align-items: center;
     justify-content: space-between;
@@ -355,7 +416,9 @@ export const useStyles = createStyles(({ css, token }) => ({
   detailPageWorkspace: css`
     display: grid;
     height: 100%;
+    min-height: 0;
     grid-template-columns: minmax(0, 1fr) 292px;
+    overflow: hidden;
     background: ${token.colorBgContainer};
     @media (max-width: 980px) {
       grid-template-columns: minmax(0, 1fr) 250px;
@@ -1171,6 +1234,16 @@ export const useStyles = createStyles(({ css, token }) => ({
       right: 18px;
     }
   `,
+  agentManagerPage: css`
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    background: ${token.colorBgLayout};
+  `,
   managerHeader: css`
     display: flex;
     min-height: 82px;
@@ -1204,7 +1277,8 @@ export const useStyles = createStyles(({ css, token }) => ({
   agentManagerGrid: css`
     display: grid;
     grid-template-columns: minmax(340px, 0.95fr) minmax(420px, 1.25fr);
-    height: min(680px, 76vh);
+    flex: 1;
+    min-height: 0;
     @media (max-width: 820px) {
       grid-template-columns: 1fr;
       height: auto;
@@ -1342,7 +1416,8 @@ export const useStyles = createStyles(({ css, token }) => ({
     }
   `,
   agentStudio: css`
-    max-height: min(760px, 80vh);
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     background: ${token.colorBgLayout};
   `,

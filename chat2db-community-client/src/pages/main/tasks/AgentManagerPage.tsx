@@ -4,9 +4,9 @@ import agentService, { type AgentDefinition, type AgentRuntimeOption } from '@/s
 import connectionService from '@/service/connection';
 import type { IConnectionDetails } from '@/typings';
 import feedback from '@/utils/feedback';
-import { Alert, Button, Checkbox, Form, Input, Modal, Popconfirm, Segmented, Select, Space, Tag, Upload } from 'antd';
+import { Alert, Button, Checkbox, Form, Input, Popconfirm, Select, Space, Tag, Upload } from 'antd';
 import { Bot, ChevronRight, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, UploadCloud } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AgentDataScopeEditor from './AgentDataScopeEditor';
 import ApprovalModeTag from './ApprovalModeTag';
@@ -25,20 +25,32 @@ import { parseAgentOutputContract, serializeAgentOutputContract } from './agentO
 import { dataSourceDisplayName } from './taskDataSource';
 
 interface Props {
-  open: boolean;
   agents: AgentDefinition[];
-  onClose: () => void;
+  active: boolean;
   onChanged: (agent: AgentDefinition, removed?: boolean) => void;
+  editorAgentId?: string;
+  createMode?: boolean;
+  onOpenEditor: (agent?: AgentDefinition) => void;
+  onCancelEditor: () => void;
+  onSaved: (agent: AgentDefinition) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
-
-type ManagerView = 'list' | 'edit';
 
 const capabilities = ['METADATA_READ', 'DATA_READ', 'DATA_WRITE', 'DDL', 'EXPORT', 'IMPORT'];
 
-export default function AgentManagerModal({ open, agents, onClose, onChanged }: Props) {
+export default function AgentManagerPage({
+  agents,
+  active,
+  editorAgentId,
+  createMode = false,
+  onOpenEditor,
+  onCancelEditor,
+  onChanged,
+  onSaved,
+  onDirtyChange,
+}: Props) {
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [view, setView] = useState<ManagerView>('list');
   const [query, setQuery] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string>();
   const [dataSources, setDataSources] = useState<IConnectionDetails[]>([]);
@@ -50,10 +62,12 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   const [editingAgent, setEditingAgent] = useState<AgentDefinition>();
   const [avatarCustomized, setAvatarCustomized] = useState(false);
   const [outputContractExtras, setOutputContractExtras] = useState<Record<string, unknown>>({});
+  const editorInitialized = useRef(false);
   const avatar = Form.useWatch('avatar', form);
   const agentName = Form.useWatch('name', form);
   const runtimeType = Form.useWatch('runtimeType', form);
   const runtimeProfileId = Form.useWatch('runtimeProfileId', form);
+  const editorMode = createMode || !!editorAgentId;
 
   const refreshRuntimeOptions = useCallback(async () => {
     setRuntimeOptionsLoading(true);
@@ -78,7 +92,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   const selectedRuntime = runtimeOptions.find((option) => option.profileId === selectedAgent?.runtimeProfileId);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     void refreshRuntimeOptions();
     void Promise.all([connectionService.getList({ pageNo: 1, pageSize: 500 }), listAIModelConfigs()])
       .then(([connectionResult, models]) => {
@@ -89,17 +103,17 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
         setDataSources([]);
         setModelConfigs([]);
       });
-  }, [open, refreshRuntimeOptions]);
+  }, [active, refreshRuntimeOptions]);
 
   useEffect(() => {
-    if (!open || runtimeOptions.length || runtimeOptionsError) return;
+    if (!active || runtimeOptions.length || runtimeOptionsError) return;
     const timer = window.setInterval(() => void refreshRuntimeOptions(), 3000);
     return () => window.clearInterval(timer);
-  }, [open, refreshRuntimeOptions, runtimeOptions.length, runtimeOptionsError]);
+  }, [active, refreshRuntimeOptions, runtimeOptions.length, runtimeOptionsError]);
 
   useEffect(() => {
-    if (open && agents.length && !selectedAgentId) setSelectedAgentId(agents[0].id);
-  }, [agents, open, selectedAgentId]);
+    if (agents.length && !selectedAgentId) setSelectedAgentId(agents[0].id);
+  }, [agents, selectedAgentId]);
 
   const save = async () => {
     const values = await form.validateFields();
@@ -140,9 +154,10 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
         : await agentService.createAgent(payload);
       onChanged(agent);
       setSelectedAgentId(agent.id);
-      setView('list');
       form.resetFields();
       setEditingAgent(undefined);
+      onDirtyChange?.(false);
+      onSaved(agent);
       feedback.success(i18n(editingAgent ? 'task.agent.updateSuccess' : 'task.agent.createSuccess'));
     } finally {
       setSubmitting(false);
@@ -154,7 +169,6 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
     setEditingAgent(agent);
     setAvatarCustomized(!!agent?.avatar && !isDefaultAgentAvatar(agent.avatar));
     setOutputContractExtras(outputContract.extras);
-    setView('edit');
     form.setFieldsValue(agent ? {
       ...agent,
       dataScopes: agent.dataScopes.map((scope) => ({ ...scope, accessLevel: scope.tableNames.length ? 'TABLES' : 'NAMESPACE' })),
@@ -167,7 +181,22 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
       outputRequirements: outputContract.outputRequirements,
       outputRequiredSections: outputContract.outputRequiredSections,
     });
+    onDirtyChange?.(false);
   };
+
+  useEffect(() => {
+    if (!active || !editorMode || editorInitialized.current) return;
+    if (createMode) {
+      openEditor();
+      editorInitialized.current = true;
+      return;
+    }
+    const agent = agents.find((item) => item.id === editorAgentId);
+    if (agent) {
+      openEditor(agent);
+      editorInitialized.current = true;
+    }
+  }, [active, agents, createMode, editorAgentId, editorMode]);
 
   const archive = async (agent: AgentDefinition) => {
     setSubmitting(true);
@@ -180,45 +209,26 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
   };
 
   return (
-    <Modal
-      width="min(1120px, 94vw)"
-      open={open}
-      title={null}
-      onCancel={onClose}
-      footer={null}
-      destroyOnClose
-      className={styles.managerModal}
-    >
+    <div className={styles.agentManagerPage}>
       <header className={styles.managerHeader}>
         <div>
           <div className={styles.managerTitle}>
             <Bot size={19} />
-            <h2>{i18n('task.agent.manage')}</h2>
+            <h2>{editorMode ? i18n(editingAgent ? 'task.agent.edit' : 'task.agent.create') : i18n('task.agent.manage')}</h2>
             <span>{agents.length}</span>
           </div>
           <p>{i18n('task.agent.manageHint')}</p>
         </div>
         <Space>
-          <Segmented<ManagerView>
-            value={view}
-            onChange={(nextView) => {
-              if (nextView === 'edit') openEditor(editingAgent);
-              else setView('list');
-            }}
-            options={[
-              { value: 'list', label: i18n('task.agent.list') },
-              { value: 'edit', label: editingAgent ? i18n('task.agent.edit') : i18n('task.agent.create') },
-            ]}
-          />
-          {view === 'list' && (
-            <Button type="primary" icon={<Plus size={15} />} onClick={() => openEditor()}>
+          {!editorMode && (
+            <Button type="primary" icon={<Plus size={15} />} onClick={() => onOpenEditor()}>
               {i18n('task.agent.create')}
             </Button>
           )}
         </Space>
       </header>
 
-      {view === 'list' ? (
+      {!editorMode ? (
         <div className={styles.agentManagerGrid}>
           <section className={styles.agentListPane}>
             <Input
@@ -263,7 +273,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                   </Tag>
                 </div>
                 <div className={styles.agentInspectorActions}>
-                  <Button icon={<Pencil size={14} />} onClick={() => openEditor(selectedAgent)}>{i18n('task.agent.edit')}</Button>
+                  <Button icon={<Pencil size={14} />} onClick={() => onOpenEditor(selectedAgent)}>{i18n('task.agent.edit')}</Button>
                   <Popconfirm title={i18n('task.agent.deleteConfirm')} onConfirm={() => void archive(selectedAgent)}>
                     <Button danger icon={<Trash2 size={14} />} loading={submitting}>{i18n('common.button.delete')}</Button>
                   </Popconfirm>
@@ -285,6 +295,9 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
                     <CapabilityChips values={selectedAgent.capabilities} limit={8} />
                   </div>
                 </div>
+                {!selectedAgent.dataScopes.length && (
+                  <Alert type="warning" showIcon message={i18n('task.agent.scopeBindingRequired')} />
+                )}
                 <div className={styles.inspectorSection}>
                   <h4>
                     <ShieldCheck size={14} />
@@ -324,6 +337,7 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
           form={form}
           layout="vertical"
           className={styles.agentStudio}
+          onValuesChange={() => onDirtyChange?.(true)}
         >
           <div className={styles.agentStudioLayout}>
             <div className={styles.agentStudioMain}>
@@ -474,13 +488,13 @@ export default function AgentManagerModal({ open, agents, onClose, onChanged }: 
             </aside>
           </div>
           <footer className={styles.studioFooter}>
-            <Button onClick={() => setView('list')}>{i18n('task.action.cancel')}</Button>
+            <Button onClick={onCancelEditor}>{i18n('task.action.cancel')}</Button>
             <Button type="primary" loading={submitting} onClick={() => void save()}>
               {editingAgent ? i18n('common.button.save') : i18n('task.agent.create')}
             </Button>
           </footer>
         </Form>
       )}
-    </Modal>
+    </div>
   );
 }

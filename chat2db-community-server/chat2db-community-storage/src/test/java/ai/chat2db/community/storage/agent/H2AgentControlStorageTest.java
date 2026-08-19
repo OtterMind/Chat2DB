@@ -86,7 +86,18 @@ class H2AgentControlStorageTest {
 
             H2AgentControlStorage storage = new H2AgentControlStorage(tempDir.resolve("null-context-classloader"));
 
-            assertEquals(List.of(), storage.listAgents());
+            List<AgentDefinition> agents = storage.listAgents();
+            assertEquals(1, agents.size());
+            AgentDefinition defaultAgent = agents.get(0);
+            assertEquals("chat2db-default-agent", defaultAgent.getId());
+            assertEquals("Chat2DB", defaultAgent.getName());
+            assertEquals(AgentStatusEnum.ACTIVE, defaultAgent.getStatus());
+            assertEquals(AgentRuntimeTypeEnum.EMBEDDED_SPRING_AI, defaultAgent.getRuntimeType());
+            assertEquals(new LinkedHashSet<>(List.of(
+                    AgentCapabilityEnum.METADATA_READ,
+                    AgentCapabilityEnum.DATA_READ)), defaultAgent.getCapabilities());
+            assertEquals(List.of(), defaultAgent.getDataScopes());
+            assertNull(defaultAgent.getCreatedBy());
         } finally {
             thread.setContextClassLoader(originalClassLoader);
         }
