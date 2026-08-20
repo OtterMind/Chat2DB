@@ -1,0 +1,28 @@
+# Cutting Edge (CE) — Backend Dependencies
+# Python 3.11
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+websockets==12.0
+sqlalchemy==2.0.32
+pydantic==2.8.2
+pydantic-settings==2.4.0
+psutil==6.0.0
+faster-whisper==1.0.3
+google-generativeai==0.7.2
+anthropic==0.34.2
+openai==1.40.3
+ollama==0.3.3
+opencv-python==4.10.0.84
+mediapipe==0.10.14
+numpy==1.26.4
+Pillow==10.4.0
+PySceneDetect==0.6.4
+yt-dlp==2024.8.6
+edge-tts==6.1.12
+pexels-api==1.0.2
+requests==2.32.3
+google-api-python-client==2.139.0
+google-auth-oauthlib==1.2.1
+pytest==8.3.2
+pytest-asyncio==0.23.8

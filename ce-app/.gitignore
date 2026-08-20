@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+*.db
+*.mp4
+*.wav
+*.log
+build/
+.DS_Storedist-electron/
+build-assets/icon-src.png
+package-lock.json

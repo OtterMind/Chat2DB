@@ -1,0 +1,27 @@
+/* Cutting Edge (CE) — Global Styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0F172A; color: #F8FAFC; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0F172A; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+.gradient-text {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.card-glass {
+  background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 12px;
+}
+.ant-card { border-radius: 12px !important; }
+.ant-card-head { border-bottom-color: rgba(148, 163, 184, 0.15) !important; }
+.ant-btn-primary { background: linear-gradient(135deg, #6366F1, #8B5CF6) !important; border: none !important; }
+.ant-btn-primary:hover { opacity: 0.9; }
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #1E293B 25%, #334155 50%, #1E293B 75%);
+  background-size: 200% 100%; animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
