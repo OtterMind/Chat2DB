@@ -102,7 +102,7 @@ jobs:
     steps:
       - name: Send Feishu start notification
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.COMMUNITY_FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: python
@@ -201,15 +201,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "${{ secrets.MAC_CERTS }}" | base64 --decode > certificate.p12
+          echo "${{ secrets.COMMUNITY_MAC_CERTS }}" | base64 --decode > certificate.p12
           KEYCHAIN_PATH="${RUNNER_TEMP}/build.keychain"
-          security create-keychain -p "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security create-keychain -p "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
           security default-keychain -s "${KEYCHAIN_PATH}"
           security list-keychains -d user -s "${KEYCHAIN_PATH}"
           security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
-          security unlock-keychain -p "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
-          security import certificate.p12 -k "${KEYCHAIN_PATH}" -P "${{ secrets.MAC_CERTS_PASSWORD }}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security import certificate.p12 -k "${KEYCHAIN_PATH}" -P "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
           security find-identity -v -p codesigning
 
       - name: Resolve macOS signing identity
@@ -249,9 +249,9 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           ARTIFACT_NAME: ${{ matrix.artifact_name }}
-          MAC_APPLE_ID: ${{ secrets.MAC_APPLE_ID }}
-          MAC_APPLE_PASSWORD: ${{ secrets.MAC_APPLE_PASSWORD }}
-          MAC_TEAM_ID: ${{ secrets.MAC_TEAM_ID }}
+          MAC_APPLE_ID: ${{ secrets.COMMUNITY_MAC_APPLE_ID }}
+          MAC_APPLE_PASSWORD: ${{ secrets.COMMUNITY_MAC_APPLE_PASSWORD }}
+          MAC_TEAM_ID: ${{ secrets.COMMUNITY_MAC_TEAM_ID }}
         run: |
           set -euo pipefail
 
@@ -470,8 +470,8 @@ jobs:
         uses: yizhoumo/setup-ossutil@02384914fef2758596b303e2035c47b8c3f80fb2
         with:
           endpoint: oss-us-west-1.aliyuncs.com
-          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          access-key-id: ${{ secrets.COMMUNITY_OSS_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.COMMUNITY_OSS_ACCESS_KEY_SECRET }}
           ossutil-version: '1.7.16'
 
       - name: Set up Aliyun CLI
@@ -488,7 +488,7 @@ jobs:
           UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
           OSS_BUCKET_NAME: chat2db-cdn
           CDN_BASE_URL: https://cdn.chat2db-ai.com
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.COMMUNITY_FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           UPDATE_LATEST_VERSION_JSON: ${{ needs.resolve.outputs.update_latest }}
         run: |
           set -euo pipefail
@@ -581,8 +581,8 @@ jobs:
         if: ${{ needs.resolve.outputs.channel == 'release' }}
         shell: bash
         env:
-          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.COMMUNITY_OSS_ACCESS_KEY_ID }}
+          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.COMMUNITY_OSS_ACCESS_KEY_SECRET }}
           ALIBABA_CLOUD_REGION_ID: cn-hangzhou
           PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
           UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
@@ -695,7 +695,7 @@ jobs:
     steps:
       - name: Send Feishu summary notification
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.COMMUNITY_FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version || inputs.version }}
           BUILD_RESULT: ${{ needs.build.result }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -887,8 +887,8 @@ jobs:
       version: ${{ needs.resolve.outputs.version }}
       push_latest: true
     secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      COMMUNITY_DOCKER_USERNAME: ${{ secrets.COMMUNITY_DOCKER_USERNAME }}
+      COMMUNITY_DOCKERHUB_TOKEN: ${{ secrets.COMMUNITY_DOCKERHUB_TOKEN }}
 
   publish_release:
     name: Publish GitHub Release
