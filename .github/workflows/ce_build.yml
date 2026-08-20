@@ -1,0 +1,23 @@
+name: 🎬 Build Cutting Edge
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: mkdir build\ffmpeg && curl -L -o ff.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z" && 7z x ff.7z -offmpeg > nul && copy ffmpeg\*\bin\ffmpeg.exe build\ffmpeg\
+        shell: pwsh
+      - run: cd ce-app\backend && python -m venv ..\..\build\backend\python && ..\..\build\backend\python\Scripts\pip install -r requirements.txt -q && xcopy /E /I app ..\..\build\backend\app && xcopy /E /I core ..\..\build\backend\core && copy run_backend.py ..\..\build\backend\
+        shell: pwsh
+      - run: cd ce-app\frontend && npm install --no-audit --no-fund && npx vite build
+        shell: pwsh
+      - run: cd ce-app\frontend && npx electron-builder --win nsis --publish never
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cutting-Edge-Windows-Setup
+          path: ce-app/frontend/release/*.exe
