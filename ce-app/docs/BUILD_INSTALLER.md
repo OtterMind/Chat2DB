@@ -111,3 +111,9 @@ IPC channels: `update:check`, `update:download`, `update:install`; renderer even
 | `Application entry file dist-electron/main.js does not exist` | Electron bundles were not built | run `npm run build`, not just `vite build` (the committed `dist-electron/` covers CI) |
 | `cannot find icon` | `build.win.icon` path wrong | icon lives at `ce-app/frontend/build-assets/icon.ico` (256→16 px, CE monogram) |
 | Installer runs but the app shows a backend error | non-portable Python got packed | verify `resources/backend/python/python311._pth` exists in the installed app |
+| Installed app opens a **black/empty window** | Vite emitted absolute asset URLs (`/assets/…`), which resolve to the filesystem root under `file://` | fixed in 0.2.1 via `base: './'`; keep it that way |
+| UI loads but every request fails | `baseURL: '/api'` becomes `file:///api` when packaged | fixed in 0.2.1 by `src/api/runtime.ts` (targets `http://127.0.0.1:8742` under `file://`) |
+
+Set the environment variable **`CE_DEBUG=1`** before launching the installed app to
+open developer tools; load failures are also rendered as a readable error page
+instead of an empty window.
