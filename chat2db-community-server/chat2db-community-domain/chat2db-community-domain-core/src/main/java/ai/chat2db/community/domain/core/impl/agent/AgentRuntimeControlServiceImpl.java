@@ -184,7 +184,9 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
         }
         List<AgentRuntimeInstance> instances = listInstances();
         for (AgentRuntimeProviderEnum provider : List.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
+                AgentRuntimeProviderEnum.CLAUDE_CODE, AgentRuntimeProviderEnum.CODEX,
+                AgentRuntimeProviderEnum.OPENCODE, AgentRuntimeProviderEnum.PI,
+                AgentRuntimeProviderEnum.HERMES,
                 AgentRuntimeProviderEnum.DSH)) {
             if (instances.stream().anyMatch(instance -> instance.getProvider() == provider)) {
                 ensureDefaultProfile(ownerId, provider);
@@ -330,7 +332,7 @@ public class AgentRuntimeControlServiceImpl implements IAgentRuntimeControlServi
             throw new IllegalArgumentException("runtime daemon id must not exceed 128 characters");
         }
         if (request.getProvider() == null || !request.getProvider().isExternal()) {
-            throw new IllegalArgumentException("external runtime provider must be CODEX, HERMES, or DSH");
+            throw new IllegalArgumentException("external runtime provider is not supported");
         }
         if (StringUtils.isBlank(request.getProviderVersion()) || StringUtils.isBlank(request.getProtocolVersion())) {
             throw new IllegalArgumentException("runtime provider and protocol versions are required");

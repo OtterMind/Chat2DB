@@ -4,7 +4,7 @@ import { Tag, Tooltip } from 'antd';
 import { CircleCheck, CircleDashed, CircleDot, Cloud, Cpu, PauseCircle, TriangleAlert, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { avatarRuntimeProvider, RuntimeProviderLogo } from './RuntimeProviderLogo';
+import { agentAvatarSource, avatarRuntimeProvider, RuntimeProviderLogo } from './RuntimeProviderLogo';
 import { useStyles } from './style';
 
 const activeRunStatuses: AgentRunStatus[] = ['QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL'];
@@ -12,13 +12,14 @@ const activeRunStatuses: AgentRunStatus[] = ['QUEUED', 'DISPATCHED', 'RUNNING', 
 export function AgentAvatar({ agent, size = 28 }: { agent?: AgentDefinition; size?: number }) {
   const { styles } = useStyles();
   const label = agent?.name?.trim() || '?';
-  const avatarProvider = avatarRuntimeProvider(agent?.avatar);
+  const avatar = agentAvatarSource(agent?.avatar);
+  const avatarProvider = avatarRuntimeProvider(avatar);
   return (
     <span className={styles.agentAvatar} style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }}>
       {avatarProvider ? (
         <RuntimeProviderLogo provider={avatarProvider} />
-      ) : agent?.avatar ? (
-        <img src={agent.avatar} alt="" />
+      ) : avatar ? (
+        <img src={avatar} alt="" />
       ) : (
         label.slice(0, 2).toUpperCase()
       )}

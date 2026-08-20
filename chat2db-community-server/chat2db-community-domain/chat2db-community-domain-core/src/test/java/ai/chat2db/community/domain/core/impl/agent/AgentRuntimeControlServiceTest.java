@@ -155,6 +155,26 @@ class AgentRuntimeControlServiceTest {
     }
 
     @Test
+    void createsDefaultProfilesForEverySupportedExternalCli() {
+        List<AgentRuntimeProviderEnum> providers = List.of(
+                AgentRuntimeProviderEnum.CLAUDE_CODE,
+                AgentRuntimeProviderEnum.OPENCODE,
+                AgentRuntimeProviderEnum.PI);
+        for (AgentRuntimeProviderEnum provider : providers) {
+            AgentRuntimeInstanceRegisterRequest request = codexRegistration();
+            request.setProvider(provider);
+            service.register(request);
+        }
+
+        List<AgentRuntimeOption> options = service.listRuntimeOptions(7L);
+
+        assertEquals(providers, options.stream().map(AgentRuntimeOption::getProvider).toList());
+        assertEquals(List.of("claude", "opencode", "pi"),
+                options.stream().map(AgentRuntimeOption::getExecutable).toList());
+        assertTrue(options.stream().allMatch(AgentRuntimeOption::getDefaultProfile));
+    }
+
+    @Test
     void returnsDetectedRuntimeAsOfflineAfterHeartbeatTimeout() {
         service.register(codexRegistration());
 

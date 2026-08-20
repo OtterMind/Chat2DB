@@ -151,7 +151,8 @@ Automatic key-file creation depends on `chat2db.mode`, not `chat2db.gui`. Commun
 
 ## External Agent Runtime Daemon Authentication
 
-External Agent Runtime daemons such as Codex and Hermes must send a dedicated
+External Agent Runtime daemons such as Claude Code, Codex, OpenCode, Pi, Hermes,
+and DeepSeek Harness must send a dedicated
 Bearer token when calling `/api/agent/runtime/daemon/**`. Configure it before
 starting Chat2DB with the `CHAT2DB_AGENT_RUNTIME_TOKEN` environment variable or
 the equivalent `-Dchat2db.agent.runtime.token=...` JVM property. The environment
@@ -172,13 +173,16 @@ daemon control-plane calls.
 
 The daemon never writes this token into a Runtime Profile. It injects
 `CHAT2DB_AGENT_TASK_TOKEN` only into the current child process and references it
-through Codex MCP `bearer_token_env_var` or a Hermes ACP HTTP header. MCP tools expose
+through the provider's managed MCP configuration or approval bridge. Claude Code,
+Codex, OpenCode, Hermes, and DeepSeek Harness receive the task-scoped MCP endpoint;
+Pi currently has no equivalent native managed-MCP configuration surface and runs
+with the immutable task context only. MCP tools expose
 only datasource, database, schema, table metadata, and SQL operations within
 the Task DataScope. SQL still passes through Capability, Proposal, Approval,
 and ToolAttempt controls. The older SQL HTTP tool endpoint continues to use
 `X-Chat2DB-Agent-Task-Token` only as a daemon compatibility API.
 
-When Session Resume is enabled on the Runtime Profile, Codex Thread IDs or Hermes Session IDs are
+When Session Resume is enabled on the Runtime Profile, provider session IDs are
 persisted with `SESSION_UPDATED` events. A later Run resumes its parent Thread
 only when the Agent, Provider, Runtime Profile, and full Profile snapshot all
 match. During a short Chat2DB restart, the Daemon retries renewal until the last
@@ -186,14 +190,18 @@ acknowledged Lease expires; hard expiry still stops local execution and preserve
 attempt fencing instead of replaying an uncertain operation.
 
 After Community Desktop starts, it scans the process `PATH`, the login shell,
-and common installation locations for Codex and Hermes. It creates internal
+and common installation locations for Claude Code, Codex, OpenCode, Pi, Hermes,
+and DeepSeek Harness. It creates internal
 Runtime Profiles for the current user, so the Agent editor can show detected
 Runtime cards without asking for a Runtime Profile ID. Use
-`CHAT2DB_CODEX_PATH` or `CHAT2DB_HERMES_PATH` for custom executable locations.
+`CHAT2DB_CLAUDE_CODE_PATH`, `CHAT2DB_CODEX_PATH`, `CHAT2DB_OPENCODE_PATH`,
+`CHAT2DB_PI_PATH`, `CHAT2DB_HERMES_PATH`, or `CHAT2DB_DSH_PATH` for custom
+executable locations.
 
-The Codex/Hermes Runtime Daemon is also built as one separate local executable.
-Standalone mode defaults to `AUTO` and detects both providers. Set
-`CHAT2DB_AGENT_RUNTIME_PROVIDER=CODEX` or `HERMES` to restrict discovery:
+The Runtime Daemon is also built as one separate local executable. Standalone
+mode defaults to `AUTO` and detects every supported provider. Set
+`CHAT2DB_AGENT_RUNTIME_PROVIDER` to one provider enum, such as `CLAUDE_CODE`,
+`CODEX`, `OPENCODE`, `PI`, `HERMES`, or `DSH`, to restrict discovery:
 
 ```bash
 mvn -B -f chat2db-community-server/pom.xml \
