@@ -22,6 +22,7 @@ const { execFileSync } = require('child_process')
 const PY_EMBED_URL =
   'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip'
 const FFMPEG_ZIP_URL = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py'
 
 function log(msg) {
   console.log(`  [ce:before-pack] ${msg}`)
@@ -139,10 +140,6 @@ module.exports = async function beforePack(context) {
   }
 
   const sitePackages = findSitePackages(pythonDir)
-  if (!sitePackages) {
-    log('no site-packages found in the CI virtualenv — skipping')
-    return
-  }
 
   log('converting virtualenv backend runtime into a portable one…')
   const work = path.join(backendDir, '_python_embed')
@@ -164,11 +161,16 @@ module.exports = async function beforePack(context) {
     [stdlibZip, '.', 'Lib\\site-packages', 'import site', ''].join('\r\n')
   )
 
-  // Move the dependencies installed by CI into the portable runtime.
+  // Move whatever the CI step managed to install into the portable runtime.
   const target = path.join(work, 'Lib', 'site-packages')
   fs.mkdirSync(path.dirname(target), { recursive: true })
-  log(`moving site-packages -> ${target}`)
-  fs.renameSync(sitePackages, target)
+  if (sitePackages && fs.readdirSync(sitePackages).length > 0) {
+    log(`moving site-packages -> ${target}`)
+    fs.renameSync(sitePackages, target)
+  } else {
+    log('CI virtualenv has no packages — the runtime will be populated from requirements.txt')
+    fs.mkdirSync(target, { recursive: true })
+  }
 
   // Drop build-time only artefacts to keep the installer smaller.
   for (const entry of fs.readdirSync(target)) {
@@ -180,10 +182,75 @@ module.exports = async function beforePack(context) {
   fs.rmSync(pythonDir, { recursive: true, force: true })
   fs.renameSync(work, pythonDir)
 
-  // Sanity check: the portable interpreter must be able to import FastAPI.
-  execFileSync(path.join(pythonDir, 'python.exe'), ['-c', 'import fastapi, uvicorn; print("portable backend OK")'], {
+  const exe = path.join(pythonDir, 'python.exe')
+
+  // The CI step that populates the virtualenv ignores pip failures, so the
+  // runtime may be missing dependencies. Detect that and install them here —
+  // the installer must never ship a backend that cannot start.
+  if (!canImport(exe, backendDir)) {
+    log('dependencies missing from the CI runtime — installing them now')
+    installRequirements(exe, backendDir, frontendDir)
+  }
+
+  if (!canImport(exe, backendDir)) {
+    throw new Error('portable backend runtime is still incomplete — aborting build')
+  }
+  log('portable backend runtime ready')
+}
+
+function canImport(exe, cwd) {
+  try {
+    execFileSync(exe, ['-c', 'import fastapi, uvicorn, sqlalchemy, pydantic_settings'], {
+      cwd,
+      stdio: 'pipe',
+    })
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+function installRequirements(exe, backendDir, frontendDir) {
+  const pythonDir = path.dirname(exe)
+  // Bootstrap pip inside the embeddable distribution.
+  const getPip = path.join(backendDir, 'get-pip.py')
+  if (!fs.existsSync(path.join(pythonDir, 'Lib', 'site-packages', 'pip'))) {
+    log('bootstrapping pip')
+    execFileSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Invoke-WebRequest -Uri '${GET_PIP_URL}' -OutFile '${getPip}'`,
+      ],
+      { stdio: 'inherit' }
+    )
+    execFileSync(exe, [getPip, '--no-warn-script-location'], { cwd: backendDir, stdio: 'inherit' })
+    fs.rmSync(getPip, { force: true })
+  }
+
+  // Runtime dependencies only — test tooling is not shipped.
+  const src = path.resolve(frontendDir, '..', 'backend', 'requirements.txt')
+  const runtimeReq = path.join(backendDir, 'requirements-runtime.txt')
+  const lines = fs
+    .readFileSync(src, 'utf8')
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*pytest/.test(l))
+  fs.writeFileSync(runtimeReq, lines.join('\n'))
+
+  log('pip install -r requirements.txt (runtime subset)')
+  execFileSync(exe, ['-m', 'pip', 'install', '--no-warn-script-location', '--no-cache-dir', '-r', runtimeReq], {
     cwd: backendDir,
     stdio: 'inherit',
   })
-  log('portable backend runtime ready')
+  fs.rmSync(runtimeReq, { force: true })
+
+  // pip itself is a build-time tool.
+  const sp = path.join(pythonDir, 'Lib', 'site-packages')
+  for (const entry of fs.existsSync(sp) ? fs.readdirSync(sp) : []) {
+    if (entry === 'pip' || entry.startsWith('pip-')) {
+      fs.rmSync(path.join(sp, entry), { recursive: true, force: true })
+    }
+  }
 }

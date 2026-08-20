@@ -17,10 +17,10 @@ opencv-python==4.10.0.84
 mediapipe==0.10.14
 numpy==1.26.4
 Pillow==10.4.0
-PySceneDetect==0.6.4
+scenedetect==0.6.4
 yt-dlp==2024.8.6
 edge-tts==6.1.12
-pexels-api==1.0.2
+pexels-api==1.0.1
 requests==2.32.3
 google-api-python-client==2.139.0
 google-auth-oauthlib==1.2.1
