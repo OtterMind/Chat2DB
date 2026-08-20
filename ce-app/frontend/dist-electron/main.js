@@ -129,6 +129,19 @@ function startBackend() {
     backendProcess = null;
   });
 }
+function showFatal(win, message) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{background:#0F172A;color:#F8FAFC;font-family:Segoe UI,system-ui,sans-serif;
+         display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+    .box{max-width:640px;padding:32px;background:#1E293B;border-radius:12px;border:1px solid #334155}
+    h1{font-size:18px;margin:0 0 12px;color:#818CF8}
+    pre{white-space:pre-wrap;word-break:break-word;font-size:13px;color:#CBD5E1;margin:0}
+    p{font-size:13px;color:#94A3B8;margin:16px 0 0}
+  </style></head><body><div class="box"><h1>Cutting Edge could not start the interface</h1>
+  <pre>${message.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c])}</pre>
+  <p>Restart the app with CE_DEBUG=1 to open developer tools.</p></div></body></html>`;
+  win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+}
 function createWindow() {
   mainWindow = new import_electron2.BrowserWindow({
     width: 1440,
@@ -140,7 +153,23 @@ function createWindow() {
     webPreferences: { preload: import_path.default.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false }
   });
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  else mainWindow.loadFile(import_path.default.join(__dirname, "../dist/index.html"));
+  else {
+    const indexPath = import_path.default.join(__dirname, "../dist/index.html");
+    if (!(0, import_fs.existsSync)(indexPath)) {
+      showFatal(mainWindow, `UI bundle not found at ${indexPath}`);
+    } else {
+      mainWindow.loadFile(indexPath);
+    }
+  }
+  if (process.env.CE_DEBUG === "1") mainWindow.webContents.openDevTools({ mode: "detach" });
+  mainWindow.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
+    console.error("[CE] Renderer failed to load:", errorCode, errorDescription, validatedURL);
+    if (mainWindow) showFatal(mainWindow, `${errorDescription} (${errorCode})
+${validatedURL}`);
+  });
+  mainWindow.webContents.on("render-process-gone", (_e, details) => {
+    console.error("[CE] Renderer process gone:", details.reason);
+  });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     import_electron2.shell.openExternal(url);
     return { action: "deny" };

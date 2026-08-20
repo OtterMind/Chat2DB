@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  // Relative asset URLs are mandatory: the packaged app is loaded over file://,
+  // where the default absolute '/assets/...' resolves to the filesystem root.
+  base: './',
   plugins: [react()],
   server: {
     host: true,

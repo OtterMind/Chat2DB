@@ -1,3 +1,5 @@
+import { backendWebSocketUrl } from './runtime'
+
 export type JobEvent =
   | { type: 'job:progress'; job_id: string; stage: string; progress: number; message?: string }
   | { type: 'job:done'; job_id: string; clips_count: number }
@@ -11,9 +13,7 @@ class WebSocketClient {
 
   connect() {
     if (this.socket?.readyState === WebSocket.OPEN) return
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const wsUrl = `${protocol}://${window.location.host}/ws`
-    this.socket = new WebSocket(wsUrl)
+    this.socket = new WebSocket(backendWebSocketUrl('/ws'))
     this.socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as JobEvent
