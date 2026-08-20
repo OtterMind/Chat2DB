@@ -45,7 +45,7 @@ export interface AgentDefinition {
   revision: number;
 }
 
-export type AgentRuntimeProvider = 'CODEX' | 'HERMES' | 'DSH';
+export type AgentRuntimeProvider = 'CLAUDE_CODE' | 'CODEX' | 'OPENCODE' | 'PI' | 'HERMES' | 'DSH';
 
 export interface AgentRuntimeOption {
   profileId: string;

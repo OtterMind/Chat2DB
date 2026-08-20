@@ -91,6 +91,7 @@ class H2AgentControlStorageTest {
             AgentDefinition defaultAgent = agents.get(0);
             assertEquals("chat2db-default-agent", defaultAgent.getId());
             assertEquals("Chat2DB", defaultAgent.getName());
+            assertEquals("./logo-transparent.webp", defaultAgent.getAvatar());
             assertEquals(AgentStatusEnum.ACTIVE, defaultAgent.getStatus());
             assertEquals(AgentRuntimeTypeEnum.EMBEDDED_SPRING_AI, defaultAgent.getRuntimeType());
             assertEquals(new LinkedHashSet<>(List.of(

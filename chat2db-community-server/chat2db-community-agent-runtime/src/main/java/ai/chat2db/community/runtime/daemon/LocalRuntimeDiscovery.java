@@ -18,6 +18,9 @@ import java.util.concurrent.TimeUnit;
 public class LocalRuntimeDiscovery {
 
     static final String CODEX_PATH_ENV = "CHAT2DB_CODEX_PATH";
+    static final String CLAUDE_CODE_PATH_ENV = "CHAT2DB_CLAUDE_CODE_PATH";
+    static final String OPENCODE_PATH_ENV = "CHAT2DB_OPENCODE_PATH";
+    static final String PI_PATH_ENV = "CHAT2DB_PI_PATH";
     static final String HERMES_PATH_ENV = "CHAT2DB_HERMES_PATH";
     static final String DSH_PATH_ENV = "CHAT2DB_DSH_PATH";
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(15);
@@ -78,7 +81,11 @@ public class LocalRuntimeDiscovery {
 
     String probeVersion(AgentRuntimeProviderEnum provider, Path executable) {
         List<String> command = new ArrayList<>();
-        command.add(executable.toString());
+        if (isWindowsBatch(executable)) {
+            command.addAll(List.of("cmd.exe", "/d", "/s", "/c", executable.toString()));
+        } else {
+            command.add(executable.toString());
+        }
         command.addAll(ExternalRuntimeProviderCatalog.versionArguments(provider));
         Process process = null;
         try {
@@ -174,6 +181,15 @@ public class LocalRuntimeDiscovery {
             candidates.add(userHome.resolve("Applications/ChatGPT.app/Contents/Resources/codex"));
             candidates.add(userHome.resolve("Applications/Codex.app/Contents/Resources/codex"));
         }
+        if (provider == AgentRuntimeProviderEnum.CLAUDE_CODE) {
+            candidates.add(userHome.resolve(".local/bin/claude"));
+        }
+        if (provider == AgentRuntimeProviderEnum.OPENCODE) {
+            candidates.add(userHome.resolve(".local/bin/opencode"));
+        }
+        if (provider == AgentRuntimeProviderEnum.PI) {
+            candidates.add(userHome.resolve(".local/bin/pi"));
+        }
         if (provider == AgentRuntimeProviderEnum.HERMES) {
             candidates.add(userHome.resolve(".local/bin/hermes"));
         }
@@ -184,6 +200,23 @@ public class LocalRuntimeDiscovery {
     }
 
     private Path executable(Path candidate) {
+        Path direct = executableFile(candidate);
+        if (direct != null) {
+            return direct;
+        }
+        if (isWindows() && candidate.getFileName().toString().indexOf('.') < 0) {
+            for (String extension : List.of(".exe", ".cmd", ".bat")) {
+                Path withExtension = executableFile(candidate.resolveSibling(
+                        candidate.getFileName() + extension));
+                if (withExtension != null) {
+                    return withExtension;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Path executableFile(Path candidate) {
         try {
             Path normalized = candidate.toAbsolutePath().normalize();
             if (!Files.isRegularFile(normalized) || !Files.isExecutable(normalized)) {
@@ -195,9 +228,21 @@ public class LocalRuntimeDiscovery {
         }
     }
 
+    private boolean isWindowsBatch(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return isWindows() && (name.endsWith(".cmd") || name.endsWith(".bat"));
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+    }
+
     private String pathEnvironment(AgentRuntimeProviderEnum provider) {
         return switch (provider) {
+            case CLAUDE_CODE -> CLAUDE_CODE_PATH_ENV;
             case CODEX -> CODEX_PATH_ENV;
+            case OPENCODE -> OPENCODE_PATH_ENV;
+            case PI -> PI_PATH_ENV;
             case HERMES -> HERMES_PATH_ENV;
             case DSH -> DSH_PATH_ENV;
             case SPRING_AI -> throw new IllegalArgumentException("Spring AI has no local executable");

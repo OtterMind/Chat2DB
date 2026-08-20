@@ -52,7 +52,7 @@ public final class AgentRuntimeDaemonMain {
     private static AgentRuntimeProviderEnum externalProvider(String value) {
         AgentRuntimeProviderEnum provider = AgentRuntimeProviderEnum.valueOf(value);
         if (!ExternalRuntimeProviderCatalog.providers().contains(provider)) {
-            throw new IllegalArgumentException("Runtime Daemon supports AUTO, CODEX, HERMES, or DSH providers");
+            throw new IllegalArgumentException("Runtime Daemon supports AUTO, CLAUDE_CODE, CODEX, OPENCODE, PI, HERMES, or DSH providers");
         }
         return provider;
     }

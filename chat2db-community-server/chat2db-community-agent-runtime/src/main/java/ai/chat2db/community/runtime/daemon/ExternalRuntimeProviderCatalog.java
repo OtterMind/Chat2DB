@@ -2,6 +2,9 @@ package ai.chat2db.community.runtime.daemon;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
 import ai.chat2db.community.runtime.codex.CodexAppServerAdapter;
+import ai.chat2db.community.runtime.cli.ClaudeCodeAdapter;
+import ai.chat2db.community.runtime.cli.OpenCodeAdapter;
+import ai.chat2db.community.runtime.cli.PiAdapter;
 import ai.chat2db.community.runtime.dsh.DshRuntimeBridgeAdapter;
 import ai.chat2db.community.runtime.hermes.HermesAcpAdapter;
 import ai.chat2db.community.runtime.provider.ExternalProviderAdapter;
@@ -22,13 +25,17 @@ public final class ExternalRuntimeProviderCatalog {
     }
 
     public static List<AgentRuntimeProviderEnum> providers() {
-        return List.of(AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
-                AgentRuntimeProviderEnum.DSH);
+        return List.of(AgentRuntimeProviderEnum.CLAUDE_CODE, AgentRuntimeProviderEnum.CODEX,
+                AgentRuntimeProviderEnum.OPENCODE, AgentRuntimeProviderEnum.PI,
+                AgentRuntimeProviderEnum.HERMES, AgentRuntimeProviderEnum.DSH);
     }
 
     public static ExternalProviderAdapter createAdapter(AgentRuntimeProviderEnum provider) {
         return switch (requireExternal(provider)) {
+            case CLAUDE_CODE -> new ClaudeCodeAdapter();
             case CODEX -> new CodexAppServerAdapter();
+            case OPENCODE -> new OpenCodeAdapter();
+            case PI -> new PiAdapter();
             case HERMES -> new HermesAcpAdapter();
             case DSH -> new DshRuntimeBridgeAdapter();
             case SPRING_AI -> throw unsupported(provider);
@@ -37,7 +44,10 @@ public final class ExternalRuntimeProviderCatalog {
 
     public static String protocolVersion(AgentRuntimeProviderEnum provider) {
         return switch (requireExternal(provider)) {
+            case CLAUDE_CODE -> "claude-stream-json-v1";
             case CODEX -> "codex-app-server-v2";
+            case OPENCODE -> "opencode-json-v1";
+            case PI -> "pi-json-v1";
             case HERMES -> "acp-v1";
             case DSH -> "chat2db-dsh-bridge-v1";
             case SPRING_AI -> throw unsupported(provider);
@@ -46,16 +56,17 @@ public final class ExternalRuntimeProviderCatalog {
 
     public static Set<String> capabilities(AgentRuntimeProviderEnum provider) {
         return switch (requireExternal(provider)) {
-            case CODEX -> COMMON_CAPABILITIES;
-            case HERMES, DSH -> Set.of("streaming", "sessionResume", "usage", "cancellation",
+            case CLAUDE_CODE, CODEX, OPENCODE, PI -> COMMON_CAPABILITIES;
+            case HERMES -> Set.of("streaming", "sessionResume", "usage", "cancellation",
                     "taskWorkspace", "approvalBridge");
+            case DSH -> Set.of("streaming", "usage", "cancellation", "taskWorkspace", "approvalBridge");
             case SPRING_AI -> throw unsupported(provider);
         };
     }
 
     public static List<String> versionArguments(AgentRuntimeProviderEnum provider) {
         return switch (requireExternal(provider)) {
-            case CODEX, DSH -> List.of("--version");
+            case CLAUDE_CODE, CODEX, OPENCODE, PI, DSH -> List.of("--version");
             case HERMES -> List.of("acp", "--version");
             case SPRING_AI -> throw unsupported(provider);
         };

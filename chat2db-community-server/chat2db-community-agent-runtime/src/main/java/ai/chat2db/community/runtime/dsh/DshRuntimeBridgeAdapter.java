@@ -55,7 +55,7 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
     static final int DEFAULT_INACTIVITY_TIMEOUT_SECONDS = 900;
     private static final String BRIDGE_RESOURCE = "/agent-runtime/dsh-runtime-bridge.mjs";
     private static final Set<String> RESERVED_ARGUMENTS = Set.of(
-            "--profile", "--patch", "--host", "--port", "--trusted-host");
+            "--profile", "--patch", "--host", "--port", "--trusted-host", "--no-open");
 
     private final ObjectMapper mapper;
     private final ProviderProcessLauncher processLauncher;
@@ -184,9 +184,9 @@ public class DshRuntimeBridgeAdapter implements ExternalProviderAdapter {
                 If the Chat2DB MCP tools are unavailable, report that integration error succinctly without
                 attempting a shell-based workaround.
                 """.trim());
-        if (StringUtils.isNotBlank(request.getResumeSessionId())) {
-            params.put("resumeSessionId", request.getResumeSessionId().trim());
-        }
+        // DSH persists the session cwd and rejects rebinding it. Chat2DB workspaces are
+        // isolated per Run and removed afterwards, so resuming that DSH session would
+        // leave shell tools pointing at a deleted directory (spawn bash ENOENT).
         return params;
     }
 

@@ -21,7 +21,10 @@ class LocalRuntimeDiscoveryTest {
 
     @Test
     void discoversEveryExternalProviderAndUsesProviderSpecificVersionCommands() throws IOException {
+        Path claude = executable("claude", "#!/bin/sh\necho '2.1.220 (Claude Code)'\n");
         Path codex = executable("codex", "#!/bin/sh\necho 'codex-cli 0.147.0'\n");
+        Path opencode = executable("opencode", "#!/bin/sh\necho '1.17.7'\n");
+        Path pi = executable("pi", "#!/bin/sh\necho '0.67.2'\n");
         Path hermes = executable("hermes", "#!/bin/sh\n"
                 + "if [ \"$1\" = 'acp' ] && [ \"$2\" = '--version' ]; then echo 'Hermes ACP 0.2.0'; exit 0; fi\n"
                 + "exit 1\n");
@@ -32,18 +35,27 @@ class LocalRuntimeDiscoveryTest {
                 Map.of("PATH", temporaryDirectory.toString()), temporaryDirectory);
 
         List<LocalRuntimeInstallation> installations = discovery.discover(Set.of(
-                AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
+                AgentRuntimeProviderEnum.CLAUDE_CODE, AgentRuntimeProviderEnum.CODEX,
+                AgentRuntimeProviderEnum.OPENCODE, AgentRuntimeProviderEnum.PI,
+                AgentRuntimeProviderEnum.HERMES,
                 AgentRuntimeProviderEnum.DSH));
 
-        assertEquals(List.of(AgentRuntimeProviderEnum.CODEX, AgentRuntimeProviderEnum.HERMES,
-                        AgentRuntimeProviderEnum.DSH),
+        assertEquals(List.of(AgentRuntimeProviderEnum.CLAUDE_CODE, AgentRuntimeProviderEnum.CODEX,
+                        AgentRuntimeProviderEnum.OPENCODE, AgentRuntimeProviderEnum.PI,
+                        AgentRuntimeProviderEnum.HERMES, AgentRuntimeProviderEnum.DSH),
                 installations.stream().map(LocalRuntimeInstallation::provider).toList());
-        assertEquals(codex.toRealPath(), installations.get(0).executable());
-        assertEquals("codex-cli 0.147.0", installations.get(0).version());
-        assertEquals(hermes.toRealPath(), installations.get(1).executable());
-        assertEquals("Hermes ACP 0.2.0", installations.get(1).version());
-        assertEquals(dsh.toRealPath(), installations.get(2).executable());
-        assertEquals("0.1.0-rc.6", installations.get(2).version());
+        assertEquals(claude.toRealPath(), installations.get(0).executable());
+        assertEquals("2.1.220 (Claude Code)", installations.get(0).version());
+        assertEquals(codex.toRealPath(), installations.get(1).executable());
+        assertEquals("codex-cli 0.147.0", installations.get(1).version());
+        assertEquals(opencode.toRealPath(), installations.get(2).executable());
+        assertEquals("1.17.7", installations.get(2).version());
+        assertEquals(pi.toRealPath(), installations.get(3).executable());
+        assertEquals("0.67.2", installations.get(3).version());
+        assertEquals(hermes.toRealPath(), installations.get(4).executable());
+        assertEquals("Hermes ACP 0.2.0", installations.get(4).version());
+        assertEquals(dsh.toRealPath(), installations.get(5).executable());
+        assertEquals("0.1.0-rc.6", installations.get(5).version());
     }
 
     @Test
