@@ -201,7 +201,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "${{ secrets.COMMUNITY_MAC_CERTS }}" | base64 --decode > certificate.p12
+          echo "${{ secrets.MAC_CERTS }}" | base64 --decode > certificate.p12
           KEYCHAIN_PATH="${RUNNER_TEMP}/build.keychain"
           security create-keychain -p "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
           security default-keychain -s "${KEYCHAIN_PATH}"
