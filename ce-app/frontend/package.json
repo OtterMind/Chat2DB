@@ -53,19 +53,19 @@
     ],
     "extraResources": [
       {
-        "from": "../build/backend",
+        "from": "../../build/backend",
         "to": "backend"
       },
       {
-        "from": "../build/ffmpeg",
+        "from": "../../build/ffmpeg",
         "to": "ffmpeg"
       }
     ],
     "publish": {
       "provider": "github",
       "owner": "yousefghorbanian98-create",
-      "repo": "Cutting-Edge-Studio",
-      "private": false
+      "repo": "Chat2DB",
+      "releaseType": "release"
     },
     "win": {
       "target": [
@@ -87,6 +87,7 @@
       "shortcutName": "Cutting Edge",
       "installerIcon": "build-assets/icon.ico",
       "uninstallerIcon": "build-assets/icon.ico"
-    }
+    },
+    "beforePack": "scripts/before-pack.js"
   }
 }

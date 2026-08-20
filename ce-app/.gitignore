@@ -10,6 +10,6 @@ __pycache__/
 *.wav
 *.log
 build/
-.DS_Storedist-electron/
+.DS_Store
 build-assets/icon-src.png
 package-lock.json
