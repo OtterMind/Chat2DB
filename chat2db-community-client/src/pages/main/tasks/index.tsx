@@ -21,6 +21,8 @@ import connectionService from '@/service/connection';
 import { getDashboardList } from '@/service/dashboard';
 import type { IChartItem, IConnectionDetails, IDashboardItem } from '@/typings';
 import feedback from '@/utils/feedback';
+import CustomTabs from '@/components/Tabs';
+import { useGlobalStore } from '@/store/global';
 import {
   Alert,
   App,
@@ -44,6 +46,7 @@ import dayjs from 'dayjs';
 import {
   ArrowLeft,
   Archive,
+  Bot,
   CalendarClock,
   ChevronRight,
   CircleCheck,
@@ -64,7 +67,6 @@ import {
   Rows3,
   Search,
   Send,
-  Settings2,
   ShieldCheck,
   TerminalSquare,
   Trash2,
@@ -95,13 +97,24 @@ import {
   getCachedAgentTaskDetail,
 } from './taskNavigation';
 import { useStyles } from './style';
-import AgentManagerModal from './AgentManagerModal';
+import AgentManagerPage from './AgentManagerPage';
 import ApprovalModeTag from './ApprovalModeTag';
+import TaskCreatePage from './TaskCreatePage';
 import TaskSchedulePage from './TaskSchedulePage';
 import { AgentAvatar, AgentIdentity, RunStatusMark, RuntimeBadge } from './TaskPrimitives';
 import { parseTaskScheduleRoute, taskScheduleRoutePath } from './taskScheduleModel';
 import { dataSourceDisplayName } from './taskDataSource';
 import { filterTasks } from './taskFilters';
+import {
+  nextTaskWorkspaceTabKey,
+  parseTaskWorkspaceRoute,
+  shouldRefreshTaskDetail,
+  taskWorkspaceRoutePath,
+  taskWorkspaceTabKey,
+  upsertTaskWorkspaceTab,
+  type TaskWorkspaceRoute,
+  type TaskWorkspaceTab,
+} from './taskWorkspaceModel';
 
 type ViewMode = 'board' | 'list';
 
@@ -149,6 +162,25 @@ function pushTaskRoute(path: string) {
     url.pathname = path;
   }
   window.history.pushState({}, '', url.toString());
+}
+
+function workspaceTabForRoute(route: TaskWorkspaceRoute, title?: string): TaskWorkspaceTab {
+  const fallbackTitle = {
+    BOARD: i18n('task.title'),
+    ARCHIVE: i18n('task.archive.records'),
+    TASK_DETAIL: title || route.entityId || i18n('task.title'),
+    TASK_CREATE: i18n('task.create.title'),
+    SCHEDULES: title || i18n('task.schedule.title'),
+    AGENT_MANAGER: i18n('task.agent.manage'),
+    AGENT_EDITOR: title || (route.entityId ? i18n('task.agent.edit') : i18n('task.agent.create')),
+  }[route.type];
+  return {
+    key: taskWorkspaceTabKey(route),
+    type: route.type,
+    entityId: route.entityId,
+    title: fallbackTitle,
+    closable: route.type !== 'BOARD',
+  };
 }
 
 function buildChartDetail(chartJson: Record<string, unknown>): IChartItem {
@@ -363,6 +395,10 @@ function PendingApproval({
 export default function Tasks() {
   const { styles } = useStyles();
   const { modal } = App.useApp();
+  const tasksPageActive = useGlobalStore((state) =>
+    state.mainPageActiveTab === 'tasks' && state.settingPageActiveTab === false,
+  );
+  const initialWorkspaceRoute = useRef(parseTaskWorkspaceRoute(currentTaskRoutePath())).current;
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<AgentTask[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
@@ -373,14 +409,14 @@ export default function Tasks() {
   const [taskTitleFilter, setTaskTitleFilter] = useState('');
   const [taskAgentFilter, setTaskAgentFilter] = useState<string[]>([]);
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskBoardColumnKey[]>([]);
-  const [archiveView, setArchiveView] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>();
+  const [archiveView, setArchiveView] = useState(initialWorkspaceRoute.type === 'ARCHIVE');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(() =>
+    initialWorkspaceRoute.type === 'TASK_DETAIL' ? initialWorkspaceRoute.entityId : undefined,
+  );
   const [detail, setDetail] = useState<AgentTaskDetail>();
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRequestTaskId = useRef<string>();
-  const [createOpen, setCreateOpen] = useState(false);
   const [scheduleRoute, setScheduleRoute] = useState(() => parseTaskScheduleRoute(currentTaskRoutePath()));
-  const [agentManagerOpen, setAgentManagerOpen] = useState(false);
   const [publishTarget, setPublishTarget] = useState<{ artifact: AgentArtifactDetail; chartIndex: number }>();
   const [dashboards, setDashboards] = useState<IDashboardItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -392,6 +428,14 @@ export default function Tasks() {
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
   const [executionOpen, setExecutionOpen] = useState(true);
   const [pastRunsOpen, setPastRunsOpen] = useState(false);
+  const [workspaceTabs, setWorkspaceTabs] = useState<TaskWorkspaceTab[]>(() =>
+    upsertTaskWorkspaceTab(
+      [workspaceTabForRoute({ type: 'BOARD' })],
+      workspaceTabForRoute(initialWorkspaceRoute),
+    ),
+  );
+  const [activeWorkspaceTabKey, setActiveWorkspaceTabKey] = useState(() => taskWorkspaceTabKey(initialWorkspaceRoute));
+  const activeWorkspaceTab = workspaceTabs.find((tab) => tab.key === activeWorkspaceTabKey) || workspaceTabs[0];
 
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const filteredTasks = useMemo(
@@ -473,6 +517,15 @@ export default function Tasks() {
   useEffect(() => {
     const routePath = currentTaskRoutePath();
     const path = routePath.split('/');
+    const workspaceRoute = parseTaskWorkspaceRoute(routePath);
+    const routedTitle = workspaceRoute.type === 'TASK_DETAIL'
+      ? tasks.find((task) => task.id === workspaceRoute.entityId)?.title
+      : workspaceRoute.type === 'AGENT_EDITOR'
+        ? agents.find((agent) => agent.id === workspaceRoute.entityId)?.name
+        : undefined;
+    const routedTab = workspaceTabForRoute(workspaceRoute, routedTitle);
+    if (activeWorkspaceTabKey !== routedTab.key) setActiveWorkspaceTabKey(routedTab.key);
+    setWorkspaceTabs((current) => upsertTaskWorkspaceTab(current, routedTab));
     const nextScheduleRoute = parseTaskScheduleRoute(routePath);
     if (nextScheduleRoute.open) {
       if (
@@ -482,6 +535,15 @@ export default function Tasks() {
       ) {
         setScheduleRoute(nextScheduleRoute);
       }
+      if (archiveView) setArchiveView(false);
+      if (selectedTaskId) {
+        setSelectedTaskId(undefined);
+        setDetail(undefined);
+      }
+      return;
+    }
+    if (workspaceRoute.type === 'TASK_CREATE' || workspaceRoute.type === 'AGENT_MANAGER' || workspaceRoute.type === 'AGENT_EDITOR') {
+      if (scheduleRoute.open) setScheduleRoute(nextScheduleRoute);
       if (archiveView) setArchiveView(false);
       if (selectedTaskId) {
         setSelectedTaskId(undefined);
@@ -518,19 +580,30 @@ export default function Tasks() {
     if (path[1] === 'tasks' && !path[2] && archiveView) setArchiveView(false);
   });
 
+  const openWorkspaceTab = useCallback((route: TaskWorkspaceRoute, title?: string) => {
+    const tab = workspaceTabForRoute(route, title);
+    setWorkspaceTabs((current) => upsertTaskWorkspaceTab(current, tab));
+    setActiveWorkspaceTabKey(tab.key);
+    pushTaskRoute(taskWorkspaceRoutePath(tab));
+    return tab;
+  }, []);
+
+  const setWorkspaceTabDirty = useCallback((key: string, dirty: boolean) => {
+    setWorkspaceTabs((current) => current.map((tab) => tab.key === key ? { ...tab, dirty } : tab));
+  }, []);
+
   const openSchedules = useCallback((scheduleId?: string) => {
-    const path = taskScheduleRoutePath(scheduleId);
-    setScheduleRoute(parseTaskScheduleRoute(path));
+    setScheduleRoute(parseTaskScheduleRoute(taskScheduleRoutePath(scheduleId)));
     setSelectedTaskId(undefined);
     setDetail(undefined);
     setArchiveView(false);
-    pushTaskRoute(path);
-  }, []);
+    openWorkspaceTab({ type: 'SCHEDULES', entityId: scheduleId });
+  }, [openWorkspaceTab]);
 
   const closeSchedules = useCallback(() => {
     setScheduleRoute({ open: false, createMode: false });
-    pushTaskRoute('/tasks');
-  }, []);
+    openWorkspaceTab({ type: 'BOARD' });
+  }, [openWorkspaceTab]);
 
   const openTask = useCallback(
     (taskId: string, initialDetail?: AgentTaskDetail) => {
@@ -540,28 +613,144 @@ export default function Tasks() {
         setDetail(initialDetail);
         setDetailLoading(false);
       }
-      pushTaskRoute(`/tasks/${taskId}`);
+      openWorkspaceTab({ type: 'TASK_DETAIL', entityId: taskId }, initialDetail?.task.title || tasks.find((task) => task.id === taskId)?.title);
       if (!initialDetail) {
         void loadDetail(taskId);
       }
     },
-    [loadDetail],
+    [loadDetail, openWorkspaceTab, tasks],
   );
 
   const closeTask = useCallback(() => {
     setSelectedTaskId(undefined);
     setDetail(undefined);
-    pushTaskRoute('/tasks');
-  }, []);
+    openWorkspaceTab({ type: 'BOARD' });
+  }, [openWorkspaceTab]);
 
   const openArchive = useCallback((open: boolean) => {
     setArchiveView(open);
     setScheduleRoute({ open: false, createMode: false });
     setSelectedTaskId(undefined);
     setDetail(undefined);
-    const path = open ? '/tasks/archive' : '/tasks';
-    pushTaskRoute(path);
-  }, []);
+    openWorkspaceTab({ type: open ? 'ARCHIVE' : 'BOARD' });
+  }, [openWorkspaceTab]);
+
+  const openTaskCreate = useCallback(() => {
+    setScheduleRoute({ open: false, createMode: false });
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    openWorkspaceTab({ type: 'TASK_CREATE' });
+  }, [openWorkspaceTab]);
+
+  const openAgentManager = useCallback(() => {
+    setScheduleRoute({ open: false, createMode: false });
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    openWorkspaceTab({ type: 'AGENT_MANAGER' });
+  }, [openWorkspaceTab]);
+
+  const openAgentEditor = useCallback((agent?: AgentDefinition) => {
+    setScheduleRoute({ open: false, createMode: false });
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    openWorkspaceTab({ type: 'AGENT_EDITOR', entityId: agent?.id }, agent?.name);
+  }, [openWorkspaceTab]);
+
+  const activateWorkspaceTab = useCallback((tab: TaskWorkspaceTab) => {
+    if (tab.type === 'TASK_DETAIL' && tab.entityId) {
+      openTask(tab.entityId);
+      return;
+    }
+    if (tab.type === 'SCHEDULES') {
+      openSchedules(tab.entityId);
+      return;
+    }
+    if (tab.type === 'ARCHIVE') {
+      openArchive(true);
+      return;
+    }
+    if (tab.type === 'TASK_CREATE') {
+      openTaskCreate();
+      return;
+    }
+    if (tab.type === 'AGENT_MANAGER') {
+      openAgentManager();
+      return;
+    }
+    if (tab.type === 'AGENT_EDITOR') {
+      openAgentEditor(agents.find((agent) => agent.id === tab.entityId));
+      return;
+    }
+    openArchive(false);
+  }, [agents, openAgentEditor, openAgentManager, openArchive, openSchedules, openTask, openTaskCreate]);
+
+  const confirmCloseWorkspaceTabs = useCallback((tabsToClose: Array<{ key: string }>) => {
+    if (!tabsToClose.some((item) => workspaceTabs.find((tab) => tab.key === item.key)?.dirty)) {
+      return true;
+    }
+    return new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: i18n('task.workspace.unsavedTitle'),
+        content: i18n('task.workspace.unsavedContent'),
+        okText: i18n('task.workspace.discard'),
+        okButtonProps: { danger: true },
+        cancelText: i18n('task.action.cancel'),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+  }, [modal, workspaceTabs]);
+
+  const handleWorkspaceTabsEdit = useCallback((
+    action: 'add' | 'remove',
+    removed?: Array<{ key: string | number }>,
+    nextItems?: Array<{ key: string | number }>,
+  ) => {
+    if (action !== 'remove' || !removed?.length) return;
+    const removedKeys = removed.map((item) => String(item.key));
+    const nextTabs = workspaceTabs.filter((tab) => !removedKeys.includes(tab.key));
+    setWorkspaceTabs(nextTabs);
+    const nextKey = nextTaskWorkspaceTabKey(workspaceTabs, removedKeys[0], activeWorkspaceTabKey);
+    const nextTab = nextTabs.find((tab) => tab.key === nextKey) || nextTabs[0];
+    if (nextTab) activateWorkspaceTab(nextTab);
+    void nextItems;
+  }, [activateWorkspaceTab, activeWorkspaceTabKey, workspaceTabs]);
+
+  useEffect(() => {
+    const handleHistoryNavigation = () => {
+      const route = parseTaskWorkspaceRoute(currentTaskRoutePath());
+      const tab = workspaceTabForRoute(route);
+      setWorkspaceTabs((current) => upsertTaskWorkspaceTab(current, tab));
+      setActiveWorkspaceTabKey(tab.key);
+      if (route.type === 'TASK_DETAIL' && route.entityId) {
+        setSelectedTaskId(route.entityId);
+        void loadDetail(route.entityId);
+      } else {
+        setSelectedTaskId(undefined);
+        setDetail(undefined);
+      }
+      setScheduleRoute(route.type === 'SCHEDULES'
+        ? parseTaskScheduleRoute(taskWorkspaceRoutePath(tab))
+        : { open: false, createMode: false });
+      setArchiveView(route.type === 'ARCHIVE');
+    };
+    window.addEventListener('popstate', handleHistoryNavigation);
+    window.addEventListener('hashchange', handleHistoryNavigation);
+    return () => {
+      window.removeEventListener('popstate', handleHistoryNavigation);
+      window.removeEventListener('hashchange', handleHistoryNavigation);
+    };
+  }, [loadDetail]);
+
+  useEffect(() => {
+    if (!workspaceTabs.some((tab) => tab.dirty)) return;
+    const confirmUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', confirmUnload);
+    return () => window.removeEventListener('beforeunload', confirmUnload);
+  }, [workspaceTabs]);
 
   const openOriginConversation = useCallback(async () => {
     const sessionId = detail?.task.originSessionId;
@@ -608,7 +797,7 @@ export default function Tasks() {
         dataScopeSnapshot: scopeIndexes.map((index) => agent!.dataScopes[index]),
       });
       setTasks((current) => [created.task, ...current]);
-      setCreateOpen(false);
+      setWorkspaceTabDirty('task:new', false);
       createForm.resetFields();
       feedback.success(i18n('task.create.success'));
       openTask(created.task.id, created);
@@ -865,10 +1054,14 @@ export default function Tasks() {
   }, [detail?.task.id]);
 
   useEffect(() => {
-    if (!selectedTaskId || !activeRun) return undefined;
+    if (
+      !tasksPageActive
+      || !selectedTaskId
+      || !shouldRefreshTaskDetail(activeWorkspaceTab, selectedTaskId, activeRun)
+    ) return undefined;
     const timer = window.setInterval(() => void loadDetail(selectedTaskId, true), 2000);
     return () => window.clearInterval(timer);
-  }, [activeRun, loadDetail, selectedTaskId]);
+  }, [activeRun, activeWorkspaceTab, loadDetail, selectedTaskId, tasksPageActive]);
 
   const _detailTabs = detail
     ? [
@@ -1151,18 +1344,36 @@ export default function Tasks() {
 
   return (
     <div className={styles.container}>
-      {scheduleRoute.open ? (
-        <TaskSchedulePage
-          agents={agents}
-          dataSources={dataSources}
-          scheduleId={scheduleRoute.scheduleId}
-          createMode={scheduleRoute.createMode}
-          onBack={closeSchedules}
-          onCreate={() => openSchedules()}
-          onSelectSchedule={openSchedules}
-          onOpenTask={openTask}
-        />
-      ) : selectedTaskId ? (
+      <CustomTabs
+        className={styles.taskWorkspaceTabs}
+        items={workspaceTabs.map((tab) => ({
+          key: tab.key,
+          label: tab.dirty ? `${tab.title} •` : tab.title,
+          canClosed: tab.closable,
+          prefixIcon: tab.type === 'TASK_DETAIL'
+            ? <span className={styles.taskWorkspaceTabIcon}><ListChecks size={14} /></span>
+            : tab.type === 'SCHEDULES'
+              ? <span className={styles.taskWorkspaceTabIcon}><CalendarClock size={14} /></span>
+              : tab.type === 'AGENT_MANAGER' || tab.type === 'AGENT_EDITOR'
+                ? <span className={styles.taskWorkspaceTabIcon}><Bot size={14} /></span>
+                : <span className={styles.taskWorkspaceTabIcon}><FolderKanban size={14} /></span>,
+        }))}
+        activeKey={activeWorkspaceTabKey}
+        hideAdd
+        height={40}
+        tabMaxWidth="220px"
+        onChange={(key) => {
+          const tab = workspaceTabs.find((item) => item.key === String(key));
+          if (tab) activateWorkspaceTab(tab);
+        }}
+        beforeRemove={confirmCloseWorkspaceTabs}
+        onEdit={handleWorkspaceTabsEdit}
+      />
+      <div className={styles.taskWorkspaceContent}>
+      {activeWorkspaceTab?.type === 'TASK_CREATE'
+        || activeWorkspaceTab?.type === 'AGENT_MANAGER'
+        || activeWorkspaceTab?.type === 'AGENT_EDITOR'
+        || activeWorkspaceTab?.type === 'SCHEDULES' ? null : selectedTaskId ? (
         <>
           <header className={styles.detailPageHeader}>
             <Button type="text" icon={<ArrowLeft size={16} />} onClick={closeTask}>
@@ -1606,30 +1817,47 @@ export default function Tasks() {
               { value: 'list', label: i18n('task.view.list') },
             ]}
           />
-          <Button
-            type={archiveView ? 'primary' : 'default'}
-            icon={<Archive size={15} />}
-            onClick={() => openArchive(!archiveView)}
-          >
-            {archiveView ? i18n('task.archive.back') : i18n('task.archive.records')}
-            {!archiveView && archivedTasks.length ? ` (${archivedTasks.length})` : ''}
-          </Button>
-          <Tooltip title={i18n('task.action.refresh')}>
-            <Button icon={<RefreshCw size={15} />} onClick={() => void load()} />
+          <Tooltip title={archiveView ? i18n('task.archive.back') : i18n('task.archive.records')}>
+            <Button
+              type={archiveView ? 'primary' : 'default'}
+              icon={<Archive size={15} />}
+              aria-label={archiveView ? i18n('task.archive.back') : i18n('task.archive.records')}
+              onClick={() => openArchive(!archiveView)}
+            />
           </Tooltip>
-          <Button icon={<CalendarClock size={15} />} onClick={() => openSchedules()}>
-            {i18n('task.schedule.title')}
-          </Button>
-          <Button icon={<Settings2 size={15} />} onClick={() => setAgentManagerOpen(true)}>
-            {i18n('task.agent.manage')}
-          </Button>
-          <Button type="primary" icon={<Plus size={15} />} onClick={() => setCreateOpen(true)}>
-            {i18n('task.create.action')}
-          </Button>
+          <Tooltip title={i18n('task.action.refresh')}>
+            <Button
+              icon={<RefreshCw size={15} />}
+              aria-label={i18n('task.action.refresh')}
+              onClick={() => void load()}
+            />
+          </Tooltip>
+          <Tooltip title={i18n('task.schedule.title')}>
+            <Button
+              icon={<CalendarClock size={15} />}
+              aria-label={i18n('task.schedule.title')}
+              onClick={() => openSchedules()}
+            />
+          </Tooltip>
+          <Tooltip title={i18n('task.agent.manage')}>
+            <Button
+              icon={<Bot size={15} />}
+              aria-label={i18n('task.agent.manage')}
+              onClick={openAgentManager}
+            />
+          </Tooltip>
+          <Tooltip title={i18n('task.create.action')}>
+            <Button
+              type="primary"
+              icon={<Plus size={15} />}
+              aria-label={i18n('task.create.action')}
+              onClick={openTaskCreate}
+            />
+          </Tooltip>
         </div>
           </header>
 
-          <main className={styles.content}>
+          <main className={`${styles.content} ${!archiveView ? styles.contentWithFilters : ''}`}>
         {!archiveView && (
           <div className={styles.taskFilters} role="search" aria-label={i18n('task.filter.title')}>
             <Input
@@ -1723,7 +1951,7 @@ export default function Tasks() {
           )
         ) : !tasks.length ? (
           <Empty description={i18n('task.empty')}>
-            <Button type="primary" onClick={() => setCreateOpen(true)}>
+            <Button type="primary" onClick={openTaskCreate}>
               {i18n('task.create.first')}
             </Button>
           </Empty>
@@ -1788,111 +2016,59 @@ export default function Tasks() {
           </main>
         </>
       )}
-
-      <Modal
-        width={720}
-        title={null}
-        open={createOpen}
-        confirmLoading={submitting}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => void createTask()}
-        destroyOnClose
-      >
-        <div className={styles.taskCreateHeader}>
-          <div>
-            <span>{i18n('task.title')}</span>
-            <h2>{i18n('task.create.title')}</h2>
-          </div>
+      {workspaceTabs.filter((tab) => tab.type === 'TASK_CREATE').map((tab) => (
+        <div key={tab.key} className={styles.taskWorkspacePane} hidden={activeWorkspaceTabKey !== tab.key}>
+          <TaskCreatePage
+            form={createForm}
+            agents={agents}
+            dataSources={dataSources}
+            submitting={submitting}
+            onCancel={closeTask}
+            onSubmit={() => void createTask()}
+            onDirtyChange={(dirty) => setWorkspaceTabDirty(tab.key, dirty)}
+          />
         </div>
-        <Form
-          form={createForm}
-          layout="vertical"
-          className={styles.taskCreateForm}
-          initialValues={{ priority: 0, scopeIndexes: [] }}
-        >
-          <Form.Item name="title" rules={[{ required: true, max: 256 }]}>
-            <Input
-              variant="borderless"
-              autoFocus
-              className={styles.taskTitleInput}
-              placeholder={i18n('task.create.titlePlaceholder')}
-            />
-          </Form.Item>
-          <Form.Item name="description">
-            <Input.TextArea variant="borderless" rows={5} placeholder={i18n('task.create.descriptionPlaceholder')} />
-          </Form.Item>
-          <div className={styles.taskPropertyBar}>
-            <Form.Item name="assigneeAgentId" label={null} rules={[{ required: true }]}>
-              <Select
-                style={{ minWidth: 180 }}
-                showSearch
-                optionFilterProp="label"
-                options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
-                optionRender={(option) => (
-                  <AgentIdentity agent={agentById.get(String(option.value))} fallback={option.label} />
-                )}
-                labelRender={({ value, label }) => (
-                  <AgentIdentity agent={agentById.get(String(value))} fallback={label} />
-                )}
-                onChange={(agentId) => {
-                  const nextAgent = agentById.get(agentId);
-                  createForm.setFieldValue('scopeIndexes', (nextAgent?.dataScopes || []).map((_, index) => index));
-                }}
-                placeholder={i18n('task.agent.select')}
-              />
-            </Form.Item>
-            <Form.Item name="priority" label={null}>
-              <Select
-                style={{ width: 130 }}
-                options={[0, 10, 20, 30].map((value) => ({
-                  value,
-                  label: i18n(`task.priority.${value}` as Parameters<typeof i18n>[0]),
-                }))}
-              />
-            </Form.Item>
-          </div>
-          <Form.Item noStyle shouldUpdate={(before, after) => before.assigneeAgentId !== after.assigneeAgentId}>
-            {({ getFieldValue }) => {
-              const formAgent = agentById.get(getFieldValue('assigneeAgentId'));
-              return (
-                <Form.Item name="scopeIndexes" label={i18n('task.scope.select')}>
-                  <Select
-                    mode="multiple"
-                    options={(formAgent?.dataScopes || []).map((scope, index) => ({
-                      value: index,
-                      label: `${dataSourceDisplayName(
-                        scope.dataSourceId,
-                        dataSources,
-                        i18n('task.scope.datasourceUnavailable', scope.dataSourceId),
-                      )} / ${scope.databaseName || '*'} / ${scope.schemaName || '*'} · ${i18n(
-                        'task.scope.approvalShort', scope.approvalMode || 'RISK_BASED',
-                      )}`,
-                    }))}
-                    placeholder={i18n('task.scope.selectPlaceholder')}
-                  />
-                </Form.Item>
-              );
+      ))}
+      {workspaceTabs.filter((tab) => tab.type === 'SCHEDULES').map((tab) => (
+        <div key={tab.key} className={styles.taskWorkspacePane} hidden={activeWorkspaceTabKey !== tab.key}>
+          <TaskSchedulePage
+            active={tasksPageActive && activeWorkspaceTabKey === tab.key}
+            agents={agents}
+            dataSources={dataSources}
+            scheduleId={tab.entityId}
+            createMode={!tab.entityId}
+            onBack={closeSchedules}
+            onCreate={() => openSchedules()}
+            onSelectSchedule={openSchedules}
+            onOpenTask={openTask}
+            onDirtyChange={(dirty) => setWorkspaceTabDirty(tab.key, dirty)}
+          />
+        </div>
+      ))}
+      {workspaceTabs.filter((tab) => tab.type === 'AGENT_MANAGER' || tab.type === 'AGENT_EDITOR').map((tab) => (
+        <div key={tab.key} className={styles.taskWorkspacePane} hidden={activeWorkspaceTabKey !== tab.key}>
+          <AgentManagerPage
+            active={tasksPageActive && activeWorkspaceTabKey === tab.key}
+            agents={agents}
+            editorAgentId={tab.type === 'AGENT_EDITOR' ? tab.entityId : undefined}
+            createMode={tab.type === 'AGENT_EDITOR' && !tab.entityId}
+            onOpenEditor={openAgentEditor}
+            onCancelEditor={openAgentManager}
+            onDirtyChange={(dirty) => setWorkspaceTabDirty(tab.key, dirty)}
+            onSaved={(agent) => openAgentEditor(agent)}
+            onChanged={(agent, removed) => {
+              setAgents((current) => {
+                if (removed) return current.filter((item) => item.id !== agent.id);
+                return current.some((item) => item.id === agent.id)
+                  ? current.map((item) => (item.id === agent.id ? agent : item))
+                  : [agent, ...current];
+              });
             }}
-          </Form.Item>
-          <Form.Item name="acceptanceCriteria" label={i18n('task.field.acceptanceCriteria')}>
-            <Input.TextArea rows={2} placeholder={i18n('task.create.criteriaPlaceholder')} />
-          </Form.Item>
-        </Form>
-      </Modal>
+          />
+        </div>
+      ))}
+      </div>
 
-      <AgentManagerModal
-        open={agentManagerOpen}
-        agents={agents}
-        onClose={() => setAgentManagerOpen(false)}
-        onChanged={(agent, removed) => {
-          setAgents((current) => {
-            if (removed) return current.filter((item) => item.id !== agent.id);
-            return current.some((item) => item.id === agent.id)
-              ? current.map((item) => (item.id === agent.id ? agent : item))
-              : [agent, ...current];
-          });
-        }}
-      />
 
       <Modal
         title={i18n('task.artifact.publish')}

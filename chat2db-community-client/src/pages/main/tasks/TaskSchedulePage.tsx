@@ -21,6 +21,7 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -35,8 +36,9 @@ import {
   RotateCcw,
   Save,
   Settings2,
+  X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentAvatar, AgentIdentity } from './TaskPrimitives';
 import ApprovalModeTag from './ApprovalModeTag';
 import { effectiveApprovalMode, normalizeApprovalMode } from './approvalMode';
@@ -46,6 +48,7 @@ import { canOpenScheduledTask, cronFromScheduleValues, sameDataScope } from './t
 import { useTaskScheduleStyles } from './taskScheduleStyle';
 
 interface Props {
+  active: boolean;
   agents: AgentDefinition[];
   dataSources: IConnectionDetails[];
   scheduleId?: string;
@@ -54,6 +57,7 @@ interface Props {
   onSelectSchedule: (scheduleId: string) => void;
   onCreate: () => void;
   onOpenTask: (taskId: string) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 interface ScheduleFormValues {
@@ -117,6 +121,7 @@ function priorityLabel(priority?: number) {
 }
 
 export default function TaskSchedulePage({
+  active,
   agents,
   dataSources,
   scheduleId,
@@ -125,6 +130,7 @@ export default function TaskSchedulePage({
   onSelectSchedule,
   onCreate,
   onOpenTask,
+  onDirtyChange,
 }: Props) {
   const { styles, cx } = useTaskScheduleStyles();
   const [schedules, setSchedules] = useState<AgentTaskSchedule[]>([]);
@@ -136,6 +142,7 @@ export default function TaskSchedulePage({
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState<Array<string | number>>([]);
   const [form] = Form.useForm<ScheduleFormValues>();
+  const createFormInitialized = useRef(false);
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const watchedAgentId = Form.useWatch('assigneeAgentId', form);
   const watchedType = Form.useWatch('scheduleType', form);
@@ -189,16 +196,21 @@ export default function TaskSchedulePage({
   }, [form]);
 
   useEffect(() => {
+    if (!active) return;
     void loadSchedules();
-  }, [loadSchedules]);
+  }, [active, loadSchedules]);
 
   useEffect(() => {
+    if (!active) return;
     if (createMode) {
-      resetCreateForm();
+      if (!createFormInitialized.current) {
+        resetCreateForm();
+        createFormInitialized.current = true;
+      }
     } else if (scheduleId) {
       void loadDetail(scheduleId);
     }
-  }, [createMode, loadDetail, resetCreateForm, scheduleId]);
+  }, [active, createMode, loadDetail, resetCreateForm, scheduleId]);
 
   const beginEdit = (schedule: AgentTaskSchedule) => {
     const agent = agentById.get(schedule.assigneeAgentId);
@@ -220,6 +232,7 @@ export default function TaskSchedulePage({
       cronExpression: schedule.cronExpression,
       timezone: schedule.timezone,
     });
+    onDirtyChange(false);
   };
 
   const previewCron = async () => {
@@ -259,6 +272,7 @@ export default function TaskSchedulePage({
         : await agentService.createTaskSchedule(payload);
       setSelected(detail);
       setEditing(undefined);
+      onDirtyChange(false);
       feedback.success(editing ? i18n('task.schedule.updated') : i18n('task.schedule.created'));
       await loadSchedules();
       onSelectSchedule(detail.schedule.id);
@@ -317,7 +331,7 @@ export default function TaskSchedulePage({
           description={i18n('task.schedule.approvalPolicyEditNotice')}
         />
       )}
-      <Form form={form} layout="vertical" className={styles.form}>
+      <Form form={form} layout="vertical" className={styles.form} onValuesChange={() => onDirtyChange(true)}>
         <div className={styles.formGrid}>
           <Form.Item name="name" label={i18n('task.schedule.name')} rules={[{ required: true, max: 128 }]}>
             <Input autoFocus />
@@ -372,6 +386,9 @@ export default function TaskSchedulePage({
             }))}
           />
         </Form.Item>
+        {watchedAgentId && !agentById.get(watchedAgentId)?.dataScopes.length && (
+          <Alert type="warning" showIcon message={i18n('task.agent.scopeBindingRequired')} />
+        )}
         <div className={styles.formGrid}>
           <Form.Item name="scheduleType" label={i18n('task.schedule.type')} rules={[{ required: true }]}>
             <Select
@@ -422,7 +439,13 @@ export default function TaskSchedulePage({
                 />
               </Form.Item>
             )}
-            <Button onClick={() => void previewCron()}>{i18n('task.schedule.preview')}</Button>
+            <Tooltip title={i18n('task.schedule.preview')}>
+              <Button
+                icon={<CalendarClock size={14} />}
+                aria-label={i18n('task.schedule.preview')}
+                onClick={() => void previewCron()}
+              />
+            </Tooltip>
             {preview.length > 0 && (
               <div className={styles.preview}>
                 {preview.map((value) => <div key={String(value)}>{formatTime(value)}</div>)}
@@ -436,11 +459,26 @@ export default function TaskSchedulePage({
         <Alert type="warning" showIcon message={i18n('task.schedule.skipPolicy')} />
         <div className={styles.formActions}>
           {editing && (
-            <Button onClick={() => setEditing(undefined)}>{i18n('task.schedule.cancel')}</Button>
+            <Tooltip title={i18n('task.schedule.cancel')}>
+              <Button
+                icon={<X size={14} />}
+                aria-label={i18n('task.schedule.cancel')}
+                onClick={() => {
+                  setEditing(undefined);
+                  onDirtyChange(false);
+                }}
+              />
+            </Tooltip>
           )}
-          <Button type="primary" icon={<Save size={14} />} loading={saving} onClick={() => void save()}>
-            {i18n('task.schedule.save')}
-          </Button>
+          <Tooltip title={i18n('task.schedule.save')}>
+            <Button
+              type="primary"
+              icon={<Save size={14} />}
+              aria-label={i18n('task.schedule.save')}
+              loading={saving}
+              onClick={() => void save()}
+            />
+          </Tooltip>
         </div>
       </Form>
     </div>
@@ -457,25 +495,48 @@ export default function TaskSchedulePage({
             <p>{schedule.taskTitle}</p>
           </div>
           <div className={styles.sectionActions}>
-            <Button icon={<Play size={14} />} disabled={schedule.status === 'ARCHIVED'} onClick={() => void runNow(schedule)}>
-              {i18n('task.schedule.runNow')}
-            </Button>
-            <Button icon={<Settings2 size={14} />} disabled={schedule.status === 'ARCHIVED'} onClick={() => beginEdit(schedule)}>
-              {i18n('task.schedule.edit')}
-            </Button>
+            <Tooltip title={i18n('task.schedule.runNow')}>
+              <Button
+                icon={<Play size={14} />}
+                aria-label={i18n('task.schedule.runNow')}
+                disabled={schedule.status === 'ARCHIVED'}
+                onClick={() => void runNow(schedule)}
+              />
+            </Tooltip>
+            <Tooltip title={i18n('task.schedule.edit')}>
+              <Button
+                icon={<Settings2 size={14} />}
+                aria-label={i18n('task.schedule.edit')}
+                disabled={schedule.status === 'ARCHIVED'}
+                onClick={() => beginEdit(schedule)}
+              />
+            </Tooltip>
             {schedule.status === 'ACTIVE' ? (
-              <Button icon={<Pause size={14} />} onClick={() => void changeStatus(schedule, 'pause')}>
-                {i18n('task.schedule.pause')}
-              </Button>
+              <Tooltip title={i18n('task.schedule.pause')}>
+                <Button
+                  icon={<Pause size={14} />}
+                  aria-label={i18n('task.schedule.pause')}
+                  onClick={() => void changeStatus(schedule, 'pause')}
+                />
+              </Tooltip>
             ) : schedule.status === 'PAUSED' ? (
-              <Button icon={<RotateCcw size={14} />} onClick={() => void changeStatus(schedule, 'resume')}>
-                {i18n('task.schedule.resume')}
-              </Button>
+              <Tooltip title={i18n('task.schedule.resume')}>
+                <Button
+                  icon={<RotateCcw size={14} />}
+                  aria-label={i18n('task.schedule.resume')}
+                  onClick={() => void changeStatus(schedule, 'resume')}
+                />
+              </Tooltip>
             ) : null}
             {schedule.status !== 'ARCHIVED' && (
-              <Button danger icon={<Archive size={14} />} onClick={() => void changeStatus(schedule, 'archive')}>
-                {i18n('task.schedule.archive')}
-              </Button>
+              <Tooltip title={i18n('task.schedule.archive')}>
+                <Button
+                  danger
+                  icon={<Archive size={14} />}
+                  aria-label={i18n('task.schedule.archive')}
+                  onClick={() => void changeStatus(schedule, 'archive')}
+                />
+              </Tooltip>
             )}
           </div>
         </div>
@@ -548,9 +609,14 @@ export default function TaskSchedulePage({
         <section className={styles.history}>
           <div className={styles.historyHeader}>
             <h3>{i18n('task.schedule.history')}</h3>
-            <Button type="text" icon={<RefreshCw size={14} />} onClick={() => void refreshSelected(schedule.id)}>
-              {i18n('task.schedule.refresh')}
-            </Button>
+            <Tooltip title={i18n('task.schedule.refresh')}>
+              <Button
+                type="text"
+                icon={<RefreshCw size={14} />}
+                aria-label={i18n('task.schedule.refresh')}
+                onClick={() => void refreshSelected(schedule.id)}
+              />
+            </Tooltip>
           </div>
           <Table
             rowKey="id"
@@ -577,10 +643,17 @@ export default function TaskSchedulePage({
                 render: (_: unknown, execution: AgentTaskScheduleExecution) => execution.taskId
                   ? canOpenScheduledTask(execution.taskId, execution.taskLinkState)
                     ? (
-                      <Button type="link" icon={<ExternalLink size={13} />} onClick={() => onOpenTask(execution.taskId!)}>
-                        {execution.taskLinkState === 'ARCHIVED'
-                          ? i18n('task.schedule.taskArchived') : i18n('task.schedule.viewTask')}
-                      </Button>
+                      <Tooltip title={execution.taskLinkState === 'ARCHIVED'
+                        ? i18n('task.schedule.taskArchived') : i18n('task.schedule.viewTask')}
+                      >
+                        <Button
+                          type="link"
+                          icon={<ExternalLink size={13} />}
+                          aria-label={execution.taskLinkState === 'ARCHIVED'
+                            ? i18n('task.schedule.taskArchived') : i18n('task.schedule.viewTask')}
+                          onClick={() => onOpenTask(execution.taskId!)}
+                        />
+                      </Tooltip>
                     )
                     : execution.taskLinkState === 'ARCHIVED'
                       ? i18n('task.schedule.taskArchived')
@@ -599,21 +672,36 @@ export default function TaskSchedulePage({
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerIdentity}>
-          <Button type="text" icon={<ArrowLeft size={16} />} onClick={onBack}>
-            {i18n('task.schedule.backToTasks')}
-          </Button>
+          <Tooltip title={i18n('task.schedule.backToTasks')}>
+            <Button
+              type="text"
+              icon={<ArrowLeft size={16} />}
+              aria-label={i18n('task.schedule.backToTasks')}
+              onClick={onBack}
+            />
+          </Tooltip>
           <div className={styles.headerTitle}>
             <h1>{i18n('task.schedule.title')}</h1>
             <p>{i18n('task.schedule.pageHint')}</p>
           </div>
         </div>
         <Space>
-          <Button icon={<RefreshCw size={14} />} loading={listLoading} onClick={() => void loadSchedules()}>
-            {i18n('task.schedule.refresh')}
-          </Button>
-          <Button type="primary" icon={<Plus size={14} />} onClick={onCreate}>
-            {i18n('task.schedule.create')}
-          </Button>
+          <Tooltip title={i18n('task.schedule.refresh')}>
+            <Button
+              icon={<RefreshCw size={14} />}
+              aria-label={i18n('task.schedule.refresh')}
+              loading={listLoading}
+              onClick={() => void loadSchedules()}
+            />
+          </Tooltip>
+          <Tooltip title={i18n('task.schedule.create')}>
+            <Button
+              type="primary"
+              icon={<Plus size={14} />}
+              aria-label={i18n('task.schedule.create')}
+              onClick={onCreate}
+            />
+          </Tooltip>
         </Space>
       </header>
       <div className={styles.workspace}>
@@ -633,9 +721,14 @@ export default function TaskSchedulePage({
                 showIcon
                 message={i18n('task.schedule.loadFailed')}
                 action={(
-                  <Button size="small" onClick={() => void loadSchedules()}>
-                    {i18n('task.action.retry')}
-                  </Button>
+                  <Tooltip title={i18n('task.action.retry')}>
+                    <Button
+                      size="small"
+                      icon={<RefreshCw size={14} />}
+                      aria-label={i18n('task.action.retry')}
+                      onClick={() => void loadSchedules()}
+                    />
+                  </Tooltip>
                 )}
               />
             </div>
@@ -674,7 +767,15 @@ export default function TaskSchedulePage({
           ) : (
             <div className={styles.sidebarEmpty}>
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={i18n('task.schedule.empty')}>
-                <Button type="primary" size="small" onClick={onCreate}>{i18n('task.schedule.create')}</Button>
+                <Tooltip title={i18n('task.schedule.create')}>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<Plus size={14} />}
+                    aria-label={i18n('task.schedule.create')}
+                    onClick={onCreate}
+                  />
+                </Tooltip>
               </Empty>
             </div>
           )}
@@ -689,16 +790,29 @@ export default function TaskSchedulePage({
                 showIcon
                 message={i18n('task.schedule.loadFailed')}
                 action={scheduleId
-                  ? <Button onClick={() => void loadDetail(scheduleId)}>{i18n('task.action.retry')}</Button>
+                  ? (
+                    <Tooltip title={i18n('task.action.retry')}>
+                      <Button
+                        icon={<RefreshCw size={14} />}
+                        aria-label={i18n('task.action.retry')}
+                        onClick={() => void loadDetail(scheduleId)}
+                      />
+                    </Tooltip>
+                  )
                   : undefined}
               />
             </div>
           ) : (
             <div className={styles.emptyMain}>
               <Empty description={i18n('task.schedule.selectHint')}>
-                <Button type="primary" icon={<CalendarClock size={14} />} onClick={onCreate}>
-                  {i18n('task.schedule.create')}
-                </Button>
+                <Tooltip title={i18n('task.schedule.create')}>
+                  <Button
+                    type="primary"
+                    icon={<CalendarClock size={14} />}
+                    aria-label={i18n('task.schedule.create')}
+                    onClick={onCreate}
+                  />
+                </Tooltip>
               </Empty>
             </div>
           )}
