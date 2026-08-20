@@ -1,5 +1,7 @@
 # Public ownership is intentionally explicit while the maintainer rotation grows.
-* @openai0229
+* @openai0229 @OtterMind/community-maintainers
 
 /.github/ @openai0229
 /script/github/ @openai0229
+/script/package/ @openai0229
+/docker/ @openai0229
