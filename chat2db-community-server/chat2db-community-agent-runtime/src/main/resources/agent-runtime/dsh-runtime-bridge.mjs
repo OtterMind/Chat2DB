@@ -166,7 +166,7 @@ async function initialize(params) {
   if (hostProcess) throw new Error('DSH bridge is already initialized');
   const args = ['--profile', 'web'];
   for (const patch of params.patches || []) args.push('--patch', patch);
-  args.push('--host', '127.0.0.1', '--port', '0');
+  args.push('--host', '127.0.0.1', '--port', '0', '--no-open');
   for (const argument of params.customArguments || []) args.push(argument);
   hostProcess = spawn(params.executable, args, {
     cwd: params.cwd,
@@ -188,14 +188,13 @@ async function initialize(params) {
 async function startTurn(params) {
   finalText = '';
   latestUsage = {};
-  if (params.resumeSessionId) {
-    activeSessionId = params.resumeSessionId;
-    await call('session.history', { sessionId: activeSessionId, maxMessages: 1 });
-  } else {
-    const created = await call('session.create', { cwd: params.cwd });
-    activeSessionId = created.sessionId;
-  }
-  notify('runtime/session-updated', { sessionId: activeSessionId, resumed: Boolean(params.resumeSessionId) });
+  // A DSH session keeps its original cwd immutable. Chat2DB creates and removes
+  // one isolated workspace per Run, so reusing a previous session would make
+  // bash spawn in a directory that no longer exists. The assembled Chat2DB
+  // context carries continuity while every DSH turn gets the current workspace.
+  const created = await call('session.create', { cwd: params.cwd });
+  activeSessionId = created.sessionId;
+  notify('runtime/session-updated', { sessionId: activeSessionId, resumed: false });
   const completion = new Promise(resolve => { completedTurn = resolve; });
   await call('session.prompt', {
     sessionId: activeSessionId,

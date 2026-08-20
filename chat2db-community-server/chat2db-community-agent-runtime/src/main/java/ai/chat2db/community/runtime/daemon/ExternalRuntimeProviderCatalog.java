@@ -57,8 +57,9 @@ public final class ExternalRuntimeProviderCatalog {
     public static Set<String> capabilities(AgentRuntimeProviderEnum provider) {
         return switch (requireExternal(provider)) {
             case CLAUDE_CODE, CODEX, OPENCODE, PI -> COMMON_CAPABILITIES;
-            case HERMES, DSH -> Set.of("streaming", "sessionResume", "usage", "cancellation",
+            case HERMES -> Set.of("streaming", "sessionResume", "usage", "cancellation",
                     "taskWorkspace", "approvalBridge");
+            case DSH -> Set.of("streaming", "usage", "cancellation", "taskWorkspace", "approvalBridge");
             case SPRING_AI -> throw unsupported(provider);
         };
     }

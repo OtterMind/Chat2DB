@@ -57,6 +57,23 @@ class DshRuntimeBridgeAdapterTest {
     Path workspace;
 
     @Test
+    void bundledBridgeDisablesAutomaticBrowserLaunch() throws Exception {
+        try (InputStream stream = DshRuntimeBridgeAdapterTest.class.getResourceAsStream(
+                "/agent-runtime/dsh-runtime-bridge.mjs")) {
+            assertTrue(stream != null);
+            String bridge = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(bridge.contains(
+                    "args.push('--host', '127.0.0.1', '--port', '0', '--no-open');"));
+        }
+
+        ProviderExecutionRequest unsafe = request();
+        unsafe.getRuntimeProfile().setCustomArguments(List.of("--no-open"));
+        assertThrows(IllegalArgumentException.class,
+                () -> adapter(new FakeProcess((reader, writer, fake) -> { })).execute(
+                        unsafe, ignored -> { }, ignored -> { }));
+    }
+
+    @Test
     void executesBridgeProtocolAndMapsSessionStreamingToolsAndUsage() throws Exception {
         List<JsonNode> requests = new ArrayList<>();
         FakeProcess process = new FakeProcess((reader, writer, fake) -> {
@@ -150,13 +167,13 @@ class DshRuntimeBridgeAdapterTest {
     }
 
     @Test
-    void forwardsResumeSessionAndRejectsHostOverrides() {
+    void startsDshInTheCurrentWorkspaceInsteadOfResumingADeletedWorkspace() {
         FakeProcess process = new FakeProcess((reader, writer, fake) -> {
             JsonNode initialize = read(reader);
             respond(writer, initialize, object("protocolVersion", "chat2db-dsh-bridge-v1"));
             JsonNode turn = read(reader);
-            assertEquals("existing-session", turn.path("params").path("resumeSessionId").asText());
-            respond(writer, turn, object("sessionId", "existing-session", "turnId", "2",
+            assertFalse(turn.path("params").has("resumeSessionId"));
+            respond(writer, turn, object("sessionId", "new-session", "turnId", "1",
                     "finalResponse", "ok", "usage", mapper.createObjectNode()));
             fake.awaitDestroy();
         });
@@ -164,8 +181,18 @@ class DshRuntimeBridgeAdapterTest {
         request.setResumeSessionId("existing-session");
         DshRuntimeBridgeAdapter adapter = adapter(process);
 
-        assertEquals("existing-session",
+        assertEquals("new-session",
                 adapter.execute(request, ignored -> { }, ignored -> { }).getSessionId());
+
+        try (InputStream stream = DshRuntimeBridgeAdapterTest.class.getResourceAsStream(
+                "/agent-runtime/dsh-runtime-bridge.mjs")) {
+            assertTrue(stream != null);
+            String bridge = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertFalse(bridge.contains("call('session.history'"));
+            assertTrue(bridge.contains("call('session.create', { cwd: params.cwd })"));
+        } catch (IOException exception) {
+            throw new AssertionError(exception);
+        }
 
         ProviderExecutionRequest unsafe = request();
         unsafe.getRuntimeProfile().setCustomArguments(List.of("--host"));
