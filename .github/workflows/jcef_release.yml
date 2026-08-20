@@ -1,5 +1,5 @@
 name: Build Community Desktop Release
-run-name: Community Desktop ${{ github.event_name == 'push' && 'release' || 'gray' }} ${{ inputs.version || github.ref_name }}
+run-name: Community Desktop ${{ github.event_name == 'push' && 'release' || 'beta' }} ${{ inputs.version || github.ref_name }}
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Gray build version, without the v prefix'
+        description: 'Beta build version, without the v prefix; beta builds must run from main'
         required: true
         type: string
 
@@ -37,6 +37,7 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
@@ -52,8 +53,12 @@ jobs:
             update_latest=true
             publish=true
           else
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "Beta builds can only run from the protected main branch: ${GITHUB_REF}" >&2
+              exit 1
+            fi
             version="${INPUT_VERSION}"
-            channel=gray
+            channel=beta
             update_latest=false
             publish=false
           fi
@@ -89,9 +94,10 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
   notify_start:
-    name: Notify Feishu Community gray build start
+    name: Notify Feishu Community beta build start
     needs: resolve
-    if: ${{ needs.resolve.outputs.channel == 'gray' }}
+    if: ${{ needs.resolve.outputs.channel == 'beta' }}
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     steps:
       - name: Send Feishu start notification
@@ -112,7 +118,7 @@ jobs:
               raise SystemExit(0)
 
           lines = [
-              "Chat2DB Community gray build started",
+              "Chat2DB Community beta build started",
               f"Version: {os.environ['VERSION']}",
               "Distribution: GitHub Actions artifacts only",
               f"Workflow run: {os.environ['RUN_URL']}",
@@ -138,6 +144,7 @@ jobs:
   build:
     name: Build ${{ matrix.artifact_name }}
     needs: resolve
+    environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
     strategy:
       fail-fast: false
       matrix:
@@ -336,6 +343,7 @@ jobs:
       - resolve
       - build
     if: ${{ needs.resolve.outputs.channel == 'release' }}
+    environment: community-release
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -674,12 +682,13 @@ jobs:
             cdn-assets/latest_version.json
 
   notify_summary:
-    name: Notify Feishu Community gray build summary
+    name: Notify Feishu Community beta build summary
     needs:
       - resolve
       - build
       - cdn_release
-    if: ${{ always() && needs.resolve.outputs.channel == 'gray' }}
+    if: ${{ always() && needs.resolve.outputs.channel == 'beta' }}
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -733,7 +742,7 @@ jobs:
 
           if build_result == "success":
               lines = [
-                  "Chat2DB Community gray build completed",
+                  "Chat2DB Community beta build completed",
                   f"Version: {version}",
                   f"Build result: {build_result}",
                   "Distribution: GitHub Actions artifacts only",
@@ -741,7 +750,7 @@ jobs:
               ]
           else:
               lines = [
-                  "Chat2DB Community gray build did not complete successfully",
+                  "Chat2DB Community beta build did not complete successfully",
                   f"Version: {version}",
                   f"Build result: {build_result}",
                   "Failed build jobs:",
@@ -773,6 +782,7 @@ jobs:
       - resolve
       - build
     if: ${{ needs.resolve.outputs.publish == 'true' }}
+    environment: community-release
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -888,6 +898,7 @@ jobs:
       - cdn_release
       - docker
     if: ${{ needs.resolve.outputs.publish == 'true' }}
+    environment: community-release
     runs-on: ubuntu-latest
     permissions:
       contents: write
