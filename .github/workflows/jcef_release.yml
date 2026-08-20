@@ -887,8 +887,8 @@ jobs:
       version: ${{ needs.resolve.outputs.version }}
       push_latest: true
     secrets:
-      COMMUNITY_DOCKER_USERNAME: ${{ secrets.COMMUNITY_DOCKER_USERNAME }}
-      COMMUNITY_DOCKERHUB_TOKEN: ${{ secrets.COMMUNITY_DOCKERHUB_TOKEN }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   publish_release:
     name: Publish GitHub Release
