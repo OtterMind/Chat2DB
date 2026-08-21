@@ -12,6 +12,19 @@ import { useGlobalStore } from '@/store/global';
 import AntdTable from '@/components/AntdTable';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 
+// Mask any API key shown in the list: short values collapse fully, longer values keep
+// a 4-character prefix and suffix around the middle dots.
+// The full value is still copied to the clipboard; only the rendered text is masked.
+const maskApiKey = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+  if (value.length <= 8) {
+    return '••••';
+  }
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+};
+
 interface IProps {
   className?: string;
 }
@@ -96,9 +109,13 @@ export default memo<IProps>((props) => {
       dataIndex: 'apiKey',
       key: 'apiKey',
       render: (data) => {
+        // Mask the displayed value in the list so it is not persistently visible in the
+        // DOM or on screen-shares; short keys collapse to bullets, while longer keys
+        // keep a prefix/suffix. The copy button still copies the full value.
+        const masked = maskApiKey(data);
         return (
           <div className={styles.apiKeyBox}>
-            <div className={styles.apiKeyText}>{data}</div>
+            <div className={styles.apiKeyText}>{masked}</div>
             <IconButton
               className={styles.iconButton}
               size="md"
