@@ -1,5 +1,4 @@
 import { UpdatedStatus } from '@/constants/settings';
-import { isCommunityEnv } from '@/utils/env';
 import { IHotUpdateConfig, IUpdateDetail } from '@/typings/settings';
 
 export interface HotUpdateState {
@@ -12,8 +11,7 @@ export const initialHotUpdateState: HotUpdateState = {
     /**
      * Do you want to remind me?
      */
-    // Community desktop stays offline-first until the user explicitly opts in.
-    remindMe: !isCommunityEnv,
+    remindMe: true,
     /**
      * Whether to download automatically
      */

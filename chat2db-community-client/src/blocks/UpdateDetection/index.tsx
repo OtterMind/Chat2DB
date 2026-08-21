@@ -4,16 +4,9 @@ import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
-import {
-  getManualDownloadAction,
-  getManualRecoveryAction,
-  isWindowsDesktopUpdatePlatform,
-} from '@/store/global/slices/hotUpdate/action';
 import { useGlobalStore } from '@/store/global';
-import { isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
-import { IUpdateDetail } from '@/typings/settings';
-import { Icon, staticMessage } from '@chat2db/ui';
+import { Icon } from '@chat2db/ui';
 import { Button, notification } from 'antd';
 import { useEffect } from 'react';
 import { useStyles } from './style';
@@ -29,30 +22,12 @@ const createTop = () => {
   }
 };
 
-const getFailureDetail = (reason?: string): string | undefined => {
-  switch (reason) {
-    case 'NETWORK':
-      return i18n('setting.text.updateFailureNetwork');
-    case 'INVALID_MANIFEST':
-      return i18n('setting.text.updateFailureInvalidManifest');
-    case 'CHECKSUM_MISMATCH':
-      return i18n('setting.text.updateFailureChecksumMismatch');
-    case 'UNSUPPORTED_REDIRECT':
-      return i18n('setting.text.updateFailureUnsupportedRedirect');
-    default:
-      return undefined;
-  }
-};
-
 const UpdateDetection = () => {
   const { styles } = useStyles();
-  const isDevelopmentDesktop = isDesktop && isDevelopment;
-  const isWindowsUpdatePlatform = isWindowsDesktopUpdatePlatform();
 
   const {
     appConfig,
     setUpdateDetail,
-    downloadUpdate,
     appUrlConfig,
     hotUpdateConfig,
     updateDetail,
@@ -62,10 +37,9 @@ const UpdateDetection = () => {
     setSettingPageActiveTab,
   } = useGlobalStore((state) => ({
     appConfig: state.appConfig,
-    setUpdateDetail: state.setUpdateDetail,
     appUrlConfig: state.appUrlConfig,
     hotUpdateConfig: state.hotUpdateConfig,
-    downloadUpdate: state.downloadUpdate,
+    setUpdateDetail: state.setUpdateDetail,
     updateDetail: state.updateDetail,
     handleCheckUpdate: state.handleCheckUpdate,
     updateAndRestartApp: state.updateAndRestartApp,
@@ -78,13 +52,29 @@ const UpdateDetection = () => {
     top: createTop(),
   });
 
+  const triggerDownload = () => {
+    jcefApi
+      .triggerDownload()
+      .then((accepted) => {
+        if (!accepted) {
+          setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+        }
+      })
+      .catch(() => {
+        setUpdateDetail({ status: UpdatedStatus.UpdateFailed });
+      });
+  };
+
   useEffect(() => {
     if (!clientRuntime.enableAutoUpdate) {
       return;
     }
     JcefEventBus.on(
       JavaPushActionType.AUTO_PROGRESS,
-      (data: IUpdateDetail) => {
+      (data: {
+        status: UpdatedStatus; // update status
+        progress: number; // update progress
+      }) => {
         setUpdateDetail(data);
       },
     );
@@ -97,12 +87,12 @@ const UpdateDetection = () => {
     if (!clientRuntime.enableAutoUpdate) {
       return;
     }
+    // Check for updates, check for updates after app initialization is completed
     if (appConfig.isReady) {
-      void syncUpdatePreferences();
-      if (hotUpdateConfig.remindMe) {
-        void handleCheckUpdate();
-      }
-      void jcefApi
+      syncUpdatePreferences()
+        .then(() => handleCheckUpdate())
+        .catch(() => undefined);
+      jcefApi
         .getUpdateRecoveryStatus()
         .then((status) => {
           if (status.failed) {
@@ -111,7 +101,7 @@ const UpdateDetection = () => {
         })
         .catch(() => undefined);
     }
-  }, [appConfig.isReady, hotUpdateConfig.remindMe, syncUpdatePreferences]);
+  }, [appConfig.isReady]);
 
   useEffect(() => {
     if (!clientRuntime.enableAutoUpdate) {
@@ -122,28 +112,19 @@ const UpdateDetection = () => {
         if (hotUpdateConfig.remindMe) {
           openFindNewVersionNotification();
         }
-        if (!isDevelopmentDesktop && isWindowsUpdatePlatform && hotUpdateConfig.autoDownload) {
-          void downloadUpdate();
+        if (hotUpdateConfig.autoDownload) {
+          triggerDownload();
         }
         break;
       case UpdatedStatus.Updated:
-        if (!isDevelopmentDesktop && isWindowsUpdatePlatform && hotUpdateConfig.autoInstall) {
-          void updateAndRestartApp();
-          return;
-        }
-        if (isDevelopmentDesktop) {
+        if (hotUpdateConfig.autoInstall) {
+          updateAndRestartApp();
           return;
         }
         openNotificationAuto();
         break;
       case UpdatedStatus.Installed:
-        if (isDevelopmentDesktop) {
-          return;
-        }
         openNotificationAuto();
-        break;
-      case UpdatedStatus.UpdateFailed:
-        openUpdateFailedNotification();
         break;
       default:
         break;
@@ -186,6 +167,17 @@ const UpdateDetection = () => {
 
   const openRecoveryNotification = (fromVersion: string, toVersion: string) => {
     const key = 'update-recovery-failed';
+    const btn = (
+      <Button
+        type="link"
+        size="small"
+        onClick={() => {
+          jcefApi.openUpdateRecoveryLog().catch(() => undefined);
+        }}
+      >
+        {i18n('setting.button.openUpdateLog')}
+      </Button>
+    );
     notificationApi.error({
       className: styles.notification,
       duration: null,
@@ -193,9 +185,7 @@ const UpdateDetection = () => {
       description: (
         <div>
           <div>{i18n('setting.text.updateRecoveryFailed', toVersion, fromVersion)}</div>
-          <Button type="link" size="small" onClick={() => void jcefApi.openUpdateRecoveryLog()}>
-            {i18n('setting.button.openUpdateLog')}
-          </Button>
+          <div>{btn}</div>
         </div>
       ),
       key,
@@ -210,32 +200,23 @@ const UpdateDetection = () => {
       CHANGE_LOG_URL = `${CHANGE_LOG_URL}?type=local`;
     }
 
-    const manualDownload = getManualDownloadAction(updateDetail);
     const btn = (
       <div className={styles.btnBox}>
         <Button
           type="link"
           size="small"
           onClick={() => {
-            if (isWindowsUpdatePlatform) {
-              setSettingPageActiveTab('about');
-            } else if (manualDownload) {
-              openWebPage(manualDownload.url);
-            }
+            setSettingPageActiveTab('about');
             notificationApi.destroy();
           }}
-          disabled={!isWindowsUpdatePlatform && !manualDownload}
         >
-          {isWindowsUpdatePlatform
-            ? i18n('setting.button.goToUpdate')
-            : i18n('setting.button.goToDownload')}
+          {i18n('setting.button.goToUpdate')}
         </Button>
         <Button
           type="link"
           size="small"
           onClick={() => {
             openWebPage(CHANGE_LOG_URL);
-            staticMessage.success(i18n('setting.text.changeLogOpenedInBrowser'));
             notificationApi.destroy();
           }}
         >
@@ -259,76 +240,6 @@ const UpdateDetection = () => {
         width: 300,
       },
       description: btn,
-      key,
-    });
-  };
-
-  // Notify the user when an automatic check or download failed and offer a manual GitHub Release fallback.
-  const openUpdateFailedNotification = () => {
-    const key = 'update-failed';
-    const recoveryAction = getManualRecoveryAction(updateDetail);
-    const isCheckFailure = !updateDetail.version || updateDetail.failureStage === 'CHECK';
-    const isInstallFailure = updateDetail.failureStage === 'INSTALL';
-    const message = isInstallFailure
-      ? i18n('setting.text.updateRecoveryFailedTitle')
-      : isCheckFailure
-      ? i18n('setting.text.updateCheckFailed')
-      : i18n('setting.text.updateDownloadFailed');
-    const failureDetail = getFailureDetail(updateDetail.failureReason);
-
-    const btn = isInstallFailure ? (
-      <div className={styles.btnBox}>
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            notificationApi.destroy(key);
-            void updateAndRestartApp();
-          }}
-        >
-          {i18n('setting.button.retryInstallation')}
-        </Button>
-        <Button type="link" size="small" onClick={() => notificationApi.destroy(key)}>
-          {i18n('common.text.laterOn')}
-        </Button>
-      </div>
-    ) : recoveryAction ? (
-      <div className={styles.btnBox}>
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            openWebPage(recoveryAction.url);
-            staticMessage.success(i18n('setting.text.changeLogOpenedInBrowser'));
-            notificationApi.destroy();
-          }}
-        >
-          {recoveryAction.version
-            ? i18n('setting.button.downloadVersionManually', `v${recoveryAction.version}`)
-            : i18n('setting.button.openGitHubReleases')}
-        </Button>
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            notificationApi.destroy();
-          }}
-        >
-          {i18n('common.text.laterOn')}
-        </Button>
-      </div>
-    ) : null;
-
-    notificationApi.error({
-      className: styles.notification,
-      duration: null,
-      message,
-      description: (
-        <div>
-          {failureDetail && <div>{failureDetail}</div>}
-          {btn}
-        </div>
-      ),
       key,
     });
   };

@@ -17,16 +17,14 @@ class DesktopUpdaterRegistryTest {
         System.clearProperty("chat2db.runtime.mode");
         System.clearProperty("chat2db.mode");
         System.clearProperty("chat2db.gui");
-        System.clearProperty("spring.profiles.active");
-        System.clearProperty("chat2db.jcef.web-frontend");
     }
 
     @Test
-    void communityDesktopUsesSecureUpdateWorkflowAdapter() {
+    void communityDesktopKeepsLegacyUpdater() {
         System.setProperty("chat2db.runtime.mode", "community");
         System.setProperty("chat2db.mode", "DESKTOP");
 
-        assertInstanceOf(CommunityDesktopUpdater.class, DesktopUpdaterRegistry.get());
+        assertInstanceOf(LegacyDesktopUpdater.class, DesktopUpdaterRegistry.get());
     }
 
     @Test
@@ -38,20 +36,6 @@ class DesktopUpdaterRegistryTest {
 
         assertInstanceOf(NoOpDesktopUpdater.class, updater);
         assertFalse(updater.appCheckUpdate().needsUpdate());
-    }
-
-    @Test
-    void developmentDesktopCanCheckButCannotDownloadOrInstall() throws Exception {
-        System.setProperty("chat2db.runtime.mode", "community");
-        System.setProperty("chat2db.mode", "DESKTOP");
-        System.setProperty("spring.profiles.active", "dev");
-        System.setProperty("chat2db.jcef.web-frontend", "false");
-
-        IDesktopUpdater updater = DesktopUpdaterRegistry.get();
-
-        assertInstanceOf(CommunityDesktopUpdater.class, updater);
-        assertFalse(updater.triggerDownload(new ConsoleResult()));
-        assertFalse(updater.triggerInstallation());
     }
 
     @Test

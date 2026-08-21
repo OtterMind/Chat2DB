@@ -156,12 +156,6 @@ jobs:
           test -s LICENSE
           test -s SECURITY.md
 
-      - name: Install YAML linter
-        run: python3 -m pip install --disable-pip-version-check yamllint==1.37.1
-
-      - name: Lint YAML configuration files
-        run: python3 -m yamllint --config-file .yamllint.yml .github
-
       - name: Parse YAML configuration files
         shell: ruby {0}
         run: |
@@ -176,9 +170,6 @@ jobs:
 
       - name: Test macOS native signing selection
         run: bash script/package/tests/sign-macos-native-libraries-test.sh
-
-      - name: Test Community release metadata contract
-        run: bash script/release/tests/release_bundle_metadata_contract_test.sh
 
       - name: Test Community workflow automation
         run: node --test script/github/issue-claim.test.js script/github/sync-community-project.test.js

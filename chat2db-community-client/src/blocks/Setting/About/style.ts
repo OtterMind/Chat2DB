@@ -46,13 +46,6 @@ export const useStyles = createStyles(({ css, token }) => {
     updateButtonFirstChild: css`
       margin-right: 20px;
     `,
-    developmentUpdateHint: css`
-      color: ${token.colorTextTertiary};
-      font-size: 12px;
-      line-height: 18px;
-      margin-top: 8px;
-      max-width: 420px;
-    `,
     downloadProgress: css`
       width: 300px;
     `,

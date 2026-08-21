@@ -1,6 +1,5 @@
 package ai.chat2db.community.jcef.update;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.HashMap;
@@ -14,12 +13,6 @@ public class VersionMetadata {
     String version;
     @JsonProperty("releaseNotes")
     String releaseNotes;
-    @JsonProperty("releasePageUrl")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    String releasePageUrl;
-    @JsonProperty("forceUpdate")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    Boolean forceUpdate;
     @JsonProperty("files")
     List<FileInfo> files;
     @JsonProperty("launchCommand")

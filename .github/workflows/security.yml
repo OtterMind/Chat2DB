@@ -24,7 +24,7 @@ jobs:
           - language: javascript
             build-mode: none
           - language: java
-            build-mode: manual
+            build-mode: autobuild
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -34,31 +34,6 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-
-      - name: Set up JDK 17 for Java analysis
-        if: matrix.language == 'java'
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Build Java projects for CodeQL
-        if: matrix.language == 'java'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mvn -B package \
-            -Dmaven.test.skip=true \
-            -DskipTests \
-            -f jpackage/updater/pom.xml
-          mvn -B package \
-            -Dmaven.test.skip=true \
-            -DskipTests \
-            -Dchat2db.finalName=chat2db-community \
-            -f chat2db-community-server/pom.xml \
-            -pl chat2db-community-start \
-            -am
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@0fa1882f994fbd81a47ab0804f93354f5ea40147

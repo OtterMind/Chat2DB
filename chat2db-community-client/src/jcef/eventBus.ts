@@ -13,7 +13,6 @@ export enum JavaPushActionType {
   TERMINAL_OUTPUT = 'terminal_output', // Integrated terminal output
   TERMINAL_EXIT = 'terminal_exit', // Integrated terminal exit
   APP_EXIT_REQUESTED = 'app_exit_requested', // Native application exit requested
-  APP_EXIT_RESULT = 'app_exit_result', // Native application exit request result
 }
 
 export const JcefEventBus = {

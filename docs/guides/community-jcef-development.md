@@ -60,22 +60,6 @@ From the repository root, run:
 JBR_HOME=/path/to/jbr ./script/dev-community-jcef.sh
 ```
 
-To exercise update discovery without depending on a published GitHub Release,
-point the development launcher at a local updater artifact directory containing
-`latest_version.json`, `version.json`, and any payload files referenced by the
-manifest:
-
-```bash
-CHAT2DB_DEV_UPDATE_DIRECTORY=/absolute/path/to/update-fixture \
-  JBR_HOME=/path/to/jbr \
-  ./script/dev-community-jcef.sh
-```
-
-The override is accepted only in Community Desktop development mode. Release,
-non-Community, and non-Desktop runtimes ignore it and continue to use the fixed
-GitHub Release source. Development builds can check and display the fixture but
-still do not enable automatic installation.
-
 The script starts the Community Web frontend with
 `yarn run start:community:hot`, binds it to `127.0.0.1:8889`, waits up to 180
 seconds for Umi to compile and serve `umi.js`, and then starts the JCEF backend

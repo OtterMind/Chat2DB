@@ -37,21 +37,6 @@ type GlobalPersist = Pick<
 // local-storage Options
 const persistOptions: PersistOptions<GlobalStore, GlobalPersist> = {
   name: clientRuntime.globalStoreName,
-  version: 1,
-  migrate: (persistedState, version) => {
-    const persisted = persistedState as GlobalPersist;
-    // Auto-update was previously hidden in Community, so old defaults are not
-    // consent to contact the GitHub Release update service.
-    if (clientRuntime.runtimeKey === 'community' && version < 1) {
-      persisted.hotUpdateConfig = {
-        ...persisted.hotUpdateConfig,
-        remindMe: false,
-        autoDownload: false,
-        autoInstall: false,
-      };
-    }
-    return persisted;
-  },
   partialize: (state) => ({
     mainPageActiveTab: state.mainPageActiveTab,
     baseSetting: state.baseSetting,
