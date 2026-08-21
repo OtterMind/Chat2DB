@@ -1,5 +1,6 @@
 package ai.chat2db.community.updater;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,8 +19,81 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class ExternalUpdaterTest {
+
+    @Test
+    void acknowledgesOnlyAfterThePlanPassesValidation(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
+        Path planPath = controlledDirectory.resolve("plan.json");
+        Path statusPath = controlledDirectory.resolve("status.txt");
+        ExternalUpdater.UpdatePlan plan = new ExternalUpdater.UpdatePlan();
+        plan.remoteMetadata = new ExternalUpdater.VersionMetadata();
+        plan.remoteMetadata.version = "5.3.2";
+        plan.remoteMetadata.files = List.of();
+        plan.tasks = List.of();
+        plan.downloadedFiles = Map.of();
+        new ObjectMapper().writeValue(planPath.toFile(), plan);
+
+        int exitCode = ExternalUpdater.run(new String[]{planPath.toString(), appDirectory.toString(),
+                "chat2db-community://restart", statusPath.toString(), "operation-1", controlledDirectory.toString(),
+                Long.toString(Long.MAX_VALUE)});
+
+        assertEquals(0, exitCode);
+        assertEquals("operation-1|ACCEPTED", Files.readString(statusPath));
+    }
+
+    @Test
+    void restartsTheApplicationWhenInstallationFailsAfterMainProcessExit(@TempDir Path tempDirectory) throws Exception {
+        assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"),
+                "The executable launcher fixture is POSIX-specific");
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
+        Path planPath = controlledDirectory.resolve("plan.json");
+        Path statusPath = controlledDirectory.resolve("status.txt");
+        Path marker = workingDirectory.resolve("restarted.txt");
+        Path launcher = appDirectory.resolve("chat2db-community.exe");
+        Files.writeString(launcher, "#!/bin/sh\nprintf restarted > '" + marker + "'\n");
+        assertTrue(launcher.toFile().setExecutable(true));
+
+        ExternalUpdater.FileInfo update = file("app", "app.jar", "jar", 1, "0".repeat(64));
+        ExternalUpdater.UpdatePlan plan = planFor(update,
+                Map.of("app", controlledDirectory.resolve("missing.jar").toString()));
+        new ObjectMapper().writeValue(planPath.toFile(), plan);
+        Process exitedProcess = new ProcessBuilder("sh", "-c", "exit 0").start();
+        exitedProcess.waitFor();
+
+        int exitCode = ExternalUpdater.run(new String[]{planPath.toString(), appDirectory.toString(),
+                "not a valid restart uri", statusPath.toString(), "operation-recovery", controlledDirectory.toString(),
+                Long.toString(exitedProcess.pid())});
+
+        assertEquals(1, exitCode);
+        for (int attempt = 0; attempt < 40 && !Files.exists(marker); attempt++) {
+            Thread.sleep(25L);
+        }
+        assertEquals("restarted", Files.readString(marker));
+    }
+
+    @Test
+    void reportsFailureWithoutAcceptanceWhenPlanValidationFails(@TempDir Path tempDirectory) throws Exception {
+        Path workingDirectory = real(tempDirectory);
+        Path appDirectory = Files.createDirectory(workingDirectory.resolve("app"));
+        Path controlledDirectory = Files.createDirectory(workingDirectory.resolve("controlled"));
+        Path planPath = controlledDirectory.resolve("plan.json");
+        Path statusPath = controlledDirectory.resolve("status.txt");
+        Files.writeString(planPath, "{\"remoteMetadata\":{\"version\":\"5.3.2\",\"files\":[]},\"downloadedFiles\":{}}");
+
+        int exitCode = ExternalUpdater.run(new String[]{planPath.toString(), appDirectory.toString(),
+                "chat2db-community://restart", statusPath.toString(), "operation-2", controlledDirectory.toString(),
+                Long.toString(Long.MAX_VALUE)});
+
+        assertEquals(1, exitCode);
+        assertEquals("operation-2|FAILED", Files.readString(statusPath));
+    }
 
     @Test
     void rejectsPlanWithoutActions(@TempDir Path appDirectory) {

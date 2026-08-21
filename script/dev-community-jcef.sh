@@ -48,6 +48,10 @@ case "$(uname -s)" in
         ;;
 esac
 
+if [ -n "${CHAT2DB_DEV_UPDATE_DIRECTORY:-}" ]; then
+    JAVA_OPTIONS+=("-Dchat2db.jcef.dev-update-directory=${CHAT2DB_DEV_UPDATE_DIRECTORY}")
+fi
+
 assert_port_available() {
     local host=$1
     local port=$2
@@ -158,6 +162,9 @@ prepare_macos_dev_app() {
     for opt in "${java_opts[@]}"; do
         args+=(--java-options "${opt}")
     done
+    if [ -n "${CHAT2DB_DEV_UPDATE_DIRECTORY:-}" ]; then
+        args+=(--java-options "-Dchat2db.jcef.dev-update-directory=${CHAT2DB_DEV_UPDATE_DIRECTORY}")
+    fi
 
     echo "[dev] building macOS JCEF app image: ${MAC_DEV_APP_DIR}"
     jpackage "${args[@]}"

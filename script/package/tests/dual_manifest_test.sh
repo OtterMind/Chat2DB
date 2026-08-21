@@ -36,7 +36,7 @@ require_file() {
   fi
 }
 
-for f in github-version.json cdn-version.json local_version.json latest_version.json receipt.json; do
+for f in github-version.json cdn-version.json local_version.json latest_version.json cdn-latest-version.json receipt.json; do
   require_file "${TEST_ROOT}/outputs/${f}"
 done
 
@@ -64,19 +64,34 @@ if jq -e 'has("forceUpdate")' "${TEST_ROOT}/outputs/cdn-version.json" >/dev/null
   fail "CDN manifest must not contain forceUpdate"
 fi
 
+# GitHub pointer must bind the full GitHub manifest without containing payload data.
+github_pointer_fields="$(jq -r 'keys[]' "${TEST_ROOT}/outputs/latest_version.json" | sort | tr '\n' ' ')"
+if [ "${github_pointer_fields}" != "forceUpdate metadataSha256 releaseNotes releasePageUrl version " ]; then
+  fail "GitHub latest pointer fields changed: ${github_pointer_fields}"
+fi
+if [ "$(jq -r '.version' "${TEST_ROOT}/outputs/latest_version.json")" != "${VERSION}" ]; then
+  fail "GitHub latest pointer version mismatch"
+fi
+if [ "$(jq -r '.metadataSha256' "${TEST_ROOT}/outputs/latest_version.json")" != "$(shasum -a 256 "${TEST_ROOT}/outputs/github-version.json" | awk '{print $1}')" ]; then
+  fail "GitHub latest pointer metadata SHA mismatch"
+fi
+if jq -e 'has("files")' "${TEST_ROOT}/outputs/latest_version.json" >/dev/null; then
+  fail "GitHub latest pointer must not include payload files"
+fi
+
 # CDN bridge pointer must keep legacy schema.
-if jq -e 'has("metadataSha256")' "${TEST_ROOT}/outputs/latest_version.json" >/dev/null; then
+if jq -e 'has("metadataSha256")' "${TEST_ROOT}/outputs/cdn-latest-version.json" >/dev/null; then
   fail "legacy CDN pointer must not contain metadataSha256"
 fi
-pointer_fields="$(jq -r 'keys[]' "${TEST_ROOT}/outputs/latest_version.json" | sort | tr '\n' ' ')"
+pointer_fields="$(jq -r 'keys[]' "${TEST_ROOT}/outputs/cdn-latest-version.json" | sort | tr '\n' ' ')"
 if [ "${pointer_fields}" != "forceUpdate latestVersion metadataUrl " ]; then
   fail "legacy CDN pointer fields changed: ${pointer_fields}"
 fi
-if [ "$(jq -r '.latestVersion' "${TEST_ROOT}/outputs/latest_version.json")" != "${VERSION}" ]; then
+if [ "$(jq -r '.latestVersion' "${TEST_ROOT}/outputs/cdn-latest-version.json")" != "${VERSION}" ]; then
   fail "CDN pointer latestVersion mismatch"
 fi
 expected_metadata_url="https://cdn.chat2db-ai.com/community/updates/${VERSION}/version.json"
-if [ "$(jq -r '.metadataUrl' "${TEST_ROOT}/outputs/latest_version.json")" != "${expected_metadata_url}" ]; then
+if [ "$(jq -r '.metadataUrl' "${TEST_ROOT}/outputs/cdn-latest-version.json")" != "${expected_metadata_url}" ]; then
   fail "CDN pointer metadataUrl mismatch"
 fi
 

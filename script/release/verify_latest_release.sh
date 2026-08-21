@@ -3,7 +3,7 @@
 # verify_latest_release.sh
 #
 # Verify that a published Community desktop GitHub Release is publicly visible
-# as Latest and that its latest-download version.json matches the staged bundle.
+# as Latest and that its latest-download pointer matches the staged bundle.
 #
 # Required environment:
 #   GH_TOKEN                      GitHub CLI token (read-only is sufficient)
@@ -37,6 +37,7 @@ export GH_TOKEN
 export GH_REPO
 
 required_release_assets=(
+  "latest_version.json"
   "version.json"
   "chat2db-community.jar"
   "lib.zip"
@@ -110,35 +111,43 @@ if [ "${resolved_tag}" != "${TAG_NAME}" ]; then
   fail "/releases/latest resolved to ${resolved_tag}, expected ${TAG_NAME}"
 fi
 
-# --- 4. Latest version.json matches staged metadata -------------------------
-echo "[check] /releases/latest/download/version.json"
-staged_manifest="${RELEASE_ASSETS_DIR}/version.json"
+# --- 4. Latest lightweight pointer matches staged metadata ------------------
+echo "[check] /releases/latest/download/latest_version.json"
+staged_manifest="${RELEASE_ASSETS_DIR}/latest_version.json"
 if [ ! -f "${staged_manifest}" ]; then
-  fail "staged version.json not found"
+  fail "staged latest_version.json not found"
 fi
 
 public_manifest="$(mktemp)"
 trap 'rm -f "${public_manifest}"' EXIT
 
-public_url="https://github.com/${REPO}/releases/latest/download/version.json"
+public_url="https://github.com/${REPO}/releases/latest/download/latest_version.json"
 curl -sSL --max-redirs 5 -o "${public_manifest}" "${public_url}"
 
 if ! diff -q "${staged_manifest}" "${public_manifest}" >/dev/null; then
-  fail "public version.json does not match staged version.json"
+  fail "public latest_version.json does not match staged latest_version.json"
 fi
 
-# --- 5. Manifest version and payload URLs match vX.Y.Z ----------------------
-echo "[check] manifest version and payload URLs"
+# --- 5. Latest pointer binds the versioned payload manifest -----------------
+echo "[check] latest pointer and version manifest"
 public_version="$(jq -r '.version' "${public_manifest}")"
 if [ "${public_version}" != "${VERSION}" ]; then
   fail "public manifest version mismatch: ${public_version} != ${VERSION}"
 fi
 
+version_manifest_url="https://github.com/${REPO}/releases/download/${TAG_NAME}/version.json"
+version_manifest="$(mktemp)"
+trap 'rm -f "${public_manifest}" "${version_manifest}"' EXIT
+curl -sSL --max-redirs 5 -o "${version_manifest}" "${version_manifest_url}"
+if [ "$(sha256_file "${version_manifest}")" != "$(jq -r '.metadataSha256' "${public_manifest}")" ]; then
+  fail "latest pointer metadataSha256 does not match version.json"
+fi
+
 expected_base="https://github.com/${REPO}/releases/download/${TAG_NAME}"
 while IFS= read -r payload; do
   payload_id="$(payload_metadata_id "${payload}")"
-  url="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .url' "${public_manifest}")"
-  server_name="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .serverFileName' "${public_manifest}")"
+  url="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .url' "${version_manifest}")"
+  server_name="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .serverFileName' "${version_manifest}")"
   expected_url="${expected_base}/${server_name}"
   if [ "${url}" != "${expected_url}" ]; then
     fail "public payload URL mismatch for ${payload}: ${url} != ${expected_url}"

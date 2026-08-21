@@ -31,6 +31,7 @@ export GH_TOKEN
 export GH_REPO
 
 required_release_assets=(
+  "latest_version.json"
   "version.json"
   "chat2db-community.jar"
   "lib.zip"

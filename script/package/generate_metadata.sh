@@ -14,7 +14,8 @@ set -euo pipefail
 #   github-version.json   GitHub Release manifest (published as version.json)
 #   cdn-version.json      CDN bridge compatibility manifest
 #   local_version.json    Copy of github-version.json for packaged clients
-#   latest_version.json   Legacy CDN latest-version pointer (bridge only)
+#   latest_version.json   lightweight GitHub Release latest pointer
+#   cdn-latest-version.json legacy CDN latest-version pointer (bridge only)
 #   receipt.json          Canonical artifact receipt with SHA-256 and sizes
 #
 # Environment:
@@ -166,6 +167,7 @@ GITHUB_VERSION_FILE="$OUTPUT_DIR/github-version.json"
 CDN_VERSION_FILE="$OUTPUT_DIR/cdn-version.json"
 LOCAL_VERSION_FILE="$OUTPUT_DIR/local_version.json"
 LATEST_VERSION_FILE="$OUTPUT_DIR/latest_version.json"
+CDN_LATEST_VERSION_FILE="$OUTPUT_DIR/cdn-latest-version.json"
 RECEIPT_FILE="$OUTPUT_DIR/receipt.json"
 
 echo "$github_manifest" > "$GITHUB_VERSION_FILE"
@@ -173,15 +175,25 @@ echo "$cdn_manifest" > "$CDN_VERSION_FILE"
 # Packaged clients receive the GitHub manifest as their local baseline.
 cp "$GITHUB_VERSION_FILE" "$LOCAL_VERSION_FILE"
 
-# CDN bridge pointer (legacy schema, frozen at bridge release N).
+# The GitHub pointer is intentionally small: check requests read only this
+# asset, while download fetches and verifies the complete version.json.
+manifest_sha256=$(get_sha256 "$GITHUB_VERSION_FILE")
 latest_json=$(jq -n \
+    --arg version "$VERSION" \
+    --arg metadataSha256 "$manifest_sha256" \
+    --arg releaseNotes "Known issue fixes" \
+    --arg releasePageUrl "https://github.com/${COMMUNITY_GITHUB_REPOSITORY}/releases/tag/v${VERSION}" \
+    '{version: $version, metadataSha256: $metadataSha256, releaseNotes: $releaseNotes, releasePageUrl: $releasePageUrl, forceUpdate: false}')
+echo "$latest_json" > "$LATEST_VERSION_FILE"
+
+# CDN bridge pointer (legacy schema, frozen at bridge release N).
+cdn_latest_json=$(jq -n \
     --arg latestVersion "$VERSION" \
     --arg metadataUrl "${CDN_BASE_URL}/${VERSION}/version.json" \
     '{latestVersion: $latestVersion, metadataUrl: $metadataUrl, forceUpdate: false}')
-echo "$latest_json" > "$LATEST_VERSION_FILE"
+echo "$cdn_latest_json" > "$CDN_LATEST_VERSION_FILE"
 
 # Canonical artifact receipt.
-manifest_sha256=$(get_sha256 "$GITHUB_VERSION_FILE")
 local_manifest_sha256=$(get_sha256 "$LOCAL_VERSION_FILE")
 receipt_json=$(jq -n \
     --arg version "$VERSION" \
@@ -213,5 +225,6 @@ echo "Success: manifests and receipt generated in $OUTPUT_DIR"
 echo "  GitHub manifest:  $GITHUB_VERSION_FILE"
 echo "  CDN manifest:     $CDN_VERSION_FILE"
 echo "  Local manifest:   $LOCAL_VERSION_FILE"
-echo "  CDN pointer:      $LATEST_VERSION_FILE"
+echo "  GitHub pointer:   $LATEST_VERSION_FILE"
+echo "  CDN pointer:      $CDN_LATEST_VERSION_FILE"
 echo "  Receipt:          $RECEIPT_FILE"

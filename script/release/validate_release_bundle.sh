@@ -16,7 +16,7 @@
 #   CDN_BASE_URL               legacy CDN base URL for bridge manifest check
 #   ALLOWED_EXTRA_RELEASE_ASSETS  whitespace-separated list of allowed extras
 #
-# On success, creates release-assets/ containing the 14 required Release Assets.
+# On success, creates release-assets/ containing the required Release Assets.
 
 set -euo pipefail
 
@@ -52,6 +52,7 @@ required_installers=(
 )
 
 required_updater_assets=(
+  "latest_version.json"
   "version.json"
   "chat2db-community.jar"
   "lib.zip"
@@ -219,12 +220,38 @@ while IFS= read -r payload; do
   fi
 done <<<"$(printf '%s\n' chat2db-community.jar lib.zip dist.zip)"
 
-# --- 7. Copy updater assets into release bundle -----------------------------
+# --- 7. Lightweight latest pointer binds this version manifest --------------
+echo "[check] GitHub latest_version.json"
+latest_manifest="${CANONICAL_ARTIFACT_DIR}/latest_version.json"
+if ! jq -e '.' "${latest_manifest}" >/dev/null; then
+  fail "latest_version.json is not valid JSON"
+fi
+latest_version="$(jq -r '.version' "${latest_manifest}")"
+if [ "${latest_version}" != "${VERSION}" ]; then
+  fail "latest_version.json version mismatch: ${latest_version} != ${VERSION}"
+fi
+latest_force_update="$(jq -r '.forceUpdate' "${latest_manifest}")"
+if [ "${latest_force_update}" != "false" ]; then
+  fail "latest_version.json forceUpdate must be false, got ${latest_force_update}"
+fi
+latest_release_page="$(jq -r '.releasePageUrl // empty' "${latest_manifest}")"
+if [ "${latest_release_page}" != "${expected_release_page}" ]; then
+  fail "latest_version.json releasePageUrl mismatch: ${latest_release_page} != ${expected_release_page}"
+fi
+latest_metadata_sha="$(jq -r '.metadataSha256 // empty' "${latest_manifest}")"
+if ! [[ "${latest_metadata_sha}" =~ ^[a-f0-9]{64}$ ]]; then
+  fail "latest_version.json metadataSha256 must be lowercase SHA-256"
+fi
+if [ "${latest_metadata_sha}" != "$(sha256_file "${github_manifest}")" ]; then
+  fail "latest_version.json metadataSha256 does not match version.json"
+fi
+
+# --- 8. Copy updater assets into release bundle -----------------------------
 for asset in "${required_updater_assets[@]}"; do
   cp "${CANONICAL_ARTIFACT_DIR}/${asset}" "release-assets/${asset}"
 done
 
-# --- 8. Regenerate SHA256SUMS over the 13 non-SHA256SUMS required assets -----
+# --- 9. Regenerate SHA256SUMS over required non-SHA256SUMS assets ------------
 echo "[check] SHA256SUMS"
 (
   cd release-assets
@@ -233,7 +260,7 @@ echo "[check] SHA256SUMS"
   done > SHA256SUMS
 )
 
-# --- 9. Required asset uniqueness and extras allowlist ----------------------
+# --- 10. Required asset uniqueness and extras allowlist ---------------------
 echo "[check] required assets and extras allowlist"
 found_assets=()
 while IFS= read -r asset; do
@@ -263,7 +290,7 @@ for found in "${found_assets[@]}"; do
   fail "unlisted extra asset: ${found}"
 done
 
-# --- 10. Bridge N: validate GitHub/CDN manifest allowed differences ---------
+# --- 11. Bridge N: validate GitHub/CDN manifest allowed differences ---------
 if [ "${IS_BRIDGE_N}" = "true" ]; then
   echo "[check] bridge N GitHub/CDN manifest equivalence"
   cdn_manifest="${CANONICAL_ARTIFACT_DIR}/cdn-version.json"

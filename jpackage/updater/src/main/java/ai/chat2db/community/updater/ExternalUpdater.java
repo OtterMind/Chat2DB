@@ -38,6 +38,7 @@ public final class ExternalUpdater {
     private static final String SHA_256_PATTERN = "^[a-f0-9]{64}$";
     private static final String BACKUP_DIRECTORY = ".chat2db-update-backups";
     private static final String BACKUP_OWNER_PID_FILE = ".owner-pid";
+    private static final long MAIN_PROCESS_EXIT_TIMEOUT_SECONDS = 60L;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private ExternalUpdater() {
@@ -49,12 +50,28 @@ public final class ExternalUpdater {
     }
 
     static int run(String[] args) {
-        if (args.length < 3) {
-            log("FATAL: Missing arguments. Usage: updater.jar <plan_path> <app_dir> <restart_uri>");
+        if (args.length < 7) {
+            log("FATAL: Missing arguments. Usage: updater.jar <plan_path> <app_dir> <restart_uri> "
+                    + "<status_path> <operation_id> <working_directory> <main_process_id>");
+            return 1;
+        }
+        return run(args, Path.of(args[5]));
+    }
+
+    static int run(String[] args, Path downloadDirectory) {
+        if (args.length < 7) {
+            log("FATAL: Missing arguments. Usage: updater.jar <plan_path> <app_dir> <restart_uri> "
+                    + "<status_path> <operation_id> <working_directory> <main_process_id>");
             return 1;
         }
         Path planPath = Path.of(args[0]).toAbsolutePath().normalize();
         Path appDirectory = Path.of(args[1]).toAbsolutePath().normalize();
+        Path statusPath = Path.of(args[3]).toAbsolutePath().normalize();
+        String operationId = args[4];
+        long mainProcessId;
+        boolean accepted = false;
+        boolean mainProcessExited = false;
+        boolean statusPathValidated = false;
         try {
             rejectSymbolicLinkPathSegments(appDirectory, "Application directory");
             if (!Files.isRegularFile(planPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -63,17 +80,79 @@ public final class ExternalUpdater {
             if (!Files.isDirectory(appDirectory, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IOException("Application directory is not a regular directory");
             }
+            if (isBlank(operationId) || !operationId.matches("^[A-Za-z0-9-]{1,128}$")) {
+                throw new IOException("Update operation ID is invalid");
+            }
+            try {
+                mainProcessId = Long.parseLong(args[6]);
+            } catch (NumberFormatException exception) {
+                throw new IOException("Main process ID is invalid", exception);
+            }
+            if (mainProcessId <= 0 || mainProcessId == ProcessHandle.current().pid()) {
+                throw new IOException("Main process ID is invalid");
+            }
+            Path controlledDownloadDirectory = downloadDirectory.toAbsolutePath().normalize();
+            resolveControlledDownloadPath(controlledDownloadDirectory, planPath.toString());
+            resolveControlledDownloadPath(controlledDownloadDirectory, statusPath.toString());
+            statusPathValidated = true;
             UpdatePlan plan = OBJECT_MAPPER.readValue(planPath.toFile(), UpdatePlan.class);
-            executeInstallation(plan, appDirectory);
+            validatePlan(plan, appDirectory, controlledDownloadDirectory);
+            writeHandshake(statusPath, operationId, "ACCEPTED");
+            accepted = true;
+            mainProcessExited = waitForMainProcessExit(mainProcessId);
+            executeInstallation(plan, appDirectory, controlledDownloadDirectory);
             if (!restartMainApplication(args[2], appDirectory)) {
                 log("WARN: Update installed successfully, but the application could not be restarted automatically.");
             }
             Files.deleteIfExists(planPath);
             return 0;
         } catch (Exception exception) {
+            if (accepted && mainProcessExited) {
+                if (!restartMainApplication(args[2], appDirectory)) {
+                    log("ERROR: Update failed after the application exited, and automatic recovery restart failed.");
+                } else {
+                    log("WARN: Update failed after the application exited; the rolled-back application was restarted.");
+                }
+            } else if (!accepted && statusPathValidated) {
+                try {
+                    writeHandshake(statusPath, operationId, "FAILED");
+                } catch (Exception handshakeException) {
+                    log("WARN: Could not report helper rejection: " + handshakeException.getMessage());
+                }
+            }
             log("FATAL: Update failed: " + exception.getMessage());
             exception.printStackTrace(System.err);
             return 1;
+        }
+    }
+
+    private static boolean waitForMainProcessExit(long processId) throws IOException {
+        ProcessHandle process = ProcessHandle.of(processId).orElse(null);
+        if (process == null || !process.isAlive()) {
+            return true;
+        }
+        try {
+            process.onExit().get(MAIN_PROCESS_EXIT_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+            return true;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for the main process to exit", exception);
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException exception) {
+            throw new IOException("Main process did not exit after updater acceptance", exception);
+        }
+    }
+
+    private static void writeHandshake(Path statusPath, String operationId, String status) throws IOException {
+        Path parent = statusPath.getParent();
+        if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Update status directory is invalid");
+        }
+        Path temporary = Files.createTempFile(parent, ".chat2db-update-status-", ".tmp");
+        try {
+            Files.writeString(temporary, operationId + "|" + status, StandardOpenOption.TRUNCATE_EXISTING);
+            moveIntoPlace(temporary, statusPath);
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

@@ -13,7 +13,8 @@ Outputs are written to:
     chat2db-community.jar
     lib.zip
     dist.zip
-    version.json          (GitHub manifest)
+    latest_version.json   (lightweight GitHub latest pointer)
+    version.json          (complete GitHub manifest)
     local_version.json    (copy of GitHub manifest)
     receipt.json
 
@@ -251,6 +252,7 @@ rm -f \
   "${CANONICAL_ARTIFACT_DIR}/cdn-version.json" \
   "${CANONICAL_ARTIFACT_DIR}/local_version.json" \
   "${CANONICAL_ARTIFACT_DIR}/latest_version.json" \
+  "${CANONICAL_ARTIFACT_DIR}/cdn-latest-version.json" \
   "${CANONICAL_ARTIFACT_DIR}/receipt.json" \
   "${CANONICAL_ARTIFACT_DIR}/updater.jar"
 

@@ -3,6 +3,14 @@
 This module builds the elevated helper copied to
 `jpackage/input/win/updater.jar` by the Community desktop packaging script.
 
+The desktop launcher passes a unique operation ID and status-file path. The
+elevated helper validates the plan first and atomically writes
+`<operationId>|ACCEPTED`; the desktop process exits only after observing that
+exact acknowledgement. UAC rejection, validation failure, and launch timeout
+leave the main process running so installation can be retried.
+After acknowledgement, the helper waits for the acknowledged main-process PID
+to exit before replacing application files.
+
 The current helper is approximately 2.3 MB instead of the previous 14 MB
 because it is a standalone shaded JAR containing only the updater code and its
 Jackson runtime dependencies. The previous artifact was built as a Spring Boot
