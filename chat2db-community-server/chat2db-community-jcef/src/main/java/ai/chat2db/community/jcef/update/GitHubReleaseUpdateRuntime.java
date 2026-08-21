@@ -81,43 +81,27 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
               /usr/bin/hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
               /bin/rm -rf "$mount_point"
             }
-            recover() {
-              status=$?
-              cleanup
-              if test "$status" -ne 0 && test -d "$destination"; then
-                /usr/bin/open -n "$destination" >/dev/null 2>&1 || true
-              fi
-              exit "$status"
-            }
-            trap recover EXIT INT TERM
+            trap cleanup EXIT INT TERM
             /usr/bin/hdiutil attach "$installer" -readonly -nobrowse -mountpoint "$mount_point" >/dev/null
             source_app="$mount_point/Chat2DB Community.app"
             test -d "$source_app"
             /usr/bin/codesign --verify --deep --strict "$source_app"
             parent_dir=$(/usr/bin/dirname "$destination")
             staged="${destination}.update-${parent_pid}"
-            backup="${destination}.backup-${parent_pid}"
             if test -w "$parent_dir"; then
-              /bin/rm -rf "$staged" "$backup"
+              /bin/rm -rf "$staged"
               /usr/bin/ditto "$source_app" "$staged"
-              if test -e "$destination"; then /bin/mv "$destination" "$backup"; fi
-              if /bin/mv "$staged" "$destination"; then
-                /bin/rm -rf "$backup"
-              else
-                test ! -e "$backup" || /bin/mv "$backup" "$destination"
-                exit 1
-              fi
+              /bin/rm -rf "$destination"
+              /bin/mv "$staged" "$destination"
             else
               /usr/bin/osascript \
                 -e 'on run argv' \
                 -e 'set sourcePath to item 1 of argv' \
                 -e 'set destinationPath to item 2 of argv' \
-                -e 'set stagedPath to item 3 of argv' \
-                -e 'set backupPath to item 4 of argv' \
-                -e 'set commandText to "/bin/rm -rf " & quoted form of stagedPath & " " & quoted form of backupPath & " && /usr/bin/ditto " & quoted form of sourcePath & " " & quoted form of stagedPath & " && if test -e " & quoted form of destinationPath & "; then /bin/mv " & quoted form of destinationPath & " " & quoted form of backupPath & "; fi && if /bin/mv " & quoted form of stagedPath & " " & quoted form of destinationPath & "; then /bin/rm -rf " & quoted form of backupPath & "; else status=$?; test ! -e " & quoted form of backupPath & " || /bin/mv " & quoted form of backupPath & " " & quoted form of destinationPath & "; exit $status; fi"' \
+                -e 'set commandText to "/bin/rm -rf " & quoted form of destinationPath & " && /usr/bin/ditto " & quoted form of sourcePath & " " & quoted form of destinationPath' \
                 -e 'do shell script commandText with administrator privileges' \
                 -e 'end run' \
-                "$source_app" "$destination" "$staged" "$backup"
+                "$source_app" "$destination"
             fi
             cleanup
             trap - EXIT INT TERM
@@ -129,14 +113,6 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             parent_pid="$1"
             installer="$2"
             destination="$3"
-            recover() {
-              status=$?
-              if test "$status" -ne 0 && test -x "$destination"; then
-                exec "$destination"
-              fi
-              exit "$status"
-            }
-            trap recover EXIT INT TERM
             set -e
             while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
             staged="${destination}.update-${parent_pid}"
@@ -153,17 +129,15 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             installer="$2"
             package_kind="$3"
             launcher="$4"
+            set -e
             while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
             if test "$package_kind" = "deb"; then
-              installed=false
-              if /usr/bin/pkexec /usr/bin/dpkg -i "$installer"; then installed=true; fi
+              /usr/bin/pkexec /usr/bin/dpkg -i "$installer"
             else
-              installed=false
-              if /usr/bin/pkexec /usr/bin/rpm -U --replacepkgs "$installer"; then installed=true; fi
+              /usr/bin/pkexec /usr/bin/rpm -U --replacepkgs "$installer"
             fi
-            if test "$installed" = "true"; then /bin/rm -f "$installer"; fi
+            /bin/rm -f "$installer"
             if test -x "$launcher"; then exec "$launcher"; fi
-            test "$installed" = "true"
             """;
 
     private final HttpClient httpClient;
@@ -481,9 +455,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         if (launcher != null) {
             script.append("if(Test-Path -LiteralPath ").append(powerShellLiteral(launcher.toString()))
                     .append("){Start-Process -FilePath ").append(powerShellLiteral(launcher.toString())).append("}}")
-                    .append("catch{if(Test-Path -LiteralPath ").append(powerShellLiteral(launcher.toString()))
-                    .append("){Start-Process -FilePath ").append(powerShellLiteral(launcher.toString()))
-                    .append("};exit 1};");
+                    .append("catch{exit 1};");
         } else {
             script.append("}catch{exit 1};");
         }

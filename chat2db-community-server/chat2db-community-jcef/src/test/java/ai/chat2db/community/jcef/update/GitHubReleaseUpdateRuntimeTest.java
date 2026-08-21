@@ -176,6 +176,7 @@ class GitHubReleaseUpdateRuntimeTest {
         assertTrue(powerShell.contains("Wait-Process -Id 42"));
         assertTrue(powerShell.contains("msiexec.exe"));
         assertTrue(powerShell.contains("/passive /norestart"));
+        assertTrue(powerShell.contains("catch{exit 1}"));
 
         Path macApp = Path.of(System.getProperty("user.home"), "Applications", "Chat2DB Community.app", "Contents", "app");
         ReleaseInstaller macRelease = release(InstallerKind.MAC_DMG, "Chat2DB-Community-5.3.5-arm64.dmg");
@@ -188,6 +189,8 @@ class GitHubReleaseUpdateRuntimeTest {
         );
         assertTrue(mac.get(2).contains("hdiutil attach"));
         assertTrue(mac.get(2).contains("administrator privileges"));
+        assertFalse(mac.get(2).contains("recover"));
+        assertFalse(mac.get(2).contains("backup"));
         assertEquals("43", mac.get(4));
 
         ReleaseInstaller appImageRelease =
@@ -200,6 +203,7 @@ class GitHubReleaseUpdateRuntimeTest {
                 Map.of("APPIMAGE", tempDirectory.resolve("current.AppImage").toString())
         );
         assertTrue(appImage.get(2).contains("chmod 0755"));
+        assertFalse(appImage.get(2).contains("recover"));
         assertEquals("44", appImage.get(4));
     }
 
