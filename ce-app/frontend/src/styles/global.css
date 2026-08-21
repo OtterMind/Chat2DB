@@ -581,3 +581,39 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tl__junction:hover > span { border-color: #818cf8; background: #1e293b; }
 .tl__junction.is-set > span { background: linear-gradient(135deg, #6366f1, #0ea5e9); border-color: #a5b4fc; }
+
+/* editing assistant --------------------------------------------------------- */
+.ai-fab {
+  position: fixed; inset-inline-start: 22px; bottom: 26px; z-index: 40;
+  width: 52px; height: 52px; border-radius: 50%; border: none; color: #fff;
+  background: linear-gradient(140deg, #6366f1, #06b6d4);
+  box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95);
+  display: grid; place-items: center; transition: transform .15s ease;
+}
+.ai-fab:hover { transform: translateY(-2px); }
+.ai-fab.is-open { background: var(--surface-2); border: 1px solid var(--border); }
+
+.ai-panel {
+  position: fixed; inset-inline-start: 22px; bottom: 90px; z-index: 40; width: min(420px, calc(100vw - 44px));
+  background: rgba(17, 28, 49, .97); backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: 16px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 24px 60px -30px #000;
+}
+.ai-panel__head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.ai-panel__input { display: flex; gap: 8px; }
+.ai-panel__input input {
+  flex: 1; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); padding: 0 12px; font-size: 13px;
+}
+.ai-panel__input input:focus { outline: none; border-color: var(--brand); }
+.ai-panel__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-chip {
+  border: 1px solid var(--border); background: var(--surface-2); color: #cbd5e1;
+  border-radius: 999px; padding: 5px 11px; font-size: 11.5px;
+}
+.ai-chip:hover { border-color: rgba(99, 102, 241, .6); color: #fff; }
+.ai-panel__log { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow: auto; }
+.ai-panel__log p { font-size: 12px; line-height: 1.8; }
+.ai-panel__log .is-ok { color: #86efac; }
+.ai-panel__log .is-warn { color: #fdba74; }

@@ -20,6 +20,7 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
 | **Tool rail** | Context-sensitive bottom toolbar (global set / clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
+| **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
 | **Languages** | English default + Persian, switch in Settings, flips LTR/RTL instantly, persisted |

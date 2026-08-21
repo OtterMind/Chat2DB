@@ -1,0 +1,61 @@
+"""The offline planner must understand real requests in both languages."""
+from __future__ import annotations
+
+from core.assistant import planner
+
+TIMELINE = {
+    "tracks": [{"id": "v1", "kind": "video"}],
+    "clips": [
+        {"id": "c1", "trackId": "v1", "start": 0, "duration": 5, "label": "intro"},
+        {"id": "c2", "trackId": "v1", "start": 5, "duration": 4, "label": "body"},
+    ],
+    "transitions": [],
+}
+
+
+def ops_for(prompt: str) -> list[str]:
+    return [op["op"] for op in planner.rule_based_plan(prompt, TIMELINE).ops]
+
+
+def test_english_intents():
+    assert "removeSilence" in ops_for("please remove the silence")
+    assert "splitScenes" in ops_for("split it at every scene change")
+    assert "addTransitionsEverywhere" in ops_for("add fade transitions between all clips")
+    assert "reverse" in ops_for("play this clip in reverse")
+
+
+def test_persian_intents():
+    assert "removeSilence" in ops_for("سکوت‌ها را حذف کن")
+    assert "splitScenes" in ops_for("در محل تغییر نما برش بزن")
+    assert "setSpeed" in ops_for("سرعت را ۲ برابر کن")
+    assert "mute" in ops_for("این کلیپ را بی‌صدا کن")
+
+
+def test_values_are_parsed_and_clamped():
+    plan = planner.rule_based_plan("make it 3x faster", TIMELINE)
+    speed = next(op for op in plan.ops if op["op"] == "setSpeed")
+    assert speed["speed"] == 3
+
+    plan = planner.rule_based_plan("speed 99x", TIMELINE)
+    speed = next(op for op in plan.ops if op["op"] == "setSpeed")
+    assert speed["speed"] == 4  # clamped to the documented range
+
+    plan = planner.rule_based_plan("set volume to 40%", TIMELINE)
+    assert next(op for op in plan.ops if op["op"] == "setVolume")["volume"] == 0.4
+
+
+def test_export_format_is_recognised():
+    plan = planner.rule_based_plan("export it for shorts", TIMELINE)
+    export = next(op for op in plan.ops if op["op"] == "setExport")
+    assert (export["width"], export["height"]) == (1080, 1920)
+
+
+def test_unknown_request_is_honest():
+    plan = planner.make_plan("compose a symphony", TIMELINE, prefer_llm=False)
+    assert plan.ops == []
+    assert "could not" in plan.explanation.lower()
+
+
+def test_only_whitelisted_operations_survive_parsing():
+    ops, _ = planner._parse_ops('{"ops":[{"op":"deleteEverything"},{"op":"mute","muted":true}],"explanation":"x"}')
+    assert [op["op"] for op in ops] == ["mute"]

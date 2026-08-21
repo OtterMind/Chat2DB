@@ -9,6 +9,7 @@ import Page from '../components/Page'
 import Timeline from '../editor/Timeline'
 import PreviewMonitor from '../editor/PreviewMonitor'
 import EditorToolbar from '../editor/EditorToolbar'
+import AssistantButton from '../editor/AssistantButton'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, renderApi, saveDialog, type Quality } from '../api/render'
@@ -340,6 +341,8 @@ export default function Studio() {
             </button>
           </div>
         </div>
+
+        <AssistantButton />
 
         <EditorToolbar onImport={importMedia} />
 
