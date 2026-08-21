@@ -3,6 +3,7 @@ package ai.chat2db.community.storage;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
+import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
 import ai.chat2db.community.domain.api.model.er.ERPosition;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
@@ -10,11 +11,7 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.operation.OpsOperationLogPageQueryRequest;
@@ -25,9 +22,9 @@ import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespac
 import ai.chat2db.community.storage.converter.StorageConverter;
 import ai.chat2db.community.storage.large.ConsoleStorage;
 import ai.chat2db.community.storage.large.OperationLogStorage;
-import ai.chat2db.community.storage.large.TaskStorage;
 import ai.chat2db.community.storage.small.*;
 import ai.chat2db.community.tools.security.AesGcmUtil;
+import ai.chat2db.community.tools.exception.DataNotFoundException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.core.date.DateUtil;
@@ -61,6 +58,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public Long createDataSource(WorkspaceDataSource dataSource) {
+        dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         dataSource.setPassword(encryptString(dataSource.getPassword()));
         dataSource.setId(DataSourceStorage.INSTANCE.generateId());
@@ -78,15 +76,24 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public Long updateDataSource(WorkspaceDataSource dataSource) {
+        dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         if (dataSource.getPassword() != null && !dataSource.getPassword().isEmpty()) {
             dataSource.setPassword(encryptString(dataSource.getPassword()));
         } else {
-            DataSource oldDataSource = DataSourceStorage.INSTANCE.getById(dataSource.getId());
-            dataSource.setPassword(oldDataSource == null ? null : oldDataSource.getPassword());
+            dataSource.setPassword(null);
         }
         DataSourceStorage.INSTANCE.update(storageConverter.workspace2dataSource(dataSource));
         return dataSource.getId();
+    }
+
+    @Override
+    public Long updateDataSourceIdentityColor(Long id, String identityColor) {
+        String normalizedIdentityColor = DataSourceIdentityColorUtils.normalize(identityColor);
+        if (!DataSourceStorage.INSTANCE.updateIdentityColor(id, normalizedIdentityColor)) {
+            throw new DataNotFoundException();
+        }
+        return id;
     }
 
     @Override
@@ -148,34 +155,6 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     @Override
     public void deletePinTable(PinTable request) {
         PinTableStorage.INSTANCE.delete(request);
-    }
-
-    @Override
-    public PageResponse<Task> taskList(TaskRecordPageRequest taskPageRequest) {
-        List<Task> tasks = TaskStorage.INSTANCE.getDataList();
-        return page(tasks, taskPageRequest.getPageNo(), taskPageRequest.getPageSize());
-    }
-
-    @Override
-    public Task getTask(Long id) {
-        return TaskStorage.INSTANCE.getById(id);
-    }
-
-    @Override
-    public Long createTask(TaskRecordCreateRequest taskCreateRequest) {
-        Task task = storageConverter.taskCreateParam2model(taskCreateRequest);
-        task.setId(TaskStorage.INSTANCE.generateId());
-        task.setGmtCreate(new Date());
-        task.setGmtModified(new Date());
-        TaskStorage.INSTANCE.save(task);
-        return task.getId();
-    }
-
-    @Override
-    public void updateTask(TaskRecordUpdateRequest taskUpdateRequest) {
-        Task task = storageConverter.taskUpdateParam2model(taskUpdateRequest);
-        task.setGmtModified(new Date());
-        TaskStorage.INSTANCE.update(task);
     }
 
     @Override

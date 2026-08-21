@@ -18,6 +18,7 @@ import ai.chat2db.community.web.api.model.request.data.source.DataSourceUpdateRe
 import ai.chat2db.community.web.api.model.request.data.source.UpdateDatasourcePositionRequest;
 import ai.chat2db.community.web.api.model.response.data.source.DataSourceNamespaceResponse;
 import ai.chat2db.community.web.api.model.response.data.source.DataSourceResponse;
+import ai.chat2db.community.web.api.model.response.data.source.DataSourceIdentityColorResponse;
 import ai.chat2db.community.web.api.model.response.data.source.DatabaseResponse;
 import ai.chat2db.community.web.api.model.response.data.source.ProgressResponse;
 import ai.chat2db.community.domain.api.config.DriverConfig;
@@ -50,6 +51,8 @@ public abstract class DataSourceWebConverter {
     public abstract DataSourceResponse storage2response(WorkspaceDataSource dataSource);
 
     public abstract WorkspaceDataSource response2storage(DataSourceResponse response);
+
+    public abstract DataSourceIdentityColorResponse storage2identityColorResponse(WorkspaceDataSource dataSource);
 
     public abstract DbDataSourcePageQueryRequest request2param(DataSourceQueryRequest request);
 

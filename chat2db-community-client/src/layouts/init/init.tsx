@@ -30,6 +30,8 @@ import useEnglish from './useEnglish';
 import useIframe from './useIframe';
 import useJcef from './useJcef';
 import useOpenFile from './useOpenFile';
+import useApplicationExit from './useApplicationExit';
+import useTaskCenter from './useTaskCenter';
 
 const useInit = () => {
   const { reload } = queryString.parse(location.search);
@@ -80,6 +82,8 @@ const useInit = () => {
   useDocumentListener();
   useOpenFile();
   useJavaMessageReceiver();
+  useApplicationExit();
+  useTaskCenter(!isDesktop || serviceStatus === ServiceStatus.SUCCESS);
 
   // Check service status
   const checkServiceStatus = () => {

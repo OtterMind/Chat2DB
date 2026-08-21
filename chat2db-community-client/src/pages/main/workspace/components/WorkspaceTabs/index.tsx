@@ -58,6 +58,7 @@ import sqlService from '@/service/sql';
 import jcefApi from '@/jcef';
 
 import { copyToClipboard, getTemporaryId, isTemporaryId } from '@/utils';
+import { resolveDataSourceIdentityColor } from '@/utils/dataSourceIdentity';
 
 import { useIndexDBStore } from '@/store/indexDB';
 import { getDatabaseSupport } from '@/utils/database';
@@ -68,6 +69,7 @@ import {
   SQL_FILE_EXTENSION_NAME,
 } from '../../utils/localTextFile';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
+import { resolveEditorDataSourceConnectable, resolveEditorDataSourceState } from '@/utils/editorDataSourceLifecycle';
 import { EditorType } from '@/components/SQLEditor';
 import { ShortcutAction } from '@/constants/shortcut';
 import {
@@ -789,10 +791,11 @@ const WorkspaceTabs = memo(() => {
     };
   });
 
-  const { currentTreeNode, dataSourceList } = useTreeStore((state) => {
+  const { currentTreeNode, dataSourceList, runtimeAvailabilityByDataSourceId } = useTreeStore((state) => {
     return {
       currentTreeNode: state.currentTreeNode,
       dataSourceList: state.dataSourceList,
+      runtimeAvailabilityByDataSourceId: state.runtimeAvailabilityByDataSourceId,
     };
   });
 
@@ -1051,6 +1054,8 @@ const WorkspaceTabs = memo(() => {
       const param = {
         dataSourceId: currentTreeNode.extraParams.dataSourceId,
         dataSourceName: currentTreeNode.extraParams.dataSourceName!,
+        environmentId: currentTreeNode.extraParams.environmentId,
+        environment: currentTreeNode.extraParams.environment,
         databaseType: currentTreeNode.extraParams.databaseType!,
         databaseName: currentTreeNode.extraParams.databaseName,
         schemaName: currentTreeNode.extraParams.schemaName,
@@ -1060,6 +1065,8 @@ const WorkspaceTabs = memo(() => {
       const param: any = {
         dataSourceId: dataSourceList[0].extraParams.dataSourceId,
         dataSourceName: dataSourceList[0].extraParams.dataSourceName,
+        environmentId: dataSourceList[0].extraParams.environmentId,
+        environment: dataSourceList[0].extraParams.environment,
         databaseType: dataSourceList[0].extraParams.databaseType,
       };
       createConsole(param).then(appendNewConsoleToActivePane);
@@ -1605,10 +1612,36 @@ const WorkspaceTabs = memo(() => {
 
   // Render the SQL executor.
   const renderSQLExecute = (item: IWorkspaceTab) => {
-    const uniqueData = rebuildSqlExecuteTabData(item);
-    if (!uniqueData) {
+    const storedUniqueData = rebuildSqlExecuteTabData(item);
+    if (!storedUniqueData) {
       return;
     }
+    const currentDataSource = dataSourceList?.find(
+      (dataSource) => dataSource.extraParams.dataSourceId === storedUniqueData.dataSourceId,
+    )?.extraParams;
+    const dataSourceState = resolveEditorDataSourceState(
+      storedUniqueData.dataSourceId,
+      dataSourceList,
+      runtimeAvailabilityByDataSourceId,
+    );
+    const connectable = resolveEditorDataSourceConnectable(dataSourceState, storedUniqueData.connectable);
+    const uniqueData = currentDataSource
+      ? {
+          ...storedUniqueData,
+          dataSourceName: currentDataSource.dataSourceName ?? storedUniqueData.dataSourceName,
+          environmentId: currentDataSource.environmentId ?? currentDataSource.environment?.id ?? null,
+          environment: currentDataSource.environment ?? null,
+          identityColor: currentDataSource.identityColor ?? null,
+          watermarkEnabled: currentDataSource.watermarkEnabled ?? null,
+          watermarkContent: currentDataSource.watermarkContent ?? null,
+          connectable,
+        }
+      : {
+          ...storedUniqueData,
+          identityColor: dataSourceState === 'deleted' ? null : storedUniqueData.identityColor,
+          watermarkEnabled: dataSourceState === 'deleted' ? false : storedUniqueData.watermarkEnabled,
+          connectable,
+        };
 
     const { ddl = '', loadSQL } = uniqueData;
     const sqlActionEnabled =
@@ -1649,6 +1682,7 @@ const WorkspaceTabs = memo(() => {
         initDDL={ddl}
         loadSQL={loadSQL}
         sqlActionEnabled={sqlActionEnabled}
+        dataSourceState={dataSourceState}
       />
     );
   };
@@ -1802,17 +1836,39 @@ const WorkspaceTabs = memo(() => {
           ? getLocalTextFileTabPresentation(item.uniqueData?.filePath, item.title)
           : undefined;
       const popoverContent = localFileTabPresentation?.popover || item.uniqueData?.popoverContent;
+      const workspaceTabIcon =
+        item.type === WorkspaceTabType.LocalSQLFile
+          ? getLocalTextFileIcon(item.uniqueData?.fileExtension)
+          : workspaceTabConfig[item.type]?.icon;
+      const dataSourceId = item.uniqueData?.dataSourceId;
+      const dataSourceIdentityColor = dataSourceId
+        ? resolveDataSourceIdentityColor(
+            dataSourceList?.find((dataSource) => dataSource.extraParams.dataSourceId === dataSourceId)?.extraParams,
+          )
+        : undefined;
       return {
-        prefixIcon:
-          item.type === WorkspaceTabType.LocalSQLFile
-            ? getLocalTextFileIcon(item.uniqueData?.fileExtension)
-            : workspaceTabConfig[item.type]?.icon,
+        prefixIcon: dataSourceId ? (
+          <span
+            className={styles.workspaceTabIdentityIcon}
+            aria-label={item.uniqueData?.dataSourceName}
+            title={item.uniqueData?.dataSourceName}
+          >
+            {typeof workspaceTabIcon === 'string' ? (
+              <IconfontSvg size={16} code={workspaceTabIcon} />
+            ) : (
+              workspaceTabIcon
+            )}
+          </span>
+        ) : (
+          workspaceTabIcon
+        ),
         label: localFileTabPresentation?.label ?? item.title,
         popover: popoverContent ? <div style={{ padding: '4px 6px' }}>{popoverContent}</div> : undefined,
         key: item.id,
         editableName:
           item.type === WorkspaceTabType.CONSOLE || item.type === WorkspaceTabType.Terminal,
         pinned: item.pinned,
+        accentColor: dataSourceId ? dataSourceIdentityColor : undefined,
         destroyOnHide: !!item.uniqueData?.filePreviewMimeType,
         styles: {
           width: WORKSPACE_TAB_WIDTH,
@@ -1828,7 +1884,7 @@ const WorkspaceTabs = memo(() => {
   // Tab list.
   const workspaceTabItems = useMemo(() => {
     return getWorkspaceTabItems(workspaceTabList || []);
-  }, [workspaceTabList, activeConsoleId]);
+  }, [workspaceTabList, activeConsoleId, dataSourceList]);
 
   function renderCreateConsoleButton() {
     if (!canCreateConsole) {

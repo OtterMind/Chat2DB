@@ -4,6 +4,8 @@ import {
   IConnectionEnv,
   IConnectionListItem,
   ICreateConnectionDetails,
+  IDataSourceIdentityColorResponse,
+  IDataSourceIdentityColorUpdateRequest,
   IDatabaseItem,
   IPageParams,
   IPageResponse,
@@ -60,6 +62,11 @@ const testSSH = createRequest<any, boolean>('/api/connection/ssh/pre_connect', {
 const update = createRequest<IConnectionDetails, IConnectionDetails>('/api/connection/datasource/update', {
   method: 'post',
 });
+
+const updateIdentityColor = createRequest<IDataSourceIdentityColorUpdateRequest, IDataSourceIdentityColorResponse>(
+  '/api/connection/datasource/identity_color',
+  { method: 'post' },
+);
 
 const remove = createRequest<{ id: number }, void>('/api/connection/datasource', { method: 'delete' });
 
@@ -163,6 +170,7 @@ export default {
   save,
   test,
   update,
+  updateIdentityColor,
   remove,
   getDatabaseList,
   getSchemaList,

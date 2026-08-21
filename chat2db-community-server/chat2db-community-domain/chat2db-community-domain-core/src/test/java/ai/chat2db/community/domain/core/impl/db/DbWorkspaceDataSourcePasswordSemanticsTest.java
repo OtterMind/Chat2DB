@@ -30,7 +30,8 @@ class DbWorkspaceDataSourcePasswordSemanticsTest {
     void setUp() {
         System.setProperty(AesGcmUtil.KEY_PROPERTY, TEST_KEY);
         System.setProperty("chat2db.runtime.mode", "community");
-        service = new DbWorkspaceDataSourceServiceImpl(storageFacade(), dataSourceService());
+        service = new DbWorkspaceDataSourceServiceImpl(storageFacade(), dataSourceService(),
+                new DataSourceEnvironmentEnricher(List::of));
     }
 
     @AfterEach

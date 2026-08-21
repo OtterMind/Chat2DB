@@ -1,15 +1,16 @@
 import { memo, useState, useRef, useMemo, useEffect, useReducer, useCallback } from 'react';
 import { Button, Segmented, Tooltip } from 'antd';
-import { List, ListTree, X } from 'lucide-react';
+import { List, ListTree, RotateCw, X } from 'lucide-react';
 import i18n from '@/i18n';
 import { useStyles } from './style';
 import { RedisDataItem } from '@/typings/redis';
 import { RedisFieldType } from '@/constants/redis';
 import EditData from './EditData';
 import BaseTable, { BaseTableRef } from '@/components/BaseTable';
+import SearchBar from '@/components/SearchBar';
 import redisServer from '@/service/nonRelationalDatabase/redis';
 import SplitPane from 'react-split-pane';
-import { ToolbarBtn, SearchBar } from '@chat2db/ui';
+import { ToolbarBtn } from '@chat2db/ui';
 import openUnifiedDeletion from '@/utils/staticModal/unifiedDeletion';
 import {
   buildRedisKeyTree,
@@ -33,6 +34,12 @@ import {
   type RedisRowIdentity,
 } from './redisRowIdentity';
 import { RedisEditSessionRegistry, type RedisEditSessionToken } from './redisEditSession';
+import {
+  hasRedisDetailPayload,
+  isRedisDataItemLoaded,
+  shouldRetryRedisDetail,
+  type RedisDetailLoadStatus,
+} from './redisDetail';
 import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 
 const REDIS_SCAN_COUNT = 1000;
@@ -69,24 +76,6 @@ function formatRedisTtl(value?: number | null) {
   return formatTime(value);
 }
 
-function isRedisDataItemLoaded(redisDataItem: RedisDataItem) {
-  if (redisDataItem.isDraftFE) {
-    return true;
-  }
-  if (redisDataItem.type === RedisFieldType.STRING) {
-    return redisDataItem.value !== undefined;
-  }
-  if (redisDataItem.type === RedisFieldType.STREAM) {
-    return redisDataItem.streamValues !== undefined;
-  }
-  return (
-    redisDataItem.values !== undefined ||
-    redisDataItem.listValues !== undefined ||
-    redisDataItem.hashValues !== undefined ||
-    redisDataItem.zsValues !== undefined
-  );
-}
-
 function mergeRedisKeys(current: RedisDataItem[], next: RedisDataItem[]) {
   const itemMap = new Map<string | null, RedisDataItem>();
   current.forEach((item) => {
@@ -121,7 +110,8 @@ const RedisAllData = (props) => {
   const [scanCursor, setScanCursor] = useState(INITIAL_SCAN_CURSOR);
   const [scanComplete, setScanComplete] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [detailLoadingKey, setDetailLoadingKey] = useState<string | null>(null);
+  const [detailLoadStatus, setDetailLoadStatus] = useState<RedisDetailLoadStatus>('idle');
+  const [detailRetryToken, setDetailRetryToken] = useState(0);
   const [viewMode, setViewMode] = useState<RedisKeyViewMode>(() =>
     readRedisKeyViewMode(
       getRedisViewModeStorage(),
@@ -149,7 +139,7 @@ const RedisAllData = (props) => {
     activeEditSessionRef.current = nextIdentity ? editSessionRegistry.begin(nextIdentity) : null;
     setSelectedRowIdentity(nextIdentity);
     setRedisDataItem(null);
-    setDetailLoadingKey(null);
+    setDetailLoadStatus('idle');
   }, [editSessionRegistry]);
   const selectedRedisRow = useMemo(
     () => resolveRedisDataItem(tableData, selectedRowIdentity),
@@ -185,9 +175,14 @@ const RedisAllData = (props) => {
   const handleSelectedRowsChange = useCallback(
     (nextSelectedRows: number[]) => {
       const selectedItem = tableData?.[nextSelectedRows[0]];
-      updateSelectedRowIdentity(selectedItem ? getRedisDataItemIdentity(selectedItem) || null : null);
+      const nextIdentity = selectedItem ? getRedisDataItemIdentity(selectedItem) || null : null;
+      if (shouldRetryRedisDetail(selectedRowIdentityRef.current, nextIdentity, detailLoadStatus)) {
+        setDetailRetryToken((current) => current + 1);
+        return;
+      }
+      updateSelectedRowIdentity(nextIdentity);
     },
-    [tableData, updateSelectedRowIdentity],
+    [detailLoadStatus, tableData, updateSelectedRowIdentity],
   );
   const handleActivateRedisRow = useCallback(
     (rowIndex: number) => handleSelectedRowsChange([rowIndex]),
@@ -205,7 +200,7 @@ const RedisAllData = (props) => {
         return;
       }
       if (isRedisDataItemLoaded(selectedRedisDataItem)) {
-        setDetailLoadingKey(null);
+        setDetailLoadStatus('loaded');
         setRedisDataItem(selectedRedisDataItem);
         return;
       }
@@ -215,10 +210,10 @@ const RedisAllData = (props) => {
         return;
       }
       detailRequestIdRef.current += 1;
-      setDetailLoadingKey(null);
+      setDetailLoadStatus('idle');
       setRedisDataItem(null);
     }
-  }, [selectedRedisDataItem, selectedRowIdentity]);
+  }, [detailRetryToken, selectedRedisDataItem, selectedRowIdentity]);
 
   useEffect(() => {
     if (hasEditTarget) {
@@ -253,7 +248,7 @@ const RedisAllData = (props) => {
     const requestId = detailRequestIdRef.current + 1;
     detailRequestIdRef.current = requestId;
     setRedisDataItem(null);
-    setDetailLoadingKey(keyName);
+    setDetailLoadStatus('loading');
     redisServer
       .queryRedisKeyDetail({
         dataSourceId: uniqueData.dataSourceId,
@@ -276,7 +271,10 @@ const RedisAllData = (props) => {
           setRedisDataItem(null);
           return;
         }
-        const nextRedisDataItem = { ...redisDataItem, ...res };
+        if (!hasRedisDetailPayload(res)) {
+          throw new Error('Redis key detail response does not contain a value payload');
+        }
+        const nextRedisDataItem = { ...redisDataItem, ...res, detailLoaded: true };
         setTableData((current) => {
           if (
             detailRequestIdRef.current !== requestId ||
@@ -299,13 +297,15 @@ const RedisAllData = (props) => {
             ? nextRedisDataItem
             : current,
         );
+        setDetailLoadStatus('loaded');
       })
-      .finally(() => {
+      .catch(() => {
         if (
           detailRequestIdRef.current === requestId &&
           selectedRowIdentityRef.current === requestIdentity
         ) {
-          setDetailLoadingKey(null);
+          setRedisDataItem(null);
+          setDetailLoadStatus('failed');
         }
       });
   };
@@ -325,7 +325,6 @@ const RedisAllData = (props) => {
       setPresenceDraft(false);
       setRedisDataItem(null);
       updateSelectedRowIdentity(null);
-      setDetailLoadingKey(null);
       setScanCursor(INITIAL_SCAN_CURSOR);
       setScanComplete(false);
       setLoadingMore(false);
@@ -428,7 +427,12 @@ const RedisAllData = (props) => {
   const handleCloseEditPane = () => {
     updateSelectedRowIdentity(null);
     setRedisDataItem(null);
-    setDetailLoadingKey(null);
+  };
+
+  const retryRedisDataItemDetail = () => {
+    if (selectedRowIdentityRef.current && detailLoadStatus === 'failed') {
+      setDetailRetryToken((current) => current + 1);
+    }
   };
 
   const handleViewModeChange = (value: string | number) => {
@@ -658,7 +662,18 @@ const RedisAllData = (props) => {
           />
         ) : (
           <div className={styles.emptyStatus}>
-            {detailLoadingKey ? i18n('common.text.loading') : i18n('redis.editData.emptyStatus')}
+            {detailLoadStatus === 'loading' ? (
+              i18n('common.text.loading')
+            ) : detailLoadStatus === 'failed' ? (
+              <div className={styles.detailFailure}>
+                <span>{i18n('redis.editData.loadFailed')}</span>
+                <Button size="small" icon={<RotateCw size={14} />} onClick={retryRedisDataItemDetail}>
+                  {i18n('redis.button.retry')}
+                </Button>
+              </div>
+            ) : (
+              i18n('redis.editData.emptyStatus')
+            )}
           </div>
         )}
       </div>

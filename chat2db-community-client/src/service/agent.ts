@@ -337,6 +337,9 @@ export interface UpdateAgentDefinitionRequest extends CreateAgentDefinitionReque
 
 const listAgents = createRequest<void, AgentDefinition[]>('/api/agent/definitions');
 const listRuntimeOptions = createRequest<void, AgentRuntimeOption[]>('/api/agent/runtime-options');
+const refreshRuntimeDiscovery = createRequest<void, boolean>('/api/agent/runtime-discovery/refresh', {
+  method: 'post',
+});
 const createAgent = createRequest<CreateAgentDefinitionRequest, AgentDefinition>('/api/agent/definitions', {
   method: 'post',
 });
@@ -431,6 +434,7 @@ const continueTask = createRequest<{ taskId: string; content: string; agentId?: 
 
 export default {
   listRuntimeOptions,
+  refreshRuntimeDiscovery,
   listAgents,
   createAgent,
   updateAgent,

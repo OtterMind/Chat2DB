@@ -20,6 +20,7 @@ import onPasteData from './event/onPasteData';
 import { buildResultColumns, buildResultRecords } from './utils/dataTreating';
 import useOperationRecord, { OperationRecordUtils } from './hooks/useOperationRecord';
 import useFilterAndSort from './hooks/useFilterAndSort';
+import useHeaderTooltip from './hooks/useHeaderTooltip';
 import { ITableOperationUtils } from './typings';
 import { useGlobalStore } from '@/store/global';
 import ColumnVisibilityModal, { ResultColumnVisibilityOption } from './ColumnVisibilityModal';
@@ -155,6 +156,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     hiddenColumnFields,
   ]);
   const records = useMemo(() => buildResultRecords(resultData), [resultData]);
+  const headerTooltip = useHeaderTooltip({ tableInstance });
 
   const clearColumnSensitiveSelection = useCallback(() => {
     interactionRevisionRef.current += 1;
@@ -421,6 +423,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
           defaultHeaderRowHeight: 'auto',
         }}
       />
+      {headerTooltip}
       <ColumnVisibilityModal
         open={columnVisibilityOpen}
         columns={columnVisibilityOptions}

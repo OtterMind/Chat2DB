@@ -11,10 +11,12 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { copyToClipboard, getTemporaryId } from '@/utils';
 import { useTreeStore } from '@/store/tree';
 import { TreeNodeData } from '@/typings';
-import { SquareArrowOutUpRight } from 'lucide-react';
+import { RotateCw, SquareArrowOutUpRight } from 'lucide-react';
+import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
 
 interface IProps {
   className?: string;
+  headerLeading?: React.ReactNode;
 }
 
 type IDatasource = IHistoryRecord;
@@ -69,7 +71,7 @@ export default memo<IProps>((props) => {
     styles,
     theme: { appearance },
   } = useStyles();
-  const { className } = props;
+  const { className, headerLeading } = props;
   const addWorkspaceTab = useWorkspaceStore((state) => state.addWorkspaceTab);
   const workspaceTabList = useWorkspaceStore((state) => state.workspaceTabList);
   const savedConsoleList = useWorkspaceStore((state) => state.savedConsoleList);
@@ -238,10 +240,10 @@ export default memo<IProps>((props) => {
 
   return (
     <div className={classnames(styles.output, className)}>
-      <div className={styles.outputTitle}>
-        <span>{i18n('common.title.executiveLogging')}</span>
-        <IconButton size={18} code="icon-refresh" onClick={refresh} />
-      </div>
+      <PanelToolbar
+        leading={headerLeading ?? <span>{i18n('common.title.executiveLogging')}</span>}
+        trailing={<IconButton size={PANEL_TOOLBAR_BUTTON_SIZE} icon={RotateCw} onClick={refresh} />}
+      />
       <div className={styles.outputContent} ref={outputContentRef}>
         <ScrollLoading
           onReachBottom={getHistoryList}

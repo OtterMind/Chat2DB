@@ -6,13 +6,18 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.model.account.*;
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
+import ai.chat2db.community.domain.api.model.task.TaskEventCode;
+import ai.chat2db.community.domain.api.model.task.TaskConstants;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.request.*;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.datasource.*;
@@ -29,7 +34,6 @@ import com.jcraft.jsch.Session;
 
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.exception.ConnectionException;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
@@ -74,14 +78,43 @@ public class DefaultDBManager implements IDbManager {
 
     protected static final String RECORD_TITLE = DIVIDING_LINE + SQLConstants.LINE_SEPARATOR + "-- Records of %s" + SQLConstants.LINE_SEPARATOR + DIVIDING_LINE;
 
-    private static final String EXPORT_TABLES_MESSAGE = ":Exporting tables";
-    private static final String EXPORT_TABLE_MESSAGE = ":Exporting table ";
-    private static final String EXPORT_TABLE_DATA_MESSAGE = ":Exporting table data ";
-    private static final String EXPORT_PAGE_MESSAGE = " Exporting ";
-    private static final String EXPORT_PAGE_SUFFIX = " page";
-    private static final String EXPORT_OFFSET_MESSAGE = " offset:";
-    private static final String EXPORT_TABLE_ERROR_LOG = "export table error";
-    private static final String EXPORT_TABLE_ERROR_MESSAGE = "export table %s error:%s";
+    protected static final String EXPORT_TASK_STAGE = TaskStage.EXPORTING.name();
+
+    protected static void reportExportProgress(TaskExecutionContext context, int progress) {
+        context.reportProgress(progress, EXPORT_TASK_STAGE, "Exporting database objects");
+    }
+
+    protected static void logDatabaseObjectExportStarted(TaskExecutionContext context, String objectType) {
+        context.logInfo(TaskEventCode.DATABASE_OBJECT_EXPORT_STARTED.name(),
+                "Exporting database " + objectType,
+                Map.of(TaskConstants.OBJECT_TYPE_DETAIL_KEY, objectType));
+    }
+
+    protected static void logDatabaseObjectExportCompleted(TaskExecutionContext context, String objectType) {
+        context.logInfo(TaskEventCode.DATABASE_OBJECT_EXPORT_COMPLETED.name(),
+                "Database " + objectType + " exported",
+                Map.of(TaskConstants.OBJECT_TYPE_DETAIL_KEY, objectType));
+    }
+
+    private static void logTableQueryStarted(TaskExecutionContext context, String tableName) {
+        context.logInfo(TaskEventCode.QUERY_STARTED.name(),
+                "Reading table data from " + tableName,
+                Map.of(TaskConstants.TABLE_NAME_DETAIL_KEY, tableName));
+    }
+
+    private static void logRowsExported(TaskExecutionContext context, String tableName, long exportedRows) {
+        context.logInfo(TaskEventCode.ROWS_EXPORTED.name(),
+                "Exported " + exportedRows + " rows from " + tableName,
+                Map.of(TaskConstants.TABLE_NAME_DETAIL_KEY, tableName,
+                        TaskConstants.EXPORTED_ROWS_DETAIL_KEY, exportedRows));
+    }
+
+    private static void logTableQueryCompleted(TaskExecutionContext context, String tableName, long exportedRows) {
+        context.logInfo(TaskEventCode.QUERY_COMPLETED.name(),
+                "Table data read completed: " + exportedRows + " rows from " + tableName,
+                Map.of(TaskConstants.TABLE_NAME_DETAIL_KEY, tableName,
+                        TaskConstants.EXPORTED_ROWS_DETAIL_KEY, exportedRows));
+    }
 
 
     @Override
@@ -225,45 +258,43 @@ public class DefaultDBManager implements IDbManager {
     }
 
     @Override
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + EXPORT_TABLES_MESSAGE);
-        exportTables(connection, databaseName, schemaName, asyncContext);
-        asyncContext.setProgress(50);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        context.write(String.format(EXPORT_TITLE, DateUtil.format(new Date(), NORM_DATETIME_PATTERN)));
+        logDatabaseObjectExportStarted(context, "tables");
+        exportTables(connection, databaseName, schemaName, containData, context);
+        logDatabaseObjectExportCompleted(context, "tables");
+        context.reportProgress(50, EXPORT_TASK_STAGE, "Exporting tables");
     }
 
-    private void exportTables(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTables(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
         DatabaseTypeEnum databaseType = DatabaseTypeEnum.from(Chat2DBContext.getConnectInfo().getDbType());
         boolean foreignKeyChecks = databaseType != null && databaseType.isMysqlProtocolFamily();
         if (foreignKeyChecks) {
-            asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_DISABLED);
+            context.write(SQL_SET_FOREIGN_KEY_CHECKS_DISABLED);
         }
         List<Table> tables = Chat2DBContext.getDbMetaData().tables(connection, new TablesRequest(databaseName, schemaName, null));
         for (Table table : tables) {
-            exportTable(connection, databaseName, schemaName, table.getName(), asyncContext);
+            exportTable(connection, databaseName, schemaName, table.getName(), containData, context);
         }
         if (foreignKeyChecks) {
-            asyncContext.write(SQL_SET_FOREIGN_KEY_CHECKS_ENABLED);
+            context.write(SQL_SET_FOREIGN_KEY_CHECKS_ENABLED);
         }
     }
 
     @Override
-    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.info(DateUtil.formatDateTime(new Date()) + EXPORT_TABLE_MESSAGE + tableName);
+    public void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
+            boolean containData, TaskExecutionContext context) throws SQLException {
         String ddl = Chat2DBContext.getDbMetaData().tableDDL(connection, new TableMetadataRequest(databaseName, schemaName, tableName));
-        try {
-            StringBuilder sqlBuilder = new StringBuilder();
-            asyncContext.write(String.format(TABLE_TITLE, tableName));
-            sqlBuilder.append(SQLConstants.DROP_TABLE_IF_EXISTS_SQL_PREFIX).append(tableName).append(SQLConstants.SEMICOLON_LINE_SEPARATOR)
-                    .append(ddl).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
-            asyncContext.write(sqlBuilder.toString());
-            if (asyncContext.isContainsData()) {
-                asyncContext.info(DateUtil.formatDateTime(new Date()) + EXPORT_TABLE_DATA_MESSAGE + tableName);
-                exportTableData(connection, databaseName, schemaName, tableName, asyncContext);
-            }
-        } catch (Exception e) {
-            log.error(EXPORT_TABLE_ERROR_LOG, e);
-            asyncContext.error(String.format(EXPORT_TABLE_ERROR_MESSAGE, tableName, e.getMessage()));
+        StringBuilder sqlBuilder = new StringBuilder();
+        context.write(String.format(TABLE_TITLE, tableName));
+        sqlBuilder.append(SQLConstants.DROP_TABLE_IF_EXISTS_SQL_PREFIX).append(tableName)
+                .append(SQLConstants.SEMICOLON_LINE_SEPARATOR)
+                .append(ddl).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
+        context.write(sqlBuilder.toString());
+        if (containData) {
+            exportTableData(connection, databaseName, schemaName, tableName, context);
         }
     }
 
@@ -289,17 +320,18 @@ public class DefaultDBManager implements IDbManager {
     }
 
     @Override
-    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext) {
+    public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
+            TaskExecutionContext context) {
         ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
         String tableQuerySql = sqlBuilder.dql().buildSelectTable(databaseName, schemaName, tableName);
         int batchSize = DEFAULT_EXPORT_BATCH_SIZE;
         int page = FIRST_PAGE;
         int offset = FIRST_OFFSET;
         AtomicReference<Boolean> finish = new AtomicReference<>(false);
-        asyncContext.write(String.format(RECORD_TITLE, tableName));
+        AtomicLong exportedRows = new AtomicLong();
+        context.write(String.format(RECORD_TITLE, tableName));
+        logTableQueryStarted(context, tableName);
         while (!finish.get()) {
-            asyncContext.info(DateUtil.formatDateTime(DateUtil.date()) + ":" + tableName + EXPORT_PAGE_MESSAGE + page
-                    + EXPORT_PAGE_SUFFIX + EXPORT_OFFSET_MESSAGE + offset);
             String pageSql = sqlBuilder.dql().buildPageLimit(PageLimitRequest.builder()
                     .sql(tableQuerySql)
                     .offset(offset)
@@ -310,8 +342,8 @@ public class DefaultDBManager implements IDbManager {
                     .connection(connection)
                     .sql(pageSql)
                     .batchSize(batchSize)
-                    .statementListener(asyncContext)
-                    .cancellationChecker(asyncContext::checkCancelled)
+                    .statementListener(context)
+                    .cancellationChecker(context::checkCancelled)
                     .consumer(resultSet -> {
                 ResultSetMetaData metaData = resultSet.getMetaData();
                 List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
@@ -319,6 +351,7 @@ public class DefaultDBManager implements IDbManager {
                 int n = 0;
                 while (resultSet.next()) {
                     n++;
+                    long currentExportedRows = exportedRows.incrementAndGet();
                     for (int i = 1; i <= metaData.getColumnCount(); i++) {
                         IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
                         JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
@@ -330,8 +363,11 @@ public class DefaultDBManager implements IDbManager {
                             .columnList(columnList)
                             .valueList(valueList)
                             .build());
-                    asyncContext.write(insertSql + SQLConstants.SEMICOLON);
+                    context.write(insertSql + SQLConstants.SEMICOLON);
                     valueList.clear();
+                    if (currentExportedRows % TaskConstants.EXPORT_LOG_ROW_INTERVAL == 0) {
+                        logRowsExported(context, tableName, currentExportedRows);
+                    }
                 }
                 if (n < batchSize) {
                     finish.set(true);
@@ -340,26 +376,28 @@ public class DefaultDBManager implements IDbManager {
             page++;
             offset = offset + batchSize;
         }
+        logTableQueryCompleted(context, tableName, exportedRows.get());
     }
 
-    protected void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, AsyncContext asyncContext, int batchSize) {
+    protected void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
+            TaskExecutionContext context, int batchSize) {
         ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
         String tableQuerySql = sqlBuilder.dql().buildSelectTable(databaseName, schemaName, tableName);
-        asyncContext.info(DateUtil.formatDateTime(DateUtil.date()) + ":" + tableName + " Exporting DATA");
+        AtomicLong exportedRows = new AtomicLong();
+        logTableQueryStarted(context, tableName);
         DefaultSQLExecutor.getInstance().fetchAllTableRecords(FetchAllTableRecordsRequest.builder()
                 .connection(connection)
                 .sql(tableQuerySql)
                 .batchSize(batchSize)
-                .statementListener(asyncContext)
-                .cancellationChecker(asyncContext::checkCancelled)
+                .statementListener(context)
+                .cancellationChecker(context::checkCancelled)
                 .consumer(resultSet -> {
             ResultSetMetaData metaData = resultSet.getMetaData();
             List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
             List<String> valueList = new ArrayList<>();
-            asyncContext.write(String.format(RECORD_TITLE, tableName));
-            int n = 0;
+            context.write(String.format(RECORD_TITLE, tableName));
             while (resultSet.next()) {
-                n++;
+                long currentExportedRows = exportedRows.incrementAndGet();
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
                     JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
@@ -371,15 +409,15 @@ public class DefaultDBManager implements IDbManager {
                         .columnList(columnList)
                         .valueList(valueList)
                         .build());
-                asyncContext.write(insertSql + ";");
+                context.write(insertSql + ";");
                 valueList.clear();
-                if (n % 10000 == 0) {
-                    asyncContext.info(DateUtil.formatDateTime(DateUtil.date()) + ":" + tableName + " Exporting DATA " + n);
+                if (currentExportedRows % TaskConstants.EXPORT_LOG_ROW_INTERVAL == 0) {
+                    logRowsExported(context, tableName, currentExportedRows);
                 }
             }
 
         }).build());
-        asyncContext.info(DateUtil.formatDateTime(DateUtil.date()) + ":" + tableName + " Exporting DATA finished");
+        logTableQueryCompleted(context, tableName, exportedRows.get());
     }
 
     @Override

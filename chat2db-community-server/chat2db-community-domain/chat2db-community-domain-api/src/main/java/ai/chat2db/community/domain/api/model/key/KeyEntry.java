@@ -24,4 +24,9 @@ public class KeyEntry {
     private List<KeyValueItem> streamValues;
 
     private List<KeyValueItem> values;
+
+    /**
+     * Whether the type-specific value payload has been loaded.
+     */
+    private Boolean detailLoaded;
 }

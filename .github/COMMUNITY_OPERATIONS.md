@@ -135,8 +135,14 @@ Review in this order:
 5. Documentation, migration, and rollback needs.
 
 All required checks and review conversations must pass before merge. When a
-real second reviewer joins the rotation, enable a required approving review on
-`main`; until then, do not claim that independent review is enforced.
+pull request targets `main`, the active repository rules require one approving
+review, Code Owner approval, approval after the latest push by someone other
+than the latest pusher, all required status checks, and resolution of every
+review conversation. Trusted Contributors may review and merge only after
+GitHub reports that all of these requirements are satisfied. The current role,
+review request path, protected ownership paths, beta-build permission, and
+release boundaries are documented in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#trusted-contributors).
 
 ### 7. Milestone And Release
 

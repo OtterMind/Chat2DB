@@ -196,7 +196,11 @@ Runtime Profiles for the current user, so the Agent editor can show detected
 Runtime cards without asking for a Runtime Profile ID. Use
 `CHAT2DB_CLAUDE_CODE_PATH`, `CHAT2DB_CODEX_PATH`, `CHAT2DB_OPENCODE_PATH`,
 `CHAT2DB_PI_PATH`, `CHAT2DB_HERMES_PATH`, or `CHAT2DB_DSH_PATH` for custom
-executable locations.
+executable locations. Desktop discovery also checks login-shell paths and common
+nvm/nvm4w, fnm, Volta, pnpm, Bun, Homebrew, and npm locations. The environment
+used to detect a Runtime is retained for its task processes, so Node-based shims
+continue to resolve the matching `node` executable. **Detect again** in the Agent
+editor performs a new filesystem scan without requiring an application restart.
 
 The Runtime Daemon is also built as one separate local executable. Standalone
 mode defaults to `AUTO` and detects every supported provider. Set

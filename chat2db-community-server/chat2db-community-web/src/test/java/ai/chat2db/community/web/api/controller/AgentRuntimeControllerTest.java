@@ -28,6 +28,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRuntimeRunSuspen
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeControlService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+import ai.chat2db.community.web.api.event.AgentRuntimeDiscoveryRefreshEvent;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationHandler;
@@ -87,6 +88,18 @@ class AgentRuntimeControllerTest {
         assertEquals(List.of("profile-1"), controller.listRuntimeOptions().getData().stream()
                 .map(AgentRuntimeOption::getProfileId).toList());
         assertEquals(7L, capturedOwner.get());
+    }
+
+    @Test
+    void profileControllerPublishesAuthenticatedRuntimeDiscoveryRefresh() {
+        IAgentRuntimeControlService service = proxy(IAgentRuntimeControlService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        AtomicReference<Object> event = new AtomicReference<>();
+        AgentRuntimeProfileController controller = new AgentRuntimeProfileController(
+                service, () -> 7L, event::set);
+
+        assertTrue(controller.refreshRuntimeDiscovery().getData());
+        assertEquals(new AgentRuntimeDiscoveryRefreshEvent(7L), event.get());
     }
 
     @Test

@@ -258,7 +258,11 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
     }
 
     public RedisKey keyDetail(String keyName) {
-        RedisKey redisKey = RedisScriptExecutor.getInstance().getKey(keyName);
+        return keyDetail(Chat2DBContext.getConnection(), keyName);
+    }
+
+    public RedisKey keyDetail(Connection connection, String keyName) {
+        RedisKey redisKey = RedisScriptExecutor.getInstance().getKey(connection, keyName);
         if (redisKey != null) {
             return redisKey;
         }
@@ -272,7 +276,7 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
     private RedisKey findKey(Connection connection, String key) {
         RedisKey redisKey = new RedisKey();
         redisKey.setName(key);
-        String keyType = RedisScriptExecutor.getInstance().getKeyType(key);
+        String keyType = RedisScriptExecutor.getInstance().getKeyType(connection, key);
         redisKey.setType(keyType);
         ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
         return typeScript.getKeyR(connection, redisKey);

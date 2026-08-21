@@ -5,8 +5,6 @@ export const useStyles = createStyles(({ css }) => {
     aiButton: css`
       position: relative;
       cursor: pointer;
-      width: 32px;
-      height: 32px;
     `,
     defaultImage: css`
       display: block;

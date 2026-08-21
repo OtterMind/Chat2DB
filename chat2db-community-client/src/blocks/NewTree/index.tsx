@@ -22,6 +22,7 @@ import { useTreeStore } from '@/store/tree';
 import { useGlobalStore } from '@/store/global';
 import connectionService from '@/service/connection';
 import { useSize } from 'ahooks';
+import { decorateDataSourceIdentityTree } from './dataSourceIdentity';
 
 interface IProps extends TreeProps<TreeNodeData> {
   className?: string;
@@ -65,7 +66,6 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   const treeRef = useRef<any>(null);
   const lastTreeSize = useRef<{ width: number; height: number }>();
   const filteredTreeData = useTrimTreeData({ leafNodes, hiddenNoPermission, excludeNodes });
-
   const {
     editingTreeNode,
     setTreeData,
@@ -75,6 +75,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     expandedKeys,
     scrollTargetKey,
     setScrollTargetKey,
+    dataSourceList,
   } = useTreeStore((state) => ({
     editingTreeNode: state.editingTreeNode,
     setTreeData: state.setTreeData,
@@ -84,7 +85,12 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     expandedKeys: state.expandedKeys,
     scrollTargetKey: state.scrollTargetKey,
     setScrollTargetKey: state.setScrollTargetKey,
+    dataSourceList: state.dataSourceList,
   }));
+  const identityTreeData = useMemo(
+    () => decorateDataSourceIdentityTree(filteredTreeData, dataSourceList),
+    [filteredTreeData, dataSourceList],
+  );
   const shortcutOverrides = useGlobalStore((state) => state.shortcutOverrides);
   const shortcutConfig = useMemo(
     () => getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides),
@@ -127,7 +133,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   const onRightClick = ({ event, node }) => {
     event.preventDefault();
     setSelectedKeys([node.key]);
-    treeDropdownRef.current?.setCurrentNode({ event, node });
+    treeDropdownRef.current?.openMenu({ event, node });
   };
 
   const onDrop: TreeProps['onDrop'] = (info: any) => {
@@ -244,7 +250,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     const treeHeight = treeSize?.height || lastTreeSize.current?.height;
 
     return {
-      treeData: filteredTreeData || [],
+      treeData: identityTreeData || [],
       blockNode: true,
       motion: false,
       itemHeight: 26,
@@ -290,12 +296,12 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
       onRightClick,
       onDrop,
       onScroll: () => {
-        treeDropdownRef.current?.setCurrentNode(null);
+        treeDropdownRef.current?.closeMenu();
       },
       titleRender,
       ...restProps,
     };
-  }, [selectedKeys, expandedKeys, treeSize?.height, editingTreeNode, filteredTreeData, restProps]);
+  }, [selectedKeys, expandedKeys, treeSize?.height, editingTreeNode, identityTreeData, restProps]);
 
   return (
     <div

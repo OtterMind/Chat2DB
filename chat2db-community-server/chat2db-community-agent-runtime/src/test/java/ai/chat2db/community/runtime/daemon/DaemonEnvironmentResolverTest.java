@@ -54,4 +54,16 @@ class DaemonEnvironmentResolverTest {
         assertThrows(IllegalStateException.class,
                 () -> resolver.resolveExecutable(profile, Map.of()));
     }
+
+    @Test
+    void discoveredPathOverridesDesktopPathWithoutForwardingOtherValues() {
+        DaemonEnvironmentResolver resolver = new DaemonEnvironmentResolver(
+                name -> "PATH".equals(name) ? "desktop-path" : null,
+                Map.of("PATH", "login-shell-path", "SECRET", "not-forwarded"));
+        AgentRuntimeProfile profile = new AgentRuntimeProfile();
+        profile.setExecutable(temporaryDirectory.resolve("missing").toString());
+        profile.setEnvironmentReferences(Map.of());
+
+        assertEquals(Map.of("PATH", "login-shell-path"), resolver.resolve(profile));
+    }
 }

@@ -145,14 +145,8 @@ public final class MysqlSqlGuards {
         if (trimmed.isEmpty()) {
             return trimmed;
         }
-        boolean startsWithParenthesis = trimmed.startsWith("(");
-        boolean endsWithParenthesis = trimmed.endsWith(")");
-        if (startsWithParenthesis != endsWithParenthesis) {
-            throw invalidEnumValues(raw);
-        }
-        boolean parenthesized = startsWithParenthesis;
-        String inner = parenthesized ? trimmed.substring(1, trimmed.length() - 1) : trimmed;
-        List<String> items = parseEnumValues(inner, raw);
+        boolean parenthesized = trimmed.startsWith("(");
+        List<String> items = parseEnumValues(trimmed);
         StringBuilder result = new StringBuilder();
         if (parenthesized) {
             result.append('(');
@@ -167,6 +161,27 @@ public final class MysqlSqlGuards {
             result.append(')');
         }
         return result.toString();
+    }
+
+    /**
+     * Parses a MySQL ENUM/SET value list while honoring quoted commas, doubled quotes and
+     * backslash escapes. The input may optionally include its surrounding parentheses.
+     */
+    public static List<String> parseEnumValues(String raw) {
+        if (raw == null) {
+            throw invalidEnumValues(null);
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            throw invalidEnumValues(raw);
+        }
+        boolean startsWithParenthesis = trimmed.startsWith("(");
+        boolean endsWithParenthesis = trimmed.endsWith(")");
+        if (startsWithParenthesis != endsWithParenthesis) {
+            throw invalidEnumValues(raw);
+        }
+        String inner = startsWithParenthesis ? trimmed.substring(1, trimmed.length() - 1) : trimmed;
+        return List.copyOf(parseEnumValues(inner, raw));
     }
 
     private static List<String> parseEnumValues(String inner, String raw) {

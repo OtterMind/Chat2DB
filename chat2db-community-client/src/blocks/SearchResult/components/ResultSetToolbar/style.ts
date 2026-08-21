@@ -8,12 +8,13 @@ export const useStyles = createStyles(({ css, token }) => {
       align-items: center;
       border-bottom: 1px solid ${token.colorBorderLayout};
       padding: 0;
-      height: 30px;
+      height: 34px;
       flex-shrink: 0;
+      box-sizing: border-box;
       overflow-x: auto;
     `,
     editTableDataBar: css`
-      height: 30px;
+      height: 34px;
     `,
     toolBarItem: css`
       flex-shrink: 0;
@@ -23,15 +24,22 @@ export const useStyles = createStyles(({ css, token }) => {
       padding: 0px 4px;
       gap: 3px;
       align-items: center;
-      div i {
-        color: ${token.colorText};
-      }
       &:not(:last-child) {
         border-right: 1px solid ${token.colorBorderLayout};
       }
     `,
-    createChartIcon: css`
-      color: ${token.colorText};
+    toolbarAction: css`
+      &:not(:disabled),
+      &:not(:disabled) i,
+      &:not(:disabled) svg {
+        color: ${token.colorTextSecondary};
+      }
+
+      &:hover:not(:disabled),
+      &:hover:not(:disabled) i,
+      &:hover:not(:disabled) svg {
+        color: ${token.colorText};
+      }
     `,
     toolBarRight: css`
       flex: 1;

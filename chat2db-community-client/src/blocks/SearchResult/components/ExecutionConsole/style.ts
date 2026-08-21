@@ -8,34 +8,9 @@ export const useStyles = createStyles(({ css, token }) => ({
     background: ${token.colorBgContainer};
     color: ${token.colorText};
   `,
-  scrollArea: css`
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    padding: 10px 14px 18px;
-    font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
-    font-size: 12px;
-    line-height: 1.65;
-  `,
-  scrollContent: css`
-    min-width: 0;
-  `,
   record: css`
     min-width: 0;
     margin-bottom: 10px;
-  `,
-  line: css`
-    display: grid;
-    grid-template-columns: 154px minmax(0, 1fr);
-    align-items: start;
-    min-height: 20px;
-  `,
-  timestamp: css`
-    color: ${token.colorTextSecondary};
-    white-space: nowrap;
-  `,
-  prominentTimestamp: css`
-    color: ${token.colorText};
   `,
   contextLine: css`
     display: flex;
@@ -119,38 +94,6 @@ export const useStyles = createStyles(({ css, token }) => ({
       letter-spacing: 0;
     }
   `,
-  message: css`
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    min-width: 0;
-  `,
-  level: css`
-    flex: none;
-    width: 42px;
-    font-size: 11px;
-    font-weight: 600;
-  `,
-  infoLevel: css`
-    color: ${token.colorSuccessText};
-  `,
-  messageText: css`
-    min-width: 0;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  `,
-  messageINFO: css`
-    color: ${token.colorTextSecondary};
-  `,
-  messageINFOText: css`
-    color: ${token.colorText};
-  `,
-  messageWARN: css`
-    color: ${token.colorWarningText};
-  `,
-  messageERROR: css`
-    color: ${token.colorErrorText};
-  `,
   resultLine: css`
     color: ${token.colorSuccessText};
     min-width: 0;
@@ -198,8 +141,13 @@ export const useStyles = createStyles(({ css, token }) => ({
     animation: console-pulse 1.2s ease-in-out infinite;
 
     @keyframes console-pulse {
-      0%, 100% { opacity: 0.35; }
-      50% { opacity: 1; }
+      0%,
+      100% {
+        opacity: 0.35;
+      }
+      50% {
+        opacity: 1;
+      }
     }
   `,
   successLine: css`

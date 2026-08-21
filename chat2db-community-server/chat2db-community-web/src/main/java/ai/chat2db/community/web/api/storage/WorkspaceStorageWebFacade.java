@@ -7,14 +7,12 @@ import ai.chat2db.community.domain.api.model.workspace.Node;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.pin.PinTable;
-import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordCreateRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordPageRequest;
-import ai.chat2db.community.domain.api.model.request.task.TaskRecordUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePositionUpdateRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSourceNamespace;
+import ai.chat2db.community.domain.api.service.db.IDbNamespaceService;
+import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -44,13 +42,19 @@ public final class WorkspaceStorageWebFacade {
     private static volatile WorkspaceStorageWebFacade delegate;
 
     private final IWorkspaceStorageFacade workspaceStorageFacade;
+    private final IDbWorkspaceDataSourceService workspaceDataSourceService;
+    private final IDbNamespaceService namespaceService;
     private final DataSourceWebConverter dataSourceWebConverter;
     private final OperationLogConverter operationLogConverter;
 
     public WorkspaceStorageWebFacade(IWorkspaceStorageFacade workspaceStorageFacade,
+            IDbWorkspaceDataSourceService workspaceDataSourceService,
+            IDbNamespaceService namespaceService,
             DataSourceWebConverter dataSourceWebConverter,
             OperationLogConverter operationLogConverter) {
         this.workspaceStorageFacade = workspaceStorageFacade;
+        this.workspaceDataSourceService = workspaceDataSourceService;
+        this.namespaceService = namespaceService;
         this.dataSourceWebConverter = dataSourceWebConverter;
         this.operationLogConverter = operationLogConverter;
         delegate = this;
@@ -80,13 +84,13 @@ public final class WorkspaceStorageWebFacade {
     }
 
     public static WebPageResult<DataSourceResponse> getDataSourceList(DataSourceQueryRequest request) {
-        return mapPageResponse(delegate().workspaceStorageFacade.listDataSources(
+        return mapPageResponse(delegate().workspaceDataSourceService.listDataSources(
                         delegate().dataSourceWebConverter.request2param(request)),
                 delegate().dataSourceWebConverter::storage2response);
     }
 
     public static DataResult<DataSourceNamespaceResponse> getNamespaceDatasource() {
-        WorkspaceDataSourceNamespace result = delegate().workspaceStorageFacade.getNamespaceDataSources();
+        WorkspaceDataSourceNamespace result = delegate().namespaceService.getNamespaceDataSources();
         return DataResult.of(result == null ? null : delegate().dataSourceWebConverter.storage2response(result));
     }
 
@@ -115,7 +119,7 @@ public final class WorkspaceStorageWebFacade {
     }
 
     public static ListResult<Node> getTree() {
-        return ListResult.of(delegate().workspaceStorageFacade.getTree());
+        return ListResult.of(delegate().namespaceService.getTree());
     }
 
     public static ActionResult updatePosition(PositionUpdateRequest request) {
@@ -134,23 +138,6 @@ public final class WorkspaceStorageWebFacade {
 
     public static ActionResult deletePinTable(PinTable request) {
         delegate().workspaceStorageFacade.deletePinTable(request);
-        return ActionResult.isSuccess();
-    }
-
-    public static WebPageResult<Task> taskList(TaskRecordPageRequest param) {
-        return toWebPageResult(delegate().workspaceStorageFacade.taskList(param));
-    }
-
-    public static DataResult<Task> getTask(Long id) {
-        return DataResult.of(delegate().workspaceStorageFacade.getTask(id));
-    }
-
-    public static DataResult<Long> createTask(TaskRecordCreateRequest param) {
-        return DataResult.of(delegate().workspaceStorageFacade.createTask(param));
-    }
-
-    public static ActionResult updateTask(TaskRecordUpdateRequest param) {
-        delegate().workspaceStorageFacade.updateTask(param);
         return ActionResult.isSuccess();
     }
 

@@ -33,6 +33,11 @@ export default memo<IProps>(() => {
   const needInputConfirmText = unifiedConfirmationModalInfo?.needInputConfirmText;
   const inputConfirmed = !needInputConfirmText || inputConfirmText === needInputConfirmText;
 
+  const handleCancel = () => {
+    unifiedConfirmationModalInfo?.onCancel?.();
+    openUnifiedConfirmationModal(null);
+  };
+
   const renderFooter = () => {
     return (
       <ModalFooterButton
@@ -40,7 +45,7 @@ export default memo<IProps>(() => {
           <>
             <Button
               onClick={() => {
-                openUnifiedConfirmationModal(null);
+                handleCancel();
               }}
             >
               {i18n('common.button.cancel')}
@@ -48,9 +53,7 @@ export default memo<IProps>(() => {
             <Button
               danger
               loading={loading}
-              disabled={
-                (!userChecked && !!unifiedConfirmationModalInfo?.needDoubleConfirmText) || !inputConfirmed
-              }
+              disabled={(!userChecked && !!unifiedConfirmationModalInfo?.needDoubleConfirmText) || !inputConfirmed}
               onClick={() => {
                 setLoading(true);
                 unifiedConfirmationModalInfo
@@ -80,7 +83,7 @@ export default memo<IProps>(() => {
       closable={false}
       footer={renderFooter()}
       onCancel={() => {
-        openUnifiedConfirmationModal(null);
+        handleCancel();
       }}
       width={unifiedConfirmationModalInfo?.width || 400}
     >

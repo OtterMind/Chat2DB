@@ -1,5 +1,99 @@
 # Public ownership is intentionally explicit while the maintainer rotation grows.
-* @openai0229
+* @openai0229 @OtterMind/chat2db-community-contributors
 
 /.github/ @openai0229
 /script/github/ @openai0229
+/script/package/ @openai0229
+/docker/ @openai0229
+
+# Database changes should go directly to Aias00; openai0229 remains an owner
+# for cross-cutting changes and when Aias00 authored or made the latest push.
+/chat2db-community-client/src/blocks/CanvasTable/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/CreateConnection/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/DatabaseTableEditor/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/EditTableView/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/RedisAllData/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/SchemaSync/ @Aias00 @openai0229
+/chat2db-community-client/src/blocks/SearchResult/ @Aias00 @openai0229
+/chat2db-community-client/src/components/SQLEditor/ @Aias00 @openai0229
+/chat2db-community-client/src/service/connection.ts @Aias00 @openai0229
+/chat2db-community-client/src/service/database/ @Aias00 @openai0229
+/chat2db-community-client/src/service/dataSource*.ts @Aias00 @openai0229
+/chat2db-community-client/src/service/nonRelationalDatabase/ @Aias00 @openai0229
+/chat2db-community-client/src/service/schemaSync.ts @Aias00 @openai0229
+/chat2db-community-client/src/service/sql*.ts @Aias00 @openai0229
+/chat2db-community-client/src/store/tree/ @Aias00 @openai0229
+/chat2db-community-client/src/typings/connection.ts @Aias00 @openai0229
+/chat2db-community-client/src/typings/console.ts @Aias00 @openai0229
+/chat2db-community-client/src/typings/database.ts @Aias00 @openai0229
+/chat2db-community-client/src/typings/redis.ts @Aias00 @openai0229
+/chat2db-community-client/src/typings/schema.ts @Aias00 @openai0229
+/chat2db-community-client/src/typings/sqlParser.ts @Aias00 @openai0229
+
+/chat2db-community-server/chat2db-community-plugins/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-spi/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/enums/completion/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/enums/parser/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/completion/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/datasource/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/metadata/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/request/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/request/sql/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/service/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/main/java/ai/chat2db/community/domain/core/completion/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/main/java/ai/chat2db/community/domain/core/impl/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/test/java/ai/chat2db/community/domain/core/completion/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/test/java/ai/chat2db/community/domain/core/impl/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/adapter/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/controller/Db*.java @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/converter/data/source/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/converter/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/converter/driver/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/request/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/request/driver/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/response/db/ @Aias00 @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/response/driver/ @Aias00 @openai0229
+
+# AI changes should go directly to auenger; openai0229 is the backup owner
+# when auenger authored or made the latest push to the pull request.
+/chat2db-community-client/src/blocks/AI/ @auenger @openai0229
+/chat2db-community-client/src/store/ai/ @auenger @openai0229
+/chat2db-community-client/src/store/*/slices/ai/ @auenger @openai0229
+/chat2db-community-client/src/service/ai*.ts @auenger @openai0229
+/chat2db-community-client/src/service/magicStick.ts @auenger @openai0229
+/chat2db-community-client/src/service/knowledgeManagement.ts @auenger @openai0229
+/chat2db-community-client/src/service/llm/ @auenger @openai0229
+/chat2db-community-client/src/hooks/useStreamChatAI.ts @auenger @openai0229
+/chat2db-community-client/src/typings/ai.ts @auenger @openai0229
+/chat2db-community-client/src/typings/knowledgeManagement.ts @auenger @openai0229
+/chat2db-community-client/src/typings/llm/ @auenger @openai0229
+/chat2db-community-client/src/i18n/**/ai.ts @auenger @openai0229
+/chat2db-community-client/src/i18n/**/knowledgeManagement.ts @auenger @openai0229
+/chat2db-community-client/src/constants/knowledgeManagement.ts @auenger @openai0229
+/chat2db-community-client/src/components/AI*/ @auenger @openai0229
+/chat2db-community-client/src/components/ChangeAiTableInfo/ @auenger @openai0229
+/chat2db-community-client/src/components/FieldPromptInput/ @auenger @openai0229
+/chat2db-community-client/src/components/PromptExample/ @auenger @openai0229
+/chat2db-community-client/src/blocks/DatabaseTableEditor/AICreateTable/ @auenger @openai0229
+/chat2db-community-client/src/blocks/NewTree/functions/ai.ts @auenger @openai0229
+/chat2db-community-client/src/blocks/NewTree/functions/createAiDataCollection.tsx @auenger @openai0229
+/chat2db-community-client/src/pages/main/knowledgeManagement/ @auenger @openai0229
+/chat2db-community-client/src/pages/main/workspace/components/NewViewAllTable/components/addAiDataCollection.tsx @auenger @openai0229
+/chat2db-community-client/src/utils/staticModal/createAiDataCollectionTips.tsx @auenger @openai0229
+
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/enums/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/model/request/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-api/src/main/java/ai/chat2db/community/domain/api/service/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/main/java/ai/chat2db/community/domain/core/impl/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/main/java/ai/chat2db/community/domain/core/converter/AiModelConfigConverter.java @auenger @openai0229
+/chat2db-community-server/chat2db-community-domain/chat2db-community-domain-core/src/test/java/ai/chat2db/community/domain/core/impl/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/adapter/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/converter/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/enums/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/request/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/model/response/ai/ @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/controller/AiChatController.java @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/controller/AiCharacterController.java @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/main/java/ai/chat2db/community/web/api/mcp/adapter/AiToolMcpAdapter.java @auenger @openai0229
+/chat2db-community-server/chat2db-community-web/src/test/java/ai/chat2db/community/web/api/adapter/ai/ @auenger @openai0229

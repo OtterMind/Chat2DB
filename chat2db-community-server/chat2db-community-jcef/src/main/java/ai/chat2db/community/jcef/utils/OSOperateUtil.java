@@ -30,6 +30,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.Timer;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.prefs.Preferences;
 
 
@@ -47,7 +48,7 @@ public class OSOperateUtil {
             if (os.contains("win")) {
                 Runtime.getRuntime().exec("explorer /select," + file.getAbsolutePath());
             } else if (os.contains("mac")) {
-                Runtime.getRuntime().exec(new String[]{"open", "-R", file.getAbsolutePath()});
+                revealInFinder(file);
             } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
                 try {
                     Runtime.getRuntime().exec(new String[]{"xdg-open", file.getParent()});
@@ -61,6 +62,19 @@ public class OSOperateUtil {
         } catch (IOException e) {
             log.error(e.getMessage(), e);
         }
+    }
+
+    private static void revealInFinder(File file) throws IOException {
+        Process revealProcess = new ProcessBuilder("open", "-R", file.getAbsolutePath()).start();
+        try {
+            if (revealProcess.waitFor() != 0) {
+                throw new IOException("Finder could not reveal file: " + file.getAbsolutePath());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while revealing file in Finder", e);
+        }
+        new ProcessBuilder("open", "-a", "Finder").start();
     }
 
     public static void openTerminal(String directoryPath) throws IOException {
@@ -106,13 +120,29 @@ public class OSOperateUtil {
     }
 
 
-    public static void windowsMax(Frame frame) {
-        frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+    public static void windowsMax(Frame frame) throws InvocationTargetException, InterruptedException {
+        onEventDispatchThread(() -> {
+            frame.setExtendedState(frame.getExtendedState() | Frame.MAXIMIZED_BOTH);
+            return null;
+        });
     }
 
 
-    public static void windowsMin(Frame frame) {
-        frame.setExtendedState(JFrame.ICONIFIED);
+    public static void windowsMin(Frame frame) throws InvocationTargetException, InterruptedException {
+        onEventDispatchThread(() -> {
+            frame.setExtendedState(frame.getExtendedState() | Frame.ICONIFIED);
+            return null;
+        });
+    }
+
+
+    public static boolean windowsToggleMaximized(Frame frame) throws InvocationTargetException, InterruptedException {
+        return onEventDispatchThread(() -> {
+            int state = frame.getExtendedState();
+            int nextState = toggleMaximizedState(state);
+            frame.setExtendedState(nextState);
+            return isMaximizedState(nextState);
+        });
     }
 
 
@@ -135,8 +165,32 @@ public class OSOperateUtil {
     }
 
 
-    public static boolean isWindowMaximized(Frame frame) {
-        return Frame.MAXIMIZED_BOTH == frame.getExtendedState();
+    public static boolean isWindowMaximized(Frame frame) throws InvocationTargetException, InterruptedException {
+        return onEventDispatchThread(() -> isMaximizedState(frame.getExtendedState()));
+    }
+
+
+    static boolean isMaximizedState(int state) {
+        return (state & Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH;
+    }
+
+
+    static int toggleMaximizedState(int state) {
+        if ((state & Frame.ICONIFIED) != 0) {
+            return state & ~Frame.ICONIFIED;
+        }
+        return isMaximizedState(state) ? state & ~Frame.MAXIMIZED_BOTH : state | Frame.MAXIMIZED_BOTH;
+    }
+
+
+    private static <T> T onEventDispatchThread(Supplier<T> operation)
+            throws InvocationTargetException, InterruptedException {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return operation.get();
+        }
+        AtomicReference<T> result = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> result.set(operation.get()));
+        return result.get();
     }
 
 

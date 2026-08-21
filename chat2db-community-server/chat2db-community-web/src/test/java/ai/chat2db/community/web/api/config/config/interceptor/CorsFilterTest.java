@@ -8,14 +8,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CorsFilterTest {
 
     @Test
-    void communityAllowsOnlyKnownFrontendOriginsOrMissingOrigin() {
-        assertTrue(CorsFilter.allowCommunityOrigin(null));
-        assertTrue(CorsFilter.allowCommunityOrigin(""));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8888"));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8889"));
-        assertTrue(CorsFilter.allowCommunityOrigin("http://localhost:10825"));
+    void releaseAllowsOnlyKnownFrontendOriginsOrMissingOrigin() {
+        assertTrue(CorsFilter.allowCommunityOrigin(null, false));
+        assertTrue(CorsFilter.allowCommunityOrigin("", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8888", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:8889", false));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://localhost:10825", false));
 
-        assertFalse(CorsFilter.allowCommunityOrigin("https://example.com"));
-        assertFalse(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000"));
+        assertFalse(CorsFilter.allowCommunityOrigin("https://example.com", false));
+        assertFalse(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000", false));
+    }
+
+    @Test
+    void developmentAllowsAllOrigins() {
+        assertTrue(CorsFilter.allowCommunityOrigin("https://example.com", true));
+        assertTrue(CorsFilter.allowCommunityOrigin("http://127.0.0.1:3000", true));
     }
 }

@@ -12,7 +12,6 @@ import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.community.domain.api.model.account.*;
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
 import ai.chat2db.community.domain.api.model.form.*;

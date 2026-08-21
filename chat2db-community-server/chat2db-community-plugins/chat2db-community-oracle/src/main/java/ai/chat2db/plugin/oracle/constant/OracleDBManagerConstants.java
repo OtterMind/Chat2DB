@@ -3,7 +3,6 @@ package ai.chat2db.plugin.oracle.constant;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.model.account.*;
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
 import ai.chat2db.community.domain.api.model.form.*;

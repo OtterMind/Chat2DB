@@ -1,5 +1,5 @@
-import { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useRef } from 'react';
-import { Modal, IconfontSvg } from '@chat2db/ui';
+import { memo, useEffect, useState } from 'react';
+import { Modal } from '@chat2db/ui';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import { Button } from 'antd';
@@ -7,15 +7,15 @@ import { ImportExportTaskDetails } from '@/typings/importExport';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import jcefApi from '@/jcef';
+import { isDesktop } from '@/utils/env';
+import { ImportExportTaskStatus } from '@/constants/importExport';
+import { Download, FolderOpen } from 'lucide-react';
 
 interface IProps {
   className?: string;
 }
 
-export interface LogModalRef {}
-
-const LogModal = forwardRef((_props: IProps, ref: ForwardedRef<LogModalRef>) => {
-  const logRef = useRef(null);
+const LogModal = (_props: IProps) => {
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
   const { logModalTaskId, openLogModal } = useImportExportStore((state) => {
     return {
@@ -24,25 +24,21 @@ const LogModal = forwardRef((_props: IProps, ref: ForwardedRef<LogModalRef>) => 
     };
   });
 
+  useEffect(() => {
+    setTaskDetails(undefined);
+  }, [logModalTaskId]);
+
   const handleOpenFile = () => {
-    jcefApi?.revealInExplorer(taskDetails?.downloadUrl);
+    if (!taskDetails) return;
+    if (isDesktop && taskDetails.artifactId) {
+      jcefApi?.revealInExplorer(taskDetails.artifactId);
+      return;
+    }
+    window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
   };
 
   const renderFooter = (
     <ModalFooterButton
-      footerLeft={
-        <>
-          {taskDetails?.downloadUrl && (
-            <Button
-              icon={<IconfontSvg code="icon-folder" />}
-              disabled={!taskDetails?.downloadUrl}
-              onClick={handleOpenFile}
-            >
-              {i18n('workspace.text.openFile')}
-            </Button>
-          )}
-        </>
-      }
       footerRight={
         <>
           <Button
@@ -52,36 +48,45 @@ const LogModal = forwardRef((_props: IProps, ref: ForwardedRef<LogModalRef>) => 
           >
             {i18n('common.button.close')}
           </Button>
-          {/* <Button type="primary">Stop</Button> */}
+          {taskDetails?.status === ImportExportTaskStatus.SUCCESS && taskDetails.artifactId && (
+            <Button
+              type="primary"
+              icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+              onClick={handleOpenFile}
+            >
+              {i18n('workspace.text.openFile')}
+            </Button>
+          )}
         </>
       }
     />
   );
 
-  useImperativeHandle(ref, () => ({
-    // openLogModal,
-  }));
-
-  const finish = (details: ImportExportTaskDetails) => {
+  const handleTaskChange = (details: ImportExportTaskDetails) => {
     setTaskDetails(details);
   };
 
   return (
     <Modal
+      className={_props.className}
       open={logModalTaskId !== null}
       footer={renderFooter}
       title={i18n('workspace.title.logDetail')}
       headerIconCode="icon-formatting"
       headerBorder
+      width={780}
+      maxHeight="calc(100vh - 48px)"
+      padding={0}
+      centered
       destroyOnClose
       maskClosable={false}
       onCancel={() => {
         openLogModal(null);
       }}
     >
-      {logModalTaskId && <Log ref={logRef} taskId={logModalTaskId} finish={finish} />}
+      {logModalTaskId && <Log taskId={logModalTaskId} onTaskChange={handleTaskChange} />}
     </Modal>
   );
-});
+};
 
 export default memo(LogModal);

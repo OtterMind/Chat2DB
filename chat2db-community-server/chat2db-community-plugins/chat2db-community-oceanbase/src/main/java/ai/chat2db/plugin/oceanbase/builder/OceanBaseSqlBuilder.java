@@ -1,5 +1,4 @@
 
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
 import ai.chat2db.community.domain.api.model.form.*;

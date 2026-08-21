@@ -1,20 +1,22 @@
 package ai.chat2db.community.domain.core.impl.task.imports;
 
-import ai.chat2db.community.domain.api.model.task.ImportAsyncContext;
 import ai.chat2db.community.domain.api.model.parser.statement.Statement;
 import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class SyncSqlBatchHandler implements ISqlBatchHandler {
 
-    private final ImportAsyncContext context;
+    private final TaskExecutionContext context;
+    private final ImportSqlExecutor sqlExecutor;
     private static final int BATCH_SIZE = 1000;
     private final List<Statement> statements = new ArrayList<>(BATCH_SIZE);
 
-    public SyncSqlBatchHandler(ImportAsyncContext context) {
+    public SyncSqlBatchHandler(TaskExecutionContext context, ImportSqlExecutor sqlExecutor) {
         this.context = context;
+        this.sqlExecutor = sqlExecutor;
 
     }
 
@@ -29,15 +31,15 @@ public class SyncSqlBatchHandler implements ISqlBatchHandler {
                 batchInsertSqls.add(sql);
             } else {
                 if (!batchInsertSqls.isEmpty()) {
-                    context.execute(batchInsertSqls);
+                    sqlExecutor.executeBatch(batchInsertSqls);
                     batchInsertSqls.clear();
                 }
-                context.execute(sql);
+                sqlExecutor.executeSql(sql);
             }
         }
         if (!batchInsertSqls.isEmpty()) {
             context.checkCancelled();
-            context.execute(batchInsertSqls);
+            sqlExecutor.executeBatch(batchInsertSqls);
         }
     }
 

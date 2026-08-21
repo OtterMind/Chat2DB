@@ -15,7 +15,7 @@ export const useStyles = createStyles(({ css, token }) => {
       justify-content: flex-start;
       flex-shrink: 0;
       height: 34px;
-      padding: 0 8px;
+      padding: 0 8px 0 4px;
       font-size: 12px;
       color: ${token.colorTextTertiary};
       white-space: nowrap;

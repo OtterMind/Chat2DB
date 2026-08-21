@@ -131,6 +131,15 @@ class MysqlIdentifierProcessorTest {
     }
 
     @Test
+    void parseEnumValuesPreservesComplexDeclaredValues() {
+        assertEquals(List.of("needs,review", "can't", "a\\b", "(nested)", ""),
+                MysqlSqlGuards.parseEnumValues("('needs,review','can\\'t','a\\\\b','(nested)','')"));
+        assertEquals(List.of("can\'t"), MysqlSqlGuards.parseEnumValues("'can''t'"));
+        assertThrows(IllegalArgumentException.class, () -> MysqlSqlGuards.parseEnumValues("('a','b'"));
+        assertThrows(IllegalArgumentException.class, () -> MysqlSqlGuards.parseEnumValues("'a',"));
+    }
+
+    @Test
     void createColumnSqlQuotesColumnNameAndEscapesComment() {
         TableColumn column = TableColumn.builder()
                 .name("a`b")

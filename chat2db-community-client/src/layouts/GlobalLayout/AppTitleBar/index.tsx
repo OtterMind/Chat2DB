@@ -1,12 +1,16 @@
-import { memo } from 'react';
-// import { IconButton } from '@chat2db/ui';
+import { Copy, Minus, Square, X } from 'lucide-react';
+import { memo, type MouseEvent, useCallback, useEffect, useState } from 'react';
 import { useStyles } from './style';
 import { Dropdown, type MenuProps } from 'antd';
 import { refreshPage } from '@/utils';
 import { history } from 'umi';
 import { Platform } from '@/constants/os';
 import jcefApi from '@/jcef';
-// import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
+import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
+import { useGlobalStore } from '@/store/global';
+import { isCommunityEnv, isDesktop } from '@/utils/env';
+import CommunityAppMenu from './CommunityAppMenu';
+import { COMMUNITY_TITLE_BAR_HEIGHT } from '@/constants/mainLayout';
 
 interface AppBarProps {
   className?: string;
@@ -14,25 +18,57 @@ interface AppBarProps {
 
 const AppBar = memo<AppBarProps>(({ className }) => {
   const { styles, cx } = useStyles();
-  // const [isMaximized, setIsMaximized] = useState(false);
+  const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
+  const isMac = window.navigator.os_type === Platform.Mac;
+  const isWindows = window.navigator.os_type === Platform.Windows;
+  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
-  // useLayoutEffect(() => {
-  //   // Monitor window status changes
-  //   const handleWindowStateChange = (maximized: boolean) => {
-  //     setIsMaximized(maximized);
-  //   };
+  const syncWindowMaximized = useCallback(() => {
+    jcefApi
+      .isWindowMaximized()
+      .then(setIsMaximized)
+      .catch(() => undefined);
+  }, []);
 
-  //   JcefEventBus.on(JavaPushActionType.IS_WINDOW_MAXIMIZED, handleWindowStateChange);
+  useEffect(() => {
+    if (!isCommunityEnv || !isWindows || !isDesktop) {
+      return;
+    }
 
-  //   // Get the initial window state
-  //   jcefApi?.isWindowMaximized().then((maximized: boolean) => {
-  //     setIsMaximized(maximized);
-  //   });
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const handleResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(syncWindowMaximized, 80);
+    };
 
-  //   return () => {
-  //     JcefEventBus.off(JavaPushActionType.IS_WINDOW_MAXIMIZED);
-  //   };
-  // }, []);
+    syncWindowMaximized();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.clearTimeout(resizeTimer);
+    };
+  }, [isWindows, syncWindowMaximized]);
+
+  useEffect(() => {
+    if (!isCommunityEnv || !isMac || !isDesktop) {
+      return;
+    }
+
+    const handleWindowFullScreenChange = (message: { data?: boolean } | boolean) => {
+      setIsWindowFullScreen(typeof message === 'boolean' ? message : message?.data === true);
+    };
+
+    JcefEventBus.on(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
+    jcefApi
+      .isWindowFullScreen()
+      .then(setIsWindowFullScreen)
+      .catch(() => undefined);
+
+    return () => {
+      JcefEventBus.off(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
+    };
+  }, [isMac]);
 
   const items: MenuProps['items'] = [
     {
@@ -70,32 +106,52 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     },
   ];
 
-  const handleDoubleClick = async () => {
-    jcefApi?.handleDoubleClickAppBar();
+  const toggleWindowMaximized = useCallback(() => {
+    return jcefApi.handleDoubleClickAppBar().then((maximized) => {
+      if (isWindows) {
+        setIsMaximized(maximized);
+      }
+    });
+  }, [isWindows]);
+
+  const handleDoubleClick = () => {
+    if (!isDesktop) {
+      return;
+    }
+    toggleWindowMaximized().catch(() => undefined);
   };
 
-  // const handelMinimizeWindow = (e) => {
-  //   e.stopPropagation();
-  //   jcefApi?.minimizeWindow();
-  // };
+  const handleMinimizeWindow = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    jcefApi.minimizeWindow();
+  };
 
-  // const handelMaximizeWindow = (e) => {
-  //   e.stopPropagation();
-  //   const handleApi = isMaximized ? jcefApi?.minimizeWindow : jcefApi?.maximizeWindow;
-  //   handleApi?.();
-  // };
+  const handleToggleMaximizeWindow = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (event.detail > 1) {
+      return;
+    }
+    toggleWindowMaximized().catch(() => undefined);
+  };
 
-  // const handelCloseWindow = (e) => {
-  //   e.stopPropagation();
-  //   jcefApi?.closeWindow();
-  // };
+  const handleCloseWindow = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    jcefApi.closeWindow();
+  };
 
-  if (!window.navigator.os_type || window.navigator.os_type !== Platform.Mac) {
+  if (!isMac && !isCommunityEnv) {
     // const showLeftContainer = checkIsSharePage();
     // if (__WEBAPP__ && !isEmbedIframe && !showLeftContainer) {
-    //   window._appTitleBarHeight = 36;
+    //   window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
     //   return (
-    //     <div style={{ height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    //     <div
+    //       style={{
+    //         height: COMMUNITY_TITLE_BAR_HEIGHT,
+    //         display: 'flex',
+    //         alignItems: 'center',
+    //         justifyContent: 'center',
+    //       }}
+    //     >
     //       {i18n('common.text.pleaseDownloadClient')}
     //       <Button type="link" href={appUrlConfig.DOWNLOAD_URL} target="_blank">
     //         {i18n('common.button.download')}
@@ -105,44 +161,80 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     // }
     window._appTitleBarHeight = 0;
     return <></>;
-  } else {
-    // TODO: jcef
-    // window._appTitleBarHeight = jcefApi.getPlatform() === Platform.Mac ? 30 : 36;
-    window._appTitleBarHeight = 30;
   }
 
+  window._appTitleBarHeight = isCommunityEnv ? COMMUNITY_TITLE_BAR_HEIGHT : 30;
+
   // When testing appBar on the web side, comment out the if else code above and open the comment code below.
-  // window._appTitleBarHeight = 36;
+  // window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
 
   return (
     <div
-      className={cx(styles.appBar, { [styles.windowsAppBar]: window.navigator.os_type !== Platform.Mac }, className)}
+      className={cx(
+        styles.appBar,
+        {
+          [styles.windowsAppBar]: !isMac,
+          [styles.communityAppBar]: isCommunityEnv,
+        },
+        className,
+      )}
       onDoubleClick={handleDoubleClick}
     >
-      <div className={styles.logoContainer}>
-        {window.navigator.os_type !== Platform.Mac ? (
+      {isCommunityEnv && isWindows && isDesktop && (
+        <div className={styles.communityMenu}>
+          <CommunityAppMenu />
+        </div>
+      )}
+      {isCommunityEnv && (
+        <div
+          className={cx(styles.communityActions, {
+          [styles.communityMacWindowedActions]: isMac && !isWindowFullScreen,
+          [styles.communityWindowsDesktopActions]: isWindows && isDesktop,
+        })}
+        >
+          {appTitleBarRightComponent}
+        </div>
+      )}
+      <div className={cx(styles.logoContainer, { [styles.communityLogoContainer]: isCommunityEnv })}>
+        {!isMac && !isCommunityEnv ? (
           <Dropdown destroyPopupOnHide menu={{ items }} trigger={['click']} className={styles.dropdown}>
             <div className={styles.appName}>Chat2DB</div>
           </Dropdown>
         ) : (
-          <div className={styles.appName}>Chat2DB</div>
+          <div className={cx(styles.appName, { [styles.communityAppName]: isCommunityEnv })}>Chat2DB</div>
         )}
       </div>
-      {/* {window.navigator.os_type !== Platform.Mac && (
-        <div className={styles.windowsActionBar}>
-          <IconButton className={styles.windowsAction} code="icon-minus" onClick={handelMinimizeWindow} />
-          <IconButton
+      {isCommunityEnv && isWindows && isDesktop && (
+        <div className={styles.windowsActionBar} onDoubleClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
             className={styles.windowsAction}
-            code={isMaximized ? 'icon-unmaximize' : 'icon-maximize'}
-            onClick={handelMaximizeWindow}
-          />
-          <IconButton
+            aria-label="Minimize window"
+            title="Minimize"
+            onClick={handleMinimizeWindow}
+          >
+            <Minus size={16} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            className={styles.windowsAction}
+            aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+            title={isMaximized ? 'Restore' : 'Maximize'}
+            onClick={handleToggleMaximizeWindow}
+          >
+            {isMaximized ? <Copy size={14} strokeWidth={1.75} /> : <Square size={13} strokeWidth={1.75} />}
+          </button>
+          <button
+            type="button"
             className={cx(styles.windowsAction, styles.closeAction)}
-            code="icon-close"
-            onClick={handelCloseWindow}
-          />
+            aria-label="Close window"
+            title="Close"
+            onClick={handleCloseWindow}
+          >
+            <X size={16} strokeWidth={1.75} />
+          </button>
         </div>
-      )} */}
+      )}
     </div>
   );
 });

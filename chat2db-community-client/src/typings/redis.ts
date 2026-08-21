@@ -44,13 +44,14 @@ export interface RedisDataItem {
   name: string | null;
   type: RedisFieldType;
   ttl: number;
-  value?: string;
+  value?: string | null;
   size?: number;
-  listValues?: ListValue[];
-  values?: SetValues[];
-  zsValues?: ZSetValue[];
-  hashValues?: HashValue[];
-  streamValues?: StreamValue[];
+  listValues?: ListValue[] | null;
+  values?: SetValues[] | null;
+  zsValues?: ZSetValue[] | null;
+  hashValues?: HashValue[] | null;
+  streamValues?: StreamValue[] | null;
+  detailLoaded?: boolean;
 
   // Process some logic on the front end. Is it a draft?
   isDraftFE?: boolean;
