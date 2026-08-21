@@ -36,17 +36,28 @@ public class JdbcUtils {
         if (StringUtils.isBlank(url)) {
             return url;
         }
+        // Only replace the host/port in the URL's authority section (//host:port),
+        // not every occurrence in the full URL — String.replace would also replace
+        // the host/port substring if it appeared in the database name or query params.
         String rewrittenUrl = url;
         String bareHost = stripJdbcHostBrackets(host);
         if (StringUtils.isNotBlank(bareHost)) {
             String bracketedHost = bracketJdbcIpv6Host(bareHost);
+            // Match the host in the authority: //host:port or //host (without port)
+            rewrittenUrl = rewrittenUrl.replaceAll(
+                    "//" + java.util.regex.Pattern.quote(bareHost) + "(:|/|$|\\?)",
+                    "//127.0.0.1$1");
             if (!StringUtils.equals(bracketedHost, bareHost)) {
-                rewrittenUrl = rewrittenUrl.replace(bracketedHost, "127.0.0.1");
+                rewrittenUrl = rewrittenUrl.replaceAll(
+                        "//" + java.util.regex.Pattern.quote(bracketedHost) + "(:|/|$|\\?)",
+                        "//127.0.0.1$1");
             }
-            rewrittenUrl = rewrittenUrl.replace(bareHost, "127.0.0.1");
         }
         if (StringUtils.isNotBlank(port) && StringUtils.isNotBlank(localPort)) {
-            rewrittenUrl = rewrittenUrl.replace(port, localPort);
+            // Only replace the port that immediately follows the host in the authority
+            rewrittenUrl = rewrittenUrl.replaceAll(
+                    "127\\.0\\.0\\.1:" + java.util.regex.Pattern.quote(port) + "(/|$|\\?)",
+                    "127.0.0.1:" + java.util.regex.Matcher.quoteReplacement(localPort) + "$1");
         }
         return rewrittenUrl;
     }
