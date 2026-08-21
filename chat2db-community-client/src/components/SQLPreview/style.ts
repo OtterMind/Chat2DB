@@ -16,6 +16,12 @@ export const useStyles = createStyles(({ css }) => {
         margin: 0;
       }
     `,
+    wrappedHighlighter: css`
+      && pre code {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    `,
     transparentHighlighter: css`
       background-color: transparent !important;
       border-radius: 0 !important;

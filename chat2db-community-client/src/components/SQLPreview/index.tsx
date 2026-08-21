@@ -54,7 +54,11 @@ const SQLPreview = memo<SQLPreviewProps>((props) => {
       data-sql-preview-source={source}
     >
       <CodeHighlighter
-        className={cx(styles.highlighter, surface === 'transparent' && styles.transparentHighlighter)}
+        className={cx(
+          styles.highlighter,
+          wrap && styles.wrappedHighlighter,
+          surface === 'transparent' && styles.transparentHighlighter,
+        )}
         code={sql || ''}
         language={language}
         type={type}
