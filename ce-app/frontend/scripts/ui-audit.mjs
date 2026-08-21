@@ -131,6 +131,28 @@ if (after.headers !== 1) note('rapid-switch', `${after.headers} headers mounted`
 if (after.scrollTop !== 0) note('rapid-switch', 'scroll position leaked between screens')
 console.log(`rapid-switch   mounted=${after.mounted} headers=${after.headers} scrollTop=${after.scrollTop}`)
 
+// editor invariants: empty start, no overlapping clips, zoom control present
+await page.goto(`${BASE}/#/studio`, { waitUntil: 'networkidle0' })
+await new Promise((r) => setTimeout(r, 900))
+const editor = await page.evaluate(() =>
+  import('/src/editor/model.ts').then((m) => {
+    const s = m.useEditor.getState()
+    s.clearTimeline()
+    const a = s.addClip({ trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'A', color: '#111' })
+    const b = s.addClip({ trackId: 'v1', start: 6, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'B', color: '#222' })
+    m.useEditor.getState().moveClip(b, 1) // aim straight at A
+    const clips = m.useEditor.getState().clips
+    const first = clips.find((c) => c.id === a)
+    const second = clips.find((c) => c.id === b)
+    const overlapping =
+      second.start < first.start + first.duration && second.start + second.duration > first.start
+    return { overlapping, zoomBar: !!document.querySelector('.tl__zoombar') }
+  })
+)
+if (editor.overlapping) note('editor', 'clips are allowed to overlap on a lane')
+if (!editor.zoomBar) note('editor', 'timeline zoom control missing')
+console.log(`editor         overlapping=${editor.overlapping} zoomBar=${editor.zoomBar}`)
+
 // language switch: direction flips and the choice persists
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle0' })
 await new Promise((r) => setTimeout(r, 600))

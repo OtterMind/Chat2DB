@@ -619,3 +619,18 @@ button { font-family: inherit; cursor: pointer; }
 .ai-panel__log .is-warn { color: #fdba74; }
 
 .tb__colors { display: flex; align-items: center; gap: 8px; }
+
+/* preview audio + timeline zoom bar ----------------------------------------- */
+.ed__preview-audio {
+  position: absolute; inset-inline-end: 12px; bottom: 10px; display: flex; align-items: center; gap: 6px;
+  padding: 2px 10px 2px 4px; border-radius: 999px;
+  background: rgba(7, 13, 24, .72); backdrop-filter: blur(6px);
+}
+.ed__preview-slider { width: 90px; margin: 0 !important; }
+
+.tl__zoombar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+}
+.tl__zoomlabel { font-size: 12px; color: var(--muted); flex: none; }
+.tl__zoomslider { flex: 1; margin: 0 !important; min-width: 120px; }

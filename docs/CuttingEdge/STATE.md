@@ -16,10 +16,11 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Render engine** | `core/engine/compose.py` — the edit model becomes one FFmpeg `filter_complex`; NVENC when present, libx264 otherwise; progress streamed over the WebSocket |
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
-| **Preview** | Real video in the program monitor, streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
+| **Preview** | Real video **with sound** in the program monitor (video lane plus the audio lane under it, per-clip volume/mute honoured, master volume on the monitor), streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
-| **Tool rail** | Context-sensitive bottom toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
+| **Timeline** | Starts empty; clips can never overlap on a lane (a drop lands in the nearest free gap, trims stop at neighbours); dedicated scale bar with zoom out/in and Fit |
+| **Tool rail** | Undo/Redo always visible, then the context-sensitive toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |

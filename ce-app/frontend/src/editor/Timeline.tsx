@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type } from 'lucide-react'
+import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, ZoomIn, ZoomOut, Maximize } from 'lucide-react'
+import { Slider } from 'antd'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
 import { useI18n } from '../i18n'
 
@@ -16,7 +17,9 @@ export default function Timeline() {
   const {
     tracks, clips, transitions, selectedId, playhead, pxPerSecond, snapping,
     select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock, addTransition, neighbourOf,
+    setZoom, zoomToFit,
   } = useEditor()
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const { t } = useI18n()
   const laneRef = useRef<HTMLDivElement>(null)
@@ -111,6 +114,33 @@ export default function Timeline() {
   const width = contentSeconds * pxPerSecond
 
   return (
+    <>
+      {/* Time scale lives with the timeline, where the eye already is. */}
+      <div className="tl__zoombar">
+        <span className="tl__zoomlabel">{t('Timeline scale', 'مقیاس زمانی')}</span>
+        <button className="ed__btn" onClick={() => setZoom(pxPerSecond / 1.4)} title={t('Zoom out', 'کوچک‌نمایی')}>
+          <ZoomOut size={15} />
+        </button>
+        <Slider
+          className="tl__zoomslider"
+          min={8}
+          max={220}
+          value={pxPerSecond}
+          tooltip={{ formatter: (v) => `${Math.round(v ?? 0)} px/s` }}
+          onChange={setZoom}
+        />
+        <button className="ed__btn" onClick={() => setZoom(pxPerSecond * 1.4)} title={t('Zoom in', 'بزرگ‌نمایی')}>
+          <ZoomIn size={15} />
+        </button>
+        <button
+          className="ed__btn"
+          onClick={() => zoomToFit(scrollRef.current?.clientWidth ?? 800)}
+          title={t('Fit the whole timeline', 'جا دادن کل تایم‌لاین')}
+        >
+          <Maximize size={14} /> {t('Fit', 'اندازه صفحه')}
+        </button>
+      </div>
+
     <div className="tl">
       <div className="tl__headers" style={{ width: HEADER_W }}>
         <div className="tl__corner" />
@@ -131,7 +161,7 @@ export default function Timeline() {
         })}
       </div>
 
-      <div className="tl__scroll">
+      <div className="tl__scroll" ref={scrollRef}>
         <div className="tl__lanes" ref={laneRef} style={{ width }} dir="ltr">
           <div
             className="tl__ruler"
@@ -209,6 +239,7 @@ export default function Timeline() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

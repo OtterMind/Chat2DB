@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers, Captions,
-  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend,
+  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { captionsApi } from '../api/captions'
@@ -53,8 +53,25 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
   const {
     clips, selectedId, playhead, transitions,
     splitAtPlayhead, duplicateSelected, removeSelected, setProps, freezeFrame,
-    addTransition, neighbourOf, addTrack, select,
+    addTransition, neighbourOf, addTrack, select, undo, redo, past, future,
   } = useEditor()
+
+  const history: Tool[] = [
+    {
+      id: 'undo',
+      icon: <Undo2 {...ICON} />,
+      label: ['Undo', 'واگرد'],
+      run: undo,
+      disabled: past.length === 0,
+    },
+    {
+      id: 'redo',
+      icon: <Redo2 {...ICON} />,
+      label: ['Redo', 'ازنو'],
+      run: redo,
+      disabled: future.length === 0,
+    },
+  ]
 
   const clip = clips.find((c) => c.id === selectedId) ?? null
   const props = clip ? propsOf(clip) : null
@@ -174,7 +191,7 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
     { id: 'delete', icon: <Trash2 {...ICON} />, label: ['Delete', 'حذف'], run: removeSelected },
   ]
 
-  const tools = clip ? clipTools : globalTools
+  const tools = [...history, ...(clip ? clipTools : globalTools)]
 
   return (
     <div className="tb">

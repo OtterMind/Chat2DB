@@ -1,74 +1,90 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Volume2, VolumeX } from 'lucide-react'
+import { Slider } from 'antd'
 import { mediaUrl } from '../api/render'
-import { useEditor, formatTimecode } from './model'
+import { useEditor, formatTimecode, propsOf } from './model'
 import { useI18n } from '../i18n'
 
 /**
- * Program monitor.
+ * Program monitor with sound.
  *
- * Shows the clip that sits under the playhead on the topmost video lane, seeked
- * to the matching source position. Media is streamed through the local API
- * because a packaged app runs from file://, where direct file playback cannot be
- * seeked reliably.
+ * The video element plays the clip under the playhead; a second, hidden element
+ * plays the audio lane underneath it, so a music bed is audible while scrubbing
+ * without building a full Web Audio mixer. Per-clip volume and mute are honoured,
+ * and a master control sits on the monitor itself.
  */
 export default function PreviewMonitor() {
   const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  const [master, setMaster] = useState(1)
+  const [muted, setMuted] = useState(false)
 
   const { clips, tracks, playhead, playing } = useEditor()
 
-  /** Topmost video clip covering the playhead. */
-  const active = useMemo(() => {
-    const videoLanes = tracks.filter((track) => track.kind === 'video').map((track) => track.id)
+  const under = (kind: 'video' | 'audio') => {
+    const lanes = tracks.filter((track) => track.kind === kind && !track.muted).map((track) => track.id)
     const covering = clips.filter(
       (clip) =>
         clip.src &&
-        videoLanes.includes(clip.trackId) &&
+        lanes.includes(clip.trackId) &&
         playhead >= clip.start &&
         playhead < clip.start + clip.duration
     )
-    // later lanes render on top, matching the compositor's overlay order
-    return covering.sort((a, b) => videoLanes.indexOf(b.trackId) - videoLanes.indexOf(a.trackId))[0]
-  }, [clips, tracks, playhead])
+    return covering.sort((a, b) => lanes.indexOf(b.trackId) - lanes.indexOf(a.trackId))[0] ?? null
+  }
 
-  const source = active?.src ? mediaUrl(active.src) : null
+  const activeVideo = useMemo(() => under('video'), [clips, tracks, playhead])
+  const activeAudio = useMemo(() => under('audio'), [clips, tracks, playhead])
 
-  // Load a new file only when the clip changes, never on every playhead tick.
-  useEffect(() => {
-    setFailed(null)
-  }, [source])
+  const videoSrc = activeVideo?.src ? mediaUrl(activeVideo.src) : null
+  const audioSrc = activeAudio?.src ? mediaUrl(activeAudio.src) : null
 
-  // Keep the element in sync with the timeline.
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !active) return
-    const target = playhead - active.start + active.offset
-    if (Number.isFinite(target) && Math.abs(video.currentTime - target) > 0.25) {
+  useEffect(() => setFailed(null), [videoSrc])
+
+  /** Keep an element aligned with the timeline position of its clip. */
+  const sync = (
+    element: HTMLMediaElement | null,
+    clip: { start: number; offset: number } | null,
+    gain: number
+  ) => {
+    if (!element || !clip) return
+    const target = playhead - clip.start + clip.offset
+    if (Number.isFinite(target) && Math.abs(element.currentTime - target) > 0.25) {
       try {
-        video.currentTime = Math.max(0, target)
+        element.currentTime = Math.max(0, target)
       } catch {
-        /* the element is not ready yet; the next tick will retry */
+        /* not ready yet */
       }
     }
-  }, [playhead, active])
+    element.volume = Math.min(1, Math.max(0, gain * master))
+    element.muted = muted || gain === 0
+  }
 
   useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    if (playing && active) void video.play().catch(() => undefined)
-    else video.pause()
-  }, [playing, active])
+    const videoProps = activeVideo ? propsOf(activeVideo) : null
+    const audioProps = activeAudio ? propsOf(activeAudio) : null
+    sync(videoRef.current, activeVideo, videoProps ? (videoProps.muted ? 0 : videoProps.volume) : 0)
+    sync(audioRef.current, activeAudio, audioProps ? (audioProps.muted ? 0 : audioProps.volume) : 0)
+  }, [playhead, activeVideo, activeAudio, master, muted])
+
+  useEffect(() => {
+    const elements = [videoRef.current, audioRef.current].filter(Boolean) as HTMLMediaElement[]
+    for (const element of elements) {
+      if (playing) void element.play().catch(() => undefined)
+      else element.pause()
+    }
+  }, [playing, videoSrc, audioSrc])
 
   return (
     <div className="ed__preview">
-      {source ? (
+      {videoSrc ? (
         <video
-          key={source}
+          key={videoSrc}
           ref={videoRef}
           className="ed__video"
-          src={source}
-          muted
+          src={videoSrc}
           playsInline
           preload="auto"
           onError={() => setFailed(t('This file could not be played', 'این فایل قابل پخش نیست'))}
@@ -84,11 +100,32 @@ export default function PreviewMonitor() {
         </div>
       )}
 
+      {audioSrc && <audio key={audioSrc} ref={audioRef} src={audioSrc} preload="auto" />}
+
       {failed && <div className="ed__preview-error">{failed}</div>}
 
       <div className="ed__preview-overlay">
         <span className="ed__tc ed__tc--sm">{formatTimecode(playhead, true)}</span>
-        {active && <span className="ed__preview-name">{active.label}</span>}
+        {activeVideo && <span className="ed__preview-name">{activeVideo.label}</span>}
+      </div>
+
+      <div className="ed__preview-audio">
+        <button
+          className="ce-iconbtn"
+          onClick={() => setMuted((v) => !v)}
+          title={muted ? t('Unmute preview', 'صدادار کردن پیش‌نمایش') : t('Mute preview', 'بی‌صدا کردن پیش‌نمایش')}
+        >
+          {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+        </button>
+        <Slider
+          className="ed__preview-slider"
+          min={0}
+          max={1}
+          step={0.05}
+          value={master}
+          tooltip={{ formatter: (v) => `${Math.round((v ?? 0) * 100)}%` }}
+          onChange={setMaster}
+        />
       </div>
     </div>
   )

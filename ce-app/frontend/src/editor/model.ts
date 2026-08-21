@@ -139,6 +139,7 @@ interface EditorState extends Snapshot {
   select: (id: string | null) => void
   setPlayhead: (t: number) => void
   setZoom: (pxPerSecond: number) => void
+  zoomToFit: (viewportPx: number) => void
   togglePlay: (playing?: boolean) => void
   toggleSnapping: () => void
 
@@ -189,21 +190,16 @@ export function propsOf(clip: Clip): ClipProps {
 export const MIN_CLIP = 0.2
 export const TIMELINE_MAX = 600
 
-/** A small demo arrangement so the editor is explorable before media import. */
+/** An empty project: three lanes, no content. */
 function seed(): Snapshot {
-  const v = { id: 'v1', kind: 'video' as const, name: 'Video 1', muted: false, locked: false }
-  const a = { id: 'a1', kind: 'audio' as const, name: 'Audio', muted: false, locked: false }
-  const t = { id: 't1', kind: 'text' as const, name: 'Text', muted: false, locked: false }
   return {
     transitions: [],
-    tracks: [v, a, t],
-    clips: [
-      { id: uid(), trackId: 'v1', start: 0, duration: 6.5, offset: 0, sourceDuration: 40, label: 'Intro', color: '#6366F1' },
-      { id: uid(), trackId: 'v1', start: 7.2, duration: 9, offset: 3, sourceDuration: 60, label: 'Interview', color: '#8B5CF6' },
-      { id: uid(), trackId: 'v1', start: 17, duration: 5, offset: 0, sourceDuration: 20, label: 'B-roll', color: '#0EA5E9' },
-      { id: uid(), trackId: 'a1', start: 0, duration: 22, offset: 0, sourceDuration: 180, label: 'Background music', color: '#10B981' },
-      { id: uid(), trackId: 't1', start: 1.2, duration: 3.4, offset: 0, sourceDuration: 3.4, label: 'Title', color: '#F59E0B' },
+    tracks: [
+      { id: 'v1', kind: 'video', name: 'Video 1', muted: false, locked: false },
+      { id: 'a1', kind: 'audio', name: 'Audio', muted: false, locked: false },
+      { id: 't1', kind: 'text', name: 'Text', muted: false, locked: false },
     ],
+    clips: [],
   }
 }
 
@@ -256,6 +252,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   select: (selectedId) => set({ selectedId }),
   setPlayhead: (t) => set({ playhead: Math.max(0, Math.min(TIMELINE_MAX, t)) }),
   setZoom: (pxPerSecond) => set({ pxPerSecond: Math.max(8, Math.min(220, pxPerSecond)) }),
+  zoomToFit: (viewportPx) => {
+    const { clips } = get()
+    const content = Math.max(5, ...clips.map((c) => c.start + c.duration))
+    set({ pxPerSecond: Math.max(8, Math.min(220, (viewportPx - 40) / content)) })
+  },
   togglePlay: (playing) => set((s) => ({ playing: playing ?? !s.playing })),
   toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
 
@@ -376,17 +377,32 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().commit((s) => {
       const clip = s.clips.find((c) => c.id === id)
       if (!clip) return
-      const track = s.tracks.find((t) => t.id === (trackId ?? clip.trackId))
+      const targetId = trackId ?? clip.trackId
+      const track = s.tracks.find((t) => t.id === targetId)
       if (!track || track.locked) return
-      clip.start = Math.max(0, start)
-      if (trackId) clip.trackId = trackId
+
+      const placed = resolvePlacement(s.clips, targetId, clip.id, start, clip.duration)
+      if (placed === null) return // no room on that lane; leave the clip alone
+      clip.start = placed
+      clip.trackId = targetId
     }),
 
   trimClip: (id, edge, seconds) =>
     get().commit((s) => {
       const clip = s.clips.find((c) => c.id === id)
       if (!clip) return
+      const laneMates = s.clips.filter((c) => c.trackId === clip.trackId && c.id !== clip.id)
+      const previousEnd = Math.max(
+        0,
+        ...laneMates.filter((c) => c.start + c.duration <= clip.start + 0.001).map((c) => c.start + c.duration)
+      )
+      const nextStart = Math.min(
+        Number.POSITIVE_INFINITY,
+        ...laneMates.filter((c) => c.start >= clip.start + clip.duration - 0.001).map((c) => c.start)
+      )
+
       if (edge === 'start') {
+        seconds = Math.max(seconds, previousEnd)
         const delta = seconds - clip.start
         const newDuration = clip.duration - delta
         const newOffset = clip.offset + delta
@@ -395,6 +411,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         clip.duration = newDuration
         clip.offset = newOffset
       } else {
+        seconds = Math.min(seconds, nextStart)
         const newDuration = seconds - clip.start
         if (newDuration < MIN_CLIP) return
         if (clip.offset + newDuration > clip.sourceDuration) return
@@ -609,6 +626,53 @@ export const useEditor = create<EditorState>((set, get) => ({
 }))
 
 /** Nearest magnet point (other clip edges + playhead), or null when too far. */
+/**
+ * Where a clip may actually sit on a lane.
+ *
+ * Clips are not allowed to overlap: a drop is clamped into the free gap it was
+ * aimed at, and if that gap is too small the clip stays where it was. Overlap is
+ * what a transition means in this model, so allowing it by accident would make
+ * the render ambiguous.
+ */
+export function resolvePlacement(
+  clips: Clip[],
+  trackId: string,
+  clipId: string,
+  desiredStart: number,
+  duration: number
+): number | null {
+  const others = clips
+    .filter((c) => c.trackId === trackId && c.id !== clipId)
+    .sort((a, b) => a.start - b.start)
+
+  const wanted = Math.max(0, desiredStart)
+  const wantedEnd = wanted + duration
+
+  const overlapping = others.find((c) => wanted < c.start + c.duration && wantedEnd > c.start)
+  if (!overlapping) return wanted
+
+  // Find the gap nearest to where the user aimed.
+  const bounds: { from: number; to: number }[] = []
+  let cursor = 0
+  for (const other of others) {
+    if (other.start - cursor >= duration) bounds.push({ from: cursor, to: other.start - duration })
+    cursor = Math.max(cursor, other.start + other.duration)
+  }
+  bounds.push({ from: cursor, to: Number.POSITIVE_INFINITY })
+
+  let best: number | null = null
+  let bestDistance = Infinity
+  for (const gap of bounds) {
+    const candidate = Math.min(Math.max(wanted, gap.from), gap.to)
+    const distance = Math.abs(candidate - wanted)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = candidate
+    }
+  }
+  return best
+}
+
 export function snapTarget(value: number, candidates: number[], pxPerSecond: number, thresholdPx = 7) {
   let best: number | null = null
   let bestDelta = Infinity
