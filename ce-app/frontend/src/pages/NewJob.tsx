@@ -3,18 +3,20 @@ import { Form, Input, Select, InputNumber, Switch, message } from 'antd'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Page, { Card } from '../components/Page'
 import { jobsApi } from '../api/jobs'
+import { useI18n } from '../i18n'
 
-const PRESET_LABEL: Record<string, string> = {
-  autoclip: 'کلیپ خودکار',
-  reframe: 'قاب عمودی',
-  facetrack: 'فیس‌ترکینگ',
-  subtitles: 'زیرنویس هوشمند',
+const PRESET_LABEL: Record<string, [en: string, fa: string]> = {
+  autoclip: ['Auto Clip', 'کلیپ خودکار'],
+  reframe: ['Reframe', 'قاب عمودی'],
+  facetrack: ['Face Tracking', 'فیس‌ترکینگ'],
+  subtitles: ['Smart Captions', 'زیرنویس هوشمند'],
 }
 
 export default function NewJob() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const preset = params.get('preset') ?? 'autoclip'
+  const { t, lang } = useI18n()
   const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm()
 
@@ -37,10 +39,10 @@ export default function NewJob() {
           ai_provider: values.ai_provider ?? 'gemini',
         },
       })
-      message.success('پروژه ساخته شد')
+      message.success(t('Project created', 'پروژه ساخته شد'))
       navigate(`/jobs/${job.id}`)
     } catch (err) {
-      message.error('ساخت پروژه ناموفق بود: ' + (err as Error).message)
+      message.error(t('Could not create the project: ', 'ساخت پروژه ناموفق بود: ') + (err as Error).message)
     } finally {
       setSubmitting(false)
     }
@@ -48,8 +50,8 @@ export default function NewJob() {
 
   return (
     <Page
-      title="پروژه جدید"
-      subtitle={`حالت: ${PRESET_LABEL[preset] ?? 'کلیپ خودکار'}`}
+      title={t('New project', 'پروژه جدید')}
+      subtitle={`${t('Mode', 'حالت')}: ${(PRESET_LABEL[preset] ?? PRESET_LABEL.autoclip)[lang === 'fa' ? 1 : 0]}`}
       back
       width="sm"
     >
@@ -68,76 +70,80 @@ export default function NewJob() {
           ai_provider: 'gemini',
         }}
       >
-        <Card title="منبع ویدیو">
-          <Form.Item name="name" label="نام پروژه" rules={[{ required: true, message: 'یک نام وارد کن' }]}>
-            <Input placeholder="مثلاً: پادکست هفتگی — قسمت ۱۲" />
+        <Card title={t('Video source', 'منبع ویدیو')}>
+          <Form.Item
+            name="name"
+            label={t('Project name', 'نام پروژه')}
+            rules={[{ required: true, message: t('Enter a name', 'یک نام وارد کن') }]}
+          >
+            <Input placeholder={t('e.g. Weekly podcast — episode 12', 'مثلاً: پادکست هفتگی — قسمت ۱۲')} />
           </Form.Item>
-          <Form.Item name="source_type" label="نوع منبع">
+          <Form.Item name="source_type" label={t('Source type', 'نوع منبع')}>
             <Select
               options={[
-                { value: 'youtube', label: 'یوتیوب' },
-                { value: 'instagram', label: 'اینستاگرام' },
-                { value: 'tiktok', label: 'تیک‌تاک' },
-                { value: 'local', label: 'فایل روی سیستم' },
+                { value: 'youtube', label: t('YouTube', 'یوتیوب') },
+                { value: 'instagram', label: t('Instagram', 'اینستاگرام') },
+                { value: 'tiktok', label: t('TikTok', 'تیک‌تاک') },
+                { value: 'local', label: t('Local file', 'فایل روی سیستم') },
               ]}
             />
           </Form.Item>
           <Form.Item
             name="source_url"
-            label="لینک یا مسیر فایل"
-            rules={[{ required: true, message: 'لینک یا مسیر فایل را وارد کن' }]}
+            label={t('Link or file path', 'لینک یا مسیر فایل')}
+            rules={[{ required: true, message: t('Enter a link or a file path', 'لینک یا مسیر فایل را وارد کن') }]}
           >
             <Input dir="ltr" placeholder="https://youtube.com/watch?v=…" />
           </Form.Item>
         </Card>
 
-        <Card title="خروجی">
+        <Card title={t('Output', 'خروجی')}>
           <div className="ce-formgrid">
-            <Form.Item name="clips_count" label="تعداد کلیپ">
+            <Form.Item name="clips_count" label={t('Number of clips', 'تعداد کلیپ')}>
               <InputNumber min={1} max={50} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="ratio" label="نسبت تصویر">
+            <Form.Item name="ratio" label={t('Aspect ratio', 'نسبت تصویر')}>
               <Select
                 options={[
-                  { value: '9:16', label: '۹:۱۶ — شورتس و ریلز' },
-                  { value: '1:1', label: '۱:۱ — مربع' },
-                  { value: '4:5', label: '۴:۵ — پرتره' },
-                  { value: '16:9', label: '۱۶:۹ — افقی' },
+                  { value: '9:16', label: t('9:16 — Shorts & Reels', '۹:۱۶ — شورتس و ریلز') },
+                  { value: '1:1', label: t('1:1 — Square', '۱:۱ — مربع') },
+                  { value: '4:5', label: t('4:5 — Portrait', '۴:۵ — پرتره') },
+                  { value: '16:9', label: t('16:9 — Landscape', '۱۶:۹ — افقی') },
                 ]}
               />
             </Form.Item>
-            <Form.Item name="ai_provider" label="موتور هوش مصنوعی">
+            <Form.Item name="ai_provider" label={t('AI engine', 'موتور هوش مصنوعی')}>
               <Select
                 options={[
                   { value: 'gemini', label: 'Google Gemini' },
                   { value: 'anthropic', label: 'Anthropic Claude' },
                   { value: 'openai', label: 'OpenAI' },
-                  { value: 'ollama', label: 'Ollama — کاملاً محلی' },
+                  { value: 'ollama', label: t('Ollama — fully local', 'Ollama — کاملاً محلی') },
                 ]}
               />
             </Form.Item>
           </div>
         </Card>
 
-        <Card title="امکانات">
+        <Card title={t('Features', 'امکانات')}>
           <div className="ce-switchlist">
-            <Form.Item name="hook_enabled" label="هوک سینمایی در ابتدای کلیپ" valuePropName="checked">
+            <Form.Item name="hook_enabled" label={t('Cinematic hook at the start', 'هوک سینمایی در ابتدای کلیپ')} valuePropName="checked">
               <Switch />
             </Form.Item>
-            <Form.Item name="captions_enabled" label="زیرنویس خودکار" valuePropName="checked">
+            <Form.Item name="captions_enabled" label={t('Automatic captions', 'زیرنویس خودکار')} valuePropName="checked">
               <Switch />
             </Form.Item>
-            <Form.Item name="bgm_enabled" label="موسیقی پس‌زمینه" valuePropName="checked">
+            <Form.Item name="bgm_enabled" label={t('Background music', 'موسیقی پس‌زمینه')} valuePropName="checked">
               <Switch />
             </Form.Item>
-            <Form.Item name="diarization_enabled" label="تشخیص گوینده (مناسب پادکست)" valuePropName="checked">
+            <Form.Item name="diarization_enabled" label={t('Speaker detection (podcasts)', 'تشخیص گوینده (مناسب پادکست)')} valuePropName="checked">
               <Switch />
             </Form.Item>
           </div>
         </Card>
 
         <button className="ce-btn ce-btn--block" type="submit" disabled={submitting}>
-          {submitting ? 'در حال ساخت…' : 'ساخت و شروع پردازش'}
+          {submitting ? t('Creating…', 'در حال ساخت…') : t('Create and start processing', 'ساخت و شروع پردازش')}
         </button>
       </Form>
     </Page>

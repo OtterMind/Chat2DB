@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type } from 'lucide-react'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
+import { useI18n } from '../i18n'
 
 const TRACK_ICON: Record<TrackKind, typeof Video> = { video: Video, audio: Music4, text: Type }
 const HEADER_W = 148
@@ -17,6 +18,7 @@ export default function Timeline() {
     select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock,
   } = useEditor()
 
+  const { t } = useI18n()
   const laneRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState>(null)
   const [guide, setGuide] = useState<number | null>(null)
@@ -118,10 +120,10 @@ export default function Timeline() {
             <div key={track.id} className="tl__header">
               <Icon size={15} />
               <span className="tl__header-name" dir="auto">{track.name}</span>
-              <button className="tl__hbtn" onClick={() => toggleMute(track.id)} title="بی‌صدا">
+              <button className="tl__hbtn" onClick={() => toggleMute(track.id)} title={t('Mute', 'بی‌صدا')}>
                 {track.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
               </button>
-              <button className="tl__hbtn" onClick={() => toggleLock(track.id)} title="قفل">
+              <button className="tl__hbtn" onClick={() => toggleLock(track.id)} title={t('Lock', 'قفل')}>
                 {track.locked ? <Lock size={14} /> : <Unlock size={14} />}
               </button>
             </div>

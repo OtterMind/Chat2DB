@@ -2346,6 +2346,17 @@ ${validatedURL}`);
       `[renderer] ${message}`
     );
   });
+  import_electron2.ipcMain.handle("media:pick", async () => {
+    const result = await import_electron2.dialog.showOpenDialog(mainWindow, {
+      title: "Import media",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Media", extensions: ["mp4", "mov", "mkv", "webm", "avi", "mp3", "wav", "m4a", "aac", "flac"] },
+        { name: "All files", extensions: ["*"] }
+      ]
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
   import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
   import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

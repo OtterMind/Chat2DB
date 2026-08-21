@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { ConfigProvider, theme } from 'antd'
-import faIR from 'antd/locale/fa_IR'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import { RuntimeBridge } from './runtime/RuntimeBridge'
@@ -13,6 +13,7 @@ import ClipReview from './pages/ClipReview'
 import Settings from './pages/Settings'
 import Uploads from './pages/Uploads'
 import Doctor from './pages/Doctor'
+import { useI18n } from './i18n'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,11 +29,20 @@ const queryClient = new QueryClient({
 })
 
 function App() {
+  const { dir, lang, antdLocale } = useI18n()
+
+  // Keep the document in sync so CSS logical properties and native widgets
+  // (scrollbars, text selection, inputs) follow the chosen language.
+  useEffect(() => {
+    document.documentElement.lang = lang
+    document.documentElement.dir = dir
+  }, [dir, lang])
+
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider
-        locale={faIR}
-        direction="rtl"
+        locale={antdLocale}
+        direction={dir}
         theme={{
           algorithm: theme.darkAlgorithm,
           token: {
@@ -41,7 +51,7 @@ function App() {
             colorBgContainer: '#1E293B',
             colorTextBase: '#F8FAFC',
             borderRadius: 10,
-            fontFamily: "Vazirmatn, 'Segoe UI', system-ui, sans-serif",
+            fontFamily: "Inter, Vazirmatn, 'Segoe UI', system-ui, sans-serif",
           },
         }}
       >

@@ -12,6 +12,8 @@ export type TrackKind = 'video' | 'audio' | 'text'
 export interface Clip {
   id: string
   trackId: string
+  /** Absolute path of the media this clip shows; null for placeholders. */
+  src?: string | null
   /** position on the timeline, seconds */
   start: number
   /** visible length, seconds */
@@ -61,6 +63,8 @@ interface EditorState extends Snapshot {
   splitAtPlayhead: () => void
   removeSelected: () => void
   duplicateSelected: () => void
+  addClip: (clip: Omit<Clip, 'id'>) => string
+  clearTimeline: () => void
   addTrack: (kind: TrackKind) => void
   toggleMute: (trackId: string) => void
   toggleLock: (trackId: string) => void
@@ -77,17 +81,17 @@ export const TIMELINE_MAX = 600
 
 /** A small demo arrangement so the editor is explorable before media import. */
 function seed(): Snapshot {
-  const v = { id: 'v1', kind: 'video' as const, name: 'ویدیو ۱', muted: false, locked: false }
-  const a = { id: 'a1', kind: 'audio' as const, name: 'صدا', muted: false, locked: false }
-  const t = { id: 't1', kind: 'text' as const, name: 'متن', muted: false, locked: false }
+  const v = { id: 'v1', kind: 'video' as const, name: 'Video 1', muted: false, locked: false }
+  const a = { id: 'a1', kind: 'audio' as const, name: 'Audio', muted: false, locked: false }
+  const t = { id: 't1', kind: 'text' as const, name: 'Text', muted: false, locked: false }
   return {
     tracks: [v, a, t],
     clips: [
-      { id: uid(), trackId: 'v1', start: 0, duration: 6.5, offset: 0, sourceDuration: 40, label: 'اینترو', color: '#6366F1' },
-      { id: uid(), trackId: 'v1', start: 7.2, duration: 9, offset: 3, sourceDuration: 60, label: 'مصاحبه', color: '#8B5CF6' },
-      { id: uid(), trackId: 'v1', start: 17, duration: 5, offset: 0, sourceDuration: 20, label: 'بی‌رول', color: '#0EA5E9' },
-      { id: uid(), trackId: 'a1', start: 0, duration: 22, offset: 0, sourceDuration: 180, label: 'موسیقی پس‌زمینه', color: '#10B981' },
-      { id: uid(), trackId: 't1', start: 1.2, duration: 3.4, offset: 0, sourceDuration: 3.4, label: 'عنوان', color: '#F59E0B' },
+      { id: uid(), trackId: 'v1', start: 0, duration: 6.5, offset: 0, sourceDuration: 40, label: 'Intro', color: '#6366F1' },
+      { id: uid(), trackId: 'v1', start: 7.2, duration: 9, offset: 3, sourceDuration: 60, label: 'Interview', color: '#8B5CF6' },
+      { id: uid(), trackId: 'v1', start: 17, duration: 5, offset: 0, sourceDuration: 20, label: 'B-roll', color: '#0EA5E9' },
+      { id: uid(), trackId: 'a1', start: 0, duration: 22, offset: 0, sourceDuration: 180, label: 'Background music', color: '#10B981' },
+      { id: uid(), trackId: 't1', start: 1.2, duration: 3.4, offset: 0, sourceDuration: 3.4, label: 'Title', color: '#F59E0B' },
     ],
   }
 }
@@ -214,10 +218,26 @@ export const useEditor = create<EditorState>((set, get) => ({
     })
   },
 
+  addClip: (clip) => {
+    const id = uid()
+    get().commit((s) => {
+      if (!s.tracks.some((t) => t.id === clip.trackId)) {
+        s.tracks.push({ id: clip.trackId, kind: 'video', name: clip.trackId, muted: false, locked: false })
+      }
+      s.clips.push({ ...clip, id })
+    })
+    return id
+  },
+
+  clearTimeline: () =>
+    get().commit((s) => {
+      s.clips = []
+    }),
+
   addTrack: (kind) =>
     get().commit((s) => {
       const count = s.tracks.filter((t) => t.kind === kind).length + 1
-      const name = kind === 'video' ? `ویدیو ${count}` : kind === 'audio' ? `صدا ${count}` : `متن ${count}`
+      const name = kind === 'video' ? `Video ${count}` : kind === 'audio' ? `Audio ${count}` : `Text ${count}`
       s.tracks.push({ id: uid(), kind, name, muted: false, locked: false })
     }),
 

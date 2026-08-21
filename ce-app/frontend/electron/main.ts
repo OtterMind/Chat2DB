@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
 import { existsSync, createWriteStream } from 'fs'
@@ -97,6 +97,19 @@ function createWindow() {
       `[renderer] ${message}`
     )
   })
+  // Native file picker for the editor — the renderer only ever sees paths.
+  ipcMain.handle('media:pick', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Import media',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Media', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'wav', 'm4a', 'aac', 'flac'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
   ipcMain.handle('log:path', () => log.transports.file.getFile().path)
   ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
 

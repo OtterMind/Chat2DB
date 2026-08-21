@@ -1,37 +1,44 @@
-/** Shared Persian labels so no screen shows a raw backend key. */
-export const STATUS_FA: Record<string, string> = {
-  pending: 'در صف',
-  queued: 'در صف',
-  processing: 'در حال پردازش',
-  done: 'آماده',
-  failed: 'ناموفق',
-  cancelled: 'لغو شده',
-  selected: 'انتخاب‌شده',
-  rejected: 'رد شده',
-  published: 'منتشر شده',
+import type { Lang } from '../i18n'
+
+type Pair = [en: string, fa: string]
+
+/** Backend keys are never shown raw; both languages live next to each other. */
+const STATUS: Record<string, Pair> = {
+  pending: ['Queued', 'در صف'],
+  queued: ['Queued', 'در صف'],
+  processing: ['Processing', 'در حال پردازش'],
+  done: ['Ready', 'آماده'],
+  failed: ['Failed', 'ناموفق'],
+  cancelled: ['Cancelled', 'لغو شده'],
+  selected: ['Selected', 'انتخاب‌شده'],
+  rejected: ['Rejected', 'رد شده'],
+  published: ['Published', 'منتشر شده'],
 }
 
-export const STAGE_FA: Record<string, string> = {
-  ingest: 'دریافت ویدیو',
-  prepare: 'آماده‌سازی',
-  transcribe: 'رونویسی گفتار',
-  select: 'انتخاب لحظه‌ها',
-  reframe: 'قاب‌بندی',
-  subtitle: 'زیرنویس',
-  export: 'خروجی گرفتن',
+const STAGE: Record<string, Pair> = {
+  ingest: ['Fetching video', 'دریافت ویدیو'],
+  prepare: ['Preparing', 'آماده‌سازی'],
+  transcribe: ['Transcribing', 'رونویسی گفتار'],
+  select: ['Picking moments', 'انتخاب لحظه‌ها'],
+  reframe: ['Reframing', 'قاب‌بندی'],
+  subtitle: ['Subtitling', 'زیرنویس'],
+  export: ['Exporting', 'خروجی گرفتن'],
+  render: ['Rendering', 'رندر'],
 }
 
-export function statusFa(status?: string | null) {
+const idx = (lang: Lang) => (lang === 'fa' ? 1 : 0)
+
+export function statusLabel(status: string | null | undefined, lang: Lang) {
   if (!status) return '—'
-  return STATUS_FA[status] ?? status
+  return STATUS[status]?.[idx(lang)] ?? status
 }
 
-export function stageFa(stage?: string | null) {
+export function stageLabel(stage: string | null | undefined, lang: Lang) {
   if (!stage) return null
-  return STAGE_FA[stage] ?? stage
+  return STAGE[stage]?.[idx(lang)] ?? stage
 }
 
-/** 83.4 -> "۱:۲۳" style timecode (kept LTR by the <Num> wrapper). */
+/** 83.4 -> "1:23" */
 export function timecode(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)

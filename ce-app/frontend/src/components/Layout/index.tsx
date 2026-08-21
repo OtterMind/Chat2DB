@@ -4,18 +4,21 @@ import { Home, LayoutGrid, Clapperboard, Settings as SettingsIcon, Menu, Bell } 
 import BrandMark from '../BrandMark'
 import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
+import { useI18n } from '../../i18n'
 
 const TABS = [
-  { key: '/', label: 'خانه', icon: Home, match: ['/'] },
-  { key: '/dashboard', label: 'پروژه‌ها', icon: LayoutGrid, match: ['/dashboard', '/new', '/jobs'] },
-  { key: '/studio', label: 'استودیو', icon: Clapperboard, match: ['/studio'] },
-  { key: '/settings', label: 'تنظیمات', icon: SettingsIcon, match: ['/settings', '/uploads', '/doctor'] },
+  { key: '/', label: ['Home', 'خانه'] as const, icon: Home, match: ['/'] },
+  { key: '/dashboard', label: ['Projects', 'پروژه‌ها'] as const, icon: LayoutGrid, match: ['/dashboard', '/new', '/jobs'] },
+  { key: '/studio', label: ['Studio', 'استودیو'] as const, icon: Clapperboard, match: ['/studio'] },
+  { key: '/settings', label: ['Settings', 'تنظیمات'] as const, icon: SettingsIcon, match: ['/settings', '/uploads', '/doctor'] },
 ]
 
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const activeCount = useRuntime(selectActiveTasks).length
+  const { t, lang } = useI18n()
+  const li = lang === 'fa' ? 1 : 0
   const contentRef = useRef<HTMLElement>(null)
 
   // Each screen starts at the top: without this a short page inherits the
@@ -33,7 +36,7 @@ export default function AppLayout() {
   return (
     <div className="ce-shell">
       <header className="ce-header">
-        <button className="ce-iconbtn" aria-label="منو" onClick={() => navigate('/doctor')}>
+        <button className="ce-iconbtn" aria-label={t('Menu', 'منو')} onClick={() => navigate('/doctor')}>
           <Menu size={22} />
           {activeCount > 0 && <span className="ce-header__dot" />}
         </button>
@@ -42,7 +45,7 @@ export default function AppLayout() {
           <BrandMark />
         </div>
 
-        <button className="ce-iconbtn" aria-label="اعلان‌ها" onClick={() => navigate('/dashboard')}>
+        <button className="ce-iconbtn" aria-label={t('Notifications', 'اعلان‌ها')} onClick={() => navigate('/dashboard')}>
           <Bell size={20} />
           {activeCount > 0 && <span className="ce-header__badge">{activeCount}</span>}
         </button>
@@ -56,7 +59,7 @@ export default function AppLayout() {
             onClick={() => navigate(key)}
           >
             <Icon size={22} />
-            <span>{label}</span>
+            <span>{label[li]}</span>
           </button>
         ))}
       </nav>

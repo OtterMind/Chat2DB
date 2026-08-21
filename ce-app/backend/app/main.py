@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__, __app_name__
 from app.config import settings
 from app.database import db
-from app.routers import jobs, clips, system, uploads
+from app.routers import jobs, clips, system, uploads, render
 from app.websocket.job_events import ws_manager
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.include_router(jobs.router)
 app.include_router(clips.router)
 app.include_router(system.router)
 app.include_router(uploads.router)
+app.include_router(render.router)
 
 @app.get("/api/health")
 def health_check():

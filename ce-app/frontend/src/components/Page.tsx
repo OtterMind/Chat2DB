@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ArrowLeft } from 'lucide-react'
+import { useI18n } from '../i18n'
 
 /**
  * Every screen renders through this shell, so page structure — width, heading
@@ -24,13 +25,15 @@ export default function Page({
   children: ReactNode
 }) {
   const navigate = useNavigate()
+  const { t, isFa } = useI18n()
+  const Back = isFa ? ArrowRight : ArrowLeft
   return (
     <div className={`ce-page ce-page--${width}`}>
       <header className="ce-page__head">
         <div className="ce-page__title">
           {back && (
-            <button className="ce-iconbtn" onClick={() => navigate(-1)} aria-label="بازگشت">
-              <ArrowRight size={20} />
+            <button className="ce-iconbtn" onClick={() => navigate(-1)} aria-label={t('Back', 'بازگشت')}>
+              <Back size={20} />
             </button>
           )}
           <div>

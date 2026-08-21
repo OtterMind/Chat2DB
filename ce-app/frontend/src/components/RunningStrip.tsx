@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { useRuntime, selectAllTasks } from '../store/runtime'
+import { useI18n } from '../i18n'
 
 /**
  * Horizontal strip of everything that is currently running.
@@ -10,6 +11,7 @@ import { useRuntime, selectAllTasks } from '../store/runtime'
  */
 export default function RunningStrip({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const tasks = useRuntime(selectAllTasks).filter((t) =>
     compact ? t.status === 'running' : t.status !== 'done' || Date.now() - t.updatedAt < 20_000
   )
@@ -20,9 +22,11 @@ export default function RunningStrip({ compact = false }: { compact?: boolean })
   return (
     <div className={`ce-running ${compact ? 'ce-running--compact' : ''}`}>
       <div className="ce-running__head">
-        <span>در حال انجام ({tasks.filter((t) => t.status === 'running').length})</span>
+        <span>
+          {t('In progress', 'در حال انجام')} ({tasks.filter((x) => x.status === 'running').length})
+        </span>
         <button className="ce-link" onClick={clearFinished}>
-          پاک‌سازی تمام‌شده‌ها
+          {t('Clear finished', 'پاک‌سازی تمام‌شده‌ها')}
         </button>
       </div>
       <div className="ce-running__list">
@@ -40,7 +44,7 @@ export default function RunningStrip({ compact = false }: { compact?: boolean })
             <span className="ce-running__body">
               <span className="ce-running__label">{task.label}</span>
               <span className="ce-running__stage">
-                {task.error ?? task.stage ?? '—'} · {Math.round(task.progress)}٪
+                {task.error ?? task.stage ?? '—'} · {Math.round(task.progress)}%
               </span>
               <span className="ce-progress">
                 <span

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { RefreshCw, CheckCircle2, AlertTriangle, FolderOpen } from 'lucide-react'
 import Page, { Card, Num, Stat } from '../components/Page'
 import { systemApi } from '../api/jobs'
+import { useI18n } from '../i18n'
 
 interface Diagnostics {
   healthy?: boolean
@@ -17,6 +18,7 @@ interface DesktopBridge {
 }
 
 export default function Doctor() {
+  const { t } = useI18n()
   const [logPath, setLogPath] = useState<string | null>(null)
   const bridge = (window as unknown as { cuttingEdge?: DesktopBridge }).cuttingEdge
 
@@ -31,24 +33,24 @@ export default function Doctor() {
 
   return (
     <Page
-      title="سلامت سیستم"
-      subtitle="بررسی پیش‌نیازهای پردازش ویدیو روی این دستگاه"
+      title={t('System health', 'سلامت سیستم')}
+      subtitle={t('Check the prerequisites for video processing on this machine', 'بررسی پیش‌نیازهای پردازش ویدیو روی این دستگاه')}
       actions={
         <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw size={15} className={isFetching ? 'ce-spin' : ''} /> بررسی دوباره
+          <RefreshCw size={15} className={isFetching ? 'ce-spin' : ''} /> {t('Re-run', 'بررسی دوباره')}
         </button>
       }
     >
-      {isLoading && <div className="ce-empty">در حال بررسی…</div>}
+      {isLoading && <div className="ce-empty">{t('Checking…', 'در حال بررسی…')}</div>}
 
       {data && (
         <>
           <Card
-            title="وضعیت کلی"
+            title={t('Overall status', 'وضعیت کلی')}
             tone={data.healthy ? 'success' : 'danger'}
             extra={
               <span className={`ce-badge ${data.healthy ? 'ce-badge--ok' : 'ce-badge--warn'}`}>
-                {data.healthy ? 'سالم' : 'نیازمند توجه'}
+                {data.healthy ? t('Healthy', 'سالم') : t('Needs attention', 'نیازمند توجه')}
               </span>
             }
           >
@@ -62,50 +64,52 @@ export default function Doctor() {
               </ul>
             ) : (
               <p className="ce-ok">
-                <CheckCircle2 size={16} /> همه‌چیز آماده است.
+                <CheckCircle2 size={16} /> {t('Everything is ready.', 'همه‌چیز آماده است.')}
               </p>
             )}
           </Card>
 
-          <Card title="مشخصات دستگاه">
+          <Card title={t('Machine', 'مشخصات دستگاه')}>
             <div className="ce-stats ce-stats--compact">
-              <Stat label="سیستم‌عامل" value={<Num>{data.system?.platform ?? '—'}</Num>} />
-              <Stat label="پایتون" value={<Num>{data.system?.python_version ?? '—'}</Num>} />
-              <Stat label="هسته پردازنده" value={<Num>{data.system?.cpu_count ?? '—'}</Num>} />
-              <Stat label="حافظه" value={<><Num>{data.system?.memory_gb ?? '—'}</Num> گیگابایت</>} />
-              <Stat label="فضای آزاد" value={<><Num>{data.system?.disk_free_gb ?? '—'}</Num> گیگابایت</>} />
+              <Stat label={t('Operating system', 'سیستم‌عامل')} value={<Num>{data.system?.platform ?? '—'}</Num>} />
+              <Stat label={t('Python', 'پایتون')} value={<Num>{data.system?.python_version ?? '—'}</Num>} />
+              <Stat label={t('CPU cores', 'هسته پردازنده')} value={<Num>{data.system?.cpu_count ?? '—'}</Num>} />
+              <Stat label={t('Memory', 'حافظه')} value={<><Num>{data.system?.memory_gb ?? '—'}</Num> {t('GB', 'گیگابایت')}</>} />
+              <Stat label={t('Free space', 'فضای آزاد')} value={<><Num>{data.system?.disk_free_gb ?? '—'}</Num> {t('GB', 'گیگابایت')}</>} />
             </div>
           </Card>
 
           <Card
-            title="گزارش‌ها و عیب‌یابی"
+            title={t('Logs & diagnostics', 'گزارش‌ها و عیب‌یابی')}
             extra={
               bridge?.openLogFolder ? (
                 <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => bridge.openLogFolder?.()}>
-                  <FolderOpen size={15} /> باز کردن پوشه گزارش
+                  <FolderOpen size={15} /> {t('Open log folder', 'باز کردن پوشه گزارش')}
                 </button>
               ) : undefined
             }
           >
             <div className="ce-kv">
-              <span>فایل گزارش</span>
+              <span>{t('Log file', 'فایل گزارش')}</span>
               <strong className="ce-kv__wrap">
-                <Num>{logPath ?? 'فقط در نسخه نصب‌شده'}</Num>
+                <Num>{logPath ?? t('installed app only', 'فقط در نسخه نصب‌شده')}</Num>
               </strong>
             </div>
             <p className="ce-hint">
-              همه‌چیز اینجا ثبت می‌شود: راه‌اندازی بک‌اند، خطاهای رابط کاربری و خروجی کامل پردازش
-              ویدیو. هنگام گزارش مشکل، همین فایل را بفرست.
+              {t(
+                'Everything is recorded here: backend startup, UI errors and the full video-processing output. Attach this file when reporting a problem.',
+                'همه‌چیز اینجا ثبت می‌شود: راه‌اندازی بک‌اند، خطاهای رابط کاربری و خروجی کامل پردازش ویدیو. هنگام گزارش مشکل، همین فایل را بفرست.'
+              )}
             </p>
           </Card>
 
           <Card title="FFmpeg">
             <div className="ce-kv">
-              <span>وضعیت</span>
-              <strong>{data.ffmpeg?.found ? 'پیدا شد' : 'پیدا نشد'}</strong>
+              <span>{t('Status', 'وضعیت')}</span>
+              <strong>{data.ffmpeg?.found ? t('Found', 'پیدا شد') : t('Not found', 'پیدا نشد')}</strong>
             </div>
             <div className="ce-kv">
-              <span>مسیر</span>
+              <span>{t('Path', 'مسیر')}</span>
               <strong>
                 <Num>{data.ffmpeg?.path ?? '—'}</Num>
               </strong>
