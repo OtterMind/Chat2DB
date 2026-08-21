@@ -1,0 +1,4 @@
+-- MYSQL-OBJ-011: Grants for test user
+
+GRANT SELECT, INSERT, CREATE ROUTINE, ALTER ROUTINE, DROP ON *.* TO 'chat2db_test'@'%';
+FLUSH PRIVILEGES;

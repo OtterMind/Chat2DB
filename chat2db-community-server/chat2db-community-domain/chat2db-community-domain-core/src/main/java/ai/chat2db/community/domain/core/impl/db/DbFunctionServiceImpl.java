@@ -23,4 +23,10 @@ public class DbFunctionServiceImpl implements IDbFunctionService {
         return Chat2DBContext.getDbMetaData().function(Chat2DBContext.getConnection(),
                 new FunctionMetadataRequest(databaseName, schemaName, functionName));
     }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String functionName) {
+        Chat2DBContext.getDbManager().dropFunction(Chat2DBContext.getConnection(),
+                databaseName, schemaName, functionName);
+    }
 }

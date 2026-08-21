@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.service.db.IDbProcedureService;
+import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.web.WebPageResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
@@ -10,6 +11,8 @@ import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -57,5 +60,19 @@ public class DbProcedureController {
     public DataResult<Procedure> detail(@Valid ProcedureDetailRequest request) {
         return DataResult.of(
                 procedureService.detail(request.getDatabaseName(), request.getSchemaName(), request.getProcedureName()));
+    }
+
+    /**
+     * Deletes a database procedure.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/procedure/delete}.
+     *
+     * @param request request payload containing procedure info.
+     * @return operation result for the request.
+     */
+    @PostMapping("/delete")
+    public ActionResult delete(@RequestBody @Valid ProcedureDetailRequest request) {
+        procedureService.drop(request.getDatabaseName(), request.getSchemaName(), request.getProcedureName());
+        return ActionResult.isSuccess();
     }
 }
