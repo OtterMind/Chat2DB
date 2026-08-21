@@ -28,4 +28,13 @@ public interface IDbTriggerService {
      * @return trigger metadata, or null when no matching trigger exists.
      */
     Trigger detail(String databaseName, String schemaName, String triggerName);
+
+    /**
+     * Drops a database trigger.
+     *
+     * @param databaseName database name that scopes the operation.
+     * @param schemaName schema name that scopes the operation.
+     * @param triggerName trigger name to drop.
+     */
+    void drop(String databaseName, String schemaName, String triggerName);
 }

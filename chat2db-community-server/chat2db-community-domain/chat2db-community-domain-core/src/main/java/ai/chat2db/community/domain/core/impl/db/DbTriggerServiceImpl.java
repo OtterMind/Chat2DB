@@ -23,4 +23,10 @@ public class DbTriggerServiceImpl implements IDbTriggerService {
         return Chat2DBContext.getDbMetaData().trigger(Chat2DBContext.getConnection(),
                 new TriggerMetadataRequest(databaseName, schemaName, triggerName));
     }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String triggerName) {
+        Chat2DBContext.getDbManager().dropTrigger(Chat2DBContext.getConnection(),
+                databaseName, schemaName, triggerName);
+    }
 }

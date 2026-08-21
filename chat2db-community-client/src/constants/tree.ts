@@ -74,6 +74,8 @@ export enum OperationColumn {
   OpenFunction = 'openFunction', // open function
   OpenProcedure = 'openProcedure', // Open stored procedure
   OpenTrigger = 'openTrigger', // open trigger
+  CreateTrigger = 'createTrigger', // Create trigger
+  DropTrigger = 'dropTrigger', // Drop trigger
   CreateSchema = 'createSchema', // Create new schema
   CreateDatabase = 'createDatabase', // Create a new database
   DeleteSchema = 'deleteSchema', // Delete schema
