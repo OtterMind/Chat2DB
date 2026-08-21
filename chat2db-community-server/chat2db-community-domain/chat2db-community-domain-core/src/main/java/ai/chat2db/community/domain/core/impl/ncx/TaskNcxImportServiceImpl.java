@@ -145,7 +145,10 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                             zipFile);
                     projects.add(projectName);
                     File json = new File(config + File.separator + ExportConstants.CONFIG_DATASOURCE_FILE);
-                    JSONObject jsonObject = JSON.parseObject(new FileInputStream(json));
+                    JSONObject jsonObject;
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(json)) {
+                        jsonObject = JSON.parseObject(fis);
+                    }
                     JSONObject connections = jsonObject.getJSONObject(ExportConstants.DIR_CONNECTIONS);
                     Set<String> keys = connections.keySet();
                     for (String key : keys) {
