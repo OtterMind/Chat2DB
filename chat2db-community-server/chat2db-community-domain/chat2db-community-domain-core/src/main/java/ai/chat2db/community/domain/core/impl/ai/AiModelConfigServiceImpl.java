@@ -34,6 +34,8 @@ import org.springframework.web.client.RestClientResponseException;
 import jakarta.annotation.PostConstruct;
 import java.net.URI;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -394,6 +396,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     }
 
     private synchronized void persistToDisk() {
+        Path temp = Paths.get(storagePath.toString() + ".tmp");
         try {
             Files.createDirectories(storagePath.getParent());
             StorageData data = new StorageData();
@@ -402,8 +405,16 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
                     .map(this::encryptedCopy)
                     .collect(Collectors.toList());
             data.setConfigs(all);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(storagePath.toFile(), data);
+            // Write to a temp file then atomically rename, so a crash mid-write
+            // does not corrupt/empty the config file (which stores encrypted API keys).
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), data);
+            try {
+                Files.move(temp, storagePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, storagePath, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
+            try { Files.deleteIfExists(temp); } catch (IOException ignore) {}
             throw new IllegalStateException("Failed to persist ai config to " + storagePath, e);
         }
     }
