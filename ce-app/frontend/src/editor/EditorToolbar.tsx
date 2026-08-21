@@ -37,6 +37,8 @@ interface Tool {
   panel?: PanelId
   disabled?: boolean
   soon?: boolean
+  /** Toggles render pressed, so their state is visible without a tooltip. */
+  active?: boolean
 }
 
 const ICON = { size: 19, strokeWidth: 1.8 } as const
@@ -193,6 +195,7 @@ export default function EditorToolbar({
       id: 'reverse',
       icon: <Rewind {...ICON} />,
       label: ['Reverse', 'معکوس'],
+      active: Boolean(props?.reversed),
       run: () => {
         if (!clip || !props) return
         setProps(clip.id, { reversed: !props.reversed })
@@ -203,7 +206,14 @@ export default function EditorToolbar({
       id: 'mute',
       icon: props?.muted ? <VolumeX {...ICON} /> : <AudioLines {...ICON} />,
       label: ['Mute', 'بی‌صدا'],
-      run: () => clip && props && setProps(clip.id, { muted: !props.muted }),
+      // A toggle has to look like a toggle, or it reads as "the button does
+      // nothing" even while it is working.
+      active: Boolean(props?.muted),
+      run: () => {
+        if (!clip || !props) return
+        setProps(clip.id, { muted: !props.muted })
+        message.success(props.muted ? t('Sound on', 'صدا روشن') : t('Sound off', 'صدا خاموش'))
+      },
     },
     {
       id: 'rotate',
@@ -323,7 +333,9 @@ export default function EditorToolbar({
         {tools.map((tool) => (
           <button
             key={tool.id}
-            className={`tb__tool ${tool.soon ? 'is-soon' : ''}`}
+            className={`tb__tool ${tool.soon ? 'is-soon' : ''} ${tool.active ? 'is-active' : ''} ${
+              panel && tool.panel === panel ? 'is-open' : ''
+            }`}
             disabled={tool.disabled}
             onClick={() => {
               if (tool.soon) return notReady(tool.label)()

@@ -204,3 +204,35 @@ def test_thumbnail_endpoint_returns_a_frame_and_caches_it(media):
         assert second.content == first.content              # served from the cache
 
         assert client.get("/api/media/thumb", params={"path": "/no/such/file.mp4"}).status_code == 404
+
+
+@requires_ffmpeg
+def test_mute_silences_a_lane_but_keeps_the_picture(media, tmp_path):
+    """Regression: muting the video lane used to blank the monitor entirely."""
+    data = {
+        "width": 320, "height": 240, "fps": 15,
+        "tracks": [{"id": "v1", "kind": "video", "muted": True}],
+        "clips": [{
+            "id": "c1", "trackId": "v1", "start": 0, "duration": 1, "offset": 0,
+            "src": str(media["clip_b"]),
+        }],
+    }
+    output = _render(data, tmp_path, "muted_lane.mp4")
+    info = compose.probe_media(str(output))
+    assert info["has_video"]                      # the picture survives a mute
+    assert _stats(output, at=0.3)["YAVG"] > 20    # …and it is not a black frame
+
+
+@requires_ffmpeg
+def test_hiding_a_lane_removes_the_picture(media, tmp_path):
+    data = {
+        "width": 320, "height": 240, "fps": 15,
+        "tracks": [{"id": "v1", "kind": "video", "hidden": True}],
+        "clips": [{
+            "id": "c1", "trackId": "v1", "start": 0, "duration": 1, "offset": 0,
+            "src": str(media["clip_b"]),
+        }],
+    }
+    output = _render(data, tmp_path, "hidden_lane.mp4")
+    # Nothing but the canvas is left, so the frame is black.
+    assert _stats(output, at=0.3)["YAVG"] < 20

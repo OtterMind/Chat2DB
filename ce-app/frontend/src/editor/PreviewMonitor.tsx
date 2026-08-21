@@ -38,9 +38,14 @@ export default function PreviewMonitor() {
    */
   const ratio = useMemo(() => useEditor.getState().canvasRatio(), [aspect, clips, tracks])
 
-  /** Every video clip under the playhead, bottom lane first. */
+  /**
+   * Every video clip under the playhead, bottom lane first.
+   *
+   * Muting a lane silences it — it must never blank the monitor. Hiding the
+   * picture is a separate switch (`hidden`), which is what the eye icon does.
+   */
   const stack = useMemo(() => {
-    const lanes = tracks.filter((track) => track.kind === 'video' && !track.muted).map((track) => track.id)
+    const lanes = tracks.filter((track) => track.kind === 'video' && !track.hidden).map((track) => track.id)
     return clips
       .filter(
         (clip) =>
@@ -55,14 +60,14 @@ export default function PreviewMonitor() {
 
   /** Text clips are painted over the picture, in timeline order. */
   const textClips = useMemo(() => {
-    const lanes = tracks.filter((track) => track.kind === 'text' && !track.muted).map((track) => track.id)
+    const lanes = tracks.filter((track) => track.kind === 'text' && !track.hidden).map((track) => track.id)
     return clips.filter(
       (clip) => lanes.includes(clip.trackId) && playhead >= clip.start && playhead < clip.start + clip.duration
     )
   }, [clips, tracks, playhead])
 
   const activeAudio = useMemo(() => {
-    const lanes = tracks.filter((track) => track.kind === 'audio' && !track.muted).map((track) => track.id)
+    const lanes = tracks.filter((track) => track.kind === 'audio' && !track.hidden).map((track) => track.id)
     return (
       clips.find(
         (clip) =>
@@ -115,7 +120,9 @@ export default function PreviewMonitor() {
   const gainOf = (clip: Clip | null) => {
     if (!clip) return 0
     const props = propsOf(clip)
-    if (props.muted) return 0
+    // Lane mute and clip mute are both honoured here, and only here: silence is
+    // an audio decision, never a reason to stop drawing the frame.
+    if (props.muted || tracks.find((track) => track.id === clip.trackId)?.muted) return 0
     // Honour the clip's own audio fades, like the export does.
     const local = playhead - clip.start
     let gain = props.volume

@@ -1,6 +1,6 @@
 {
   "name": "cutting-edge-frontend",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Cutting Edge (CE) — AI-powered video clipping studio",
   "private": true,
   "main": "dist-electron/main.js",
@@ -25,6 +25,7 @@
     "axios": "^1.7.4",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "framer-motion": "^13.1.1",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -42,11 +43,11 @@
     "electron-builder": "^24.13.3",
     "esbuild": "^0.23.1",
     "postcss": "^8.4.41",
+    "puppeteer-core": "^23.9.0",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.0",
-    "wait-on": "^8.0.0",
-    "puppeteer-core": "^23.9.0"
+    "wait-on": "^8.0.0"
   },
   "build": {
     "appId": "com.cuttingedge.studio",

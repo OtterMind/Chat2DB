@@ -121,7 +121,10 @@ export interface Track {
   id: string
   kind: TrackKind
   name: string
+  /** Silences the lane. On a video lane it silences the sound only. */
   muted: boolean
+  /** Hides the picture of a video or text lane. Sound is unaffected. */
+  hidden?: boolean
   locked: boolean
 }
 
@@ -205,6 +208,7 @@ interface EditorState extends Snapshot {
   splitAtSourceTimes: (id: string, times: number[]) => number
   addTrack: (kind: TrackKind) => void
   toggleMute: (trackId: string) => void
+  toggleHidden: (trackId: string) => void
   toggleLock: (trackId: string) => void
   setProjectName: (name: string) => void
   markSaved: (at?: number) => void
@@ -774,6 +778,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().commit((s) => {
       const t = s.tracks.find((x) => x.id === trackId)
       if (t) t.muted = !t.muted
+    }),
+
+  toggleHidden: (trackId) =>
+    get().commit((s) => {
+      const t = s.tracks.find((x) => x.id === trackId)
+      if (t) t.hidden = !t.hidden
     }),
 
   toggleLock: (trackId) =>

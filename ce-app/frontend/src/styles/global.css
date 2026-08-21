@@ -35,10 +35,35 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------------------------------------------------------------- shell -- */
 .ce-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 
+/*
+ * Immersive sections.
+ *
+ * On the launcher the brand line and the tabs are the furniture. Inside a
+ * section they fade away and the work fills the window; the pointer at the very
+ * top edge (or Escape, or the small pill) brings them back. The transition is a
+ * fade with a short rise — never a jump, which is what makes an interface feel
+ * built rather than assembled.
+ */
+.ce-chrome { position: sticky; top: 0; z-index: 30; }
+.ce-shell.is-immersive .ce-content { padding-top: 26px; }
+.ce-reveal {
+  position: fixed; top: 0; inset-inline-start: 50%; transform: translateX(-50%);
+  z-index: 45; width: 54px; height: 20px; padding: 0;
+  display: grid; place-items: center; cursor: pointer; color: var(--muted);
+  background: var(--bg-elevated); border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 12px 12px; opacity: .55; transition: opacity .2s ease, color .2s ease;
+}
+.ce-reveal:hover { opacity: 1; color: #c7d2fe; }
+
+/* One motion language for the whole app. */
+@media (prefers-reduced-motion: reduce) {
+  .ce-route, .ce-chrome { transition: none !important; animation: none !important; }
+}
+
 .ce-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 18px; background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 30;
+  border-bottom: 1px solid var(--border);
 }
 .ce-header__brand { display: flex; align-items: center; }
 
@@ -86,7 +111,7 @@ button { font-family: inherit; cursor: pointer; }
 /* top tab bar, super-app style */
 .ce-tabs {
   display: flex; gap: 4px; padding: 6px 10px 0; background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border); position: sticky; top: 69px; z-index: 25;
+  border-bottom: 1px solid var(--border);
 }
 .ce-tab {
   flex: 1; border: none; background: transparent; color: var(--muted);
@@ -553,6 +578,11 @@ button { font-family: inherit; cursor: pointer; }
 /* centred mode: a brighter, taller line, because it is now the fixed reference */
 .tl__playhead.is-centred { width: 2.5px; box-shadow: 0 0 10px rgba(244, 63, 94, .65); }
 .tl__hbtn.is-on { color: #a5b4fc; }
+.tl__hbtn.is-off { color: #f87171; }
+/* a pressed tool must look pressed */
+.tb__tool.is-active .tb__icon { background: rgba(99, 102, 241, .22); box-shadow: inset 0 0 0 1px #6366f1; }
+.tb__tool.is-active .tb__label { color: #c7d2fe; }
+.tb__tool.is-open .tb__icon { box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .6); }
 .tl__lane { touch-action: pan-y; }
 .tl__playhead-grip {
   position: absolute; top: 0; left: -6px; width: 14px; height: 14px; border-radius: 3px;

@@ -140,7 +140,10 @@ class Track:
     id: str
     kind: str = "video"
     name: str = ""
+    #: Silences the lane. On a video lane the picture still renders.
     muted: bool = False
+    #: Hides the picture of a video/text lane. Its sound is unaffected.
+    hidden: bool = False
 
 
 @dataclass
@@ -170,6 +173,7 @@ class Timeline:
                 kind=t.get("kind", "video"),
                 name=t.get("name", ""),
                 muted=bool(t.get("muted", False)),
+                hidden=bool(t.get("hidden", False)),
             )
             for t in data.get("tracks", [])
         ]
@@ -465,11 +469,19 @@ def build_command(
     if total <= 0:
         raise ValueError("timeline is empty")
 
-    text_clips = [c for c in timeline.clips if c.kind == "text" and (c.text or c.label)]
+    hidden = {t.id for t in timeline.tracks if t.hidden}
+    text_clips = [
+        c for c in timeline.clips
+        if c.kind == "text" and (c.text or c.label) and c.track_id not in hidden
+    ]
     playable = [c for c in timeline.clips if c.src and Path(c.src).exists() and c.kind != "text"]
     muted = {t.id for t in timeline.tracks if t.muted}
-    # Only branch a stream that the source actually contains.
-    video_clips = [c for c in playable if c.kind == "video" and _has_video_stream(c.src)]  # type: ignore[arg-type]
+    # Mute silences, hide removes the picture — two different switches, and the
+    # export has to make exactly the same distinction as the monitor.
+    video_clips = [
+        c for c in playable
+        if c.kind == "video" and c.track_id not in hidden and _has_video_stream(c.src)  # type: ignore[arg-type]
+    ]
     audio_clips = [
         c
         for c in playable

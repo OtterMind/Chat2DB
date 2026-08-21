@@ -7,6 +7,10 @@ export default defineConfig({
   // where the default absolute '/assets/...' resolves to the filesystem root.
   base: './',
   plugins: [react()],
+  // One React instance, always. A second copy (from a freshly added dependency
+  // or a stale optimiser cache) throws "invalid hook call" at runtime while the
+  // type checker stays perfectly happy.
+  resolve: { dedupe: ['react', 'react-dom'] },
   server: {
     host: true,
     port: 5173,

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize, Crosshair,
+  Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize, Crosshair, Eye, EyeOff,
 } from 'lucide-react'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
 import { thumbUrl } from '../api/render'
 import { useI18n } from '../i18n'
 
 const TRACK_ICON: Record<TrackKind, typeof Video> = { video: Video, audio: Music4, text: Type }
-const HEADER_W = 148
+const HEADER_W = 176
 
 type DragState =
   | { mode: 'move'; id: string; grabOffset: number; originTrack: string }
@@ -22,7 +22,7 @@ const CENTRED_KEY = 'ce.timeline.centred'
 export default function Timeline() {
   const {
     tracks, clips, transitions, selectedId, playhead, pxPerSecond, snapping,
-    select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock, neighbourOf,
+    select, setPlayhead, moveClip, trimClip, toggleMute, toggleHidden, toggleLock, neighbourOf,
     setZoom, zoomToFit, setPanel, playing,
   } = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -300,9 +300,24 @@ export default function Timeline() {
             <div key={track.id} className="tl__header">
               <Icon size={15} />
               <span className="tl__header-name" dir="auto">{track.name}</span>
-              <button className="tl__hbtn" onClick={() => toggleMute(track.id)} title={t('Mute', 'بی‌صدا')}>
-                {track.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              </button>
+              {track.kind !== 'text' && (
+                <button
+                  className={`tl__hbtn ${track.muted ? 'is-off' : ''}`}
+                  onClick={() => toggleMute(track.id)}
+                  title={track.muted ? t('Unmute this lane', 'صدادار کردن این لایه') : t('Mute this lane', 'بی‌صدا کردن این لایه')}
+                >
+                  {track.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                </button>
+              )}
+              {track.kind !== 'audio' && (
+                <button
+                  className={`tl__hbtn ${track.hidden ? 'is-off' : ''}`}
+                  onClick={() => toggleHidden(track.id)}
+                  title={track.hidden ? t('Show this lane', 'نمایش این لایه') : t('Hide this lane', 'پنهان کردن این لایه')}
+                >
+                  {track.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              )}
               <button className="tl__hbtn" onClick={() => toggleLock(track.id)} title={t('Lock', 'قفل')}>
                 {track.locked ? <Lock size={14} /> : <Unlock size={14} />}
               </button>

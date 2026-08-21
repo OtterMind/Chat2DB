@@ -595,6 +595,76 @@ else bad('slip ran past the end of the source', String(trims.clamped))
 if (trims.deleted.count === 1 && Math.abs(trims.deleted.bStart) < 0.01) ok('ripple delete closes the hole')
 else bad('ripple delete left a hole', JSON.stringify(trims.deleted))
 
+/* 11g — mute is sound, hide is picture -------------------------------------- */
+const mute = await page.evaluate(async () => {
+  const store = window.__ceEditor
+  store.getState().clearTimeline()
+  const id = store.getState().addClip({
+    trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 4,
+    src: window.__ceTestVertical, label: 'A', color: '#6366F1', width: 360, height: 640,
+  })
+  store.getState().select(id)
+  store.getState().setPlayhead(1)
+  const settle = () => new Promise((r) => setTimeout(r, 500))
+  await settle()
+  const read = () => {
+    const video = document.querySelector('video')
+    return { picture: Boolean(video), elMuted: video?.muted ?? null, volume: video?.volume ?? null }
+  }
+  const before = read()
+
+  // the clip's own Mute tool
+  store.getState().setProps(id, { muted: true })
+  await settle()
+  const clipMuted = read()
+  store.getState().setProps(id, { muted: false })
+
+  // the lane's Mute button next to the timeline
+  store.getState().toggleMute('v1')
+  await settle()
+  const laneMuted = read()
+  store.getState().toggleMute('v1')
+
+  // …and the separate eye, which is the one that hides the picture
+  store.getState().toggleHidden('v1')
+  await settle()
+  const laneHidden = read()
+  store.getState().toggleHidden('v1')
+  await settle()
+  return { before, clipMuted, laneMuted, laneHidden }
+})
+if (mute.before.picture && !mute.before.elMuted) ok('the clip plays with sound to begin with')
+else bad('the clip did not start unmuted', JSON.stringify(mute.before))
+if (mute.clipMuted.elMuted && mute.clipMuted.picture) ok('the clip Mute tool silences the clip')
+else bad('the clip Mute tool does nothing', JSON.stringify(mute.clipMuted))
+if (mute.laneMuted.elMuted && mute.laneMuted.picture)
+  ok('muting the lane silences it and keeps the picture')
+else bad('muting the lane blanked the preview', JSON.stringify(mute.laneMuted))
+if (!mute.laneHidden.picture) ok('the eye hides the picture (mute no longer does)')
+else bad('hiding the lane did not remove the picture', JSON.stringify(mute.laneHidden))
+
+/* 11h — chrome fades away inside a section ---------------------------------- */
+const chrome = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+  location.hash = '#/'
+  await wait(700)
+  const onLauncher = Boolean(document.querySelector('.ce-header'))
+  location.hash = '#/studio'
+  await wait(900)
+  const inSection = Boolean(document.querySelector('.ce-header'))
+  const revealPill = Boolean(document.querySelector('.ce-reveal'))
+  document.querySelector('.ce-reveal')?.click()
+  await wait(700)
+  const afterReveal = Boolean(document.querySelector('.ce-header'))
+  return { onLauncher, inSection, revealPill, afterReveal }
+})
+if (chrome.onLauncher) ok('the launcher keeps its header and tabs')
+else bad('the header is missing on the home screen')
+if (!chrome.inSection) ok('the header fades away inside a section (full screen)')
+else bad('the header is still there inside a section', JSON.stringify(chrome))
+if (chrome.revealPill && chrome.afterReveal) ok('the menu can be brought back')
+else bad('there is no way back to the menu', JSON.stringify(chrome))
+
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 900))
