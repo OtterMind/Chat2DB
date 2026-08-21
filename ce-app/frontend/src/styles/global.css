@@ -97,7 +97,15 @@ button { font-family: inherit; cursor: pointer; }
 .ce-tab:hover { color: #cbd5e1; }
 .ce-tab.is-active { color: var(--text); border-bottom-color: var(--brand); font-weight: 700; }
 
-.ce-content { flex: 1; overflow: auto; padding: 16px 18px 24px; }
+.ce-route { animation: ce-fade .18s ease-out; }
+@keyframes ce-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.ce-content {
+  flex: 1; overflow-x: hidden; overflow-y: auto;
+  /* the sticky task dock must never sit on top of content */
+  padding: 16px 18px 120px;
+  scrollbar-gutter: stable;
+}
 
 /* ----------------------------------------------------------------- home -- */
 .ce-home { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
@@ -214,9 +222,121 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* --------------------------------------------------------------- pages --- */
-.ce-page { max-width: 1080px; margin: 0 auto; }
-.ce-page__head { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
-.ce-page__head h2 { font-size: 17px; }
+.ce-page { margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.ce-page--sm { max-width: 680px; }
+.ce-page--md { max-width: 920px; }
+.ce-page--lg { max-width: 1160px; }
+
+.ce-page__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; min-height: 44px;
+}
+.ce-page__title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ce-page__title h2 { font-size: 18px; line-height: 1.6; overflow-wrap: anywhere; }
+.ce-page__title p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.ce-page__actions, .ce-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ce-page__body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* cards -------------------------------------------------------------------- */
+.ce-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  overflow: hidden; min-width: 0;
+}
+.ce-card--danger { border-color: rgba(248, 113, 113, .45); }
+.ce-card--success { border-color: rgba(34, 197, 94, .35); }
+.ce-card__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, .015);
+}
+.ce-card__head h3 { font-size: 13.5px; font-weight: 700; color: #cbd5e1; }
+.ce-card__body { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* stats -------------------------------------------------------------------- */
+.ce-stats {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.ce-stats--compact { gap: 10px; }
+.ce-stat {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+}
+.ce-card .ce-stat { background: var(--surface-2); }
+.ce-stat__label { font-size: 12px; color: var(--muted); }
+.ce-stat__value { font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
+.ce-stat__hint { font-size: 11.5px; color: var(--muted); }
+
+/* key/value rows ----------------------------------------------------------- */
+.ce-kv {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 13px;
+}
+.ce-kv:last-child { border-bottom: none; }
+.ce-kv > span { color: var(--muted); flex: none; }
+.ce-kv > strong { font-weight: 600; text-align: end; min-width: 0; overflow-wrap: anywhere; }
+.ce-kv__wrap { max-width: 70%; }
+
+/* numbers, paths and URLs stay LTR inside Persian text */
+.ce-num { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+
+/* badges, notes, misc ------------------------------------------------------ */
+.ce-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.ce-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; background: rgba(99, 102, 241, .16);
+  color: #c7d2fe; border: 1px solid rgba(99, 102, 241, .3);
+}
+.ce-badge--ok { background: rgba(34, 197, 94, .14); color: #86efac; border-color: rgba(34, 197, 94, .3); }
+.ce-badge--warn { background: rgba(249, 115, 22, .14); color: #fdba74; border-color: rgba(249, 115, 22, .3); }
+.ce-badge--muted { background: rgba(148, 163, 184, .12); color: var(--muted); border-color: var(--border); }
+
+.ce-note, .ce-hint {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px;
+  color: var(--muted); line-height: 2;
+}
+.ce-note { border: 1px dashed var(--border); border-radius: 14px; padding: 14px 16px; }
+.ce-error { color: #fca5a5; font-size: 13px; line-height: 2; overflow-wrap: anywhere; }
+.ce-ok { display: flex; align-items: center; gap: 8px; color: #86efac; font-size: 13px; }
+.ce-warnlist { display: flex; flex-direction: column; gap: 8px; list-style: none; }
+.ce-warnlist li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #fdba74; }
+
+/* buttons ------------------------------------------------------------------ */
+.ce-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; border-radius: 999px; padding: 10px 20px; font-weight: 700; font-size: 13px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.ce-btn:hover { opacity: .92; }
+.ce-btn:active { transform: scale(.98); }
+.ce-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ce-btn--sm { padding: 8px 15px; font-size: 12.5px; }
+.ce-btn--block { width: 100%; padding: 13px 20px; font-size: 14px; }
+.ce-btn--ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.ce-btn--danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+/* forms -------------------------------------------------------------------- */
+.ce-formgrid { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.ce-switchlist { display: grid; gap: 0 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.ce-switchlist .ant-form-item, .ce-formgrid .ant-form-item { margin-bottom: 14px; }
+
+/* accounts / clips --------------------------------------------------------- */
+.ce-accounts { display: flex; flex-direction: column; gap: 10px; }
+.ce-account {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+}
+.ce-account__icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff; }
+.ce-account__name { flex: 1; font-size: 13.5px; font-weight: 600; }
+
+.ce-clip { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ce-clip__info { min-width: 0; flex: 1; }
+.ce-clip__time { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ce-clip__score { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.ce-clip__reason { margin-top: 6px; font-size: 12.5px; color: var(--muted); line-height: 2; }
+
+.ce-jobprogress { display: flex; flex-direction: column; gap: 8px; }
+.ce-jobprogress__row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
 
 .ce-soon {
   border: 1px solid var(--border); border-radius: 18px; padding: 44px 24px;
@@ -225,17 +345,15 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--muted);
 }
 .ce-soon h3 { color: var(--text); font-size: 16px; }
-.ce-soon__note { font-size: 12.5px; max-width: 520px; }
-.ce-btn {
-  margin-top: 8px; border: none; border-radius: 999px; padding: 10px 20px; font-weight: 700;
-  background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-size: 13px;
-}
+.ce-soon__note { font-size: 12.5px; max-width: 520px; line-height: 2; }
 
 /* --------------------------------------------------------- antd overrides */
 .ant-card { border-radius: 14px !important; }
 .ant-card-head { border-bottom-color: var(--border) !important; }
 .ant-btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)) !important; border: none !important; }
 .ant-btn-primary:hover { opacity: .92; }
+.ant-form-item-label > label { font-size: 12.5px !important; color: var(--muted) !important; }
+.ant-input, .ant-input-number, .ant-select-selector { border-radius: 10px !important; }
 
 @media (max-width: 520px) {
   .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }

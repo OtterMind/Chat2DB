@@ -26,6 +26,18 @@ The docked "در حال انجام" strip is rendered by the app shell, and its 
 store outside the router — switching tabs never cancels or resets a running job or
 upload.
 
+## Projects, new job, diagnostics
+
+![Projects](./dashboard.png)
+![New job](./new-job.png)
+![Doctor](./doctor.png)
+![Settings](./settings.png)
+
+Every screen renders through the same `Page` shell (identical width, heading
+position, spacing and a reserved gap for the task dock), so switching sections
+never produces overlapping cards or drifting typography. Numbers, paths and URLs
+are isolated LTR inside Persian sentences.
+
 ## Studio placeholder
 
 ![Studio](./studio.png)

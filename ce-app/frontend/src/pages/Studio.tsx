@@ -1,5 +1,6 @@
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Clapperboard, ArrowLeft } from 'lucide-react'
+import { Clapperboard } from 'lucide-react'
+import Page from '../components/Page'
 
 const TOOLS: Record<string, { title: string; body: string }> = {
   bgremove: { title: 'حذف پس‌زمینه', body: 'جداسازی سوژه بدون پرده سبز با مدل‌های متن‌باز.' },
@@ -11,18 +12,10 @@ const TOOLS: Record<string, { title: string; body: string }> = {
 export default function Studio() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const tool = params.get('tool')
-  const info = tool ? TOOLS[tool] : undefined
+  const info = params.get('tool') ? TOOLS[params.get('tool')!] : undefined
 
   return (
-    <div className="ce-page">
-      <div className="ce-page__head">
-        <button className="ce-iconbtn" onClick={() => navigate(-1)} aria-label="بازگشت">
-          <ArrowLeft size={20} />
-        </button>
-        <h2>{info?.title ?? 'میز تدوین'}</h2>
-      </div>
-
+    <Page title={info?.title ?? 'میز تدوین'} subtitle="تایم‌لاین چندلایه، برش و پیش‌نمایش زنده">
       <div className="ce-soon">
         <Clapperboard size={44} />
         <h3>{info?.title ?? 'تایم‌لاین چندلایه'} — در دست ساخت</h3>
@@ -30,10 +23,8 @@ export default function Studio() {
         <p className="ce-soon__note">
           تا آماده شدن این بخش، از «کلیپ خودکار» استفاده کن؛ خروجی همان‌جا قابل بازبینی و اصلاح است.
         </p>
-        <button className="ce-btn" onClick={() => navigate('/new')}>
-          ساخت پروژه جدید
-        </button>
+        <button className="ce-btn" onClick={() => navigate('/new')}>ساخت پروژه جدید</button>
       </div>
-    </div>
+    </Page>
   )
 }

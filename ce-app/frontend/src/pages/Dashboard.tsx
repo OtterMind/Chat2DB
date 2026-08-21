@@ -1,76 +1,75 @@
-import { useEffect, useState } from 'react'
-import { Card, Col, Row, Statistic, Typography, Button, Empty } from 'antd'
-import { PlusOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
-import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
+import Page, { Card, Num, Stat } from '../components/Page'
 import { jobsApi, systemApi } from '../api/jobs'
-import { wsClient, JobEvent } from '../api/websocket'
+import { useRuntime } from '../store/runtime'
+import { stageFa, statusFa } from '../lib/labels'
 
-function Dashboard() {
+export default function Dashboard() {
   const navigate = useNavigate()
-  const [live, setLive] = useState<Record<string, JobEvent & { type: 'job:progress' }>>({})
-  const { data: jobsData } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list(1, 10) })
-  const { data: systemInfo } = useQuery({ queryKey: ['systemInfo'], queryFn: () => systemApi.info() })
+  const tasks = useRuntime((s) => s.tasks)
 
-  useEffect(() => {
-    wsClient.connect()
-    const unsub = wsClient.onEvent((event) => {
-      if (event.type === 'job:progress') setLive((prev) => ({ ...prev, [event.job_id]: event }))
-    })
-    return unsub
-  }, [])
+  const { data: jobsData } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list(1, 20) })
+  const { data: info } = useQuery({ queryKey: ['systemInfo'], queryFn: () => systemApi.info(), staleTime: 60_000 })
 
   const jobs = jobsData?.jobs ?? []
-  const total = jobsData?.total ?? 0
-  const done = jobs.filter((j) => j.status === 'done').length
-  const failed = jobs.filter((j) => j.status === 'failed').length
-  const processing = jobs.filter((j) => j.status === 'processing').length
+  const count = (s: string) => jobs.filter((j) => j.status === s).length
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>Dashboard</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/new')}>New Job</Button>
+    <Page
+      title="پروژه‌ها"
+      subtitle="همه‌ی کارهای ساخته‌شده و وضعیت لحظه‌ای آن‌ها"
+      actions={
+        <button className="ce-btn ce-btn--sm" onClick={() => navigate('/new')}>
+          <Plus size={16} /> پروژه جدید
+        </button>
+      }
+    >
+      <div className="ce-stats">
+        <Stat label="کل پروژه‌ها" value={<Num>{jobsData?.total ?? 0}</Num>} />
+        <Stat label="در حال پردازش" value={<Num>{count('processing')}</Num>} />
+        <Stat label="آماده" value={<Num>{count('done')}</Num>} />
+        <Stat label="ناموفق" value={<Num>{count('failed')}</Num>} />
       </div>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}><Card><Statistic title="Total Jobs" value={total} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card><Statistic title="Processing" value={processing} prefix={<PlayCircleOutlined />} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card><Statistic title="Completed" value={done} prefix={<CheckCircleOutlined />} /></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card><Statistic title="Failed" value={failed} prefix={<CloseCircleOutlined />} /></Card></Col>
-      </Row>
 
-      <Card style={{ marginTop: 24 }} title="System Status">
-        <Row gutter={16}>
-          <Col span={6}><Statistic title="FFmpeg" value={systemInfo?.ffmpeg_found ? '✓ Found' : '✗ Missing'} /></Col>
-          <Col span={6}><Statistic title="CUDA" value={systemInfo?.cuda_available ? '✓ Available' : '✗ CPU Only'} /></Col>
-          <Col span={6}><Statistic title="Free Disk" value={systemInfo?.disk_free_gb ?? 0} suffix="GB" /></Col>
-          <Col span={6}><Statistic title="Memory" value={systemInfo?.memory_gb ?? 0} suffix="GB" /></Col>
-        </Row>
+      <Card title="وضعیت سیستم">
+        <div className="ce-stats ce-stats--compact">
+          <Stat label="FFmpeg" value={info?.ffmpeg_found ? 'آماده' : 'یافت نشد'} />
+          <Stat label="پردازنده گرافیکی" value={info?.cuda_available ? 'فعال' : 'فقط CPU'} />
+          <Stat label="فضای آزاد" value={<><Num>{info?.disk_free_gb ?? '—'}</Num> گیگابایت</>} />
+          <Stat label="حافظه" value={<><Num>{info?.memory_gb ?? '—'}</Num> گیگابایت</>} />
+        </div>
       </Card>
 
-      <Card style={{ marginTop: 24 }} title="Recent Jobs">
+      <Card title="فهرست پروژه‌ها">
         {jobs.length === 0 ? (
-          <Empty description="No jobs yet — create your first one!" />
+          <div className="ce-empty">هنوز پروژه‌ای نساخته‌ای.</div>
         ) : (
-          jobs.map((job) => {
-            const l = live[job.id]
-            const progress = l ? l.progress : job.progress
-            return (
-              <Card key={job.id} size="small" style={{ marginBottom: 12, cursor: 'pointer' }} onClick={() => navigate(`/jobs/${job.id}`)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <Typography.Text strong>{job.name}</Typography.Text><br />
-                    <Typography.Text type="secondary">{job.current_stage ?? job.status} · {Math.round(progress)}%</Typography.Text>
-                  </div>
-                  <div>{job.status === 'processing' && l && <Typography.Text style={{ color: '#6366F1' }}>{l.stage}</Typography.Text>}</div>
-                </div>
-              </Card>
-            )
-          })
+          <div className="ce-joblist">
+            {jobs.map((job) => {
+              const live = tasks[job.id]
+              const progress = live?.progress ?? job.progress
+              const stage = stageFa(live?.stage ?? job.current_stage)
+              return (
+                <button key={job.id} className="ce-jobcard" onClick={() => navigate(`/jobs/${job.id}`)}>
+                  <span className={`ce-dot ce-dot--${job.status}`} />
+                  <span className="ce-jobcard__name">{job.name}</span>
+                  <span className="ce-jobcard__meta">
+                    {job.status === 'processing' ? (
+                      <>
+                        {stage ?? 'در حال پردازش'} · <Num>{Math.round(progress)}%</Num>
+                      </>
+                    ) : (
+                      statusFa(job.status)
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         )}
       </Card>
-    </div>
+    </Page>
   )
 }
-
-export default Dashboard

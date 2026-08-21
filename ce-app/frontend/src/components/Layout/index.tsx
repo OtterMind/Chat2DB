@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, LayoutGrid, Clapperboard, Settings as SettingsIcon, Menu, Bell } from 'lucide-react'
 import BrandMark from '../BrandMark'
@@ -5,21 +6,29 @@ import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
 
 const TABS = [
-  { key: '/', label: 'خانه', icon: Home },
-  { key: '/dashboard', label: 'پروژه‌ها', icon: LayoutGrid },
-  { key: '/studio', label: 'استودیو', icon: Clapperboard },
-  { key: '/settings', label: 'تنظیمات', icon: SettingsIcon },
+  { key: '/', label: 'خانه', icon: Home, match: ['/'] },
+  { key: '/dashboard', label: 'پروژه‌ها', icon: LayoutGrid, match: ['/dashboard', '/new', '/jobs'] },
+  { key: '/studio', label: 'استودیو', icon: Clapperboard, match: ['/studio'] },
+  { key: '/settings', label: 'تنظیمات', icon: SettingsIcon, match: ['/settings', '/uploads', '/doctor'] },
 ]
 
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const activeCount = useRuntime(selectActiveTasks).length
+  const contentRef = useRef<HTMLElement>(null)
 
+  // Each screen starts at the top: without this a short page inherits the
+  // scroll offset of the previous one and looks like two pages stacked.
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 })
+  }, [location.pathname, location.search])
+
+  // Highlight the tab that owns the current screen, including its sub-routes,
+  // so deep pages never look like they belong to the wrong section.
   const activeKey =
-    TABS.filter((t) => t.key !== '/')
-      .sort((a, b) => b.key.length - a.key.length)
-      .find((t) => location.pathname.startsWith(t.key))?.key ?? '/'
+    TABS.find((t) => t.match.some((m) => m !== '/' && location.pathname.startsWith(m)))?.key ??
+    (location.pathname === '/' ? '/' : '')
 
   return (
     <div className="ce-shell">
@@ -52,8 +61,12 @@ export default function AppLayout() {
         ))}
       </nav>
 
-      <main className="ce-content">
-        <Outlet />
+      <main className="ce-content" ref={contentRef} key="content">
+        {/* keyed by path so a route swap replaces the subtree instead of
+            merging two screens' DOM during transitions */}
+        <div key={location.pathname} className="ce-route">
+          <Outlet />
+        </div>
       </main>
 
       {/* Always-visible dock: proof that work keeps running across navigation. */}

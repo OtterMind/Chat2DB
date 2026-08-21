@@ -1,42 +1,43 @@
-import { Card, Typography, Button, Table, Tag } from 'antd'
-import { YoutubeOutlined, FacebookOutlined } from '@ant-design/icons'
+import { Youtube, Facebook, Instagram, Info } from 'lucide-react'
+import Page, { Card } from '../components/Page'
 
-interface UploadRecord {
-  id: string; clip_id: string; platform: 'youtube' | 'facebook'; status: string
-  platform_url: string | null; error: string | null; scheduled_at: string | null; published_at: string | null
-}
-
-const columns = [
-  { title: 'Clip', dataIndex: 'clip_id', key: 'clip_id' },
-  {
-    title: 'Platform', dataIndex: 'platform', key: 'platform',
-    render: (v: string) => v === 'youtube'
-      ? <Tag color="red" icon={<YoutubeOutlined />}>YouTube</Tag>
-      : <Tag color="blue" icon={<FacebookOutlined />}>Facebook</Tag>,
-  },
-  {
-    title: 'Status', dataIndex: 'status', key: 'status',
-    render: (v: string) => <Tag color={v === 'published' ? 'green' : v === 'failed' ? 'red' : 'blue'}>{v}</Tag>,
-  },
-  { title: 'URL', dataIndex: 'platform_url', key: 'platform_url', render: (v: string) => v ? <a href={v} target="_blank">{v}</a> : '-' },
+const PLATFORMS = [
+  { id: 'youtube', label: 'یوتیوب', icon: <Youtube size={20} />, color: '#EF4444', ready: false },
+  { id: 'instagram', label: 'اینستاگرام', icon: <Instagram size={20} />, color: '#EC4899', ready: false },
+  { id: 'facebook', label: 'فیس‌بوک', icon: <Facebook size={20} />, color: '#3B82F6', ready: false },
 ]
 
-function Uploads() {
+export default function Uploads() {
   return (
-    <div>
-      <Typography.Title level={3}>Uploads</Typography.Title>
-      <Card>
-        <div style={{ marginBottom: 16 }}>
-          <Typography.Text type="secondary">Manage your YouTube and Facebook uploads.</Typography.Text>
-        </div>
-        <Table<UploadRecord> columns={columns} dataSource={[]} locale={{ emptyText: 'No uploads yet' }} rowKey="id" />
-        <div style={{ marginTop: 16 }}>
-          <Button icon={<YoutubeOutlined />} style={{ marginRight: 12 }}>Upload to YouTube</Button>
-          <Button icon={<FacebookOutlined />}>Upload to Facebook</Button>
+    <Page title="انتشار خودکار" subtitle="کلیپ‌های آماده را مستقیم روی شبکه‌های اجتماعی منتشر کن">
+      <Card title="حساب‌های متصل">
+        <div className="ce-accounts">
+          {PLATFORMS.map((p) => (
+            <div key={p.id} className="ce-account">
+              <span className="ce-account__icon" style={{ background: p.color }}>
+                {p.icon}
+              </span>
+              <span className="ce-account__name">{p.label}</span>
+              <span className="ce-badge ce-badge--muted">متصل نیست</span>
+              <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled>
+                اتصال
+              </button>
+            </div>
+          ))}
         </div>
       </Card>
-    </div>
+
+      <Card title="تاریخچه انتشار">
+        <div className="ce-empty">هنوز چیزی منتشر نشده است.</div>
+      </Card>
+
+      <div className="ce-note">
+        <Info size={16} />
+        <span>
+          اتصال حساب‌ها در فاز ۴ نقشه‌راه فعال می‌شود؛ تا آن زمان می‌توانی خروجی‌ها را از صفحه‌ی هر
+          پروژه دانلود و دستی منتشر کنی.
+        </span>
+      </div>
+    </Page>
   )
 }
-
-export default Uploads
