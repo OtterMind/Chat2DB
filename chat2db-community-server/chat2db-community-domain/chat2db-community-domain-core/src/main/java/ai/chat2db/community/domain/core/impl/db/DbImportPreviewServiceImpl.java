@@ -3,29 +3,27 @@ package ai.chat2db.community.domain.core.impl.db;
 import ai.chat2db.community.domain.api.service.db.IDbImportPreviewService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.sql.Chat2DBContext;
-import com.alibaba.excel.EasyExcel;
+import ai.chat2db.spi.model.request.TableMetadataRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
- * Bounded import preview with column mapping (MYSQL-IMPORT-001). CSV/XLS/XLSX are parsed
- * through EasyExcel with the same reader for preview and execution; the preview reads only
+ * Bounded Excel import preview with column mapping. Preview and execution share the same
+ * parser; the preview reads only
  * the first {@link #PREVIEW_ROW_LIMIT} rows and never writes.
  */
 @Slf4j
@@ -112,7 +110,8 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
 
         // Resolve mapping: source index -> target column name; track unmapped targets.
         Map<Integer, String> sourceToTarget = new LinkedHashMap<>();
-        for (Map<String, String> mapping : mappings == null ? List.of() : mappings) {
+        List<Map<String, String>> safeMappings = mappings == null ? Collections.emptyList() : mappings;
+        for (Map<String, String> mapping : safeMappings) {
             String source = mapping.get("sourceColumn");
             String target = mapping.get("targetColumn");
             if (StringUtils.isBlank(target)) {
@@ -131,16 +130,19 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         int failed = 0;
         int skipped = 0;
 
-        String insertSql = buildInsertSql(tableName, targetColumns, sourceToTarget, strategy);
+        List<Map<String, Object>> insertTargets = targetColumns.stream()
+                .filter(target -> NULL_STRATEGY.equals(strategy) || isMapped(sourceToTarget, (String) target.get("name")))
+                .toList();
+        String insertSql = buildInsertSql(tableName, insertTargets);
         Connection connection = Chat2DBContext.getConnection();
         try (PreparedStatement statement = connection.prepareStatement(insertSql)) {
             for (int r = outcome.firstDataRow; r < rows.size(); r++) {
                 Map<Integer, ExcelParser.CellValue> row = rows.get(r);
                 try {
                     int paramIndex = 1;
-                    for (Map<String, Object> target : targetColumns) {
+                    for (Map<String, Object> target : insertTargets) {
                         String targetName = (String) target.get("name");
-                        String sourceIndexKey = sourceToTarget.entrySet().stream()
+                        int sourceIndexKey = sourceToTarget.entrySet().stream()
                                 .filter(e -> StringUtils.equals(e.getValue(), targetName))
                                 .map(Map.Entry::getKey)
                                 .findFirst().orElse(-1);
@@ -198,29 +200,28 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         return entry;
     }
 
-    private static int indexOfName(Map<Integer, String> header, String name) {
+    private static int indexOfName(Map<Integer, ExcelParser.CellValue> header, String name) {
         if (StringUtils.isBlank(name)) {
             return -1;
         }
-        for (Map.Entry<Integer, String> entry : header.entrySet()) {
-            if (StringUtils.equalsIgnoreCase(entry.getValue(), name)) {
+        for (Map.Entry<Integer, ExcelParser.CellValue> entry : header.entrySet()) {
+            if (StringUtils.equalsIgnoreCase(entry.getValue().value(), name)) {
                 return entry.getKey();
             }
         }
         return -1;
     }
 
-    private static String buildInsertSql(String tableName, List<Map<String, Object>> targetColumns,
-                                        Map<Integer, String> sourceToTarget, String strategy) {
+    private static boolean isMapped(Map<Integer, String> sourceToTarget, String targetName) {
+        return sourceToTarget.values().stream().anyMatch(target -> StringUtils.equals(target, targetName));
+    }
+
+    private static String buildInsertSql(String tableName, List<Map<String, Object>> targetColumns) {
         StringBuilder columns = new StringBuilder();
         StringBuilder placeholders = new StringBuilder();
         boolean first = true;
         for (Map<String, Object> target : targetColumns) {
             String name = (String) target.get("name");
-            boolean mapped = sourceToTarget.values().stream().anyMatch(t -> StringUtils.equals(t, name));
-            if (!mapped && DEFAULT_STRATEGY.equals(strategy)) {
-                continue;
-            }
             if (!first) {
                 columns.append(", ");
                 placeholders.append(", ");
@@ -271,7 +272,8 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
 
     private static List<Map<String, Object>> targetColumns(String databaseName, String tableName) {
         Connection connection = Chat2DBContext.getConnection();
-        return Chat2DBContext.getDbMetaData().columns(connection, databaseName, null, tableName).stream()
+        return Chat2DBContext.getDbMetaData().columns(connection,
+                        new TableMetadataRequest(databaseName, null, tableName)).stream()
                 .map(column -> {
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put("name", column.getName());
@@ -284,11 +286,6 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
                 .collect(java.util.stream.Collectors.toList());
     }
 
-    /**
-     * Parses the file with EasyExcel (same code path for preview and execution). The first
-     * row is treated as the header; without a header the columns are named column_1..N.
-     */
-    @SuppressWarnings("unchecked")
     /**
      * Spreadsheet formula injection guard: values that Excel would interpret as formulas
      * (= + - @ or a control character) are prefixed with a single quote so a later export
@@ -323,50 +320,14 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         }
     }
 
-    private static boolean isCsv(String fileName) {
-        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".csv");
-    }
-
-    @SuppressWarnings("unchecked")
     private static ParseOutcome parseRows(byte[] bytes, String fileName, int limit,
                                           Map<String, Object> csvOptions) {
-        if (isCsv(fileName)) {
-            CsvParser parser = new CsvParser(
-                    (String) csvOptions.getOrDefault("encoding", CsvParser.DEFAULT_ENCODING),
-                    (String) csvOptions.getOrDefault("delimiter", ","),
-                    (String) csvOptions.getOrDefault("quote", "\""),
-                    (String) csvOptions.getOrDefault("escape", "\""),
-                    Boolean.TRUE.equals(csvOptions.getOrDefault("hasHeader", Boolean.TRUE)),
-                    Boolean.TRUE.equals(csvOptions.getOrDefault("emptyAsNull", Boolean.TRUE)));
-            CsvParser.CsvResult result = parser.parse(bytes, limit);
-            List<Map<Integer, String>> rows = result.rows();
-            List<Map<Integer, ExcelParser.CellValue>> typedRows = new ArrayList<>();
-            for (Map<Integer, String> row : rows) {
-                Map<Integer, ExcelParser.CellValue> typed = new LinkedHashMap<>();
-                row.forEach((k, v) -> typed.put(k, new ExcelParser.CellValue(v, "string")));
-                typedRows.add(typed);
-            }
-            Map<Integer, ExcelParser.CellValue> header;
-            int firstDataRow;
-            if (result.headerRowCount() > 0 && !typedRows.isEmpty()) {
-                header = typedRows.get(0);
-                firstDataRow = 1;
-            } else {
-                header = new LinkedHashMap<>();
-                int columns = typedRows.isEmpty() ? 0 : typedRows.get(0).size();
-                for (int i = 0; i < columns; i++) {
-                    header.put(i, new ExcelParser.CellValue("column_" + (i + 1), "string"));
-                }
-                firstDataRow = 0;
-            }
-            return new ParseOutcome(typedRows, header, firstDataRow, List.of());
-        }
+        Map<String, Object> options = csvOptions == null ? Map.of() : csvOptions;
         if (ExcelParser.isExcel(fileName)) {
-            String sheetName = (String) csvOptions.getOrDefault("sheetName", null);
-            int startRow = ((Number) csvOptions.getOrDefault("startRow", 0)).intValue();
-            int headerRow = ((Number) csvOptions.getOrDefault("headerRow", 0)).intValue();
-            boolean emptyAsNull = Boolean.TRUE.equals(csvOptions.getOrDefault("emptyAsNull", Boolean.TRUE));
+            String sheetName = (String) options.getOrDefault("sheetName", null);
+            int startRow = ((Number) options.getOrDefault("startRow", 0)).intValue();
+            int headerRow = ((Number) options.getOrDefault("headerRow", 0)).intValue();
+            boolean emptyAsNull = Boolean.TRUE.equals(options.getOrDefault("emptyAsNull", Boolean.TRUE));
             ExcelParser.ExcelResult result = ExcelParser.parse(bytes, fileName, sheetName,
                     startRow, headerRow, emptyAsNull, limit);
             List<Map<Integer, ExcelParser.CellValue>> rows = result.rows();

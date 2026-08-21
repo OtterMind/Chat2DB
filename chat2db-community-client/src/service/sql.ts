@@ -468,7 +468,7 @@ export interface ICsvOptions {
 }
 
 const getImportPreview = createRequest<
-  { dataSourceId: number; databaseName: string; tableName: string; filePath: string; csvOptions?: string },
+  { dataSourceId: number; databaseName: string; tableName: string; filePath: string; csvOptions?: ICsvOptions },
   IImportPreview
 >('/api/rdb/import_preview/preview', { method: 'post' });
 

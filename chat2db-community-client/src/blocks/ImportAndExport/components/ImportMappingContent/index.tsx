@@ -49,7 +49,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
         databaseName,
         tableName,
         filePath,
-        csvOptions: isCsv || isExcel ? JSON.stringify(csvOptions) : undefined,
+        csvOptions: isExcel ? csvOptions : undefined,
       })
       .then((data) => {
         setPreview(data);
@@ -148,7 +148,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
           .filter(([, target]) => target && target !== SKIP)
           .map(([source, target]) => ({ sourceColumn: source, targetColumn: target })),
         unmappedTarget,
-        csvOptions: isCsv || isExcel ? csvOptions : undefined,
+        csvOptions: isExcel ? csvOptions : undefined,
       })
       .then(setResult)
       .catch((e) => setError(e?.message || i18n('common.text.failure')))
@@ -191,7 +191,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, tableName, filePath,
             value={csvOptions.sheetName}
             placeholder={i18n('workspace.importExport.selectSheet')}
             onChange={(v) => setCsvOptions((prev) => ({ ...prev, sheetName: v }))}
-            options={(preview.sheets || []).map((s) => ({ value: s.name, label: s.name }))}
+            options={(preview.sheets || []).filter((s) => s.visible).map((s) => ({ value: s.name, label: s.name }))}
           />
           <span>{i18n('workspace.importExport.startRow')}</span>
           <InputNumber

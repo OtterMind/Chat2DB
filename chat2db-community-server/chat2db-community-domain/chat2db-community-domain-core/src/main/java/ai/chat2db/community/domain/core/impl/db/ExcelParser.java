@@ -44,10 +44,12 @@ public final class ExcelParser {
                 if (sheet == null) {
                     continue;
                 }
-                Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("name", sheet.getSheetName());
-                entry.put("visible", !workbook.isSheetHidden(i) && !workbook.isSheetVeryHidden(i));
-                result.add(entry);
+                if (!workbook.isSheetHidden(i) && !workbook.isSheetVeryHidden(i)) {
+                    Map<String, Object> entry = new LinkedHashMap<>();
+                    entry.put("name", sheet.getSheetName());
+                    entry.put("visible", true);
+                    result.add(entry);
+                }
             }
             return result;
         } catch (Exception e) {
@@ -67,14 +69,11 @@ public final class ExcelParser {
             int effectiveStart = Math.max(0, startRow);
             int effectiveHeader = headerRow > 0 ? headerRow - 1 : effectiveStart;
 
-            Map<Integer, CellValue> header = readRow(sheet, effectiveHeader, emptyAsNull);
+            Map<Integer, CellValue> header = headerRow > 0
+                    ? readRow(sheet, effectiveHeader, emptyAsNull) : Map.of();
             int maxColumn = header.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
             List<Map<Integer, CellValue>> rows = new ArrayList<>();
-            int firstDataRow = 0;
-            if (headerRow > 0) {
-                firstDataRow = 1;
-            }
-            int physicalRow = effectiveHeader + firstDataRow;
+            int physicalRow = headerRow > 0 ? effectiveHeader + 1 : effectiveStart;
             int count = 0;
             while (physicalRow <= sheet.getLastRowNum() && count < limit) {
                 Map<Integer, CellValue> row = readRow(sheet, physicalRow, emptyAsNull);
@@ -87,19 +86,25 @@ public final class ExcelParser {
             }
             // Normalize every row to the same column count so previews align.
             List<Map<Integer, CellValue>> normalizedRows = new ArrayList<>();
-            normalizedRows.add(header);
+            if (headerRow > 0) {
+                normalizedRows.add(normalizeRow(header, maxColumn));
+            }
             for (Map<Integer, CellValue> row : rows) {
-                Map<Integer, CellValue> normalized = new LinkedHashMap<>();
-                for (int c = 0; c <= maxColumn; c++) {
-                    CellValue value = row.get(c);
-                    normalized.put(c, value == null ? new CellValue(null, "empty") : value);
-                }
-                normalizedRows.add(normalized);
+                normalizedRows.add(normalizeRow(row, maxColumn));
             }
             return new ExcelResult(normalizedRows, headerRow > 0 ? 1 : 0);
         } catch (Exception e) {
             throw workbookError(fileName, e);
         }
+    }
+
+    private static Map<Integer, CellValue> normalizeRow(Map<Integer, CellValue> row, int maxColumn) {
+        Map<Integer, CellValue> normalized = new LinkedHashMap<>();
+        for (int c = 0; c <= maxColumn; c++) {
+            CellValue value = row.get(c);
+            normalized.put(c, value == null ? new CellValue(null, "empty") : value);
+        }
+        return normalized;
     }
 
     private static Workbook open(byte[] bytes, String fileName) {
@@ -119,6 +124,10 @@ public final class ExcelParser {
             Sheet sheet = workbook.getSheet(sheetName);
             if (sheet == null) {
                 throw new BusinessException("import.excel.sheetMissing", new Object[]{sheetName});
+            }
+            int sheetIndex = workbook.getSheetIndex(sheet);
+            if (workbook.isSheetHidden(sheetIndex) || workbook.isSheetVeryHidden(sheetIndex)) {
+                throw new BusinessException("import.excel.noVisibleSheet");
             }
             return sheet;
         }
