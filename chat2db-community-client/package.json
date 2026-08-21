@@ -180,7 +180,7 @@
     "monaco-editor-webpack-plugin": "^7.1.0",
     "postcss-less": "6.0.0",
     "prettier": "^2",
-    "prettier-plugin-organize-imports": "^2",
+    "prettier-plugin-organize-imports": "^4",
     "prettier-plugin-packagejson": "^2",
     "stylelint": "16.26.1",
     "stylelint-config-standard": "38.0.0",
