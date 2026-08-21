@@ -122,7 +122,7 @@
     "html-to-image": "1.11.11",
     "html2canvas": "^1.4.1",
     "idb-keyval": "^6.2.1",
-    "is-online": "^11.0.0",
+    "is-online": "^12.0.2",
     "katex": "^0.16.21",
     "localforage": "^1.10.0",
     "lodash": "^4.17.21",
