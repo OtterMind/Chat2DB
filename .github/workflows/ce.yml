@@ -1,43 +1,84 @@
 name: 🎬 Build Cutting Edge
-on: workflow_dispatch
+
+# Copy the contents of this file into .github/workflows/ce.yml
+# (the build agent's token is not allowed to modify workflow files).
+#
+# What changed compared to the current ce.yml:
+#   1. the artifact now includes latest.yml and *.blockmap — without them
+#      auto-update cannot detect a new version and cannot compute a delta
+#   2. the installer is published to a GitHub Release, which is the feed
+#      electron-updater reads (and which supports HTTP range requests, the
+#      mechanism differential downloads rely on)
+#   3. pip failures fail the step instead of being swallowed
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish to GitHub Releases (required for auto-update)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
+
       - name: FFmpeg
         shell: pwsh
         run: |
-          curl -L -o ff.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z"
+          $ErrorActionPreference = 'Stop'
+          curl.exe -L --retry 3 -o ff.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z"
           7z x ff.7z -offmpeg | Out-Null
-          mkdir build\ffmpeg
-          cp ffmpeg\*\bin\ffmpeg.exe build\ffmpeg\
+          New-Item -ItemType Directory -Force build\ffmpeg | Out-Null
+          Copy-Item ffmpeg\*\bin\ffmpeg.exe  build\ffmpeg\
+          Copy-Item ffmpeg\*\bin\ffprobe.exe build\ffmpeg\
+
       - name: Backend
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           cd ce-app\backend
           python -m venv ..\..\build\backend\python
-          ..\..\build\backend\python\Scripts\pip install -r requirements.txt -q
-          xcopy /E /I app ..\..\build\backend\app
-          xcopy /E /I core ..\..\build\backend\core
-          copy run_backend.py ..\..\build\backend\
+          & ..\..\build\backend\python\Scripts\python.exe -m pip install --no-cache-dir -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+          Copy-Item app, core, uploaders -Destination ..\..\build\backend -Recurse -Force
+          Copy-Item run_backend.py ..\..\build\backend\
+
       - name: Frontend
         shell: pwsh
+        working-directory: ce-app/frontend
         run: |
-          cd ce-app\frontend
           npm install --no-audit --no-fund
-          npx vite build
+          npm run build
+
       - name: Package
         shell: pwsh
+        working-directory: ce-app/frontend
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd ce-app\frontend
-          npx electron-builder --win nsis --publish never
+          if ('${{ inputs.publish_release }}' -eq 'true') {
+            npx electron-builder --win nsis --publish always
+          } else {
+            npx electron-builder --win nsis --publish never
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: Cutting-Edge-Windows-Setup
-          path: ce-app/frontend/release/*.exe
+          # latest.yml + blockmap are what make auto-update and delta patches work
+          path: |
+            ce-app/frontend/release/*.exe
+            ce-app/frontend/release/*.blockmap
+            ce-app/frontend/release/latest.yml
+          if-no-files-found: error
