@@ -422,6 +422,12 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// Table maintenance SQL preview
+const maintenanceSql = createRequest<ITableParams & { operationType: string }, string>(
+  '/api/rdb/table/maintenance/sql',
+  { method: 'post' },
+);
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -443,6 +449,7 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  maintenanceSql,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,

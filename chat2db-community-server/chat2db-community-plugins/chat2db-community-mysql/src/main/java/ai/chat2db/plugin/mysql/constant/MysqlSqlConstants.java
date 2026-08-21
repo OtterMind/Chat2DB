@@ -60,6 +60,10 @@ public final class MysqlSqlConstants {
     public static final String SQL_SHOW_CREATE_VIEW_TEMPLATE = "show create view %s ";
     public static final String SQL_SHOW_GRANTS_FOR = "SHOW GRANTS FOR ";
     public static final String SQL_SHOW_INDEX_FROM = "SHOW INDEX FROM ";
+    public static final String SQL_ANALYZE_TABLE = "ANALYZE TABLE ";
+    public static final String SQL_OPTIMIZE_TABLE = "OPTIMIZE TABLE ";
+    public static final String SQL_CHECK_TABLE = "CHECK TABLE ";
+    public static final String SQL_REPAIR_TABLE = "REPAIR TABLE ";
     public static final String SQL_SHOW_PROCEDURE_STATUS = "SHOW PROCEDURE STATUS WHERE Db = DATABASE()";
     public static final String SQL_SHOW_TRIGGERS = "SHOW TRIGGERS";
     public static final String SQL_TRUNCATE_TABLE_TEMPLATE = "TRUNCATE TABLE %s";
