@@ -4,7 +4,11 @@ import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
-import { getManualRecoveryAction } from '@/store/global/slices/hotUpdate/action';
+import {
+  getManualDownloadAction,
+  getManualRecoveryAction,
+  isWindowsDesktopUpdatePlatform,
+} from '@/store/global/slices/hotUpdate/action';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
@@ -43,6 +47,7 @@ const getFailureDetail = (reason?: string): string | undefined => {
 const UpdateDetection = () => {
   const { styles } = useStyles();
   const isDevelopmentDesktop = isDesktop && isDevelopment;
+  const isWindowsUpdatePlatform = isWindowsDesktopUpdatePlatform();
 
   const {
     appConfig,
@@ -117,12 +122,12 @@ const UpdateDetection = () => {
         if (hotUpdateConfig.remindMe) {
           openFindNewVersionNotification();
         }
-        if (!isDevelopmentDesktop && hotUpdateConfig.autoDownload) {
+        if (!isDevelopmentDesktop && isWindowsUpdatePlatform && hotUpdateConfig.autoDownload) {
           void downloadUpdate();
         }
         break;
       case UpdatedStatus.Updated:
-        if (!isDevelopmentDesktop && hotUpdateConfig.autoInstall) {
+        if (!isDevelopmentDesktop && isWindowsUpdatePlatform && hotUpdateConfig.autoInstall) {
           void updateAndRestartApp();
           return;
         }
@@ -205,17 +210,25 @@ const UpdateDetection = () => {
       CHANGE_LOG_URL = `${CHANGE_LOG_URL}?type=local`;
     }
 
+    const manualDownload = getManualDownloadAction(updateDetail);
     const btn = (
       <div className={styles.btnBox}>
         <Button
           type="link"
           size="small"
           onClick={() => {
-            setSettingPageActiveTab('about');
+            if (isWindowsUpdatePlatform) {
+              setSettingPageActiveTab('about');
+            } else if (manualDownload) {
+              openWebPage(manualDownload.url);
+            }
             notificationApi.destroy();
           }}
+          disabled={!isWindowsUpdatePlatform && !manualDownload}
         >
-          {i18n('setting.button.goToUpdate')}
+          {isWindowsUpdatePlatform
+            ? i18n('setting.button.goToUpdate')
+            : i18n('setting.button.goToDownload')}
         </Button>
         <Button
           type="link"
@@ -255,12 +268,31 @@ const UpdateDetection = () => {
     const key = 'update-failed';
     const recoveryAction = getManualRecoveryAction(updateDetail);
     const isCheckFailure = !updateDetail.version || updateDetail.failureStage === 'CHECK';
-    const message = isCheckFailure
+    const isInstallFailure = updateDetail.failureStage === 'INSTALL';
+    const message = isInstallFailure
+      ? i18n('setting.text.updateRecoveryFailedTitle')
+      : isCheckFailure
       ? i18n('setting.text.updateCheckFailed')
       : i18n('setting.text.updateDownloadFailed');
     const failureDetail = getFailureDetail(updateDetail.failureReason);
 
-    const btn = recoveryAction ? (
+    const btn = isInstallFailure ? (
+      <div className={styles.btnBox}>
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            notificationApi.destroy(key);
+            void updateAndRestartApp();
+          }}
+        >
+          {i18n('setting.button.retryInstallation')}
+        </Button>
+        <Button type="link" size="small" onClick={() => notificationApi.destroy(key)}>
+          {i18n('common.text.laterOn')}
+        </Button>
+      </div>
+    ) : recoveryAction ? (
       <div className={styles.btnBox}>
         <Button
           type="link"

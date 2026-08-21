@@ -69,7 +69,7 @@ export interface IHotUpdateConfig {
 
 export type { ShortcutOverride, ShortcutOverrides } from '@/constants/shortcut';
 
-export type UpdateFailureStage = 'CHECK' | 'DOWNLOAD';
+export type UpdateFailureStage = 'CHECK' | 'DOWNLOAD' | 'INSTALL';
 export type UpdateFailureReason =
   | 'NETWORK'
   | 'INVALID_MANIFEST'

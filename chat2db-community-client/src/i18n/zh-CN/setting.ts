@@ -139,6 +139,8 @@ export default {
   'setting.button.iSee': '我知道了',
   'setting.text.newEditionIsReady': '新版本已准备就绪',
   'setting.button.goToUpdate': '前往更新',
+  'setting.button.goToDownload': '前往下载',
+  'setting.button.retryInstallation': '重试安装',
   'setting.text.UpdatedLatestVersion': '已更新到最新版本 {1}',
   'setting.title.holdingService': '保持服务',
   'setting.text.holdingService': '退出应用时保持服务，加快启动速度',

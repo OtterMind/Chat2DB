@@ -142,6 +142,8 @@ export default {
   'setting.button.iSee': 'I know',
   'setting.text.newEditionIsReady': 'The new version is ready',
   'setting.button.goToUpdate': 'Go to update',
+  'setting.button.goToDownload': 'Go to download',
+  'setting.button.retryInstallation': 'Retry installation',
   'setting.text.UpdatedLatestVersion': 'Updated to the latest version {1}',
   'setting.title.holdingService': 'Holding Service',
   'setting.text.holdingService': 'Keep the service when exiting the application to speed up startup',

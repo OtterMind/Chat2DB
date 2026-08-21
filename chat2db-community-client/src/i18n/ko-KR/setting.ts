@@ -142,6 +142,8 @@ export default {
   'setting.button.iSee': '확인',
   'setting.text.newEditionIsReady': '새 버전을 사용할 수 있습니다',
   'setting.button.goToUpdate': '업데이트로 이동',
+  'setting.button.goToDownload': '다운로드로 이동',
+  'setting.button.retryInstallation': '설치 다시 시도',
   'setting.text.UpdatedLatestVersion': '최신 버전 {1}(으)로 업데이트되었습니다',
   'setting.title.holdingService': '서비스 유지',
   'setting.text.holdingService': '시작 속도를 높이기 위해 애플리케이션 종료 후에도 서비스를 유지합니다',

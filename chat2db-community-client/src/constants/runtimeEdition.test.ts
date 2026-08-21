@@ -8,6 +8,11 @@ Object.assign(globalThis, {
   window: { javaQuery: {} },
 });
 
+Object.defineProperty(globalThis, 'navigator', {
+  value: { userAgent: '' },
+  configurable: true,
+});
+
 async function main() {
   const runtimeEditionModule = await import('./runtimeEdition');
   const runtimeEditionConfig =

@@ -144,6 +144,8 @@ export default {
   'setting.button.iSee': 'Entendido',
   'setting.text.newEditionIsReady': 'La nueva versión está lista',
   'setting.button.goToUpdate': 'Ir a la actualización',
+  'setting.button.goToDownload': 'Ir a la descarga',
+  'setting.button.retryInstallation': 'Reintentar instalación',
   'setting.text.UpdatedLatestVersion': 'Actualizado a la versión más reciente {1}',
   'setting.title.holdingService': 'Mantener el servicio',
   'setting.text.holdingService': 'Mantener el servicio al salir de la aplicación para acelerar el inicio',

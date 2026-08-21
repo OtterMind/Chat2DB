@@ -1,20 +1,17 @@
 import assert from 'node:assert/strict';
+import './action.test.setup';
+import { UpdatedStatus } from './status';
+import { createCheckUpdateCoordinator } from './checkCoordinator';
+import {
+  COMMUNITY_GITHUB_RELEASES_URL,
+  createHotUpdateAction,
+  getCommunityGitHubReleaseTagUrl,
+  getManualDownloadAction,
+  getManualRecoveryAction,
+  isWindowsDesktopUpdatePlatform,
+} from './action';
 
 void (async () => {
-  (globalThis as any).window = globalThis;
-  Object.assign(globalThis as Record<string, unknown>, {
-    __APP_NAME__: 'chat2db-community',
-    __APP_VERSION__: '0.0.0-test',
-    __RUNTIME_ENV__: 'community',
-    __ENV__: 'production',
-    navigator: { userAgent: 'node', language: 'en-US', app_language: 'en-US' },
-    location: { search: '' },
-    javaQuery: () => undefined,
-  });
-
-  const { UpdatedStatus } = await import('./status');
-  const { createCheckUpdateCoordinator } = await import('./checkCoordinator');
-
   async function testRepeatedChecksShareOneJcefRequestAndReachAvailable() {
     const updates: Awaited<ReturnType<typeof createCheckUpdateCoordinator>>[] = [];
     let requestCount = 0;
@@ -83,6 +80,20 @@ void (async () => {
     ]);
   }
 
+  async function testCompletedChecksRespectShortCooldown() {
+    let requestCount = 0;
+    const check = createCheckUpdateCoordinator(
+      async () => {
+        requestCount += 1;
+        return { status: UpdatedStatus.NotAvailable };
+      },
+      () => undefined,
+    );
+    assert.equal(await check(), false);
+    assert.equal(await check(), false);
+    assert.equal(requestCount, 1);
+  }
+
   async function testCheckPassesFailureFieldsToDetail() {
     const updates: any[] = [];
     const check = createCheckUpdateCoordinator(
@@ -124,7 +135,6 @@ void (async () => {
       requestCounts[command] = (requestCounts[command] || 0) + 1;
       callbacks[command] = { onSuccess };
     };
-    const { createHotUpdateAction } = await import('./action');
     const state: {
       updateDetail: any;
       setUpdateDetail: (detail: any) => void;
@@ -150,11 +160,68 @@ void (async () => {
     const secondRestart = actions.updateAndRestartApp();
     assert.equal(requestCounts['trigger-installation'], 1);
     callbacks['trigger-installation'].onSuccess('true');
-    await Promise.resolve();
-    assert.equal(requestCounts['restart-app'], 1);
-    callbacks['restart-app'].onSuccess('{}');
     await Promise.all([firstRestart, secondRestart]);
-    assert.equal(state.updateDetail.status, UpdatedStatus.Installed);
+    assert.equal(requestCounts['restart-app'] || 0, 0);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Installing);
+  }
+
+  async function testWindowsInstallationWaitsForNativeExitConfirmation() {
+    const callbacks: Record<string, { onSuccess: (data: string) => void }> = {};
+    const requestCounts: Record<string, number> = {};
+    (globalThis as any).navigator.os_type = 'Windows';
+    (globalThis as any).javaQuery = (
+      { request, onSuccess }: { request: string; onSuccess: (data: string) => void },
+    ) => {
+      const command = JSON.parse(request).requestUrl as string;
+      requestCounts[command] = (requestCounts[command] || 0) + 1;
+      callbacks[command] = { onSuccess };
+    };
+    const state: { updateDetail: any; setUpdateDetail: (detail: any) => void } = {
+      updateDetail: { status: UpdatedStatus.Updated },
+      setUpdateDetail: (detail) => Object.assign(state.updateDetail, detail),
+    };
+    const actions = createHotUpdateAction(() => undefined, () => state as any, {} as any);
+
+    const installation = actions.updateAndRestartApp();
+    callbacks['trigger-installation'].onSuccess('true');
+    await installation;
+
+    assert.equal(requestCounts['restart-app'] || 0, 0);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Installing);
+    (globalThis as any).navigator.os_type = 'Windows';
+  }
+
+  async function testWindowsCancelFailureAndRetryTransitions() {
+    const callbacks: Record<string, { onSuccess: (data: string) => void }> = {};
+    const requestCounts: Record<string, number> = {};
+    (globalThis as any).navigator.os_type = 'Windows';
+    (globalThis as any).javaQuery = (
+      { request, onSuccess }: { request: string; onSuccess: (data: string) => void },
+    ) => {
+      const command = JSON.parse(request).requestUrl as string;
+      requestCounts[command] = (requestCounts[command] || 0) + 1;
+      callbacks[command] = { onSuccess };
+    };
+    const state: { updateDetail: any; setUpdateDetail: (detail: any) => void } = {
+      updateDetail: { status: UpdatedStatus.Installing, version: '5.3.1' },
+      setUpdateDetail: (detail) => Object.assign(state.updateDetail, detail),
+    };
+    const actions = createHotUpdateAction(() => undefined, () => state as any, {} as any);
+
+    actions.handleApplicationExitResult({ reason: 'INSTALL_UPDATE', result: 'CANCELLED' });
+    assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+
+    actions.handleApplicationExitResult({ reason: 'INSTALL_UPDATE', result: 'FAILED' });
+    assert.equal(state.updateDetail.status, UpdatedStatus.UpdateFailed);
+    assert.equal(state.updateDetail.failureStage, 'INSTALL');
+
+    const retry = actions.updateAndRestartApp();
+    assert.equal(state.updateDetail.status, UpdatedStatus.Installing);
+    assert.equal(requestCounts['trigger-installation'], 1);
+    callbacks['trigger-installation'].onSuccess('true');
+    await retry;
+    assert.equal(state.updateDetail.status, UpdatedStatus.Installing);
+    (globalThis as any).navigator.os_type = 'Windows';
   }
 
   async function testDownloadFailurePreservesRecoveryFields() {
@@ -171,7 +238,6 @@ void (async () => {
       requestCounts[command] = (requestCounts[command] || 0) + 1;
       callbacks[command] = { onSuccess };
     };
-    const { createHotUpdateAction } = await import('./action');
     const state: {
       updateDetail: any;
       setUpdateDetail: (detail: any) => void;
@@ -200,7 +266,6 @@ void (async () => {
   }
 
   async function testManualRecoveryActionUsesConstantReleasesPageForCheckFailure() {
-    const { getManualRecoveryAction, COMMUNITY_GITHUB_RELEASES_URL } = await import('./action');
     const action = getManualRecoveryAction({
       status: UpdatedStatus.UpdateFailed,
       failureStage: 'CHECK',
@@ -210,7 +275,6 @@ void (async () => {
   }
 
   async function testManualRecoveryActionUsesValidatedReleasePageUrl() {
-    const { getManualRecoveryAction } = await import('./action');
     const action = getManualRecoveryAction({
       status: UpdatedStatus.UpdateFailed,
       version: '5.3.1',
@@ -225,7 +289,6 @@ void (async () => {
   }
 
   async function testManualRecoveryActionDerivesTagUrlWhenReleasePageUrlMissing() {
-    const { getManualRecoveryAction, getCommunityGitHubReleaseTagUrl } = await import('./action');
     const action = getManualRecoveryAction({
       status: UpdatedStatus.UpdateFailed,
       version: '5.3.1',
@@ -239,13 +302,11 @@ void (async () => {
   }
 
   async function testManualRecoveryActionReturnsNullForNonFailureStatus() {
-    const { getManualRecoveryAction } = await import('./action');
     const action = getManualRecoveryAction({ status: UpdatedStatus.Available, version: '5.3.1' });
     assert.equal(action, null);
   }
 
   async function testManualRecoveryHelperDoesNotOpenBrowser() {
-    const { getManualRecoveryAction } = await import('./action');
     let openedUrl: string | undefined;
     Object.assign(globalThis as Record<string, unknown>, {
       openWebPage: (url: string) => {
@@ -260,16 +321,67 @@ void (async () => {
     assert.notEqual(action, null);
   }
 
+  async function testManualDownloadActionUsesValidatedUrlAndVersionFallback() {
+    const expectedUrl = getCommunityGitHubReleaseTagUrl('5.3.1');
+
+    assert.deepEqual(getManualDownloadAction({
+      status: UpdatedStatus.Available,
+      version: '5.3.1',
+      releasePageUrl: expectedUrl,
+    }), { url: expectedUrl, version: '5.3.1' });
+    assert.deepEqual(getManualDownloadAction({
+      status: UpdatedStatus.Available,
+      version: '5.3.1',
+    }), { url: expectedUrl, version: '5.3.1' });
+    assert.deepEqual(getManualDownloadAction({
+      status: UpdatedStatus.Available,
+      version: '5.3.1',
+      releasePageUrl: 'https://example.com/untrusted',
+    }), { url: expectedUrl, version: '5.3.1' });
+    assert.equal(getManualDownloadAction({ status: UpdatedStatus.Available }), null);
+    assert.equal(getManualDownloadAction({ status: UpdatedStatus.Available, version: '../latest' }), null);
+  }
+
+  async function testAutomaticDownloadAndInstallationAreWindowsOnly() {
+    let bridgeCalls = 0;
+    (globalThis as any).javaQuery = () => {
+      bridgeCalls += 1;
+    };
+
+    for (const platform of ['Mac', 'Linux']) {
+      (globalThis as any).navigator.os_type = platform;
+      const state: { updateDetail: any; setUpdateDetail: (detail: any) => void } = {
+        updateDetail: { status: UpdatedStatus.Available, version: '5.3.1' },
+        setUpdateDetail: (detail) => Object.assign(state.updateDetail, detail),
+      };
+      const actions = createHotUpdateAction(() => undefined, () => state as any, {} as any);
+      assert.equal(isWindowsDesktopUpdatePlatform(), false);
+      assert.equal(await actions.downloadUpdate(), false);
+      state.updateDetail = { status: UpdatedStatus.Updated, version: '5.3.1' };
+      await actions.updateAndRestartApp();
+      assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+    }
+
+    (globalThis as any).navigator.os_type = 'Windows';
+    assert.equal(isWindowsDesktopUpdatePlatform(), true);
+    assert.equal(bridgeCalls, 0);
+  }
+
   await testRepeatedChecksShareOneJcefRequestAndReachAvailable();
   await testCheckReachesNotAvailableAndFailureStates();
+  await testCompletedChecksRespectShortCooldown();
   await testCheckPassesFailureFieldsToDetail();
   await testRepeatedDownloadAndRestartUseOneJcefRequestEach();
+  await testWindowsInstallationWaitsForNativeExitConfirmation();
+  await testWindowsCancelFailureAndRetryTransitions();
   await testDownloadFailurePreservesRecoveryFields();
   await testManualRecoveryActionUsesConstantReleasesPageForCheckFailure();
   await testManualRecoveryActionUsesValidatedReleasePageUrl();
   await testManualRecoveryActionDerivesTagUrlWhenReleasePageUrlMissing();
   await testManualRecoveryActionReturnsNullForNonFailureStatus();
   await testManualRecoveryHelperDoesNotOpenBrowser();
+  await testManualDownloadActionUsesValidatedUrlAndVersionFallback();
+  await testAutomaticDownloadAndInstallationAreWindowsOnly();
   console.log('Hot update check action tests passed');
 })().catch((error) => {
   console.error(error);

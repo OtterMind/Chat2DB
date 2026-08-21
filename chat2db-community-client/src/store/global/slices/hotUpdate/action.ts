@@ -3,6 +3,7 @@ import { UpdatedStatus } from './status';
 import jcefApi from '@/jcef';
 import { IHotUpdateConfig, IUpdateDetail, UpdateFailureReason, UpdateFailureStage } from '@/typings/settings';
 import { isDesktop, isDevelopment } from '@/utils/env';
+import { Platform } from '@/constants/os';
 import produce from 'immer';
 import type { StateCreator } from 'zustand/vanilla';
 import { GlobalStore } from '../../store';
@@ -25,11 +26,33 @@ export interface HotUpdateAction {
   syncUpdatePreferences: () => Promise<void>;
   // Update hot update configuration
   updateHotUpdateConfig: (property: keyof IHotUpdateConfig, value: any) => Promise<void>;
+  // Apply the native exit/elevated-helper result to the update state machine.
+  handleApplicationExitResult: (result: ApplicationExitResult) => void;
 }
+
+export type ApplicationExitResult = {
+  reason?: string;
+  result?: 'ACCEPTED' | 'CANCELLED' | 'FAILED';
+};
 
 export type ManualRecoveryAction = {
   url: string;
   version?: string;
+};
+
+export const isWindowsDesktopUpdatePlatform = (osType = window.navigator.os_type): boolean =>
+  osType === Platform.Windows;
+
+/** Return the safe, user-initiated Release page for an update that is available. */
+export const getManualDownloadAction = (detail: IUpdateDetail): ManualRecoveryAction | null => {
+  if (detail.status !== UpdatedStatus.Available || !detail.version || !/^[0-9]+(?:\.[0-9]+)+$/.test(detail.version)) {
+    return null;
+  }
+  const fallbackUrl = getCommunityGitHubReleaseTagUrl(detail.version);
+  return {
+    url: detail.releasePageUrl === fallbackUrl ? detail.releasePageUrl : fallbackUrl,
+    version: detail.version,
+  };
 };
 
 /**
@@ -74,13 +97,16 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
         return activeRestart;
       }
       activeRestart = (async () => {
-        if (!runtimeEditionConfig.autoUpdate) {
+        if (!runtimeEditionConfig.autoUpdate || !isWindowsDesktopUpdatePlatform()) {
           return;
         }
         if (isDesktop && isDevelopment) {
           return;
         }
-        if (get().updateDetail.status === UpdatedStatus.Updated) {
+        const detail = get().updateDetail;
+        const shouldInstall = detail.status === UpdatedStatus.Updated
+          || (detail.status === UpdatedStatus.UpdateFailed && detail.failureStage === 'INSTALL');
+        if (shouldInstall) {
           get().setUpdateDetail({
             status: UpdatedStatus.Installing,
           });
@@ -89,18 +115,26 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
             if (!installed) {
               get().setUpdateDetail({
                 status: UpdatedStatus.UpdateFailed,
+                failureStage: 'INSTALL',
+                failureReason: 'UNKNOWN',
               });
               return;
             }
-            get().setUpdateDetail({
-              status: UpdatedStatus.Installed,
-            });
+            // On Windows the bridge has only accepted an exit-confirmation request.
+            // The helper is launched after that confirmation, so neither report an
+            // installed update nor send the generic restart command from here.
+            return;
           } catch {
             get().setUpdateDetail({
               status: UpdatedStatus.UpdateFailed,
+              failureStage: 'INSTALL',
+              failureReason: 'UNKNOWN',
             });
             return;
           }
+        }
+        if (get().updateDetail.status !== UpdatedStatus.Installed) {
+          return;
         }
         try {
           await jcefApi.restartApp();
@@ -114,6 +148,24 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
       });
       return activeRestart;
     },
+    handleApplicationExitResult: ({ reason, result }) => {
+      if (reason !== 'INSTALL_UPDATE') {
+        return;
+      }
+      if (result === 'CANCELLED') {
+        get().setUpdateDetail({
+          status: UpdatedStatus.Updated,
+          failureStage: undefined,
+          failureReason: undefined,
+        });
+      } else if (result === 'FAILED') {
+        get().setUpdateDetail({
+          status: UpdatedStatus.UpdateFailed,
+          failureStage: 'INSTALL',
+          failureReason: 'UNKNOWN',
+        });
+      }
+    },
     handleCheckUpdate: () => {
       if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
         return Promise.resolve(false);
@@ -121,7 +173,8 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
       return runCheckUpdate();
     },
     downloadUpdate: () => {
-      if (!isDesktop || !runtimeEditionConfig.autoUpdate || (isDesktop && isDevelopment)) {
+      if (!isDesktop || !runtimeEditionConfig.autoUpdate || !isWindowsDesktopUpdatePlatform()
+        || (isDesktop && isDevelopment)) {
         return Promise.resolve(false);
       }
       if (activeDownload) {

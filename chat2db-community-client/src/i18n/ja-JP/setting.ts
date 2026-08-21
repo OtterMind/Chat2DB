@@ -144,6 +144,8 @@ export default {
   'setting.button.iSee': '了解しました',
   'setting.text.newEditionIsReady': '新しいバージョンが準備されました',
   'setting.button.goToUpdate': '更新に進む',
+  'setting.button.goToDownload': 'ダウンロードページへ',
+  'setting.button.retryInstallation': 'インストールを再試行',
   'setting.text.UpdatedLatestVersion': '最新バージョン{1}に更新されました',
   'setting.title.holdingService': 'サービスを保持',
   'setting.text.holdingService': 'アプリケーションを終了してもサービスを保持し、起動を高速化します',

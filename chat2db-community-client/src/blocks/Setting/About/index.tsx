@@ -5,17 +5,23 @@ import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
+import {
+  getManualDownloadAction,
+  isWindowsDesktopUpdatePlatform,
+} from '@/store/global/slices/hotUpdate/action';
 import { isCommunityEnv, isDesktop, isDevelopment } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
 import { staticMessage } from '@chat2db/ui';
 import { Button, Checkbox, Progress } from 'antd';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useStyles } from './style';
 
 // About Us
 export default function AboutUs() {
   const { styles } = useStyles();
   const isDevelopmentDesktop = isDesktop && isDevelopment;
+  const isWindowsUpdatePlatform = isWindowsDesktopUpdatePlatform();
+  const lastCheckClickAtRef = useRef(Number.NEGATIVE_INFINITY);
   const {
     appUrlConfig,
     hotUpdateConfig,
@@ -44,6 +50,13 @@ export default function AboutUs() {
   };
 
   const checkUpdate = () => {
+    if (useGlobalStore.getState().updateDetail.status === UpdatedStatus.Checking) {
+      return;
+    }
+    if (Date.now() - lastCheckClickAtRef.current < 5_000) {
+      return;
+    }
+    lastCheckClickAtRef.current = Date.now();
     handleCheckUpdate().then((available) => {
       if (available) {
         return;
@@ -79,7 +92,7 @@ export default function AboutUs() {
             {i18n('setting.button.checkingUpdate')}
           </Button>
         );
-      case UpdatedStatus.Available:
+      case UpdatedStatus.Available: {
         if (isDevelopmentDesktop) {
           return (
             <Button type="primary" size="small" disabled>
@@ -87,7 +100,8 @@ export default function AboutUs() {
             </Button>
           );
         }
-        return (
+        const manualDownload = getManualDownloadAction(updateDetail);
+        return isWindowsUpdatePlatform ? (
           <Button
             type="primary"
             size="small"
@@ -95,7 +109,17 @@ export default function AboutUs() {
           >
             {i18n('setting.button.startDownloading')}
           </Button>
+        ) : (
+          <Button
+            type="primary"
+            size="small"
+            disabled={!manualDownload}
+            onClick={() => manualDownload && openWebPage(manualDownload.url)}
+          >
+            {i18n('setting.button.goToDownload')}
+          </Button>
         );
+      }
       case UpdatedStatus.Updating:
         return (
           <Button type="primary" size="small" loading>
@@ -120,6 +144,19 @@ export default function AboutUs() {
         return (
           <Button size="small" icon={<Iconfont code="&#xe662;" />} type="primary" onClick={updateAndRestartApp}>
             {i18n('setting.button.restart')}
+          </Button>
+        );
+      case UpdatedStatus.UpdateFailed:
+        if (updateDetail.failureStage === 'INSTALL') {
+          return (
+            <Button size="small" icon={<Iconfont code="&#xe662;" />} type="primary" onClick={updateAndRestartApp}>
+              {i18n('setting.button.retryInstallation')}
+            </Button>
+          );
+        }
+        return (
+          <Button onClick={checkUpdate} type="primary" size="small">
+            {i18n('setting.title.checkUpdate')}
           </Button>
         );
       default:
@@ -185,7 +222,7 @@ export default function AboutUs() {
                 {i18n('setting.text.alertNewVersion')}
               </Checkbox>
               <Checkbox
-                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop}
+                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop || !isWindowsUpdatePlatform}
                 onChange={(e) => {
                   updateHotUpdateConfig('autoDownload', e.target.checked);
                 }}
@@ -194,7 +231,7 @@ export default function AboutUs() {
                 {i18n('setting.text.downloadNewVersion')}
               </Checkbox>
               <Checkbox
-                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop}
+                disabled={!hotUpdateConfig.remindMe || isDevelopmentDesktop || !isWindowsUpdatePlatform}
                 onChange={(e) => {
                   updateHotUpdateConfig('autoInstall', e.target.checked);
                 }}
