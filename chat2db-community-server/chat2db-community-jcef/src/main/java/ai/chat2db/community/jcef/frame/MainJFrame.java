@@ -94,6 +94,7 @@ public class MainJFrame extends JFrame {
             ConsoleCodec.CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS;
     private static final String MAC_OS_14_1_VERSION_PREFIX = "14.1";
     private static final String WEB_FRONTEND_PROPERTY = "chat2db.jcef.web-frontend";
+    private static final String WEB_FRONTEND_URL_PROPERTY = "chat2db.jcef.web-frontend-url";
     private static final String WEB_FRONTEND_URL = "http://127.0.0.1:8889/";
     private static final String DESKTOP_READY_FILE_PROPERTY = "chat2db.jcef.ready-file";
     private JSplitPane splitPane;
@@ -136,7 +137,7 @@ public class MainJFrame extends JFrame {
         return instance;
     }
     static {
-        appName = DesktopProductTitle.resolve(OS.isWindows(), ConfigUtils.isCommunity(), ConfigUtils.isLocalEdition());
+        appName = DesktopProductTitle.resolve();
         if (!OS.isMacintosh()) {
             JFrame.setDefaultLookAndFeelDecorated(true);
             JDialog.setDefaultLookAndFeelDecorated(true);
@@ -748,8 +749,8 @@ public class MainJFrame extends JFrame {
         log.info("4. Starting CefBrowser and UI component creation...");
         String indexHtmlFile;
         if (Boolean.getBoolean(WEB_FRONTEND_PROPERTY)) {
-            indexHtmlFile = WEB_FRONTEND_URL;
-            log.info("Using Community Web frontend for JCEF development: {}", indexHtmlFile);
+            indexHtmlFile = resolveWebFrontendUrl();
+            log.info("Using web frontend for JCEF development: {}", indexHtmlFile);
         } else {
             String currentJarPath = OSOperateUtil.getCurrentJarPath();
             try {
@@ -812,6 +813,12 @@ public class MainJFrame extends JFrame {
         });
         log.info("4. CefBrowser and UI component creation completed.");
     }
+
+    private static String resolveWebFrontendUrl() {
+        String configuredUrl = System.getProperty(WEB_FRONTEND_URL_PROPERTY);
+        return StringUtils.isBlank(configuredUrl) ? WEB_FRONTEND_URL : configuredUrl;
+    }
+
     private void initializeFrame() {
         log.info("5. Starting JFrame initialization...");
         initAppWindowSize();

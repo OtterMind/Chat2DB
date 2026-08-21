@@ -9,6 +9,7 @@ export default {
   'team.nav.permission.authorization': 'Lista de autorizaciones',
   'team.nav.permission.apply': 'Lista de solicitudes',
   'team.nav.sqlAudit': 'Auditoría de SQL',
+  'team.nav.desensitize': 'Enmascaramiento de datos',
 
   // Configuración del equipo
   'team.setting.basic': 'Información básica',
@@ -163,7 +164,8 @@ export default {
   'team.join.form.reason': 'Motivo de la solicitud (opcional)',
   'team.join.apply': 'Solicitar',
 
-  'team.invite.title.subtitle1': 'Una plataforma de desarrollo y análisis de datos con IA utilizada por más de un millón de desarrolladores',
+  'team.invite.title.subtitle1':
+    'Una plataforma de desarrollo y análisis de datos con IA utilizada por más de un millón de desarrolladores',
   'team.invite.title.subtitle2': 'Una gestión de datos más sencilla, eficiente y entretenida 😎',
   'team.invite.question': '¿Qué es Chat2DB?',
   'team.invite.init.content1': '{1} utiliza {2}',
@@ -179,6 +181,15 @@ export default {
   'team.invite.success.content1': 'Envío correcto',
   'team.invite.success.content2': 'Espere la aprobación del administrador',
   'team.invite.success.finish': 'Finalizar',
+
+  'team.desensitize.add.title': 'Añadir reglas de enmascaramiento',
+  'team.desensitize.field.datasource': 'Fuente de datos',
+  'team.desensitize.field.database': 'Base de datos',
+  'team.desensitize.field.schema': 'Esquema',
+  'team.desensitize.field.table': 'Tabla',
+  'team.desensitize.field.columns': 'Columnas',
+  'team.desensitize.field.type': 'Regla de enmascaramiento',
+  'team.desensitize.table.databaseSchema': 'Base de datos / Esquema',
 
   'team.permission.modal.title': 'Permiso restringido',
   'team.permission.modal.OkText': 'Solicitar permiso',

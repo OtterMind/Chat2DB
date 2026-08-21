@@ -222,7 +222,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     );
   };
 
-  const handleDatabaseTreeShortcut = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleDatabaseTreeShortcut = async (event: React.KeyboardEvent<HTMLDivElement>) => {
     const selectedTreeNode = findTreeNodeByKey(filteredTreeData, selectedKeys[0]);
     if (!selectedTreeNode || isEditableTarget(event.target)) {
       return;
@@ -231,12 +231,13 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     const action = DATABASE_TREE_SHORTCUT_ACTIONS.find((shortcutAction) =>
       isShortcutEventMatch(event, shortcutConfig[shortcutAction].binding),
     );
-    if (!action || !treeDropdownRef.current?.handleShortcut(selectedTreeNode, action)) {
+    if (!action) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
+    await treeDropdownRef.current?.handleShortcut(selectedTreeNode, action);
   };
 
   const antdTreeProps: TreeProps<TreeNodeData> = useMemo(() => {

@@ -66,7 +66,6 @@ export default {
   'dashboard.chart.pinToDashboardSuccess': '成功固定到仪表盘',
   'import.community.dataSource': '导入社区版连接',
   'dashboard.createName.placeholder': '输入仪表盘名称，方便后续查找（必填）',
-  'dashboard.select.aiDataCollection': '请选择AI对话的数据集（必选）',
   'dashboard.createDescription.placeholder': '输入仪表盘的描述（选填）',
   'dashboard.delete.confirm': '你确定要删除该表报吗？',
   'dashboard.delete.chart.confirm': '你确定要删除该图表吗？',

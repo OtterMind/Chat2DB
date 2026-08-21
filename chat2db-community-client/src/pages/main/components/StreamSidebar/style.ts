@@ -20,6 +20,12 @@ export const useStyles = createStyles(({ css, token }) => {
       border-radius: 6px;
       justify-content: center;
     `,
+    streamSearchTooltipAnchor: css`
+      display: inline-flex;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+    `,
     streamSearchButton: css`
       flex-shrink: 0;
       border-radius: 6px !important;

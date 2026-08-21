@@ -4,13 +4,12 @@ import { useStyles } from './style';
 import { Dropdown, type MenuProps } from 'antd';
 import { refreshPage } from '@/utils';
 import { history } from 'umi';
-import { Platform } from '@/constants/os';
 import jcefApi from '@/jcef';
-import { JcefEventBus, JavaPushActionType } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
 import CommunityAppMenu from './CommunityAppMenu';
 import { COMMUNITY_TITLE_BAR_HEIGHT } from '@/constants/mainLayout';
+import { resolveTitleBarPlatform } from './platform';
 
 interface AppBarProps {
   className?: string;
@@ -19,9 +18,7 @@ interface AppBarProps {
 const AppBar = memo<AppBarProps>(({ className }) => {
   const { styles, cx } = useStyles();
   const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
-  const isMac = window.navigator.os_type === Platform.Mac;
-  const isWindows = window.navigator.os_type === Platform.Windows;
-  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false);
+  const { isMac, isWindows } = resolveTitleBarPlatform(window.navigator.os_type, window.navigator.userAgent);
   const [isMaximized, setIsMaximized] = useState(false);
 
   const syncWindowMaximized = useCallback(() => {
@@ -49,26 +46,6 @@ const AppBar = memo<AppBarProps>(({ className }) => {
       window.clearTimeout(resizeTimer);
     };
   }, [isWindows, syncWindowMaximized]);
-
-  useEffect(() => {
-    if (!isCommunityEnv || !isMac || !isDesktop) {
-      return;
-    }
-
-    const handleWindowFullScreenChange = (message: { data?: boolean } | boolean) => {
-      setIsWindowFullScreen(typeof message === 'boolean' ? message : message?.data === true);
-    };
-
-    JcefEventBus.on(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
-    jcefApi
-      .isWindowFullScreen()
-      .then(setIsWindowFullScreen)
-      .catch(() => undefined);
-
-    return () => {
-      JcefEventBus.off(JavaPushActionType.WINDOW_FULL_SCREEN_CHANGED, handleWindowFullScreenChange);
-    };
-  }, [isMac]);
 
   const items: MenuProps['items'] = [
     {
@@ -185,12 +162,11 @@ const AppBar = memo<AppBarProps>(({ className }) => {
           <CommunityAppMenu />
         </div>
       )}
-      {isCommunityEnv && (
+      {appTitleBarRightComponent && (
         <div
-          className={cx(styles.communityActions, {
-          [styles.communityMacWindowedActions]: isMac && !isWindowFullScreen,
-          [styles.communityWindowsDesktopActions]: isWindows && isDesktop,
-        })}
+          className={cx(styles.titleBarActions, {
+            [styles.windowsDesktopTitleBarActions]: isCommunityEnv && isWindows && isDesktop,
+          })}
         >
           {appTitleBarRightComponent}
         </div>

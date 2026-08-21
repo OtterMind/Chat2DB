@@ -1,5 +1,5 @@
-import editionUiExtension from '@/edition-ui';
-import { appendEditionSettingMenuItems } from '@/edition-ui/settingMenus';
+import clientExtension from '@/client-extension';
+import { appendClientSettingMenuItems } from '@/client-extension/settingMenus';
 import i18n from '@/i18n';
 import { ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
@@ -11,7 +11,7 @@ import NetworkProxySetting from './NetworkProxySetting';
 import SettingLayout, { type SettingMenuItem } from './SettingLayout';
 
 // ---- store -----
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop } from '@/utils/env';
 import ShortcutSetting from './ShortcutSetting';
@@ -60,7 +60,7 @@ function Setting() {
             },
           ]
         : []),
-      ...(runtimeEditionConfig.mcpSetting
+      ...(clientRuntime.showMcpSetting
         ? [
             {
               title: i18n('setting.nav.mcp'),
@@ -72,7 +72,7 @@ function Setting() {
             },
           ]
         : []),
-      ...(runtimeEditionConfig.networkProxySetting
+      ...(clientRuntime.showNetworkProxySetting
         ? [
             {
               title: i18n('setting.nav.networkProxy'),
@@ -101,18 +101,14 @@ function Setting() {
         group: 'information' as const,
         hidePageHeader: true,
         icon: Info,
-        body: <About />,
+        body: clientExtension.settings?.about ?? <About />,
         code: 'about',
       },
     ] satisfies SettingMenuItem[];
 
-    const editionItems =
-      editionUiExtension.settingMenuItems?.({
-        language,
-        profile: runtimeEditionConfig.settingMenuProfile,
-      }) ?? [];
+    const clientItems = clientExtension.settings?.items?.({ language }) ?? [];
 
-    return appendEditionSettingMenuItems([...sharedItems, ...informationItems], editionItems);
+    return appendClientSettingMenuItems([...sharedItems, ...informationItems], clientItems);
   }, [language]);
 
   useEffect(() => {

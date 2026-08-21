@@ -30,7 +30,7 @@ export default {
   'price.text.upgradePlan': 'Upgrade plan',
   'price.text.reorderPlan': 'Reorder plan',
   'price.text.unsubscribeSuccess': 'Unsubscribe success',
-  'price.text.pricingPlans': 'Chat2DB Pro Membership Plans',
+  'price.text.pricingPlans': '{PRODUCT_NAME} Membership Plans',
   'price.text.welcome':
     'Over 1 million developers are using the AI data development and analysis platform that makes data management simpler, more efficient, and more fun 😎',
   'price.text.monthly': 'Monthly',
@@ -74,7 +74,7 @@ export default {
   'price.text.upgradePackage': 'Upgrade package',
   'price.label.total': 'Total',
   'price.text.selectPlan': 'Select your upgrade package',
-  'price.text.startFreeTitle': 'Start Your Free 30-Day Chat2DB Pro Trial!',
+  'price.text.startFreeTitle': 'Start Your Free 30-Day {PRODUCT_NAME} Trial!',
   'price.text.freePriceSuffix': 'First 30 days',
   'price.text.freeTrial': '',
   'price.text.thenPriceSuffix': 'then',

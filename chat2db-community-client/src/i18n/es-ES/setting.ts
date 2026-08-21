@@ -270,7 +270,7 @@ export default {
   'setting.nav.editorFontSize': 'Tamaño de fuente del editor',
   'setting.nav.editorFontSizeDescribe': 'Establecer el tamaño de fuente del editor',
   'setting.apiKeys.describe':
-    'Chat2DB Pro ofrece servicios de IA mediante API. Consulte la documentación para obtener información detallada. {1} No exponga su clave API a otros clientes ni en el código.',
+    '{PRODUCT_NAME} ofrece servicios de IA mediante API. Consulte la documentación para obtener información detallada. {1} No exponga su clave API a otros clientes ni en el código.',
   'setting.apiKeys.CreateApiKey': 'Crear clave API',
   'setting.apiKeys.addApiDoc': '«Método de llamada a la API»',
   'setting.apiKeys.CreateSuccess': 'Creación correcta',

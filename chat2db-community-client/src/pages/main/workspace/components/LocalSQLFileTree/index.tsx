@@ -19,7 +19,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } 
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuEntry, ContextMenuIntent } from '@/components/ContextMenu/core';
 import { LOCAL_SQL_FILE_SAVED_EVENT, LOCAL_SQL_SESSION_DRAG_TYPE, WorkspaceTabType } from '@/constants';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { DEFAULT_TERMINAL_SETTINGS } from '@/constants/terminal';
 import {
   getEffectiveShortcutConfigMap,
@@ -105,8 +105,8 @@ export interface LocalSQLFileTreeRef {
 }
 
 const SQL_FILE_EXTENSION = '.sql';
-const LOCAL_SQL_DIRECTORY_PATH_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathStorageKey;
-const LOCAL_SQL_DIRECTORY_PATHS_STORAGE_KEY = runtimeEditionConfig.localSqlDirectoryPathsStorageKey;
+const LOCAL_SQL_DIRECTORY_PATH_STORAGE_KEY = clientRuntime.localSqlDirectoryPathStorageKey;
+const LOCAL_SQL_DIRECTORY_PATHS_STORAGE_KEY = clientRuntime.localSqlDirectoryPathsStorageKey;
 const LOCAL_SQL_TOOLBAR_EXPANDED_MIN_WIDTH = 150;
 const LOCAL_SQL_TOOLBAR_BUTTON_SIZE = { boxSize: 24, iconSize: 16 };
 const LOCAL_SQL_TREE_BASE_INDENT = 0;

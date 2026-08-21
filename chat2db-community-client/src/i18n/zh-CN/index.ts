@@ -23,7 +23,6 @@ import redis from './redis';
 import invite from './invite';
 import plugin from './plugin';
 import license from './license';
-import knowledgeManagement from './knowledgeManagement';
 
 export default {
   lang: LangType.ZH_CN,
@@ -52,5 +51,4 @@ export default {
   ...invite,
   ...plugin,
   ...license,
-  ...knowledgeManagement,
 };

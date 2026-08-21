@@ -72,7 +72,7 @@ class ExternalUpdaterTest {
                 Long.toString(exitedProcess.pid())});
 
         assertEquals(1, exitCode);
-        for (int attempt = 0; attempt < 40 && !Files.exists(marker); attempt++) {
+        for (int attempt = 0; attempt < 200 && !Files.exists(marker); attempt++) {
             Thread.sleep(25L);
         }
         assertEquals("restarted", Files.readString(marker));

@@ -23,7 +23,6 @@ import invite from './invite';
 import team from './team';
 import plugin from './plugin';
 import license from './license';
-import knowledgeManagement from './knowledgeManagement';
 
 export default {
   lang: LangType.KO_KR,
@@ -51,5 +50,4 @@ export default {
   ...team,
   ...plugin,
   ...license,
-  ...knowledgeManagement,
 };

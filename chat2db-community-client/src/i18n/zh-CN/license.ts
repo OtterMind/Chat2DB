@@ -16,7 +16,7 @@ export default {
   'license.certificateDescription': '需要填写对应的信息，系统将为你自动生成设备证书，',
   'license.certificateWarning': '一旦生成，将无法修改',
   'license.licenseTooltip':
-    '目前只有Chat2DB Local 永久版订单需要生成设备证书来激活设备，其他订单无需设备证书，即可激活',
+    '目前只有离线桌面永久版订单需要生成设备证书来激活设备，其他订单无需设备证书即可激活',
   'license.selectOrder': '请选择你的订单',
   'license.deviceNameLabel': '设备名称',
   'license.deviceNameTooltip': '备注一个设备名称',
@@ -36,7 +36,7 @@ export default {
   'license.copyButton': '复制设备证书',
   'license.offlineUsageNotes': '离线使用须知',
   'license.viewActivationProcess': '点击查看离线激活流程',
-  'license.permanentVersion': 'Chat2DB Local 永久版',
+  'license.permanentVersion': '离线桌面永久版',
   'license.offlineActivationIntro': '如果你对离线激活流程不了解，',
   'license.deviceLimit': '许可证绑定设备数已达到上限',
   'license.licenseNotSupported': '离线激活不支持此在线 AI 功能，请配置自定义模型后使用本地 AI 功能',

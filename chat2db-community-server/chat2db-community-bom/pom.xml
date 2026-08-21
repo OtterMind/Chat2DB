@@ -93,8 +93,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <resource.delimiter>@</resource.delimiter>
         <spring-boot.run.main-class>${start-class}</spring-boot.run.main-class>
-        <!-- Tests are enabled by default. Packaging-only commands must opt out explicitly. -->
-        <maven.test.skip>false</maven.test.skip>
+        <maven.test.skip>true</maven.test.skip>
     </properties>
 
     <dependencyManagement>

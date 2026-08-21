@@ -9,6 +9,7 @@ export default {
   'team.nav.permission.authorization': '권한 부여 목록',
   'team.nav.permission.apply': '신청 목록',
   'team.nav.sqlAudit': 'SQL 감사',
+  'team.nav.desensitize': '데이터 마스킹',
 
   // Team Settings
   'team.setting.basic': '기본 정보',
@@ -178,6 +179,15 @@ export default {
   'team.invite.success.content1': '제출되었습니다',
   'team.invite.success.content2': '관리자 승인을 기다려 주세요',
   'team.invite.success.finish': '완료',
+
+  'team.desensitize.add.title': '마스킹 규칙 추가',
+  'team.desensitize.field.datasource': '데이터 소스',
+  'team.desensitize.field.database': '데이터베이스',
+  'team.desensitize.field.schema': '스키마',
+  'team.desensitize.field.table': '테이블',
+  'team.desensitize.field.columns': '열',
+  'team.desensitize.field.type': '마스킹 규칙',
+  'team.desensitize.table.databaseSchema': '데이터베이스 / 스키마',
 
   'team.permission.modal.title': '권한 제한',
   'team.permission.modal.OkText': '권한 요청',

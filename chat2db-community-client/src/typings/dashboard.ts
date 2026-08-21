@@ -17,7 +17,6 @@ export interface IDashboardItem {
   id?: number;
   name?: string;
   description?: string;
-  dataSourceCollectionId?: number;
   chartIds?: number[];
   gmtModified?: number;
   gmtCreate?: number;

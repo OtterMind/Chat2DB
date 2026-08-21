@@ -1,8 +1,59 @@
 import assert from 'node:assert/strict';
-import { domWindow } from './index.dom.test.setup';
-import { act } from 'react';
-import { SelectEditor } from './index';
-import { MultiSelectEditor } from '../MultiSelectIEditor';
+import { JSDOM } from 'jsdom';
+
+const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+  pretendToBeVisual: true,
+  url: 'http://localhost',
+});
+const domWindow = dom.window;
+
+Object.defineProperties(globalThis, {
+  window: { configurable: true, value: domWindow },
+  document: { configurable: true, value: domWindow.document },
+  navigator: { configurable: true, value: domWindow.navigator },
+  Node: { configurable: true, value: domWindow.Node },
+  Element: { configurable: true, value: domWindow.Element },
+  HTMLElement: { configurable: true, value: domWindow.HTMLElement },
+  HTMLInputElement: { configurable: true, value: domWindow.HTMLInputElement },
+  HTMLTextAreaElement: { configurable: true, value: domWindow.HTMLTextAreaElement },
+  SVGElement: { configurable: true, value: domWindow.SVGElement },
+  ShadowRoot: { configurable: true, value: domWindow.ShadowRoot },
+  MutationObserver: { configurable: true, value: domWindow.MutationObserver },
+  getComputedStyle: { configurable: true, value: domWindow.getComputedStyle.bind(domWindow) },
+  requestAnimationFrame: { configurable: true, value: domWindow.requestAnimationFrame.bind(domWindow) },
+  cancelAnimationFrame: { configurable: true, value: domWindow.cancelAnimationFrame.bind(domWindow) },
+  PointerEvent: { configurable: true, value: domWindow.MouseEvent },
+  IS_REACT_ACT_ENVIRONMENT: { configurable: true, value: true },
+});
+
+domWindow.matchMedia = (query: string) =>
+  ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }) as MediaQueryList;
+Object.defineProperty(globalThis, 'matchMedia', {
+  configurable: true,
+  value: domWindow.matchMedia.bind(domWindow),
+});
+
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver });
+Object.defineProperty(domWindow, 'ResizeObserver', { configurable: true, value: TestResizeObserver });
+Object.defineProperty(domWindow.HTMLElement.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: () => undefined,
+});
 
 const keyCodes: Record<string, number> = {
   Enter: 13,
@@ -32,6 +83,12 @@ const clickOption = (option: HTMLElement) => {
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 async function main() {
+  const [{ act }, { SelectEditor }, { MultiSelectEditor }] = await Promise.all([
+    import('react'),
+    import('./index'),
+    import('../MultiSelectIEditor'),
+  ]);
+
   const options = [
     { label: 'Alpha', value: 'ALPHA' },
     { label: 'Beta', value: 'BETA' },

@@ -268,7 +268,7 @@ export default {
   'setting.nav.editorFontSize': 'Editor Font Size',
   'setting.nav.editorFontSizeDescribe': 'Set the font size of the editor',
   'setting.apiKeys.describe':
-    'Chat2DB Pro provides AI services through APIs. For detailed usage, please refer to the documentation. {1} Do not expose your API key to other clients or code.',
+    '{PRODUCT_NAME} provides AI services through APIs. For detailed usage, please refer to the documentation. {1} Do not expose your API key to other clients or code.',
   'setting.apiKeys.CreateApiKey': 'Create API key',
   'setting.apiKeys.addApiDoc': '《API call method》',
   'setting.apiKeys.CreateSuccess': 'Create success',
@@ -320,7 +320,7 @@ export default {
   'setting.license.getCode': 'Get Email Verification Code',
   'setting.license.codeChannel': 'Verification Code Channel',
   'setting.license.codeChannelDesc':
-    'Search for the WeChat official account [Ch2DB] → [Pro Member] → [Get Verification Code]',
+    'Search for the WeChat official account [Ch2DB] → [Membership] → [Get Verification Code]',
   'setting.purchaseDetails.title': 'Purchase Details',
   'setting.purchaseDetails.productName': 'Product Name',
   'setting.purchaseDetails.price': 'Purchase Price',

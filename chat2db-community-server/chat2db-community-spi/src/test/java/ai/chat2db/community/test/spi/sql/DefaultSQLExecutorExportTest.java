@@ -91,6 +91,20 @@ class DefaultSQLExecutorExportTest {
     }
 
     @Test
+    void exportAppliesJdbcMaxRowsAndStopsReadingAtTheSameLimit() {
+        List<List<String>> rows = new ArrayList<>();
+        StatementHandler statementHandler = new StatementHandler(List.of(JdbcResult.resultSet(
+                columns("name"), row("alpha"), row("beta"), row("gamma"))));
+        Connection connection = connection(proxy(PreparedStatement.class, statementHandler));
+
+        new DefaultSQLExecutor().execute(connection, "select name from test", ignored -> {
+        }, row -> rows.add(new ArrayList<>(row)), JDBCDataValue::getString, false, null, 2);
+
+        assertEquals(2, statementHandler.maxRows);
+        assertEquals(List.of(List.of("alpha"), List.of("beta")), rows);
+    }
+
+    @Test
     void exportWritesSelectedResultSet() {
         List<List<String>> headers = new ArrayList<>();
         List<List<String>> rows = new ArrayList<>();
@@ -281,6 +295,7 @@ class DefaultSQLExecutorExportTest {
     private static class StatementHandler implements InvocationHandler {
         private final List<JdbcResult> results;
         private int index = -1;
+        private int maxRows;
 
         private StatementHandler(List<JdbcResult> results) {
             this.results = results;
@@ -289,6 +304,10 @@ class DefaultSQLExecutorExportTest {
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws SQLException {
             return switch (method.getName()) {
+                case "setMaxRows" -> {
+                    maxRows = (Integer) args[0];
+                    yield null;
+                }
                 case "execute" -> {
                     index = 0;
                     yield current().isResultSet();

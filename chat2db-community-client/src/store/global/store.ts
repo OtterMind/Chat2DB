@@ -1,4 +1,5 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
+import { registerI18nStateReader } from '@/i18n/runtime';
 import { PersistOptions, devtools, persist } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
@@ -24,7 +25,6 @@ const createStore: StateCreator<GlobalStore, [['zustand/devtools', never]]> = (.
 type GlobalPersist = Pick<
   GlobalStore,
   | 'mainPageActiveTab'
-  | 'loginType'
   | 'baseSetting'
   | 'hotUpdateConfig'
   | 'editorSettings'
@@ -36,13 +36,13 @@ type GlobalPersist = Pick<
 
 // local-storage Options
 const persistOptions: PersistOptions<GlobalStore, GlobalPersist> = {
-  name: runtimeEditionConfig.globalStoreName,
+  name: clientRuntime.globalStoreName,
   version: 1,
   migrate: (persistedState, version) => {
     const persisted = persistedState as GlobalPersist;
-    // The update controls were previously hidden in Community, so an old
-    // persisted default is not evidence of the user's consent to contact CDN.
-    if (runtimeEditionConfig.mode === 'community' && version < 1) {
+    // Auto-update was previously hidden in Community, so old defaults are not
+    // consent to contact the GitHub Release update service.
+    if (clientRuntime.runtimeKey === 'community' && version < 1) {
       persisted.hotUpdateConfig = {
         ...persisted.hotUpdateConfig,
         remindMe: false,
@@ -54,7 +54,6 @@ const persistOptions: PersistOptions<GlobalStore, GlobalPersist> = {
   },
   partialize: (state) => ({
     mainPageActiveTab: state.mainPageActiveTab,
-    loginType: state.loginType,
     baseSetting: state.baseSetting,
     hotUpdateConfig: state.hotUpdateConfig,
     editorSettings: state.editorSettings,
@@ -68,18 +67,24 @@ const persistOptions: PersistOptions<GlobalStore, GlobalPersist> = {
 export const useGlobalStore = createWithEqualityFn<GlobalStore>()(
   persist(
     devtools(createStore, {
-      name: runtimeEditionConfig.globalStoreName,
+      name: clientRuntime.globalStoreName,
     }),
     persistOptions,
   ),
   shallow,
 );
 
-// Clean the store to exclude some data loginType
+registerI18nStateReader(() => {
+  const state = useGlobalStore.getState();
+  return {
+    language: state.baseSetting.language,
+    isCN: state.appConfig.isCN,
+  };
+});
+
 export const clearGlobalStore = () => {
   useGlobalStore.setState({
     ...initialState,
-    loginType: useGlobalStore.getState().loginType,
     baseSetting: useGlobalStore.getState().baseSetting,
     systemErrorMessageApi: useGlobalStore.getState().systemErrorMessageApi,
     serviceStatus: useGlobalStore.getState().serviceStatus,

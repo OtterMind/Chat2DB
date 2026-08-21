@@ -63,7 +63,35 @@ interface IProps {
   allowSelectDataSource?: boolean;
   // Whether every node must have a value.
   mustHaveValue?: boolean;
+  // Whether a data source must be selected even when Database/Schema may be empty.
+  requireDataSource?: boolean;
 }
+
+const getPlaceholder = (treeNodeType: TreeNodeType) => {
+  switch (treeNodeType) {
+    case TreeNodeType.DATA_SOURCE:
+      return i18n('common.selectBoundInfo.placeholder.dataSource');
+    case TreeNodeType.DATABASE:
+      return i18n('common.selectBoundInfo.placeholder.database');
+    case TreeNodeType.SCHEMA:
+      return i18n('common.selectBoundInfo.placeholder.schema');
+    default:
+      return '';
+  }
+};
+
+const getEmptyScopeLabel = (treeNodeType: TreeNodeType) => {
+  switch (treeNodeType) {
+    case TreeNodeType.DATA_SOURCE:
+      return i18n('common.selectBoundInfo.scope.global');
+    case TreeNodeType.DATABASE:
+      return i18n('common.selectBoundInfo.scope.dataSource');
+    case TreeNodeType.SCHEMA:
+      return i18n('common.selectBoundInfo.scope.database');
+    default:
+      return '';
+  }
+};
 
 interface CascadeOptionsState {
   contextKey: string;
@@ -105,11 +133,14 @@ const generateOptions = (treeDataList: TreeNodeData[] | null, allowEmpty, styles
     };
   });
   if (allowEmpty) {
+    const treeNodeType = treeDataList[0].treeNodeType;
+    const label = getEmptyScopeLabel(treeNodeType);
     options.unshift({
-      label: '',
+      label,
+      title: label,
       value: '',
       key: '',
-      treeNodeType: treeDataList[0].treeNodeType,
+      treeNodeType,
     });
   }
   return options || [];
@@ -117,7 +148,13 @@ const generateOptions = (treeDataList: TreeNodeData[] | null, allowEmpty, styles
 
 const SelectBoundInfo = memo(
   (props: IProps) => {
-    const { boundInfo, allowEmpty = false, allowSelectDataSource = true, mustHaveValue } = props;
+    const {
+      boundInfo,
+      allowEmpty = false,
+      allowSelectDataSource = true,
+      mustHaveValue,
+      requireDataSource = false,
+    } = props;
     const { styles } = useStyles();
 
     const { dataSourceList, getTreeData } = useTreeStore((s) => ({
@@ -138,8 +175,7 @@ const SelectBoundInfo = memo(
     boundInfoRef.current = boundInfo;
 
     const getOptions = (treeNodeType: TreeNodeType, _boundInfo?) => {
-      return treeConfig[treeNodeType]
-        ?.getChildren?.({ ...(_boundInfo || boundInfo), needAiDataCollections: false })
+      return treeConfig[treeNodeType]?.getChildren?.(_boundInfo || boundInfo)
         .then((result) => normalizeTreeNodeLoadResult(result).children);
     };
 
@@ -162,7 +198,7 @@ const SelectBoundInfo = memo(
     }, [dataSourceList, getTreeData]);
 
     const dataSourceOptions = useMemo(() => {
-      return generateOptions(dataSourceList, false, styles);
+      return generateOptions(dataSourceList, allowEmpty && !requireDataSource, styles);
     }, [dataSourceList]);
 
     const isValidDataSource = useMemo(() => {
@@ -327,7 +363,7 @@ const SelectBoundInfo = memo(
         }
         _defaultSelectedList.push({
           value: databaseName,
-          label: databaseName,
+          label: databaseName || (allowEmpty ? getEmptyScopeLabel(TreeNodeType.DATABASE) : ''),
           treeNodeType: TreeNodeType.DATABASE,
           options: databaseOptions,
         });
@@ -351,7 +387,7 @@ const SelectBoundInfo = memo(
         }
         _defaultSelectedList.push({
           value: schemaName,
-          label: schemaName,
+          label: schemaName || (allowEmpty ? getEmptyScopeLabel(TreeNodeType.SCHEMA) : ''),
           treeNodeType: TreeNodeType.SCHEMA,
           options: schemaOptions,
         });
@@ -437,14 +473,15 @@ const DropdownItem = memo((props: DropdownProps) => {
   // Render the current node's icon.
   const currentIcon = useMemo(() => {
     if (eachOption.treeNodeType === TreeNodeType.DATA_SOURCE) {
+      const databaseConfig = databaseMap[eachOption.databaseType!];
       return (
         <span className={styles.dataSourceIdentityIcon}>
           <DataSourceIdentityMark dataSourceId={eachOption.dataSourceId} size={7} />
           <IconfontSvg
             size="md"
-            existDark={databaseMap[eachOption.databaseType!]?.iconExistDark}
+            existDark={databaseConfig?.iconExistDark}
             appearance={appearance}
-            code={databaseMap[eachOption.databaseType!]?.icon}
+            code={databaseConfig?.icon || 'icon-database'}
           />
         </span>
       );
@@ -519,20 +556,22 @@ const DropdownItem = memo((props: DropdownProps) => {
           }}
           trigger={['click']}
         >
+          <span className={styles.dropdownTrigger}>
+            <ToolbarBtn
+              className={styles.toolbarBtn}
+              prefixIcon={currentIcon}
+              text={eachOption?.label || getPlaceholder(eachOption.treeNodeType)}
+              suffixIcon={<ChevronRight size={14} className={styles.suffixIcon} />}
+            />
+          </span>
+        </Dropdown>
+      ) : (
           <ToolbarBtn
             className={styles.toolbarBtn}
             prefixIcon={currentIcon}
-            text={eachOption?.label || `<${eachOption.treeNodeType}>`}
+            text={eachOption?.label || getPlaceholder(eachOption.treeNodeType)}
             suffixIcon={<ChevronRight size={14} className={styles.suffixIcon} />}
           />
-        </Dropdown>
-      ) : (
-        <ToolbarBtn
-          className={styles.toolbarBtn}
-          prefixIcon={currentIcon}
-          text={eachOption?.label || `<${eachOption.treeNodeType}>`}
-          suffixIcon={<ChevronRight size={14} className={styles.suffixIcon} />}
-        />
       )}
     </Fragment>
   );

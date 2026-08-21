@@ -7,7 +7,7 @@ import { i18n } from '@/i18n';
 import { BucketTypeEnum, UploadTypeEnum } from '@/typings/upload';
 import OSS from 'ali-oss';
 import { v4 as uuid } from 'uuid';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 interface IProps extends UploadProps {
   dragger?: boolean;
   /**

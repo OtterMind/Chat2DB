@@ -21,6 +21,11 @@ import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionContext;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionOperation;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
+import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.SqlUtils;
@@ -33,7 +38,6 @@ import net.sf.jsqlparser.statement.Statements;
 import net.sf.jsqlparser.statement.select.Select;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
@@ -45,11 +49,18 @@ import java.util.*;
 @Service
 public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
 
-    @Autowired
-    private ExecuteResultHeaderEnhancer executeResultHeaderEnhancer;
+    private final ExecuteResultHeaderEnhancer executeResultHeaderEnhancer;
 
-    @Autowired
-    private CommandConverter commandConverter;
+    private final CommandConverter commandConverter;
+
+    private final SqlExecutionPolicyManager sqlExecutionPolicyManager;
+
+    public DbDlTemplateServiceImpl(ExecuteResultHeaderEnhancer executeResultHeaderEnhancer,
+            CommandConverter commandConverter, SqlExecutionPolicyManager sqlExecutionPolicyManager) {
+        this.executeResultHeaderEnhancer = executeResultHeaderEnhancer;
+        this.commandConverter = commandConverter;
+        this.sqlExecutionPolicyManager = sqlExecutionPolicyManager;
+    }
 
     private static final String LINE_SEPARATOR = "\r|\n|\r\n";
 
@@ -60,14 +71,18 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         }
         long s1 = System.currentTimeMillis();
         ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param));
         SqlExecuteRequest command = commandConverter.param2model(param);
+        command.setScript(executionPlan.getSql());
+        sqlExecutionPolicyManager.applyMaxRows(command, executionPlan);
+        sqlExecutionPolicyManager.beforeExecute(executionPlan);
         List<ExecuteResponse> results = executor.execute(command);
         long s2 = System.currentTimeMillis();
         log.info("execute_sql cost time:{}", s2 - s1);
         List<ExecuteResponse> r = reBuildHeader(results, param.getDataSourceId(), param.getSchemaName(),
                 param.getDatabaseName());
         log.info("execute_header cost time:{}", System.currentTimeMillis() - s2);
-        return r;
+        return sqlExecutionPolicyManager.filterResultColumns(executionPlan, r);
     }
 
     @Override
@@ -93,6 +108,9 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
 
     @Override
     public ExecuteResponse executeUpdate(DbDlExecuteRequest param) {
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param));
+        param.setSql(executionPlan.getSql());
+        sqlExecutionPolicyManager.beforeExecute(executionPlan);
         String type = Chat2DBContext.getConnectInfo().getDbType();
         if ("REDIS".equalsIgnoreCase(type)) {
             return redisExecuteUpdate(param.getSql());
@@ -105,9 +123,28 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
 
     @Override
     public List<ExecuteResponse> executeSelectTable(DbDlExecuteRequest param) {
+        String type = Chat2DBContext.getConnectInfo().getDbType();
+        String querySql = tableQuerySql(param, type);
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param.getDataSourceId(),
+                param.getDatabaseName(), param.getSchemaName(), param.getTableName(), querySql));
         SqlExecuteRequest command = commandConverter.param2model(param);
-        List<ExecuteResponse> results = Chat2DBContext.getDbMetaData().getCommandExecutor().executeSelectTable(command);
-        return reBuildHeader(results, param.getDataSourceId(), param.getSchemaName(), param.getDatabaseName());
+        command.setScript(executionPlan.getSql());
+        command.setSingle(true);
+        sqlExecutionPolicyManager.applyMaxRows(command, executionPlan);
+        sqlExecutionPolicyManager.beforeExecute(executionPlan);
+        ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
+        List<ExecuteResponse> results;
+        if (isDocumentOrKeyValueStore(type)) {
+            if (!Objects.equals(querySql, executionPlan.getSql())) {
+                throw new IllegalStateException("SQL rewrite is not supported for " + type + " table browsing");
+            }
+            results = executor.executeSelectTable(command);
+        } else {
+            results = executor.execute(command);
+        }
+        List<ExecuteResponse> rebuilt = reBuildHeader(results, param.getDataSourceId(), param.getSchemaName(),
+                param.getDatabaseName());
+        return sqlExecutionPolicyManager.filterResultColumns(executionPlan, rebuilt);
     }
 
 
@@ -117,20 +154,26 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         if (StringUtils.isBlank(sql)) {
             return 0L;
         }
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param.getDataSourceId(),
+                param.getDatabaseName(), connectInfo == null ? null : connectInfo.getSchemaName(),
+                param.getTableName(), sql));
+        sql = executionPlan.getSql();
         String dataBaseType = Chat2DBContext.getConnectInfo().getDbType();
         if (DataSourceTypeEnum.MONGODB.getCode().equals(dataBaseType)) {
             ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
-            return getCountOfMongodb(param.getTableName(), executor);
+            return sqlExecutionPolicyManager.limitCount(executionPlan,
+                    getCountOfMongodb(param.getTableName(), executor));
         }
         ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
         try {
-            sql = SqlUtils.count(sql, dataBaseType);
-            if (sql == null) {
+            String countSql = SqlUtils.count(sql, dataBaseType);
+            if (countSql == null) {
                 Long count = executor.count(sql, Chat2DBContext.getConnection());
-                return count;
+                return sqlExecutionPolicyManager.limitCount(executionPlan, count);
             }
             ExecuteResponse executeResult = executor.execute(SqlStatementExecuteRequest.builder()
-                    .sql(sql)
+                    .sql(countSql)
                     .connection(Chat2DBContext.getConnection())
                     .limitRowSize(true)
                     .build());
@@ -144,12 +187,12 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
                     .stream()
                     .findFirst()
                     .orElse("0");
-            return Long.valueOf(count);
+            return sqlExecutionPolicyManager.limitCount(executionPlan, Long.parseLong(count));
         } catch (Exception e) {
             log.warn("Failed to execute SQL: {}", sql, e);
             try {
                 Long count = executor.count(sql, Chat2DBContext.getConnection());
-                return count;
+                return sqlExecutionPolicyManager.limitCount(executionPlan, count);
             } catch (Exception e1) {
                 throw new BusinessException("count error", new Object[]{sql, e1.getMessage()}, e1);
             }
@@ -190,7 +233,9 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
 
     @Override
     public ExecuteResponse validate(DbSqlValidateRequest param) {
-        String sql = param.getSql();
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param.getDataSourceId(),
+                param.getDatabaseName(), param.getSchemaName(), null, param.getSql()));
+        String sql = executionPlan.getSql();
         ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
         if (StringUtils.isEmpty(sql)) {
             return ExecuteResponse.builder().success(true).build();
@@ -255,13 +300,17 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         if (SqlTypeEnum.SELECT.name().equalsIgnoreCase(statement.getSqlType())) {
 
             try {
+                Integer policyMaxRows = executionPlan.getMaxRows();
+                int validationMaxRows = policyMaxRows == null ? 1000 : Math.min(1000, policyMaxRows);
+                sqlExecutionPolicyManager.beforeExecute(executionPlan);
                 ExecuteResponse executeResult = executor.execute(SqlStatementExecuteRequest.builder()
                         .sql(statement.getSql())
                         .connection(Chat2DBContext.getConnection())
                         .limitRowSize(true)
                         .offset(0)
-                        .count(1000)
+                        .count(validationMaxRows)
                         .build());
+                sqlExecutionPolicyManager.filterResultColumns(executionPlan, List.of(executeResult));
                 return executeResult;
             } catch (Exception e) { // impl-contract: fallback - validation query failure is returned as failed ExecuteResponse.
                 log.error("validate error", e);
@@ -282,6 +331,38 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
             executeResultHeaderEnhancer.enhance(enhanceExecuteResultRequest);
         }
         return results;
+    }
+
+    private SqlExecutionContext executionContext(DbDlExecuteRequest request) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        return new SqlExecutionContext(
+                connectInfo == null ? request.getDataSourceId() : connectInfo.getDataSourceId(),
+                connectInfo == null ? null : connectInfo.getDbType(),
+                request.getDatabaseName(), request.getSchemaName(), request.getTableName(), request.getSql(),
+                SqlExecutionOperation.EXECUTE, null, request.getApplyId());
+    }
+
+    private SqlExecutionContext executionContext(Long dataSourceId, String databaseName, String schemaName,
+            String tableName, String sql) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        return new SqlExecutionContext(
+                connectInfo == null ? dataSourceId : connectInfo.getDataSourceId(),
+                connectInfo == null ? null : connectInfo.getDbType(), databaseName,
+                schemaName, tableName, sql,
+                SqlExecutionOperation.EXECUTE, null);
+    }
+
+    private String tableQuerySql(DbDlExecuteRequest param, String type) {
+        if (isDocumentOrKeyValueStore(type)) {
+            return "SELECT * FROM " + param.getTableName();
+        }
+        return Chat2DBContext.getSqlBuilder().dql().buildSelectTable(param.getDatabaseName(),
+                param.getSchemaName(), param.getTableName());
+    }
+
+    private boolean isDocumentOrKeyValueStore(String type) {
+        return DataSourceTypeEnum.MONGODB.getCode().equalsIgnoreCase(type)
+                || DataSourceTypeEnum.REDIS.getCode().equalsIgnoreCase(type);
     }
 
     private ExecuteResponse redisExecuteUpdate(String command) {

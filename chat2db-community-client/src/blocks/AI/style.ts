@@ -310,6 +310,61 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       text-overflow: ellipsis;
     `,
 
+    userKnowledgeList: css`
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+      max-width: 100%;
+    `,
+
+    userKnowledgeItem: css`
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      max-width: 260px;
+      min-width: 0;
+      min-height: 26px;
+      padding: 3px 8px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      line-height: 18px;
+    `,
+
+    userKnowledgeType: css`
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.72;
+    `,
+
+    userKnowledgeName: css`
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `,
+
+    userKnowledgeTerm: css`
+      color: ${token.colorInfoText};
+      border-color: ${token.colorInfoBorder};
+      background: ${token.colorInfoBg};
+    `,
+
+    userBusinessLogic: css`
+      color: ${token.colorSuccessText};
+      border-color: ${token.colorSuccessBorder};
+      background: ${token.colorSuccessBg};
+    `,
+
+    userSqlTemplate: css`
+      color: ${token.colorWarningText};
+      border-color: ${token.colorWarningBorder};
+      background: ${token.colorWarningBg};
+    `,
+
     userBubble: css`
       max-width: 100%;
       white-space: pre-wrap;

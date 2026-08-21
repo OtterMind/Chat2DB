@@ -16,7 +16,7 @@ export default {
   'license.certificateDescription': '必要な情報を入力すると、システムが自動的にデバイス証明書を生成します。',
   'license.certificateWarning': '一度生成すると、変更することはできません',
   'license.licenseTooltip':
-    '現在、Chat2DB Local永久版のみデバイスをアクティベートするためのデバイス証明書が必要です。他の注文はデバイス証明書なしでアクティベートできます',
+    'オフラインデスクトップ永久版のみデバイスのアクティベーションに証明書が必要です。その他の注文は証明書なしでアクティベートできます',
   'license.selectOrder': '注文を選択してください',
   'license.deviceNameLabel': 'デバイス名',
   'license.deviceNameTooltip': 'デバイス名のメモ',
@@ -36,7 +36,7 @@ export default {
   'license.copyButton': 'デバイス証明書をコピー',
   'license.offlineUsageNotes': 'オフライン使用に関する注意事項',
   'license.viewActivationProcess': 'オフラインアクティベーションプロセスを表示',
-  'license.permanentVersion': 'Chat2DB Local永久版',
+  'license.permanentVersion': 'オフラインデスクトップ永久版',
   'license.offlineActivationIntro': 'オフラインアクティベーションプロセスについて不明な点がある場合、',
   'license.deviceLimit': 'ライセンスのデバイスバインド制限に達しました',
   'license.licenseNotSupported':

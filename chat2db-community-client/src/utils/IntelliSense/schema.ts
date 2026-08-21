@@ -1,5 +1,5 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
-import { SORT_TEXT } from '@/components/MonacoEditor/providers/completionProvider';
+import { SORT_TEXT } from '@/components/SQLEditor/type';
 
 export const resetSenseSchema = () => {
   intelliSenseSchema.dispose();

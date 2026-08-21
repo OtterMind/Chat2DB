@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { StateCreator } from 'zustand';
 import { devtools, persist, PersistOptions } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
@@ -6,18 +6,16 @@ import { createWithEqualityFn } from 'zustand/traditional';
 import { AIState, initialState } from './initialState';
 import { CascaderAction, createCascaderAction } from './slices/cascader/action';
 import { CascaderState, initCascaderState } from './slices/cascader/initialState';
-import { createDataCollectionAction, DataCollectionAction } from './slices/dataCollection/action';
 import { createModelAction, ModelAction } from './slices/model/action';
 import { initModelState, ModelState, SelectedModelOption } from './slices/model/initialState';
 import { createPanelAction, PanelAction } from './slices/panel/action';
 
-export type AIAction = PanelAction & DataCollectionAction & ModelAction & CascaderAction;
+export type AIAction = PanelAction & ModelAction & CascaderAction;
 export type AIStore = AIState & AIAction & ModelState & CascaderState;
 
 const createStore: StateCreator<AIStore, [['zustand/devtools', never]], [], AIStore> = (...parameters) => ({
   ...initialState,
   ...createPanelAction(...parameters),
-  ...createDataCollectionAction(...parameters),
   ...initModelState,
   ...createModelAction(...parameters),
   ...initCascaderState,
@@ -27,7 +25,7 @@ const createStore: StateCreator<AIStore, [['zustand/devtools', never]], [], AISt
 type GlobalPersist = Pick<AIStore, 'size'>;
 
 const persistOptions: PersistOptions<AIStore, GlobalPersist> = {
-  name: runtimeEditionConfig.aiStoreName,
+  name: clientRuntime.aiStoreName,
   version: 3,
   partialize: (state) => ({
     size: state.size,
@@ -59,7 +57,7 @@ const persistOptions: PersistOptions<AIStore, GlobalPersist> = {
 export const useAIStore = createWithEqualityFn<AIStore>()(
   persist(
     devtools(createStore, {
-      name: runtimeEditionConfig.aiStoreName,
+      name: clientRuntime.aiStoreName,
     }),
     persistOptions,
   ),

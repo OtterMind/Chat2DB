@@ -1,4 +1,4 @@
-import { UpdatedStatus } from './status';
+import { UpdatedStatus } from '@/constants/settings';
 import type { IUpdateDetail } from '@/typings/settings';
 
 type CheckUpdateRequest = () => Promise<IUpdateDetail>;

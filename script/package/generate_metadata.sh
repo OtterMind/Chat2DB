@@ -12,15 +12,12 @@ set -euo pipefail
 #
 # Outputs (in output_directory, defaulting to source_directory):
 #   github-version.json   GitHub Release manifest (published as version.json)
-#   cdn-version.json      CDN bridge compatibility manifest
 #   local_version.json    Copy of github-version.json for packaged clients
 #   latest_version.json   lightweight GitHub Release latest pointer
-#   cdn-latest-version.json legacy CDN latest-version pointer (bridge only)
 #   receipt.json          Canonical artifact receipt with SHA-256 and sizes
 #
 # Environment:
 #   COMMUNITY_GITHUB_REPOSITORY   Default: OtterMind/Chat2DB
-#   CDN_BASE_URL                  Default: https://cdn.chat2db-ai.com/community/updates
 
 # --- 1. Argument validation ---
 if [[ "$#" -lt 2 ]]; then
@@ -34,7 +31,6 @@ SOURCE_DIR="$2"
 OUTPUT_DIR="${3:-$SOURCE_DIR}"
 
 COMMUNITY_GITHUB_REPOSITORY="${COMMUNITY_GITHUB_REPOSITORY:-OtterMind/Chat2DB}"
-CDN_BASE_URL="${CDN_BASE_URL:-${COMMUNITY_UPDATE_BASE_URL:-https://cdn.chat2db-ai.com/community/updates}}"
 
 # Check directories.
 if [[ ! -d "$SOURCE_DIR" ]]; then
@@ -77,8 +73,7 @@ for payload in "${PAYLOADS[@]}"; do
   fi
 done
 
-# --- 3. Build the shared files array (order matters) ---
-# File metadata is identical in GitHub and CDN manifests except for the URL.
+# --- 3. Build the files array (order matters) ---
 # Avoid associative arrays for bash 3.2 compatibility (macOS default shell).
 get_payload_id() {
   case "$1" in
@@ -151,27 +146,13 @@ github_manifest=$(jq -n \
     --argjson files "$github_files_array" \
     '{version: $version, releaseNotes: $releaseNotes, releasePageUrl: $releasePageUrl, forceUpdate: false, files: $files, launchCommand: null}')
 
-# --- 5. Render CDN bridge manifest ---
-cdn_files_array=$(echo "$json_files_array" | jq \
-    --arg prefix "${CDN_BASE_URL}/${VERSION}" \
-    '[.[] | .url = "\($prefix)/\(.serverFileName)"]')
-
-cdn_manifest=$(jq -n \
-    --arg version "$VERSION" \
-    --arg releaseNotes "Known issue fixes" \
-    --argjson files "$cdn_files_array" \
-    '{version: $version, releaseNotes: $releaseNotes, files: $files, launchCommand: null}')
-
-# --- 6. Write outputs ---
+# --- 5. Write outputs ---
 GITHUB_VERSION_FILE="$OUTPUT_DIR/github-version.json"
-CDN_VERSION_FILE="$OUTPUT_DIR/cdn-version.json"
 LOCAL_VERSION_FILE="$OUTPUT_DIR/local_version.json"
 LATEST_VERSION_FILE="$OUTPUT_DIR/latest_version.json"
-CDN_LATEST_VERSION_FILE="$OUTPUT_DIR/cdn-latest-version.json"
 RECEIPT_FILE="$OUTPUT_DIR/receipt.json"
 
 echo "$github_manifest" > "$GITHUB_VERSION_FILE"
-echo "$cdn_manifest" > "$CDN_VERSION_FILE"
 # Packaged clients receive the GitHub manifest as their local baseline.
 cp "$GITHUB_VERSION_FILE" "$LOCAL_VERSION_FILE"
 
@@ -186,13 +167,6 @@ latest_json=$(jq -n \
     '{version: $version, metadataSha256: $metadataSha256, releaseNotes: $releaseNotes, releasePageUrl: $releasePageUrl, forceUpdate: false}')
 echo "$latest_json" > "$LATEST_VERSION_FILE"
 
-# CDN bridge pointer (legacy schema, frozen at bridge release N).
-cdn_latest_json=$(jq -n \
-    --arg latestVersion "$VERSION" \
-    --arg metadataUrl "${CDN_BASE_URL}/${VERSION}/version.json" \
-    '{latestVersion: $latestVersion, metadataUrl: $metadataUrl, forceUpdate: false}')
-echo "$cdn_latest_json" > "$CDN_LATEST_VERSION_FILE"
-
 # Canonical artifact receipt.
 local_manifest_sha256=$(get_sha256 "$LOCAL_VERSION_FILE")
 receipt_json=$(jq -n \
@@ -203,28 +177,9 @@ receipt_json=$(jq -n \
     '{version: $version, files: $files, manifestSha256: $manifestSha256, localManifestSha256: $localManifestSha256}')
 echo "$receipt_json" > "$RECEIPT_FILE"
 
-# --- 7. Dual manifest identity check ---
-# Normalize only approved differences:
-#   - payload URLs (host/path prefix)
-#   - GitHub-only top-level fields: releasePageUrl, forceUpdate
-# Then prove the remaining semantic fields are structurally identical.
-normalized_equal=$(jq -n \
-    --slurpfile github "$GITHUB_VERSION_FILE" \
-    --slurpfile cdn "$CDN_VERSION_FILE" \
-    '($github[0] | del(.releasePageUrl, .forceUpdate) | .files |= map(del(.url)))
-     ==
-     ($cdn[0] | .files |= map(del(.url)))')
-
-if [[ "$normalized_equal" != "true" ]]; then
-    echo "Error: GitHub and CDN manifests differ beyond approved fields." >&2
-    exit 1
-fi
-
 echo ""
 echo "Success: manifests and receipt generated in $OUTPUT_DIR"
 echo "  GitHub manifest:  $GITHUB_VERSION_FILE"
-echo "  CDN manifest:     $CDN_VERSION_FILE"
 echo "  Local manifest:   $LOCAL_VERSION_FILE"
 echo "  GitHub pointer:   $LATEST_VERSION_FILE"
-echo "  CDN pointer:      $CDN_LATEST_VERSION_FILE"
 echo "  Receipt:          $RECEIPT_FILE"

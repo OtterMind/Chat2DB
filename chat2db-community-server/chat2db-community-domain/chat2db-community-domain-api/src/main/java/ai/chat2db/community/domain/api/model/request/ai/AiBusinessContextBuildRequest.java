@@ -1,15 +1,18 @@
 package ai.chat2db.community.domain.api.model.request.ai;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 public class AiBusinessContextBuildRequest {
 
-    @NotNull
     private Long dataSourceId;
 
     private String databaseName;
 
     private String schemaName;
+
+    private List<AiSelectedKnowledge> selectedKnowledge = new ArrayList<>();
 }

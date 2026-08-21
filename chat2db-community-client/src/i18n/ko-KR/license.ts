@@ -16,7 +16,7 @@ export default {
   'license.certificateDescription': '해당 정보를 입력하면 시스템이 기기 인증서를 자동으로 생성합니다,',
   'license.certificateWarning': '생성한 후에는 수정할 수 없습니다',
   'license.licenseTooltip':
-    '현재 Chat2DB Local 영구 버전 주문만 기기 활성화를 위한 기기 인증서를 생성해야 하며, 다른 주문은 기기 인증서 없이 활성화할 수 있습니다',
+    '오프라인 데스크톱 영구 버전 주문만 기기 활성화를 위한 인증서가 필요하며, 다른 주문은 인증서 없이 활성화할 수 있습니다',
   'license.selectOrder': '주문을 선택해 주세요',
   'license.deviceNameLabel': '기기 이름',
   'license.deviceNameTooltip': '기기 이름 메모를 추가하세요',
@@ -36,7 +36,7 @@ export default {
   'license.copyButton': '기기 인증서 복사',
   'license.offlineUsageNotes': '오프라인 사용 안내',
   'license.viewActivationProcess': '클릭하여 오프라인 활성화 절차 보기',
-  'license.permanentVersion': 'Chat2DB Local 평생 버전',
+  'license.permanentVersion': '오프라인 데스크톱 평생 버전',
   'license.offlineActivationIntro': '오프라인 활성화 절차가 익숙하지 않다면,',
   'license.deviceLimit': '라이선스의 기기 연결 한도에 도달했습니다',
   'license.licenseNotSupported':

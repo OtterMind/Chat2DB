@@ -1,6 +1,6 @@
 import { StateCreator } from 'zustand';
 import { AIStore } from '../../store';
-import AIService from '@/service/ai';
+import aiStreamService from '@/service/aiStream';
 import { SelectedModelOption } from './initialState';
 
 export interface ModelAction {
@@ -11,11 +11,11 @@ export interface ModelAction {
 
 export const createModelAction: StateCreator<AIStore, [['zustand/devtools', never]], [], ModelAction> = (set, get) => ({
   getModelList: async () => {
-    const list = await AIService.getModelList();
-    const modelList = (list || []).map((i) => ({
-      label: i.displayName,
-      value: i.modelName,
-      isDefault: i.isDefault,
+    const options = await aiStreamService.getModelOptions();
+    const modelList = (options || []).map((option) => ({
+      label: option.label,
+      value: option.value,
+      isDefault: !!option.defaultOption,
     }));
 
     set({ modelList });

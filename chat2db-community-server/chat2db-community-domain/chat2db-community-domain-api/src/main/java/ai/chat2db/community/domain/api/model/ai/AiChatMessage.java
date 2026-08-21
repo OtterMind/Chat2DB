@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.model.ai;
 
+import ai.chat2db.community.domain.api.model.request.ai.AiSelectedKnowledge;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -20,6 +21,8 @@ public class AiChatMessage {
     private String reasoningContent;
 
     private List<ChatAttachment> attachments = new ArrayList<>();
+
+    private List<AiSelectedKnowledge> selectedKnowledge = new ArrayList<>();
 
     private LocalDateTime gmtCreate;
 }

@@ -71,8 +71,8 @@ const TitleRender = (props: IProps) => {
     }
   };
 
-  const handleDoubleTreeNode = () => {
-    const flag = treeDropdownRef.current?.handleDoubleClick(nodeData as any);
+  const handleDoubleTreeNode = async () => {
+    const flag = await treeDropdownRef.current?.handleDoubleClick(nodeData as any);
     // The dropdown returns true after handling the double-click, so no further action is needed.
     // nodeData.isLeaf represents leaf nodes and does not need to handle double-click events.
     if (flag || nodeData.isLeaf) {
@@ -224,8 +224,7 @@ const TitleRender = (props: IProps) => {
 
     if (
       nodeData.treeNodeType === TreeNodeType.GROUP ||
-      nodeData.treeNodeType === TreeNodeType.SAVE_CONSOLE ||
-      nodeData.treeNodeType === TreeNodeType.AI_DATA_COLLECTION
+      nodeData.treeNodeType === TreeNodeType.SAVE_CONSOLE
     ) {
       return (
         <EditText

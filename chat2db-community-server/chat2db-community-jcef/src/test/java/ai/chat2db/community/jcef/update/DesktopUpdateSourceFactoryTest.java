@@ -41,18 +41,16 @@ class DesktopUpdateSourceFactoryTest {
         System.setProperty(DesktopUpdateSourceFactory.DEVELOPMENT_DIRECTORY_PROPERTY,
                 temporaryDirectory.toString());
 
-        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create());
+        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create(true, true, true));
     }
 
     @Test
     void nonCommunityOrNonDesktopRuntimeIgnoresDevelopmentDirectory() {
         System.setProperty(DesktopUpdateSourceFactory.DEVELOPMENT_DIRECTORY_PROPERTY,
                 temporaryDirectory.toString());
-        setRuntime("pro", "DESKTOP", "dev");
-        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create());
+        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create(false, true, false));
 
-        setRuntime("community", "WEB", "dev");
-        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create());
+        assertInstanceOf(GitHubReleaseUpdateSource.class, DesktopUpdateSourceFactory.create(true, false, false));
     }
 
     @Test

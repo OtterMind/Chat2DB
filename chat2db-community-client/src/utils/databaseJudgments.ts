@@ -44,7 +44,6 @@ export const getDatabaseSupport = (databaseType?: DatabaseTypeInput) => {
   return {
     supportDatabase: databaseInfo?.supportDatabase || false,
     supportSchema: databaseInfo?.supportSchema || false,
-    needAiDataCollections: databaseInfo?.needAiDataCollections,
   };
 };
 

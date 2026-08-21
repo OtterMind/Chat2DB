@@ -2,8 +2,8 @@
 #
 # validate_release_bundle.sh
 #
-# Validate the assembled Community desktop release bundle before any Release or
-# CDN write happens. Exits non-zero on any contract violation.
+# Validate the assembled Community desktop release bundle before any Release
+# write happens. Exits non-zero on any contract violation.
 #
 # Required environment:
 #   VERSION                    numeric SemVer, e.g. 5.4.0
@@ -11,9 +11,6 @@
 #   REPO                       GitHub repository, e.g. OtterMind/Chat2DB
 #   CANONICAL_ARTIFACT_DIR     path to the downloaded canonical artifact
 #   PLATFORM_ARTIFACTS_DIR     path to downloaded native installer artifacts
-#   IS_BRIDGE_N                "true" only for the bridge release
-#   BRIDGE_VERSION             optional, the configured bridge version
-#   CDN_BASE_URL               legacy CDN base URL for bridge manifest check
 #   ALLOWED_EXTRA_RELEASE_ASSETS  whitespace-separated list of allowed extras
 #
 # On success, creates release-assets/ containing the required Release Assets.
@@ -29,9 +26,6 @@ TAG_NAME="${TAG_NAME:-}"
 REPO="${REPO:-OtterMind/Chat2DB}"
 CANONICAL_ARTIFACT_DIR="${CANONICAL_ARTIFACT_DIR:-}"
 PLATFORM_ARTIFACTS_DIR="${PLATFORM_ARTIFACTS_DIR:-}"
-IS_BRIDGE_N="${IS_BRIDGE_N:-false}"
-BRIDGE_VERSION="${BRIDGE_VERSION:-}"
-CDN_BASE_URL="${CDN_BASE_URL:-https://cdn.chat2db-ai.com/community/updates}"
 ALLOWED_EXTRA_RELEASE_ASSETS="${ALLOWED_EXTRA_RELEASE_ASSETS:-}"
 
 if [ -z "${VERSION}" ] || [ -z "${TAG_NAME}" ] || [ -z "${CANONICAL_ARTIFACT_DIR}" ] || [ -z "${PLATFORM_ARTIFACTS_DIR}" ]; then
@@ -289,54 +283,6 @@ for found in "${found_assets[@]}"; do
   fi
   fail "unlisted extra asset: ${found}"
 done
-
-# --- 11. Bridge N: validate GitHub/CDN manifest allowed differences ---------
-if [ "${IS_BRIDGE_N}" = "true" ]; then
-  echo "[check] bridge N GitHub/CDN manifest equivalence"
-  cdn_manifest="${CANONICAL_ARTIFACT_DIR}/cdn-version.json"
-  if [ ! -f "${cdn_manifest}" ]; then
-    # Generate a CDN manifest from the GitHub manifest for validation.
-    cdn_manifest="$(mktemp)"
-    trap 'rm -f "${cdn_manifest}"' EXIT
-    jq --arg base "${CDN_BASE_URL}/${VERSION}" \
-      'del(.releasePageUrl, .forceUpdate) | .files |= map(.url = "\($base)/\(.serverFileName)")' \
-      "${github_manifest}" > "${cdn_manifest}"
-  fi
-
-  # Compare legacy semantic fields.
-  for field in version releaseNotes; do
-    gh_value="$(jq -r ".${field} // empty" "${github_manifest}")"
-    cdn_value="$(jq -r ".${field} // empty" "${cdn_manifest}")"
-    if [ "${gh_value}" != "${cdn_value}" ]; then
-      fail "bridge manifest ${field} mismatch: GitHub=${gh_value} CDN=${cdn_value}"
-    fi
-  done
-
-  gh_files="$(jq -c '.files | map({id, serverFileName, localTargetName, sha256, fileSizeByte, type, deleted})' "${github_manifest}")"
-  cdn_files="$(jq -c '.files | map({id, serverFileName, localTargetName, sha256, fileSizeByte, type, deleted})' "${cdn_manifest}")"
-  if [ "${gh_files}" != "${cdn_files}" ]; then
-    fail "bridge manifest semantic file fields differ"
-  fi
-
-  # Verify CDN URLs.
-  while IFS= read -r payload; do
-    payload_id="$(payload_metadata_id "${payload}")"
-    url="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .url' "${cdn_manifest}")"
-    server_name="$(jq -r --arg id "${payload_id}" '.files[] | select(.id == $id) | .serverFileName' "${cdn_manifest}")"
-    expected_url="${CDN_BASE_URL}/${VERSION}/${server_name}"
-    if [ "${url}" != "${expected_url}" ]; then
-      fail "bridge CDN payload URL mismatch for ${payload}: ${url} != ${expected_url}"
-    fi
-  done <<<"$(printf '%s\n' chat2db-community.jar lib.zip dist.zip)"
-
-  # GitHub-only fields must be absent from CDN manifest.
-  if jq -e 'has("releasePageUrl")' "${cdn_manifest}" >/dev/null; then
-    fail "CDN manifest must not contain releasePageUrl"
-  fi
-  if jq -e 'has("forceUpdate")' "${cdn_manifest}" >/dev/null; then
-    fail "CDN manifest must not contain forceUpdate"
-  fi
-fi
 
 echo "[done] release bundle validated"
 echo "[info] release-assets:"

@@ -44,6 +44,7 @@ import { IBoundInfo } from '@/typings';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 import { getSqlCompletionContextId } from './sqlCompletionContext';
+import { isExpectedSqlCompletionPermissionError } from './sqlCompletionRequestError';
 
 const triggerCharacters = [' ', '.', ',', '(', ')', '[', ']', '{', '}'];
 const ACTIVATE_SNIPPET_SLOT_COMMAND = 'chat2db.sqlCompletion.activateSnippetSlot';
@@ -646,7 +647,9 @@ class CompletionProviderManager {
         activeSnippetSlot,
       });
     } catch (error) {
-      console.error('Error fetching tips:', error);
+      if (!isExpectedSqlCompletionPermissionError(error)) {
+        console.error('Error fetching tips:', error);
+      }
       return null;
     }
   }

@@ -9,6 +9,7 @@ export default {
   'team.nav.permission.authorization': 'Authorization List',
   'team.nav.permission.apply': 'Application List',
   'team.nav.sqlAudit': 'SQL Audit',
+  'team.nav.desensitize': 'Data Masking',
 
   // Team Settings
   'team.setting.basic': 'Basic Information',
@@ -179,6 +180,15 @@ export default {
   'team.invite.success.content1': 'Submission successful',
   'team.invite.success.content2': 'Please wait for administrator approval',
   'team.invite.success.finish': 'Finish',
+
+  'team.desensitize.add.title': 'Add Masking Rules',
+  'team.desensitize.field.datasource': 'Data Source',
+  'team.desensitize.field.database': 'Database',
+  'team.desensitize.field.schema': 'Schema',
+  'team.desensitize.field.table': 'Table',
+  'team.desensitize.field.columns': 'Columns',
+  'team.desensitize.field.type': 'Masking Rule',
+  'team.desensitize.table.databaseSchema': 'Database / Schema',
 
   'team.permission.modal.title': 'Permission Restricted',
   'team.permission.modal.OkText': 'Request Permission',

@@ -22,7 +22,6 @@ Environment:
   SKIP_BACKEND=true             Skip Maven backend build.
   SKIP_FRONTEND=true            Skip frontend build.
   COMMUNITY_GITHUB_REPOSITORY   Default: OtterMind/Chat2DB
-  CDN_BASE_URL                  Default: https://cdn.chat2db-ai.com/community/updates
 
 Examples:
   script/package/build_canonical_payload.sh 5.4.0
@@ -249,10 +248,8 @@ rm -f \
   "${CANONICAL_ARTIFACT_DIR}/dist.zip" \
   "${CANONICAL_ARTIFACT_DIR}/version.json" \
   "${CANONICAL_ARTIFACT_DIR}/github-version.json" \
-  "${CANONICAL_ARTIFACT_DIR}/cdn-version.json" \
   "${CANONICAL_ARTIFACT_DIR}/local_version.json" \
   "${CANONICAL_ARTIFACT_DIR}/latest_version.json" \
-  "${CANONICAL_ARTIFACT_DIR}/cdn-latest-version.json" \
   "${CANONICAL_ARTIFACT_DIR}/receipt.json" \
   "${CANONICAL_ARTIFACT_DIR}/updater.jar"
 

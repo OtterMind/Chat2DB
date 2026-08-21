@@ -5,8 +5,10 @@ import ai.chat2db.community.domain.api.model.request.db.DbSchemaOperationRequest
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDatabaseCreateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDatabaseQueryAllRequest;
+import ai.chat2db.community.domain.api.model.metadata.extension.MetadataAccessContext;
 import ai.chat2db.community.domain.api.service.db.IDbDatabaseService;
 import ai.chat2db.community.domain.core.cache.CacheManage;
+import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
 import ai.chat2db.community.domain.core.util.ListSorter;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.community.domain.api.model.metadata.Database;
@@ -17,6 +19,7 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
@@ -33,6 +36,17 @@ import static ai.chat2db.community.domain.core.cache.CacheKey.*;
 @Service
 public class DbDatabaseServiceImpl implements IDbDatabaseService {
 
+    private final MetadataAccessPolicyManager metadataAccessPolicyManager;
+
+    public DbDatabaseServiceImpl() {
+        this(new MetadataAccessPolicyManager(List.of()));
+    }
+
+    @Autowired
+    public DbDatabaseServiceImpl(MetadataAccessPolicyManager metadataAccessPolicyManager) {
+        this.metadataAccessPolicyManager = metadataAccessPolicyManager;
+    }
+
     @Override
     public List<Database> queryAll(DbDatabaseQueryAllRequest param) {
         try {
@@ -46,7 +60,9 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
             if (Objects.nonNull(connectInfo) && !"REDIS".equalsIgnoreCase(connectInfo.getDbType())) {
                 ListSorter.sortByKey(databases, Database::getName);
             }
-            return databases;
+            String dbType = StringUtils.defaultIfBlank(param.getDbType(), currentDbType());
+            return metadataAccessPolicyManager.filter(databases,
+                    database -> resource(param.getDataSourceId(), dbType, database.getName(), null, null, null));
         } catch (Exception e) {
             if (!param.isRefresh()) {
                 log.error("database.list.fallback", e);
@@ -68,7 +84,9 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
                         return getSchemaList(param.getDataBaseName(), connection);
                     });
             ListSorter.sortByKey(schemas, Schema::getName);
-            return schemas;
+            return metadataAccessPolicyManager.filter(schemas,
+                    schema -> resource(param.getDataSourceId(), currentDbType(), param.getDataBaseName(),
+                            schema.getName(), null, null));
         } catch (Exception e) {
             if (!param.isRefresh()) {
                 log.error("schema.list.fallback", e);
@@ -103,7 +121,7 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
                     return metaSchema;
                 });
 
-        return ms;
+        return filterMetaSchema(param.getDataSourceId(), ms);
     }
 
     @Override
@@ -173,6 +191,63 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
         if (num != -1 && num != 0) {
             Collections.swap(schemas, num, 0);
         }
+    }
+
+    private MetaSchema filterMetaSchema(Long dataSourceId, MetaSchema source) {
+        if (source == null || metadataAccessPolicyManager.isEmpty()) {
+            return source;
+        }
+        String dbType = currentDbType();
+        MetaSchema filtered = new MetaSchema();
+        if (!CollectionUtils.isEmpty(source.getDatabases())) {
+            List<Database> databases = metadataAccessPolicyManager.filter(source.getDatabases(),
+                    database -> resource(dataSourceId, dbType, database.getName(), null, null, null));
+            filtered.setDatabases(databases.stream().map(database -> {
+                Database copy = copyDatabase(database);
+                if (!CollectionUtils.isEmpty(database.getSchemas())) {
+                    copy.setSchemas(metadataAccessPolicyManager.filter(database.getSchemas(),
+                            schema -> resource(dataSourceId, dbType, database.getName(), schema.getName(), null,
+                                    null)));
+                }
+                return copy;
+            }).toList());
+        }
+        if (!CollectionUtils.isEmpty(source.getSchemas())) {
+            filtered.setSchemas(metadataAccessPolicyManager.filter(source.getSchemas(),
+                    schema -> resource(dataSourceId, dbType, schema.getDatabaseName(), schema.getName(), null,
+                            null)));
+        }
+        return filtered;
+    }
+
+    private Database copyDatabase(Database source) {
+        Database copy = new Database();
+        copy.setName(source.getName());
+        copy.setComment(source.getComment());
+        copy.setCharset(source.getCharset());
+        copy.setCollation(source.getCollation());
+        copy.setOwner(source.getOwner());
+        copy.setSystem(source.isSystem());
+        copy.setSchemas(source.getSchemas());
+        return copy;
+    }
+
+    private MetadataAccessContext resource(Long dataSourceId, String dbType, String databaseName,
+            String schemaName, String tableName, String columnName) {
+        return MetadataAccessContext.builder()
+                .dataSourceId(dataSourceId)
+                .dbType(dbType)
+                .databaseName(databaseName)
+                .schemaName(schemaName)
+                .tableName(tableName)
+                .columnName(columnName)
+                .operationType("SELECT")
+                .build();
+    }
+
+    private String currentDbType() {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        return connectInfo == null ? null : connectInfo.getDbType();
     }
 
 }

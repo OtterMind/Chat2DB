@@ -1,6 +1,6 @@
 import EditorChartModal, { EditChartModalRef } from '@/blocks/BI/ChartCardBox/EditorChartModal';
 import { chartDetailNormalization } from '@/blocks/BI/utils/dataTreating';
-import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
+import clientExtension from '@client-extension';
 import i18n from '@/i18n';
 import { createChart } from '@/service/dashboard';
 import { useDashboardStore } from '@/store/dashboard/store';
@@ -9,7 +9,7 @@ import { EditText, Empty, EmptyImage, Icon, IconButton } from '@chat2db/ui';
 import { useFullscreen } from 'ahooks';
 import { Flex, Popover } from 'antd';
 import { ChevronDown, LayoutDashboard, Plus } from 'lucide-react';
-import { lazy, memo, Suspense, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import ChartCardList, { ChartCardListRef } from '../ChartCardList';
 import DashboardMenuList from '../DashboardMenuList';
 import { useStyles } from './style';
@@ -17,8 +17,6 @@ import { useStyles } from './style';
 interface IProps {
   isShare?: boolean;
 }
-
-const DashboardCommercialActions = lazy(() => import('./DashboardCommercialActions'));
 
 export default memo<IProps>((props) => {
   const { isShare = false } = props;
@@ -38,7 +36,6 @@ export default memo<IProps>((props) => {
   const draggableModalAcceptPlace = useRef<HTMLDivElement>(null);
 
   const { styles } = useStyles();
-  const capabilities = useRuntimeEditionCapabilities();
   const dashboardContentRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, { enterFullscreen, exitFullscreen }] = useFullscreen(dashboardContentRef);
 
@@ -93,8 +90,10 @@ export default memo<IProps>((props) => {
     setSettingDashboard(currentDashboard);
   };
 
-  const showCommercialDashboardActions =
-    isEditPermission && (capabilities.dashboardShare || capabilities.dashboardHostedAiGenerate);
+  const dashboardActions =
+    isEditPermission && currentDashboard?.id
+      ? clientExtension.dashboardActions?.({ dashboardId: currentDashboard.id })
+      : null;
 
   if (!currentDashboard) {
     return (
@@ -174,11 +173,7 @@ export default memo<IProps>((props) => {
                 onClick={openSettingModal}
               />
             )}
-            {showCommercialDashboardActions && (
-              <Suspense fallback={null}>
-                <DashboardCommercialActions dashboardId={currentDashboard.id} />
-              </Suspense>
-            )}
+            {dashboardActions}
             {isFullscreen ? (
               <IconButton
                 code="icon-exit-full-screen"

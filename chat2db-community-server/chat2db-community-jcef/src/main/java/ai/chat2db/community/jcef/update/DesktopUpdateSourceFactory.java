@@ -16,9 +16,12 @@ final class DesktopUpdateSourceFactory {
     }
 
     static UpdateSource create() {
+        return create(ConfigUtils.isCommunity(), ConfigUtils.isDesktop(), ConfigUtils.isRelease());
+    }
+
+    static UpdateSource create(boolean communityRuntime, boolean desktopRuntime, boolean releaseRuntime) {
         String configuredDirectory = System.getProperty(DEVELOPMENT_DIRECTORY_PROPERTY);
-        boolean developmentCommunityDesktop = ConfigUtils.isCommunity() && ConfigUtils.isDesktop()
-                && !ConfigUtils.isRelease();
+        boolean developmentCommunityDesktop = communityRuntime && desktopRuntime && !releaseRuntime;
         if (configuredDirectory != null && !configuredDirectory.isBlank() && developmentCommunityDesktop) {
             Path directory = Path.of(configuredDirectory.trim()).normalize();
             if (!directory.isAbsolute()) {

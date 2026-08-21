@@ -228,7 +228,7 @@ export default {
   'setting.nav.editorFontSize': 'エディタのフォントサイズ',
   'setting.nav.editorFontSizeDescribe': 'SQLエディタ内のフォントサイズを設定します',
   'setting.apiKeys.describe':
-    'Chat2DB Proは、APIを使用してAIサービスを提供します。詳細な使用方法については、ドキュメントを参照してください。{1} APIキーを他のクライアントやコードに公開しないでください。',
+    '{PRODUCT_NAME}は、APIを使用してAIサービスを提供します。詳細な使用方法については、ドキュメントを参照してください。{1} APIキーを他のクライアントやコードに公開しないでください。',
   'setting.apiKeys.CreateApiKey': 'APIキーを追加',
   'setting.apiKeys.addApiDoc': '《API呼び出し方法》',
   'setting.apiKeys.CreateSuccess': 'APIキーが作成されました',

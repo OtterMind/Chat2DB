@@ -35,22 +35,18 @@ import {
 assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.MYSQL), {
   supportDatabase: true,
   supportSchema: false,
-  needAiDataCollections: undefined,
 });
 assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.ORACLE), {
   supportDatabase: false,
   supportSchema: true,
-  needAiDataCollections: undefined,
 });
 assert.deepEqual(getDatabaseSupport(undefined), {
   supportDatabase: false,
   supportSchema: false,
-  needAiDataCollections: undefined,
 });
 assert.deepEqual(getDatabaseSupport('oscar_db'), {
   supportDatabase: false,
   supportSchema: true,
-  needAiDataCollections: undefined,
 });
 
 assert.equal(canUseRoutineOperation(DatabaseTypeCode.MYSQL), true);

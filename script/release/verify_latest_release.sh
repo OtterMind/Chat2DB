@@ -66,9 +66,9 @@ if [ "${is_draft}" != "false" ]; then
   fail "Release ${TAG_NAME} is still a draft"
 fi
 
-is_latest="$(gh release view "${TAG_NAME}" --json isLatest --jq '.isLatest')"
-if [ "${is_latest}" != "true" ]; then
-  fail "Release ${TAG_NAME} is not marked Latest"
+latest_tag="$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')"
+if [ "${latest_tag}" != "${TAG_NAME}" ]; then
+  fail "Release ${TAG_NAME} is not Latest; GitHub reports ${latest_tag}"
 fi
 
 # --- 2. Required assets exist exactly once ----------------------------------

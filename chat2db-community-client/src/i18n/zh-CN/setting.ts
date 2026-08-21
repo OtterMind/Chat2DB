@@ -246,7 +246,7 @@ export default {
   'setting.nav.editorFontSize': '编辑器字体大小',
   'setting.nav.editorFontSizeDescribe': '设置SQL编辑器内字体大小',
   'setting.apiKeys.describe':
-    'Chat2DB Pro 提供API的方式调用AI服务，详细使用方式请查看文档, {1} 请勿将你的API key 暴露在其他客户端或者代码中。',
+    '{PRODUCT_NAME} 提供 API 方式调用 AI 服务，详细使用方式请查看文档，{1} 请勿将你的 API key 暴露在其他客户端或者代码中。',
   'setting.apiKeys.CreateApiKey': '创建API key',
   'setting.apiKeys.addApiDoc': '《API调用方式》',
   'setting.apiKeys.CreateSuccess': 'API key创建成功',

@@ -1,5 +1,7 @@
 package ai.chat2db.community.jcef.utils;
 
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentityProvider;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
@@ -12,9 +14,8 @@ public class UriUtil {
         System.out.println("---");
         System.out.println("Processing input: " + inputString);
         URI finalUri = null;
-        if (inputString != null && (inputString.startsWith("chat2db-pro://")
-                || inputString.startsWith("chat2db-local://")
-                || inputString.startsWith("chat2db-community://"))) {
+        String productProtocol = ProductRuntimeIdentityProvider.current().protocolScheme();
+        if (inputString != null && inputString.startsWith(productProtocol + "://")) {
             System.out.println("Input type: custom protocol URI");
             try {
                 finalUri = new URI(inputString);

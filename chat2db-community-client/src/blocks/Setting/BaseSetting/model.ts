@@ -14,15 +14,15 @@ export const languageOptions = [
   { value: KO_KR, label: '한국어' },
 ];
 
-export function getAvailableLanguageOptions(languageRegionRestricted: boolean, isCN: boolean) {
-  if (languageRegionRestricted && !isCN) {
+export function getAvailableLanguageOptions(restrictChineseOutsideChina: boolean, isCN: boolean) {
+  if (restrictChineseOutsideChina && !isCN) {
     return languageOptions.filter((item) => item.value !== ZH_CN);
   }
   return languageOptions;
 }
 
-export function resolveCurrentLanguage(language: LangType, languageRegionRestricted: boolean, isCN: boolean) {
-  if (languageRegionRestricted && !isCN && language === ZH_CN) {
+export function resolveCurrentLanguage(language: LangType, restrictChineseOutsideChina: boolean, isCN: boolean) {
+  if (restrictChineseOutsideChina && !isCN && language === ZH_CN) {
     return EN_US;
   }
   return language;

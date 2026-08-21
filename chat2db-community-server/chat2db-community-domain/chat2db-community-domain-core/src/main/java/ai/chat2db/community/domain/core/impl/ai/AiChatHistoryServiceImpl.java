@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
 import ai.chat2db.community.domain.api.model.ai.AiChatSession;
 import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiSelectedKnowledge;
 import ai.chat2db.community.domain.api.service.ai.IAiChatHistoryService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
@@ -64,7 +65,9 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         String content = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getContent();
         String reasoningContent = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getReasoningContent();
         List<ChatAttachment> attachments = addAiChatMessageRequest == null ? null : addAiChatMessageRequest.getAttachments();
-        return addMessageLocal(sessionId, userId, role, content, reasoningContent, attachments);
+        List<AiSelectedKnowledge> selectedKnowledge = addAiChatMessageRequest == null
+                ? null : addAiChatMessageRequest.getSelectedKnowledge();
+        return addMessageLocal(sessionId, userId, role, content, reasoningContent, attachments, selectedKnowledge);
     }
 
 
@@ -116,7 +119,8 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
 
     private synchronized AiChatMessage addMessageLocal(String sessionId, Long userId, String role, String content,
                                                        String reasoningContent,
-                                                       List<ChatAttachment> attachments) {
+                                                       List<ChatAttachment> attachments,
+                                                       List<AiSelectedKnowledge> selectedKnowledge) {
         if (!ownsSession(userId, sessionId)) {
             throw new BusinessException("ai.chat.history.sessionNotOwned", new Object[]{sessionId});
         }
@@ -128,6 +132,9 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         message.setReasoningContent(reasoningContent);
         if (attachments != null) {
             message.setAttachments(new ArrayList<>(attachments));
+        }
+        if (selectedKnowledge != null) {
+            message.setSelectedKnowledge(new ArrayList<>(selectedKnowledge));
         }
         message.setGmtCreate(LocalDateTime.now());
 

@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.service.ai;
 
+import ai.chat2db.community.domain.api.model.ai.AiBusinessContextResult;
 import ai.chat2db.community.domain.api.model.request.ai.AiBusinessContextBuildRequest;
 
 /**
@@ -8,10 +9,10 @@ import ai.chat2db.community.domain.api.model.request.ai.AiBusinessContextBuildRe
 public interface IAiBusinessContextService {
 
     /**
-     * Builds structured AI business context for a request.
+     * Resolves untrusted knowledge references and builds structured AI business context.
      *
      * @param aiBusinessContextBuildRequest AI business context build parameters.
-     * @return structured business context text.
+     * @return server-resolved context and the trusted knowledge snapshot.
      */
-    String buildStructuredContext(AiBusinessContextBuildRequest aiBusinessContextBuildRequest);
+    AiBusinessContextResult resolve(AiBusinessContextBuildRequest aiBusinessContextBuildRequest);
 }

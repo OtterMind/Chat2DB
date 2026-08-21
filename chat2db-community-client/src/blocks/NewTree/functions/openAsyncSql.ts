@@ -1,35 +1,38 @@
 import { WorkspaceTabType } from '@/constants';
 import sqlService from '@/service/sql';
 import { randomLargeLong } from '@/utils';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 
 function getObjectTabId(prefix: WorkspaceTabType, extraParams: any, objectName: string) {
-  return [prefix, extraParams.dataSourceId, extraParams.databaseName || '', extraParams.schemaName || '', objectName].join(':');
+  return [
+    prefix,
+    extraParams.dataSourceId,
+    extraParams.databaseName || '',
+    extraParams.schemaName || '',
+    objectName,
+  ].join(':');
 }
 
 export const openView = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
-  const { extraParams,originalTitle } = treeNodeData;
+  const { extraParams, originalTitle } = treeNodeData;
   const { databaseName, schemaName, dataSourceName } = extraParams;
-  const title = [originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
-  const popoverContent =
-    [databaseName, schemaName, originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: originalTitle });
   addWorkspaceTab({
     id: randomLargeLong(),
     title,
     type: WorkspaceTabType.ViewView,
     uniqueData: {
       ...extraParams,
-      popoverContent
+      popoverContent: title,
     },
   });
 };
 export const editView = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
-  const { extraParams,originalTitle } = treeNodeData;
+  const { extraParams, originalTitle } = treeNodeData;
   const { databaseName, schemaName, dataSourceName } = extraParams;
-  const title = [originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
-  const popoverContent =
-    [databaseName, schemaName, originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: originalTitle });
   addWorkspaceTab({
     id: getObjectTabId(WorkspaceTabType.VIEW, extraParams, originalTitle),
     type: WorkspaceTabType.VIEW,
@@ -54,18 +57,16 @@ export const editView = (props: { treeNodeData: any; addWorkspaceTab: any }) => 
             });
         });
       },
-      popoverContent,
+      popoverContent: title,
     },
   });
 };
 
 export const openFunction = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
-  const { extraParams,originalTitle } = treeNodeData;
+  const { extraParams, originalTitle } = treeNodeData;
   const { databaseName, schemaName, dataSourceName } = extraParams;
-  const title = [originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
-  const popoverContent =
-    [databaseName, schemaName, originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: originalTitle });
   addWorkspaceTab({
     id: getObjectTabId(WorkspaceTabType.FUNCTION, extraParams, originalTitle),
     type: WorkspaceTabType.FUNCTION,
@@ -89,18 +90,16 @@ export const openFunction = (props: { treeNodeData: any; addWorkspaceTab: any })
             });
         });
       },
-      popoverContent
+      popoverContent: title,
     },
   });
 };
 
 export const openProcedure = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
-  const { extraParams,originalTitle } = treeNodeData;
+  const { extraParams, originalTitle } = treeNodeData;
   const { databaseName, schemaName, dataSourceName } = extraParams;
-  const title = [originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
-  const popoverContent =
-    [databaseName, schemaName, originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: originalTitle });
   addWorkspaceTab({
     id: getObjectTabId(WorkspaceTabType.PROCEDURE, extraParams, originalTitle),
     type: WorkspaceTabType.PROCEDURE,
@@ -124,18 +123,16 @@ export const openProcedure = (props: { treeNodeData: any; addWorkspaceTab: any }
             });
         });
       },
-      popoverContent
+      popoverContent: title,
     },
   });
 };
 
 export const openTrigger = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
-  const { extraParams,originalTitle } = treeNodeData;
+  const { extraParams, originalTitle } = treeNodeData;
   const { databaseName, schemaName, dataSourceName } = extraParams;
-  const title = [originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
-  const popoverContent =
-    [databaseName, schemaName, originalTitle].filter(Boolean).join('.') + `[${dataSourceName}]`;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: originalTitle });
   addWorkspaceTab({
     id: getObjectTabId(WorkspaceTabType.TRIGGER, extraParams, originalTitle),
     type: WorkspaceTabType.TRIGGER,
@@ -159,7 +156,7 @@ export const openTrigger = (props: { treeNodeData: any; addWorkspaceTab: any }) 
             });
         });
       },
-      popoverContent
+      popoverContent: title,
     },
   });
 };

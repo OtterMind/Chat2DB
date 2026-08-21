@@ -29,7 +29,7 @@ export default {
   'price.text.upgradePlan': 'プランをアップグレード',
   'price.text.reorderPlan': 'プランを再注文',
   'price.text.unsubscribeSuccess': '退会成功',
-  'price.text.pricingPlans': 'Chat2DB Pro会員プラン',
+  'price.text.pricingPlans': '{PRODUCT_NAME}会員プラン',
   'price.text.welcome':
     '100万人以上の開発者が使用しているAIデータ開発及び分析プラットフォームで、データ管理をよりシンプルで、より効率的で、より楽しくします😎',
   'price.text.monthly': '月額',
@@ -73,7 +73,7 @@ export default {
   'price.text.upgradePackage': 'アップグレードパッケージ',
   'price.label.total': '合計',
   'price.text.selectPlan': 'アップグレードパッケージを選択してください',
-  'price.text.startFreeTitle': 'あなたの無料30日間 Chat2DB Proトライアルを開始！',
+  'price.text.startFreeTitle': '無料30日間の{PRODUCT_NAME}トライアルを開始！',
   'price.text.freePriceSuffix': '初月無料',
   'price.text.freeTrial': '',
   'price.text.thenPriceSuffix': 'その後',

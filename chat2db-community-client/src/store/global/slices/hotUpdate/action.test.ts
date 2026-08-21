@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import './action.test.setup';
-import { UpdatedStatus } from './status';
+import { UpdatedStatus } from '@/constants/settings';
 import { createCheckUpdateCoordinator } from './checkCoordinator';
 import {
   COMMUNITY_GITHUB_RELEASES_URL,
@@ -70,7 +70,7 @@ void (async () => {
 
     const failedUpdates: any[] = [];
     const failed = createCheckUpdateCoordinator(
-      async () => Promise.reject(new Error('CDN unavailable')),
+      async () => Promise.reject(new Error('GitHub Release unavailable')),
       (detail) => failedUpdates.push(detail),
     );
     assert.equal(await failed(), false);

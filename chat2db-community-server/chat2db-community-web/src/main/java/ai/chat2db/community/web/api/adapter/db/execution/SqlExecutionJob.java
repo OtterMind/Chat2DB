@@ -93,6 +93,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
                     request,
                     sqlOperationLogRecorder);
             DbStreamingExecuteRequest executeStreamingRequest = new DbStreamingExecuteRequest();
+            executeStreamingRequest.setExecutionId(request.getExecutionId());
             executeStreamingRequest.setDlExecuteRequest(param);
             executeStreamingRequest.setConsumer(logConsumer);
             executeStreamingRequest.setStatementListener(this);

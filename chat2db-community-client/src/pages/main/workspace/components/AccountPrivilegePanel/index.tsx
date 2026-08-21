@@ -171,6 +171,10 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   };
 
   useEffect(() => {
+    if (!dataSourceId) {
+      resetPreview();
+      return;
+    }
     loadCapability();
     loadDatabases();
     form.setFieldsValue({
@@ -193,6 +197,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [dataSourceId, uniqueData?.user, uniqueData?.host]);
 
   useEffect(() => {
+    if (!dataSourceId) {
+      return;
+    }
     if (watchedScope === AccountPrivilegeScope.GLOBAL) {
       form.setFieldsValue({ databaseName: undefined, tableName: undefined });
       return;
@@ -203,6 +210,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedDatabaseName, databaseOptions, uniqueData?.databaseName]);
 
   useEffect(() => {
+    if (!dataSourceId) {
+      return;
+    }
     if (watchedScope !== AccountPrivilegeScope.TABLE) {
       form.setFieldsValue({ tableName: undefined });
       setTableOptions([]);
@@ -213,6 +223,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedDatabaseName]);
 
   useEffect(() => {
+    if (!dataSourceId) {
+      return;
+    }
     if (
       watchedScope === AccountPrivilegeScope.TABLE &&
       tableOptions.length &&
@@ -223,6 +236,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedTableName, tableOptions]);
 
   useEffect(() => {
+    if (!dataSourceId) {
+      return;
+    }
     if (watchedActionType === AccountActionType.REVOKE_PRIVILEGE) {
       form.setFieldsValue({ grantOption: false });
     }
@@ -349,14 +365,20 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   };
 
   const openAccountModal = (actionType: AccountActionType) => {
+    setAccountActionType(actionType);
+    setAccountModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!accountModalOpen) {
+      return;
+    }
     accountForm.setFieldsValue({
       user: selectedAccount?.user,
       host: selectedAccount?.host,
       password: '',
     });
-    setAccountActionType(actionType);
-    setAccountModalOpen(true);
-  };
+  }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
 
   const submitAccountCommand = () => {
     if (!accountActionType) {
@@ -390,7 +412,12 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   };
 
   if (!dataSourceId) {
-    return <Empty description={i18n('workspace.text.pleaseSelectDataSource')} />;
+    return (
+      <>
+        <Form form={form} style={{ display: 'none' }} />
+        <Empty description={i18n('workspace.text.pleaseSelectDataSource')} />
+      </>
+    );
   }
 
   return (
@@ -405,7 +432,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       )}
       <div className={styles.body}>
         {!selectedAccount ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={i18n('workspace.databaseAccount.selectUserFromTree')} />
+          <>
+            <Form form={form} style={{ display: 'none' }} />
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={i18n('workspace.databaseAccount.selectUserFromTree')}
+            />
+          </>
         ) : (
           <section className={styles.editorPane}>
             <Space className={styles.accountActions}>

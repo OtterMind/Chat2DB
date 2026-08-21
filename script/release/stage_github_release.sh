@@ -29,6 +29,7 @@ fi
 
 export GH_TOKEN
 export GH_REPO
+RELEASE_TITLE="Chat2DB v${VERSION}"
 
 required_release_assets=(
   "latest_version.json"
@@ -97,6 +98,7 @@ if draft=$(gh release view "${TAG_NAME}" --json isDraft --jq '.isDraft' 2>/dev/n
     fail "Release ${TAG_NAME} is already published; refusing to replace assets"
   fi
   echo "[info] refreshing existing draft Release ${TAG_NAME}"
+  gh release edit "${TAG_NAME}" --title "${RELEASE_TITLE}"
   gh release upload "${TAG_NAME}" "${RELEASE_ASSETS_DIR}"/* --clobber
 else
   echo "[info] creating draft Release ${TAG_NAME}"
@@ -104,7 +106,11 @@ else
     --verify-tag \
     --draft \
     --generate-notes \
-    --title "Chat2DB Community ${VERSION}"
+    --title "${RELEASE_TITLE}"
+fi
+
+if [ "$(gh release view "${TAG_NAME}" --json name --jq '.name')" != "${RELEASE_TITLE}" ]; then
+  fail "Release title does not match ${RELEASE_TITLE}"
 fi
 
 # --- 3. Verify remote asset inventory matches local -------------------------

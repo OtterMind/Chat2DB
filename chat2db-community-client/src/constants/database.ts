@@ -140,7 +140,6 @@ export const databaseMap: {
     icon: 'icon-colourful-MongoDB',
     supportDatabase: false,
     supportSchema: true,
-    needAiDataCollections: false,
   },
   [DatabaseTypeCode.REDIS]: {
     name: 'Redis',
@@ -148,7 +147,6 @@ export const databaseMap: {
     icon: 'icon-colourful-Redis',
     supportDatabase: true,
     supportSchema: false,
-    needAiDataCollections: false,
   },
   [DatabaseTypeCode.SNOWFLAKE]: {
     name: 'Snowflake',

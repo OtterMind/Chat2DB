@@ -27,21 +27,22 @@ export const useStyles = createStyles(({ css, token }) => {
     communityAppBar: css`
       height: ${COMMUNITY_TITLE_BAR_HEIGHT}px;
     `,
-    communityActions: css`
+    titleBarActions: css`
+      position: absolute;
+      top: 0;
+      right: 0;
       display: flex;
       align-items: center;
-      flex: 1;
+      justify-content: flex-end;
       min-width: 0;
+      max-width: calc(50% - 12px);
       height: 100%;
       padding: 0 8px;
       box-sizing: border-box;
       z-index: 1;
     `,
-    communityMacWindowedActions: css`
-      padding-left: 78px;
-    `,
-    communityWindowsDesktopActions: css`
-      padding-right: 144px;
+    windowsDesktopTitleBarActions: css`
+      right: 144px;
     `,
     communityMenu: css`
       position: absolute;

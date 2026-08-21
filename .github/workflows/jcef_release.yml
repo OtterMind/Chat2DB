@@ -12,6 +12,10 @@ on:
         required: true
         type: string
 
+env:
+  COMMUNITY_GITHUB_REPOSITORY: OtterMind/Chat2DB
+  ALLOWED_EXTRA_RELEASE_ASSETS: ""
+
 concurrency:
   group: community-desktop-${{ github.ref }}-${{ inputs.version || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
@@ -130,9 +134,58 @@ jobs:
           except urllib.error.URLError as exc:
               print(f"::warning::Feishu start notification failed: {exc}")
 
+  build_update_payloads:
+    name: Build canonical updater payload
+    needs: resolve
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.22.2'
+          cache: yarn
+          cache-dependency-path: chat2db-community-client/yarn.lock
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y file jq zip
+
+      - name: Build canonical updater payload
+        shell: bash
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          COMMUNITY_GITHUB_REPOSITORY: ${{ env.COMMUNITY_GITHUB_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          script/package/build_canonical_payload.sh "${VERSION}"
+
+      - name: Upload canonical updater payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chat2db-community-canonical-payload-${{ needs.resolve.outputs.version }}
+          if-no-files-found: error
+          overwrite: true
+          path: jpackage/canonical-artifact/${{ needs.resolve.outputs.version }}
+
   build:
     name: Build ${{ matrix.artifact_name }}
-    needs: resolve
+    needs:
+      - resolve
+      - build_update_payloads
     environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
     strategy:
       fail-fast: false
@@ -222,11 +275,18 @@ jobs:
           echo "Using macOS signing identity: ${SIGN_ID}"
           echo "MAC_SIGNING_IDENTITY=${SIGN_ID}" >> "${GITHUB_ENV}"
 
+      - name: Download canonical updater payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: chat2db-community-canonical-payload-${{ needs.resolve.outputs.version }}
+          path: jpackage/canonical-artifact
+
       - name: Build Community desktop package
         shell: bash
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           TARGET: ${{ matrix.target }}
+          CANONICAL_ARTIFACT_DIR: ${{ github.workspace }}/jpackage/canonical-artifact/${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
           script/package/package-community-jcef.sh "${VERSION}" "${TARGET}"
@@ -321,10 +381,6 @@ jobs:
             jpackage/output/*.deb
             jpackage/output/*.rpm
             jpackage/output/*.AppImage
-            jpackage/input/sourceFile/version.json
-            jpackage/input/sourceFile/local_version.json
-            jpackage/input/sourceFile/*.jar
-            jpackage/input/sourceFile/*.zip
 
   notify_summary:
     name: Notify Feishu Community beta build summary
@@ -424,6 +480,7 @@ jobs:
     name: Validate and stage GitHub Release
     needs:
       - resolve
+      - build_update_payloads
       - build
     if: ${{ needs.resolve.outputs.publish == 'true' }}
     environment: community-release
@@ -432,6 +489,20 @@ jobs:
       actions: read
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Download canonical updater payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: chat2db-community-canonical-payload-${{ needs.resolve.outputs.version }}
+          path: jpackage/canonical-artifact
+
       - name: Download platform artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -442,46 +513,14 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
+          TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
+          REPO: ${{ env.COMMUNITY_GITHUB_REPOSITORY }}
+          CANONICAL_ARTIFACT_DIR: ${{ github.workspace }}/jpackage/canonical-artifact/${{ needs.resolve.outputs.version }}
+          PLATFORM_ARTIFACTS_DIR: ${{ github.workspace }}/downloaded-artifacts
+          ALLOWED_EXTRA_RELEASE_ASSETS: ${{ env.ALLOWED_EXTRA_RELEASE_ASSETS }}
         run: |
           set -euo pipefail
-          expected=(
-            "Chat2DB-Community-${VERSION}-arm64.dmg"
-            "Chat2DB-Community-${VERSION}-x64.dmg"
-            "Chat2DB-Community-${VERSION}.msi"
-            "Chat2DB-Community-${VERSION}-amd64.deb"
-            "Chat2DB-Community-${VERSION}-arm64.deb"
-            "Chat2DB-Community-${VERSION}-x86_64.rpm"
-            "Chat2DB-Community-${VERSION}-aarch64.rpm"
-            "Chat2DB-Community-${VERSION}-x86_64.AppImage"
-            "Chat2DB-Community-${VERSION}-arm64.AppImage"
-          )
-
-          mapfile -d '' installers < <(
-            find downloaded-artifacts -type f \
-              \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
-              -print0
-          )
-          if [ "${#installers[@]}" -ne "${#expected[@]}" ]; then
-            echo "Expected ${#expected[@]} installers, found ${#installers[@]}" >&2
-            printf ' - %s\n' "${installers[@]}" >&2
-            exit 1
-          fi
-
-          mkdir -p release-assets
-          for asset in "${expected[@]}"; do
-            mapfile -t matches < <(find downloaded-artifacts -type f -name "${asset}")
-            if [ "${#matches[@]}" -ne 1 ]; then
-              echo "Expected exactly one ${asset}, found ${#matches[@]}" >&2
-              exit 1
-            fi
-            test -s "${matches[0]}"
-            cp "${matches[0]}" "release-assets/${asset}"
-          done
-
-          (
-            cd release-assets
-            sha256sum "${expected[@]}" > SHA256SUMS
-          )
+          script/release/validate_release_bundle.sh
 
       - name: Upload validated release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -498,26 +537,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          RELEASE_ASSETS_DIR: ${{ github.workspace }}/release-assets
+          ALLOWED_EXTRA_RELEASE_ASSETS: ${{ env.ALLOWED_EXTRA_RELEASE_ASSETS }}
         run: |
           set -euo pipefail
-
-          if draft=$(gh release view "${TAG_NAME}" --json isDraft --jq '.isDraft' 2>/dev/null); then
-            if [ "${draft}" != "true" ]; then
-              echo "Release ${TAG_NAME} is already published; refusing to replace it" >&2
-              exit 1
-            fi
-            gh release upload "${TAG_NAME}" release-assets/* --clobber
-          else
-            gh release create "${TAG_NAME}" release-assets/* \
-              --verify-tag \
-              --draft \
-              --generate-notes \
-              --title "Chat2DB Community ${VERSION}"
-          fi
-
-          find release-assets -maxdepth 1 -type f -exec basename {} \; | sort > expected-assets.txt
-          gh release view "${TAG_NAME}" --json assets --jq '.assets[].name' | sort > actual-assets.txt
-          diff -u expected-assets.txt actual-assets.txt
+          script/release/stage_github_release.sh
 
   docker:
     name: Publish Docker image
@@ -555,3 +579,42 @@ jobs:
           set -euo pipefail
           gh release edit "${TAG_NAME}" --draft=false --latest
           test "$(gh release view "${TAG_NAME}" --json isDraft --jq '.isDraft')" = "false"
+
+  verify_latest_release:
+    name: Verify public latest Release
+    needs:
+      - resolve
+      - publish_release
+    if: ${{ needs.resolve.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install verification dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Download validated release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: community-release-bundle-${{ needs.resolve.outputs.version }}
+          path: release-assets
+
+      - name: Verify public latest Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          REPO: ${{ env.COMMUNITY_GITHUB_REPOSITORY }}
+          RELEASE_ASSETS_DIR: ${{ github.workspace }}/release-assets
+          ALLOWED_EXTRA_RELEASE_ASSETS: ${{ env.ALLOWED_EXTRA_RELEASE_ASSETS }}
+        run: |
+          set -euo pipefail
+          script/release/verify_latest_release.sh

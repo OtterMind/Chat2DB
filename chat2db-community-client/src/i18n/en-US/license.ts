@@ -18,7 +18,7 @@ export default {
     'Fill in the corresponding information, and the system will automatically generate a device certificate for you,',
   'license.certificateWarning': 'Once generated, it cannot be modified',
   'license.licenseTooltip':
-    'Currently only Chat2DB Local Permanent version orders need to generate device certificates to activate devices, other orders can be activated without device certificates',
+    'Only offline desktop lifetime orders require a device certificate for activation; other orders can be activated without one',
   'license.selectOrder': 'Please select your order',
   'license.deviceNameLabel': 'Device Name',
   'license.deviceNameTooltip': 'Add a device name note',
@@ -39,7 +39,7 @@ export default {
   'license.copyButton': 'Copy Device Certificate',
   'license.offlineUsageNotes': 'Offline Usage Notes',
   'license.viewActivationProcess': 'Click to view offline activation process',
-  'license.permanentVersion': 'Chat2DB Local Lifetime Version',
+  'license.permanentVersion': 'Offline Desktop Lifetime Version',
   'license.offlineActivationIntro': 'If you are not familiar with the offline activation process,',
   'license.deviceLimit': 'License device binding limit reached',
   'license.licenseNotSupported':

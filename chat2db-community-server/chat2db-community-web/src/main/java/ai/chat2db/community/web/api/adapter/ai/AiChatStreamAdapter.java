@@ -6,9 +6,11 @@ import ai.chat2db.community.web.api.model.request.ai.ChatMessage;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
 import ai.chat2db.community.domain.api.model.ai.AiChatSession;
+import ai.chat2db.community.domain.api.model.ai.AiBusinessContextResult;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
 import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiSelectedKnowledge;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
@@ -176,6 +178,48 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
             - Hard constraint: no output may ever violate the one-China principle. Taiwan and the islands in the South China Sea are part of China's territory; never state, imply, or generate content (including SQL text, comments, or sample data) suggesting otherwise.
             """;
 
+    private static final String SQL_EXPLAIN_SCENARIO_PROMPT = """
+
+            ## SQL Explanation Mode
+            Explain the SQL supplied by the user in the response language.
+            - Describe the statement's purpose, execution flow, filters, joins, grouping, sorting, and important expressions.
+            - Point out dialect-specific behavior and correctness risks when relevant.
+            - Use selected schema metadata only to clarify real tables and columns; never invent metadata.
+            - Do not execute the SQL and do not modify the database.
+            """;
+
+    private static final String SQL_OPTIMIZER_SCENARIO_PROMPT = """
+
+            ## SQL Optimization Mode
+            Analyze the SQL supplied by the user and provide practical optimization advice.
+            - Explain concrete performance or correctness issues before proposing changes.
+            - Return a complete optimized SQL statement in a SQL code block when a rewrite is useful.
+            - Preserve the original business semantics unless a semantic change is explicitly identified.
+            - Use selected schema metadata when it helps validate tables, columns, indexes, joins, or predicates.
+            - Do not execute the original or optimized SQL and do not modify the database.
+            """;
+
+    private static final String SQL_DEBUG_SCENARIO_PROMPT = """
+
+            ## SQL Diagnosis Mode
+            Diagnose the supplied SQL and error message.
+            - Identify the most likely root cause first and tie it to the exact SQL fragment or database behavior.
+            - Provide a complete executable corrected SQL statement in a SQL code block when SQL changes are required.
+            - Distinguish syntax, object-resolution, type, constraint, permission, and runtime-data failures.
+            - Use selected schema metadata when it helps validate the diagnosis; never invent metadata.
+            - Do not execute any proposed fix and do not modify the database.
+            """;
+
+    private static final String SQL_CONVERSION_SCENARIO_PROMPT = """
+
+            ## SQL Dialect Conversion Mode
+            Convert the supplied SQL to the target database dialect stated by the user.
+            - Output exactly one complete executable SQL statement.
+            - Output SQL only, without markdown fences, explanation, comments, or surrounding text.
+            - Preserve the original business semantics and identify no assumptions outside the SQL output.
+            - Do not execute the SQL and do not modify the database.
+            """;
+
     private final IAiModelConfigService modelConfigService;
 
     private final AiModelFactory modelFactory;
@@ -224,17 +268,17 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
             List<ChatMessage> effectiveHistory = request.getHistory() != null
                     ? request.getHistory()
                     : new ArrayList<>();
-            String structuredBusinessContext = businessContextService.buildStructuredContext(
+            AiBusinessContextResult businessContext = businessContextService.resolve(
                     chatConverter.toBusinessContextParam(request));
             List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory,
-                    structuredBusinessContext);
+                    businessContext.getStructuredContext());
             Map<String, Object> toolContext = buildToolContext(request);
             putRequestContext(toolContext);
             boolean hasExecutableToolContext = !toolContext.isEmpty();
 
             String resolvedSystemPrompt = resolveSystemPrompt(request, toolContext);
-            log.info("ai sync resolved system prompt, questionType={}, prompt={}",
-                    request.getQuestionType(), resolvedSystemPrompt);
+            log.info("ai sync resolved system prompt, questionType={}, length={}",
+                    request.getQuestionType(), textLength(resolvedSystemPrompt));
 
             ChatClient.ChatClientRequestSpec spec = aiChatClient.getChatClient().prompt()
                     .system(resolvedSystemPrompt)
@@ -275,11 +319,13 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         StringBuilder persistedTraceBuilder = new StringBuilder();
         StringBuilder streamedReasoningState = new StringBuilder();
         Long userId = identityService.currentUserId();
-        String sessionId = prepareSession(request, userId);
+        AiBusinessContextResult businessContext = businessContextService.resolve(
+                chatConverter.toBusinessContextParam(request));
+        String sessionId = shouldPersistHistory(request)
+                ? prepareSession(request, userId, businessContext.getSelectedKnowledge()) : null;
         Context capturedContext = ContextUtils.queryContext();
         List<ChatMessage> effectiveHistory = resolveHistory(request, sessionId, userId);
-        String structuredBusinessContext = businessContextService.buildStructuredContext(
-                chatConverter.toBusinessContextParam(request));
+        String structuredBusinessContext = businessContext.getStructuredContext();
         String structuredAttachmentContext = aiAttachmentService.buildStructuredContext(request.getAttachments());
         logAttachmentDebug(request, effectiveHistory, structuredAttachmentContext);
         List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory,
@@ -289,12 +335,11 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         boolean hasExecutableToolContext = !toolContext.isEmpty();
         toolContext.put(AiChatTraceSupport.TRACE_EMITTER_KEY,
                 buildTraceEmitter(emitter, traceEvents, persistedTraceBuilder));
-        logUpstreamRequest(runtimeModel, request, sessionId, effectiveHistory, messages, toolContext,
-                hasExecutableToolContext);
-
         String resolvedSystemPrompt = resolveSystemPrompt(request, toolContext);
-        log.info("ai resolved system prompt, questionType={}, prompt={}",
-                request.getQuestionType(), resolvedSystemPrompt);
+        logUpstreamRequest(runtimeModel, request, sessionId, effectiveHistory, messages, toolContext,
+                hasExecutableToolContext, resolvedSystemPrompt);
+        log.info("ai resolved system prompt, questionType={}, length={}",
+                request.getQuestionType(), textLength(resolvedSystemPrompt));
 
         ChatClient.ChatClientRequestSpec spec = aiChatClient.getChatClient().prompt()
                 .system(resolvedSystemPrompt)
@@ -320,7 +365,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                         if (finalSessionId != null && (responseBuilder.length() > 0 || !traceEvents.isEmpty())) {
                             try {
                                 historyService.addMessage(addMessageRequest(finalSessionId, userId, "assistant",
-                                        responseBuilder.toString(), serializeTraceEvents(traceEvents), null));
+                                        responseBuilder.toString(), serializeTraceEvents(traceEvents), null, null));
                             } catch (Exception e) {
                                 log.error("save assistant message failed, sessionId={}", finalSessionId, e);
                             }
@@ -348,12 +393,13 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
 
-    private String prepareSession(ChatRequest request, Long userId) {
+    private String prepareSession(ChatRequest request, Long userId,
+                                  List<AiSelectedKnowledge> selectedKnowledgeSnapshot) {
         if (StringUtils.isNotBlank(request.getSessionId())) {
             String sessionId = request.getSessionId().trim();
             try {
                 historyService.addMessage(addMessageRequest(sessionId, userId, "user", request.getInput(), null,
-                        request.getAttachments()));
+                        request.getAttachments(), selectedKnowledgeSnapshot));
             } catch (Exception e) {
                 log.error("save user message failed, sessionId={}", sessionId, e);
             }
@@ -362,7 +408,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         try {
             AiChatSession session = historyService.createSession(userId, request.getInput());
             historyService.addMessage(addMessageRequest(session.getId(), userId, "user", request.getInput(), null,
-                    request.getAttachments()));
+                    request.getAttachments(), selectedKnowledgeSnapshot));
             return session.getId();
         } catch (Exception e) {
             log.error("create session failed", e);
@@ -371,7 +417,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
     private AiChatMessageAddRequest addMessageRequest(String sessionId, Long userId, String role, String content,
-                                                      String reasoningContent, List<ChatAttachment> attachments) {
+                                                      String reasoningContent, List<ChatAttachment> attachments,
+                                                      List<AiSelectedKnowledge> selectedKnowledge) {
         AiChatMessageAddRequest request = new AiChatMessageAddRequest();
         request.setSessionId(sessionId);
         request.setUserId(userId);
@@ -379,6 +426,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         request.setContent(content);
         request.setReasoningContent(reasoningContent);
         request.setAttachments(attachments);
+        request.setSelectedKnowledge(selectedKnowledge);
         return request;
     }
 
@@ -467,6 +515,9 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
     private String resolveSystemPrompt(ChatRequest request, Map<String, Object> toolContext) {
+        if (isDdlRequest(request)) {
+            return buildDdlSystemPrompt(request, toolContext);
+        }
         if (isNl2SqlRequest(request)) {
             return buildNl2SqlSystemPrompt(request, toolContext);
         }
@@ -476,6 +527,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         boolean hasToolContext = hasDatabaseToolContext(toolContext);
         return basePrompt
                 + SCOPE_AND_COMPLIANCE_PROMPT
+                + buildQuestionTypePrompt(request)
                 + buildScenarioPrompt(request, hasToolContext)
                 + buildDatabaseToolPrompt(hasToolContext)
                 + buildSelectedDatabasePrompt(toolContext)
@@ -484,6 +536,66 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
 
     private boolean isNl2SqlRequest(ChatRequest request) {
         return request != null && QuestionTypeEnum.NL_2_SQL.getCode().equalsIgnoreCase(StringUtils.trimToEmpty(request.getQuestionType()));
+    }
+
+    static boolean shouldPersistHistory(ChatRequest request) {
+        return request == null || !Boolean.FALSE.equals(request.getPersistHistory());
+    }
+
+    static String buildQuestionTypePrompt(ChatRequest request) {
+        if (request == null) {
+            return "";
+        }
+        QuestionTypeEnum questionType = QuestionTypeEnum.getByCode(
+                StringUtils.upperCase(StringUtils.trimToEmpty(request.getQuestionType())));
+        if (questionType == null) {
+            return "";
+        }
+        return switch (questionType) {
+            case SQL_EXPLAIN -> SQL_EXPLAIN_SCENARIO_PROMPT;
+            case SQL_OPTIMIZER -> SQL_OPTIMIZER_SCENARIO_PROMPT;
+            case SQL_DEBUG, SQL_DEBUG_CHAIN -> SQL_DEBUG_SCENARIO_PROMPT;
+            case SQL_2_SQL -> SQL_CONVERSION_SCENARIO_PROMPT;
+            default -> "";
+        };
+    }
+
+    private boolean isDdlRequest(ChatRequest request) {
+        if (request == null) {
+            return false;
+        }
+        String questionType = StringUtils.trimToEmpty(request.getQuestionType());
+        return QuestionTypeEnum.TEXT_TO_CREATE_TABLE_STREAM.getCode().equalsIgnoreCase(questionType)
+                || QuestionTypeEnum.TEXT_MODIFY_COLUMN.getCode().equalsIgnoreCase(questionType);
+    }
+
+    private String buildDdlSystemPrompt(ChatRequest request, Map<String, Object> toolContext) {
+        boolean createTable = QuestionTypeEnum.TEXT_TO_CREATE_TABLE_STREAM.getCode()
+                .equalsIgnoreCase(StringUtils.trimToEmpty(request.getQuestionType()));
+        StringBuilder prompt = new StringBuilder(1024);
+        prompt.append("""
+                You are a database DDL generator.
+
+                ## DDL Mode
+                Generate exactly one executable DDL statement for the selected database dialect.
+                - Output SQL only, without markdown fences, explanation, comments, or surrounding text.
+                - Preserve the requested table and column names exactly unless dialect quoting is required.
+                - Do not execute the SQL and do not call database tools.
+                - End immediately after the DDL statement.
+                """);
+        prompt.append("\nOperation: ").append(createTable ? "CREATE TABLE" : "ALTER TABLE").append(".\n");
+        if (StringUtils.isNotBlank(request.getDatabaseType())) {
+            prompt.append("Database dialect: ").append(request.getDatabaseType()).append(".\n");
+        }
+        if (StringUtils.isNotBlank(request.getTableName())) {
+            prompt.append("Target table: ").append(request.getTableName()).append(".\n");
+        }
+        if (createTable && StringUtils.isNotBlank(request.getColumnList())) {
+            prompt.append("Requested columns: ").append(request.getColumnList()).append(".\n");
+        }
+        prompt.append(buildSelectedDatabasePrompt(toolContext));
+        prompt.append(NL_2_SQL_COMPLIANCE_PROMPT);
+        return prompt.toString();
     }
 
     private String buildNl2SqlSystemPrompt(ChatRequest request, Map<String, Object> toolContext) {
@@ -1016,7 +1128,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                                     List<ChatMessage> effectiveHistory,
                                     List<Message> messages,
                                     Map<String, Object> toolContext,
-                                    boolean hasExecutableToolContext) {
+                                    boolean hasExecutableToolContext,
+                                    String resolvedSystemPrompt) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("sessionId", sessionId);
         payload.put("systemPreset", runtimeModel.isSystemPreset());
@@ -1030,7 +1143,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         payload.put("hasDatabaseToolContext", hasDatabaseToolContext(toolContext));
         payload.put("historySize", effectiveHistory == null ? 0 : effectiveHistory.size());
         payload.put("attachmentCount", request.getAttachments() == null ? 0 : request.getAttachments().size());
-        payload.put("systemPrompt", resolveSystemPrompt(request, toolContext));
+        payload.put("systemPromptLength", textLength(resolvedSystemPrompt));
         payload.put("toolContext", summarizeToolContext(toolContext));
         payload.put("messages", summarizeMessages(messages));
         log.info("ai upstream request payload: {}", JSON.toJSONString(payload));
@@ -1044,9 +1157,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         payload.put("historyMessageCount", effectiveHistory == null ? 0 : effectiveHistory.size());
         payload.put("historyAttachments", summarizeHistoryAttachments(effectiveHistory));
         payload.put("structuredAttachmentContextLength",
-                structuredAttachmentContext == null ? 0 : structuredAttachmentContext.length());
-        payload.put("structuredAttachmentContextPreview",
-                structuredAttachmentContext == null ? null : truncatePreview(structuredAttachmentContext, 600));
+                textLength(structuredAttachmentContext));
         log.info("ai attachment context debug: {}", JSON.toJSONString(payload));
     }
 
@@ -1071,8 +1182,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         return messages.stream().map(message -> {
             Map<String, Object> item = new HashMap<>();
             item.put("messageType", message.getMessageType());
-            item.put("textLength", message.getText() == null ? 0 : message.getText().length());
-            item.put("textPreview", truncatePreview(message.getText(), 500));
+            item.put("textLength", textLength(message.getText()));
             return item;
         }).collect(Collectors.toList());
     }
@@ -1083,12 +1193,11 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         }
         return attachments.stream().map(attachment -> {
             Map<String, Object> item = new HashMap<>();
-            item.put("fileName", attachment.getFileName());
+            item.put("fileNameLength", textLength(attachment.getFileName()));
             item.put("fileType", attachment.getFileType());
             item.put("contentCategory", attachment.getContentCategory());
             item.put("contentLength", attachment.getContentLength());
             item.put("truncated", attachment.getTruncated());
-            item.put("contentPreview", truncatePreview(attachment.getContent(), 200));
             return item;
         }).collect(Collectors.toList());
     }
@@ -1102,7 +1211,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                 .map(message -> {
                     Map<String, Object> item = new HashMap<>();
                     item.put("role", message.getRole());
-                    item.put("contentPreview", truncatePreview(message.getContent(), 120));
+                    item.put("contentLength", textLength(message.getContent()));
                     item.put("attachmentCount", message.getAttachments().size());
                     item.put("attachments", summarizeAttachments(message.getAttachments()));
                     return item;
@@ -1110,14 +1219,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                 .collect(Collectors.toList());
     }
 
-    private String truncatePreview(String text, int maxLength) {
-        if (text == null) {
-            return null;
-        }
-        if (text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...[truncated]";
+    static int textLength(String text) {
+        return text == null ? 0 : text.length();
     }
 
     private record SelectedDatabasePromptContext(String databaseType, String databaseName, String schemaName) {

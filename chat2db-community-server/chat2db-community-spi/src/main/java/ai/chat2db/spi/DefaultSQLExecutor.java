@@ -160,8 +160,34 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             Function<JDBCDataValue, String> valueFunction,
             boolean limitSize,
             Integer resultSetId,
+            Integer maxRows) {
+        execute(connection, sql, headerConsumer, rowConsumer, valueFunction, limitSize, resultSetId,
+                null, null, maxRows);
+    }
+
+    public void execute(
+            Connection connection, String sql,
+            Consumer<List<Header>> headerConsumer,
+            Consumer<List<String>> rowConsumer,
+            Function<JDBCDataValue, String> valueFunction,
+            boolean limitSize,
+            Integer resultSetId,
             ISqlExecutionStatementListener statementListener,
             Runnable cancellationChecker) {
+        execute(connection, sql, headerConsumer, rowConsumer, valueFunction, limitSize, resultSetId,
+                statementListener, cancellationChecker, null);
+    }
+
+    public void execute(
+            Connection connection, String sql,
+            Consumer<List<Header>> headerConsumer,
+            Consumer<List<String>> rowConsumer,
+            Function<JDBCDataValue, String> valueFunction,
+            boolean limitSize,
+            Integer resultSetId,
+            ISqlExecutionStatementListener statementListener,
+            Runnable cancellationChecker,
+            Integer maxRows) {
         Assert.notNull(sql, "SQL must not be null");
         checkTaskCancellation(cancellationChecker);
         PreparedStatement stmt = null;
@@ -171,6 +197,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             notifyStatementCreated(statementListener, preparedStatement);
             try (preparedStatement) {
                 checkTaskCancellation(cancellationChecker);
+                if (maxRows != null && maxRows > 0) {
+                    preparedStatement.setMaxRows(maxRows);
+                }
                 boolean query = preparedStatement.execute();
                 int resultCount = 0;
                 while (true) {
@@ -179,8 +208,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         resultCount++;
                         if (resultSetId == null || resultCount == resultSetId) {
                             writeExportResultSet(preparedStatement, headerConsumer, rowConsumer, valueFunction,
-                                    limitSize,
-                                    cancellationChecker);
+                                    limitSize, cancellationChecker, maxRows);
                             return;
                         }
                     } else if (preparedStatement.getUpdateCount() == -1) {
@@ -202,7 +230,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                                       Consumer<List<String>> rowConsumer,
                                       Function<JDBCDataValue, String> valueFunction,
                                       boolean limitSize,
-                                      Runnable cancellationChecker) throws SQLException {
+                                      Runnable cancellationChecker,
+                                      Integer maxRows) throws SQLException {
         ResultSet rs = null;
         try {
             rs = stmt.getResultSet();
@@ -217,7 +246,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
             headerConsumer.accept(headerList);
 
-            while (rs.next()) {
+            int exportedRows = 0;
+            while ((maxRows == null || maxRows < 1 || exportedRows < maxRows) && rs.next()) {
                 checkTaskCancellation(cancellationChecker);
                 List<String> row = new ArrayList<>();
                 for (int i = 1; i <= col; i++) {
@@ -228,6 +258,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     row.add(valueFunction.apply(jdbcDataValue));
                 }
                 rowConsumer.accept(row);
+                exportedRows++;
             }
         } finally {
             JdbcUtils.closeResultSet(rs);

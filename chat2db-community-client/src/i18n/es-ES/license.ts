@@ -18,7 +18,7 @@ export default {
     'Complete la información correspondiente y el sistema generará automáticamente un certificado del dispositivo,',
   'license.certificateWarning': 'Una vez generado, no se puede modificar',
   'license.licenseTooltip':
-    'Actualmente solo los pedidos de la versión permanente de Chat2DB Local necesitan generar certificados para activar dispositivos; los demás pedidos se pueden activar sin ellos',
+    'Solo los pedidos de la versión permanente de escritorio sin conexión necesitan un certificado para activar dispositivos; los demás pedidos se pueden activar sin él',
   'license.selectOrder': 'Seleccione su pedido',
   'license.deviceNameLabel': 'Nombre del dispositivo',
   'license.deviceNameTooltip': 'Añada una nota con el nombre del dispositivo',
@@ -39,7 +39,7 @@ export default {
   'license.copyButton': 'Copiar certificado del dispositivo',
   'license.offlineUsageNotes': 'Notas de uso sin conexión',
   'license.viewActivationProcess': 'Haga clic para ver el proceso de activación sin conexión',
-  'license.permanentVersion': 'Versión de por vida de Chat2DB Local',
+  'license.permanentVersion': 'Versión de escritorio sin conexión de por vida',
   'license.offlineActivationIntro': 'Si no conoce el proceso de activación sin conexión,',
   'license.deviceLimit': 'Se alcanzó el límite de dispositivos vinculados a la licencia',
   'license.licenseNotSupported':

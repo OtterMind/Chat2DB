@@ -159,6 +159,12 @@ Before closing a Milestone, the release owner verifies:
 - release notes link the delivered Issues and pull requests;
 - post-release installation or smoke verification is recorded.
 
+Formal version tags use `vX.Y.Z`. The corresponding GitHub Release title uses
+`Chat2DB vX.Y.Z`; do not append an edition suffix such as `Community` to the
+Release title. Application, installer, and package names may still use
+`Chat2DB Community` where the edition distinction is part of the product
+identity.
+
 The Milestone closes only after the GitHub Release is published and verified.
 
 ## Project State Matrix

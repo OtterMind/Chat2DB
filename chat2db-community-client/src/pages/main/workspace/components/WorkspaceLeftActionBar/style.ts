@@ -27,16 +27,5 @@ export const useStyles = createStyles(({ css, token }) => {
         color: ${token.colorTextSecondary};
       }
     `,
-    storageMigrationButton: css`
-      height: 26px;
-      padding-inline: 7px;
-      flex-shrink: 0;
-      color: ${token.colorTextSecondary};
-      font-size: 12px;
-
-      &:hover {
-        color: ${token.colorText};
-      }
-    `,
   };
 });

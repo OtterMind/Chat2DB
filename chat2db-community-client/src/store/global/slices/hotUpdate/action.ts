@@ -1,5 +1,9 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
-import { UpdatedStatus } from './status';
+import { clientRuntime } from '@client-runtime';
+import {
+  COMMUNITY_GITHUB_RELEASES_URL,
+  getCommunityGitHubReleaseTagUrl,
+  UpdatedStatus,
+} from '@/constants/settings';
 import jcefApi from '@/jcef';
 import { IHotUpdateConfig, IUpdateDetail, UpdateFailureReason, UpdateFailureStage } from '@/typings/settings';
 import { isDesktop, isDevelopment } from '@/utils/env';
@@ -8,11 +12,6 @@ import produce from 'immer';
 import type { StateCreator } from 'zustand/vanilla';
 import { GlobalStore } from '../../store';
 import { createCheckUpdateCoordinator } from './checkCoordinator';
-import {
-  COMMUNITY_GITHUB_RELEASES_URL,
-  getCommunityGitHubReleaseTagUrl,
-} from '@/constants/settings';
-
 export { COMMUNITY_GITHUB_RELEASES_URL, getCommunityGitHubReleaseTagUrl };
 
 export interface HotUpdateAction {
@@ -97,7 +96,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
         return activeRestart;
       }
       activeRestart = (async () => {
-        if (!runtimeEditionConfig.autoUpdate || !isWindowsDesktopUpdatePlatform()) {
+        if (!clientRuntime.enableAutoUpdate || !isWindowsDesktopUpdatePlatform()) {
           return;
         }
         if (isDesktop && isDevelopment) {
@@ -167,13 +166,13 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
       }
     },
     handleCheckUpdate: () => {
-      if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+      if (!isDesktop || !clientRuntime.enableAutoUpdate) {
         return Promise.resolve(false);
       }
       return runCheckUpdate();
     },
     downloadUpdate: () => {
-      if (!isDesktop || !runtimeEditionConfig.autoUpdate || !isWindowsDesktopUpdatePlatform()
+      if (!isDesktop || !clientRuntime.enableAutoUpdate || !isWindowsDesktopUpdatePlatform()
         || (isDesktop && isDevelopment)) {
         return Promise.resolve(false);
       }
@@ -203,7 +202,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
       return activeDownload;
     },
     syncUpdatePreferences: async () => {
-      if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+      if (!isDesktop || !clientRuntime.enableAutoUpdate) {
         return;
       }
       try {
@@ -219,7 +218,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
     },
     updateHotUpdateConfig: async (property, value) => {
       let persistedValue = value;
-      if (property === 'receiveBeta' && isDesktop && runtimeEditionConfig.autoUpdate) {
+      if (property === 'receiveBeta' && isDesktop && clientRuntime.enableAutoUpdate) {
         try {
           const preferences = await jcefApi.updatePreferences({ receiveBeta: Boolean(value) });
           if (!preferences.saved) {

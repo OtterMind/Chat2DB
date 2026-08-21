@@ -2,7 +2,17 @@ import { GlobalBaseSettings, GlobalAppConfig, DataTableSettings } from '@/typing
 import { getUserComputerLanguage } from '@/utils';
 import { DEFAULT_RESULT_PAGE_SIZE } from './pagination';
 
-export { UpdatedStatus } from '@/store/global/slices/hotUpdate/status';
+export enum UpdatedStatus {
+  Default = 'default',
+  Available = 'available',
+  NotAvailable = 'notAvailable',
+  Updating = 'updating',
+  Updated = 'updated',
+  Installing = 'installing',
+  Installed = 'installed',
+  UpdateFailed = 'updateFailed',
+  Checking = 'checking',
+}
 
 export enum LangType {
   EN_US = 'en-US',

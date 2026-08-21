@@ -268,7 +268,7 @@ export default {
   'setting.nav.editorFontSize': '편집기 글꼴 크기',
   'setting.nav.editorFontSizeDescribe': '편집기 글꼴 크기 설정',
   'setting.apiKeys.describe':
-    'Chat2DB Pro는 API를 통해 AI 서비스를 제공합니다. 자세한 사용 방법은 문서를 참조하세요. {1} API 키를 다른 클라이언트나 코드에 노출하지 마세요.',
+    '{PRODUCT_NAME}는 API를 통해 AI 서비스를 제공합니다. 자세한 사용 방법은 문서를 참조하세요. {1} API 키를 다른 클라이언트나 코드에 노출하지 마세요.',
   'setting.apiKeys.CreateApiKey': 'API 키 생성',
   'setting.apiKeys.addApiDoc': '《API 호출 방법》',
   'setting.apiKeys.CreateSuccess': '생성되었습니다',
@@ -317,7 +317,7 @@ export default {
   'setting.license.codeCountdown': '{1}초 후 다시 받기',
   'setting.license.getCode': '이메일 인증 코드 받기',
   'setting.license.codeChannel': '인증 코드 채널',
-  'setting.license.codeChannelDesc': 'WeChat 공식 계정 [Ch2DB] 검색 → [Pro Member] → [Get Verification Code]',
+  'setting.license.codeChannelDesc': 'WeChat 공식 계정 [Ch2DB] 검색 → [Membership] → [Get Verification Code]',
   'setting.purchaseDetails.title': '구매 상세 정보',
   'setting.purchaseDetails.productName': '제품 이름',
   'setting.purchaseDetails.price': '구매 가격',

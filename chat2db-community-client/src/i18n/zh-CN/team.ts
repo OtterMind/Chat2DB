@@ -9,6 +9,7 @@ export default {
   'team.nav.permission.authorization': '授权列表',
   'team.nav.permission.apply': '申请列表',
   'team.nav.sqlAudit': 'SQL审计',
+  'team.nav.desensitize': '数据脱敏',
 
   // 团队设置
   'team.setting.basic': '基本信息',
@@ -132,7 +133,6 @@ export default {
   'team.createSuccess.title.desc': '快复制以下链接，邀请小伙伴们一起愉快的办公吧',
   'team.createSuccess.button': '复制链接去邀请伙伴',
 
-
   'team.join.title': '加入已有团队',
   'team.join.title.desc': '马上加入，体验一起办公的畅快',
   'team.join.title.desc2': '输入个人信息，申请以成员的身份加入团队',
@@ -148,10 +148,9 @@ export default {
   'team.create.form.industry.placeholder': '请选择所在行业',
   'team.create.form.role': '角色',
   'team.create.form.role.placeholder': '请选择角色',
-  'team.create.form.proxy':'创建即表示你同意我们的',
+  'team.create.form.proxy': '创建即表示你同意我们的',
   'team.create.form.proxy.service': '服务协议',
   'team.create.form.proxy.org': '组织协议',
-
 
   'team.join.form.name': '姓名',
   'team.join.form.name.placeholder': '请输入姓名',
@@ -159,7 +158,7 @@ export default {
   'team.join.form.code.placeholder': '如何获取团队号？',
   'team.join.form.code.tip': '你正在申请加入团队是',
   'team.join.form.code.error': '无效的团队号',
-  'team.join.form.code.error.count':'请输入8位团队号',
+  'team.join.form.code.error.count': '请输入8位团队号',
   'team.join.form.code.verfying': '正在校验团队号',
   'team.join.form.reason': '申请理由(选填)',
   'team.join.apply': '申请',
@@ -182,9 +181,17 @@ export default {
   'team.invite.success.content2': '请等待管理员审批',
   'team.invite.success.finish': '完成',
 
+  'team.desensitize.add.title': '添加脱敏规则',
+  'team.desensitize.field.datasource': '数据源',
+  'team.desensitize.field.database': '数据库',
+  'team.desensitize.field.schema': 'Schema',
+  'team.desensitize.field.table': '表',
+  'team.desensitize.field.columns': '列',
+  'team.desensitize.field.type': '脱敏规则',
+  'team.desensitize.table.databaseSchema': '数据库 / Schema',
+
   // 权限
   'team.permission.modal.title': '权限受限',
   'team.permission.modal.OkText': '申请权限',
   'team.permission.modal.cancelText': '取消',
-  
 };

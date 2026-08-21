@@ -3,33 +3,28 @@ import { useStyles } from './style';
 import { useTableStyles } from '@/styles/table';
 import i18n from '@/i18n';
 import { BaseTable, ArtColumn, useTablePipeline, features } from 'ali-react-table';
-import { Checkbox, Spin } from 'antd';
+import { Spin } from 'antd';
 import sqlServer from '@/service/sql';
 import { TreeNodeType, WorkspaceTabType } from '@/constants';
 import Pagination from '@/components/Pagination';
 import { Empty, IconButton, ToolbarBtn } from '@chat2db/ui';
 import { IPageParams } from '@/typings';
 import isEqual from 'lodash/isEqual';
-import SelectiveDisplay from './components/SelectiveDisplay';
-import { openAddAiDataCollectionModal } from './components/addAiDataCollection';
 import TreeDropdown, { TreeDropdownRef } from '@/blocks/NewTree/components/TreeDropdown';
 import SelectBoundInfo from '@/components/SelectBoundInfo';
 import { getDatabaseSupport } from '@/utils/database';
 import { useWorkspaceStore } from '@/store/workspace';
 import { v4 as uuid } from 'uuid';
-import { DataCollectionElementType } from '@/constants/aiDataCollection';
 
 interface IProps {
   className?: string;
   uniqueData: {
-    dataCollectionElementType?: DataCollectionElementType;
+    objectType?: 'TABLE' | 'VIEW';
     dataSourceId: string;
     dataSourceName: string;
     databaseType: string;
     databaseName?: string;
     schemaName?: string;
-    aiDataCollectionName?: string;
-    aiDataCollectionId?: number;
     submitCallback?: () => void;
   };
 }
@@ -40,7 +35,7 @@ export default memo<IProps>(
     const { styles, cx, theme } = useStyles();
     const { styles: tableStyles } = useTableStyles();
     const [tableData, setTableData] = useState<any[] | null>(null);
-    const [columnResize, setColumnResize] = useState<number[]>([40, 200, 100, 150, 150, 150, 150, 150]);
+    const [columnResize, setColumnResize] = useState<number[]>([200, 100, 150, 150, 150, 150, 150]);
     const tableBoxRef = useRef<HTMLDivElement>(null);
     const [searchValue, setSearchValue] = useState<string>('');
     const [boundInfo, setBoundInfo] = useState<any>(uniqueData);
@@ -50,7 +45,6 @@ export default memo<IProps>(
       total: 0,
       hasNextPage: false,
     });
-    const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
     // Tree drop-down menu ref.
     const treeDropdownRef = useRef<TreeDropdownRef>(null);
 
@@ -83,7 +77,6 @@ export default memo<IProps>(
 
     const boundInfoChangeCallback = (_boundInfo) => {
       setBoundInfo(_boundInfo);
-      setSelectedRowKeys([]);
       getTable(
         {
           pageNo: 1,
@@ -95,45 +88,8 @@ export default memo<IProps>(
 
     // Table column configuration.
     const columns: ArtColumn[] = useMemo(() => {
-      if (uniqueData.dataCollectionElementType === DataCollectionElementType.VIEW) {
+      if (uniqueData.objectType === 'VIEW') {
         return [
-          {
-            name: ' ',
-            key: 'No.',
-            code: 'No.',
-            title: (
-              <div className={styles.checkAllBox}>
-                <Checkbox
-                  checked={selectedRowKeys.length === tableData?.length}
-                  onChange={(e) => {
-                    setSelectedRowKeys(e.target.checked ? tableData?.map((item) => item.key) || [] : []);
-                  }}
-                />
-              </div>
-            ),
-            lock: true,
-            render: (value, rowData) => {
-              return (
-                <div
-                  className={styles.checkboxContainer}
-                  onContextMenu={(e) => {
-                    handleRightClick(e, rowData);
-                  }}
-                >
-                  <Checkbox
-                    checked={selectedRowKeys.includes(rowData.key)}
-                    onChange={() => {
-                      setSelectedRowKeys(
-                        selectedRowKeys.includes(rowData.key)
-                          ? selectedRowKeys.filter((key) => key !== rowData.key)
-                          : [...selectedRowKeys, rowData.key],
-                      );
-                    }}
-                  />
-                </div>
-              );
-            },
-          },
           {
             title: i18n('workspace.tableTitle.viewName'),
             name: 'name',
@@ -146,43 +102,6 @@ export default memo<IProps>(
         ];
       }
       return [
-        {
-          name: ' ',
-          key: 'No.',
-          code: 'No.',
-          title: (
-            <div className={styles.checkAllBox}>
-              <Checkbox
-                checked={selectedRowKeys.length === tableData?.length}
-                onChange={(e) => {
-                  setSelectedRowKeys(e.target.checked ? tableData?.map((item) => item.key) || [] : []);
-                }}
-              />
-            </div>
-          ),
-          lock: true,
-          render: (value, rowData) => {
-            return (
-              <div
-                className={styles.checkboxContainer}
-                onContextMenu={(e) => {
-                  handleRightClick(e, rowData);
-                }}
-              >
-                <Checkbox
-                  checked={selectedRowKeys.includes(rowData.key)}
-                  onChange={() => {
-                    setSelectedRowKeys(
-                      selectedRowKeys.includes(rowData.key)
-                        ? selectedRowKeys.filter((key) => key !== rowData.key)
-                        : [...selectedRowKeys, rowData.key],
-                    );
-                  }}
-                />
-              </div>
-            );
-          },
-        },
         {
           title: i18n('workspace.tableTitle.tableName'),
           name: 'name',
@@ -241,7 +160,7 @@ export default memo<IProps>(
           },
         },
       ];
-    }, [selectedRowKeys]);
+    }, [uniqueData.objectType]);
 
     // Table rendering configuration.
     const pipeline = useTablePipeline()
@@ -254,7 +173,6 @@ export default memo<IProps>(
           maxSize: 500,
           sizes: columnResize,
           onChangeSizes: (sizes) => {
-            sizes[0] = 40;
             setColumnResize(sizes);
           },
         }),
@@ -290,7 +208,7 @@ export default memo<IProps>(
       }
       setTableData(null);
       const api =
-        uniqueData.dataCollectionElementType === DataCollectionElementType.VIEW
+        uniqueData.objectType === 'VIEW'
           ? sqlServer.getViewList
           : sqlServer.getTableList;
       api(requestParams).then((res) => {
@@ -306,7 +224,7 @@ export default memo<IProps>(
             //     tableName: t.name,
             //   }) || t.name;
             const item = {
-              treeNodeType: TreeNodeType.TABLE,
+              treeNodeType: uniqueData.objectType === 'VIEW' ? TreeNodeType.VIEW : TreeNodeType.TABLE,
               key: t.name,
               originalTitle: t.name,
               title: null,
@@ -394,25 +312,6 @@ export default memo<IProps>(
       });
     };
 
-    const handelSync = () => {
-      if (selectedRowKeys.length === 0) {
-        return;
-      }
-      openAddAiDataCollectionModal({
-        parentInfo: {
-          dataSourceId: boundInfo.dataSourceId,
-          databaseName: boundInfo.databaseName,
-          schemaName: boundInfo.schemaName,
-        },
-        dataCollectionElementType: uniqueData.dataCollectionElementType,
-        aiDataCollectionId: uniqueData.aiDataCollectionId,
-        tableNameList: selectedRowKeys,
-        loadData: () => {
-          setSelectedRowKeys([]);
-        },
-      });
-    };
-
     return (
       <div className={cx(styles.allTableContainer, className)}>
         <div className={styles.toolBarList}>
@@ -427,21 +326,7 @@ export default memo<IProps>(
             <ToolbarBtn onClick={handelRefresh} prefixIcon="icon-refresh" text={i18n('common.button.refresh')} />
           </div>
           <div className={styles.toolBarItem}>
-            <ToolbarBtn
-              onClick={handelSync}
-              prefixIcon="icon-file-exchange"
-              text={i18n(
-                'workspace.aiDataCollection.syncTo',
-                uniqueData.aiDataCollectionName
-                  ? uniqueData.aiDataCollectionName
-                  : i18n('common.text.aiDataCollection'),
-              )}
-              //
-              className={cx({ [styles.cannotSubmit]: selectedRowKeys.length === 0 })}
-            />
-          </div>
-          <div className={styles.toolBarItem}>
-            {uniqueData.dataCollectionElementType === DataCollectionElementType.VIEW ? null : (
+            {uniqueData.objectType === 'VIEW' ? null : (
               <ToolbarBtn
                 onClick={handelViewERModal}
                 prefixIcon="icon-er-modal"
@@ -477,7 +362,7 @@ export default memo<IProps>(
             }}
             placeholder={i18n(
               'workspace.tips.searchTableName',
-              uniqueData.dataCollectionElementType === DataCollectionElementType.VIEW
+              uniqueData.objectType === 'VIEW'
                 ? i18n('common.text.views')
                 : i18n('common.text.tables'),
             )}
@@ -517,13 +402,6 @@ export default memo<IProps>(
               ref={treeDropdownRef}
             />
           </div>
-        )}
-        {selectedRowKeys.length > 0 && (
-          <SelectiveDisplay
-            dataCollectionElementType={uniqueData.dataCollectionElementType}
-            selectedTable={selectedRowKeys}
-            setSelectedTable={setSelectedRowKeys}
-          />
         )}
       </div>
     );

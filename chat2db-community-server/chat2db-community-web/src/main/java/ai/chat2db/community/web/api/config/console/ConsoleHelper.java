@@ -275,7 +275,7 @@ public class ConsoleHelper {
             Class[] params = iRequestMappingInfo.getParams();
             Object object = controllerClass.getMethod(method, params).invoke(c, o);
             result.setMessage(ConsoleObjectConverter.object2map(object));
-            if("/api/ai/chat/stream".equals(message.getRequestUrl())){
+            if("/api/v3/ai/chat/stream".equals(message.getRequestUrl())){
                 return null;
             }
             return result;

@@ -30,7 +30,7 @@ export default {
   'price.text.upgradePlan': '升级计划',
   'price.text.reorderPlan': '再次订购',
   'price.text.unsubscribeSuccess': '退订成功',
-  'price.text.pricingPlans': 'Chat2DB Pro会员计划',
+  'price.text.pricingPlans': '{PRODUCT_NAME}会员计划',
   'price.text.welcome': '超过100万开发者在使用的AI数据开发和分析平台，让数据管理变得更简单、更高效、更有趣😎',
   'price.text.monthly': '月',
   'price.text.yearly': '年',

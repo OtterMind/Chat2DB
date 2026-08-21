@@ -37,7 +37,7 @@ cp "${TEST_ROOT}/payloads/lib.zip" "${TEST_ROOT}/artifact/lib.zip"
 cp "${TEST_ROOT}/payloads/dist.zip" "${TEST_ROOT}/artifact/dist.zip"
 
 # Verify canonical artifact structure.
-for f in chat2db-community.jar lib.zip dist.zip github-version.json cdn-version.json local_version.json latest_version.json receipt.json; do
+for f in chat2db-community.jar lib.zip dist.zip github-version.json local_version.json latest_version.json receipt.json; do
   if [ ! -f "${TEST_ROOT}/artifact/${f}" ]; then
     fail "canonical artifact missing ${f}"
   fi
