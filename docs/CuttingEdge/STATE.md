@@ -19,6 +19,7 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Preview** | Real video **with sound** in the program monitor (video lane plus the audio lane under it, per-clip volume/mute honoured, master volume on the monitor), streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
+| **Projects** | Save/open `.ceproj` documents in `~/CuttingEdge/projects` (a few KB — media is referenced, never copied), Ctrl+S, unsaved-changes indicator, autosave every 20 s with a restore prompt at launch, and a clear report when media has moved |
 | **Timeline** | Starts empty; clips can never overlap on a lane (a drop lands in the nearest free gap, trims stop at neighbours); dedicated scale bar with zoom out/in and Fit |
 | **Tool rail** | Undo/Redo always visible, then the context-sensitive toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
@@ -120,5 +121,5 @@ to build a differential patch.
 2. Project save/load — the timeline is lost when the app closes.
 1. Animated captions from the transcript (libass is already inside our FFmpeg).
 2. MediaPipe face tracking for reframing (currently centre-crop).
-3. Beat detection and automatic ducking; YouTube/Instagram publishing.
-4. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).
+2. Beat detection and automatic ducking; YouTube/Instagram publishing.
+3. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).

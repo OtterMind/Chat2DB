@@ -634,3 +634,19 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tl__zoomlabel { font-size: 12px; color: var(--muted); flex: none; }
 .tl__zoomslider { flex: 1; margin: 0 !important; min-width: 120px; }
+
+/* project bar --------------------------------------------------------------- */
+.pj {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 8px 12px;
+}
+.pj__name { max-width: 240px; }
+.pj__state {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #86efac;
+  margin-inline-end: auto;
+}
+.pj__state.is-dirty { color: #fdba74; }
+.pj kbd {
+  font-size: 10px; opacity: .7; border: 1px solid rgba(255,255,255,.25);
+  border-radius: 4px; padding: 0 4px; margin-inline-start: 4px;
+}

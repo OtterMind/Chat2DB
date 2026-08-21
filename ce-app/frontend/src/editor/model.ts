@@ -124,6 +124,10 @@ interface Snapshot {
 }
 
 interface EditorState extends Snapshot {
+  /** Project identity and save state. */
+  projectName: string
+  dirty: boolean
+  lastSavedAt: number | null
   selectedId: string | null
   playhead: number
   pxPerSecond: number
@@ -167,6 +171,10 @@ interface EditorState extends Snapshot {
   addTrack: (kind: TrackKind) => void
   toggleMute: (trackId: string) => void
   toggleLock: (trackId: string) => void
+  setProjectName: (name: string) => void
+  markSaved: (at?: number) => void
+  loadSnapshot: (snapshot: Partial<Snapshot>, name?: string) => void
+  toDocument: () => Snapshot
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -205,6 +213,9 @@ function seed(): Snapshot {
 
 export const useEditor = create<EditorState>((set, get) => ({
   ...seed(),
+  projectName: 'Untitled',
+  dirty: false,
+  lastSavedAt: null,
   selectedId: null,
   playhead: 0,
   pxPerSecond: 42,
@@ -220,6 +231,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       mutate(next)
       return {
         ...next,
+        dirty: true,
         past: [...state.past, before].slice(-60),
         future: [],
       }
@@ -623,6 +635,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       const t = s.tracks.find((x) => x.id === trackId)
       if (t) t.locked = !t.locked
     }),
+
+  setProjectName: (projectName) => set({ projectName, dirty: true }),
+
+  markSaved: (at) => set({ dirty: false, lastSavedAt: at ?? Date.now() }),
+
+  /** Replace the whole timeline, e.g. when opening a project. */
+  loadSnapshot: (snapshot, name) =>
+    set((state) => ({
+      tracks: (snapshot.tracks as Track[] | undefined) ?? state.tracks,
+      clips: (snapshot.clips as Clip[] | undefined) ?? [],
+      transitions: (snapshot.transitions as Transition[] | undefined) ?? [],
+      projectName: name ?? state.projectName,
+      selectedId: null,
+      playhead: 0,
+      past: [],
+      future: [],
+      dirty: false,
+      lastSavedAt: Date.now(),
+    })),
+
+  toDocument: () => {
+    const { tracks, clips, transitions } = get()
+    return { tracks, clips, transitions }
+  },
 }))
 
 /** Nearest magnet point (other clip edges + playhead), or null when too far. */
