@@ -15,6 +15,7 @@ import ai.chat2db.community.web.api.config.cli.security.CliRuntimeOnly;
 import ai.chat2db.community.web.api.model.response.cli.CliResult;
 import ai.chat2db.community.tools.exception.cli.CliDomainException;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
         CliSqlController.class
 })
 @CliRuntimeOnly
+@Slf4j
 public class CliExceptionHandler {
 
     @ExceptionHandler(CliDomainException.class)
@@ -41,16 +43,18 @@ public class CliExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<CliResult<Void>> handleValidation(MethodArgumentNotValidException exception,
                                                             HttpServletRequest request) {
+        log.error("CLI validation error", exception);
         return ResponseEntity.badRequest()
-                .body(CliResult.error("cli_request_invalid", exception.getMessage(),
-                        Map.of("exceptionClass", exception.getClass().getName()), requestId(request)));
+                .body(CliResult.error("cli_request_invalid", "Request validation failed",
+                        Map.of(), requestId(request)));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<CliResult<Void>> handleException(Exception exception, HttpServletRequest request) {
+        log.error("CLI runtime error", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(CliResult.error("cli_runtime_error", exception.getMessage(),
-                        Map.of("exceptionClass", exception.getClass().getName()), requestId(request)));
+                .body(CliResult.error("cli_runtime_error", "An internal error occurred",
+                        Map.of(), requestId(request)));
     }
 
     private String requestId(HttpServletRequest request) {
