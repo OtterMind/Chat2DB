@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Button } from 'antd';
 import { staticModal } from '@chat2db/ui';
 import i18n from '@/i18n';
@@ -21,31 +20,24 @@ interface EditorCloseDialogFooterProps {
 const footerButtonStyle = { marginInlineStart: 0 };
 
 function EditorCloseDialogFooter({ editor, onDecision }: EditorCloseDialogFooterProps) {
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!editor.saveBeforeClose || saving) {
+  const handleSave = () => {
+    if (!editor.saveBeforeClose) {
       return;
     }
-    setSaving(true);
-    try {
-      if (await editor.saveBeforeClose()) {
-        onDecision('saved');
-      }
-    } finally {
-      setSaving(false);
-    }
+    // Resolve the dialog before starting the save. An unnamed draft opens a
+    // second modal to collect its name, which must be the only active layer.
+    onDecision('save');
   };
 
   return (
     <div style={{ display: 'grid', gap: 8, width: '100%' }}>
-      <Button block type="primary" loading={saving} style={footerButtonStyle} onClick={handleSave}>
+      <Button block type="primary" style={footerButtonStyle} onClick={handleSave}>
         {i18n('common.button.save')}
       </Button>
-      <Button block disabled={saving} style={footerButtonStyle} onClick={() => onDecision('discard')}>
+      <Button block style={footerButtonStyle} onClick={() => onDecision('discard')}>
         {i18n('workspace.editorClose.dontSave')}
       </Button>
-      <Button block disabled={saving} style={footerButtonStyle} onClick={() => onDecision('cancel')}>
+      <Button block style={footerButtonStyle} onClick={() => onDecision('cancel')}>
         {i18n('common.button.cancel')}
       </Button>
     </div>
@@ -54,14 +46,13 @@ function EditorCloseDialogFooter({ editor, onDecision }: EditorCloseDialogFooter
 
 function requestEditorCloseDecision(tab: IWorkspaceTab, editor: EditorCloseGuardRef) {
   return new Promise<EditorCloseDecision>((resolve) => {
-    let settled = false;
-    const finish = (decision: EditorCloseDecision) => {
-      if (settled) {
+    let selectedDecision: EditorCloseDecision | undefined;
+    const finish = (nextDecision: EditorCloseDecision) => {
+      if (selectedDecision !== undefined) {
         return;
       }
-      settled = true;
+      selectedDecision = nextDecision;
       modal.destroy();
-      resolve(decision);
     };
     const modal = staticModal.confirm({
       icon: null,
@@ -75,10 +66,7 @@ function requestEditorCloseDecision(tab: IWorkspaceTab, editor: EditorCloseGuard
       footer: () => <EditorCloseDialogFooter editor={editor} onDecision={finish} />,
       onCancel: () => finish('cancel'),
       afterClose: () => {
-        if (!settled) {
-          settled = true;
-          resolve('cancel');
-        }
+        resolve(selectedDecision ?? 'cancel');
       },
     });
   });

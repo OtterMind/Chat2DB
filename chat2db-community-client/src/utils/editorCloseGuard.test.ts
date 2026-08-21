@@ -129,6 +129,21 @@ async function run() {
     3,
     'all close-dialog actions share the same horizontal alignment',
   );
+  assert.match(
+    confirmationSource,
+    /const handleSave = \(\) => \{[\s\S]*?onDecision\('save'\)/,
+    'the save action resolves the close dialog before the guard starts saving',
+  );
+  assert.doesNotMatch(
+    confirmationSource,
+    /await editor\.saveBeforeClose\(\)/,
+    'the close dialog must not keep a second save modal blocked behind it',
+  );
+  assert.match(
+    confirmationSource,
+    /afterClose: \(\) => \{[\s\S]*?resolve\(selectedDecision \?\? 'cancel'\)/,
+    'the guard waits for the close mask to finish its exit lifecycle',
+  );
 
   console.log('Editor close guard tests passed');
 }
