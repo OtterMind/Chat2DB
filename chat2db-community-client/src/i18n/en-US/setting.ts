@@ -240,6 +240,8 @@ export default {
   'setting.update.tip': 'JPG, GIF, or PNG. smaller than 1MB.',
   'setting.update.tooLarge': 'File must be smaller than 1MB!',
   'setting.title.checkUpdate': 'Check for updates',
+  'setting.button.openRelease': 'Open Release',
+  'setting.text.newVersionAvailable': 'New version available',
   'setting.text.downloadProgress': 'Download progress',
   'setting.text.notAvailable': 'No new version available',
   'setting.text.updateCheckFailed': 'Unable to check for updates. Please try again.',

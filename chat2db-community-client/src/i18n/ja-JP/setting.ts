@@ -200,6 +200,8 @@ export default {
   'setting.update.tip': 'JPG、GIF、またはPNG。1MB未満。',
   'setting.update.tooLarge': 'ファイルは1MB未満でなければなりません！',
   'setting.title.checkUpdate': '更新を確認',
+  'setting.button.openRelease': 'リリースを開く',
+  'setting.text.newVersionAvailable': '新しいバージョンがあります',
   'setting.text.downloadProgress': 'ダウンロード進捗状況',
   'setting.text.notAvailable': '新しいバージョンはありません',
   'setting.text.updateCheckFailed': '更新を確認できませんでした。もう一度お試しください。',
