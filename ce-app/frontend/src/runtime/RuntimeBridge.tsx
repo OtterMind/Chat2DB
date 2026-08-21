@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { wsClient } from '../api/websocket'
 import { jobsApi } from '../api/jobs'
+import { backendOrigin } from '../api/runtime'
 import { useRuntime } from '../store/runtime'
 
 const POLL_MS = 3000
@@ -55,6 +56,19 @@ export function RuntimeBridge() {
       }
     })
 
+    // A dead backend used to look like an empty app: every screen degraded to
+    // "no data" and only a POST ever surfaced an error. Now it is polled openly.
+    const checkHealth = async () => {
+      try {
+        const response = await fetch(`${backendOrigin}/api/health`, { cache: 'no-store' })
+        useRuntime.getState().setBackendOnline(response.ok)
+      } catch {
+        useRuntime.getState().setBackendOnline(false)
+      }
+    }
+    void checkHealth()
+    const health = window.setInterval(checkHealth, 5000)
+
     // Safety net: if the socket drops, polling still keeps the dock accurate.
     const timer = window.setInterval(async () => {
       const state = useRuntime.getState()
@@ -90,6 +104,7 @@ export function RuntimeBridge() {
       // Only on full app teardown; route changes never reach this.
       unsubscribe()
       window.clearInterval(timer)
+      window.clearInterval(health)
     }
   }, [queryClient])
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, LayoutGrid, Clapperboard, Settings as SettingsIcon, Menu, Bell } from 'lucide-react'
 import BrandMark from '../BrandMark'
+import BackendBanner from '../BackendBanner'
 import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
 import { useI18n } from '../../i18n'
@@ -63,6 +64,8 @@ export default function AppLayout() {
           </button>
         ))}
       </nav>
+
+      <BackendBanner />
 
       <main className="ce-content" ref={contentRef} key="content">
         {/* keyed by path so a route swap replaces the subtree instead of

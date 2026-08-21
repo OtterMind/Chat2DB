@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
-import { existsSync, createWriteStream } from 'fs'
+import { existsSync, createWriteStream, mkdirSync, readFileSync, statSync } from 'fs'
 import log from 'electron-log/main'
 
 /**
@@ -19,6 +19,12 @@ log.errorHandler.startCatching({ showDialog: false })
 Object.assign(console, log.functions)
 
 let backendProcess: ReturnType<typeof spawn> | null = null
+/** Why the backend is not available, surfaced to the UI instead of a silent failure. */
+let backendFailure: string | null = null
+
+function backendLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'backend.log')
+}
 let mainWindow: BrowserWindow | null = null
 
 function startBackend() {
@@ -31,7 +37,11 @@ function startBackend() {
   let cmd: string; let args: string[]; let cwd: string | undefined
   if (existsSync(exePath)) { cmd = exePath; args = []; cwd = resourcesBackend }
   else if (existsSync(pythonPath)) { cmd = pythonPath; args = ['run_backend.py']; cwd = resourcesBackend }
-  else { console.warn('[CE] Bundled backend not found at', resourcesBackend); return }
+  else {
+    log.error('[CE] Bundled backend not found at', resourcesBackend)
+    backendFailure = `Bundled backend not found at ${resourcesBackend}`
+    return
+  }
 
   const ffmpegDir = path.join(process.resourcesPath, 'ffmpeg')
   if (existsSync(ffmpegDir)) {
@@ -39,15 +49,36 @@ function startBackend() {
     process.env.PATH = ffmpegDir + path.delimiter + (process.env.PATH ?? '')
   }
   log.info('[CE] Starting backend:', cmd, args.join(' '))
-  backendProcess = spawn(cmd, args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
+  try {
+    backendProcess = spawn(cmd, args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
+  } catch (error) {
+    backendFailure = `spawn failed: ${String(error)}`
+    log.error('[CE] Backend spawn threw:', error)
+    return
+  }
 
-  // Backend output is the single most useful thing when a job fails; keep it.
-  const backendLog = createWriteStream(path.join(app.getPath('userData'), 'logs', 'backend.log'), { flags: 'a' })
-  backendProcess.stdout?.pipe(backendLog)
-  backendProcess.stderr?.pipe(backendLog)
+  // Backend output is the single most useful thing when anything fails; keep it.
+  // The directory may not exist on a first run, and an unhandled stream error
+  // would take the whole main process down with it.
+  try {
+    mkdirSync(path.dirname(backendLogPath()), { recursive: true })
+    const backendLog = createWriteStream(backendLogPath(), { flags: 'a' })
+    backendLog.on('error', (err) => log.error('[CE] backend.log write failed:', err))
+    backendProcess.stdout?.pipe(backendLog)
+    backendProcess.stderr?.pipe(backendLog)
+  } catch (error) {
+    log.error('[CE] Could not open backend.log:', error)
+  }
 
-  backendProcess.on('error', (err) => log.error('[CE] Backend failed:', err))
-  backendProcess.on('exit', (code) => { log.warn('[CE] Backend exited:', code); backendProcess = null })
+  backendProcess.on('error', (err) => {
+    backendFailure = String(err)
+    log.error('[CE] Backend failed:', err)
+  })
+  backendProcess.on('exit', (code, signal) => {
+    backendFailure = `backend exited with code ${code}${signal ? ` (${signal})` : ''}`
+    log.warn('[CE] Backend exited:', code, signal)
+    backendProcess = null
+  })
 }
 
 /**
@@ -84,6 +115,39 @@ function registerIpc() {
   })
 
   ipcMain.handle('log:path', () => log.transports.file.getFile().path)
+
+  /** Everything the diagnostics screen needs to explain a dead backend. */
+  ipcMain.handle('backend:status', () => {
+    let tail: string[] = []
+    try {
+      const file = backendLogPath()
+      if (existsSync(file)) {
+        const size = statSync(file).size
+        const text = readFileSync(file, 'utf8').slice(Math.max(0, size - 8000))
+        tail = text.split(/\r?\n/).filter(Boolean).slice(-40)
+      }
+    } catch (error) {
+      tail = [`could not read backend.log: ${String(error)}`]
+    }
+    return {
+      running: backendProcess !== null,
+      pid: backendProcess?.pid ?? null,
+      failure: backendFailure,
+      logPath: backendLogPath(),
+      tail,
+    }
+  })
+
+  /** Manual restart from the UI when the backend died. */
+  ipcMain.handle('backend:restart', () => {
+    if (backendProcess) {
+      try { backendProcess.kill() } catch { /* already gone */ }
+      backendProcess = null
+    }
+    backendFailure = null
+    startBackend()
+    return { running: backendProcess !== null, failure: backendFailure }
+  })
   ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
 }
 

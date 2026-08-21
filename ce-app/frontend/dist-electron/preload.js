@@ -34,6 +34,10 @@ import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
   },
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => import_electron.ipcRenderer.invoke("media:pick"),
+  /** Is the bundled backend alive, and why not — plus the tail of its log. */
+  backendStatus: () => import_electron.ipcRenderer.invoke("backend:status"),
+  /** Try to start the backend again after a crash. */
+  restartBackend: () => import_electron.ipcRenderer.invoke("backend:restart"),
   /** Absolute path of the log file, for the diagnostics screen. */
   logPath: () => import_electron.ipcRenderer.invoke("log:path"),
   /** Reveal the log file in Explorer so the user can attach it to a report. */

@@ -126,8 +126,14 @@ export default function Studio() {
           color: info.has_video ? '#6366F1' : '#10B981',
         })
       } catch (err) {
+        const offline = /network error/i.test((err as Error).message)
         message.error(
-          t('Could not read ', 'خواندن فایل ممکن نشد ') + path + ': ' + (err as Error).message
+          offline
+            ? t(
+                'The local processing service is not running — see Diagnostics.',
+                'سرویس پردازش محلی اجرا نمی‌شود — به بخش عیب‌یابی برو.'
+              )
+            : t('Could not read ', 'خواندن فایل ممکن نشد ') + path + ': ' + (err as Error).message
         )
       }
     }

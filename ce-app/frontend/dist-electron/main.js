@@ -2261,6 +2261,10 @@ import_main.default.transports.file.maxSize = 5 * 1024 * 1024;
 import_main.default.errorHandler.startCatching({ showDialog: false });
 Object.assign(console, import_main.default.functions);
 var backendProcess = null;
+var backendFailure = null;
+function backendLogPath() {
+  return import_path.default.join(import_electron2.app.getPath("userData"), "logs", "backend.log");
+}
 var mainWindow = null;
 function startBackend() {
   if (process.env.CE_MANUAL_BACKEND === "1") return;
@@ -2280,7 +2284,8 @@ function startBackend() {
     args = ["run_backend.py"];
     cwd = resourcesBackend;
   } else {
-    console.warn("[CE] Bundled backend not found at", resourcesBackend);
+    import_main.default.error("[CE] Bundled backend not found at", resourcesBackend);
+    backendFailure = `Bundled backend not found at ${resourcesBackend}`;
     return;
   }
   const ffmpegDir = import_path.default.join(process.resourcesPath, "ffmpeg");
@@ -2289,13 +2294,29 @@ function startBackend() {
     process.env.PATH = ffmpegDir + import_path.default.delimiter + (process.env.PATH ?? "");
   }
   import_main.default.info("[CE] Starting backend:", cmd, args.join(" "));
-  backendProcess = (0, import_child_process.spawn)(cmd, args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: process.env });
-  const backendLog = (0, import_fs.createWriteStream)(import_path.default.join(import_electron2.app.getPath("userData"), "logs", "backend.log"), { flags: "a" });
-  backendProcess.stdout?.pipe(backendLog);
-  backendProcess.stderr?.pipe(backendLog);
-  backendProcess.on("error", (err) => import_main.default.error("[CE] Backend failed:", err));
-  backendProcess.on("exit", (code) => {
-    import_main.default.warn("[CE] Backend exited:", code);
+  try {
+    backendProcess = (0, import_child_process.spawn)(cmd, args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+  } catch (error) {
+    backendFailure = `spawn failed: ${String(error)}`;
+    import_main.default.error("[CE] Backend spawn threw:", error);
+    return;
+  }
+  try {
+    (0, import_fs.mkdirSync)(import_path.default.dirname(backendLogPath()), { recursive: true });
+    const backendLog = (0, import_fs.createWriteStream)(backendLogPath(), { flags: "a" });
+    backendLog.on("error", (err) => import_main.default.error("[CE] backend.log write failed:", err));
+    backendProcess.stdout?.pipe(backendLog);
+    backendProcess.stderr?.pipe(backendLog);
+  } catch (error) {
+    import_main.default.error("[CE] Could not open backend.log:", error);
+  }
+  backendProcess.on("error", (err) => {
+    backendFailure = String(err);
+    import_main.default.error("[CE] Backend failed:", err);
+  });
+  backendProcess.on("exit", (code, signal) => {
+    backendFailure = `backend exited with code ${code}${signal ? ` (${signal})` : ""}`;
+    import_main.default.warn("[CE] Backend exited:", code, signal);
     backendProcess = null;
   });
 }
@@ -2324,6 +2345,38 @@ function registerIpc() {
     }
   });
   import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
+  import_electron2.ipcMain.handle("backend:status", () => {
+    let tail = [];
+    try {
+      const file = backendLogPath();
+      if ((0, import_fs.existsSync)(file)) {
+        const size = (0, import_fs.statSync)(file).size;
+        const text = (0, import_fs.readFileSync)(file, "utf8").slice(Math.max(0, size - 8e3));
+        tail = text.split(/\r?\n/).filter(Boolean).slice(-40);
+      }
+    } catch (error) {
+      tail = [`could not read backend.log: ${String(error)}`];
+    }
+    return {
+      running: backendProcess !== null,
+      pid: backendProcess?.pid ?? null,
+      failure: backendFailure,
+      logPath: backendLogPath(),
+      tail
+    };
+  });
+  import_electron2.ipcMain.handle("backend:restart", () => {
+    if (backendProcess) {
+      try {
+        backendProcess.kill();
+      } catch {
+      }
+      backendProcess = null;
+    }
+    backendFailure = null;
+    startBackend();
+    return { running: backendProcess !== null, failure: backendFailure };
+  });
   import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
 }
 function showFatal(win, message) {

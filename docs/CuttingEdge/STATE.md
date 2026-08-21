@@ -84,10 +84,14 @@ gate that stops a broken installer from being published.
    actually contain audio, or FFmpeg aborts the whole graph.
 7. **Event loop in worker threads.** Endpoints that hand work to a thread must be
    `async def` and capture `asyncio.get_running_loop()`.
-8. **Bridge contract.** Anything the renderer calls on `window.cuttingEdge` must be
+8. **Never let a dead backend look like an empty app.** Every screen degraded to
+   "no data" when the bundled Python process was not running, and only a POST ever
+   produced an error. `RuntimeBridge` polls `/api/health` and `BackendBanner` says
+   so out loud, with restart and diagnostics.
+9. **Bridge contract.** Anything the renderer calls on `window.cuttingEdge` must be
    exposed in `electron/preload.ts` *and* handled in `electron/main.ts`. A missing
    entry fails silently — `npm run check:bridge` now catches it.
-9. **Bad dependency pins.** The PyPI project is `scenedetect`, not `PySceneDetect`;
+10. **Bad dependency pins.** The PyPI project is `scenedetect`, not `PySceneDetect`;
    `pexels-api` stops at 1.0.1.
 
 ## 5. Release procedure

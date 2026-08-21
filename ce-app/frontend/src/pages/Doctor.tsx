@@ -12,18 +12,33 @@ interface Diagnostics {
   ffmpeg?: { found?: boolean; path?: string | null }
 }
 
+interface BackendStatus {
+  running: boolean
+  pid: number | null
+  failure: string | null
+  logPath: string
+  tail: string[]
+}
+
 interface DesktopBridge {
   logPath?: () => Promise<string>
   openLogFolder?: () => void
+  backendStatus?: () => Promise<BackendStatus>
+  restartBackend?: () => Promise<{ running: boolean; failure: string | null }>
 }
 
 export default function Doctor() {
   const { t } = useI18n()
   const [logPath, setLogPath] = useState<string | null>(null)
+  const [backend, setBackend] = useState<BackendStatus | null>(null)
   const bridge = (window as unknown as { cuttingEdge?: DesktopBridge }).cuttingEdge
 
   useEffect(() => {
     bridge?.logPath?.().then(setLogPath).catch(() => undefined)
+    const refresh = () => bridge?.backendStatus?.().then(setBackend).catch(() => undefined)
+    refresh()
+    const timer = window.setInterval(refresh, 4000)
+    return () => window.clearInterval(timer)
   }, [bridge])
 
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -78,6 +93,43 @@ export default function Doctor() {
               <Stat label={t('Free space', 'فضای آزاد')} value={<><Num>{data.system?.disk_free_gb ?? '—'}</Num> {t('GB', 'گیگابایت')}</>} />
             </div>
           </Card>
+
+          {backend && (
+            <Card
+              title={t('Processing service', 'سرویس پردازش')}
+              tone={backend.running ? 'success' : 'danger'}
+              extra={
+                bridge?.restartBackend ? (
+                  <button
+                    className="ce-btn ce-btn--ghost ce-btn--sm"
+                    onClick={() => bridge.restartBackend?.().then(() => bridge.backendStatus?.().then(setBackend))}
+                  >
+                    <RefreshCw size={15} /> {t('Restart', 'راه‌اندازی دوباره')}
+                  </button>
+                ) : undefined
+              }
+            >
+              <div className="ce-kv">
+                <span>{t('Status', 'وضعیت')}</span>
+                <strong>
+                  {backend.running
+                    ? `${t('running', 'در حال اجرا')} (PID ${backend.pid})`
+                    : t('not running', 'اجرا نمی‌شود')}
+                </strong>
+              </div>
+              {backend.failure && (
+                <div className="ce-kv">
+                  <span>{t('Last error', 'آخرین خطا')}</span>
+                  <strong className="ce-kv__wrap">{backend.failure}</strong>
+                </div>
+              )}
+              {backend.tail.length > 0 && (
+                <pre className="ce-logtail" dir="ltr">
+                  {backend.tail.slice(-12).join('\n')}
+                </pre>
+              )}
+            </Card>
+          )}
 
           <Card
             title={t('Logs & diagnostics', 'گزارش‌ها و عیب‌یابی')}

@@ -22,18 +22,24 @@ interface RuntimeState {
   tasks: Record<string, BackgroundTask>
   wsConnected: boolean
   lastEventAt: number | null
+  /** null while unknown, then the live reachability of the local API. */
+  backendOnline: boolean | null
+  backendCheckedAt: number | null
 
   upsertTask: (task: Partial<BackgroundTask> & { id: string; kind: TaskKind; label: string }) => void
   patchTask: (id: string, patch: Partial<BackgroundTask>) => void
   removeTask: (id: string) => void
   clearFinished: () => void
   setWsConnected: (connected: boolean) => void
+  setBackendOnline: (online: boolean) => void
 }
 
 export const useRuntime = create<RuntimeState>((set) => ({
   tasks: {},
   wsConnected: false,
   lastEventAt: null,
+  backendOnline: null,
+  backendCheckedAt: null,
 
   upsertTask: (task) =>
     set((state) => {
@@ -77,6 +83,7 @@ export const useRuntime = create<RuntimeState>((set) => ({
     })),
 
   setWsConnected: (wsConnected) => set({ wsConnected }),
+  setBackendOnline: (backendOnline) => set({ backendOnline, backendCheckedAt: Date.now() }),
 }))
 
 /** Selector helpers */

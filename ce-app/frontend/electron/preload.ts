@@ -30,6 +30,18 @@ contextBridge.exposeInMainWorld('cuttingEdge', {
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => ipcRenderer.invoke('media:pick') as Promise<string[]>,
 
+  /** Is the bundled backend alive, and why not — plus the tail of its log. */
+  backendStatus: () =>
+    ipcRenderer.invoke('backend:status') as Promise<{
+      running: boolean
+      pid: number | null
+      failure: string | null
+      logPath: string
+      tail: string[]
+    }>,
+  /** Try to start the backend again after a crash. */
+  restartBackend: () => ipcRenderer.invoke('backend:restart') as Promise<{ running: boolean; failure: string | null }>,
+
   /** Absolute path of the log file, for the diagnostics screen. */
   logPath: () => ipcRenderer.invoke('log:path') as Promise<string>,
   /** Reveal the log file in Explorer so the user can attach it to a report. */
