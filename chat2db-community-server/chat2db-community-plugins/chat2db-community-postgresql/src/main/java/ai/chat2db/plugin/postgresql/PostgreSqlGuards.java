@@ -28,7 +28,8 @@ public final class PostgreSqlGuards {
     private static final Set<String> PRIVILEGES = Set.of(
             "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN");
     private static final Set<String> VIEW_STORAGE_CLAUSES = Set.of(
-            "TEMP", "LOCAL TEMP", "GLOBAL TEMP", "UNLOGGED");
+            "TEMP", "LOCAL TEMP", "GLOBAL TEMP", "UNLOGGED",
+            "TEMPORARY", "LOCAL TEMPORARY", "GLOBAL TEMPORARY");
 
     private PostgreSqlGuards() {
     }
