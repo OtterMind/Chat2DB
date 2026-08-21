@@ -45,6 +45,7 @@ export const databaseCapabilities = {
   ],
   tableEditorMysqlBaseInfoSupported: [DatabaseTypeCode.MYSQL],
   tableEditorMysqlIndexMethodSupported: [DatabaseTypeCode.MYSQL],
+  tableEditorMysqlIndexVisibleSupported: [DatabaseTypeCode.MYSQL],
   tableEditorOracleIndexColumnHidden: [DatabaseTypeCode.ORACLE],
   tableEditorSqliteIncludeCollationSupported: [DatabaseTypeCode.SQLITE],
   tableEditorSqliteExistingColumnReadonly: [DatabaseTypeCode.SQLITE],

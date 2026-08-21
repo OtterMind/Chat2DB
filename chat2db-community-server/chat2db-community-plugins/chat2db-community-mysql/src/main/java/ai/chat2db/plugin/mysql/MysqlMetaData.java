@@ -344,6 +344,11 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                         log.error(LOG_INDEX_COMMENT_FAILED, keyName, e);
                         index.setComment(resultSet.getString(FIELD_INDEX_COMMENT_FALLBACK));
                     }
+                    try {
+                        index.setVisible("YES".equalsIgnoreCase(resultSet.getString(FIELD_IS_VISIBLE)));
+                    } catch (SQLException e) {
+                        index.setVisible(Boolean.TRUE);
+                    }
                     List<TableIndexColumn> tableIndexColumns = new ArrayList<>();
                     tableIndexColumns.add(getTableIndexColumn(resultSet));
                     index.setColumnList(tableIndexColumns);
