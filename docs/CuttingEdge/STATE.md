@@ -19,7 +19,10 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Preview** | Real video in the program monitor, streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
-| **Tool rail** | Context-sensitive bottom toolbar (global set / clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
+| **Tool rail** | Context-sensitive bottom toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
+| **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
+| **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
+| **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
@@ -112,8 +115,8 @@ to build a differential patch.
 
 ## 6. Next, in order
 
-1. Project save/load — the timeline is lost when the app closes.
-2. Animated captions from the transcript (libass is already inside our FFmpeg).
+2. Project save/load — the timeline is lost when the app closes.
+1. Animated captions from the transcript (libass is already inside our FFmpeg).
 3. MediaPipe face tracking for reframing (currently centre-crop).
 4. YouTube/Instagram publishing.
 5. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).

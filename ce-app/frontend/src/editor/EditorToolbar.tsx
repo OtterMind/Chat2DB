@@ -5,12 +5,16 @@ import {
   Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend,
 } from 'lucide-react'
 import { Slider, Segmented, message } from 'antd'
-import { useEditor, propsOf, type Clip } from './model'
+import { useEditor, propsOf, type Clip, type ClipProps } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
 
 type PanelId =
   | null
+  | 'filters'
+  | 'adjust'
+  | 'animate'
+  | 'audio'
   | 'speed'
   | 'volume'
   | 'crop'
@@ -69,8 +73,8 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
     { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
     { id: 'captions', icon: <Captions {...ICON} />, label: ['Captions', 'زیرنویس'], soon: true },
     { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], soon: true },
-    { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], soon: true },
-    { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], soon: true },
+    { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
+    { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
   ]
 
@@ -112,7 +116,10 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
       run: () => clip && props && setProps(clip.id, { transform: { ...props.transform, rotate: (props.transform.rotate + 90) % 360 } }),
     },
     { id: 'replace', icon: <Repeat {...ICON} />, label: ['Replace', 'جایگزینی'], run: onImport },
-    { id: 'animations', icon: <Film {...ICON} />, label: ['Animations', 'انیمیشن'], soon: true },
+    { id: 'animations', icon: <Film {...ICON} />, label: ['Animations', 'انیمیشن'], panel: 'animate' },
+    { id: 'clipfilters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
+    { id: 'clipadjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
+    { id: 'clipaudio', icon: <AudioLines {...ICON} />, label: ['Audio', 'پردازش صدا'], panel: 'audio' },
     { id: 'delete', icon: <Trash2 {...ICON} />, label: ['Delete', 'حذف'], run: removeSelected },
   ]
 
@@ -171,6 +178,27 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
                     )
                   }
                 }}
+              />
+            )}
+            {panel === 'filters' && clip && props && (
+              <PanelFilters current={props.filter} onPick={(filter) => setProps(clip.id, { filter })} />
+            )}
+            {panel === 'adjust' && clip && props && (
+              <PanelAdjust adjust={props.adjust} onChange={(adjust) => setProps(clip.id, { adjust })} />
+            )}
+            {panel === 'animate' && clip && props && (
+              <PanelAnimate
+                animIn={props.animIn}
+                animOut={props.animOut}
+                duration={props.animDuration}
+                onChange={(patch) => setProps(clip.id, patch)}
+              />
+            )}
+            {panel === 'audio' && clip && props && (
+              <PanelAudio
+                denoise={props.denoise}
+                enhanceVoice={props.enhanceVoice}
+                onChange={(patch) => setProps(clip.id, patch)}
               />
             )}
             {panel === 'ratio' && <PanelRatio />}
@@ -378,6 +406,144 @@ function PanelTransition({
           {t('Remove transition', 'حذف ترنزیشن')}
         </button>
       )}
+    </div>
+  )
+}
+
+const LOOKS: [id: string, label: [string, string], swatch: string][] = [
+  ['none', ['Original', 'اصلی'], 'linear-gradient(135deg,#64748b,#94a3b8)'],
+  ['warm', ['Warm', 'گرم'], 'linear-gradient(135deg,#f59e0b,#ef4444)'],
+  ['cool', ['Cool', 'سرد'], 'linear-gradient(135deg,#38bdf8,#6366f1)'],
+  ['cinematic', ['Cinematic', 'سینمایی'], 'linear-gradient(135deg,#0f172a,#14b8a6)'],
+  ['vivid', ['Vivid', 'پرمایه'], 'linear-gradient(135deg,#ec4899,#f59e0b)'],
+  ['bw', ['B & W', 'سیاه‌وسفید'], 'linear-gradient(135deg,#e2e8f0,#0f172a)'],
+  ['sepia', ['Sepia', 'سپیا'], 'linear-gradient(135deg,#d6b48a,#7c5a3a)'],
+  ['vintage', ['Vintage', 'قدیمی'], 'linear-gradient(135deg,#c4b5fd,#f0abfc)'],
+  ['matte', ['Matte', 'مات'], 'linear-gradient(135deg,#475569,#cbd5e1)'],
+  ['night', ['Night', 'شب'], 'linear-gradient(135deg,#1e293b,#3b82f6)'],
+]
+
+function PanelFilters({ current, onPick }: { current: string; onPick: (id: string) => void }) {
+  const { lang } = useI18n()
+  const i = lang === 'fa' ? 1 : 0
+  return (
+    <div className="tb__transitions">
+      {LOOKS.map(([id, label, swatch]) => (
+        <button
+          key={id}
+          className={`tb__transition ${current === id ? 'is-active' : ''}`}
+          onClick={() => onPick(id)}
+        >
+          <span className="tb__transition-art" style={{ background: swatch }} />
+          <span>{label[i]}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function PanelAdjust({
+  adjust, onChange,
+}: {
+  adjust: ClipProps['adjust']
+  onChange: (adjust: ClipProps['adjust']) => void
+}) {
+  const { t } = useI18n()
+  const rows: [keyof typeof adjust, string, number, number, number][] = [
+    ['brightness', t('Brightness', 'روشنایی'), -0.5, 0.5, 0],
+    ['contrast', t('Contrast', 'کنتراست'), 0.5, 2, 1],
+    ['saturation', t('Saturation', 'اشباع'), 0, 3, 1],
+    ['temperature', t('Temperature', 'دمای رنگ'), -1, 1, 0],
+    ['sharpen', t('Sharpen', 'وضوح'), 0, 1, 0],
+    ['vignette', t('Vignette', 'وینیت'), 0, 1, 0],
+  ]
+  return (
+    <div className="tb__grid">
+      {rows.map(([key, label, min, max, base]) => (
+        <Field key={key} label={label} value={adjust[key].toFixed(2)}>
+          <Slider
+            min={min}
+            max={max}
+            step={0.01}
+            value={adjust[key]}
+            onChange={(v) => onChange({ ...adjust, [key]: v })}
+            marks={{ [base]: '' }}
+          />
+        </Field>
+      ))}
+    </div>
+  )
+}
+
+const ANIMATIONS: [id: string, label: [string, string]][] = [
+  ['none', ['None', 'بدون']],
+  ['fade', ['Fade', 'محو']],
+  ['zoomIn', ['Zoom in', 'زوم به داخل']],
+  ['zoomOut', ['Zoom out', 'زوم به بیرون']],
+]
+
+function PanelAnimate({
+  animIn, animOut, duration, onChange,
+}: {
+  animIn: string
+  animOut: string
+  duration: number
+  onChange: (patch: { animIn?: string; animOut?: string; animDuration?: number }) => void
+}) {
+  const { t, lang } = useI18n()
+  const i = lang === 'fa' ? 1 : 0
+  return (
+    <div className="tb__stack">
+      <div className="tb__row">
+        <Field label={t('In', 'ورود')}>
+          <Segmented
+            value={animIn}
+            onChange={(v) => onChange({ animIn: String(v) })}
+            options={ANIMATIONS.map(([id, label]) => ({ value: id, label: label[i] }))}
+          />
+        </Field>
+        <Field label={t('Out', 'خروج')}>
+          <Segmented
+            value={animOut}
+            onChange={(v) => onChange({ animOut: String(v) })}
+            options={ANIMATIONS.map(([id, label]) => ({ value: id, label: label[i] }))}
+          />
+        </Field>
+      </div>
+      <Field label={t('Animation length', 'مدت انیمیشن')} value={`${duration.toFixed(1)}s`}>
+        <Slider min={0.2} max={2} step={0.1} value={duration} onChange={(v) => onChange({ animDuration: v })} />
+      </Field>
+    </div>
+  )
+}
+
+function PanelAudio({
+  denoise, enhanceVoice, onChange,
+}: {
+  denoise: number
+  enhanceVoice: boolean
+  onChange: (patch: { denoise?: number; enhanceVoice?: boolean }) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="tb__stack">
+      <Field label={t('Noise reduction', 'نویزگیری')} value={`${Math.round(denoise * 100)}%`}>
+        <Slider min={0} max={1} step={0.05} value={denoise} onChange={(v) => onChange({ denoise: v })} />
+      </Field>
+      <Segmented
+        value={enhanceVoice ? 'on' : 'off'}
+        onChange={(v) => onChange({ enhanceVoice: v === 'on' })}
+        options={[
+          { value: 'off', label: t('Voice enhance off', 'بهبود صدا خاموش') },
+          { value: 'on', label: t('Voice enhance on', 'بهبود صدا روشن') },
+        ]}
+      />
+      <p className="ce-hint">
+        {t(
+          'Voice enhance applies a high-pass, presence boost, compression and -16 LUFS normalisation.',
+          'بهبود صدا شامل حذف بم‌های مزاحم، تقویت وضوح، فشرده‌سازی و نرمال‌سازی روی -۱۶ است.'
+        )}
+      </p>
     </div>
   )
 }

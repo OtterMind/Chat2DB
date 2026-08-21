@@ -40,12 +40,21 @@ class ClipProps:
     transform: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 0.0)  # x, y, scale, rotate
     fade_in: float = 0.0
     fade_out: float = 0.0
+    # colour grade: brightness/contrast/saturation/temperature/sharpen/vignette
+    adjust: tuple[float, float, float, float, float, float] = (0.0, 1.0, 1.0, 0.0, 0.0, 0.0)
+    filter: str = "none"
+    anim_in: str = "none"
+    anim_out: str = "none"
+    anim_duration: float = 0.6
+    denoise: float = 0.0
+    enhance_voice: bool = False
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "ClipProps":
         data = data or {}
         crop = data.get("crop") or {}
         transform = data.get("transform") or {}
+        adjust = data.get("adjust") or {}
         return cls(
             speed=max(0.0001, float(data.get("speed", 1.0) or 1.0)),
             volume=max(0.0, float(data.get("volume", 1.0) or 1.0)),
@@ -62,6 +71,20 @@ class ClipProps:
             ),
             fade_in=max(0.0, float(data.get("fadeIn", 0.0) or 0.0)),
             fade_out=max(0.0, float(data.get("fadeOut", 0.0) or 0.0)),
+            adjust=(
+                float(adjust.get("brightness", 0.0)),
+                float(adjust.get("contrast", 1.0)),
+                float(adjust.get("saturation", 1.0)),
+                float(adjust.get("temperature", 0.0)),
+                float(adjust.get("sharpen", 0.0)),
+                float(adjust.get("vignette", 0.0)),
+            ),
+            filter=str(data.get("filter", "none") or "none"),
+            anim_in=str(data.get("animIn", "none") or "none"),
+            anim_out=str(data.get("animOut", "none") or "none"),
+            anim_duration=max(0.1, float(data.get("animDuration", 0.6) or 0.6)),
+            denoise=min(1.0, max(0.0, float(data.get("denoise", 0.0) or 0.0))),
+            enhance_voice=bool(data.get("enhanceVoice", False)),
         )
 
 
@@ -273,6 +296,87 @@ def _has_video_stream(path: str) -> bool:
         return False
 
 
+#: Colour looks, expressed with filters that ship inside our FFmpeg build so no
+#: external LUT files have to be downloaded or licensed.
+LOOKS: dict[str, list[str]] = {
+    "none": [],
+    "warm": ["colorbalance=rs=0.10:gs=0.02:bs=-0.08", "eq=saturation=1.06"],
+    "cool": ["colorbalance=rs=-0.08:gs=0.00:bs=0.12", "eq=saturation=1.02"],
+    "cinematic": ["curves=preset=medium_contrast", "eq=saturation=0.92:contrast=1.08"],
+    "vivid": ["eq=saturation=1.45:contrast=1.12:brightness=0.02"],
+    "bw": ["hue=s=0", "eq=contrast=1.12"],
+    "sepia": ["colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"],
+    "vintage": ["curves=vintage", "eq=saturation=0.9"],
+    "matte": ["curves=all='0/0.06 0.5/0.5 1/0.94'", "eq=saturation=0.95"],
+    "night": ["colorbalance=rs=-0.12:bs=0.18", "eq=brightness=-0.06:contrast=1.1"],
+}
+
+
+def _look_filters(name: str) -> list[str]:
+    return LOOKS.get(name, [])
+
+
+def _adjust_filters(adjust: tuple[float, float, float, float, float, float]) -> list[str]:
+    brightness, contrast, saturation, temperature, sharpen, vignette = adjust
+    parts: list[str] = []
+    if any(abs(v - d) > 0.001 for v, d in ((brightness, 0.0), (contrast, 1.0), (saturation, 1.0))):
+        parts.append(
+            f"eq=brightness={brightness:.3f}:contrast={contrast:.3f}:saturation={saturation:.3f}"
+        )
+    if abs(temperature) > 0.001:
+        # positive is warmer, negative cooler
+        parts.append(f"colorbalance=rs={temperature * 0.3:.3f}:bs={-temperature * 0.3:.3f}")
+    if sharpen > 0.001:
+        parts.append(f"unsharp=5:5:{min(2.0, sharpen * 2):.3f}")
+    if vignette > 0.001:
+        parts.append(f"vignette=PI/{max(2.5, 6 - vignette * 3):.2f}")
+    return parts
+
+
+def _animation_filters(
+    kind: str,
+    duration: float,
+    clip_duration: float,
+    entering: bool,
+    width: int,
+    height: int,
+) -> list[str]:
+    """In/out animations expressed with time-aware filters.
+
+    Expression commas must be escaped: inside filter_complex a bare comma ends
+    the filter, which is why an unescaped `if(lt(t,d),..)` breaks the whole graph.
+    """
+    if kind in ("none", "", None):
+        return []
+    d = max(0.1, min(duration, clip_duration / 2))
+    start = 0.0 if entering else max(0.0, clip_duration - d)
+
+    if kind == "fade":
+        return [f"fade=t={'in' if entering else 'out'}:st={start:.3f}:d={d:.3f}:alpha=1"]
+
+    if kind in ("zoomIn", "zoomOut"):
+        # A time-varying crop, then scale back to the canvas: zoompan restarts
+        # per frame on moving footage, so it cannot animate a clip.
+        if kind == "zoomIn":
+            zoom = (
+                f"if(lt(t,{d:.3f}),1.18-0.18*t/{d:.3f},1)"
+                if entering
+                else f"if(gt(t,{start:.3f}),1+0.18*(t-{start:.3f})/{d:.3f},1)"
+            )
+        else:
+            zoom = (
+                f"if(lt(t,{d:.3f}),1+0.18*(1-t/{d:.3f}),1)"
+                if entering
+                else f"if(gt(t,{start:.3f}),1.18-0.18*(1-(t-{start:.3f})/{d:.3f}),1)"
+            )
+        zoom = zoom.replace(",", "\\,")
+        return [
+            f"crop=w=iw/({zoom}):h=ih/({zoom}):x=(iw-ow)/2:y=(ih-oh)/2",
+            f"scale={width}:{height}",
+        ]
+    return []
+
+
 def _atempo_chain(speed: float) -> list[float]:
     """atempo only accepts 0.5–2.0, so extreme speeds need to be chained."""
     factors: list[float] = []
@@ -407,6 +511,8 @@ def build_command(
             f"pad={timeline.width}:{timeline.height}:(ow-iw)/2+{int(x * timeline.width)}"
             f":(oh-ih)/2+{int(y * timeline.height)}:color=black@0"
         )
+        parts.extend(_look_filters(clip.props.filter))
+        parts.extend(_adjust_filters(clip.props.adjust))
         parts.append("setsar=1")
         parts.append(f"fps={timeline.fps}")
 
@@ -416,6 +522,19 @@ def build_command(
         if clip.props.opacity < 0.999:
             parts.append("format=rgba")
             parts.append(f"colorchannelmixer=aa={clip.props.opacity:.3f}")
+
+        parts.extend(
+            _animation_filters(
+                clip.props.anim_in, clip.props.anim_duration, clip.duration, True,
+                timeline.width, timeline.height,
+            )
+        )
+        parts.extend(
+            _animation_filters(
+                clip.props.anim_out, clip.props.anim_duration, clip.duration, False,
+                timeline.width, timeline.height,
+            )
+        )
 
         if clip.props.fade_in > 0:
             parts.append(f"fade=t=in:st=0:d={clip.props.fade_in:.3f}:alpha=1")
@@ -484,6 +603,16 @@ def build_command(
         if clip.props.speed != 1.0:
             for factor in _atempo_chain(clip.props.speed):
                 parts.append(f"atempo={factor:.6f}")
+        if clip.props.denoise > 0.01:
+            # afftdn is spectral denoise; 0..1 maps to a sane 6..24 dB reduction
+            parts.append(f"afftdn=nr={6 + clip.props.denoise * 18:.1f}:nf=-25")
+        if clip.props.enhance_voice:
+            parts.extend([
+                "highpass=f=90",
+                "equalizer=f=3000:width_type=o:width=1:g=3",
+                "acompressor=threshold=-18dB:ratio=3:attack=15:release=180",
+                "loudnorm=I=-16:TP=-1.5:LRA=11",
+            ])
         if clip.props.volume != 1.0:
             parts.append(f"volume={clip.props.volume:.3f}")
         if clip.props.fade_in > 0:

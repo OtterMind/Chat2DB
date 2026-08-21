@@ -24,6 +24,23 @@ export interface ClipProps {
   transform: { x: number; y: number; scale: number; rotate: number }
   fadeIn: number
   fadeOut: number
+  /** Colour grade. */
+  adjust: {
+    brightness: number
+    contrast: number
+    saturation: number
+    temperature: number
+    sharpen: number
+    vignette: number
+  }
+  /** Named look; see LOOKS in the compositor. */
+  filter: string
+  animIn: string
+  animOut: string
+  animDuration: number
+  /** Spectral noise reduction, 0–1. */
+  denoise: number
+  enhanceVoice: boolean
 }
 
 export const DEFAULT_PROPS: ClipProps = {
@@ -36,6 +53,13 @@ export const DEFAULT_PROPS: ClipProps = {
   transform: { x: 0, y: 0, scale: 1, rotate: 0 },
   fadeIn: 0,
   fadeOut: 0,
+  adjust: { brightness: 0, contrast: 1, saturation: 1, temperature: 0, sharpen: 0, vignette: 0 },
+  filter: 'none',
+  animIn: 'none',
+  animOut: 'none',
+  animDuration: 0.6,
+  denoise: 0,
+  enhanceVoice: false,
 }
 
 /** Cross-clip transition, always between two neighbours on the same lane. */
@@ -139,6 +163,7 @@ export function propsOf(clip: Clip): ClipProps {
     ...clip.props,
     crop: { ...DEFAULT_PROPS.crop, ...clip.props?.crop },
     transform: { ...DEFAULT_PROPS.transform, ...clip.props?.transform },
+    adjust: { ...DEFAULT_PROPS.adjust, ...clip.props?.adjust },
   }
 }
 
@@ -225,6 +250,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         ...patch,
         crop: { ...current.crop, ...patch.crop },
         transform: { ...current.transform, ...patch.transform },
+        adjust: { ...current.adjust, ...patch.adjust },
       }
       // Changing speed keeps the source window fixed and rescales the clip on
       // the timeline, which is what every NLE does.

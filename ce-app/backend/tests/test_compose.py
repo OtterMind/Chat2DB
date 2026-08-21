@@ -1,6 +1,8 @@
 """The render engine must produce a real file with the right geometry and length."""
 from __future__ import annotations
 
+import pytest
+
 from core.engine import compose
 from tests.conftest import requires_ffmpeg
 
@@ -132,3 +134,56 @@ def test_muted_clip_contributes_no_audio(media, tmp_path):
     })
     command = compose.build_command(timeline, tmp_path / "muted.mp4")
     assert "-an" in command
+
+
+@requires_ffmpeg
+@pytest.mark.parametrize("look", ["warm", "cool", "cinematic", "vivid", "bw", "sepia", "vintage", "matte", "night"])
+def test_every_colour_look_renders(media, tmp_path, look):
+    timeline = compose.Timeline.from_dict({
+        "width": 320, "height": 320, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [_clip("a", media["clip_a"], 0, 1, filter=look)],
+    })
+    output = compose.render(timeline, tmp_path / f"{look}.mp4")
+    assert compose.probe_media(str(output))["has_video"]
+
+
+@requires_ffmpeg
+@pytest.mark.parametrize("anim", ["fade", "zoomIn", "zoomOut"])
+def test_animations_render(media, tmp_path, anim):
+    """Regression: unescaped commas in a time expression broke the whole graph."""
+    timeline = compose.Timeline.from_dict({
+        "width": 320, "height": 568, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [_clip("a", media["clip_a"], 0, 2, animIn=anim, animOut=anim, animDuration=0.4)],
+    })
+    output = compose.render(timeline, tmp_path / f"{anim}.mp4")
+    assert abs(compose.probe_media(str(output))["duration"] - 2) < 0.3
+
+
+@requires_ffmpeg
+def test_colour_adjustment_renders(media, tmp_path):
+    timeline = compose.Timeline.from_dict({
+        "width": 320, "height": 320, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [_clip("a", media["clip_a"], 0, 1, adjust={
+            "brightness": 0.1, "contrast": 1.3, "saturation": 1.4,
+            "temperature": 0.4, "sharpen": 0.6, "vignette": 0.5,
+        })],
+    })
+    assert compose.render(timeline, tmp_path / "graded.mp4").exists()
+
+
+@requires_ffmpeg
+def test_audio_cleanup_renders(media, tmp_path):
+    timeline = compose.Timeline.from_dict({
+        "width": 320, "height": 320, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}, {"id": "a1", "kind": "audio"}],
+        "clips": [
+            _clip("v", media["clip_a"], 0, 2),
+            {"id": "a", "trackId": "a1", "start": 0, "duration": 2, "offset": 0,
+             "src": str(media["tone"]), "props": {"denoise": 0.7, "enhanceVoice": True}},
+        ],
+    })
+    output = compose.render(timeline, tmp_path / "audio.mp4")
+    assert compose.probe_media(str(output))["has_audio"]

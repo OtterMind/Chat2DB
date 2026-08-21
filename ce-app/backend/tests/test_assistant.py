@@ -59,3 +59,17 @@ def test_unknown_request_is_honest():
 def test_only_whitelisted_operations_survive_parsing():
     ops, _ = planner._parse_ops('{"ops":[{"op":"deleteEverything"},{"op":"mute","muted":true}],"explanation":"x"}')
     assert [op["op"] for op in ops] == ["mute"]
+
+
+def test_colour_and_audio_intents():
+    assert "setFilter" in ops_for("give it a cinematic look")
+    assert "setFilter" in ops_for("فیلتر سیاه و سفید بزن")
+    assert "setAdjust" in ops_for("make it brighter")
+    assert "setAnimation" in ops_for("zoom in at the start")
+    assert "denoise" in ops_for("remove the background noise")
+    assert "enhanceVoice" in ops_for("صدا رو تمیز کن با بهبود صدا")
+
+
+def test_new_operations_are_in_the_whitelist():
+    for name in ("setFilter", "setAdjust", "setAnimation", "denoise", "enhanceVoice"):
+        assert name in planner.OPERATIONS

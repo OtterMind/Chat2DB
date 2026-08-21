@@ -199,6 +199,50 @@ export async function applyPlan(ops: Operation[], selectedId: string | null): Pr
         result.applied.push(`trimmed to ~${target}s`)
         break
       }
+      case 'setFilter': {
+        if (!clip) break
+        state.setProps(clip.id, { filter: String(op.filter ?? op.name ?? 'none') })
+        result.applied.push(`look ${String(op.filter ?? op.name)}`)
+        break
+      }
+      case 'setAdjust': {
+        if (!clip) break
+        const current = propsOf(clip).adjust
+        state.setProps(clip.id, {
+          adjust: {
+            brightness: clamp(num(op.brightness, current.brightness), -0.5, 0.5),
+            contrast: clamp(num(op.contrast, current.contrast), 0.5, 2),
+            saturation: clamp(num(op.saturation, current.saturation), 0, 3),
+            temperature: clamp(num(op.temperature, current.temperature), -1, 1),
+            sharpen: clamp(num(op.sharpen, current.sharpen), 0, 1),
+            vignette: clamp(num(op.vignette, current.vignette), 0, 1),
+          },
+        })
+        result.applied.push('colour adjust')
+        break
+      }
+      case 'setAnimation': {
+        if (!clip) break
+        state.setProps(clip.id, {
+          animIn: typeof op.animIn === 'string' ? op.animIn : propsOf(clip).animIn,
+          animOut: typeof op.animOut === 'string' ? op.animOut : propsOf(clip).animOut,
+          animDuration: clamp(num(op.duration, propsOf(clip).animDuration), 0.2, 2),
+        })
+        result.applied.push('animation')
+        break
+      }
+      case 'denoise': {
+        if (!clip) break
+        state.setProps(clip.id, { denoise: clamp(num(op.amount, 0.6), 0, 1) })
+        result.applied.push('noise reduction')
+        break
+      }
+      case 'enhanceVoice': {
+        if (!clip) break
+        state.setProps(clip.id, { enhanceVoice: op.enabled !== false })
+        result.applied.push('voice enhance')
+        break
+      }
       case 'setExport': {
         result.exportOverride = {
           width: typeof op.width === 'number' ? op.width : undefined,

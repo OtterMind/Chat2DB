@@ -44,6 +44,11 @@ OPERATIONS: dict[str, str] = {
     "deleteClip": "Remove a clip. args: clipId?",
     "duplicateClip": "Duplicate a clip. args: clipId?",
     "setExport": "Choose the export format. args: width?, height?, fps?, quality?",
+    "setFilter": "Apply a colour look. args: clipId?, filter (none|warm|cool|cinematic|vivid|bw|sepia|vintage|matte|night)",
+    "setAdjust": "Grade the picture. args: clipId?, brightness?, contrast?, saturation?, temperature?, sharpen?, vignette?",
+    "setAnimation": "Animate the clip in/out. args: clipId?, animIn?, animOut? (none|fade|zoomIn|zoomOut), duration?",
+    "denoise": "Reduce background noise. args: clipId?, amount (0-1)",
+    "enhanceVoice": "Clean up speech: high-pass, presence, compression, loudness. args: clipId?, enabled?",
 }
 
 TRANSITION_WORDS = {
@@ -51,6 +56,18 @@ TRANSITION_WORDS = {
     "wipe": "wipeleft", "پاک": "wipeleft", "slide": "slideleft", "لغزش": "slideleft",
     "zoom": "zoomin", "زوم": "zoomin", "circle": "circleopen", "دایره": "circleopen",
     "pixel": "pixelize", "پیکسل": "pixelize", "black": "fadeblack", "سیاه": "fadeblack",
+}
+
+LOOK_WORDS = {
+    "warm": "warm", "گرم": "warm",
+    "cool": "cool", "سرد": "cool",
+    "cinematic": "cinematic", "سینمایی": "cinematic", "film": "cinematic",
+    "vivid": "vivid", "پرمایه": "vivid", "saturated": "vivid",
+    "black and white": "bw", "b&w": "bw", "سیاه و سفید": "bw", "سیاه‌وسفید": "bw", "grayscale": "bw",
+    "sepia": "sepia", "سپیا": "sepia",
+    "vintage": "vintage", "قدیمی": "vintage", "retro": "vintage",
+    "matte": "matte", "مات": "matte",
+    "night": "night", "شب": "night",
 }
 
 FORMAT_WORDS: dict[str, tuple[int, int]] = {
@@ -174,6 +191,47 @@ def rule_based_plan(prompt: str, timeline: dict) -> Plan:
     if opacity is not None:
         ops.append({"op": "setOpacity", "opacity": max(0.0, min(1.0, opacity / 100))})
         notes.append(f"opacity {opacity:g}%")
+
+    # --- colour ----------------------------------------------------------
+    look = next((v for k, v in LOOK_WORDS.items() if k in text), None)
+    if look and wants("look", "filter", "grade", "فیلتر", "رنگ", "حالت", "make it"):
+        ops.append({"op": "setFilter", "filter": look})
+        notes.append(f"{look} look")
+
+    if wants("brighter", "روشن‌تر", "روشنتر"):
+        ops.append({"op": "setAdjust", "brightness": 0.12})
+        notes.append("brighter")
+    elif wants("darker", "تاریک‌تر", "تاریکتر"):
+        ops.append({"op": "setAdjust", "brightness": -0.12})
+        notes.append("darker")
+    if wants("more contrast", "کنتراست بیشتر"):
+        ops.append({"op": "setAdjust", "contrast": 1.25})
+        notes.append("more contrast")
+    if wants("sharper", "واضح‌تر", "شارپ"):
+        ops.append({"op": "setAdjust", "sharpen": 0.6})
+        notes.append("sharper")
+    if wants("vignette", "وینیت"):
+        ops.append({"op": "setAdjust", "vignette": 0.5})
+        notes.append("vignette")
+
+    # --- animation ---------------------------------------------------------
+    if wants("zoom in", "زوم به داخل", "زوم بده"):
+        ops.append({"op": "setAnimation", "animIn": "zoomIn"})
+        notes.append("zoom-in animation")
+    elif wants("zoom out", "زوم به بیرون"):
+        ops.append({"op": "setAnimation", "animOut": "zoomOut"})
+        notes.append("zoom-out animation")
+    elif wants("animate", "انیمیشن"):
+        ops.append({"op": "setAnimation", "animIn": "fade", "animOut": "fade"})
+        notes.append("fade animation")
+
+    # --- audio cleanup -----------------------------------------------------
+    if wants("noise", "نویز", "خش"):
+        ops.append({"op": "denoise", "amount": 0.7})
+        notes.append("noise reduction")
+    if wants("enhance voice", "clean up the voice", "بهبود صدا", "صدا رو تمیز", "voice clearer"):
+        ops.append({"op": "enhanceVoice", "enabled": True})
+        notes.append("voice enhancement")
 
     # --- length ----------------------------------------------------------
     target = _number(
