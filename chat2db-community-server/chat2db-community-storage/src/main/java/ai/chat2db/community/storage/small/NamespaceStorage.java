@@ -17,7 +17,7 @@ public class NamespaceStorage extends SmallDataStorage<Namespace> {
     }
 
 
-    public void deleteDataSourcePosition(Long dataSourceId) {
+    public synchronized void deleteDataSourcePosition(Long dataSourceId) {
         for (Namespace namespace : getDataList()) {
             List<Long> dataSourceIds = namespace.getDatasourceIds();
             if (!CollectionUtils.isEmpty(dataSourceIds)) {
@@ -29,7 +29,7 @@ public class NamespaceStorage extends SmallDataStorage<Namespace> {
         saveDataList();
     }
 
-    public void updateDataSourcePosition(Long namespaceId, Long dataSourceId) {
+    public synchronized void updateDataSourcePosition(Long namespaceId, Long dataSourceId) {
         for (Namespace namespace : getDataList()) {
             List<Long> dataSourceIds = namespace.getDatasourceIds();
             if (!CollectionUtils.isEmpty(dataSourceIds)) {
