@@ -215,8 +215,6 @@ export default {
   'setting.update.tip': 'JPG、GIF 或 PNG 格式，小于 1MB。',
   'setting.update.tooLarge': '文件必须小于1MB!',
   'setting.title.checkUpdate': '检查更新',
-  'setting.button.openRelease': '打开 Release',
-  'setting.text.newVersionAvailable': '发现新版本',
   'setting.text.downloadProgress': '下载进度',
   'setting.text.notAvailable': '没有可用的新版本',
   'setting.text.latestVersion': '最新版本',

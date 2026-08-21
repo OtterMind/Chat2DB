@@ -236,8 +236,6 @@ export default {
   'setting.update.tip': 'JPG, GIF 또는 PNG. 1MB 미만.',
   'setting.update.tooLarge': '파일은 1MB 미만이어야 합니다!',
   'setting.title.checkUpdate': '업데이트 확인',
-  'setting.button.openRelease': '릴리스 열기',
-  'setting.text.newVersionAvailable': '새 버전을 사용할 수 있습니다',
   'setting.text.downloadProgress': '다운로드 진행률',
   'setting.text.notAvailable': '사용 가능한 새 버전이 없습니다',
   'setting.text.latestVersion': '최신 버전',

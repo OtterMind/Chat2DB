@@ -238,8 +238,6 @@ export default {
   'setting.update.tip': 'JPG, GIF o PNG de menos de 1 MB.',
   'setting.update.tooLarge': 'El archivo debe ocupar menos de 1 MB.',
   'setting.title.checkUpdate': 'Buscar actualizaciones',
-  'setting.button.openRelease': 'Abrir Release',
-  'setting.text.newVersionAvailable': 'Nueva versión disponible',
   'setting.text.downloadProgress': 'Progreso de descarga',
   'setting.text.notAvailable': 'No hay ninguna versión nueva disponible',
   'setting.text.latestVersion': 'Versión más reciente',

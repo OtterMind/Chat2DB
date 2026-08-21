@@ -20,11 +20,11 @@ class DesktopUpdaterRegistryTest {
     }
 
     @Test
-    void communityDesktopKeepsLegacyUpdater() {
+    void communityDesktopUsesGitHubReleaseUpdater() {
         System.setProperty("chat2db.runtime.mode", "community");
         System.setProperty("chat2db.mode", "DESKTOP");
 
-        assertInstanceOf(LegacyDesktopUpdater.class, DesktopUpdaterRegistry.get());
+        assertInstanceOf(GitHubReleaseDesktopUpdater.class, DesktopUpdaterRegistry.get());
     }
 
     @Test

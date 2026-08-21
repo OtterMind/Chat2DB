@@ -75,7 +75,7 @@ export const clientRuntime: ClientRuntime = {
   showAccountCenter: false,
   showUpgradeEntry: false,
   showDownloadEntry: false,
-  enableAutoUpdate: false,
+  enableAutoUpdate: isDesktop,
   showMcpSetting: isDesktop,
   showNetworkProxySetting: isDesktop,
   showLicenseSetting: false,

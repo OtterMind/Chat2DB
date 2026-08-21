@@ -22,8 +22,13 @@ public class AppCheckUpdateHandler implements IJcefActionHandler {
     public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
         DesktopUpdateCheckResult checkResult = DesktopUpdaterRegistry.get().appCheckUpdate();
         log.info(checkResult.toString());
+        String status = checkResult.checkFailed()
+                ? UpdatedStatus.UpdateFailed.getName()
+                : checkResult.needsUpdate()
+                ? UpdatedStatus.Available.getName()
+                : UpdatedStatus.NotAvailable.getName();
         ResponseBuilder.buildSuccessJcef(
-                Map.of("data", Map.of("status", checkResult.needsUpdate() ? UpdatedStatus.Available.getName() : UpdatedStatus.NotAvailable.getName(),
+                Map.of("data", Map.of("status", status,
                         "version", checkResult.needsUpdate() ? checkResult.version() : "")
                 ), callback);
     }

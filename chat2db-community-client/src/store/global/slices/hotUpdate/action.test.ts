@@ -100,18 +100,19 @@ async function run() {
     };
 
     await state.updateAndRestartApp();
-    assert.equal(await state.handleCheckUpdate(), false);
+    assert.equal(await state.handleCheckUpdate(), true);
     await state.syncUpdatePreferences();
     await state.updateHotUpdateConfig('receiveBeta', true);
 
-    assert.equal(desktopBridgeCalls, 0);
-    assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+    assert.equal(desktopBridgeCalls, 5);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Available);
+    assert.equal(state.updateDetail.version, '5.3.1');
     assert.equal(state.hotUpdateConfig.receiveBeta, true);
 
     await state.updateHotUpdateConfig('remindMe', false);
     assert.equal(state.hotUpdateConfig.remindMe, false);
 
-    console.log('Community hot update boundary tests passed');
+    console.log('Community desktop update flow tests passed');
   } finally {
     Object.assign(jcefApi, originalApi);
   }
