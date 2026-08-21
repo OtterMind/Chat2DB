@@ -102,3 +102,57 @@ Projects with real scale, permissive licences and a direct fit:
    generating `filter_complex` graphs from our edit model.
 5. **Avoid GPL dependencies inside the app process** so the project can stay
    permissively licensed.
+
+
+---
+
+# Second review — the extended list (2026-08-21)
+
+Every entry checked against the GitHub API again. Two more do not exist:
+
+| Proposed | Result |
+|---|---|
+| `pixclip/pixclip` | **404 — no such repository** |
+| `ffmpeg-toolkit/ffmpeg_toolkit` | **404 — no such repository** |
+
+## Verdicts
+
+| Project | Stars | Licence | Verdict |
+|---|---|---|---|
+| `WyattBlue/auto-editor` | 5.0k | Unlicense | ✅ **idea adopted, implemented natively** (see below) |
+| `Breakthrough/PySceneDetect` | 5.1k | BSD-3 | ✅ **now used** for shot detection (already a pinned dependency) |
+| `SYSTRAN/faster-whisper` | 25k | MIT | ✅ already bundled — keep |
+| `rastikerdar/vazirmatn` | 3.2k | OFL-1.1 | ✅ already bundled offline via `@fontsource` |
+| `francozanardi/movielite` | 68 | MIT | ⏳ keep for per-frame effects only; FFmpeg stays the core |
+| `m-bain/whisperX` | 23.7k | BSD-2 | ⏳ better word alignment + diarization, but drags in torch (~2 GB). Offer as an optional download, never in the base installer |
+| `smacke/ffsubsync` | 7.8k | MIT | ⏳ worth adopting when we support importing external subtitles |
+| `alibaba-damo-academy/FunASR` / `FunClip` | 20k / 6.2k | MIT | ➖ excellent, but Mandarin-first and heavy; no advantage for Persian/English over what we ship |
+| `Zulko/moviepy` | 14.9k | MIT | ❌ slower than our FFmpeg graph; MovieLite already covers the same niche faster |
+| `kkroening/ffmpeg-python` | 11k | Apache-2 | ❌ unmaintained since 2024 and only builds argument strings — we already generate `filter_complex` directly |
+| `jiaaro/pydub` | 9.8k | MIT | ❌ wraps FFmpeg for things we do in the graph, and depends on `audioop`, removed in Python 3.13 |
+| `opencv/opencv-python`, `python-pillow/Pillow` | — | MIT / HPND | ✅ already dependencies |
+| `OpenShot/openshot-qt` | 6.2k | **GPL-3** | ❌ copyleft — reading it is fine, linking it would force our whole app to GPL. MLT (LGPL) remains the safe engine option |
+| `programmersd21/yarn`, `KinanCodeaz/opencut`, `sonnhfit/pavo-engine-py` | tiny | **no licence** | ➖ inspiration only; no licence means no reuse |
+| `mbekana/autovideo-ai` | 2 | MIT | ❌ 8 KB skeleton |
+| Helsinki-NLP (Hugging Face) | — | mostly Apache-2/MIT per model | ⏳ `opus-mt-en-fa` / `opus-mt-fa-en` are the right choice for translation, downloaded on demand into `~/CuttingEdge/models` |
+
+## What was actually built from this review
+
+**Silence removal** — the core value of `auto-editor`, implemented in
+`core/engine/analyze.py` on FFmpeg's own `silencedetect` filter, so it needs **zero
+new dependencies** and runs on the binary we already ship. It also keeps 50 ms of
+room tone on each side so cuts do not clip the first consonant of a word.
+
+**Scene detection** — PySceneDetect's `ContentDetector`, with an FFmpeg-only
+fallback (`select='gt(scene,0.4)'`) so the feature survives a trimmed install.
+
+Both are exposed as `POST /api/analyze/silence` and `POST /api/analyze/scenes`, and
+wired to two toolbar buttons in the editor that rewrite the edit model — rippling
+the timeline closed after cuts, fully undoable with Ctrl+Z.
+
+Measured on synthetic material with known ground truth:
+
+| Test | Expected | Detected |
+|---|---|---|
+| 8.7 s audio, gaps at 2.0–3.5 s and 5.5–6.7 s | 2 gaps | `2.05–3.45`, `5.55–6.65` (padding applied) — 0.05 s |
+| 9 s video, cuts at 3 s and 6 s | 2 cuts | `[3.0, 6.0]` — 0.05 s |

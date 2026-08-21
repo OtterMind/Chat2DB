@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet, ZoomIn, ZoomOut,
-  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo,
+  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film,
 } from 'lucide-react'
 import { message } from 'antd'
 import Page from '../components/Page'
@@ -10,6 +10,7 @@ import Timeline from '../editor/Timeline'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, renderApi } from '../api/render'
+import { analyzeApi } from '../api/analyze'
 import { useRuntime } from '../store/runtime'
 import { wsClient } from '../api/websocket'
 
@@ -29,7 +30,61 @@ export default function Studio() {
     playing, playhead, pxPerSecond, snapping, selectedId, clips, tracks, past, future,
     togglePlay, setPlayhead, setZoom, toggleSnapping, splitAtPlayhead,
     removeSelected, duplicateSelected, undo, redo, addTrack, addClip,
+    keepRanges, splitAtSourceTimes,
   } = useEditor()
+
+  const [analysing, setAnalysing] = useState<'silence' | 'scenes' | null>(null)
+
+  /** The clip an automatic edit should act on. */
+  const targetClip = clips.find((c) => c.id === selectedId && c.src) ?? clips.find((c) => c.src)
+
+  const removeSilence = async () => {
+    if (!targetClip?.src) {
+      message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
+      return
+    }
+    setAnalysing('silence')
+    try {
+      const result = await analyzeApi.silence(targetClip.src)
+      if (result.speech.length === 0) {
+        message.info(t('No speech detected.', 'گفتاری پیدا نشد.'))
+        return
+      }
+      const parts = keepRanges(targetClip.id, result.speech)
+      const saved = result.silences.reduce((sum, r) => sum + (r.end - r.start), 0)
+      message.success(
+        t(
+          `Removed ${result.silences.length} silent gaps (${saved.toFixed(1)}s) — ${parts} segments left`,
+          `${result.silences.length} سکوت حذف شد (${saved.toFixed(1)} ثانیه) — ${parts} قطعه باقی ماند`
+        )
+      )
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setAnalysing(null)
+    }
+  }
+
+  const splitScenes = async () => {
+    if (!targetClip?.src) {
+      message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
+      return
+    }
+    setAnalysing('scenes')
+    try {
+      const { scenes } = await analyzeApi.scenes(targetClip.src)
+      const cuts = splitAtSourceTimes(targetClip.id, scenes)
+      message.success(
+        cuts > 0
+          ? t(`Split into ${cuts + 1} shots`, `به ${cuts + 1} نما تقسیم شد`)
+          : t('No scene changes found', 'تغییر نما پیدا نشد')
+      )
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setAnalysing(null)
+    }
+  }
 
   const [exporting, setExporting] = useState(false)
   const [lastOutput, setLastOutput] = useState<string | null>(null)
@@ -231,6 +286,27 @@ export default function Studio() {
               onChange={(e) => setZoom(Number(e.target.value))} aria-label={t('Zoom', 'بزرگ‌نمایی')}
             />
             <button className="ed__btn" onClick={() => setZoom(pxPerSecond * 1.35)} title={t('Zoom in', 'بزرگ‌نمایی')}><ZoomIn size={16} /></button>
+          </div>
+
+          <div className="ed__group">
+            <button
+              className="ed__btn"
+              onClick={removeSilence}
+              disabled={analysing !== null}
+              title={t('Detect and cut silent gaps', 'یافتن و حذف سکوت‌ها')}
+            >
+              <AudioLines size={15} className={analysing === 'silence' ? 'ce-spin' : ''} />{' '}
+              {t('Remove silence', 'حذف سکوت')}
+            </button>
+            <button
+              className="ed__btn"
+              onClick={splitScenes}
+              disabled={analysing !== null}
+              title={t('Split the clip at shot changes', 'برش کلیپ در محل تغییر نما')}
+            >
+              <Film size={15} className={analysing === 'scenes' ? 'ce-spin' : ''} />{' '}
+              {t('Split scenes', 'برش نماها')}
+            </button>
           </div>
 
           <div className="ed__group">

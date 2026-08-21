@@ -65,6 +65,10 @@ interface EditorState extends Snapshot {
   duplicateSelected: () => void
   addClip: (clip: Omit<Clip, 'id'>) => string
   clearTimeline: () => void
+  /** Replace a clip with the given source-time windows, closing the gaps. */
+  keepRanges: (id: string, ranges: { start: number; end: number }[]) => number
+  /** Cut a clip at the given source-time offsets (scene changes). */
+  splitAtSourceTimes: (id: string, times: number[]) => number
   addTrack: (kind: TrackKind) => void
   toggleMute: (trackId: string) => void
   toggleLock: (trackId: string) => void
@@ -233,6 +237,70 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().commit((s) => {
       s.clips = []
     }),
+
+  keepRanges: (id, ranges) => {
+    let produced = 0
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      // Ranges arrive in source time; translate them into the clip's window.
+      const windows = ranges
+        .map((r) => ({
+          start: Math.max(clip.offset, r.start),
+          end: Math.min(clip.offset + clip.duration, r.end),
+        }))
+        .filter((r) => r.end - r.start >= MIN_CLIP)
+      if (windows.length === 0) return
+
+      s.clips = s.clips.filter((c) => c.id !== id)
+      let cursor = clip.start
+      for (const w of windows) {
+        s.clips.push({
+          ...clip,
+          id: uid(),
+          start: cursor,          // ripple: no gaps are left behind
+          offset: w.start,
+          duration: w.end - w.start,
+        })
+        cursor += w.end - w.start
+      }
+      produced = windows.length
+
+      // Everything later on the same lane shifts by the time we removed.
+      const removed = clip.duration - (cursor - clip.start)
+      if (removed > 0) {
+        for (const other of s.clips) {
+          if (other.trackId === clip.trackId && other.start >= clip.start + clip.duration) {
+            other.start = Math.max(0, other.start - removed)
+          }
+        }
+      }
+    })
+    return produced
+  },
+
+  splitAtSourceTimes: (id, times) => {
+    let cuts = 0
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      const inside = times
+        .filter((t) => t > clip.offset + MIN_CLIP && t < clip.offset + clip.duration - MIN_CLIP)
+        .sort((a, b) => a - b)
+      if (inside.length === 0) return
+
+      s.clips = s.clips.filter((c) => c.id !== id)
+      const bounds = [clip.offset, ...inside, clip.offset + clip.duration]
+      let cursor = clip.start
+      for (let i = 0; i < bounds.length - 1; i++) {
+        const duration = bounds[i + 1] - bounds[i]
+        s.clips.push({ ...clip, id: uid(), start: cursor, offset: bounds[i], duration })
+        cursor += duration
+      }
+      cuts = inside.length
+    })
+    return cuts
+  },
 
   addTrack: (kind) =>
     get().commit((s) => {
