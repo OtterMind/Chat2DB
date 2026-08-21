@@ -119,11 +119,13 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         SqlExecutionPlan plan = authorizeExport(param);
         ExportTypeEnum exportType = ExportTypeEnum.from(param.getExportType());
         if (ExportTypeEnum.CSV == exportType) {
+            requireSelectSql(plan.getSql());
             exportCsv(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
                     rowListener, finalizationListener);
             return;
         }
         if (ExportTypeEnum.EXCEL == exportType) {
+            requireSelectSql(plan.getSql());
             exportExcel(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
                     rowListener, finalizationListener);
             return;
@@ -145,6 +147,17 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         SqlExecutionPlan plan = sqlExecutionPolicyManager.plan(context);
         sqlExecutionPolicyManager.beforeExecute(plan);
         return plan;
+    }
+
+    private void requireSelectSql(String sql) {
+        DbType dbType = currentDruidDbType();
+        if (dbType == null) {
+            return;
+        }
+        SQLStatement sqlStatement = SQLUtils.parseSingleStatement(sql, dbType);
+        if (!(sqlStatement instanceof SQLSelectStatement)) {
+            throw new BusinessException("dataSource.sqlAnalysisError");
+        }
     }
 
     private DbType currentDruidDbType() {
