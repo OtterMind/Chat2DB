@@ -17,6 +17,14 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var preload_exports = {};
 module.exports = __toCommonJS(preload_exports);
 var import_electron = require("electron");
+window.addEventListener(
+  "error",
+  (e) => import_electron.ipcRenderer.send("log:renderer", "error", `${e.message} @ ${e.filename}:${e.lineno}`)
+);
+window.addEventListener(
+  "unhandledrejection",
+  (e) => import_electron.ipcRenderer.send("log:renderer", "error", `unhandled rejection: ${String(e.reason)}`)
+);
 import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
   platform: process.platform,
   versions: {

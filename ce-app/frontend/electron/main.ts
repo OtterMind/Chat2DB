@@ -1,7 +1,22 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, createWriteStream } from 'fs'
+import log from 'electron-log/main'
+
+/**
+ * Persistent logging.
+ *
+ * Debugging the installed app used to mean guessing: a black window told us
+ * nothing and the bundled backend wrote to a console nobody could see. Now
+ * everything lands in a file the user can send us in one click:
+ *   %APPDATA%\Cutting Edge\logs\main.log
+ */
+log.initialize()
+log.transports.file.level = 'info'
+log.transports.file.maxSize = 5 * 1024 * 1024
+log.errorHandler.startCatching({ showDialog: false })
+Object.assign(console, log.functions)
 
 let backendProcess: ReturnType<typeof spawn> | null = null
 let mainWindow: BrowserWindow | null = null
@@ -23,10 +38,16 @@ function startBackend() {
     process.env.CE_FFMPEG_DIR = ffmpegDir
     process.env.PATH = ffmpegDir + path.delimiter + (process.env.PATH ?? '')
   }
-  console.log('[CE] Starting backend:', cmd, args.join(' '))
-  backendProcess = spawn(cmd, args, { cwd, windowsHide: true, stdio: 'ignore', env: process.env })
-  backendProcess.on('error', (err) => console.error('[CE] Backend failed:', err))
-  backendProcess.on('exit', (code) => { console.log('[CE] Backend exited:', code); backendProcess = null })
+  log.info('[CE] Starting backend:', cmd, args.join(' '))
+  backendProcess = spawn(cmd, args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
+
+  // Backend output is the single most useful thing when a job fails; keep it.
+  const backendLog = createWriteStream(path.join(app.getPath('userData'), 'logs', 'backend.log'), { flags: 'a' })
+  backendProcess.stdout?.pipe(backendLog)
+  backendProcess.stderr?.pipe(backendLog)
+
+  backendProcess.on('error', (err) => log.error('[CE] Backend failed:', err))
+  backendProcess.on('exit', (code) => { log.warn('[CE] Backend exited:', code); backendProcess = null })
 }
 
 function showFatal(win: BrowserWindow, message: string) {
@@ -63,17 +84,27 @@ function createWindow() {
 
   // Never leave the user staring at an empty dark window: surface load failures.
   mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
-    console.error('[CE] Renderer failed to load:', errorCode, errorDescription, validatedURL)
+    log.error('[CE] Renderer failed to load:', errorCode, errorDescription, validatedURL)
     if (mainWindow) showFatal(mainWindow, `${errorDescription} (${errorCode})\n${validatedURL}`)
   })
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
-    console.error('[CE] Renderer process gone:', details.reason)
+    log.error('[CE] Renderer process gone:', details.reason)
   })
+
+  // Uncaught renderer errors are forwarded by preload and land in the same file.
+  ipcMain.on('log:renderer', (_e, level: string, message: string) => {
+    ;(log as unknown as Record<string, (m: string) => void>)[level === 'error' ? 'error' : 'info'](
+      `[renderer] ${message}`
+    )
+  })
+  ipcMain.handle('log:path', () => log.transports.file.getFile().path)
+  ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
 }
 
 app.whenReady().then(() => {
+  log.info(`[CE] Cutting Edge ${app.getVersion()} starting — logs at ${log.transports.file.getFile().path}`)
   startBackend()
   createWindow()
   // Initialize auto-updater (lazy import to avoid issues in dev)

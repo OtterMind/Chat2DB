@@ -19,6 +19,7 @@
     "@tanstack/react-query": "^5.51.0",
     "antd": "^5.19.0",
     "axios": "^1.7.4",
+    "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",

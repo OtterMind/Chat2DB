@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { RefreshCw, CheckCircle2, AlertTriangle, FolderOpen } from 'lucide-react'
 import Page, { Card, Num, Stat } from '../components/Page'
 import { systemApi } from '../api/jobs'
 
@@ -10,7 +11,19 @@ interface Diagnostics {
   ffmpeg?: { found?: boolean; path?: string | null }
 }
 
+interface DesktopBridge {
+  logPath?: () => Promise<string>
+  openLogFolder?: () => void
+}
+
 export default function Doctor() {
+  const [logPath, setLogPath] = useState<string | null>(null)
+  const bridge = (window as unknown as { cuttingEdge?: DesktopBridge }).cuttingEdge
+
+  useEffect(() => {
+    bridge?.logPath?.().then(setLogPath).catch(() => undefined)
+  }, [bridge])
+
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['doctor'],
     queryFn: () => systemApi.doctor() as Promise<Diagnostics>,
@@ -62,6 +75,28 @@ export default function Doctor() {
               <Stat label="حافظه" value={<><Num>{data.system?.memory_gb ?? '—'}</Num> گیگابایت</>} />
               <Stat label="فضای آزاد" value={<><Num>{data.system?.disk_free_gb ?? '—'}</Num> گیگابایت</>} />
             </div>
+          </Card>
+
+          <Card
+            title="گزارش‌ها و عیب‌یابی"
+            extra={
+              bridge?.openLogFolder ? (
+                <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => bridge.openLogFolder?.()}>
+                  <FolderOpen size={15} /> باز کردن پوشه گزارش
+                </button>
+              ) : undefined
+            }
+          >
+            <div className="ce-kv">
+              <span>فایل گزارش</span>
+              <strong className="ce-kv__wrap">
+                <Num>{logPath ?? 'فقط در نسخه نصب‌شده'}</Num>
+              </strong>
+            </div>
+            <p className="ce-hint">
+              همه‌چیز اینجا ثبت می‌شود: راه‌اندازی بک‌اند، خطاهای رابط کاربری و خروجی کامل پردازش
+              ویدیو. هنگام گزارش مشکل، همین فایل را بفرست.
+            </p>
           </Card>
 
           <Card title="FFmpeg">

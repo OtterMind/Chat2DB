@@ -11,6 +11,14 @@ export interface UpdatePayload {
   notes?: string | null
 }
 
+// Any uncaught renderer error is written to the same log file as the main process.
+window.addEventListener('error', (e) =>
+  ipcRenderer.send('log:renderer', 'error', `${e.message} @ ${e.filename}:${e.lineno}`)
+)
+window.addEventListener('unhandledrejection', (e) =>
+  ipcRenderer.send('log:renderer', 'error', `unhandled rejection: ${String(e.reason)}`)
+)
+
 contextBridge.exposeInMainWorld('cuttingEdge', {
   platform: process.platform,
   versions: {
