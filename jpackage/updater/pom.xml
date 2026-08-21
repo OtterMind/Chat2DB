@@ -10,7 +10,7 @@
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Keep this standalone module on a patched Jackson line; it does not inherit the root BOM. -->
-        <jackson.version>2.18.8</jackson.version>
+        <jackson.version>2.18.9</jackson.version>
         <junit.version>5.10.3</junit.version>
         <project.build.outputTimestamp>2024-01-01T00:00:00Z</project.build.outputTimestamp>
     </properties>
