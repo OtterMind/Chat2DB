@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Zap, TrendingUp } from 'lucide-react'
+import { message } from 'antd'
+import { ArrowLeft, Plus, Zap, TrendingUp, Film, Clock3, Wand2 } from 'lucide-react'
 import { BADGE_LABELS, FEATURES, GROUP_TITLES, type FeatureTile } from '../features/catalog'
 import { useI18n } from '../i18n'
 import { jobsApi, systemApi } from '../api/jobs'
+import { projectsApi } from '../api/projects'
+import { useEditor, formatTimecode } from '../editor/model'
 import { stageLabel, statusLabel } from '../lib/labels'
 
 function Tile({ tile, onOpen }: { tile: FeatureTile; onOpen: (t: FeatureTile) => void }) {
@@ -57,6 +60,30 @@ export default function Home() {
   const openTile = (tile: FeatureTile) => navigate(tile.route)
   const jobs = jobsData?.jobs ?? []
 
+  /* Saved editor projects are the real "recents" of a video app. */
+  const { data: projectData } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list(),
+    staleTime: 5_000,
+  })
+  const projects = (projectData?.projects ?? []).slice(0, 8)
+
+  const openProject = async (name: string) => {
+    try {
+      const doc = await projectsApi.load(name)
+      useEditor.getState().loadSnapshot(doc.timeline as never, doc.name)
+      if (doc.missingMedia?.length) {
+        message.warning(
+          t(`${doc.missingMedia.length} media file(s) could not be found.`,
+            `${doc.missingMedia.length} فایل رسانه پیدا نشد.`)
+        )
+      }
+      navigate('/studio')
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
   return (
     <div className="ce-home">
       <div className="ce-searchbar">
@@ -68,14 +95,64 @@ export default function Home() {
         />
       </div>
 
-      {/* Primary call to action, styled like the promo banner of a super-app */}
+      {/* The two things a video app is opened for, side by side. */}
+      <section className="ce-start">
+        <button className="ce-start__main" onClick={() => navigate('/studio?import=1')}>
+          <span className="ce-start__icon"><Plus size={26} /></span>
+          <strong>{t('New video', 'ویدیوی جدید')}</strong>
+          <span className="ce-start__hint">{t('Pick files and start editing', 'فایل انتخاب کن و شروع کن')}</span>
+        </button>
+        <button className="ce-start__main ce-start__main--alt" onClick={() => navigate('/studio')}>
+          <span className="ce-start__icon"><Film size={24} /></span>
+          <strong>{t('Open the editor', 'باز کردن میز تدوین')}</strong>
+          <span className="ce-start__hint">{t('Continue where you left off', 'ادامه‌ی همان‌جا که بودی')}</span>
+        </button>
+      </section>
+
+      {/* Recent editor projects, the row a phone editor puts under the buttons. */}
+      <section className="ce-group">
+        <div className="ce-group__head">
+          <h3>{t('Recent projects', 'پروژه‌های اخیر')}</h3>
+          {projects.length > 0 && (
+            <button className="ce-link" onClick={() => navigate('/studio')}>
+              {t('Editor', 'میز تدوین')} <ArrowLeft size={14} />
+            </button>
+          )}
+        </div>
+        {projects.length === 0 ? (
+          <div className="ce-empty">
+            {t('No saved projects yet — “New video” starts one.', 'هنوز پروژه‌ای ذخیره نشده — با «ویدیوی جدید» شروع کن.')}
+          </div>
+        ) : (
+          <div className="ce-reel">
+            {projects.map((project) => (
+              <button
+                key={project.name}
+                className={`ce-reelcard ${project.broken ? 'is-broken' : ''}`}
+                onClick={() => void openProject(project.name)}
+                title={project.name}
+              >
+                <span className="ce-reelcard__art">
+                  <Film size={20} />
+                  <span className="ce-reelcard__len" dir="ltr">{formatTimecode(project.duration)}</span>
+                </span>
+                <span className="ce-reelcard__name" dir="auto">{project.name}</span>
+                <span className="ce-reelcard__meta">
+                  <Clock3 size={11} /> {new Date(project.updatedAt * 1000).toLocaleDateString()}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="ce-banner ce-banner--primary" onClick={() => navigate('/new')}>
         <div className="ce-banner__text">
           <h2>{t('Turn long videos into viral clips', 'ویدیوی بلندت را به کلیپ وایرال تبدیل کن')}</h2>
           <p>{t('Drop a YouTube link or a file — AI does the rest', 'لینک یوتیوب بده یا فایل بگذار — بقیه‌اش با هوش مصنوعی')}</p>
         </div>
         <span className="ce-banner__cta">
-          <Plus size={16} /> {t('New project', 'پروژه جدید')}
+          <Wand2 size={16} /> {t('Auto clip', 'کلیپ خودکار')}
         </span>
       </section>
 
@@ -104,14 +181,14 @@ export default function Home() {
 
       <section className="ce-group">
         <div className="ce-group__head">
-          <h3>{t('Recent projects', 'پروژه‌های اخیر')}</h3>
+          <h3>{t('Automatic clip jobs', 'کارهای کلیپ خودکار')}</h3>
           <button className="ce-link" onClick={() => navigate('/dashboard')}>
             {t('See all', 'همه')} <ArrowLeft size={14} />
           </button>
         </div>
         {jobs.length === 0 ? (
           <div className="ce-empty">
-            {t('No projects yet — start with “New project”.', 'هنوز پروژه‌ای نساخته‌ای. از «پروژه جدید» شروع کن.')}
+            {t('No automatic jobs yet.', 'هنوز کار خودکاری اجرا نشده.')}
           </div>
         ) : (
           <div className="ce-joblist">

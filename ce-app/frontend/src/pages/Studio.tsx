@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet, ZoomIn, ZoomOut,
+  Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet,
   Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film,
 } from 'lucide-react'
 import { Input, Modal, Radio, Select, message } from 'antd'
@@ -31,8 +31,8 @@ export default function Studio() {
   const note = params.get('tool') ? TOOL_NOTE[params.get('tool')!]?.[lang === 'fa' ? 1 : 0] : undefined
 
   const {
-    playing, playhead, pxPerSecond, snapping, selectedId, clips, tracks, past, future,
-    togglePlay, setPlayhead, setZoom, toggleSnapping, splitAtPlayhead,
+    playing, playhead, snapping, selectedId, clips, tracks, past, future,
+    togglePlay, setPlayhead, toggleSnapping, splitAtPlayhead,
     removeSelected, duplicateSelected, undo, redo, addTrack, addClip,
     keepRanges, splitAtSourceTimes, transitions,
   } = useEditor()
@@ -158,6 +158,7 @@ export default function Studio() {
 
   const [exporting, setExporting] = useState(false)
   const [lastOutput, setLastOutput] = useState<string | null>(null)
+  const importedOnEntry = useRef(false)
 
   /** Import real media: OS picker in the desktop app, typed path in the browser. */
   const importMedia = async () => {
@@ -191,6 +192,8 @@ export default function Studio() {
           duration: Math.max(0.5, info.duration),
           offset: 0,
           sourceDuration: Math.max(0.5, info.duration),
+          width: info.width || undefined,
+          height: info.height || undefined,
           src: info.path,
           label: path.split(/[\\/]/).pop() ?? 'clip',
           color: info.has_video ? '#6366F1' : '#10B981',
@@ -209,6 +212,17 @@ export default function Studio() {
     }
   }
 
+  /*
+   * "New video" on the home screen lands here with ?import=1, so the very first
+   * thing the user sees is the file picker instead of an empty timeline.
+   */
+  useEffect(() => {
+    if (params.get('import') !== '1' || importedOnEntry.current) return
+    importedOnEntry.current = true
+    void importMedia()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
+
   /** Export: ask for format and destination, then hand the model to the compositor. */
   const exportTimeline = async () => {
     const withMedia = clips.filter((c) => c.src)
@@ -217,7 +231,8 @@ export default function Studio() {
       return
     }
 
-    const settings = await askExportSettings(t)
+    // The export starts from the shape the user has been editing in.
+    const settings = await askExportSettings(t, formatForRatio(useEditor.getState().canvasRatio()))
     if (!settings) return
 
     const suggested = `timeline-${settings.width}x${settings.height}.mp4`
@@ -311,6 +326,7 @@ export default function Studio() {
       title={t('Editor', 'میز تدوین')}
       subtitle={t('Multi-track timeline — cut, move and trim', 'تایم‌لاین چندلایه — برش، جابه‌جایی و تریم')}
       width="lg"
+      bare
     >
       <div className="ed">
         <ProjectBar />
@@ -357,15 +373,6 @@ export default function Studio() {
             <button className="ed__btn" onClick={undo} disabled={past.length === 0} title={t('Undo (Ctrl+Z)', 'واگرد (Ctrl+Z)')}><Undo2 size={16} /></button>
             <button className="ed__btn" onClick={redo} disabled={future.length === 0} title={t('Redo (Ctrl+Shift+Z)', 'ازنو (Ctrl+Shift+Z)')}><Redo2 size={16} /></button>
             <button className={`ed__btn ${snapping ? 'is-on' : ''}`} onClick={toggleSnapping} title={t('Snapping', 'چسبندگی')}><Magnet size={16} /></button>
-          </div>
-
-          <div className="ed__group">
-            <button className="ed__btn" onClick={() => setZoom(pxPerSecond / 1.35)} title={t('Zoom out', 'کوچک‌نمایی')}><ZoomOut size={16} /></button>
-            <input
-              className="ed__zoom" type="range" min={8} max={220} value={pxPerSecond}
-              onChange={(e) => setZoom(Number(e.target.value))} aria-label={t('Zoom', 'بزرگ‌نمایی')}
-            />
-            <button className="ed__btn" onClick={() => setZoom(pxPerSecond * 1.35)} title={t('Zoom in', 'بزرگ‌نمایی')}><ZoomIn size={16} /></button>
           </div>
 
           <div className="ed__group">
@@ -482,10 +489,21 @@ const FORMATS: { id: string; label: [string, string]; width: number; height: num
   { id: 'landscape4k', label: ['16:9 — 4K', '۱۶:۹ — چهار کی'], width: 3840, height: 2160 },
 ]
 
+/** The catalogue entry closest to the canvas the editor is showing. */
+function formatForRatio(ratio: number) {
+  return FORMATS.reduce((best, format) =>
+    Math.abs(format.width / format.height - ratio) < Math.abs(best.width / best.height - ratio) ? format : best
+  ).id
+}
+
 /** Format, quality and frame rate before anything starts encoding. */
-function askExportSettings(t: (en: string, fa: string) => string): Promise<ExportSettings | null> {
+function askExportSettings(
+  t: (en: string, fa: string) => string,
+  preferred = 'vertical'
+): Promise<ExportSettings | null> {
   return new Promise((resolve) => {
-    const state: ExportSettings = { width: 1080, height: 1920, fps: 30, quality: 'balanced' }
+    const initial = FORMATS.find((f) => f.id === preferred) ?? FORMATS[0]
+    const state: ExportSettings = { width: initial.width, height: initial.height, fps: 30, quality: 'balanced' }
     let resolved = false
     const done = (value: ExportSettings | null) => {
       if (resolved) return
@@ -502,7 +520,7 @@ function askExportSettings(t: (en: string, fa: string) => string): Promise<Expor
           <label>
             <span>{t('Format', 'قالب')}</span>
             <Select
-              defaultValue="vertical"
+              defaultValue={initial.id}
               style={{ width: '100%' }}
               options={FORMATS.map((f) => ({ value: f.id, label: f.label[0] }))}
               onChange={(id) => {

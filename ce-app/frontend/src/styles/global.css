@@ -118,6 +118,43 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-searchbar input:focus { outline: none; border-color: var(--brand); }
 
+/* home: the two starting points, then a strip of recent projects ------------- */
+.ce-start { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ce-start__main {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 18px 18px 16px; border-radius: 18px; cursor: pointer; text-align: start;
+  border: 1px solid var(--border); color: var(--text);
+  background: radial-gradient(130% 150% at 100% 0%, #4c1d95 0%, #1e1b4b 45%, #0f172a 100%);
+  transition: transform .15s ease;
+}
+.ce-start__main--alt { background: radial-gradient(130% 150% at 0% 0%, #075985 0%, #0c2a4a 45%, #0f172a 100%); }
+.ce-start__main:hover { transform: translateY(-2px); }
+.ce-start__main strong { font-size: 15.5px; }
+.ce-start__icon {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  background: rgba(255, 255, 255, .12); margin-bottom: 6px;
+}
+.ce-start__hint { font-size: 12px; color: var(--muted); }
+
+.ce-reel { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.ce-reelcard {
+  flex: none; width: 128px; display: flex; flex-direction: column; gap: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 8px; cursor: pointer; text-align: start; color: var(--text);
+}
+.ce-reelcard:hover { border-color: #6366f1; }
+.ce-reelcard.is-broken { opacity: .6; }
+.ce-reelcard__art {
+  position: relative; height: 66px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(150deg, #1e293b, #0f172a); color: #94a3b8;
+}
+.ce-reelcard__len {
+  position: absolute; bottom: 4px; inset-inline-end: 6px; font-size: 10px;
+  background: rgba(2, 6, 23, .75); border-radius: 6px; padding: 0 4px; color: #e2e8f0;
+}
+.ce-reelcard__name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ce-reelcard__meta { font-size: 10.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+
 .ce-banner {
   border-radius: 18px; padding: 20px 22px; display: flex; align-items: center;
   justify-content: space-between; gap: 16px; cursor: pointer; border: 1px solid var(--border);
@@ -226,6 +263,8 @@ button { font-family: inherit; cursor: pointer; }
 .ce-page--sm { max-width: 680px; }
 .ce-page--md { max-width: 920px; }
 .ce-page--lg { max-width: 1160px; }
+/* the editor uses the whole window: no heading strip above the tool bars */
+.ce-page--bare { max-width: 1360px; gap: 10px; }
 
 .ce-page__head {
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -359,7 +398,44 @@ button { font-family: inherit; cursor: pointer; }
   .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
-  .ce-banner { flex-direction: column; align-items: flex-start; }
+  /* home: the two starting points, then a strip of recent projects ------------- */
+.ce-start { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ce-start__main {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 18px 18px 16px; border-radius: 18px; cursor: pointer; text-align: start;
+  border: 1px solid var(--border); color: var(--text);
+  background: radial-gradient(130% 150% at 100% 0%, #4c1d95 0%, #1e1b4b 45%, #0f172a 100%);
+  transition: transform .15s ease;
+}
+.ce-start__main--alt { background: radial-gradient(130% 150% at 0% 0%, #075985 0%, #0c2a4a 45%, #0f172a 100%); }
+.ce-start__main:hover { transform: translateY(-2px); }
+.ce-start__main strong { font-size: 15.5px; }
+.ce-start__icon {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  background: rgba(255, 255, 255, .12); margin-bottom: 6px;
+}
+.ce-start__hint { font-size: 12px; color: var(--muted); }
+
+.ce-reel { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.ce-reelcard {
+  flex: none; width: 128px; display: flex; flex-direction: column; gap: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 8px; cursor: pointer; text-align: start; color: var(--text);
+}
+.ce-reelcard:hover { border-color: #6366f1; }
+.ce-reelcard.is-broken { opacity: .6; }
+.ce-reelcard__art {
+  position: relative; height: 66px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(150deg, #1e293b, #0f172a); color: #94a3b8;
+}
+.ce-reelcard__len {
+  position: absolute; bottom: 4px; inset-inline-end: 6px; font-size: 10px;
+  background: rgba(2, 6, 23, .75); border-radius: 6px; padding: 0 4px; color: #e2e8f0;
+}
+.ce-reelcard__name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ce-reelcard__meta { font-size: 10.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+
+.ce-banner { flex-direction: column; align-items: flex-start; }
 }
 
 /* ------------------------------------------------------------ editor ----- */
@@ -369,8 +445,8 @@ button { font-family: inherit; cursor: pointer; }
 /* the timeline is the working surface: cap the monitor so it stays on screen */
 .ed__preview {
   background: #06090f; border: 1px solid var(--border); border-radius: 16px;
-  aspect-ratio: 16 / 9; max-height: 38vh; margin: 0 auto; width: 100%;
-  display: grid; place-items: center; min-height: 180px;
+  aspect-ratio: 16 / 9; max-height: 46vh; margin: 0 auto; width: 100%;
+  display: grid; place-items: center; min-height: 200px;
 }
 .ed__preview-box { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
 .ed__preview-hint { font-size: 12.5px; }
@@ -379,7 +455,7 @@ button { font-family: inherit; cursor: pointer; }
 
 .ed__inspector {
   background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
-  max-height: 38vh; overflow: auto;
+  max-height: 46vh; overflow: auto;
 }
 .ed__inspector h4 { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
 
@@ -410,7 +486,12 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 16px; overflow: hidden; user-select: none;
 }
 .tl__headers { flex: none; border-right: 1px solid var(--border); background: #0d1728; }
-.tl__corner { height: 28px; border-bottom: 1px solid var(--border); }
+.tl__corner {
+  height: 28px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 2px; padding: 0 4px;
+}
+.tl__cornerslider { flex: 1; margin: 0 !important; min-width: 26px; }
+.tl__cornerslider .ant-slider-handle::after { transform: scale(.8); }
 .tl__header {
   height: 62px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
   border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px;
@@ -505,7 +586,7 @@ button { font-family: inherit; cursor: pointer; }
 :fullscreen .ce-content { padding-inline: 32px; }
 
 /* preview monitor ----------------------------------------------------------- */
-.ed__preview { position: relative; overflow: hidden; }
+.ed__preview { position: relative; overflow: hidden; container-type: size; }
 .ed__video { width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: 15px; }
 .ed__preview-overlay {
   position: absolute; inset-inline-start: 12px; bottom: 10px; display: flex; align-items: center; gap: 10px;
@@ -518,8 +599,16 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* preview stage: one layer per visible clip, so effects and transitions show -- */
+/*
+ * The stage is the project canvas, not the box around it: a phone video gets a
+ * tall stage and fills it, instead of hiding between two black walls. The width
+ * is limited by whichever runs out first — the box or the height times ratio.
+ */
 .ed__stagewrap {
-  position: absolute; inset: 0; overflow: hidden; border-radius: 15px; background: #000;
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(100cqw, calc(100cqh * var(--ce-ratio, 1.7778)));
+  aspect-ratio: var(--ce-ratio, 1.7778);
+  overflow: hidden; border-radius: 12px; background: #000;
   container-type: size;
 }
 .ed__layer { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform, opacity; }
@@ -609,7 +698,8 @@ button { font-family: inherit; cursor: pointer; }
 
 /* editing assistant --------------------------------------------------------- */
 .ai-fab {
-  position: fixed; inset-inline-start: 22px; bottom: 26px; z-index: 40;
+  /* end side: the start side is where the timeline's track headers live */
+  position: fixed; inset-inline-end: 22px; bottom: 96px; z-index: 40;
   width: 52px; height: 52px; border-radius: 50%; border: none; color: #fff;
   background: linear-gradient(140deg, #6366f1, #06b6d4);
   box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95);
@@ -619,7 +709,7 @@ button { font-family: inherit; cursor: pointer; }
 .ai-fab.is-open { background: var(--surface-2); border: 1px solid var(--border); }
 
 .ai-panel {
-  position: fixed; inset-inline-start: 22px; bottom: 90px; z-index: 40; width: min(420px, calc(100vw - 44px));
+  position: fixed; inset-inline-end: 22px; bottom: 160px; z-index: 40; width: min(420px, calc(100vw - 44px));
   background: rgba(17, 28, 49, .97); backdrop-filter: blur(10px);
   border: 1px solid var(--border); border-radius: 16px; padding: 14px;
   display: flex; flex-direction: column; gap: 10px;
@@ -652,13 +742,6 @@ button { font-family: inherit; cursor: pointer; }
   background: rgba(7, 13, 24, .72); backdrop-filter: blur(6px);
 }
 .ed__preview-slider { width: 90px; margin: 0 !important; }
-
-.tl__zoombar {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-}
-.tl__zoomlabel { font-size: 12px; color: var(--muted); flex: none; }
-.tl__zoomslider { flex: 1; margin: 0 !important; min-width: 120px; }
 
 /* project bar --------------------------------------------------------------- */
 .pj {

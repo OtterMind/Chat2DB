@@ -71,6 +71,10 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
 await page.goto(`${BASE}/#/studio`, { waitUntil: 'networkidle2' })
 await page.waitForFunction('Boolean(window.__ceEditor)', { timeout: 15000 })
+// a vertical file for the canvas-shape check, when one was provided
+await page.evaluate((v) => {
+  window.__ceTestVertical = v
+}, args.vertical ?? process.env.CE_TEST_VERTICAL ?? A)
 
 // Two clips back to back on the video lane, exactly like an import would make.
 await page.evaluate(
@@ -319,6 +323,84 @@ await new Promise((r) => setTimeout(r, 300))
 const restored = await page.evaluate(() => window.__ceEditor.getState().clips.length)
 if (restored === deleted) ok('Ctrl+Z undoes it')
 else bad('Ctrl+Z does not undo', `${afterDelete} → ${restored}`)
+
+/* 10 — the layout the user asked for ---------------------------------------- */
+const layout = await page.evaluate(() => ({
+  zoomBarAboveTimeline: Boolean(document.querySelector('.tl__zoombar')),
+  toolbarZoomSlider: Boolean(document.querySelector('.ed__zoom')),
+  scaleInsideTimeline: Boolean(document.querySelector('.tl__corner .tl__cornerslider')),
+  pageHeading: Boolean(document.querySelector('.ce-page__head')),
+}))
+if (!layout.zoomBarAboveTimeline && !layout.toolbarZoomSlider) ok('the separate scale bar and the magnifiers are gone')
+else bad('the old zoom controls are still there', JSON.stringify(layout))
+if (layout.scaleInsideTimeline) ok('the scale control lives inside the timeline')
+else bad('the timeline has no scale control', JSON.stringify(layout))
+if (!layout.pageHeading) ok('the editor has no heading strip above it')
+else bad('the editor still has a page heading', JSON.stringify(layout))
+
+// Ctrl + wheel zooms the timeline.
+const zoomBefore = await page.evaluate(() => window.__ceEditor.getState().pxPerSecond)
+const lane = await page.$('.tl__scroll')
+await lane.scrollIntoView()
+await new Promise((r) => setTimeout(r, 300))
+const laneBox = await lane.boundingBox()
+// aim inside the visible part of the lane: its centre can sit below the fold
+const aimY = Math.min(laneBox.y + 30, page.viewport().height - 20)
+await page.mouse.move(laneBox.x + laneBox.width / 2, aimY)
+await page.keyboard.down('Control')
+await page.mouse.wheel({ deltaY: -240 })
+await page.keyboard.up('Control')
+await new Promise((r) => setTimeout(r, 300))
+const zoomAfter = await page.evaluate(() => window.__ceEditor.getState().pxPerSecond)
+if (zoomAfter > zoomBefore) ok(`Ctrl + wheel zooms the timeline (${zoomBefore.toFixed(0)} → ${zoomAfter.toFixed(0)} px/s)`)
+else bad('Ctrl + wheel does not zoom', `${zoomBefore} → ${zoomAfter} at ${JSON.stringify(laneBox)}`)
+
+/* 11 — the monitor takes the shape of the footage --------------------------- */
+const shapes = await page.evaluate(async () => {
+  const store = window.__ceEditor.getState()
+  store.clearTimeline()
+  const measure = async () => {
+    await new Promise((r) => setTimeout(r, 500))
+    const box = document.querySelector('.ed__stagewrap')?.getBoundingClientRect()
+    return box ? Number((box.width / box.height).toFixed(3)) : null
+  }
+  const state = () => window.__ceEditor.getState()
+  state().addClip({
+    trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 4,
+    src: window.__ceTestVertical, label: 'vertical', color: '#6366F1', width: 360, height: 640,
+  })
+  state().setPlayhead(1)
+  const auto = await measure()
+  state().setAspect('16:9')
+  const wide = await measure()
+  state().setAspect('1:1')
+  const square = await measure()
+  state().setAspect('auto')
+  return { auto, wide, square }
+})
+if (shapes.auto !== null && Math.abs(shapes.auto - 0.5625) < 0.02)
+  ok(`the monitor follows a vertical clip (ratio ${shapes.auto})`)
+else bad('a vertical video is not shown in its own shape', JSON.stringify(shapes))
+if (Math.abs(shapes.wide - 1.7778) < 0.05 && Math.abs(shapes.square - 1) < 0.05)
+  ok('the ratio panel reshapes the monitor')
+else bad('the chosen ratio does not reshape the monitor', JSON.stringify(shapes))
+
+/* 12 — the home screen starts a video --------------------------------------- */
+await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
+await new Promise((r) => setTimeout(r, 900))
+const home = await page.evaluate(() => ({
+  starters: document.querySelectorAll('.ce-start__main').length,
+  recents: Boolean(document.querySelector('.ce-reel, .ce-empty')),
+  editorTileSaysSoon: [...document.querySelectorAll('.ce-tile')].some(
+    (tile) => /Editor/.test(tile.textContent ?? '') && /SOON/i.test(tile.textContent ?? '')
+  ),
+}))
+if (home.starters === 2) ok('the home screen leads with New video / Open editor')
+else bad('the home screen has no starting cards', JSON.stringify(home))
+if (home.recents) ok('the recent projects strip is there')
+else bad('no recent projects strip on the home screen')
+if (!home.editorTileSaysSoon) ok('the editor tile no longer claims to be "soon"')
+else bad('the editor tile still says "soon"')
 
 const hard = errors.filter((e) => !/favicon|ResizeObserver|DevTools/i.test(e))
 if (hard.length) bad('console errors', hard.slice(0, 3).join(' | '))

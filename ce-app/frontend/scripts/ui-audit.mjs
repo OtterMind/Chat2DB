@@ -146,7 +146,7 @@ const editor = await page.evaluate(() =>
     const second = clips.find((c) => c.id === b)
     const overlapping =
       second.start < first.start + first.duration && second.start + second.duration > first.start
-    return { overlapping, zoomBar: !!document.querySelector('.tl__zoombar') }
+    return { overlapping, zoomBar: !!document.querySelector(".tl__cornerslider") }
   })
 )
 if (editor.overlapping) note('editor', 'clips are allowed to overlap on a lane')

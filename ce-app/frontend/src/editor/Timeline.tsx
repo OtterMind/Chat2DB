@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, ZoomIn, ZoomOut, Maximize } from 'lucide-react'
+import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize } from 'lucide-react'
 import { Slider } from 'antd'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
 import { useI18n } from '../i18n'
@@ -126,37 +126,64 @@ export default function Timeline() {
   const contentSeconds = Math.max(45, ...clips.map((c) => c.start + c.duration + 10))
   const width = contentSeconds * pxPerSecond
 
-  return (
-    <>
-      {/* Time scale lives with the timeline, where the eye already is. */}
-      <div className="tl__zoombar">
-        <span className="tl__zoomlabel">{t('Timeline scale', 'مقیاس زمانی')}</span>
-        <button className="ed__btn" onClick={() => setZoom(pxPerSecond / 1.4)} title={t('Zoom out', 'کوچک‌نمایی')}>
-          <ZoomOut size={15} />
-        </button>
-        <Slider
-          className="tl__zoomslider"
-          min={8}
-          max={220}
-          value={pxPerSecond}
-          tooltip={{ formatter: (v) => `${Math.round(v ?? 0)} px/s` }}
-          onChange={setZoom}
-        />
-        <button className="ed__btn" onClick={() => setZoom(pxPerSecond * 1.4)} title={t('Zoom in', 'بزرگ‌نمایی')}>
-          <ZoomIn size={15} />
-        </button>
-        <button
-          className="ed__btn"
-          onClick={() => zoomToFit(scrollRef.current?.clientWidth ?? 800)}
-          title={t('Fit the whole timeline', 'جا دادن کل تایم‌لاین')}
-        >
-          <Maximize size={14} /> {t('Fit', 'اندازه صفحه')}
-        </button>
-      </div>
+  /*
+   * Zooming belongs to the timeline, not to a bar above it: the wheel with Ctrl
+   * (or a trackpad pinch, which the browser reports the same way) zooms around
+   * the pointer, so the frame under the cursor stays put.
+   */
+  useEffect(() => {
+    const view = scrollRef.current
+    if (!view) return
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      // Must be a non-passive listener, otherwise the browser zooms the page
+      // underneath us and preventDefault is ignored.
+      event.preventDefault()
+      const anchor = xToTime(event.clientX)
+      const next = Math.max(8, Math.min(220, pxPerSecond * Math.exp(-event.deltaY / 260)))
+      setZoom(next)
+      const rect = view.getBoundingClientRect()
+      view.scrollLeft = Math.max(0, anchor * next - (event.clientX - rect.left))
+    }
+    view.addEventListener('wheel', onWheel, { passive: false })
+    return () => view.removeEventListener('wheel', onWheel)
+  }, [pxPerSecond, setZoom, xToTime])
 
+  return (
     <div className="tl">
       <div className="tl__headers" style={{ width: HEADER_W }}>
-        <div className="tl__corner" />
+        {/* The scale control sits in the corner of the timeline itself. */}
+        <div className="tl__corner">
+          <button
+            className="tl__hbtn"
+            onClick={() => setZoom(pxPerSecond / 1.4)}
+            title={t('Shorter spacing (Ctrl + wheel)', 'فاصله‌ی کمتر (Ctrl و چرخ ماوس)')}
+          >
+            <Minus size={13} />
+          </button>
+          <Slider
+            className="tl__cornerslider"
+            min={8}
+            max={220}
+            value={pxPerSecond}
+            tooltip={{ formatter: (v) => `${Math.round(v ?? 0)} px/s` }}
+            onChange={setZoom}
+          />
+          <button
+            className="tl__hbtn"
+            onClick={() => setZoom(pxPerSecond * 1.4)}
+            title={t('Wider spacing (Ctrl + wheel)', 'فاصله‌ی بیشتر (Ctrl و چرخ ماوس)')}
+          >
+            <Plus size={13} />
+          </button>
+          <button
+            className="tl__hbtn"
+            onClick={() => zoomToFit(scrollRef.current?.clientWidth ?? 800)}
+            title={t('Fit the whole timeline', 'جا دادن کل تایم‌لاین')}
+          >
+            <Maximize size={12} />
+          </button>
+        </div>
         {tracks.map((track) => {
           const Icon = TRACK_ICON[track.kind]
           return (
@@ -254,7 +281,6 @@ export default function Timeline() {
         </div>
       </div>
     </div>
-    </>
   )
 }
 

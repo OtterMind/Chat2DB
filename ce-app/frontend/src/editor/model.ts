@@ -105,6 +105,9 @@ export interface Clip {
   offset: number
   /** full length of the source media, seconds (bounds trimming) */
   sourceDuration: number
+  /** Pixel size of the source, when known — the canvas follows it in Auto. */
+  width?: number
+  height?: number
   label: string
   color: string
 }
@@ -134,6 +137,11 @@ interface EditorState extends Snapshot {
   playing: boolean
   snapping: boolean
   /**
+   * Project canvas ratio. 'auto' follows the first video clip, which is what
+   * makes a phone video fill the monitor instead of sitting in a wide letterbox.
+   */
+  aspect: 'auto' | '9:16' | '1:1' | '4:5' | '16:9'
+  /**
    * Which tool panel the rail shows. It lives here, not inside the toolbar,
    * because the timeline has to be able to open one — clicking the junction
    * diamond between two clips must show the transition chooser straight away.
@@ -153,6 +161,9 @@ interface EditorState extends Snapshot {
   togglePlay: (playing?: boolean) => void
   toggleSnapping: () => void
   setPanel: (panel: string | null) => void
+  setAspect: (aspect: EditorState['aspect']) => void
+  /** Width / height of the canvas as a number, resolving 'auto'. */
+  canvasRatio: () => number
   /** Furthest point any clip reaches — where playback stops. */
   contentEnd: () => number
 
@@ -231,6 +242,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   playing: false,
   snapping: true,
   panel: null,
+  aspect: 'auto',
   past: [],
   future: [],
 
@@ -289,6 +301,18 @@ export const useEditor = create<EditorState>((set, get) => ({
     }),
   toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
   setPanel: (panel) => set({ panel }),
+  setAspect: (aspect) => set({ aspect, dirty: true }),
+  canvasRatio: () => {
+    const { aspect, clips, tracks } = get()
+    const named: Record<string, number> = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 }
+    if (aspect !== 'auto') return named[aspect]
+    const lanes = tracks.filter((t) => t.kind === 'video').map((t) => t.id)
+    const first = clips
+      .filter((c) => c.src && lanes.includes(c.trackId) && c.width && c.height)
+      .sort((a, b) => a.start - b.start)[0]
+    if (first?.width && first?.height) return first.width / first.height
+    return 16 / 9
+  },
   contentEnd: () => get().clips.reduce((end, c) => Math.max(end, c.start + c.duration), 0),
 
   setProps: (id, patch) =>

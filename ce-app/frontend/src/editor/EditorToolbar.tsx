@@ -708,12 +708,26 @@ function PanelText({
 
 function PanelRatio() {
   const { t } = useI18n()
+  const { aspect, setAspect } = useEditor()
   return (
-    <p className="ce-hint">
-      {t(
-        'The output ratio is chosen in the export dialog: 9:16, 1:1, 4:5, 16:9 or 4K.',
-        'نسبت خروجی در پنجره‌ی خروجی انتخاب می‌شود: ۹:۱۶، ۱:۱، ۴:۵، ۱۶:۹ یا ۴K.'
-      )}
-    </p>
+    <div className="tb__stack">
+      <Segmented
+        value={aspect}
+        onChange={(value) => setAspect(value as typeof aspect)}
+        options={[
+          { value: 'auto', label: t('Auto', 'خودکار') },
+          { value: '9:16', label: '9:16' },
+          { value: '1:1', label: '1:1' },
+          { value: '4:5', label: '4:5' },
+          { value: '16:9', label: '16:9' },
+        ]}
+      />
+      <span className="ce-hint">
+        {t(
+          'This is the shape of the monitor and the default for export. Auto follows the first video clip.',
+          'شکل مانیتور و پیش‌فرض خروجی همین است. حالت خودکار از اولین ویدیو پیروی می‌کند.'
+        )}
+      </span>
+    </div>
   )
 }

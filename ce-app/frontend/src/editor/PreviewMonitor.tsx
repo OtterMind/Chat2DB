@@ -27,7 +27,16 @@ export default function PreviewMonitor() {
   const [master, setMaster] = useState(1)
   const [muted, setMuted] = useState(false)
 
-  const { clips, tracks, transitions, playhead, playing } = useEditor()
+  const { clips, tracks, transitions, playhead, playing, aspect } = useEditor()
+
+  /*
+   * The monitor takes the shape of the project.
+   *
+   * A fixed 16:9 box showed a phone video as a thin strip between two black
+   * walls, which is what "the preview does not show the video properly" meant.
+   * In Auto the canvas follows the first video clip's real pixel size.
+   */
+  const ratio = useMemo(() => useEditor.getState().canvasRatio(), [aspect, clips, tracks])
 
   /** Every video clip under the playhead, bottom lane first. */
   const stack = useMemo(() => {
@@ -198,7 +207,7 @@ export default function PreviewMonitor() {
   const notes = Array.from(new Set([...(baseLayer?.notes ?? []), ...(topLayer?.notes ?? [])]))
 
   return (
-    <div className="ed__preview">
+    <div className="ed__preview" style={{ ['--ce-ratio' as string]: `${ratio}` }}>
       {baseSrc ? (
         <div className="ed__stagewrap">
           <div className="ed__layer" style={baseLayer?.media}>

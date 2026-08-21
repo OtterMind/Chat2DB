@@ -38,7 +38,6 @@ export const FEATURES: FeatureTile[] = [
     icon: <Film {...ICON} />,
     gradient: 'linear-gradient(145deg,#0EA5E9,#2563EB)',
     route: '/studio',
-    badge: 'soon',
     group: 'core',
   },
   {

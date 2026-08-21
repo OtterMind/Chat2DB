@@ -15,6 +15,11 @@ export default function Page({
   actions,
   back = false,
   width = 'md',
+  /**
+   * Editors want the whole window: the heading strip is dropped and the tool
+   * bars become the top of the screen, the way a video app is expected to look.
+   */
+  bare = false,
   children,
 }: {
   title: string
@@ -22,13 +27,15 @@ export default function Page({
   actions?: ReactNode
   back?: boolean
   width?: 'sm' | 'md' | 'lg'
+  bare?: boolean
   children: ReactNode
 }) {
   const navigate = useNavigate()
   const { t, isFa } = useI18n()
   const Back = isFa ? ArrowRight : ArrowLeft
   return (
-    <div className={`ce-page ce-page--${width}`}>
+    <div className={`ce-page ce-page--${width} ${bare ? 'ce-page--bare' : ''}`}>
+      {!bare && (
       <header className="ce-page__head">
         <div className="ce-page__title">
           {back && (
@@ -43,6 +50,7 @@ export default function Page({
         </div>
         {actions && <div className="ce-page__actions">{actions}</div>}
       </header>
+      )}
       <div className="ce-page__body">{children}</div>
     </div>
   )
