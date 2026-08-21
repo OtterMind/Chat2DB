@@ -128,7 +128,7 @@ public class DbDatabaseController {
     public ActionResult modifyDatabase(@Valid @RequestBody UpdateDatabaseRequest request) {
         DbDatabaseCreateRequest param =
                 DbDatabaseCreateRequest.builder().name(request.getDatabaseName())
-            .name(request.getNewDatabaseName()).build();
+            .newName(request.getNewDatabaseName()).build();
         databaseService.modifyDatabase(param);
         return ActionResult.isSuccess();
     }
