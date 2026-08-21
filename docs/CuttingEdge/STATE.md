@@ -72,10 +72,11 @@ No Windows machine is needed for anything except packaging.
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth — 7 tests |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` — which measures the exported pixels to prove looks, opacity, grade, transform, rotate, crop, animations, freeze, speed and xfade really land — 61 tests |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
-| `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport: the playhead advances while playing, the red marker moves, playback crosses a cut into the next clip, stops at the end, pause really pauses, a manual seek is followed, and the junction diamond opens the transition chooser |
+| `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
+| `bash ce-app/scripts/sandbox-test-env.sh` | rebuilds the whole headless test environment (venv, ffmpeg, Chromium, test clips) after the sandbox wipes `/tmp` |
 | `ce-app/scripts/smoke-test.ps1` | the **packaged** app: asar entry, relative asset paths, ffmpeg+ffprobe, embeddable Python, live `/api/health` |
 
 The first two run anywhere. The third runs on the Windows runner in CI and is the
@@ -112,7 +113,16 @@ gate that stops a broken installer from being published.
    video element's own `currentTime`, falls back to the wall clock over gaps, steps
    over each cut so the next clip loads, and stops at the end of the timeline.
    Guarded by `npm run test:playback`.
-12. **Panels the timeline can open.** The tool rail's open panel lives in the store
+12. **Effects must be visible in the monitor.** Every per-clip effect reached the
+   exported file (measured, see `tests/test_effects.py`) but the preview showed a
+   raw `<video>`, so opacity, transform, rotate, crop, looks, grade, animations,
+   freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
+   of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
+   cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
+13. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+   while nothing listened for a key; Studio now owns one `keydown` handler and
+   skips inputs, textareas and modals.
+14. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 

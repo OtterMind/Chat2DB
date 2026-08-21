@@ -512,6 +512,31 @@ button { font-family: inherit; cursor: pointer; }
   padding: 4px 10px; border-radius: 999px; background: rgba(7, 13, 24, .72); backdrop-filter: blur(6px);
 }
 .ed__preview-name { font-size: 11.5px; color: #cbd5e1; }
+.ed__preview-badge {
+  font-size: 10.5px; color: #c7d2fe; border: 1px solid rgba(129, 140, 248, .45);
+  border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+}
+
+/* preview stage: one layer per visible clip, so effects and transitions show -- */
+.ed__stagewrap {
+  position: absolute; inset: 0; overflow: hidden; border-radius: 15px; background: #000;
+  container-type: size;
+}
+.ed__layer { position: absolute; inset: 0; transform-origin: 50% 50%; will-change: transform, opacity; }
+.ed__wash { position: absolute; inset: 0; pointer-events: none; border-radius: 15px; }
+.ed__wash--full { mix-blend-mode: normal; }
+
+.ed__text {
+  position: absolute; inset-inline: 6%; text-align: center; line-height: 1.35;
+  font-weight: 800; pointer-events: none; word-break: break-word;
+}
+.ed__text--top { top: 8%; }
+.ed__text--middle { top: 50%; transform: translateY(-50%); }
+.ed__text--bottom { bottom: 9%; }
+.ed__text--clean { text-shadow: 0 2px 6px rgba(0, 0, 0, .55); }
+.ed__text--shadow { text-shadow: 0 4px 12px rgba(0, 0, 0, .9); }
+.ed__text--outline { -webkit-text-stroke: 1.2px #000; }
+.ed__text--boxed { background: var(--ce-text-highlight, rgba(15, 23, 42, .75)); padding: 4px 10px; border-radius: 8px; }
 .ed__preview-error {
   position: absolute; inset-inline: 12px; top: 12px; padding: 8px 12px; border-radius: 10px;
   background: rgba(239, 68, 68, .18); border: 1px solid rgba(248, 113, 113, .4);

@@ -39,6 +39,72 @@ export default function Studio() {
 
   const [analysing, setAnalysing] = useState<'silence' | 'scenes' | null>(null)
 
+  /*
+   * Keyboard shortcuts.
+   *
+   * The buttons advertised them ("Delete", "S", "Ctrl+Z") but nothing listened,
+   * so every one of them was a lie. Typing in a field or a modal must still be
+   * typing, which is what the editable check is for.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const typing =
+        target?.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '') ||
+        Boolean(target?.closest('.ant-modal'))
+      if (typing) return
+
+      const meta = event.ctrlKey || event.metaKey
+      const key = event.key
+
+      if (meta && key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+        return
+      }
+      if (meta && key.toLowerCase() === 'y') {
+        event.preventDefault()
+        redo()
+        return
+      }
+      if (meta && key.toLowerCase() === 'd') {
+        event.preventDefault()
+        duplicateSelected()
+        return
+      }
+      if (meta) return
+
+      if (key === ' ') {
+        event.preventDefault()
+        togglePlay()
+      } else if (key === 'Delete' || key === 'Backspace') {
+        if (!useEditor.getState().selectedId) return
+        event.preventDefault()
+        removeSelected()
+      } else if (key.toLowerCase() === 's') {
+        event.preventDefault()
+        splitAtPlayhead()
+      } else if (key === 'ArrowLeft') {
+        event.preventDefault()
+        setPlayhead(useEditor.getState().playhead - (event.shiftKey ? 1 : 1 / 30))
+      } else if (key === 'ArrowRight') {
+        event.preventDefault()
+        setPlayhead(useEditor.getState().playhead + (event.shiftKey ? 1 : 1 / 30))
+      } else if (key === 'Home') {
+        event.preventDefault()
+        setPlayhead(0)
+      } else if (key === 'End') {
+        event.preventDefault()
+        setPlayhead(useEditor.getState().contentEnd())
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [duplicateSelected, redo, removeSelected, setPlayhead, splitAtPlayhead, togglePlay, undo])
+
   /** The clip an automatic edit should act on. */
   const targetClip = clips.find((c) => c.id === selectedId && c.src) ?? clips.find((c) => c.src)
 

@@ -205,6 +205,121 @@ if (Math.abs(scrub.time - scrub.expected) < 0.35)
   ok(`seek follows the playhead (source ${scrub.time.toFixed(2)}s ≈ ${scrub.expected.toFixed(2)}s)`)
 else bad('the preview did not follow a manual seek', JSON.stringify(scrub))
 
+/* 7 — the effects actually reach the picture -------------------------------- */
+const styleOf = () =>
+  page.evaluate(() => {
+    const layer = document.querySelector('.ed__layer')
+    if (!layer) return null
+    const cs = getComputedStyle(layer)
+    return {
+      opacity: Number(cs.opacity),
+      transform: cs.transform,
+      filter: cs.filter,
+      clipPath: cs.clipPath,
+      washes: document.querySelectorAll('.ed__wash').length,
+    }
+  })
+
+await page.evaluate(() => {
+  const s = window.__ceEditor.getState()
+  s.setPlayhead(1)
+  s.select(s.clips[0].id)
+  s.resetProps(s.clips[0].id)
+})
+await new Promise((r) => setTimeout(r, 300))
+const before = await styleOf()
+if (before) ok('the preview renders a clip layer')
+else bad('no clip layer in the preview')
+
+const setProps = async (patch) => {
+  await page.evaluate((p) => {
+    const s = window.__ceEditor.getState()
+    s.setProps(s.clips[0].id, p)
+  }, patch)
+  await new Promise((r) => setTimeout(r, 250))
+  return styleOf()
+}
+
+const opacity = await setProps({ opacity: 0.4 })
+if (opacity && Math.abs(opacity.opacity - 0.4) < 0.05) ok(`opacity applied (${opacity.opacity})`)
+else bad('opacity is not applied in the preview', JSON.stringify(opacity))
+
+const moved = await setProps({ opacity: 1, transform: { x: 0.2, y: -0.1, scale: 1.4, rotate: 30 } })
+if (moved && moved.transform !== 'none' && moved.transform !== before?.transform)
+  ok(`transform and rotation applied (${moved.transform})`)
+else bad('transform/rotate is not applied in the preview', JSON.stringify(moved))
+
+const graded = await setProps({
+  transform: { x: 0, y: 0, scale: 1, rotate: 0 },
+  filter: 'bw',
+  adjust: { brightness: 0.2, contrast: 1.3, saturation: 0.5, temperature: 0.4, sharpen: 0, vignette: 0.5 },
+})
+if (graded && /grayscale/.test(graded.filter) && /brightness|contrast|saturate/.test(graded.filter))
+  ok(`look and grade applied (${graded.filter})`)
+else bad('filters/adjust are not applied in the preview', JSON.stringify(graded))
+if (graded && graded.washes >= 2) ok(`tint and vignette painted (${graded.washes} washes)`)
+else bad('tint/vignette missing', JSON.stringify(graded))
+
+const cropped = await setProps({
+  filter: 'none',
+  adjust: { brightness: 0, contrast: 1, saturation: 1, temperature: 0, sharpen: 0, vignette: 0 },
+  crop: { left: 0.2, top: 0.1, right: 0.1, bottom: 0 },
+})
+if (cropped && cropped.clipPath && cropped.clipPath !== 'none') ok(`crop applied (${cropped.clipPath})`)
+else bad('crop is not applied in the preview', JSON.stringify(cropped))
+
+// Animations are time based: the first frames of a fade-in must be transparent.
+await setProps({ crop: { left: 0, top: 0, right: 0, bottom: 0 }, animIn: 'fade', animDuration: 1 })
+await page.evaluate(() => window.__ceEditor.getState().setPlayhead(0.05))
+await new Promise((r) => setTimeout(r, 250))
+const animStart = await styleOf()
+await page.evaluate(() => window.__ceEditor.getState().setPlayhead(1.5))
+await new Promise((r) => setTimeout(r, 250))
+const animLater = await styleOf()
+if (animStart && animLater && animStart.opacity < 0.3 && animLater.opacity > 0.9)
+  ok(`animation applied (${animStart.opacity.toFixed(2)} → ${animLater.opacity.toFixed(2)})`)
+else bad('in/out animation is not applied in the preview', JSON.stringify({ animStart, animLater }))
+
+/* 8 — a transition is really cross-faded ------------------------------------ */
+const blend = await page.evaluate(async () => {
+  const store = window.__ceEditor.getState()
+  store.setProps(store.clips[0].id, { animIn: 'none' })
+  const t = window.__ceEditor.getState().transitions[0]
+  const from = window.__ceEditor.getState().clips.find((c) => c.id === t.fromClipId)
+  const to = window.__ceEditor.getState().clips.find((c) => c.id === t.toClipId)
+  const overlapStart = Math.max(from.start, to.start)
+  const overlapEnd = Math.min(from.start + from.duration, to.start + to.duration)
+  window.__ceEditor.getState().setPlayhead((overlapStart + overlapEnd) / 2)
+  await new Promise((r) => setTimeout(r, 400))
+  const layers = [...document.querySelectorAll('.ed__layer')]
+  return { layers: layers.length, opacities: layers.map((l) => Number(getComputedStyle(l).opacity)) }
+})
+if (blend.layers === 2) ok('both clips are on screen during a transition')
+else bad('the transition does not stack two clips', JSON.stringify(blend))
+if (blend.opacities.some((o) => o > 0.2 && o < 0.9)) ok(`cross-fade in progress (${blend.opacities.join(', ')})`)
+else bad('the transition is not cross-faded in the preview', JSON.stringify(blend))
+
+/* 9 — the Delete key removes the selected clip ------------------------------ */
+const deleted = await page.evaluate(async () => {
+  const before = window.__ceEditor.getState().clips.length
+  window.__ceEditor.getState().select(window.__ceEditor.getState().clips[0].id)
+  return before
+})
+await page.keyboard.press('Delete')
+await new Promise((r) => setTimeout(r, 300))
+const afterDelete = await page.evaluate(() => window.__ceEditor.getState().clips.length)
+if (afterDelete === deleted - 1) ok('the Delete key removes the selected clip')
+else bad('the Delete key does nothing', `${deleted} → ${afterDelete}`)
+
+// …and Ctrl+Z brings it back.
+await page.keyboard.down('Control')
+await page.keyboard.press('KeyZ')
+await page.keyboard.up('Control')
+await new Promise((r) => setTimeout(r, 300))
+const restored = await page.evaluate(() => window.__ceEditor.getState().clips.length)
+if (restored === deleted) ok('Ctrl+Z undoes it')
+else bad('Ctrl+Z does not undo', `${afterDelete} → ${restored}`)
+
 const hard = errors.filter((e) => !/favicon|ResizeObserver|DevTools/i.test(e))
 if (hard.length) bad('console errors', hard.slice(0, 3).join(' | '))
 
