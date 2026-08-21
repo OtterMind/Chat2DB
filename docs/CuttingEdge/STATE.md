@@ -152,10 +152,24 @@ apps then see it through the update button.
 **Never delete old releases** — the updater needs the previous installer's blockmap
 to build a differential patch.
 
+**Confirmed on a real machine (0.3.7, user report):** every in-app update so far has
+downloaded **under 50 MB** against a ~479 MB installer, so the differential channel
+is genuinely working end to end — deterministic payload, blockmap, and the installer
+seeded in `%LOCALAPPDATA%` all do their job. This is the baseline any future change
+to packaging must not break: if an update ever downloads the full installer again,
+suspect a non-deterministic payload (timestamps, `__pycache__`, compression change)
+before anything else.
+
 ## 6. Next, in order
 
-2. Project save/load — the timeline is lost when the app closes.
-1. Animated captions from the transcript (libass is already inside our FFmpeg).
-2. MediaPipe face tracking for reframing (currently centre-crop).
-2. Beat detection and automatic ducking; YouTube/Instagram publishing.
+1. Playhead pinned to the centre with the timeline scrolling under it (asked for,
+   awaiting the user's go-ahead — it changes drag, trim and scroll semantics).
+2. 720p proxies on import, so scrubbing 4K footage is not painful.
+3. Keyframes for position, scale, rotation, opacity and volume.
+4. Ripple / roll / slip trimming.
+5. Slim the installer: fetch the Python runtime and models on first launch
+   (~479 MB → ~120 MB). Delta updates are verified working, so the risk here is
+   measurable — re-check the download size right after this lands.
+6. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
+7. Beat detection + automatic ducking; then YouTube/Instagram publishing.
 3. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).
