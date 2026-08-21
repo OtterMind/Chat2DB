@@ -4,8 +4,25 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Zap, TrendingUp } from 'lucide-react'
 import { FEATURES, GROUP_TITLES, type FeatureTile } from '../features/catalog'
 import { jobsApi, systemApi } from '../api/jobs'
-import { useRuntime, selectActiveTasks } from '../store/runtime'
-import RunningStrip from '../components/RunningStrip'
+
+const STATUS_FA: Record<string, string> = {
+  pending: 'در صف',
+  queued: 'در صف',
+  processing: 'در حال پردازش',
+  done: 'آماده',
+  failed: 'ناموفق',
+  cancelled: 'لغو شده',
+}
+
+const STAGE_FA: Record<string, string> = {
+  ingest: 'دریافت ویدیو',
+  prepare: 'آماده‌سازی',
+  transcribe: 'رونویسی',
+  select: 'انتخاب لحظه‌ها',
+  reframe: 'قاب‌بندی',
+  subtitle: 'زیرنویس',
+  export: 'خروجی گرفتن',
+}
 
 function Tile({ tile, onOpen }: { tile: FeatureTile; onOpen: (t: FeatureTile) => void }) {
   return (
@@ -22,7 +39,6 @@ function Tile({ tile, onOpen }: { tile: FeatureTile; onOpen: (t: FeatureTile) =>
 export default function Home() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const activeTasks = useRuntime(selectActiveTasks)
 
   const { data: jobsData } = useQuery({
     queryKey: ['jobs'],
@@ -70,8 +86,6 @@ export default function Home() {
         </span>
       </section>
 
-      {activeTasks.length > 0 && <RunningStrip />}
-
       {groups.map(({ group, items }) => (
         <section key={group} className="ce-group">
           <div className="ce-group__head">
@@ -110,7 +124,10 @@ export default function Home() {
                 <span className={`ce-dot ce-dot--${job.status}`} />
                 <span className="ce-jobcard__name">{job.name}</span>
                 <span className="ce-jobcard__meta">
-                  {job.current_stage ?? job.status} · {Math.round(job.progress)}٪
+                  {(job.current_stage && STAGE_FA[job.current_stage]) ??
+                    STATUS_FA[job.status] ??
+                    job.status}
+                  {job.status === 'processing' ? ` · ${Math.round(job.progress)}٪` : ''}
                 </span>
               </button>
             ))}

@@ -1,5 +1,8 @@
 /* Cutting Edge (CE) — Global Styles */
-@import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css');
+/* Bundled offline — the packaged app must never depend on a CDN. */
+@import '@fontsource/vazirmatn/400.css';
+@import '@fontsource/vazirmatn/600.css';
+@import '@fontsource/vazirmatn/700.css';
 
 :root {
   --bg: #0b1220;
@@ -76,7 +79,7 @@ button { font-family: inherit; cursor: pointer; }
 .ce-content { flex: 1; overflow: auto; padding: 16px 18px 24px; }
 
 /* ----------------------------------------------------------------- home -- */
-.ce-home { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.ce-home { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
 
 .ce-searchbar input {
   width: 100%; height: 46px; border-radius: 14px; border: 1px solid var(--border);
@@ -115,16 +118,13 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* -------------------------------------------------------------- tiles ---- */
-.ce-grid {
-  display: grid; gap: 14px 8px;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-}
+.ce-grid { display: grid; gap: 16px 10px; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
 .ce-tile {
   border: none; background: transparent; display: flex; flex-direction: column;
   align-items: center; gap: 8px; padding: 4px 2px;
 }
 .ce-tile__icon {
-  position: relative; width: 60px; height: 60px; border-radius: 18px;
+  position: relative; width: 64px; height: 64px; border-radius: 19px;
   display: grid; place-items: center; color: #fff;
   box-shadow: 0 8px 18px -10px rgba(0, 0, 0, .9);
   transition: transform .16s ease, box-shadow .16s ease;
@@ -217,7 +217,7 @@ button { font-family: inherit; cursor: pointer; }
 .ant-btn-primary:hover { opacity: .92; }
 
 @media (max-width: 520px) {
-  .ce-grid { grid-template-columns: repeat(4, 1fr); gap: 12px 4px; }
+  .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
   .ce-banner { flex-direction: column; align-items: flex-start; }

@@ -22,6 +22,11 @@ export function RuntimeBridge() {
     wsClient.connect()
     setWsConnected(true)
 
+    // Dev aid: lets us inspect/inject tasks from the console while designing.
+    if (import.meta.env.DEV) {
+      ;(window as unknown as Record<string, unknown>).__ceRuntime = useRuntime
+    }
+
     const unsubscribe = wsClient.onEvent((event) => {
       switch (event.type) {
         case 'job:progress':
