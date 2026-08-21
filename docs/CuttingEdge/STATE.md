@@ -169,6 +169,20 @@ to packaging must not break: if an update ever downloads the full installer agai
 suspect a non-deterministic payload (timestamps, `__pycache__`, compression change)
 before anything else.
 
+## 5b. Open-source survey
+
+`docs/CuttingEdge/OSS_SURVEY_0.3.8.md` is the verified list (GitHub API + Hugging Face
+API + PyPI, on the day of writing) of what we may and may not use. Headlines:
+
+* MediaPipe (Apache-2.0) unblocks real auto-reframe; **Ultralytics YOLO is AGPL-3.0**,
+  so every "MIT" reframe repo built on it is unusable for us.
+* `piper` is MIT on GitHub and **GPL-3.0-or-later on PyPI** — always check the wheel,
+  not just the repo. It has the only good local Persian voices, so it belongs in the
+  plugin channel as a separate process.
+* madmom's beat models are CC BY-NC → use librosa (ISC).
+* wavesurfer.js (BSD-3) for audio waveforms, OpenTimelineIO (Apache-2.0) for project
+  interchange, DeepFilterNet (MIT/Apache) for denoise, Demucs (MIT) for ducking.
+
 ## 6. Next, in order
 
 1. Keyframes for position, scale, rotation, opacity and volume. The model part is
