@@ -171,14 +171,6 @@ export default function AboutUs() {
               >
                 {i18n('setting.text.autoInstallNewVersion')}
               </Checkbox>
-              <Checkbox
-                onChange={(e) => {
-                  updateHotUpdateConfig('receiveBeta', e.target.checked);
-                }}
-                checked={Boolean(hotUpdateConfig.receiveBeta)}
-              >
-                {i18n('setting.text.receiveBetaVersion')}
-              </Checkbox>
             </div>
           </div>
         </>
