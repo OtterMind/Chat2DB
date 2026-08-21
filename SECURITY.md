@@ -60,6 +60,29 @@ Processing untrusted data must not allow code execution, filesystem escape,
 credential disclosure, unauthorized network access, or modification of
 trusted application files.
 
+### Credentials supplied for an import
+
+Importing a DBeaver `.dbp` archive can require the DBeaver master password,
+because DBeaver encrypts `credentials-config.json` with a key derived from it.
+Chat2DB treats that password as request-scoped input:
+
+- It is accepted only as an optional parameter of the import request, is used
+  only to decrypt the credential files of that archive, and is never written to
+  Chat2DB storage, logs, or error messages.
+- The extracted copy of the archive holds decrypted credentials, so it is
+  removed when the import finishes, including when the import fails.
+- Supplying it is always optional. Without it, connections whose credentials
+  cannot be decrypted are imported without a user or password, which is what the
+  import dialog already announces.
+
+The password crosses the HTTP boundary in the same request form as the
+connection passwords the datasource endpoints already accept, so it inherits the
+deployment boundary above rather than adding a new one: the service must stay
+bound to a loopback address, where the request does not leave the machine. A
+network-reachable Community deployment is unsupported for this reason, and would
+expose this password exactly as it exposes every connection password unless the
+API is served over HTTPS.
+
 ### Out of scope
 
 The following are outside the supported Community security boundary:
