@@ -201,7 +201,7 @@ const ChartCardList = forwardRef((props: IProps, ref: ForwardedRef<ChartCardList
     return (
       <GridLayout layout={_aiLayout}>
         {_aiLayout?.map((t: any) => {
-          const id = Number(t.i);
+          const id = t.i;
           const isActive = activeChart === id;
           return (
             <div key={t.i} data-grid={t} className={cx(styles.gridBox, { [styles.gridBoxActive]: isActive })}>
