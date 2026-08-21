@@ -18,7 +18,9 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
 | **Preview** | Real video in the program monitor, streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
-| **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import media, export, remove silence, split scenes |
+| **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
+| **Tool rail** | Context-sensitive bottom toolbar (global set / clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
+| **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
 | **Languages** | English default + Persian, switch in Settings, flips LTR/RTL instantly, persisted |
 | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |

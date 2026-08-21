@@ -1,0 +1,395 @@
+import { useState, type ReactNode } from 'react'
+import {
+  Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
+  Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers, Captions,
+  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend,
+} from 'lucide-react'
+import { Slider, Segmented, message } from 'antd'
+import { useEditor, propsOf, type Clip } from './model'
+import { useI18n } from '../i18n'
+import { TRANSITIONS } from './transitions'
+
+type PanelId =
+  | null
+  | 'speed'
+  | 'volume'
+  | 'crop'
+  | 'transform'
+  | 'opacity'
+  | 'transition'
+  | 'ratio'
+  | 'soon'
+
+interface Tool {
+  id: string
+  icon: ReactNode
+  label: [en: string, fa: string]
+  run?: () => void
+  panel?: PanelId
+  disabled?: boolean
+  soon?: boolean
+}
+
+const ICON = { size: 19, strokeWidth: 1.8 } as const
+
+/**
+ * Context-sensitive tool rail, the way every mobile NLE works: one set of tools
+ * when nothing is selected, another for the selected clip, and nested panels
+ * with a back arrow. Rows scroll horizontally instead of wrapping, so adding
+ * tools never reflows the editor.
+ */
+export default function EditorToolbar({ onImport }: { onImport: () => void }) {
+  const { t, lang } = useI18n()
+  const i = lang === 'fa' ? 1 : 0
+  const [panel, setPanel] = useState<PanelId>(null)
+  const [soonLabel, setSoonLabel] = useState('')
+
+  const {
+    clips, selectedId, playhead, transitions,
+    splitAtPlayhead, duplicateSelected, removeSelected, setProps, freezeFrame,
+    addTransition, neighbourOf, addTrack, select,
+  } = useEditor()
+
+  const clip = clips.find((c) => c.id === selectedId) ?? null
+  const props = clip ? propsOf(clip) : null
+
+  const notReady = (label: [string, string]) => () => {
+    setSoonLabel(label[i])
+    setPanel('soon')
+  }
+
+  const globalTools: Tool[] = [
+    { id: 'edit', icon: <Scissors {...ICON} />, label: ['Edit', 'ویرایش'], run: () => {
+      const first = clips.find((c) => playhead >= c.start && playhead < c.start + c.duration) ?? clips[0]
+      if (first) select(first.id)
+      else onImport()
+    } },
+    { id: 'audio', icon: <Music4 {...ICON} />, label: ['Audio', 'صدا'], run: () => addTrack('audio') },
+    { id: 'text', icon: <Type {...ICON} />, label: ['Text', 'متن'], run: () => addTrack('text') },
+    { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
+    { id: 'captions', icon: <Captions {...ICON} />, label: ['Captions', 'زیرنویس'], soon: true },
+    { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], soon: true },
+    { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], soon: true },
+    { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], soon: true },
+    { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
+  ]
+
+  const clipTools: Tool[] = [
+    { id: 'split', icon: <Scissors {...ICON} />, label: ['Split', 'برش'], run: splitAtPlayhead },
+    { id: 'speed', icon: <Gauge {...ICON} />, label: ['Speed', 'سرعت'], panel: 'speed' },
+    { id: 'volume', icon: <Volume2 {...ICON} />, label: ['Volume', 'صدا'], panel: 'volume' },
+    { id: 'transition', icon: <Blend {...ICON} />, label: ['Transition', 'ترنزیشن'], panel: 'transition' },
+    { id: 'crop', icon: <Crop {...ICON} />, label: ['Crop', 'برش کادر'], panel: 'crop' },
+    { id: 'transform', icon: <Move {...ICON} />, label: ['Transform', 'جابه‌جایی'], panel: 'transform' },
+    { id: 'opacity', icon: <Droplets {...ICON} />, label: ['Opacity', 'شفافیت'], panel: 'opacity' },
+    { id: 'duplicate', icon: <Copy {...ICON} />, label: ['Duplicate', 'تکثیر'], run: duplicateSelected },
+    {
+      id: 'freeze',
+      icon: <Snowflake {...ICON} />,
+      label: ['Freeze', 'فریز'],
+      run: () => clip && freezeFrame(clip.id),
+    },
+    {
+      id: 'reverse',
+      icon: <Rewind {...ICON} />,
+      label: ['Reverse', 'معکوس'],
+      run: () => {
+        if (!clip || !props) return
+        setProps(clip.id, { reversed: !props.reversed })
+        message.success(props.reversed ? t('Reverse off', 'معکوس خاموش') : t('Reverse on', 'معکوس روشن'))
+      },
+    },
+    {
+      id: 'mute',
+      icon: props?.muted ? <VolumeX {...ICON} /> : <AudioLines {...ICON} />,
+      label: ['Mute', 'بی‌صدا'],
+      run: () => clip && props && setProps(clip.id, { muted: !props.muted }),
+    },
+    {
+      id: 'rotate',
+      icon: <RotateCw {...ICON} />,
+      label: ['Rotate', 'چرخش'],
+      run: () => clip && props && setProps(clip.id, { transform: { ...props.transform, rotate: (props.transform.rotate + 90) % 360 } }),
+    },
+    { id: 'replace', icon: <Repeat {...ICON} />, label: ['Replace', 'جایگزینی'], run: onImport },
+    { id: 'animations', icon: <Film {...ICON} />, label: ['Animations', 'انیمیشن'], soon: true },
+    { id: 'delete', icon: <Trash2 {...ICON} />, label: ['Delete', 'حذف'], run: removeSelected },
+  ]
+
+  const tools = clip ? clipTools : globalTools
+
+  return (
+    <div className="tb">
+      {panel && (
+        <div className="tb__panel">
+          <button className="tb__back" onClick={() => setPanel(null)}>
+            <ChevronLeft size={18} />
+          </button>
+          <div className="tb__panel-body">
+            {panel === 'speed' && clip && props && (
+              <PanelSpeed clip={clip} speed={props.speed} onChange={(v) => setProps(clip.id, { speed: v })} />
+            )}
+            {panel === 'volume' && clip && props && (
+              <PanelVolume
+                volume={props.volume}
+                fadeIn={props.fadeIn}
+                fadeOut={props.fadeOut}
+                max={clip.duration / 2}
+                onChange={(patch) => setProps(clip.id, patch)}
+              />
+            )}
+            {panel === 'opacity' && clip && props && (
+              <Field label={t('Opacity', 'شفافیت')} value={`${Math.round(props.opacity * 100)}%`}>
+                <Slider
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={props.opacity}
+                  onChange={(v) => setProps(clip.id, { opacity: v })}
+                />
+              </Field>
+            )}
+            {panel === 'crop' && clip && props && (
+              <PanelCrop crop={props.crop} onChange={(crop) => setProps(clip.id, { crop })} />
+            )}
+            {panel === 'transform' && clip && props && (
+              <PanelTransform
+                transform={props.transform}
+                onChange={(transform) => setProps(clip.id, { transform })}
+              />
+            )}
+            {panel === 'transition' && clip && (
+              <PanelTransition
+                clip={clip}
+                hasNeighbour={Boolean(neighbourOf(clip.id))}
+                existing={transitions.find((x) => x.fromClipId === clip.id) ?? null}
+                onApply={(type, duration) => {
+                  const created = addTransition(clip.id, type, duration)
+                  if (!created) {
+                    message.warning(
+                      t('Place another clip right after this one first.', 'اول یک کلیپ دیگر بلافاصله بعد از این بگذار.')
+                    )
+                  }
+                }}
+              />
+            )}
+            {panel === 'ratio' && <PanelRatio />}
+            {panel === 'soon' && (
+              <p className="ce-hint">
+                {soonLabel} — {t('arriving in the next phase of the editor.', 'در فاز بعدی ویرایشگر اضافه می‌شود.')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="tb__rail">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            className={`tb__tool ${tool.soon ? 'is-soon' : ''}`}
+            disabled={tool.disabled}
+            onClick={() => {
+              if (tool.soon) return notReady(tool.label)()
+              if (tool.panel) setPanel(tool.panel)
+              else tool.run?.()
+            }}
+          >
+            <span className="tb__icon">{tool.icon}</span>
+            <span className="tb__label">{tool.label[i]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- panels -- */
+
+function Field({ label, value, children }: { label: string; value?: string; children: ReactNode }) {
+  return (
+    <label className="tb__field">
+      <span className="tb__field-head">
+        {label}
+        {value && <strong dir="ltr">{value}</strong>}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+function PanelSpeed({ clip, speed, onChange }: { clip: Clip; speed: number; onChange: (v: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="tb__stack">
+      <Field label={t('Speed', 'سرعت')} value={`${speed.toFixed(2)}×`}>
+        <Slider min={0.25} max={4} step={0.05} value={speed} onChange={onChange} />
+      </Field>
+      <Segmented
+        value={String(speed)}
+        onChange={(v) => onChange(Number(v))}
+        options={['0.5', '1', '1.5', '2', '3'].map((v) => ({ value: v, label: `${v}×` }))}
+      />
+      <span className="ce-hint">
+        {t('Clip length', 'طول کلیپ')}: <span dir="ltr">{clip.duration.toFixed(2)}s</span>
+      </span>
+    </div>
+  )
+}
+
+function PanelVolume({
+  volume, fadeIn, fadeOut, max, onChange,
+}: {
+  volume: number
+  fadeIn: number
+  fadeOut: number
+  max: number
+  onChange: (patch: { volume?: number; fadeIn?: number; fadeOut?: number }) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="tb__stack">
+      <Field label={t('Volume', 'بلندی صدا')} value={`${Math.round(volume * 100)}%`}>
+        <Slider min={0} max={2} step={0.01} value={volume} onChange={(v) => onChange({ volume: v })} />
+      </Field>
+      <div className="tb__row">
+        <Field label={t('Fade in', 'محو ورودی')} value={`${fadeIn.toFixed(1)}s`}>
+          <Slider min={0} max={Math.max(0.5, max)} step={0.1} value={fadeIn} onChange={(v) => onChange({ fadeIn: v })} />
+        </Field>
+        <Field label={t('Fade out', 'محو خروجی')} value={`${fadeOut.toFixed(1)}s`}>
+          <Slider min={0} max={Math.max(0.5, max)} step={0.1} value={fadeOut} onChange={(v) => onChange({ fadeOut: v })} />
+        </Field>
+      </div>
+    </div>
+  )
+}
+
+function PanelCrop({
+  crop, onChange,
+}: {
+  crop: { left: number; top: number; right: number; bottom: number }
+  onChange: (crop: { left: number; top: number; right: number; bottom: number }) => void
+}) {
+  const { t } = useI18n()
+  const edges: [keyof typeof crop, string][] = [
+    ['left', t('Left', 'چپ')],
+    ['right', t('Right', 'راست')],
+    ['top', t('Top', 'بالا')],
+    ['bottom', t('Bottom', 'پایین')],
+  ]
+  return (
+    <div className="tb__grid">
+      {edges.map(([key, label]) => (
+        <Field key={key} label={label} value={`${Math.round(crop[key] * 100)}%`}>
+          <Slider
+            min={0}
+            max={0.45}
+            step={0.01}
+            value={crop[key]}
+            onChange={(v) => onChange({ ...crop, [key]: v })}
+          />
+        </Field>
+      ))}
+    </div>
+  )
+}
+
+function PanelTransform({
+  transform, onChange,
+}: {
+  transform: { x: number; y: number; scale: number; rotate: number }
+  onChange: (transform: { x: number; y: number; scale: number; rotate: number }) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="tb__grid">
+      <Field label={t('Scale', 'مقیاس')} value={`${Math.round(transform.scale * 100)}%`}>
+        <Slider min={0.1} max={3} step={0.01} value={transform.scale} onChange={(v) => onChange({ ...transform, scale: v })} />
+      </Field>
+      <Field label={t('Rotation', 'چرخش')} value={`${Math.round(transform.rotate)}°`}>
+        <Slider min={-180} max={180} step={1} value={transform.rotate} onChange={(v) => onChange({ ...transform, rotate: v })} />
+      </Field>
+      <Field label={t('Horizontal', 'افقی')} value={`${Math.round(transform.x * 100)}%`}>
+        <Slider min={-0.5} max={0.5} step={0.01} value={transform.x} onChange={(v) => onChange({ ...transform, x: v })} />
+      </Field>
+      <Field label={t('Vertical', 'عمودی')} value={`${Math.round(transform.y * 100)}%`}>
+        <Slider min={-0.5} max={0.5} step={0.01} value={transform.y} onChange={(v) => onChange({ ...transform, y: v })} />
+      </Field>
+    </div>
+  )
+}
+
+function PanelTransition({
+  clip, hasNeighbour, existing, onApply,
+}: {
+  clip: Clip
+  hasNeighbour: boolean
+  existing: { id: string; type: string; duration: number } | null
+  onApply: (type: string, duration: number) => void
+}) {
+  const { t, lang } = useI18n()
+  const i = lang === 'fa' ? 1 : 0
+  const { updateTransition, removeTransition } = useEditor()
+  const [duration, setDuration] = useState(existing?.duration ?? 0.5)
+
+  if (!hasNeighbour && !existing) {
+    return (
+      <p className="ce-hint">
+        {t(
+          'A transition needs a clip immediately after this one.',
+          'برای ترنزیشن باید بلافاصله بعد از این کلیپ، کلیپ دیگری باشد.'
+        )}
+      </p>
+    )
+  }
+
+  return (
+    <div className="tb__stack">
+      <Field label={t('Duration', 'مدت')} value={`${duration.toFixed(2)}s`}>
+        <Slider
+          min={0.1}
+          max={Math.max(0.3, Math.min(2, clip.duration * 0.9))}
+          step={0.05}
+          value={duration}
+          onChange={(v) => {
+            setDuration(v)
+            if (existing) updateTransition(existing.id, { duration: v })
+          }}
+        />
+      </Field>
+
+      <div className="tb__transitions">
+        {TRANSITIONS.map((transition) => (
+          <button
+            key={transition.id}
+            className={`tb__transition ${existing?.type === transition.id ? 'is-active' : ''}`}
+            onClick={() =>
+              existing ? updateTransition(existing.id, { type: transition.id }) : onApply(transition.id, duration)
+            }
+          >
+            <span className="tb__transition-art" data-kind={transition.id} />
+            <span>{transition.label[i]}</span>
+          </button>
+        ))}
+      </div>
+
+      {existing && (
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => removeTransition(existing.id)}>
+          {t('Remove transition', 'حذف ترنزیشن')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PanelRatio() {
+  const { t } = useI18n()
+  return (
+    <p className="ce-hint">
+      {t(
+        'The output ratio is chosen in the export dialog: 9:16, 1:1, 4:5, 16:9 or 4K.',
+        'نسبت خروجی در پنجره‌ی خروجی انتخاب می‌شود: ۹:۱۶، ۱:۱، ۴:۵، ۱۶:۹ یا ۴K.'
+      )}
+    </p>
+  )
+}

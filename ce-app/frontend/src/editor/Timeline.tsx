@@ -14,8 +14,8 @@ type DragState =
 
 export default function Timeline() {
   const {
-    tracks, clips, selectedId, playhead, pxPerSecond, snapping,
-    select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock,
+    tracks, clips, transitions, selectedId, playhead, pxPerSecond, snapping,
+    select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock, addTransition, neighbourOf,
   } = useEditor()
 
   const { t } = useI18n()
@@ -150,6 +150,29 @@ export default function Timeline() {
 
           {tracks.map((track) => (
             <div key={track.id} className={`tl__lane ${track.locked ? 'is-locked' : ''}`} data-track-id={track.id}>
+              {/* A junction marker between neighbours, exactly where a
+                  transition lives — click it to create or edit one. */}
+              {clips
+                .filter((c) => c.trackId === track.id && neighbourOf(c.id))
+                .map((clip) => {
+                  const existing = transitions.find((x) => x.fromClipId === clip.id)
+                  return (
+                    <button
+                      key={`j-${clip.id}`}
+                      className={`tl__junction ${existing ? 'is-set' : ''}`}
+                      style={{ left: (clip.start + clip.duration) * pxPerSecond }}
+                      title={existing ? existing.type : t('Add transition', 'افزودن ترنزیشن')}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        select(clip.id)
+                        if (!existing) addTransition(clip.id)
+                      }}
+                    >
+                      <span />
+                    </button>
+                  )
+                })}
+
               {clips
                 .filter((c) => c.trackId === track.id)
                 .map((clip) => (

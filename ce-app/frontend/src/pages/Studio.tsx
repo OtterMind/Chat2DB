@@ -8,6 +8,7 @@ import { Input, Modal, Radio, Select, message } from 'antd'
 import Page from '../components/Page'
 import Timeline from '../editor/Timeline'
 import PreviewMonitor from '../editor/PreviewMonitor'
+import EditorToolbar from '../editor/EditorToolbar'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, renderApi, saveDialog, type Quality } from '../api/render'
@@ -31,7 +32,7 @@ export default function Studio() {
     playing, playhead, pxPerSecond, snapping, selectedId, clips, tracks, past, future,
     togglePlay, setPlayhead, setZoom, toggleSnapping, splitAtPlayhead,
     removeSelected, duplicateSelected, undo, redo, addTrack, addClip,
-    keepRanges, splitAtSourceTimes,
+    keepRanges, splitAtSourceTimes, transitions,
   } = useEditor()
 
   const [analysing, setAnalysing] = useState<'silence' | 'scenes' | null>(null)
@@ -164,6 +165,7 @@ export default function Studio() {
         {
           tracks,
           clips: withMedia,
+          transitions,
           width: settings.width,
           height: settings.height,
           fps: settings.fps,
@@ -338,6 +340,8 @@ export default function Studio() {
             </button>
           </div>
         </div>
+
+        <EditorToolbar onImport={importMedia} />
 
         <Timeline />
 

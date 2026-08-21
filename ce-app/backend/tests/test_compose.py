@@ -59,3 +59,76 @@ def test_empty_timeline_is_rejected():
     except ValueError:
         return
     raise AssertionError("an empty timeline should not build a command")
+
+
+def _clip(cid: str, src, start: float, duration: float, **props) -> dict:
+    return {
+        "id": cid, "trackId": "v1", "start": start, "duration": duration,
+        "offset": 0, "src": str(src), "props": props or {},
+    }
+
+
+@requires_ffmpeg
+def test_transition_overlaps_the_two_clips(media, tmp_path):
+    """A 0.5s transition must shorten the result by exactly that much."""
+    timeline = compose.Timeline.from_dict({
+        "width": 480, "height": 854, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [
+            _clip("a", media["clip_a"], 0, 3),
+            _clip("b", media["clip_b"], 2.5, 3),
+        ],
+        "transitions": [
+            {"id": "t1", "trackId": "v1", "fromClipId": "a", "toClipId": "b",
+             "type": "wipeleft", "duration": 0.5}
+        ],
+    })
+    command = compose.build_command(timeline, tmp_path / "x.mp4")
+    graph = command[command.index("-filter_complex") + 1]
+    assert "xfade=transition=wipeleft" in graph
+
+    output = compose.render(timeline, tmp_path / "transition.mp4")
+    assert abs(compose.probe_media(str(output))["duration"] - 5.5) < 0.4
+
+
+def test_speed_defines_how_much_source_a_clip_consumes(media):
+    timeline = compose.Timeline.from_dict({
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [_clip("a", media["clip_a"], 0, 2, speed=2)],
+    })
+    clip = timeline.clips[0]
+    assert clip.duration == 2          # two seconds on the timeline
+    assert clip.source_window == 4     # consuming four seconds of source
+
+
+@requires_ffmpeg
+def test_clip_effects_render(media, tmp_path):
+    timeline = compose.Timeline.from_dict({
+        "width": 480, "height": 480, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}],
+        "clips": [
+            _clip("a", media["clip_a"], 0, 1, speed=2, opacity=0.5,
+                  crop={"left": 0.1, "right": 0.1, "top": 0, "bottom": 0},
+                  transform={"x": 0.05, "y": 0, "scale": 0.8, "rotate": 0}),
+            _clip("b", media["clip_a"], 1.2, 1, reversed=True),
+        ],
+    })
+    output = compose.render(timeline, tmp_path / "effects.mp4")
+    info = compose.probe_media(str(output))
+    assert (info["width"], info["height"]) == (480, 480)
+    assert info["has_video"]
+
+
+@requires_ffmpeg
+def test_muted_clip_contributes_no_audio(media, tmp_path):
+    timeline = compose.Timeline.from_dict({
+        "width": 320, "height": 320, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}, {"id": "a1", "kind": "audio"}],
+        "clips": [
+            _clip("v", media["clip_a"], 0, 1),
+            {"id": "m", "trackId": "a1", "start": 0, "duration": 1, "offset": 0,
+             "src": str(media["tone"]), "props": {"muted": True}},
+        ],
+    })
+    command = compose.build_command(timeline, tmp_path / "muted.mp4")
+    assert "-an" in command

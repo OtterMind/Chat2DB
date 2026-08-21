@@ -28,6 +28,54 @@ from app.config import settings
 
 
 @dataclass
+class ClipProps:
+    """Per-clip effects. Nothing here modifies the source file."""
+
+    speed: float = 1.0
+    volume: float = 1.0
+    opacity: float = 1.0
+    muted: bool = False
+    reversed: bool = False
+    crop: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)  # l, t, r, b
+    transform: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 0.0)  # x, y, scale, rotate
+    fade_in: float = 0.0
+    fade_out: float = 0.0
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> "ClipProps":
+        data = data or {}
+        crop = data.get("crop") or {}
+        transform = data.get("transform") or {}
+        return cls(
+            speed=max(0.0001, float(data.get("speed", 1.0) or 1.0)),
+            volume=max(0.0, float(data.get("volume", 1.0) or 1.0)),
+            opacity=min(1.0, max(0.0, float(data.get("opacity", 1.0) or 1.0))),
+            muted=bool(data.get("muted", False)),
+            reversed=bool(data.get("reversed", False)),
+            crop=(
+                float(crop.get("left", 0.0)), float(crop.get("top", 0.0)),
+                float(crop.get("right", 0.0)), float(crop.get("bottom", 0.0)),
+            ),
+            transform=(
+                float(transform.get("x", 0.0)), float(transform.get("y", 0.0)),
+                max(0.05, float(transform.get("scale", 1.0) or 1.0)), float(transform.get("rotate", 0.0)),
+            ),
+            fade_in=max(0.0, float(data.get("fadeIn", 0.0) or 0.0)),
+            fade_out=max(0.0, float(data.get("fadeOut", 0.0) or 0.0)),
+        )
+
+
+@dataclass
+class Transition:
+    id: str
+    track_id: str
+    from_clip_id: str
+    to_clip_id: str
+    type: str = "fade"
+    duration: float = 0.5
+
+
+@dataclass
 class Clip:
     id: str
     track_id: str
@@ -37,10 +85,16 @@ class Clip:
     src: str | None = None
     label: str = ""
     kind: str = "video"
+    props: ClipProps = field(default_factory=ClipProps)
 
     @property
     def end(self) -> float:
         return self.start + self.duration
+
+    @property
+    def source_window(self) -> float:
+        """How much source material a clip consumes, accounting for speed."""
+        return self.duration * self.props.speed
 
 
 @dataclass
@@ -55,6 +109,7 @@ class Track:
 class Timeline:
     tracks: list[Track] = field(default_factory=list)
     clips: list[Clip] = field(default_factory=list)
+    transitions: list[Transition] = field(default_factory=list)
     width: int = 1080
     height: int = 1920
     fps: int = 30
@@ -62,6 +117,12 @@ class Timeline:
     @property
     def duration(self) -> float:
         return max((c.end for c in self.clips), default=0.0)
+
+    def transition_between(self, from_id: str, to_id: str) -> Transition | None:
+        for transition in self.transitions:
+            if transition.from_clip_id == from_id and transition.to_clip_id == to_id:
+                return transition
+        return None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Timeline":
@@ -85,12 +146,25 @@ class Timeline:
                 src=c.get("src"),
                 label=c.get("label", ""),
                 kind=kind_by_track.get(str(c["trackId"]), "video"),
+                props=ClipProps.from_dict(c.get("props")),
             )
             for c in data.get("clips", [])
+        ]
+        transitions = [
+            Transition(
+                id=str(t.get("id", "")),
+                track_id=str(t["trackId"]),
+                from_clip_id=str(t["fromClipId"]),
+                to_clip_id=str(t["toClipId"]),
+                type=str(t.get("type", "fade")),
+                duration=float(t.get("duration", 0.5)),
+            )
+            for t in data.get("transitions", [])
         ]
         return cls(
             tracks=tracks,
             clips=clips,
+            transitions=transitions,
             width=int(data.get("width", 1080)),
             height=int(data.get("height", 1920)),
             fps=int(data.get("fps", 30)),
@@ -199,6 +273,54 @@ def _has_video_stream(path: str) -> bool:
         return False
 
 
+def _atempo_chain(speed: float) -> list[float]:
+    """atempo only accepts 0.5–2.0, so extreme speeds need to be chained."""
+    factors: list[float] = []
+    remaining = speed
+    while remaining > 2.0:
+        factors.append(2.0)
+        remaining /= 2.0
+    while remaining < 0.5:
+        factors.append(0.5)
+        remaining /= 0.5
+    factors.append(remaining)
+    return factors
+
+
+def _build_sequences(timeline: "Timeline", clips: list[Clip]) -> list[list[Clip]]:
+    """Group clips that are joined by transitions into crossfade chains."""
+    by_id = {c.id: c for c in clips}
+    successors = {
+        t.from_clip_id: t.to_clip_id
+        for t in timeline.transitions
+        if t.from_clip_id in by_id and t.to_clip_id in by_id
+    }
+    predecessors = set(successors.values())
+
+    sequences: list[list[Clip]] = []
+    consumed: set[str] = set()
+    for clip in sorted(clips, key=lambda c: (c.track_id, c.start)):
+        if clip.id in consumed or clip.id in predecessors:
+            continue
+        chain = [clip]
+        consumed.add(clip.id)
+        nxt = successors.get(clip.id)
+        while nxt and nxt not in consumed:
+            chain.append(by_id[nxt])
+            consumed.add(nxt)
+            nxt = successors.get(nxt)
+        sequences.append(chain)
+    return sequences
+
+
+def _sequence_duration(timeline: "Timeline", sequence: list[Clip]) -> float:
+    total = sum(c.duration for c in sequence)
+    for a, b in zip(sequence, sequence[1:]):
+        transition = timeline.transition_between(a.id, b.id)
+        total -= transition.duration if transition else 0.0
+    return total
+
+
 def _has_nvenc(ffmpeg: str) -> bool:
     try:
         out = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=20)
@@ -225,7 +347,12 @@ def build_command(
     # Only branch a stream that the source actually contains.
     video_clips = [c for c in playable if c.kind == "video" and _has_video_stream(c.src)]  # type: ignore[arg-type]
     audio_clips = [
-        c for c in playable if c.track_id not in muted and _has_audio_stream(c.src)  # type: ignore[arg-type]
+        c
+        for c in playable
+        if c.track_id not in muted
+        and not c.props.muted
+        and c.props.volume > 0
+        and _has_audio_stream(c.src)  # type: ignore[arg-type]
     ]
 
     args: list[str] = [ffmpeg, "-hide_banner", "-y"]
@@ -237,27 +364,111 @@ def build_command(
     ]
 
     for clip in playable:
-        args += ["-ss", f"{clip.offset:.3f}", "-t", f"{clip.duration:.3f}", "-i", clip.src]  # type: ignore[arg-type]
+        # A reversed clip has to be decoded whole, so it cannot be seek-trimmed.
+        if clip.props.reversed:
+            args += ["-i", clip.src]  # type: ignore[arg-type]
+        else:
+            args += [
+                "-ss", f"{clip.offset:.3f}",
+                "-t", f"{clip.source_window:.3f}",
+                "-i", clip.src,  # type: ignore[arg-type]
+            ]
 
     index_of = {clip.id: i + 1 for i, clip in enumerate(playable)}
     steps: list[str] = []
 
     # ---- video ---------------------------------------------------------
-    current = "[0:v]"
-    for n, clip in enumerate(video_clips):
+    def video_chain(clip: Clip, label: str) -> str:
+        """Normalise one clip to the canvas, applying its per-clip effects."""
         idx = index_of[clip.id]
-        scaled = f"[v{n}]"
-        steps.append(
-            f"[{idx}:v]scale={timeline.width}:{timeline.height}:force_original_aspect_ratio=decrease,"
-            f"pad={timeline.width}:{timeline.height}:-1:-1:color=black,"
-            f"setsar=1,fps={timeline.fps},setpts=PTS-STARTPTS+{clip.start:.3f}/TB{scaled}"
+        chain = [f"[{idx}:v]"]
+        parts: list[str] = []
+
+        if clip.props.reversed:
+            parts.append(f"trim=start={clip.offset:.3f}:duration={clip.source_window:.3f}")
+            parts.append("setpts=PTS-STARTPTS")
+            parts.append("reverse")
+
+        left, top, right, bottom = clip.props.crop
+        if any(v > 0.001 for v in (left, top, right, bottom)):
+            parts.append(
+                f"crop=iw*{max(0.05, 1 - left - right):.4f}:ih*{max(0.05, 1 - top - bottom):.4f}"
+                f":iw*{left:.4f}:ih*{top:.4f}"
+            )
+
+        x, y, scale, rotate = clip.props.transform
+        if abs(rotate) > 0.01:
+            parts.append(f"rotate={rotate}*PI/180:c=none:ow=rotw({rotate}*PI/180):oh=roth({rotate}*PI/180)")
+
+        target_w = max(2, int(timeline.width * scale))
+        target_h = max(2, int(timeline.height * scale))
+        parts.append(f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease")
+        parts.append(
+            f"pad={timeline.width}:{timeline.height}:(ow-iw)/2+{int(x * timeline.width)}"
+            f":(oh-ih)/2+{int(y * timeline.height)}:color=black@0"
         )
-        out = f"[bg{n}]" if n < len(video_clips) - 1 else "[vout]"
+        parts.append("setsar=1")
+        parts.append(f"fps={timeline.fps}")
+
+        if clip.props.speed != 1.0:
+            parts.append(f"setpts=PTS/{clip.props.speed:.6f}")
+
+        if clip.props.opacity < 0.999:
+            parts.append("format=rgba")
+            parts.append(f"colorchannelmixer=aa={clip.props.opacity:.3f}")
+
+        if clip.props.fade_in > 0:
+            parts.append(f"fade=t=in:st=0:d={clip.props.fade_in:.3f}:alpha=1")
+        if clip.props.fade_out > 0:
+            parts.append(
+                f"fade=t=out:st={max(0.0, clip.duration - clip.props.fade_out):.3f}"
+                f":d={clip.props.fade_out:.3f}:alpha=1"
+            )
+
+        steps.append("".join(chain) + ",".join(parts) + label)
+        return label
+
+    # Clips chained by transitions must be crossfaded together before they are
+    # placed, so xfade sees two aligned streams — that is what unlocks all of
+    # FFmpeg's transition types rather than a hand-rolled alpha ramp.
+    sequences = _build_sequences(timeline, video_clips)
+
+    current = "[0:v]"
+    placed = 0
+    for seq_index, sequence in enumerate(sequences):
+        head = sequence[0]
+        if len(sequence) == 1:
+            label = video_chain(head, f"[v{seq_index}]")
+            seq_start = head.start
+            seq_label = label
+        else:
+            labels = [video_chain(clip, f"[v{seq_index}_{i}]") for i, clip in enumerate(sequence)]
+            seq_label = labels[0]
+            elapsed = sequence[0].duration
+            for i in range(1, len(sequence)):
+                transition = timeline.transition_between(sequence[i - 1].id, sequence[i].id)
+                d = min(transition.duration if transition else 0.5, sequence[i - 1].duration, sequence[i].duration)
+                kind = transition.type if transition else "fade"
+                out = f"[x{seq_index}_{i}]"
+                steps.append(
+                    f"{seq_label}{labels[i]}xfade=transition={kind}:duration={d:.3f}"
+                    f":offset={max(0.0, elapsed - d):.3f}{out}"
+                )
+                elapsed = elapsed - d + sequence[i].duration
+                seq_label = out
+            seq_start = head.start
+
+        seq_end = seq_start + _sequence_duration(timeline, sequence)
+        shifted = f"[p{seq_index}]"
+        steps.append(f"{seq_label}setpts=PTS-STARTPTS+{seq_start:.3f}/TB{shifted}")
+        out = f"[bg{seq_index}]" if seq_index < len(sequences) - 1 else "[vout]"
         steps.append(
-            f"{current}{scaled}overlay=eof_action=pass:enable='between(t,{clip.start:.3f},{clip.end:.3f})'{out}"
+            f"{current}{shifted}overlay=eof_action=pass:enable='between(t,{seq_start:.3f},{seq_end:.3f})'{out}"
         )
         current = out
-    if not video_clips:
+        placed += 1
+
+    if placed == 0:
         steps.append("[0:v]null[vout]")
 
     # ---- audio ---------------------------------------------------------
@@ -265,10 +476,26 @@ def build_command(
     for n, clip in enumerate(audio_clips):
         idx = index_of[clip.id]
         label = f"[a{n}]"
+        parts = ["aresample=48000"]
+        if clip.props.reversed:
+            parts.insert(0, f"atrim=start={clip.offset:.3f}:duration={clip.source_window:.3f}")
+            parts.insert(1, "asetpts=PTS-STARTPTS")
+            parts.insert(2, "areverse")
+        if clip.props.speed != 1.0:
+            for factor in _atempo_chain(clip.props.speed):
+                parts.append(f"atempo={factor:.6f}")
+        if clip.props.volume != 1.0:
+            parts.append(f"volume={clip.props.volume:.3f}")
+        if clip.props.fade_in > 0:
+            parts.append(f"afade=t=in:st=0:d={clip.props.fade_in:.3f}")
+        if clip.props.fade_out > 0:
+            parts.append(
+                f"afade=t=out:st={max(0.0, clip.duration - clip.props.fade_out):.3f}:d={clip.props.fade_out:.3f}"
+            )
         delay_ms = int(clip.start * 1000)
-        steps.append(
-            f"[{idx}:a]aresample=48000,adelay={delay_ms}|{delay_ms},apad=whole_dur={total:.3f}{label}"
-        )
+        parts.append(f"adelay={delay_ms}|{delay_ms}")
+        parts.append(f"apad=whole_dur={total:.3f}")
+        steps.append(f"[{idx}:a]" + ",".join(parts) + label)
         audio_labels.append(label)
 
     if audio_labels:
