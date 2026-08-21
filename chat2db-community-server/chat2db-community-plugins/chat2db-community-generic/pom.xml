@@ -45,25 +45,25 @@
         <dependency>
             <groupId>org.hsqldb</groupId>
             <artifactId>hsqldb</artifactId>
-            <version>2.7.3</version>
+            <version>2.7.4</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.derby</groupId>
             <artifactId>derby</artifactId>
-            <version>10.16.1.1</version>
+            <version>10.17.1.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.derby</groupId>
             <artifactId>derbyshared</artifactId>
-            <version>10.16.1.1</version>
+            <version>10.17.1.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.derby</groupId>
             <artifactId>derbytools</artifactId>
-            <version>10.16.1.1</version>
+            <version>10.17.1.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -81,7 +81,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.5.1</version>
+            <version>42.7.13</version>
             <scope>test</scope>
         </dependency>
         <!-- Same Jaybird build that generic.json pins for the FIREBIRD entry;
@@ -89,7 +89,7 @@
         <dependency>
             <groupId>org.firebirdsql.jdbc</groupId>
             <artifactId>jaybird</artifactId>
-            <version>5.0.6.java11</version>
+            <version>5.0.12.java11</version>
             <scope>test</scope>
         </dependency>
         <!-- Matches the trinodb/trino:475 container in start-test-databases.sh;
