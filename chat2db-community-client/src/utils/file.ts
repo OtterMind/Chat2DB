@@ -2,13 +2,16 @@ import { BucketTypeEnum, UploadTypeEnum, uploadTypeObject } from '@/typings/uplo
 import OSS from 'ali-oss';
 import miscService from '@/service/misc';
 import { v4 as uuid } from 'uuid';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 import html2canvas from 'html2canvas';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import sqlService from '@/service/sql';
 import { LOCAL_SQL_FILE_SAVED_EVENT } from '@/constants';
 import type { LocalFileEncodingMetadata } from '@/utils/localFileEncoding';
+import { staticMessage } from '@chat2db/ui';
+import i18n from '@/i18n';
+import { getDownloadFilename } from './downloadFilename';
 
 export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
 
@@ -18,46 +21,42 @@ export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
  * @param url
  * @param params
  */
-export function downloadFile(url: string, params: any) {
-  // Create POST request
-  fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json', // Or set other content types according to the requirements of the server
-    },
-    body: JSON.stringify(params), // Convert parameters to JSON string
-  })
-    .then((response) => {
-      // Get filename from content-disposition header
-      const contentDisposition = response.headers.get('content-disposition');
-      const filename = contentDisposition ? decodeURIComponent(contentDisposition.split("''")[1]) : 'file.text';
-
-      // Get the returned Blob data
-      return response.blob().then((blob) => ({ blob, filename }));
-    })
-    .then(({ blob, filename }) => {
-      // Create a URL that represents a Blob object
-      const blobUrl = URL.createObjectURL(blob);
-
-      // Create a hidden <a> tag and set its href attribute
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = blobUrl;
-
-      // Use filename parsed from response headers
-      a.download = filename;
-
-      // Append <a> tag to DOM and trigger click event
-      document.body.appendChild(a);
-      a.click();
-
-      // Cleanup: Remove the <a> tag from the DOM and release the blob URL
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    })
-    .catch((error) => {
-      console.error('Failed to download file:', error);
+export async function downloadFile(url: string, params: any) {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', // Or set other content types according to the requirements of the server
+      },
+      body: JSON.stringify(params), // Convert parameters to JSON string
     });
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      const result = await response.json();
+      throw new Error(result?.errorMessage || result?.message || i18n('common.text.failure'));
+    }
+    if (!response.ok) {
+      throw new Error(`${response.status}: ${response.statusText}`);
+    }
+
+    const blob = await response.blob();
+    const filename = getDownloadFilename(response.headers.get('content-disposition'));
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : i18n('common.text.failure');
+    staticMessage.error(message);
+    return false;
+  }
 }
 
 export async function downloadLargeCellValue(largeValueId: string, format: LargeCellDownloadFormat = 'raw') {

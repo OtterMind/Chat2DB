@@ -268,7 +268,6 @@ function getDatabaseObjectLocateTarget(activeTab: IWorkspaceTab): DatabaseActive
 
     case WorkspaceTabType.CreateTable:
     case WorkspaceTabType.ViewERModal:
-    case WorkspaceTabType.ChangeAiTableInfo:
       return databaseTreeTarget(getContextCandidates(uniqueData), getContextLoadPath(uniqueData));
 
     default:

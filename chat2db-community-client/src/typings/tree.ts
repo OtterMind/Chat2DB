@@ -1,5 +1,4 @@
 import { TreeNodeType, DatabaseTypeCode } from '@/constants';
-import { DataCollectionElementType } from '@/constants/aiDataCollection';
 import { TreeDataNode as AntdTreeDataNode } from 'antd';
 import type { IConnectionEnv } from './connection';
 
@@ -24,11 +23,9 @@ export interface IExtraParams {
   triggerName?: string;
   user?: string;
   host?: string;
-  aiDataCollectionId?: number;
   storageType?: string;
   hasPermission?: boolean;
   isAdmin?: boolean;
-  dataCollectionElementType?: DataCollectionElementType;
 }
 
 export interface DecorativeParams {

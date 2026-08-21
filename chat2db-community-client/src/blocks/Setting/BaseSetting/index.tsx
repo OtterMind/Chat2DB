@@ -2,7 +2,7 @@ import themeAutoImg from '@/assets/img/theme-auto.png';
 import themeDarkDimmedImg from '@/assets/img/theme-dark-dimmed.png';
 import themeDarkImg from '@/assets/img/theme-dark.png';
 import themeLightImg from '@/assets/img/theme-light.png';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import type { LangType } from '@/constants/settings';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
@@ -74,12 +74,12 @@ export default function BaseSetting() {
 
   // If it is not a domestic version, Chinese will not be displayed.
   const curLanguageOptions = useMemo(() => {
-    return getAvailableLanguageOptions(runtimeEditionConfig.languageRegionRestricted, isCN);
+    return getAvailableLanguageOptions(clientRuntime.restrictChineseOutsideChina, isCN);
   }, [isCN]);
 
   // If it is not a domestic version, Chinese will not be displayed.
   const curLanguage = useMemo(() => {
-    return resolveCurrentLanguage(language, runtimeEditionConfig.languageRegionRestricted, isCN);
+    return resolveCurrentLanguage(language, clientRuntime.restrictChineseOutsideChina, isCN);
   }, [language, isCN]);
 
   const isDark = appearance.includes('dark');

@@ -58,6 +58,11 @@ declare global {
   const __ENV__: string; // environment variables
   const __RUNTIME_ENV__: string; // runtime environment
   const __APP_NAME__: string; // Application name
+  const __APP_CAPITAL_NAME__: string; // Application package name
+  const __APP_DISPLAY_NAME__: string; // User-facing application name
+  const __APP_PROTOCOL_SCHEME__: string; // Desktop URL protocol
+  const __STORAGE_KEY_PREFIX__: string; // Local storage namespace selected by the build profile
+  const __STORAGE_VERSION_KEY__: string; // Local storage schema-version key selected by the build profile
   const __GATEWAY_URL__: string; // Gateway URL
   const __PRINT_LOGS__: boolean; // Whether to print log
   const __WEBAPP__: boolean; // Is it a web application?

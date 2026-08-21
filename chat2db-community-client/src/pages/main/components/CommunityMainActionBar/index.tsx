@@ -1,5 +1,6 @@
 import { IconButton } from '@chat2db/ui';
 import { Settings } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
 import i18n from '@/i18n';
@@ -15,6 +16,7 @@ interface CommunityMainActionBarProps {
   activePage: string;
   settingsActive: boolean;
   hideSettings: boolean;
+  extras?: ReactNode;
   onNavigate: (item: INavItem) => void;
   onOpenSettings: () => void;
 }
@@ -24,6 +26,7 @@ const CommunityMainActionBar = ({
   activePage,
   settingsActive,
   hideSettings,
+  extras,
   onNavigate,
   onOpenSettings,
 }: CommunityMainActionBarProps) => {
@@ -55,6 +58,7 @@ const CommunityMainActionBar = ({
 
       {(isDesktop || !hideSettings) && (
         <div className={styles.bottomActions}>
+          {extras}
           {isDesktop && (
             <QuickTerminalButton
               size={COMMUNITY_MAIN_ACTION_BUTTON_SIZE}

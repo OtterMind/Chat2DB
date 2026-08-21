@@ -1,4 +1,5 @@
 import { Confetti } from '@chat2db/ui';
+import clientExtension from '@client-extension';
 import { type InputRef } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -11,7 +12,7 @@ import { useUpdateEffect } from 'ahooks';
 
 import { getConnectionEnvList } from '@/store/connection';
 import { useGlobalStore } from '@/store/global';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 
 import CommunitySetting from '@/blocks/Setting/CommunitySetting';
 import CommunityMainActionBar from './components/CommunityMainActionBar';
@@ -19,16 +20,16 @@ import CommunityTitleBarActions from './components/CommunityTitleBarActions';
 import StreamSidebar from './components/StreamSidebar';
 
 import Dashboard from './dashboard';
+import { mergeNavigationItems } from '@/client-extension/merge';
 import { createCoreMainNavItems } from './navigationItems';
 import Workspace from './workspace';
 import Stream from '../stream';
 
 import { useStyles } from './style';
 
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { IframeType } from '@/constants';
 import aiStreamService, { IChatSession } from '@/service/aiStream';
-import { useChatStore } from '@/store/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
 import {
@@ -46,15 +47,19 @@ import { checkIsSharePage } from '@/utils/url';
 function CommunityMainPage() {
   const [navConfig, setNavConfig] = useState<INavItem[]>([]);
 
-  const initNavConfig: INavItem[] = useMemo(
+  const allNavItems: INavItem[] = useMemo(
     () =>
-      createCoreMainNavItems({
-        stream: { component: <Stream />, name: i18n('stream.nav.title') },
-        workspace: { component: <Workspace />, name: i18n('workspace.title') },
-        dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
-      }),
+      mergeNavigationItems(
+        createCoreMainNavItems({
+          stream: { component: <Stream />, name: i18n('stream.nav.title') },
+          workspace: { component: <Workspace />, name: i18n('workspace.title') },
+          dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
+        }),
+        clientExtension.navigationItems ?? [],
+      ),
     [],
   );
+  const initNavConfig = clientExtension.mainPage.useNavigationItems(allNavItems);
 
   const showLeftContainer = useMemo(() => checkIsSharePage(), []);
 
@@ -86,11 +91,6 @@ function CommunityMainPage() {
     setSettingPageActiveTab: state.setSettingPageActiveTab,
     triggerConfetti: state.triggerConfetti,
     isEmbedIframe: state.isEmbedIframe,
-  }));
-
-  const { currentChat, setCurrentChat } = useChatStore((state) => ({
-    setCurrentChat: state.setCurrentChat,
-    currentChat: state.currentChat,
   }));
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
@@ -155,7 +155,7 @@ function CommunityMainPage() {
   const handleInitPage = useCallback(() => {
     let nextNavConfig = [...initNavConfig];
 
-    if (!runtimeEditionConfig.dashboardEntry) {
+    if (!clientRuntime.showDashboard) {
       nextNavConfig = nextNavConfig.filter((item) => item.key !== 'dashboard');
     }
 
@@ -175,7 +175,7 @@ function CommunityMainPage() {
       if (isDesktop) {
         let persistedPage: string | undefined;
         try {
-          persistedPage = readPersistedMainPageActiveTab(localStorage.getItem(runtimeEditionConfig.globalStoreName));
+          persistedPage = readPersistedMainPageActiveTab(localStorage.getItem(clientRuntime.globalStoreName));
         } catch {
           persistedPage = undefined;
         }
@@ -200,13 +200,24 @@ function CommunityMainPage() {
       pathName = '/workspace';
     }
 
+    const resolvedPage =
+      clientExtension.mainPage.resolveNavigationPage?.({
+        requestedPage: page,
+        allItems: allNavItems,
+        visibleItems: nextNavConfig,
+      }) ?? page;
+    if (resolvedPage !== page) {
+      page = resolvedPage;
+      pathName = `/${resolvedPage}`;
+    }
+
     handleChangePageTab({
       page,
       pathName,
       navConfigTmp: nextNavConfig,
       isFirst: true,
     });
-  }, [handleChangePageTab, initNavConfig, mainPageActiveTab, networkAbandoned]);
+  }, [allNavItems, handleChangePageTab, initNavConfig, mainPageActiveTab, networkAbandoned]);
 
   useEffect(() => {
     if (mainPageActiveTab === 'stream') {
@@ -335,13 +346,6 @@ function CommunityMainPage() {
     }
   }, [mainPageActiveTab]);
 
-  useEffect(() => {
-    setCurrentChat({
-      ...currentChat,
-      [mainPageActiveTab]: currentChat[mainPageActiveTab],
-    });
-  }, [mainPageActiveTab]);
-
   const handleNavItemClick = useCallback(
     (item: INavItem) => {
       if (item.key === 'stream') {
@@ -432,6 +436,7 @@ function CommunityMainPage() {
           activePage={mainPageActiveTab}
           settingsActive={settingPageActiveTab !== false}
           hideSettings={Boolean(isEmbedIframe)}
+          extras={clientExtension.mainPage.actionBarExtras}
           onNavigate={handleNavItemClick}
           onOpenSettings={handleOpenSettings}
         />

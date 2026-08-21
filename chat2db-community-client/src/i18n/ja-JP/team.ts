@@ -9,6 +9,7 @@ export default {
   'team.nav.permission.authorization': '認可リスト',
   'team.nav.permission.apply': '申請リスト',
   'team.nav.sqlAudit': 'SQL監査',
+  'team.nav.desensitize': 'データマスキング',
 
   // チーム設定
   'team.setting.basic': '基本情報',
@@ -151,7 +152,7 @@ export default {
   'team.create.form.proxy': '作成することで、あなたは私たちの',
   'team.create.form.proxy.service': 'サービス規約',
   'team.create.form.proxy.org': '組織規約',
-  
+
   'team.join.form.name': '名前',
   'team.join.form.name.placeholder': '名前を入力してください',
   'team.join.form.code': 'チームコード',
@@ -179,6 +180,15 @@ export default {
   'team.invite.success.content1': '提出が成功しました',
   'team.invite.success.content2': '管理者の承認をお待ちください',
   'team.invite.success.finish': '完了',
+
+  'team.desensitize.add.title': 'マスキングルールを追加',
+  'team.desensitize.field.datasource': 'データソース',
+  'team.desensitize.field.database': 'データベース',
+  'team.desensitize.field.schema': 'スキーマ',
+  'team.desensitize.field.table': 'テーブル',
+  'team.desensitize.field.columns': 'カラム',
+  'team.desensitize.field.type': 'マスキングルール',
+  'team.desensitize.table.databaseSchema': 'データベース / スキーマ',
 
   'team.permission.modal.title': '権限が制限されています',
   'team.permission.modal.OkText': '権限を申請する',

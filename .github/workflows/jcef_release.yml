@@ -1,5 +1,5 @@
 name: Build Community Desktop Release
-run-name: Community Desktop ${{ github.event_name == 'push' && 'release' || 'gray' }} ${{ inputs.version || github.ref_name }}
+run-name: Community Desktop ${{ github.event_name == 'push' && 'release' || 'beta' }} ${{ inputs.version || github.ref_name }}
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Gray build version, without the v prefix'
+        description: 'Beta build version, without the v prefix; beta builds must run from main'
         required: true
         type: string
 
@@ -27,16 +27,14 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       tag_name: ${{ steps.metadata.outputs.tag_name }}
       channel: ${{ steps.metadata.outputs.channel }}
-      update_latest: ${{ steps.metadata.outputs.update_latest }}
       publish: ${{ steps.metadata.outputs.publish }}
-      package_prefix: ${{ steps.metadata.outputs.package_prefix }}
-      update_prefix: ${{ steps.metadata.outputs.update_prefix }}
     steps:
       - name: Validate version
         id: metadata
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
@@ -49,12 +47,14 @@ jobs:
             fi
             version="${REF_NAME#v}"
             channel=release
-            update_latest=true
             publish=true
           else
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "Beta builds can only run from the protected main branch: ${GITHUB_REF}" >&2
+              exit 1
+            fi
             version="${INPUT_VERSION}"
-            channel=gray
-            update_latest=false
+            channel=beta
             publish=false
           fi
 
@@ -75,28 +75,23 @@ jobs:
             exit 1
           fi
 
-          package_prefix="community/${version}"
-          update_prefix="community/updates/${version}"
-
           {
             echo "version=${version}"
             echo "tag_name=v${version}"
             echo "channel=${channel}"
-            echo "update_latest=${update_latest}"
             echo "publish=${publish}"
-            echo "package_prefix=${package_prefix}"
-            echo "update_prefix=${update_prefix}"
           } >> "${GITHUB_OUTPUT}"
 
   notify_start:
-    name: Notify Feishu Community gray build start
+    name: Notify Feishu Community beta build start
     needs: resolve
-    if: ${{ needs.resolve.outputs.channel == 'gray' }}
+    if: ${{ needs.resolve.outputs.channel == 'beta' }}
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     steps:
       - name: Send Feishu start notification
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.COMMUNITY_FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: python
@@ -112,7 +107,7 @@ jobs:
               raise SystemExit(0)
 
           lines = [
-              "Chat2DB Community gray build started",
+              "Chat2DB Community beta build started",
               f"Version: {os.environ['VERSION']}",
               "Distribution: GitHub Actions artifacts only",
               f"Workflow run: {os.environ['RUN_URL']}",
@@ -138,6 +133,7 @@ jobs:
   build:
     name: Build ${{ matrix.artifact_name }}
     needs: resolve
+    environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
     strategy:
       fail-fast: false
       matrix:
@@ -196,13 +192,13 @@ jobs:
           set -euo pipefail
           echo "${{ secrets.MAC_CERTS }}" | base64 --decode > certificate.p12
           KEYCHAIN_PATH="${RUNNER_TEMP}/build.keychain"
-          security create-keychain -p "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security create-keychain -p "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
           security default-keychain -s "${KEYCHAIN_PATH}"
           security list-keychains -d user -s "${KEYCHAIN_PATH}"
           security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
-          security unlock-keychain -p "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
-          security import certificate.p12 -k "${KEYCHAIN_PATH}" -P "${{ secrets.MAC_CERTS_PASSWORD }}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ secrets.MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
+          security import certificate.p12 -k "${KEYCHAIN_PATH}" -P "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${{ secrets.COMMUNITY_MAC_CERTS_PASSWORD }}" "${KEYCHAIN_PATH}"
           security find-identity -v -p codesigning
 
       - name: Resolve macOS signing identity
@@ -242,9 +238,9 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
           ARTIFACT_NAME: ${{ matrix.artifact_name }}
-          MAC_APPLE_ID: ${{ secrets.MAC_APPLE_ID }}
-          MAC_APPLE_PASSWORD: ${{ secrets.MAC_APPLE_PASSWORD }}
-          MAC_TEAM_ID: ${{ secrets.MAC_TEAM_ID }}
+          MAC_APPLE_ID: ${{ secrets.COMMUNITY_MAC_APPLE_ID }}
+          MAC_APPLE_PASSWORD: ${{ secrets.COMMUNITY_MAC_APPLE_PASSWORD }}
+          MAC_TEAM_ID: ${{ secrets.COMMUNITY_MAC_TEAM_ID }}
         run: |
           set -euo pipefail
 
@@ -330,363 +326,20 @@ jobs:
             jpackage/input/sourceFile/*.jar
             jpackage/input/sourceFile/*.zip
 
-  cdn_release:
-    name: Publish Community release packages to CDN
-    needs:
-      - resolve
-      - build
-    if: ${{ needs.resolve.outputs.channel == 'release' }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: Download platform artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          pattern: chat2db-community-${{ needs.resolve.outputs.version }}-*
-          path: downloaded-artifacts
-
-      - name: Validate CDN bundle and generate manifest
-        shell: bash
-        env:
-          VERSION: ${{ needs.resolve.outputs.version }}
-          CHANNEL: ${{ needs.resolve.outputs.channel }}
-          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
-          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
-          CDN_BASE_URL: https://cdn.chat2db-ai.com
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-
-          expected=(
-            "Chat2DB-Community-${VERSION}-arm64.dmg"
-            "Chat2DB-Community-${VERSION}-x64.dmg"
-            "Chat2DB-Community-${VERSION}.msi"
-            "Chat2DB-Community-${VERSION}-amd64.deb"
-            "Chat2DB-Community-${VERSION}-arm64.deb"
-            "Chat2DB-Community-${VERSION}-x86_64.rpm"
-            "Chat2DB-Community-${VERSION}-aarch64.rpm"
-            "Chat2DB-Community-${VERSION}-x86_64.AppImage"
-            "Chat2DB-Community-${VERSION}-arm64.AppImage"
-          )
-
-          mapfile -d '' installers < <(
-            find downloaded-artifacts -type f \
-              \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
-              -print0
-          )
-          if [ "${#installers[@]}" -ne "${#expected[@]}" ]; then
-            echo "Expected ${#expected[@]} installers, found ${#installers[@]}" >&2
-            printf ' - %s\n' "${installers[@]}" >&2
-            exit 1
-          fi
-
-          mkdir -p cdn-assets/release cdn-assets/updates
-          for asset in "${expected[@]}"; do
-            mapfile -t matches < <(find downloaded-artifacts -type f -name "${asset}")
-            if [ "${#matches[@]}" -ne 1 ]; then
-              echo "Expected exactly one ${asset}, found ${#matches[@]}" >&2
-              exit 1
-            fi
-            test -s "${matches[0]}"
-            cp "${matches[0]}" "cdn-assets/release/${asset}"
-          done
-
-          windows_artifact_dir="downloaded-artifacts/chat2db-community-${VERSION}-windows"
-          test -d "${windows_artifact_dir}" || {
-            echo "Windows artifact directory is missing: ${windows_artifact_dir}" >&2
-            exit 1
-          }
-          for payload in version.json chat2db-community.jar lib.zip dist.zip; do
-            mapfile -t matches < <(find "${windows_artifact_dir}" -type f -name "${payload}")
-            if [ "${#matches[@]}" -ne 1 ]; then
-              echo "Expected exactly one Windows update payload ${payload}, found ${#matches[@]}" >&2
-              exit 1
-            fi
-            test -s "${matches[0]}"
-            cp "${matches[0]}" "cdn-assets/updates/${payload}"
-          done
-
-          (
-            cd cdn-assets/release
-            sha256sum "${expected[@]}" > SHA256SUMS
-          )
-
-          VERSION="${VERSION}" CHANNEL="${CHANNEL}" PACKAGE_PREFIX="${PACKAGE_PREFIX}" UPDATE_PREFIX="${UPDATE_PREFIX}" CDN_BASE_URL="${CDN_BASE_URL}" RUN_URL="${RUN_URL}" python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-
-          release_dir = Path("cdn-assets/release")
-          files = []
-          for path in sorted(release_dir.iterdir()):
-              if path.name == "SHA256SUMS":
-                  continue
-              files.append(
-                  {
-                      "name": path.name,
-                      "size": path.stat().st_size,
-                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                      "url": f"{os.environ['CDN_BASE_URL']}/{os.environ['PACKAGE_PREFIX']}/{path.name}",
-                  }
-              )
-
-          update_metadata_path = Path("cdn-assets/updates/version.json")
-          update_metadata = json.loads(update_metadata_path.read_text(encoding="utf-8"))
-          for file in update_metadata.get("files", []):
-              file["url"] = (
-                  f"{os.environ['CDN_BASE_URL']}/{os.environ['UPDATE_PREFIX']}"
-                  f"/{file['serverFileName']}"
-              )
-          update_metadata_path.write_text(
-              json.dumps(update_metadata, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-
-          manifest = {
-              "edition": "Chat2DB Community",
-              "version": os.environ["VERSION"],
-              "channel": os.environ["CHANNEL"],
-              "run_url": os.environ["RUN_URL"],
-              "files": files,
-          }
-          Path("cdn-assets/release-manifest.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          PY
-
-      - name: Set up ossutil
-        uses: yizhoumo/setup-ossutil@02384914fef2758596b303e2035c47b8c3f80fb2
-        with:
-          endpoint: oss-us-west-1.aliyuncs.com
-          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          ossutil-version: '1.7.16'
-
-      - name: Set up Aliyun CLI
-        uses: aliyun/setup-aliyun-cli-action@09a5f86915bb556e27bf050e9a5e339aeb073df5
-        with:
-          version: '3.4.8'
-
-      - name: Upload validated Community packages to CDN
-        shell: bash
-        env:
-          VERSION: ${{ needs.resolve.outputs.version }}
-          CHANNEL: ${{ needs.resolve.outputs.channel }}
-          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
-          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
-          OSS_BUCKET_NAME: chat2db-cdn
-          CDN_BASE_URL: https://cdn.chat2db-ai.com
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
-          UPDATE_LATEST_VERSION_JSON: ${{ needs.resolve.outputs.update_latest }}
-        run: |
-          set -euo pipefail
-
-          send_package_notification() {
-            local package_name="$1"
-            local package_url="$2"
-            PACKAGE_NAME="${package_name}" PACKAGE_URL="${package_url}" CHANNEL="${CHANNEL}" python3 - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-
-          webhook = os.environ.get("FEISHU_WEBHOOK_URL", "")
-          if not webhook:
-              print("FEISHU_RELEASE_NOTIFY_WEBHOOK is not configured; skip package notification.")
-              raise SystemExit(0)
-
-          text = "\n".join(
-              [
-                  "Chat2DB Community package published to CDN",
-                  f"Version: {os.environ['VERSION']}",
-                  f"Channel: {os.environ['CHANNEL']}",
-                  f"Package: {os.environ['PACKAGE_NAME']}",
-                  f"Download URL: {os.environ['PACKAGE_URL']}",
-              ]
-          )
-          payload = json.dumps(
-              {"msg_type": "text", "content": {"text": text}}, ensure_ascii=False
-          ).encode("utf-8")
-          request = urllib.request.Request(
-              webhook,
-              data=payload,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=15) as response:
-                  result = json.loads(response.read().decode("utf-8"))
-              if result.get("code", 0) != 0:
-                  print(f"::warning::Feishu package notification was rejected: {result}")
-          except urllib.error.URLError as exc:
-              print(f"::warning::Feishu package notification failed: {exc}")
-          PY
-          }
-
-          for file in cdn-assets/release/*; do
-            name="$(basename "${file}")"
-            destination="oss://${OSS_BUCKET_NAME}/${PACKAGE_PREFIX}/${name}"
-            ossutil cp -f --meta "Cache-Control:no-cache" "${file}" "${destination}"
-            ossutil stat "${destination}"
-            if [ "${name}" != "SHA256SUMS" ]; then
-              send_package_notification "${name}" "${CDN_BASE_URL}/${PACKAGE_PREFIX}/${name}"
-            fi
-          done
-
-          for file in cdn-assets/updates/*; do
-            name="$(basename "${file}")"
-            destination="oss://${OSS_BUCKET_NAME}/${UPDATE_PREFIX}/${name}"
-            ossutil cp -f --meta "Cache-Control:no-cache" "${file}" "${destination}"
-            ossutil stat "${destination}"
-          done
-
-          if [ "${UPDATE_LATEST_VERSION_JSON}" = "true" ]; then
-            VERSION="${VERSION}" UPDATE_PREFIX="${UPDATE_PREFIX}" CDN_BASE_URL="${CDN_BASE_URL}" python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          payload = {
-              "latestVersion": os.environ["VERSION"],
-              "metadataUrl": f"{os.environ['CDN_BASE_URL']}/{os.environ['UPDATE_PREFIX']}/version.json",
-              "forceUpdate": False,
-          }
-          Path("cdn-assets/latest_version.json").write_text(
-              json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          PY
-            destination="oss://${OSS_BUCKET_NAME}/community/updates/latest_version.json"
-            ossutil cp -f --meta "Cache-Control:no-cache" cdn-assets/latest_version.json "${destination}"
-            ossutil stat "${destination}"
-          fi
-
-          manifest_destination="oss://${OSS_BUCKET_NAME}/${PACKAGE_PREFIX}/release-manifest.json"
-          ossutil cp -f --meta "Cache-Control:no-cache" cdn-assets/release-manifest.json "${manifest_destination}"
-          ossutil stat "${manifest_destination}"
-
-      - name: Refresh Community CDN cache
-        if: ${{ needs.resolve.outputs.channel == 'release' }}
-        shell: bash
-        env:
-          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          ALIBABA_CLOUD_REGION_ID: cn-hangzhou
-          PACKAGE_PREFIX: ${{ needs.resolve.outputs.package_prefix }}
-          UPDATE_PREFIX: ${{ needs.resolve.outputs.update_prefix }}
-          CDN_BASE_URL: https://cdn.chat2db-ai.com
-          UPDATE_LATEST_VERSION_JSON: ${{ needs.resolve.outputs.update_latest }}
-        run: |
-          set -euo pipefail
-
-          refresh_task_ids=()
-
-          submit_refresh() {
-            local object_path="$1"
-            local object_type="$2"
-            local force="${3:-}"
-            local -a command=(
-              aliyun cdn RefreshObjectCaches
-              --ObjectPath "${object_path}"
-              --ObjectType "${object_type}"
-            )
-            if [ -n "${force}" ]; then
-              command+=(--Force "${force}")
-            fi
-
-            local output task_id
-            output="$("${command[@]}")"
-            echo "${output}"
-            task_id="$(jq -r '.RefreshTaskId // empty' <<<"${output}")"
-            if [ -z "${task_id}" ]; then
-              echo "CDN refresh response did not include RefreshTaskId for ${object_path}" >&2
-              exit 1
-            fi
-            refresh_task_ids+=("${task_id}")
-          }
-
-          wait_for_refresh() {
-            local task_id="$1"
-            local deadline=$((SECONDS + 300))
-
-            while [ "${SECONDS}" -lt "${deadline}" ]; do
-              local output status
-              output="$(aliyun cdn DescribeRefreshTasks --TaskId "${task_id}")"
-              status="$(jq -r '
-                (.Tasks.CDNTask // []) as $tasks
-                | if ($tasks | length) == 0 then "Pending"
-                  elif any($tasks[]; .Status == "Failed") then "Failed"
-                  elif all($tasks[]; .Status == "Complete") then "Complete"
-                  else "Refreshing"
-                  end
-              ' <<<"${output}")"
-
-              if [ "${status}" = "Complete" ]; then
-                echo "CDN refresh task ${task_id} completed"
-                return 0
-              fi
-              if [ "${status}" = "Failed" ]; then
-                echo "CDN refresh task ${task_id} failed: ${output}" >&2
-                return 1
-              fi
-              sleep 5
-            done
-
-            echo "Timed out waiting for CDN refresh task ${task_id}" >&2
-            return 1
-          }
-
-          submit_refresh \
-            "${CDN_BASE_URL}/${PACKAGE_PREFIX}/" \
-            Directory \
-            true
-          submit_refresh \
-            "${CDN_BASE_URL}/${UPDATE_PREFIX}/" \
-            Directory \
-            true
-
-          if [ "${UPDATE_LATEST_VERSION_JSON}" = "true" ]; then
-            submit_refresh \
-              "${CDN_BASE_URL}/community/updates/latest_version.json" \
-              File
-          fi
-
-          mapfile -t refresh_task_ids < <(
-            printf '%s\n' "${refresh_task_ids[@]}" | sort -u
-          )
-          for task_id in "${refresh_task_ids[@]}"; do
-            wait_for_refresh "${task_id}"
-          done
-
-      - name: Upload CDN distribution receipt
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: community-cdn-receipt-${{ needs.resolve.outputs.version }}
-          if-no-files-found: error
-          overwrite: true
-          path: |
-            cdn-assets/release/SHA256SUMS
-            cdn-assets/release-manifest.json
-            cdn-assets/latest_version.json
-
   notify_summary:
-    name: Notify Feishu Community gray build summary
+    name: Notify Feishu Community beta build summary
     needs:
       - resolve
       - build
-      - cdn_release
-    if: ${{ always() && needs.resolve.outputs.channel == 'gray' }}
+    if: ${{ always() && needs.resolve.outputs.channel == 'beta' }}
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     permissions:
       actions: read
     steps:
       - name: Send Feishu summary notification
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_RELEASE_NOTIFY_WEBHOOK }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.COMMUNITY_FEISHU_RELEASE_NOTIFY_WEBHOOK }}
           VERSION: ${{ needs.resolve.outputs.version || inputs.version }}
           BUILD_RESULT: ${{ needs.build.result }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -733,7 +386,7 @@ jobs:
 
           if build_result == "success":
               lines = [
-                  "Chat2DB Community gray build completed",
+                  "Chat2DB Community beta build completed",
                   f"Version: {version}",
                   f"Build result: {build_result}",
                   "Distribution: GitHub Actions artifacts only",
@@ -741,7 +394,7 @@ jobs:
               ]
           else:
               lines = [
-                  "Chat2DB Community gray build did not complete successfully",
+                  "Chat2DB Community beta build did not complete successfully",
                   f"Version: {version}",
                   f"Build result: {build_result}",
                   "Failed build jobs:",
@@ -773,6 +426,7 @@ jobs:
       - resolve
       - build
     if: ${{ needs.resolve.outputs.publish == 'true' }}
+    environment: community-release
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -846,21 +500,24 @@ jobs:
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
+          RELEASE_TITLE="Chat2DB v${VERSION}"
 
           if draft=$(gh release view "${TAG_NAME}" --json isDraft --jq '.isDraft' 2>/dev/null); then
             if [ "${draft}" != "true" ]; then
               echo "Release ${TAG_NAME} is already published; refusing to replace it" >&2
               exit 1
             fi
+            gh release edit "${TAG_NAME}" --title "${RELEASE_TITLE}"
             gh release upload "${TAG_NAME}" release-assets/* --clobber
           else
             gh release create "${TAG_NAME}" release-assets/* \
               --verify-tag \
               --draft \
               --generate-notes \
-              --title "Chat2DB Community ${VERSION}"
+              --title "${RELEASE_TITLE}"
           fi
 
+          test "$(gh release view "${TAG_NAME}" --json name --jq '.name')" = "${RELEASE_TITLE}"
           find release-assets -maxdepth 1 -type f -exec basename {} \; | sort > expected-assets.txt
           gh release view "${TAG_NAME}" --json assets --jq '.assets[].name' | sort > actual-assets.txt
           diff -u expected-assets.txt actual-assets.txt
@@ -870,7 +527,6 @@ jobs:
     needs:
       - resolve
       - stage_release
-      - cdn_release
     if: ${{ needs.resolve.outputs.publish == 'true' }}
     uses: ./.github/workflows/pushdocker.yml
     with:
@@ -885,9 +541,9 @@ jobs:
     needs:
       - resolve
       - stage_release
-      - cdn_release
       - docker
     if: ${{ needs.resolve.outputs.publish == 'true' }}
+    environment: community-release
     runs-on: ubuntu-latest
     permissions:
       contents: write

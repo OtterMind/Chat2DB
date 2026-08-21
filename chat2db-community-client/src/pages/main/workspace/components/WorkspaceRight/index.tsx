@@ -8,7 +8,7 @@ import {
   RESULT_INSPECTOR_MAX_PANEL_RATIO,
 } from '@/store/workspace/utils/resultInspector';
 import SplitPane from 'react-split-pane';
-import { isCommunityEnv } from '@/utils/env';
+import { useGlobalStore } from '@/store/global';
 // import DragFileToApp from '@/components/DragFileToApp';
 
 // ----- components -----
@@ -20,6 +20,7 @@ const WorkspaceRight = memo(() => {
   const draggablePanelRef = useRef<HTMLDivElement>(null);
 
   const { styles } = useStyles();
+  const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
 
   const { currentWorkspaceExtend, panelRight, panelRightWidth, setPanelRightWidth } = useWorkspaceStore((state) => {
     return {
@@ -52,6 +53,7 @@ const WorkspaceRight = memo(() => {
       : preferredPanelSize
     : 0;
   const maxPanelSize = workspaceWidth * (resultInspectorOpen ? RESULT_INSPECTOR_MAX_PANEL_RATIO : 0.8);
+  const hasTitleBarActionHost = Boolean(appTitleBarRightComponent) && (window._appTitleBarHeight ?? 0) > 0;
 
   return (
     <div className={styles.workspaceRight}>
@@ -76,7 +78,7 @@ const WorkspaceRight = memo(() => {
           <Fragment>{panelRight && <WorkspaceExtendBody />}</Fragment>
         </SplitPane>
       </div>
-      {!isCommunityEnv && <WorkspaceExtendNav />}
+      {!hasTitleBarActionHost && <WorkspaceExtendNav />}
     </div>
   );
 });

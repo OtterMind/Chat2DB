@@ -1,24 +1,18 @@
 import useTrimTreeData from '@/blocks/NewTree/hooks/useTrimTreeData';
 import { ILoadDataOptions, switchIcon, treeConfig } from '@/blocks/NewTree/treeConfig';
 import { TreeNodeType, databaseMap } from '@/constants';
-import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
-import { useAIStore } from '@/store/ai';
 import { useTreeStore } from '@/store/tree';
 import { TreeNodeData } from '@/typings';
 import { IDBContextInfo } from '@/typings/database';
 import { findNode } from '@/utils';
 import { IconfontSvg } from '@chat2db/ui';
 import { Cascader, Tooltip } from 'antd';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
 
-export type IAICascaderData = IDBContextInfo | DataCollectionContextInfo | null;
-
-interface DataCollectionContextInfo {
-  dataSourceCollectionId: number;
-}
+export type IAICascaderData = IDBContextInfo | null;
 
 interface IAICascaderOption {
   originalTitle: string;
@@ -39,22 +33,11 @@ interface IProps {
 
 const AICascaderSource = (props: IProps) => {
   const { contextInfo, onChange, onFileSelect } = props;
-  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const {
     styles,
     theme: { appearance },
   } = useStyles();
-  const { dataCollectionList, getDataCollectionList } = useAIStore((state) => ({
-    dataCollectionList: state.dataCollectionList,
-    getDataCollectionList: state.getDataCollectionList,
-  }));
   const treeData = useTrimTreeData();
-
-  useEffect(() => {
-    if (!aiDataCollection && contextInfo && 'dataSourceCollectionId' in contextInfo) {
-      onChange?.(null);
-    }
-  }, [aiDataCollection, contextInfo, onChange]);
 
   const { handleLoadData } = useTreeStore((state) => ({
     handleLoadData: state.handleLoadData,
@@ -78,17 +61,7 @@ const AICascaderSource = (props: IProps) => {
         children: item.children?.length ? handleTreeData(item.children) : undefined,
       };
     });
-    return list.filter(
-      (item) =>
-        !(
-          // excludes ai data set
-          (
-            item.treeNodeType === TreeNodeType.AI_DATA_COLLECTIONS ||
-            // excludes empty groups
-            (item?.treeNodeType === TreeNodeType.GROUP && !item.children?.length)
-          )
-        ),
-    );
+    return list.filter((item) => !(item?.treeNodeType === TreeNodeType.GROUP && !item.children?.length));
   };
 
   const treeDataOptions = useMemo(() => {
@@ -115,21 +88,8 @@ const AICascaderSource = (props: IProps) => {
         isLeaf: true,
       },
     ];
-    if (aiDataCollection) {
-      nextOptions.splice(2, 0, {
-        originalTitle: i18n('common.text.aiDataCollection'),
-        key: 'dataCollection',
-        iconCode: 'icon-folder-close-ai',
-        children: (dataCollectionList || []).map((item) => ({
-          originalTitle: item.title,
-          treeNodeType: TreeNodeType.AI_DATA_COLLECTION,
-          key: item.id.toString(),
-        })),
-        isLeaf: false,
-      });
-    }
     return nextOptions;
-  }, [aiDataCollection, treeData, dataCollectionList]);
+  }, [treeData]);
 
   const loadData = (selectedOptions: any) => {
     const data = selectedOptions[selectedOptions.length - 1];
@@ -145,11 +105,6 @@ const AICascaderSource = (props: IProps) => {
   const cascaderValue = useMemo(() => {
     if (!contextInfo) {
       return [];
-    }
-
-    // update data set
-    if ('dataSourceCollectionId' in contextInfo) {
-      return ['dataCollection', contextInfo.dataSourceCollectionId.toString()];
     }
 
     // Update data source
@@ -185,13 +140,6 @@ const AICascaderSource = (props: IProps) => {
     }
     if (_value[0] === 'globalDatabaseScope') {
       onChange?.(null);
-      return;
-    }
-    // ai data set
-    if (aiDataCollection && _value[0] === 'dataCollection') {
-      onChange?.({
-        dataSourceCollectionId: Number(_value[1]),
-      });
       return;
     }
     // data source situation
@@ -258,7 +206,7 @@ const AICascaderSource = (props: IProps) => {
       return (
         <div className={styles.displayRenderPlaceholder}>
           {selectedOptions?.[1] && renderIcon(selectedOptions[1])}
-          {i18n('ai.select.databaseOrDataCollection')}
+          {i18n('ai.select.database')}
         </div>
       );
     }
@@ -289,13 +237,6 @@ const AICascaderSource = (props: IProps) => {
     );
   };
 
-  const handleDropdownVisibleChange = (visible: boolean) => {
-    if (visible && aiDataCollection) {
-      // calls getDataCollectionList when the drop-down menu is opened
-      getDataCollectionList();
-    }
-  };
-
   return (
     <Cascader
       className={styles.wrapper}
@@ -319,7 +260,6 @@ const AICascaderSource = (props: IProps) => {
       variant="borderless"
       placement="topLeft"
       displayRender={renderDisplayValue}
-      onDropdownVisibleChange={handleDropdownVisibleChange}
     />
   );
 };

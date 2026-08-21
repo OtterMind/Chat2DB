@@ -1,12 +1,16 @@
 package ai.chat2db.community.domain.core.impl.task.export.excel;
 
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
+import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.api.model.task.extension.ExportCell;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -32,6 +36,12 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public abstract class BaseExcelExporter extends BaseExporter {
+
+    protected BaseExcelExporter(ExportCellProcessorChain exportCellProcessorChain,
+            SqlExecutionPolicyManager sqlExecutionPolicyManager) {
+        super(exportCellProcessorChain, sqlExecutionPolicyManager);
+    }
+
     static {
         SpreadsheetVersion excel2007 = SpreadsheetVersion.EXCEL2007;
         SpreadsheetVersion excel97 = SpreadsheetVersion.EXCEL97;
@@ -60,26 +70,27 @@ public abstract class BaseExcelExporter extends BaseExporter {
     @Override
     protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
         ExcelTypeEnum excelType = getExcelType();
-        String querySql = getQuerySql(spec, tableName);
+        SqlExecutionPlan executionPlan = getQueryPlan(spec, tableName);
         Connection connection = Chat2DBContext.getConnection();
         ExportProgressLogger progressLogger = new ExportProgressLogger(context, excelType.name(), tableName);
         progressLogger.queryStarted("Reading table data from " + tableName);
-        DefaultSQLExecutor.getInstance().execute(connection, querySql, BATCH_SIZE, resultSet ->
-                writeExcelData(resultSet, excelType, file, tableName, spec, context, progressLogger),
+        DefaultSQLExecutor.getInstance().execute(connection, executionPlan.getSql(), BATCH_SIZE, resultSet ->
+                writeExcelData(resultSet, excelType, file, tableName, spec, executionPlan, context, progressLogger),
                 context, context::checkCancelled);
     }
 
     public static int BATCH_SIZE = 500;
 
     private void writeExcelData(ResultSet resultSet, ExcelTypeEnum excelType, File file, String sheetName,
-            ExportTaskSpec spec, TaskExecutionContext context, ExportProgressLogger progressLogger) {
+            ExportTaskSpec spec, SqlExecutionPlan executionPlan, TaskExecutionContext context,
+            ExportProgressLogger progressLogger) {
         try (ExcelWriter excelWriter = EasyExcel.write(file).excelType(excelType).build()) {
             ResultSetMetaData metaData = resultSet.getMetaData();
-            int columnCount = metaData.getColumnCount();
+            List<Integer> includedColumnIndexes = includedColumnIndexes(metaData, executionPlan);
             IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
             List<List<String>> head = Collections.emptyList();
             if (Boolean.TRUE.equals(spec.getContainsHeader())) {
-                List<String> header = ResultSetUtils.getRsHeader(resultSet);
+                List<String> header = selectColumns(ResultSetUtils.getRsHeader(resultSet), includedColumnIndexes);
                 head = header.stream().map(Collections::singletonList).collect(Collectors.toList());
             }
             MultiSheetExcelWriter multiSheetWriter = null;
@@ -95,13 +106,19 @@ public abstract class BaseExcelExporter extends BaseExporter {
                     writeSheet.setHead(head);
                 }
             }
-            boolean hasNext = resultSet.next();
+            int exportedRows = 0;
+            boolean hasNext = nextRow(resultSet, executionPlan, exportedRows);
             while (hasNext) {
                 context.checkCancelled();
-                List<Object> rowDataList = new ArrayList<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
-                    rowDataList.add(valueProcessor.getJdbcValue(jdbcDataValue));
+                List<Object> rowDataList = new ArrayList<>(includedColumnIndexes.size());
+                for (Integer columnIndex : includedColumnIndexes) {
+                    JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, columnIndex, false);
+                    if (hasExportCellProcessors()) {
+                        ExportCell cell = processJdbcCell(spec, metaData, columnIndex, sheetName, jdbcDataValue);
+                        rowDataList.add(cell.getValue());
+                    } else {
+                        rowDataList.add(valueProcessor.getJdbcValue(jdbcDataValue));
+                    }
                 }
                 if (multiSheetWriter == null) {
                     excelWriter.write(Collections.singletonList(rowDataList), writeSheet);
@@ -109,7 +126,8 @@ public abstract class BaseExcelExporter extends BaseExporter {
                     multiSheetWriter.writeRow(rowDataList);
                 }
                 progressLogger.recordExportedRow();
-                hasNext = resultSet.next();
+                exportedRows++;
+                hasNext = nextRow(resultSet, executionPlan, exportedRows);
             }
             progressLogger.queryCompleted("Table data read completed");
             progressLogger.fileFinalizing();

@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { WorkspaceTabType } from '@/constants/workspace';
 import {
   EditorType,
@@ -197,7 +197,7 @@ const getContentDiffDisabledSurfaces = () => {
     const value =
       typeof window === 'undefined'
         ? ''
-        : window.localStorage?.getItem(runtimeEditionConfig.contentDiffDisabledSurfacesStorageKey);
+        : window.localStorage?.getItem(clientRuntime.contentDiffDisabledSurfacesStorageKey);
     return new Set(
       (value || '')
         .split(',')

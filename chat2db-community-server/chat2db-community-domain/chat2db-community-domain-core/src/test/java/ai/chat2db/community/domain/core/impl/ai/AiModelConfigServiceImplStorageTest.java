@@ -83,15 +83,15 @@ class AiModelConfigServiceImplStorageTest {
         beanFactory.registerSingleton("aiModelConfigConverter", new AiModelConfigConverter());
         beanFactory.registerSingleton("identityService", (IIdentityService) () -> USER_ID);
 
-        String previousRuntimeMode = System.getProperty("chat2db.runtime.mode");
-        System.setProperty("chat2db.runtime.mode", "pro");
+        String previousEncryptionKey = System.getProperty(AesGcmUtil.KEY_PROPERTY);
+        System.setProperty(AesGcmUtil.KEY_PROPERTY, KEY);
         try {
             assertNotNull(beanFactory.createBean(AiModelConfigServiceImpl.class));
         } finally {
-            if (previousRuntimeMode == null) {
-                System.clearProperty("chat2db.runtime.mode");
+            if (previousEncryptionKey == null) {
+                System.clearProperty(AesGcmUtil.KEY_PROPERTY);
             } else {
-                System.setProperty("chat2db.runtime.mode", previousRuntimeMode);
+                System.setProperty(AesGcmUtil.KEY_PROPERTY, previousEncryptionKey);
             }
         }
     }

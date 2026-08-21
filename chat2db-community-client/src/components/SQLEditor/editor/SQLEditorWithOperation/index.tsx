@@ -19,8 +19,6 @@ import { useGlobalStore } from '@/store/global';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useAIStore } from '@/store/ai';
-import { useChatStore } from '@/store/chat';
-import ChatService from '@/service/chat';
 import sqlService, { type IRoutineMigrationParams } from '@/service/sql';
 import { isRoutineOperationSupportedDatabaseType, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { EditorTableIdentifier } from '../../helper/tableIdentifier';
@@ -47,6 +45,7 @@ import {
 import { normalizeSavedConsoleName, resolveInitialSavedConsoleName } from '../../helper/savedConsoleName';
 import { hasUnsavedLocalFileChanges } from '@/utils/localFileEncoding';
 import type { EditorCloseGuardRef } from '@/utils/editorCloseGuard';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { getDataSourceWatermarkContent, getDataSourceWatermarkLayout } from '@/utils/dataSourceWatermark';
 import { withIdentityColorAlpha } from '@/utils/dataSourceIdentity';
 import { useDataSourceIdentityColor } from '@/components/DataSourceIdentityMark';
@@ -603,10 +602,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       return;
     }
 
-    const title = [tableIdentifier.tableName].filter(Boolean).join('.') + `[${tableIdentifier.dataSourceName || ''}]`;
-    const popoverContent =
-      [tableIdentifier.databaseName, tableIdentifier.schemaName, tableIdentifier.tableName].filter(Boolean).join('.') +
-      `[${tableIdentifier.dataSourceName || ''}]`;
+    const title = buildWorkspaceObjectTabTitle({
+      dataSourceName: tableIdentifier.dataSourceName,
+      databaseName: tableIdentifier.databaseName,
+      schemaName: tableIdentifier.schemaName,
+      objectName: tableIdentifier.tableName,
+    });
     const tabId =
       treeConfig?.[TreeNodeType.TABLE]?.createTreeNodeKey?.({
         dataSourceId: tableIdentifier.dataSourceId,
@@ -626,59 +627,66 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         databaseName: tableIdentifier.databaseName,
         schemaName: tableIdentifier.schemaName,
         tableName: tableIdentifier.tableName,
-        popoverContent,
+        popoverContent: title,
       },
     });
   };
 
   const handleAI = async (actionType: SQLOptType) => {
-    if (actionType === SQLOptType.SQL_OPTIMIZER) {
-      const selectSQL = sqlEditorRef.current?.getSelectedContent();
-      if (!selectSQL) {
-        staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
-        return;
-      }
-
-      const { dataSourceId, databaseName, schemaName, databaseType, supportDatabase, supportSchema } = dbInfo;
-      if (!dataSourceId || !databaseType) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.dataSource.title')));
-        return;
-      }
-      if (supportDatabase && !databaseName) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.database.title')));
-        return;
-      }
-      if (supportSchema && !schemaName) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.schema.title')));
-        return;
-      }
-
-      useAIStore.getState().setShowPanel(true);
-      const chatVO = await ChatService.getChatBriefByDataSourceId({
-        dataSourceId,
-      });
-      const page = useGlobalStore.getState().mainPageActiveTab;
-      const currentChat = useChatStore.getState().currentChat;
-      useChatStore
-        .getState()
-        .setCurrentChat({
-          ...currentChat,
-          [page]: chatVO,
-        })
-        .then(() => {
-          if (!useChatStore.getState().handleSend) return;
-          useChatStore.getState().handleSend?.({
-            questionType: QuestionType.SQL_OPTIMIZER,
-            input: `${i18n('ai.aiType.SQLOptimizer.preContent')}: \\\n ${selectSQL}`,
-            source: ChatSourceType.DATASOURCE_CHAT,
-            dataSourceId,
-            databaseName,
-            schemaName,
-            databaseType,
-            sql: selectSQL,
-          } as any);
-        });
+    const selectSQL = sqlEditorRef.current?.getSelectedContent();
+    if (!selectSQL) {
+      staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+      return;
     }
+
+    const { dataSourceId, databaseName, schemaName, databaseType, supportDatabase, supportSchema } = dbInfo;
+    if (!dataSourceId || !databaseType) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.dataSource.title')));
+      return;
+    }
+    if (supportDatabase && !databaseName) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.database.title')));
+      return;
+    }
+    if (supportSchema && !schemaName) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.schema.title')));
+      return;
+    }
+
+    const scenario = {
+      [SQLOptType.NL_2_SQL]: {
+        questionType: QuestionType.NL_2_SQL,
+        input: selectSQL,
+      },
+      [SQLOptType.SQL_EXPLAIN]: {
+        questionType: QuestionType.SQL_EXPLAIN,
+        input: `${i18n('ai.aiType.SQLExplain.preContent')}: \\\n ${selectSQL}`,
+      },
+      [SQLOptType.SQL_OPTIMIZER]: {
+        questionType: QuestionType.SQL_OPTIMIZER,
+        input: `${i18n('ai.aiType.SQLOptimizer.preContent')}: \\\n ${selectSQL}`,
+      },
+    }[actionType];
+    if (!scenario) return;
+
+    useAIStore.getState().setShowPanel(true);
+    window.setTimeout(
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('stream:sendMessage', {
+            detail: {
+              ...scenario,
+              source: ChatSourceType.DATASOURCE_CHAT,
+              dataSourceId,
+              databaseName,
+              schemaName,
+              databaseType,
+              sql: selectSQL,
+            },
+          }),
+        ),
+      0,
+    );
   };
 
   const handleCopy = useCallback(() => {

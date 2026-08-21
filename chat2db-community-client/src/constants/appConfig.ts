@@ -46,39 +46,9 @@ export const getAppConfig = (isCN: boolean) => {
   return isCN ? APP_URL_CONFIG_CHINA : APP_URL_CONFIG_OVERSEAS;
 };
 
-export const appConfigMap: {
-  [key: string]: AppConfig;
-} = {
-  'chat2db-pro': {
-    name: 'chat2db-pro',
-    capitalName: 'Chat2DB-Pro',
-    displayName: 'Chat2DB Pro',
-  },
-  'chat2db-pro-test': {
-    name: 'chat2db-pro-test',
-    capitalName: 'Chat2DB-Pro-Test',
-    displayName: 'Chat2DB Pro Test',
-  },
-  'chat2db-local': {
-    name: 'chat2db-local',
-    capitalName: 'Chat2DB-Local',
-    displayName: 'Chat2DB Local',
-  },
-  'chat2db-local-test': {
-    name: 'chat2db-local-test',
-    capitalName: 'Chat2DB-Local-Test',
-    displayName: 'Chat2DB Local Test',
-  },
-  'chat2db-community': {
-    name: 'chat2db-community',
-    capitalName: 'Chat2DB-Community',
-    displayName: 'Chat2DB Community',
-  },
-  'chat2db-community-test': {
-    name: 'chat2db-community-test',
-    capitalName: 'Chat2DB-Community-Test',
-    displayName: 'Chat2DB Community Test',
-  },
+export const APP_CONFIG: AppConfig = {
+  name: __APP_NAME__,
+  capitalName: __APP_CAPITAL_NAME__,
+  displayName: __APP_DISPLAY_NAME__,
+  protocolScheme: __APP_PROTOCOL_SCHEME__,
 };
-
-export const APP_CONFIG: AppConfig = appConfigMap[__APP_NAME__] || appConfigMap['chat2db-pro'];

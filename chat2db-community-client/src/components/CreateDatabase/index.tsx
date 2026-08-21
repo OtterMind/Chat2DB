@@ -72,19 +72,26 @@ const CreateDatabase = () => {
   );
 
   useEffect(() => {
-    if (!open) {
-      previewRequestIdRef.current += 1;
-      setErrorMessage(null);
-      setSelectedCharset(undefined);
-      setPreviewReady(false);
-      form.resetFields();
-      monacoEditorRef.current?.setValue('', 'cover');
-    } else {
+    if (open) {
       setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
     }
   }, [open]);
+
+  const resetModalState = () => {
+    previewRequestIdRef.current += 1;
+    setErrorMessage(null);
+    setSelectedCharset(undefined);
+    setPreviewReady(false);
+    form.resetFields();
+    monacoEditorRef.current?.setValue('', 'cover');
+  };
+
+  const closeModal = () => {
+    resetModalState();
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (!open || createType !== 'database' || !relyOnParams || (!supportsCharset && !supportsCollation)) {
@@ -214,7 +221,7 @@ const CreateDatabase = () => {
       .executeDDL(params)
       .then((res) => {
         if (res.success) {
-          setOpen(false);
+          closeModal();
           executedCallbackRef.current?.();
         } else {
           setErrorMessage(res);
@@ -253,7 +260,7 @@ const CreateDatabase = () => {
     !!relyOnParams && (
       <Modal
         onCancel={() => {
-          setOpen(false);
+          closeModal();
         }}
         maskClosable={false}
         title={config.title}

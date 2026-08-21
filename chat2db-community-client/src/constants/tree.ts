@@ -2,10 +2,6 @@ export enum TreeNodeType {
   GROUPS = 'groups',
   GROUP = 'group',
   SCHEMAS = 'schemas',
-  AI_DATA_COLLECTIONS = 'aiDataCollections',
-  AI_DATA_COLLECTION = 'aiDataCollection',
-  AI_DATA_COLLECTION_TABLE = 'aiDataCollectionTable',
-  AI_DATA_COLLECTION_VIEW = 'aiDataCollectionView',
   ALL_DATA = 'allData', // All data dedicated to redis
   DATA_SOURCES = 'dataSources',
   DATA_SOURCE = 'dataSource',
@@ -44,29 +40,9 @@ export enum OperationColumn {
   CopyName = 'copyName',
   // Move to xxx group
   MoveToGroup = 'moveToGroup',
-  // Create AI dataset
-  CreateAiDataCollection = 'createAiDataCollection',
-  // Delete AI dataset
-  RemoveAiDataCollection = 'removeAiDataCollection',
-  // Delete a table from a collection
-  RemoveAiDataCollectionElement = 'removeAiDataCollectionElement',
-  // Resynchronize AI datasets
-  SyncAiDataCollection = 'syncAiDataCollection',
-  // Rename
-  RenameAiDataCollection = 'renameAiDataCollection',
-  // Add a table to an AI dataset
-  AddAiDataCollectionTable = 'addAiDataCollectionTable',
-  // Add views to AI datasets
-  AddAiDataCollectionView = 'addAiDataCollectionView',
-  // Copy the AI dataset ID.
-  CopyAiDataCollectionId = 'copyAiDataId',
   // CopyMcpConfig
   CopyMcpConfig = 'copyMcpConfig',
   CopyGlobalMcpConfig = 'copyGlobalMcpConfig',
-
-  // Modify the table structure of AI
-  ChangeAiTableInfo = 'changeAiTableInfo',
-  ChangeAiTableInfoNodataCollection = 'changeAiTableInfoNodataCollection',
 
   // open all data
   OpenAllData = 'openAllData',
@@ -106,6 +82,14 @@ export enum OperationColumn {
   ViewAllView = 'viewAllView', // View all views
   ViewERModal = 'viewERModal', // View ER diagram
   GenerateCRUD = 'generateCRUD', // Generate CRUD
+  // Neutral menu capability slots retained for cross-product menu contracts.
+  // Community does not provide AI data-collection implementations.
+  CreateAiDataCollection = 'createAiDataCollection',
+  RemoveAiDataCollection = 'removeAiDataCollection',
+  RemoveAiDataCollectionElement = 'removeAiDataCollectionElement',
+  SyncAiDataCollection = 'syncAiDataCollection',
+  ChangeAiTableInfo = 'changeAiTableInfo',
+  ChangeAiTableInfoNodataCollection = 'changeAiTableInfoNodataCollection',
   OpenConsole = 'openConsole', // open console
   RemoveConsole = 'removeConsole',
   // Run sql file

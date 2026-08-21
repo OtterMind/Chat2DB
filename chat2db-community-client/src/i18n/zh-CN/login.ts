@@ -1,6 +1,7 @@
 export default {
   'login.text.logout': '退出登录',
   'login.text.password': '密码',
+  'login.text.rememberMe': '记住用户名和密码',
   'login.text.welcome': '欢迎使用 Chat2DB',
   'login.text.tips': 'Chat2DB 账号仅用于团队协作管理',
   'login.text.tips.title': '为什么需要登录？',

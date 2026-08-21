@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
@@ -44,7 +44,7 @@ export interface IAIModelConfigTestResult {
   endpoint?: string;
 }
 
-const LOCAL_STORAGE_KEY = runtimeEditionConfig.aiModelConfigStorageKey;
+const LOCAL_STORAGE_KEY = clientRuntime.aiModelConfigStorageKey;
 
 const listRemoteModelConfigs = createRequest<void, IAIModelConfigItem[]>('/api/v3/ai/model/config/list');
 const saveRemoteModelConfig = createRequest<IAIModelConfigSaveRequest, IAIModelConfigItem>(
@@ -132,14 +132,14 @@ const createLocalModelOption = (config: IAIModelConfigItem): IModelOptionItem =>
 });
 
 export const listAIModelConfigs = async () => {
-  if (runtimeEditionConfig.localPersistence) {
+  if (clientRuntime.usesLocalPersistence) {
     return loadLocalConfigs();
   }
   return (await listRemoteModelConfigs(undefined as void)) || [];
 };
 
 export const saveAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
-  if (!runtimeEditionConfig.localPersistence) {
+  if (!clientRuntime.usesLocalPersistence) {
     return saveRemoteModelConfig(payload);
   }
 
@@ -177,7 +177,7 @@ export const saveAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
 };
 
 export const deleteAIModelConfig = async (id: string) => {
-  if (!runtimeEditionConfig.localPersistence) {
+  if (!clientRuntime.usesLocalPersistence) {
     await deleteRemoteModelConfig({ id });
     return;
   }
@@ -188,7 +188,7 @@ export const deleteAIModelConfig = async (id: string) => {
 
 export const testAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
   const nextPayload = { ...payload };
-  if (runtimeEditionConfig.localPersistence && !nextPayload.apiKey?.trim() && nextPayload.id) {
+  if (clientRuntime.usesLocalPersistence && !nextPayload.apiKey?.trim() && nextPayload.id) {
     const localConfig = loadLocalConfigs().find((item) => item.id === nextPayload.id);
     if (localConfig?.apiKey?.trim()) {
       nextPayload.apiKey = localConfig.apiKey.trim();
@@ -198,11 +198,11 @@ export const testAIModelConfig = async (payload: IAIModelConfigSaveRequest) => {
 };
 
 export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> => {
-  const presetOptions = runtimeEditionConfig.remoteAiModelOptions
+  const presetOptions = clientRuntime.loadModelOptionsFromServer
     ? (await aiStreamService.getModelOptions(undefined as void)) || []
     : [];
 
-  if (!runtimeEditionConfig.localPersistence) {
+  if (!clientRuntime.usesLocalPersistence) {
     return presetOptions;
   }
 
@@ -218,7 +218,7 @@ export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> =
 };
 
 export const resolveModelRequestPayload = async (option: IModelOptionItem) => {
-  if (runtimeEditionConfig.localPersistence && option.customOption && option.modelConfigId) {
+  if (clientRuntime.usesLocalPersistence && option.customOption && option.modelConfigId) {
     const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);
     if (!config) {
       return null;

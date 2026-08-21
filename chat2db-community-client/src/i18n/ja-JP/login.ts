@@ -1,6 +1,7 @@
 export default {
   'login.text.logout': 'ログアウト',
   'login.text.password': 'パスワード',
+  'login.text.rememberMe': '覚えています',
   'login.text.welcome': 'Chat2DBへようこそ',
   'login.text.tips': 'Chat2DBアカウントは、チーム協力管理のためだけです。',
   'login.text.tips.title': 'なぜログインが必要なのか？',

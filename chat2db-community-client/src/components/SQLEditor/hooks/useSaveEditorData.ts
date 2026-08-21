@@ -4,7 +4,7 @@ import historyServer from '@/service/history';
 import i18n from '@/i18n';
 import { useWorkspaceStore } from '@/store/workspace';
 import { staticMessage } from '@chat2db/ui';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 import { useIndexDBStore } from '@/store/indexDB';
 import { SQLEditorRef } from '@/components/SQLEditor/editor/SQLEditor';
 import type { IBoundInfo } from '@/typings';

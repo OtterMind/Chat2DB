@@ -23,22 +23,8 @@ assert.ok(
   'shared navigation items should remain lazy by default',
 );
 
-for (const page of ['src/pages/main/CommunityMainPage.tsx', 'src/pages/main/index.tsx']) {
-  assert.match(
-    readFileSync(page, 'utf8'),
-    /createCoreMainNavItems/,
-    `${page} should consume the shared core navigation definition`,
-  );
-}
-
-const commercialMainPage = readFileSync('src/pages/main/index.tsx', 'utf8');
-assert.match(commercialMainPage, /icon: 'icon-a-xunwen1'/, 'Team should keep its existing iconfont icon');
-for (const retiredIconCode of ['icon-chat-alt-21', 'icon-gongxiang-', 'icon-chart-square-bar']) {
-  assert.doesNotMatch(
-    commercialMainPage,
-    new RegExp(retiredIconCode),
-    `commercial main navigation should not use ${retiredIconCode}`,
-  );
-}
+const communityMainPage = readFileSync('src/pages/main/CommunityMainPage.tsx', 'utf8');
+assert.match(communityMainPage, /createCoreMainNavItems/);
+assert.doesNotMatch(communityMainPage, /organization|team|upgrade|pricing/i);
 
 console.log('Main navigation item tests passed.');

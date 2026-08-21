@@ -1,5 +1,5 @@
 import { Platform } from '@/constants/os';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
@@ -66,7 +66,7 @@ const UpdateDetection = () => {
   };
 
   useEffect(() => {
-    if (!runtimeEditionConfig.autoUpdate) {
+    if (!clientRuntime.enableAutoUpdate) {
       return;
     }
     JcefEventBus.on(
@@ -84,7 +84,7 @@ const UpdateDetection = () => {
   }, []);
 
   useEffect(() => {
-    if (!runtimeEditionConfig.autoUpdate) {
+    if (!clientRuntime.enableAutoUpdate) {
       return;
     }
     // Check for updates, check for updates after app initialization is completed
@@ -104,7 +104,7 @@ const UpdateDetection = () => {
   }, [appConfig.isReady]);
 
   useEffect(() => {
-    if (!runtimeEditionConfig.autoUpdate) {
+    if (!clientRuntime.enableAutoUpdate) {
       return;
     }
     switch (updateDetail.status) {
@@ -196,7 +196,7 @@ const UpdateDetection = () => {
   const openFindNewVersionNotification = () => {
     const key = `open${Date.now()}`;
     let CHANGE_LOG_URL = appUrlConfig.CHANGE_LOG_URL;
-    if (runtimeEditionConfig.localPersistence) {
+    if (clientRuntime.usesLocalPersistence) {
       CHANGE_LOG_URL = `${CHANGE_LOG_URL}?type=local`;
     }
 

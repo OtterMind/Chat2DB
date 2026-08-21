@@ -1,6 +1,6 @@
-import { EditorSettings } from '@/components/SQLEditor';
+import type { EditorSettings } from '@/components/SQLEditor/type';
 import { APP_URL_CONFIG_CHINA, APP_URL_CONFIG_OVERSEAS } from '@/constants/appConfig';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import {
   EffectiveShortcutConfig,
   getEffectiveShortcutConfigMap,
@@ -8,8 +8,7 @@ import {
   normalizeShortcutBinding,
   ShortcutAction,
 } from '@/constants/shortcut';
-import oauthService from '@/service/enterprise/oauth';
-import miscServices from '@/service/misc';
+import appConfigService from '@/service/appConfig';
 import {
   DataTableSettings,
   GlobalBaseSettings,
@@ -137,12 +136,12 @@ export const createSettingsAction: StateCreator<GlobalStore, [['zustand/devtools
     });
   },
   queryAppConfig: () => {
-    if (!runtimeEditionConfig.remoteAppConfig && runtimeEditionConfig.localAppConfig) {
+    if (!clientRuntime.loadAppConfigFromServer && clientRuntime.localAppConfig) {
       set({
         appConfig: produce(get().appConfig, (draft) => {
-          Object.assign(draft, runtimeEditionConfig.localAppConfig);
-          if (runtimeEditionConfig.localAppUrlConfig) {
-            get().setAppUrlConfig(runtimeEditionConfig.localAppUrlConfig);
+          Object.assign(draft, clientRuntime.localAppConfig);
+          if (clientRuntime.localAppUrlConfig) {
+            get().setAppUrlConfig(clientRuntime.localAppUrlConfig);
           }
           draft.version = __APP_VERSION__;
           draft.isReady = true;
@@ -151,7 +150,7 @@ export const createSettingsAction: StateCreator<GlobalStore, [['zustand/devtools
       return;
     }
 
-    oauthService.getAppConfig().then((res) => {
+    appConfigService.getAppConfig().then((res) => {
       set({
         appConfig: produce(get().appConfig, (draft) => {
           res?.countries?.forEach((item) => {
@@ -225,7 +224,8 @@ export const createSettingsAction: StateCreator<GlobalStore, [['zustand/devtools
       return;
     }
 
-    miscServices.fetchSpm({
+    const { default: clientExtension } = await import('@client-extension');
+    await clientExtension.reportClient?.({
       deviceUuid,
       clientVersion: get().appConfig.version,
       userAgent: window.navigator.userAgent,

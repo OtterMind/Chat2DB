@@ -10,43 +10,20 @@ export default function useActive(
   onCancel: () => void,
 ) {
   const [activePaths, setActivePaths] = useState<string[]>([]);
+  const [previewValue, setPreviewValue] = useState<string>();
 
-  /** Get items by column index */
-  const getItems = (colIndex: number, paths = activePaths) => {
-    let currentItems = items;
-
-    for (let i = 0; i < colIndex - 1; i += 1) {
-      const activePath = paths[i];
-      const activeItem = currentItems.find((item) => item.value === activePath);
-
-      if (!activeItem) {
-        break;
-      }
-
-      currentItems = activeItem.children || [];
-    }
-
-    return currentItems;
-  };
-
-  const getValues = (paths: string[]) => {
-    return paths.map((path, index) => {
-      const currentItems = getItems(index + 1, paths);
-      const currentItem = currentItems.find((item) => item.value === path);
-
-      return currentItem?.value;
-    }) as string[];
-  };
+  const activeValue = activePaths[0];
+  const activeItem = items.find((item) => item.value === activeValue);
+  const previewItem = items.find((item) => item.value === previewValue);
 
   const offsetRow = (offset: number) => {
-    const currentColIndex = activePaths.length || 1;
-
-    const currentItems = getItems(currentColIndex);
-    const currentRowIndex = currentItems.findIndex((item) => item.value === activePaths[currentColIndex - 1]);
-    const itemCount = currentItems.length;
-
-    const nextItem = currentItems[(currentRowIndex + offset + itemCount) % itemCount];
-    setActivePaths([...activePaths.slice(0, currentColIndex - 1), nextItem.value]);
+    if (!items.length) return;
+    const currentRowIndex = items.findIndex((item) => item.value === activeValue);
+    const nextItem = items[(currentRowIndex + offset + items.length) % items.length];
+    setActivePaths([nextItem.value]);
+    if (previewValue) {
+      setPreviewValue(nextItem.kind === 'knowledge' ? nextItem.value : undefined);
+    }
 
     // Add a delay to wait for the DOM to update before scrolling
     setTimeout(() => {
@@ -60,45 +37,6 @@ export default function useActive(
         });
       }
     }, 0);
-  };
-
-  const offsetNext = () => {
-    const currentColIndex = activePaths.length;
-    const nextItems = getItems(currentColIndex + 1);
-
-    // If there are sub-items, select the first sub-item
-    if (nextItems.length > 0) {
-      setActivePaths([...activePaths, nextItems[0].value]);
-
-      // Wait for the DOM to update before scrolling to the newly selected item
-      setTimeout(() => {
-        const activeElement = document.querySelector('.ant-cascader-menu-item-active');
-        if (activeElement) {
-          activeElement.scrollIntoView({
-            block: 'start',
-            behavior: 'smooth',
-          });
-        }
-      }, 0);
-    }
-  };
-
-  const offsetPrev = () => {
-    // If there is a previous level, return to the previous level
-    if (activePaths.length > 1) {
-      setActivePaths(activePaths.slice(0, -1));
-
-      // Wait for the DOM to update before scrolling to the newly selected item
-      setTimeout(() => {
-        const activeElement = document.querySelector('.ant-cascader-menu-item-active');
-        if (activeElement) {
-          activeElement.scrollIntoView({
-            block: 'nearest',
-            behavior: 'smooth',
-          });
-        }
-      }, 0);
-    }
   };
 
   const onKeyDown = useEvent((e: React.KeyboardEvent) => {
@@ -119,21 +57,24 @@ export default function useActive(
       }
 
       case 'ArrowRight': {
-        offsetNext();
-        e.preventDefault();
+        if (activeItem?.kind === 'knowledge') {
+          setPreviewValue(activeItem.value);
+          e.preventDefault();
+        }
         break;
       }
 
       case 'ArrowLeft': {
-        offsetPrev();
-        e.preventDefault();
+        if (previewValue) {
+          setPreviewValue(undefined);
+          e.preventDefault();
+        }
         break;
       }
 
       case 'Enter': {
-        // Submit if not have children
-        if (getItems(activePaths.length + 1).length === 0) {
-          onSelect(getValues(activePaths));
+        if (activeValue) {
+          onSelect([activeValue]);
         }
         e.preventDefault();
         break;
@@ -152,9 +93,12 @@ export default function useActive(
 
   React.useEffect(() => {
     if (open && items?.[0]?.value) {
-      setActivePaths([items[0].value]);
+      setActivePaths((previous) => (items.some((item) => item.value === previous[0]) ? previous : [items[0].value]));
+    } else if (!open) {
+      setActivePaths([]);
+      setPreviewValue(undefined);
     }
   }, [open, items]);
 
-  return [activePaths, onKeyDown] as const;
+  return [activePaths, onKeyDown, previewItem, setPreviewValue] as const;
 }

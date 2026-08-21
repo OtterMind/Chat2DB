@@ -36,7 +36,7 @@ export default {
   'ai.feedback.reject': '放弃',
   'ai.syncDBTable.title': '同步数据库表结构',
   'ai.syncDBTable.desc': '同步会后台运行，默认需要几分钟。同步后，AI可以自动识别数据库表结构信息',
-  'ai.select.databaseOrDataCollection': '请选择数据库或数据集',
+  'ai.select.database': '请选择数据库',
   'ai.select.globalDatabaseScope': '全局查询（不选择数据源）',
   'ai.select.model': '请选择模型',
   'ai.sqlDebug.prefill': '请帮我诊断下面 SQL 的报错原因，并给出可执行的修复建议。\n\nSQL:\n{1}\n\n错误信息:\n{2}',

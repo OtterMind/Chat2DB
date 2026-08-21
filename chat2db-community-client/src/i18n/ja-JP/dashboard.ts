@@ -66,7 +66,6 @@ export default {
   'dashboard.chart.pinToDashboardSuccess': 'ダッシュボードにピンしました',
   'import.community.dataSource': 'コミュニティ版のリンクをインポートする ',
   'dashboard.createName.placeholder': 'ダッシュボード名を入力してください（必須）',
-  'dashboard.select.aiDataCollection': 'AIチャートのコマンドセットを選択してください（必須）',
   'dashboard.createDescription.placeholder': 'ダッシュボードの説明を入力してください（任意）',
   'dashboard.delete.confirm': 'このレポートを削除してもよろしいですか？',
   'dashboard.delete.chart.confirm': 'このチャートを削除してもよろしいですか？',

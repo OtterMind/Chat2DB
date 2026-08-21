@@ -29,7 +29,7 @@ export default {
   'price.text.upgradePlan': '요금제 업그레이드',
   'price.text.reorderPlan': '요금제 다시 주문',
   'price.text.unsubscribeSuccess': '구독을 취소했습니다',
-  'price.text.pricingPlans': 'Chat2DB Pro 멤버십 요금제',
+  'price.text.pricingPlans': '{PRODUCT_NAME} 멤버십 요금제',
   'price.text.welcome':
     '100만 명 이상의 개발자가 데이터 관리를 더 간편하고 효율적이며 즐겁게 만드는 AI 데이터 개발 및 분석 플랫폼을 사용하고 있습니다 😎',
   'price.text.monthly': '월간',
@@ -72,7 +72,7 @@ export default {
   'price.text.upgradePackage': '업그레이드 패키지',
   'price.label.total': '합계',
   'price.text.selectPlan': '업그레이드 패키지를 선택하세요',
-  'price.text.startFreeTitle': 'Chat2DB Pro 30일 무료 체험을 시작하세요!',
+  'price.text.startFreeTitle': '{PRODUCT_NAME} 30일 무료 체험을 시작하세요!',
   'price.text.freePriceSuffix': '첫 30일',
   'price.text.freeTrial': '',
   'price.text.thenPriceSuffix': '이후',

@@ -7,12 +7,21 @@ import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
+import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
+import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
+import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.domain.api.model.task.extension.TaskExecutionContext;
+import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
+import ai.chat2db.community.domain.api.model.task.extension.TaskSubmissionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
+import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import jakarta.annotation.PostConstruct;
@@ -46,6 +55,10 @@ public class LocalTaskManager {
 
     private final ArtifactService artifactService;
 
+    private final ConnectionContextConverter connectionContextConverter;
+
+    private final TaskExtensionManager taskExtensionManager;
+
     private final RunningTaskRegistry runningTaskRegistry = new RunningTaskRegistry();
 
     private final ThreadPoolExecutor executor;
@@ -55,12 +68,15 @@ public class LocalTaskManager {
     private boolean preparingForExit;
 
     public LocalTaskManager(TaskStorage taskStorage, TaskExecutorRegistry taskExecutorRegistry,
-            ArtifactService artifactService,
+            ArtifactService artifactService, ConnectionContextConverter connectionContextConverter,
+            TaskExtensionManager taskExtensionManager,
             @Value("${chat2db.task.max-concurrency:4}") int maxConcurrency,
             @Value("${chat2db.task.queue-capacity:100}") int queueCapacity) {
         this.taskStorage = taskStorage;
         this.taskExecutorRegistry = taskExecutorRegistry;
         this.artifactService = artifactService;
+        this.connectionContextConverter = connectionContextConverter;
+        this.taskExtensionManager = taskExtensionManager;
         int concurrency = Math.max(1, maxConcurrency);
         int capacity = Math.max(1, queueCapacity);
         this.executor = new ThreadPoolExecutor(concurrency, concurrency, 0L, TimeUnit.MILLISECONDS,
@@ -90,7 +106,15 @@ public class LocalTaskManager {
                 throw new RejectedExecutionException("The application is preparing to exit");
             }
             Task persistedTask = taskStorage.create(task, createdEvent);
-            schedule(persistedTask, spec, context, connectInfo);
+            TaskSubmissionContext extensionContext = extensionContext(persistedTask, spec, connectInfo);
+            try {
+                taskExtensionManager.capture(extensionContext);
+            } catch (RuntimeException e) {
+                failPersistedTask(persistedTask, TaskErrorCode.TASK_SUBMISSION_REJECTED.name(),
+                        TaskEventCode.TASK_FAILED.name(), "Task submission rejected");
+                throw e;
+            }
+            schedule(persistedTask, spec, context, connectInfo, extensionContext.toExecutionContext());
             return persistedTask;
         } finally {
             lifecycleLock.unlock();
@@ -321,13 +345,38 @@ public class LocalTaskManager {
                 && Objects.equals(task.getOrganizationId(), organizationId);
     }
 
-    private <S extends TaskSpec> void schedule(Task task, S spec, Context context, ConnectInfo connectInfo) {
+    private TaskSubmissionContext extensionContext(Task task, TaskSpec spec, ConnectInfo connectInfo) {
+        TaskType taskType = TaskType.valueOf(spec.getTaskType());
+        TaskTargetSnapshot target = spec.getTarget();
+        List<String> tableNames = taskTableNames(spec, target);
+        TaskOperation operation = switch (taskType) {
+            case QUERY_RESULT_EXPORT, SQL_EXPORT, TABLE_DATA_EXPORT -> TaskOperation.EXPORT;
+            case DATA_FILE_IMPORT, SQL_FILE_IMPORT -> TaskOperation.IMPORT;
+        };
+        return new TaskSubmissionContext(task.getId(), taskType,
+                connectionContextConverter.connectInfo2profile(connectInfo),
+                target == null ? null : target.getDatabaseName(),
+                target == null ? null : target.getSchemaName(), tableNames, operation);
+    }
+
+    private List<String> taskTableNames(TaskSpec spec, TaskTargetSnapshot target) {
+        if (spec instanceof ExportTaskSpec exportSpec && exportSpec.getTableNames() != null) {
+            return exportSpec.getTableNames();
+        }
+        if (spec instanceof ImportTaskSpec && target != null && target.getTableName() != null) {
+            return List.of(target.getTableName());
+        }
+        return List.of();
+    }
+
+    private <S extends TaskSpec> void schedule(Task task, S spec, Context context, ConnectInfo connectInfo,
+            TaskExecutionContext extensionContext) {
         TaskExecutor<S> taskExecutor = taskExecutorRegistry.require(spec);
         RunningTask runningTask = new RunningTask(task.getId());
         TaskSubmission<S> submission = new TaskSubmission<>(task.getId(), spec, context,
-                connectInfo == null ? null : connectInfo.copy());
+                connectInfo == null ? null : connectInfo.copy(), extensionContext);
         TaskRunner<S> taskRunner = new TaskRunner<>(submission, runningTask, runningTaskRegistry, taskStorage,
-                taskExecutor, artifactService);
+                taskExecutor, artifactService, taskExtensionManager);
         FutureTask<Void> futureTask = new FutureTask<>(taskRunner, null);
         runningTask.setFuture(futureTask);
         runningTaskRegistry.register(runningTask);

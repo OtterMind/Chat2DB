@@ -51,6 +51,18 @@ export const useStyles = createStyles(({ css, token }, { sidebarExpanded }: { si
         background-color: ${token.colorFillTertiary};
       }
     `,
+    sidebarLogoButton: css`
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    `,
 
     /* ── Nav items ─────────────────────────────────────── */
     navContainer: css`

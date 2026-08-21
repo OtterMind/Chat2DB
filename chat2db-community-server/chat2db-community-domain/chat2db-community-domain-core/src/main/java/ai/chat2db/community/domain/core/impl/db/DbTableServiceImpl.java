@@ -12,10 +12,12 @@ import ai.chat2db.community.domain.api.model.request.db.DbTableQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.TableSelector;
 import ai.chat2db.community.domain.api.model.request.db.DbTypeQueryRequest;
 import ai.chat2db.community.domain.api.model.request.pin.DbTablePinRequest;
+import ai.chat2db.community.domain.api.model.metadata.extension.MetadataAccessContext;
 import ai.chat2db.community.domain.api.service.db.IDbTablePinService;
 import ai.chat2db.community.domain.api.service.db.IDbTableService;
 import ai.chat2db.community.domain.core.cache.CacheManage;
 import ai.chat2db.community.domain.core.cache.MemoryCacheManage;
+import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
 import ai.chat2db.community.domain.core.util.ListSorter;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.IDbManager;
@@ -36,6 +38,7 @@ import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
@@ -52,13 +55,30 @@ import static ai.chat2db.community.domain.core.cache.CacheKey.getTableKey;
 public class DbTableServiceImpl implements IDbTableService {
 
     private final IDbTablePinService tablePinService;
+    private final MetadataAccessPolicyManager metadataAccessPolicyManager;
 
     public DbTableServiceImpl(IDbTablePinService tablePinService) {
+        this(tablePinService, new MetadataAccessPolicyManager(List.of()));
+    }
+
+    @Autowired
+    public DbTableServiceImpl(IDbTablePinService tablePinService,
+                              MetadataAccessPolicyManager metadataAccessPolicyManager) {
         this.tablePinService = tablePinService;
+        this.metadataAccessPolicyManager = metadataAccessPolicyManager;
     }
 
     @Override
     public String showCreateTable(DbTableShowCreateRequest param) {
+        requireVisibleTable(param.getDataSourceId(), param.getDatabaseName(), param.getSchemaName(),
+                param.getTableName());
+        List<TableColumn> rawColumns = rawColumns(param);
+        if (!metadataAccessPolicyManager.isEmpty() && rawColumns.isEmpty()) {
+            throw new BusinessException("common.permissionDenied");
+        }
+        if (visibleColumns(param, rawColumns).size() != rawColumns.size()) {
+            throw new BusinessException("common.permissionDenied");
+        }
         IDbMetaData metaSchema = Chat2DBContext.getDbMetaData();
         return metaSchema.tableDDL(Chat2DBContext.getConnection(),
                 new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName()));
@@ -94,7 +114,7 @@ public class DbTableServiceImpl implements IDbTableService {
                     table.setColumnList(
                             metaSchema.columns(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
-                    return table;
+                    return filterTableDetail(param, table);
                 }
                 break;
             default:
@@ -109,7 +129,7 @@ public class DbTableServiceImpl implements IDbTableService {
                             metaSchema.columns(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
                     setPrimaryKey(table);
-                    return table;
+                    return filterTableDetail(param, table);
                 }
         }
         return null;
@@ -146,6 +166,7 @@ public class DbTableServiceImpl implements IDbTableService {
             return PageResponse.of(new ArrayList<>(), 0L, param.getPageNo(), param.getPageSize());
         }
         List<Table> tables = getQueryTables(all, param);
+        tables = visibleTables(param, tables);
         if (CollectionUtils.isEmpty(tables)) {
             return PageResponse.of(new ArrayList<>(), 0L, param.getPageNo(), param.getPageSize());
         }
@@ -174,27 +195,38 @@ public class DbTableServiceImpl implements IDbTableService {
         if (CollectionUtils.isEmpty(all)) {
             return new ArrayList<>();
         }
-        return all.stream().map(table -> SimpleTable.builder().name(table.getName()).comment(table.getComment()).build()).collect(Collectors.toList());
+        return visibleTables(param, all).stream()
+                .map(table -> SimpleTable.builder().name(table.getName()).comment(table.getComment()).build())
+                .collect(Collectors.toList());
     }
 
     @Override
     public List<TableColumn> queryColumns(DbTableQueryRequest param) {
-        String tableColumnKey = getColumnKey(param.getDataSourceId(), param.getDatabaseName(), param.getSchemaName(), param.getTableName());
-        IDbMetaData metaSchema = Chat2DBContext.getDbMetaData();
-        List<TableColumn> list = CacheManage.getList(tableColumnKey, TableColumn.class,
-                (key) -> param.isRefresh(), (key) ->
-                        metaSchema.columns(Chat2DBContext.getConnection(),
-                                new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
-        return list;
+        requireVisibleTable(param.getDataSourceId(), param.getDatabaseName(), param.getSchemaName(),
+                param.getTableName());
+        return visibleColumns(param, rawColumns(param));
     }
 
     @Override
     public List<TableIndex> queryIndexes(DbTableQueryRequest param) {
+        requireVisibleTable(param.getDataSourceId(), param.getDatabaseName(), param.getSchemaName(),
+                param.getTableName());
         IDbMetaData metaSchema = Chat2DBContext.getDbMetaData();
         List<TableIndex> indexes = metaSchema.indexes(Chat2DBContext.getConnection(),
                 new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName()));
         ListSorter.sortByKey(indexes, TableIndex::getName);
-        return indexes;
+        if (CollectionUtils.isEmpty(indexes)) {
+            return indexes;
+        }
+        List<TableColumn> rawColumns = rawColumns(param);
+        if (!metadataAccessPolicyManager.isEmpty() && rawColumns.isEmpty() && !indexes.isEmpty()) {
+            return List.of();
+        }
+        List<TableColumn> visibleColumns = visibleColumns(param, rawColumns);
+        if (visibleColumns.size() == rawColumns.size()) {
+            return indexes;
+        }
+        return filterIndexes(indexes, normalizedColumnNames(visibleColumns));
     }
 
     @Override
@@ -462,7 +494,8 @@ public class DbTableServiceImpl implements IDbTableService {
         TablesPageResponse page = metaData.tables(connection,
                 new TablesPageRequest(param.getDatabaseName(), param.getSchemaName(), param.getSearchKey(),
                         param.getPageNo(), param.getPageSize()));
-        return PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize());
+        return filterExternalPage(param,
+                PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize()));
     }
 
     private PageResponse<Table> pageQueryForMongodb(DbTablePageQueryRequest param) {
@@ -471,7 +504,8 @@ public class DbTableServiceImpl implements IDbTableService {
         TablesPageResponse page = metaData.tables(connection,
                 new TablesPageRequest(param.getDatabaseName(), param.getSchemaName(), param.getSearchKey(),
                         param.getPageNo(), param.getPageSize()));
-        return PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize());
+        return filterExternalPage(param,
+                PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize()));
     }
 
     private List<Table> getAllTables(DbTablePageQueryRequest param) {
@@ -597,5 +631,150 @@ public class DbTableServiceImpl implements IDbTableService {
         keyIndex.setColumnList(sortTableIndexColumns);
         newTable.setIndexList(indexes);
 
+    }
+
+    private PageResponse<Table> filterExternalPage(DbTablePageQueryRequest request, PageResponse<Table> page) {
+        List<Table> original = page.getData();
+        List<Table> visible = visibleTables(request, original);
+        long safeTotal = visible.size() == original.size() ? page.getTotal() : visible.size();
+        return PageResponse.of(visible, safeTotal, page.getPageNo(), page.getPageSize());
+    }
+
+    private List<Table> visibleTables(DbTablePageQueryRequest request, List<Table> tables) {
+        return metadataAccessPolicyManager.filter(tables,
+                table -> resource(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                        table == null ? null : table.getName(), null));
+    }
+
+    private Table filterTableDetail(DbTableQueryRequest request, Table table) {
+        requireVisibleTable(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                request.getTableName());
+        List<TableColumn> rawColumns = table.getColumnList() == null ? List.of() : table.getColumnList();
+        if (!metadataAccessPolicyManager.isEmpty() && rawColumns.isEmpty()) {
+            table.setIndexList(List.of());
+            table.setForeignKeyList(List.of());
+            table.setDdl(null);
+            return table;
+        }
+        List<TableColumn> visibleColumns = visibleColumns(request, rawColumns);
+        table.setColumnList(visibleColumns);
+        if (visibleColumns.size() == rawColumns.size()) {
+            return table;
+        }
+        Set<String> visibleNames = normalizedColumnNames(visibleColumns);
+        table.setIndexList(filterIndexes(table.getIndexList(), visibleNames));
+        table.setForeignKeyList(List.of());
+        table.setDdl(null);
+        return table;
+    }
+
+    private void requireVisibleTable(Long dataSourceId, String databaseName, String schemaName, String tableName) {
+        if (!metadataAccessPolicyManager.isAllowed(resource(dataSourceId, databaseName, schemaName, tableName,
+                null))) {
+            throw new BusinessException("common.permissionDenied");
+        }
+    }
+
+    private List<TableColumn> rawColumns(DbTableQueryRequest request) {
+        return rawColumns(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                request.getTableName(), request.isRefresh());
+    }
+
+    private List<TableColumn> rawColumns(DbTableShowCreateRequest request) {
+        return rawColumns(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                request.getTableName(), false);
+    }
+
+    private List<TableColumn> rawColumns(Long dataSourceId, String databaseName, String schemaName, String tableName,
+                                         boolean refresh) {
+        String tableColumnKey = getColumnKey(dataSourceId, databaseName, schemaName, tableName);
+        IDbMetaData metaSchema = Chat2DBContext.getDbMetaData();
+        return CacheManage.getList(tableColumnKey, TableColumn.class,
+                key -> refresh, key -> metaSchema.columns(Chat2DBContext.getConnection(),
+                        new TableMetadataRequest(databaseName, schemaName, tableName)));
+    }
+
+    private List<TableColumn> visibleColumns(DbTableQueryRequest request, List<TableColumn> columns) {
+        return visibleColumns(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                request.getTableName(), columns);
+    }
+
+    private List<TableColumn> visibleColumns(DbTableShowCreateRequest request, List<TableColumn> columns) {
+        return visibleColumns(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
+                request.getTableName(), columns);
+    }
+
+    private List<TableColumn> visibleColumns(Long dataSourceId, String databaseName, String schemaName,
+                                              String tableName, List<TableColumn> columns) {
+        return metadataAccessPolicyManager.filter(columns,
+                column -> resource(dataSourceId, databaseName, schemaName, tableName,
+                        column == null ? null : column.getName()));
+    }
+
+    private Set<String> normalizedColumnNames(List<TableColumn> columns) {
+        if (CollectionUtils.isEmpty(columns)) {
+            return Set.of();
+        }
+        return columns.stream().map(TableColumn::getName).filter(StringUtils::isNotBlank)
+                .map(value -> value.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
+    }
+
+    private List<TableIndex> filterIndexes(List<TableIndex> indexes, Set<String> visibleColumnNames) {
+        if (CollectionUtils.isEmpty(indexes)) {
+            return indexes;
+        }
+        List<TableIndex> visible = new ArrayList<>();
+        for (TableIndex index : indexes) {
+            if (index == null || CollectionUtils.isEmpty(index.getColumnList())) {
+                continue;
+            }
+            List<TableIndexColumn> columns = index.getColumnList().stream()
+                    .filter(Objects::nonNull)
+                    .filter(column -> StringUtils.isNotBlank(column.getColumnName()))
+                    .filter(column -> visibleColumnNames.contains(column.getColumnName().toLowerCase(Locale.ROOT)))
+                    .toList();
+            if (columns.isEmpty()) {
+                continue;
+            }
+            TableIndex copy = copyIndex(index);
+            copy.setColumnList(columns);
+            copy.setForeignColumnNamelist(List.of());
+            visible.add(copy);
+        }
+        return visible;
+    }
+
+    private TableIndex copyIndex(TableIndex source) {
+        TableIndex copy = new TableIndex();
+        copy.setOldName(source.getOldName());
+        copy.setName(source.getName());
+        copy.setTableName(source.getTableName());
+        copy.setType(source.getType());
+        copy.setUnique(source.getUnique());
+        copy.setComment(source.getComment());
+        copy.setSchemaName(source.getSchemaName());
+        copy.setDatabaseName(source.getDatabaseName());
+        copy.setColumnList(source.getColumnList());
+        copy.setEditStatus(source.getEditStatus());
+        copy.setConcurrently(source.getConcurrently());
+        copy.setMethod(source.getMethod());
+        copy.setForeignSchemaName(source.getForeignSchemaName());
+        copy.setForeignTableName(source.getForeignTableName());
+        copy.setForeignColumnNamelist(source.getForeignColumnNamelist());
+        return copy;
+    }
+
+    private MetadataAccessContext resource(Long dataSourceId, String databaseName, String schemaName,
+            String tableName, String columnName) {
+        String dbType = Chat2DBContext.getConnectInfo() == null ? null : Chat2DBContext.getConnectInfo().getDbType();
+        return MetadataAccessContext.builder()
+                .dataSourceId(dataSourceId)
+                .dbType(dbType)
+                .databaseName(databaseName)
+                .schemaName(schemaName)
+                .tableName(tableName)
+                .columnName(columnName)
+                .operationType("SELECT")
+                .build();
     }
 }

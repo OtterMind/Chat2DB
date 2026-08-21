@@ -1,6 +1,14 @@
 import { ColorProps, ThemeAppearance } from '@chat2db/ui';
 import { LangType, UpdatedStatus } from '@/constants/settings';
-import { CountryItem } from '@/typings/enterprise/user';
+
+export interface CountryItem {
+  code: string;
+  name: string;
+  appUrl: string;
+  current: boolean;
+  redirect: boolean;
+  gatewayUrl: string;
+}
 
 export interface GlobalBaseSettings {
   appearance: ThemeAppearance;

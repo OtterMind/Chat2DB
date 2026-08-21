@@ -1,7 +1,7 @@
 import { Button, Drawer, Flex, Popover } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import i18n from '@/i18n';
 import notificationService from '@/service/notification';
 import { ActionType, NotificationStatusType, NotificationType, NotificationVO } from '@/typings/notification';
@@ -75,10 +75,10 @@ const NotificationButton = ({ drawerMode, open: externalOpen, onClose }: Notific
     const res = await notificationService.queryPopNotification();
     if (!mountedRef.current) return;
     // Check localStorage for notifications already displayed, distinguished by ID.
-    const popedNotificationId = localStorage.getItem(runtimeEditionConfig.notificationPopupStorageKey);
+    const popedNotificationId = localStorage.getItem(clientRuntime.notificationPopupStorageKey);
     // If the notification has not been shown, display it when valid.
     if (res && res.id && res.status === NotificationStatusType.Valid && res.id.toString() !== popedNotificationId) {
-      localStorage.setItem(runtimeEditionConfig.notificationPopupStorageKey, res.id.toString());
+      localStorage.setItem(clientRuntime.notificationPopupStorageKey, res.id.toString());
       // S-level notification.
       if (res.type === NotificationType.S_CAMPAIGN) {
         setSPopOpen(true);

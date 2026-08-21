@@ -21,10 +21,10 @@ import styles from './index.less';
 import { formatJdbcHostForUrl, normalizeJdbcHostFromUrl, shouldSyncJdbcUrlForField } from './utils/jdbcUrl';
 
 // ----- store -----
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { useGlobalStore } from '@/store/global';
-import { useOrgStore } from '@/store/organization';
-import { OrganizationType } from '@/typings/enterprise/organization';
+import { useOrgStore } from '@/store/workspaceContext';
+import clientExtension from '@client-extension';
 import { staticMessage } from '@chat2db/ui';
 
 const { Option } = Select;
@@ -393,13 +393,13 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
   const dataSourceFormConfigPropsMemo = useMemo<IConnectionConfig>(() => {
     const data = resolveDataSourceFormConfig(backfillData?.type);
 
-    // Team-specific storageType handling.
     const items = data?.baseInfo?.items || [];
-    if (curOrg?.type === OrganizationType.TEAM) {
+    const storagePolicy = clientExtension.connectionStoragePolicy?.(curOrg);
+    if (storagePolicy) {
       const storage = items.find((t) => t.name === 'storageType');
       if (storage) {
-        storage.defaultValue = DataSourceStorageType.CLOUD;
-        storage.disabled = true;
+        storage.defaultValue = storagePolicy.value as DataSourceStorageType;
+        storage.disabled = storagePolicy.disabled;
       }
     }
     return data;
@@ -506,7 +506,7 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
       p.id = backfillData.id;
     }
 
-    if (runtimeEditionConfig.localPersistence) {
+    if (clientRuntime.usesLocalPersistence) {
       p.storageType = DataSourceStorageType.LOCAL;
     } else if (!curIsPersonalOrg()) {
       p.storageType = DataSourceStorageType.CLOUD;
@@ -520,12 +520,16 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
     }));
 
     if ((type === submitType.SAVE || type === submitType.UPDATE) && submit) {
-      submit?.(p, type).finally(() => {
-        setLoading((state) => ({
-          ...state,
-          [loadingsButton]: false,
-        }));
-      });
+      Promise.resolve(submit(p, type))
+        .catch((error: any) => {
+          staticMessage.error(getConnectionErrorMessage(error));
+        })
+        .finally(() => {
+          setLoading((state) => ({
+            ...state,
+            [loadingsButton]: false,
+          }));
+        });
       return;
     }
 

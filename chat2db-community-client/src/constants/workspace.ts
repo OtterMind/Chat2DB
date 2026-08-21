@@ -7,7 +7,7 @@ export enum CreateTabIntroType {
 
 export const LOCAL_SQL_FILE_SAVED_EVENT = 'chat2db:local-sql-file-saved';
 export const SAVED_CONSOLE_UPDATED_EVENT = 'chat2db:saved-console-updated';
-export const LOCAL_SQL_SESSION_DRAG_TYPE = 'application/x-chat2db-local-sql-session';
+export const LOCAL_SQL_SESSION_DRAG_TYPE = 'application/x-chat2db-sql-session';
 
 export interface SavedConsoleUpdatedEventDetail {
   dataSourceId: number;
@@ -31,7 +31,6 @@ export enum WorkspaceTabType {
   ViewAllTable = 'viewAllTable',
   ViewAllView = 'viewAllView',
   ViewERModal = 'viewERModal',
-  ChangeAiTableInfo = 'changeAiTableInfo',
   RedisAllData = 'redisAllData',
   AccountPrivileges = 'accountPrivileges',
   ContentDiff = 'contentDiff',
@@ -82,9 +81,6 @@ export const workspaceTabConfig: {
   },
   [WorkspaceTabType.ViewAllView]: {
     icon: 'icon-table-all',
-  },
-  [WorkspaceTabType.ChangeAiTableInfo]: {
-    icon: 'icon-ai-table',
   },
   [WorkspaceTabType.RedisAllData]: {
     icon: 'icon-table-view',

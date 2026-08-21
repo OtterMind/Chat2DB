@@ -2,14 +2,12 @@ import { useCallback } from 'react';
 import { useUpdateEffect } from 'ahooks';
 import { debounce } from 'lodash';
 
-import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import { useTreeStore } from '@/store/tree';
 import { searchTreeNodes } from '@/utils';
 import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
 import WorkspaceHeaderSearch from '../WorkspaceHeaderSearch';
 
 const WorkspaceTreeSearch = () => {
-  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const { searchBarValue, setSearchBarValue, searchResultKeys, hiddenTreeNodeIds } = useTreeStore((state) => ({
     searchBarValue: state.searchBarValue,
     setSearchBarValue: state.setSearchBarValue,
@@ -33,14 +31,13 @@ const WorkspaceTreeSearch = () => {
       }
       const visibleTreeData = filterTreeNodesForDisplay(treeStore.treeData || [], {
         hiddenTreeNodeIds: treeStore.hiddenTreeNodeIds,
-        aiDataCollectionEnabled: aiDataCollection,
       });
       const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(visibleTreeData, value);
       treeStore.setSearchResult(matchedNodes);
       treeStore.setSearchResultKeys(matchedKeys);
       treeStore.setExpandedKeys([...parentIdsWithMatches, ...treeStore.expandedKeys]);
     }, 300),
-    [aiDataCollection],
+    [],
   );
 
   useUpdateEffect(() => {

@@ -5,7 +5,7 @@ import { ICreateConsoleParams, IBoundInfo, IWorkspaceTab } from '@/typings';
 import historyService from '@/service/history';
 import { ConsoleOpenedStatus, ConsoleStatus, WorkspaceTabType } from '@/constants';
 
-import { EditorSetValueType } from '@/components/SQLEditor';
+import type { EditorSetValueType } from '@/components/SQLEditor/type';
 import { useIndexDBStore } from '@/store/indexDB';
 import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';

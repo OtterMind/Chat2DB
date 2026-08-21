@@ -36,7 +36,6 @@ import DatabaseTableEditor from '@/blocks/DatabaseTableEditor';
 import SQLExecute from '../SQLExecute';
 import NewViewAllTable from '../NewViewAllTable';
 import WorkspaceRightEmpty from '../WorkspaceRightEmpty';
-import ChangeAiTableInfo from '@/components/ChangeAiTableInfo';
 import RedisAllData from '@/blocks/RedisAllData';
 import Iconfont from '@/components/Iconfont';
 import { useZoerStore } from '@/store/zoer';
@@ -1746,14 +1745,6 @@ const WorkspaceTabs = memo(() => {
     return <ConsoleERModal uniqueData={uniqueData!} />;
   };
 
-  const renderAiDataCollection = (item: IWorkspaceTab) => {
-    const { uniqueData } = item;
-    if (!uniqueData) {
-      return;
-    }
-    return <ChangeAiTableInfo uniqueData={uniqueData as any} />;
-  };
-
   const renderRedisAllData = (item: IWorkspaceTab) => {
     const { uniqueData } = item;
     if (!uniqueData) {
@@ -1814,8 +1805,6 @@ const WorkspaceTabs = memo(() => {
         return renderViewAllTable(item);
       case WorkspaceTabType.ViewERModal:
         return renderERModal(item);
-      case WorkspaceTabType.ChangeAiTableInfo:
-        return renderAiDataCollection(item);
       case WorkspaceTabType.RedisAllData:
         return renderRedisAllData(item);
       case WorkspaceTabType.AccountPrivileges:

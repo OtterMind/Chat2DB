@@ -1,7 +1,7 @@
 import { isDevelopment } from './env';
 
 const MONOCHROME_ICONFONT_SCRIPT_ID = 'chat2db-monochrome-iconfont';
-const MONOCHROME_ICONFONT_SCRIPT = 'iconfont/iconfont.js';
+const MONOCHROME_ICONFONT_SCRIPT = '/iconfont/iconfont.js';
 const COLOR_ICONFONT_SCRIPT_ID = 'chat2db-color-iconfont';
 const COLOR_ICONFONT_SCRIPT = '//at.alicdn.com/t/c/font_4551262_fnn84ra2j4v.js';
 

@@ -112,7 +112,6 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
     treeConfig['dataSource']
       .getChildren?.({
         ...params,
-        needAiDataCollections: false,
         refresh: true,
       })
       .then((res) => {
@@ -134,7 +133,6 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
     treeConfig['database']
       .getChildren?.({
         ...params,
-        needAiDataCollections: false,
         refresh: true,
       })
       .then((res) => {

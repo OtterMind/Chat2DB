@@ -37,6 +37,10 @@ export const useStyles = createStyles(({ css, token }) => {
         background-color: ${token.colorFillSecondary};
       }
     `,
+    dropdownTrigger: css`
+      display: inline-flex;
+      min-width: 0;
+    `,
     noPermission: css`
       color: ${token.colorTextSecondary};
       margin: 0px 4px;

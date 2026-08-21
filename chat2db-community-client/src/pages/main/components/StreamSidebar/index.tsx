@@ -135,15 +135,17 @@ const StreamSidebar = ({
           {i18n('stream.panel.newChat')}
         </Button>
         <Tooltip title={i18n('stream.sidebar.search')} placement="bottom" mouseEnterDelay={0.3}>
-          <IconButton
-            size={{
-              boxSize: 32,
-              iconSize: 18,
-            }}
-            className={styles.streamSearchButton}
-            icon={Search}
-            onClick={() => onSearchOpenChange(!searchOpen)}
-          />
+          <span className={styles.streamSearchTooltipAnchor}>
+            <IconButton
+              size={{
+                boxSize: 32,
+                iconSize: 18,
+              }}
+              className={styles.streamSearchButton}
+              icon={Search}
+              onClick={() => onSearchOpenChange(!searchOpen)}
+            />
+          </span>
         </Tooltip>
       </div>
       {searchOpen && (

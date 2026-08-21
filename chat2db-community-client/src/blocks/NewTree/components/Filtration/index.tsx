@@ -59,9 +59,7 @@ export default memo<IProps>((props) => {
       return null;
     }
 
-    const data = children
-      .filter((item) => !item.key.includes('aiDataCollections_chat2dbCatalogue'))
-      .map((item) => ({
+    const data = children.map((item) => ({
         title: item.originalTitle,
         key: item.key,
         count: null,

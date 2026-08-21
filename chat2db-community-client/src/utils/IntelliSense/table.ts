@@ -3,7 +3,7 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import { addIntelliSenseField } from './field';
 import i18n from '@/i18n';
 import { compatibleDataBaseName } from '../database';
-import { SORT_TEXT } from '@/components/MonacoEditor/providers/completionProvider';
+import { SORT_TEXT } from '@/components/SQLEditor/type';
 
 export const resetSenseTable = () => {
   intelliSenseTable.dispose();

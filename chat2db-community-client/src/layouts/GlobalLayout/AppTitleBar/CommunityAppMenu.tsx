@@ -3,7 +3,7 @@ import { Dropdown, type MenuProps } from 'antd';
 import { AlignJustify } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 
-import communityLogo from '@/assets/logo/pro/logo.png';
+import ProductLogo from '@/components/Logo';
 import { COMMUNITY_MAIN_ACTION_BUTTON_SIZE } from '@/constants/mainLayout';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
@@ -113,7 +113,7 @@ const CommunityAppMenu = () => {
   return (
     <div ref={menuRef} className={styles.communityMenuContent} onDoubleClick={stopWindowGesture}>
       <span className={styles.communityMenuLogoSlot}>
-        <img className={styles.communityMenuLogo} src={communityLogo} alt="Chat2DB" />
+        <ProductLogo className={styles.communityMenuLogo} size={24} />
       </span>
       {expanded ? (
         <div className={styles.communityMenuBar}>

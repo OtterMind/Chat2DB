@@ -10,6 +10,7 @@ import ai.chat2db.community.jcef.utils.CallJsFunctionUtil;
 import ai.chat2db.community.jcef.utils.OSOperateUtil;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentityProvider;
 import ai.chat2db.community.tools.annotation.NotCliRuntime;
 import ai.chat2db.community.tools.console.ConsoleResult;
 import com.alibaba.fastjson2.JSON;
@@ -44,7 +45,7 @@ import java.util.zip.ZipInputStream;
 @NotCliRuntime
 public class Updater {
 
-    private String SERVER_BASE_URL = "https://cdn.chat2db-ai.com/download/updates/";
+    private String SERVER_BASE_URL;
     private String LATEST_VERSION_INFO_URL;
     private Path APP_DIR;
     private Path LOCAL_VERSION_FILE;
@@ -69,11 +70,7 @@ public class Updater {
     }
 
     private Updater() {
-        if (ConfigUtils.isCommunity()) {
-            this.SERVER_BASE_URL = "https://cdn.chat2db-ai.com/community/updates/";
-        } else if (ConfigUtils.isLocalEdition()) {
-            this.SERVER_BASE_URL = "https://cdn.chat2db-ai.com/offline/updates/";
-        }
+        this.SERVER_BASE_URL = ProductRuntimeIdentityProvider.current().updateBaseUrl();
         this.LATEST_VERSION_INFO_URL = SERVER_BASE_URL + "latest_version.json";
         this.APP_DIR = Paths.get(OSOperateUtil.getCurrentJarPath());
         this.TMP_DIR = APP_DIR.resolve("tmp_updater_downloads");
@@ -836,12 +833,7 @@ public class Updater {
     }
 
     private @NotNull ProcessBuilder getProcessBuilder(String javaExecutable, Path updaterJarPath, Path planPath) {
-        String restartUri = "chat2db-pro://restart";
-        if (ConfigUtils.isCommunity()) {
-            restartUri = "chat2db-community://restart";
-        } else if (ConfigUtils.isLocalEdition()) {
-            restartUri = "chat2db-local://restart";
-        }
+        String restartUri = ProductRuntimeIdentityProvider.current().protocolScheme() + "://restart";
         ProcessBuilder pb = new ProcessBuilder(
                 "wscript.exe",
                 APP_DIR.resolve("run-as-admin.vbs").toAbsolutePath().toString(),

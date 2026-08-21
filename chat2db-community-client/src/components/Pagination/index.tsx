@@ -272,12 +272,14 @@ export default function Pagination(props: IProps) {
       </Dropdown>
       {props.onClickTotalBtn ? (
         <Tooltip mouseEnterDelay={0.6} title={i18n('workspace.table.total.tip')}>
-          <ToolbarBtn
-            text={`${i18n('workspace.table.total')}：${paginationConfig?.total}`}
-            className={styles.totalButton}
-            suffixIcon={totalLoading ? <LoadingGracile /> : ''}
-            onClick={handleClickTotalBtn}
-          />
+          <span>
+            <ToolbarBtn
+              text={`${i18n('workspace.table.total')}：${paginationConfig?.total}`}
+              className={styles.totalButton}
+              suffixIcon={totalLoading ? <LoadingGracile /> : ''}
+              onClick={handleClickTotalBtn}
+            />
+          </span>
         </Tooltip>
       ) : (
         <div className={styles.totalContainer}>

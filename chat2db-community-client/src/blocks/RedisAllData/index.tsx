@@ -34,17 +34,17 @@ import {
   type RedisRowIdentity,
 } from './redisRowIdentity';
 import { RedisEditSessionRegistry, type RedisEditSessionToken } from './redisEditSession';
+import { clientRuntime } from '@client-runtime';
 import {
   hasRedisDetailPayload,
   isRedisDataItemLoaded,
   shouldRetryRedisDetail,
   type RedisDetailLoadStatus,
 } from './redisDetail';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 
 const REDIS_SCAN_COUNT = 1000;
 const REDIS_KEY_VIEW_MODE_STORAGE_KEY = createRedisKeyViewModeStorageKey(
-  runtimeEditionConfig.clientStorageEdition,
+  clientRuntime.runtimeKey,
   __RUNTIME_ENV__,
 );
 const INITIAL_SCAN_CURSOR = '0';

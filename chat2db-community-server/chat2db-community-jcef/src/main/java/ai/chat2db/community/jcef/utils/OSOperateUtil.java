@@ -486,20 +486,11 @@ public class OSOperateUtil {
         }
         if (actualLogFilePath == null) {
             String userHome = System.getProperty("user.home");
-            ArrayList<Path> potentialPaths;
-            if (ConfigUtils.isCommunity()) {
-                potentialPaths = Lists.newArrayList(
-                        Paths.get(userHome, ".chat2db-community", "chat2db-community", "logs", "application.log"),
-                        Paths.get(System.getProperty("user.dir"), "logs", "application.log")
-                );
-            } else {
-                potentialPaths = Lists.newArrayList(
-                        Paths.get(userHome, ".chat2db", "chat2db-community", "logs", "application.log"),
-                        Paths.get(userHome, ".chat2db_local_edition", "chat2db-community", "logs", "application.log"),
-                        Paths.get(userHome, "chat2db-community", "logs", "application.log"),
-                        Paths.get(System.getProperty("user.dir"), "logs", "application.log")
-                );
-            }
+            ArrayList<Path> potentialPaths = Lists.newArrayList(
+                    Paths.get(ConfigUtils.getBasePath(), "chat2db-community", "logs", "application.log"),
+                    Paths.get(userHome, "chat2db-community", "logs", "application.log"),
+                    Paths.get(System.getProperty("user.dir"), "logs", "application.log")
+            );
 
             for (Path p : potentialPaths) {
                 if (Files.exists(p) && Files.isRegularFile(p)) {

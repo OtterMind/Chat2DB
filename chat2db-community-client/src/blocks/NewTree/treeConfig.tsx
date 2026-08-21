@@ -1,9 +1,6 @@
 import { ConsoleStatus, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
-import { DataCollectionElementType } from '@/constants/aiDataCollection';
-import { getRuntimeEditionCapabilities } from '@/hooks/useRuntimeEditionCapabilities';
 import i18n from '@/i18n';
 import accountAdminService from '@/service/accountAdmin';
-import aiDataCollectionService from '@/service/aiDataCollection';
 import connectionService from '@/service/connection';
 import historyService from '@/service/history';
 import mysqlServer from '@/service/sql';
@@ -21,7 +18,7 @@ export interface ILoadDataOptions {
   refresh?: boolean;
   // Turn off the expansion of tree nodes
   closeExpandTreeNode?: boolean;
-  // Load children without changing the user's current selection or collapsing descendants.
+  // Refresh children without changing the current selection or collapsing descendants.
   preserveInteraction?: boolean;
 }
 
@@ -51,24 +48,6 @@ export const switchIcon: Partial<{
     icon: fileIcon,
     iconExistDark: true,
     unfoldIcon: unfoldFileIcon,
-  },
-  [TreeNodeType.AI_DATA_COLLECTIONS]: {
-    icon: 'icon-colourful-folder-close-ai',
-    iconExistDark: true,
-    unfoldIcon: 'icon-colourful-folder-open-ai',
-  },
-  [TreeNodeType.AI_DATA_COLLECTION]: {
-    icon: 'icon-colourful-folder-close-ai',
-    iconExistDark: true,
-    unfoldIcon: 'icon-colourful-folder-open-ai',
-  },
-  [TreeNodeType.AI_DATA_COLLECTION_TABLE]: {
-    icon: 'icon-colourful-table-ai',
-    iconExistDark: true,
-  },
-  [TreeNodeType.AI_DATA_COLLECTION_VIEW]: {
-    icon: 'icon-colourful-table-view',
-    iconExistDark: true,
   },
   [TreeNodeType.SCHEMA]: {
     icon: 'icon-schema',
@@ -274,9 +253,8 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
   [TreeNodeType.DATA_SOURCE]: {
     getChildren: (extraParams: any) => {
       return new Promise((r, j) => {
-        const { aiDataCollection } = getRuntimeEditionCapabilities();
-        const { dataSourceId, databaseType, needAiDataCollections: extraParamsNeedAiDataCollections } = extraParams;
-        const { supportDatabase, supportSchema, needAiDataCollections } = getDatabaseSupport(databaseType);
+        const { dataSourceId, databaseType } = extraParams;
+        const { supportDatabase, supportSchema } = getDatabaseSupport(databaseType);
         const accountNode: TreeNodeData | null = canUseAccountManage(databaseType)
           ? {
               key: treeConfig[TreeNodeType.DATABASE_ACCOUNTS].createTreeNodeKey!({ dataSourceId }),
@@ -287,14 +265,6 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               extraParams,
             }
           : null;
-        const aiDataCollections = {
-          key: `dataSource_${dataSourceId}-aiDataCollections_chat2dbCatalogue`,
-          originalTitle: i18n('common.text.aiDataCollection'),
-          title: null,
-          treeNodeType: TreeNodeType.AI_DATA_COLLECTIONS,
-          isLeaf: false,
-          extraParams,
-        };
         if (supportDatabase === false && supportSchema === false) {
           // No database or schema level at all (Firebird, IoTDB, ...): the
           // connection itself is the namespace, so show the object folders
@@ -347,13 +317,6 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
           if (accountNode) {
             data.push(accountNode);
           }
-          if (
-            aiDataCollection &&
-            needAiDataCollections !== false &&
-            extraParamsNeedAiDataCollections !== false
-          ) {
-            data.push(aiDataCollections);
-          }
           r(data);
           return;
         }
@@ -381,13 +344,6 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               });
               if (accountNode) {
                 data.push(accountNode);
-              }
-              if (
-                aiDataCollection &&
-                needAiDataCollections !== false &&
-                extraParamsNeedAiDataCollections !== false
-              ) {
-                data.push(aiDataCollections);
               }
               r(data);
             })
@@ -418,13 +374,6 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               });
               if (accountNode) {
                 data.push(accountNode);
-              }
-              if (
-                aiDataCollection &&
-                needAiDataCollections !== false &&
-                extraParamsNeedAiDataCollections !== false
-              ) {
-                data.push(aiDataCollections);
               }
               r(data);
             })
@@ -547,146 +496,6 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
     createTreeNodeKey: (params) => {
       const { dataSourceId, schemaName } = formatObject(params);
       return `dataSource_${dataSourceId}-schema_${schemaName}`;
-    },
-  },
-
-  [TreeNodeType.AI_DATA_COLLECTIONS]: {
-    getChildren: (extraParams: any) => {
-      return new Promise((r, j) => {
-        const { dataSourceId } = extraParams;
-
-        aiDataCollectionService
-          .getAiDataCollectionList({
-            dataSourceId: extraParams.dataSourceId,
-            pageNo: 1,
-            pageSize: 1000,
-          })
-          .then((res) => {
-            const data: TreeNodeData[] =
-              res.data?.map((t) => {
-                const key = treeConfig[TreeNodeType.AI_DATA_COLLECTION].createTreeNodeKey!({
-                  dataSourceId,
-                  aiDataCollectionId: t.id,
-                });
-                return {
-                  key,
-                  originalTitle: t.title,
-                  title: null,
-                  treeNodeType: TreeNodeType.AI_DATA_COLLECTION,
-                  isLeaf: false,
-                  id: t.id,
-                  extraParams: {
-                    ...extraParams,
-                    aiDataCollectionId: t.id,
-                  },
-                };
-              }) || [];
-            r(data);
-          })
-          .catch(() => {
-            j();
-          });
-      });
-    },
-    createTreeNodeKey: (params) => {
-      const { dataSourceId } = formatObject(params);
-      return `dataSource_${dataSourceId}-aiDataCollections_chat2dbCatalogue`;
-    },
-  },
-
-  [TreeNodeType.AI_DATA_COLLECTION]: {
-    getChildren: (extraParams: any) => {
-      return new Promise((r, j) => {
-        const { aiDataCollectionId, dataSourceId } = extraParams;
-
-        aiDataCollectionService
-          .getAiDataCollectionElementList({
-            id: aiDataCollectionId,
-            pageNo: 1,
-            pageSize: 1000,
-          })
-          .then((res) => {
-            const data: TreeNodeData[] =
-              res?.elements?.map((element) => {
-                const key = treeConfig[TreeNodeType.AI_DATA_COLLECTION_TABLE].createTreeNodeKey!({
-                  dataSourceId,
-                  aiDataCollectionId,
-                  aiDataCollectionElementId: element.id,
-                });
-                const describe = [extraParams.dataSourceName, element.databaseName, element.schemaName]
-                  .filter(Boolean)
-                  .join('-');
-                return {
-                  key,
-                  originalTitle: element.tableName,
-                  describe,
-                  id: element.id,
-                  title: null,
-                  treeNodeType:
-                    element.type === DataCollectionElementType.VIEW
-                      ? TreeNodeType.AI_DATA_COLLECTION_VIEW
-                      : TreeNodeType.AI_DATA_COLLECTION_TABLE,
-                  isLeaf: true,
-                  extraParams: {
-                    ...extraParams,
-                    dataSourceId: extraParams.dataSourceId,
-                    dataSourceName: extraParams.dataSourceName,
-                    databaseName: element.databaseName,
-                    schemaName: element.schemaName,
-                    dataCollectionElementType: element.type,
-                  },
-                };
-              }) || [];
-            r(data);
-          })
-          .catch(() => {
-            j();
-          });
-      });
-    },
-    renameCallback: (text: string, nodeData: TreeNodeData) => {
-      aiDataCollectionService.updateAiDataCollectionTitle({
-        id: nodeData.id!,
-        title: text,
-      });
-    },
-    createTreeNodeKey: (params) => {
-      const { dataSourceId, aiDataCollectionId } = formatObject(params);
-      return `dataSource_${dataSourceId}-aiDataCollectionItem_${aiDataCollectionId}`;
-    },
-  },
-
-  [TreeNodeType.AI_DATA_COLLECTION_TABLE]: {
-    getChildren: () => {
-      return new Promise((r: (value: TreeNodeData[]) => void) => {
-        r([]);
-      });
-    },
-    createTreeNodeKey: (params) => {
-      const { dataSourceId, aiDataCollectionId, aiDataCollectionElementId } = formatObject(params);
-      return [
-        `dataSource_${dataSourceId}`,
-        `-aiDataCollectionItem_${aiDataCollectionId}`,
-        `-aiDataCollectionElement_${aiDataCollectionElementId}`,
-        `-uuid_${uuid()}`,
-      ].join('');
-    },
-  },
-
-  [TreeNodeType.AI_DATA_COLLECTION_VIEW]: {
-    getChildren: () => {
-      return new Promise((r: (value: TreeNodeData[]) => void) => {
-        r([]);
-      });
-    },
-    createTreeNodeKey: (params) => {
-      const { dataSourceId, aiDataCollectionId, aiDataCollectionElementId } = formatObject(params);
-      return [
-        `dataSource_${dataSourceId}`,
-        `-aiDataCollectionItem_${aiDataCollectionId}`,
-        `-aiDataCollectionElement_${aiDataCollectionElementId}`,
-        `-uuid_${uuid()}`,
-      ].join('');
     },
   },
 

@@ -2,6 +2,7 @@ package ai.chat2db.community.tools.util;
 
 import ai.chat2db.community.tools.model.ConfigJson;
 import ai.chat2db.community.tools.enums.NetworkStatus;
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentityProvider;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.lang.UUID;
 import com.alibaba.fastjson2.JSON;
@@ -18,9 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static ai.chat2db.community.tools.enums.NetworkStatus.ONLINE;
-
-
 @Slf4j
 public class ConfigUtils {
 
@@ -35,23 +33,9 @@ public class ConfigUtils {
     public static File clientIdFile;
     private static String clientId = null;
 
-    private static final String BASE_CHAT2DB_DIRECTORY = ".chat2db";
-
-    private static final String BASE_CHAT2DB_LOCAL_DIRECTORY = ".chat2db_local_edition";
-
-    private static final String BASE_CHAT2DB_COMMUNITY_DIRECTORY = ".chat2db-community";
-
-    private static final String COMMUNITY_RUNTIME_MODE = "community";
-
     public static String getBasePath() {
-        if (isCommunity()) {
-            return System.getProperty("user.home") + File.separator + BASE_CHAT2DB_COMMUNITY_DIRECTORY;
-        }
-        if (isLocalEdition()) {
-            return System.getProperty("user.home") + File.separator + BASE_CHAT2DB_LOCAL_DIRECTORY;
-        } else {
-            return System.getProperty("user.home") + File.separator + BASE_CHAT2DB_DIRECTORY;
-        }
+        return System.getProperty("user.home") + File.separator
+                + ProductRuntimeIdentityProvider.current().stateDirectoryName();
     }
 
     public static String getEnvBasePath(){
@@ -68,14 +52,14 @@ public class ConfigUtils {
                 versionFile = null;
             }
         }
-        configFile = new File(
-                getBasePath() + File.separator + "config" + File.separator + "enterprise_config_" + environment + ".json");
+        configFile = new File(getBasePath() + File.separator + "config" + File.separator
+                + ProductRuntimeIdentityProvider.current().runtimeConfigFileName(environment));
         if (!configFile.exists()) {
             FileUtil.writeUtf8String(JSON.toJSONString(new ConfigJson()), configFile);
         }
 
-        clientIdFile = new File(
-                getBasePath() + File.separator + "config" + File.separator + "enterprise_client_uuid");
+        clientIdFile = new File(getBasePath() + File.separator + "config" + File.separator
+                + ProductRuntimeIdentityProvider.current().clientIdFileName());
         if (!clientIdFile.exists()) {
             String uuid = UUID.fastUUID().toString(true);
             FileUtil.writeUtf8String(uuid, clientIdFile);
@@ -94,15 +78,11 @@ public class ConfigUtils {
     }
 
     public static boolean isOffline() {
-        return isLocalEdition();
+        return ProductRuntimeIdentityProvider.current().offlineRuntime();
     }
 
     public static boolean isLocalPersistence() {
-        return isCommunity() || isLocalEdition();
-    }
-
-    public static boolean isLocalEdition() {
-        return !isCommunity() && isNetworkOffline();
+        return isCommunity() || isOffline();
     }
 
     public static boolean isNetworkOffline() {
@@ -110,17 +90,15 @@ public class ConfigUtils {
     }
 
     public static String getRuntimeMode() {
-        return StringUtils.defaultString(System.getProperty("chat2db.runtime.mode"), "pro");
+        return ProductRuntimeIdentityProvider.current().runtimeMode();
     }
 
     public static boolean isCommunity() {
-        return COMMUNITY_RUNTIME_MODE.equalsIgnoreCase(getRuntimeMode());
+        return ProductRuntimeIdentityProvider.current().communityRuntime();
     }
 
     public static String getNetworkStatus() {
-        return StringUtils.defaultString(
-                System.getProperty("chat2db.network.status"),
-                isCommunity() ? NetworkStatus.OFFLINE.name() : ONLINE.name());
+        return ProductRuntimeIdentityProvider.current().networkStatus();
     }
 
     public static void updateVersion(String version) {

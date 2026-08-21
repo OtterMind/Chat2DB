@@ -7,6 +7,7 @@ import java.io.File;
 
 public interface IExportStrategy {
 
+    String type();
 
     void run(ExportTaskSpec spec, TaskExecutionContext context, File outputFile);
 
