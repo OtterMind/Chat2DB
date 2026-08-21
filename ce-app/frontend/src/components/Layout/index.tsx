@@ -1,5 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, LayoutGrid, Clapperboard, Settings as SettingsIcon, Menu, Bell } from 'lucide-react'
+import BrandMark from '../BrandMark'
 import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
 
@@ -28,8 +29,8 @@ export default function AppLayout() {
           {activeCount > 0 && <span className="ce-header__dot" />}
         </button>
 
-        <div className="ce-header__brand" title="Cutting Edge">
-          <span className="ce-logo">CE</span>
+        <div className="ce-header__brand">
+          <BrandMark />
         </div>
 
         <button className="ce-iconbtn" aria-label="اعلان‌ها" onClick={() => navigate('/dashboard')}>

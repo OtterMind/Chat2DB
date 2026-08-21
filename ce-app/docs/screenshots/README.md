@@ -2,6 +2,13 @@
 
 Real captures of the running app (Vite dev server + FastAPI backend), not mockups.
 
+## Wordmark
+
+![Header](./header.png)
+
+Breaking Bad style: the product name is spelled out, but the initials sit in
+periodic-table element boxes — C (6) in violet, E (99) in cyan.
+
 ## Home — super-app launcher
 
 ![Home](./home.png)
