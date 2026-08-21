@@ -76,7 +76,6 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ type, showPanel }) => {
     // component is uninstalled
     return () => {
       isPlaying.current = false;
-      setCurrentFrame(0);
       if (intervalRef.current) clearInterval(intervalRef.current); // clear interval
     };
   }, []);
