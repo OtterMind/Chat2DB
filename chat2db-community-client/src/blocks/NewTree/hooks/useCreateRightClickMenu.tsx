@@ -20,6 +20,7 @@ import aiService from '@/service/ai';
 import connectionService from '@/service/connection';
 import historyServer from '@/service/history';
 import sqlService from '@/service/sql';
+import viewService from '@/service/database/view';
 
 // ---- functions -----
 import { copyToClipboard, getParentNode } from '@/utils';
@@ -905,6 +906,45 @@ export const useCreateRightClickMenu = () => {
         icon: 'icon-edit',
         handle: () => {
           editView({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.CreateView]: {
+        text: i18n('workspace.menu.createView'),
+        icon: 'icon-table-view',
+        handle: () => {
+          editView({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.DropView]: {
+        text: i18n('workspace.menu.dropView'),
+        icon: 'icon-delete',
+        handle: () => {
+          const viewName = treeNodeData.originalTitle;
+          const ep = treeNodeData.extraParams;
+          staticModal.confirm({
+            title: i18n('workspace.menu.dropView'),
+            content: `"${viewName}"`,
+            okText: i18n('common.button.confirm'),
+            cancelText: i18n('common.button.cancel'),
+            okType: 'danger',
+            onOk: () => {
+              viewService
+                .dropView({
+                  dataSourceId: ep.dataSourceId,
+                  databaseName: ep.databaseName,
+                  schemaName: ep.schemaName,
+                  tableName: viewName,
+                })
+                .then(() => {
+                  handleLoadData();
+                })
+                .catch((error) => {
+                  staticMessage.error(error?.message || i18n('common.text.failure'));
+                });
+            },
+          });
         },
       },
 
