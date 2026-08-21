@@ -34,6 +34,14 @@ import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
   },
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => import_electron.ipcRenderer.invoke("media:pick"),
+  /** Fullscreen control; F11 and Escape do the same thing from the keyboard. */
+  toggleFullscreen: () => import_electron.ipcRenderer.invoke("window:fullscreen:toggle"),
+  isFullscreen: () => import_electron.ipcRenderer.invoke("window:fullscreen:get"),
+  onFullscreenChange: (callback) => {
+    const listener = (_event, value) => callback(value);
+    import_electron.ipcRenderer.on("window:fullscreen", listener);
+    return () => import_electron.ipcRenderer.removeListener("window:fullscreen", listener);
+  },
   /** Is the bundled backend alive, and why not — plus the tail of its log. */
   backendStatus: () => import_electron.ipcRenderer.invoke("backend:status"),
   /** Try to start the backend again after a crash. */

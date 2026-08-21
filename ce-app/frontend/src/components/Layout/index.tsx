@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Home, LayoutGrid, Clapperboard, Settings as SettingsIcon, Menu, Bell } from 'lucide-react'
 import BrandMark from '../BrandMark'
 import BackendBanner from '../BackendBanner'
+import FullscreenButton from '../FullscreenButton'
 import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
 import { useI18n } from '../../i18n'
@@ -46,10 +47,13 @@ export default function AppLayout() {
           <BrandMark />
         </div>
 
-        <button className="ce-iconbtn" aria-label={t('Notifications', 'اعلان‌ها')} onClick={() => navigate('/dashboard')}>
-          <Bell size={20} />
-          {activeCount > 0 && <span className="ce-header__badge">{activeCount}</span>}
-        </button>
+        <div className="ce-header__actions">
+          <FullscreenButton />
+          <button className="ce-iconbtn" aria-label={t('Notifications', 'اعلان‌ها')} onClick={() => navigate('/dashboard')}>
+            <Bell size={20} />
+            {activeCount > 0 && <span className="ce-header__badge">{activeCount}</span>}
+          </button>
+        </div>
       </header>
 
       <nav className="ce-tabs">

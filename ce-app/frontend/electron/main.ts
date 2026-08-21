@@ -114,6 +114,9 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('window:fullscreen:toggle', () => setFullscreen(!(mainWindow?.isFullScreen() ?? false)))
+  ipcMain.handle('window:fullscreen:get', () => mainWindow?.isFullScreen() ?? false)
+
   ipcMain.handle('log:path', () => log.transports.file.getFile().path)
 
   /** Everything the diagnostics screen needs to explain a dead backend. */
@@ -151,6 +154,14 @@ function registerIpc() {
   ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
 }
 
+function setFullscreen(value: boolean) {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  mainWindow.setFullScreen(value)
+  // Leaving fullscreen on a maximised window looks broken without this.
+  if (!value && !mainWindow.isMaximized()) mainWindow.unmaximize()
+  return mainWindow.isFullScreen()
+}
+
 function showFatal(win: BrowserWindow, message: string) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     body{background:#0F172A;color:#F8FAFC;font-family:Segoe UI,system-ui,sans-serif;
@@ -182,6 +193,26 @@ function createWindow() {
   }
 
   if (process.env.CE_DEBUG === '1') mainWindow.webContents.openDevTools({ mode: 'detach' })
+
+  // Fullscreen: F11 toggles, Escape leaves. Electron ships no menu here, so the
+  // shortcuts have to be wired explicitly.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    if (input.key === 'F11') {
+      event.preventDefault()
+      setFullscreen(!mainWindow!.isFullScreen())
+    } else if (input.key === 'Escape' && mainWindow!.isFullScreen()) {
+      event.preventDefault()
+      setFullscreen(false)
+    }
+  })
+
+  const broadcastFullscreen = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:fullscreen', mainWindow.isFullScreen())
+  }
+  mainWindow.on('enter-full-screen', broadcastFullscreen)
+  mainWindow.on('leave-full-screen', broadcastFullscreen)
 
   // Never leave the user staring at an empty dark window: surface load failures.
   mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {

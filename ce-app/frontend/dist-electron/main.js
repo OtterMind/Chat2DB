@@ -2344,6 +2344,8 @@ function registerIpc() {
       throw error;
     }
   });
+  import_electron2.ipcMain.handle("window:fullscreen:toggle", () => setFullscreen(!(mainWindow?.isFullScreen() ?? false)));
+  import_electron2.ipcMain.handle("window:fullscreen:get", () => mainWindow?.isFullScreen() ?? false);
   import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
   import_electron2.ipcMain.handle("backend:status", () => {
     let tail = [];
@@ -2379,6 +2381,12 @@ function registerIpc() {
   });
   import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
 }
+function setFullscreen(value) {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.setFullScreen(value);
+  if (!value && !mainWindow.isMaximized()) mainWindow.unmaximize();
+  return mainWindow.isFullScreen();
+}
 function showFatal(win, message) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     body{background:#0F172A;color:#F8FAFC;font-family:Segoe UI,system-ui,sans-serif;
@@ -2412,6 +2420,22 @@ function createWindow() {
     }
   }
   if (process.env.CE_DEBUG === "1") mainWindow.webContents.openDevTools({ mode: "detach" });
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    if (input.key === "F11") {
+      event.preventDefault();
+      setFullscreen(!mainWindow.isFullScreen());
+    } else if (input.key === "Escape" && mainWindow.isFullScreen()) {
+      event.preventDefault();
+      setFullscreen(false);
+    }
+  });
+  const broadcastFullscreen = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("window:fullscreen", mainWindow.isFullScreen());
+  };
+  mainWindow.on("enter-full-screen", broadcastFullscreen);
+  mainWindow.on("leave-full-screen", broadcastFullscreen);
   mainWindow.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
     import_main.default.error("[CE] Renderer failed to load:", errorCode, errorDescription, validatedURL);
     if (mainWindow) showFatal(mainWindow, `${errorDescription} (${errorCode})

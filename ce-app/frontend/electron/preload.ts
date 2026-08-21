@@ -30,6 +30,15 @@ contextBridge.exposeInMainWorld('cuttingEdge', {
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => ipcRenderer.invoke('media:pick') as Promise<string[]>,
 
+  /** Fullscreen control; F11 and Escape do the same thing from the keyboard. */
+  toggleFullscreen: () => ipcRenderer.invoke('window:fullscreen:toggle') as Promise<boolean>,
+  isFullscreen: () => ipcRenderer.invoke('window:fullscreen:get') as Promise<boolean>,
+  onFullscreenChange: (callback: (value: boolean) => void) => {
+    const listener = (_event: IpcRendererEvent, value: boolean) => callback(value)
+    ipcRenderer.on('window:fullscreen', listener)
+    return () => ipcRenderer.removeListener('window:fullscreen', listener)
+  },
+
   /** Is the bundled backend alive, and why not — plus the tail of its log. */
   backendStatus: () =>
     ipcRenderer.invoke('backend:status') as Promise<{

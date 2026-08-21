@@ -498,3 +498,8 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid var(--border); font-family: Consolas, monospace; font-size: 11px;
   line-height: 1.7; color: #94a3b8; max-height: 190px; overflow: auto; white-space: pre-wrap;
 }
+
+.ce-header__actions { display: flex; align-items: center; gap: 2px; }
+
+/* Fullscreen: give the working surface the space it just gained. */
+:fullscreen .ce-content { padding-inline: 32px; }

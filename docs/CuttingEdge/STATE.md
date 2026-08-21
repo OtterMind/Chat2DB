@@ -17,6 +17,7 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import media, export, remove silence, split scenes |
+| Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
 | **Languages** | English default + Persian, switch in Settings, flips LTR/RTL instantly, persisted |
 | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
 | Auto-update | One button: check → differential download → install; silent check at startup |
