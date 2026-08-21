@@ -21,10 +21,10 @@ super-app launcher UI · ✅ background work that survives navigation ·
 
 | Capability | Approach | Status |
 |---|---|---|
-| Multi-track timeline (video/audio/text/sticker) | Edit model (EDL) in SQLite: `tracks → clips → effects`, all edits immutable + undo stack | ⏳ P1 |
+| Multi-track timeline (video/audio/text/sticker) | Edit model in `src/editor/model.ts`: `tracks → clips`, every mutation through a commit with undo/redo | 🔨 UI done in 0.2.3 (drag, trim, split, snap, zoom, shortcuts); persistence + SQLite next |
 | Smooth scrubbing on long media | Generate **720p H.264 proxies** on import (`ffmpeg -vf scale`), edit against proxies, render from originals | ⏳ P1 |
 | Frame-accurate preview | `<video>` + canvas compositor in the renderer; effects previewed with CSS/WebGL shaders, then baked by FFmpeg on export | ⏳ P1 |
-| Razor / ripple / roll / slip trim, magnetic snapping | Pure model operations — no media touched until export | ⏳ P1 |
+| Razor / ripple / roll / slip trim, magnetic snapping | Pure model operations — no media touched until export | 🔨 razor + trim + magnetic snapping shipped; ripple/roll/slip next |
 | Keyframes (position, scale, rotation, opacity, volume) | Bezier interpolation in the model → `sendcmd`/`zoompan`/`overlay` expressions at render | ⏳ P2 |
 | Transitions (100+) | FFmpeg `xfade` (50+ built-ins) + custom GLSL pack | ⏳ P2 |
 | Speed ramping, freeze frame, reverse | `setpts` / `atempo` curves | ⏳ P2 |

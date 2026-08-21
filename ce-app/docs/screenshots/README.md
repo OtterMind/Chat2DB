@@ -38,10 +38,12 @@ position, spacing and a reserved gap for the task dock), so switching sections
 never produces overlapping cards or drifting typography. Numbers, paths and URLs
 are isolated LTR inside Persian sentences.
 
-## Studio placeholder
+## Studio — working multi-track timeline
 
 ![Studio](./studio.png)
 
-The multi-track timeline is the next milestone (P1 in
-`docs/CuttingEdge/ROADMAP_EDITOR.md`); until then the screen says so plainly and points
-back to the working automatic-clipping flow.
+Shipped in 0.2.3: program monitor, clip inspector, transport/edit toolbar and a
+three-lane timeline. Clips can be dragged between lanes, trimmed from either edge,
+split at the playhead (S), duplicated (Ctrl+D) and deleted, with magnetic snapping,
+zoom and full undo/redo (Ctrl+Z). Media is never touched — the edit model is pure
+data, which is what the render engine will consume next.

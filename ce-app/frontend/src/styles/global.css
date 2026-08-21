@@ -361,3 +361,109 @@ button { font-family: inherit; cursor: pointer; }
   .ce-tile__label { font-size: 11.5px; }
   .ce-banner { flex-direction: column; align-items: flex-start; }
 }
+
+/* ------------------------------------------------------------ editor ----- */
+.ed { display: flex; flex-direction: column; gap: 14px; }
+
+.ed__stage { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 240px; align-items: start; }
+/* the timeline is the working surface: cap the monitor so it stays on screen */
+.ed__preview {
+  background: #06090f; border: 1px solid var(--border); border-radius: 16px;
+  aspect-ratio: 16 / 9; max-height: 38vh; margin: 0 auto; width: 100%;
+  display: grid; place-items: center; min-height: 180px;
+}
+.ed__preview-box { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
+.ed__preview-hint { font-size: 12.5px; }
+.ed__tc { font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #e2e8f0; direction: ltr; }
+.ed__tc--sm { font-size: 13px; font-weight: 600; min-width: 68px; text-align: center; }
+
+.ed__inspector {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+  max-height: 38vh; overflow: auto;
+}
+.ed__inspector h4 { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
+
+.ed__toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 9px 12px;
+}
+.ed__group { display: flex; align-items: center; gap: 6px; }
+.ed__group--end { margin-inline-start: auto; }
+.ed__btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px;
+  border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); font-size: 12px; transition: background .15s ease, border-color .15s ease;
+}
+.ed__btn:hover:not(:disabled) { border-color: rgba(99, 102, 241, .55); }
+.ed__btn:disabled { opacity: .38; cursor: not-allowed; }
+.ed__btn--primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); border: none; }
+.ed__btn.is-on { border-color: var(--brand); color: #c7d2fe; }
+.ed__zoom { width: 116px; accent-color: var(--brand); }
+
+/* timeline ----------------------------------------------------------------- */
+/* The timeline is a technical LTR surface — time always flows left to right,
+   headers stay on the left. Inheriting RTL made the scroll origin jump to the
+   end of the sequence, so second 0 started outside the visible area. */
+.tl {
+  direction: ltr;
+  display: flex; background: #0a1220; border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden; user-select: none;
+}
+.tl__headers { flex: none; border-right: 1px solid var(--border); background: #0d1728; }
+.tl__corner { height: 28px; border-bottom: 1px solid var(--border); }
+.tl__header {
+  height: 62px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+  border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px;
+}
+.tl__header-name { flex: 1; color: #cbd5e1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl__hbtn { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; }
+.tl__hbtn:hover { color: #e2e8f0; }
+
+.tl__scroll { flex: 1; overflow-x: auto; overflow-y: hidden; }
+.tl__headers, .tl__scroll { max-height: 34vh; }
+.tl__headers { overflow: hidden; }
+.tl__lanes { position: relative; min-width: 100%; }
+
+.tl__ruler {
+  position: relative; height: 28px; border-bottom: 1px solid var(--border);
+  background: #0d1728; cursor: text;
+}
+.tl__tick {
+  position: absolute; top: 6px; font-size: 10.5px; color: #64748b; padding-left: 4px;
+  border-left: 1px solid rgba(148, 163, 184, .22); height: 22px; direction: ltr;
+}
+
+.tl__lane {
+  position: relative; height: 62px; border-bottom: 1px solid var(--border);
+  background: repeating-linear-gradient(90deg, transparent 0 79px, rgba(148, 163, 184, .05) 79px 80px);
+}
+.tl__lane.is-locked { background-color: rgba(248, 113, 113, .04); }
+
+.tl__clip {
+  position: absolute; top: 8px; height: 46px; border-radius: 8px; cursor: grab;
+  display: flex; align-items: center; gap: 6px; padding: 0 10px; overflow: hidden;
+  box-shadow: 0 6px 14px -10px #000; border: 1px solid rgba(255, 255, 255, .14);
+}
+.tl__clip:active { cursor: grabbing; }
+.tl__clip.is-selected { outline: 2px solid #fff; outline-offset: -2px; }
+.tl__clip-label {
+  flex: 1; font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+.tl__clip-dur { font-size: 10.5px; color: rgba(255, 255, 255, .8); direction: ltr; pointer-events: none; }
+.tl__handle {
+  position: absolute; top: 0; width: 9px; height: 100%; cursor: ew-resize;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .35), transparent); left: 0;
+}
+.tl__handle--end { left: auto; right: 0; background: linear-gradient(270deg, rgba(255, 255, 255, .35), transparent); }
+
+.tl__playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #f43f5e; pointer-events: none; }
+.tl__playhead-grip {
+  position: absolute; top: 0; left: -6px; width: 14px; height: 14px; border-radius: 3px;
+  background: #f43f5e; pointer-events: auto; cursor: ew-resize;
+}
+.tl__guide { position: absolute; top: 28px; bottom: 0; width: 1px; background: #38bdf8; pointer-events: none; }
+
+@media (max-width: 900px) {
+  .ed__stage { grid-template-columns: minmax(0, 1fr); }
+}
