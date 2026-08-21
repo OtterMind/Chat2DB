@@ -22,6 +22,7 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Tool rail** | Context-sensitive bottom toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
+| **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
@@ -117,6 +118,6 @@ to build a differential patch.
 
 2. Project save/load — the timeline is lost when the app closes.
 1. Animated captions from the transcript (libass is already inside our FFmpeg).
-3. MediaPipe face tracking for reframing (currently centre-crop).
-4. YouTube/Instagram publishing.
-5. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).
+2. MediaPipe face tracking for reframing (currently centre-crop).
+3. Beat detection and automatic ducking; YouTube/Instagram publishing.
+4. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).

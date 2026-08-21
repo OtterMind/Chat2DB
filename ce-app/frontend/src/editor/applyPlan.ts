@@ -1,5 +1,6 @@
 import { useEditor, propsOf, type Clip } from './model'
 import { analyzeApi } from '../api/analyze'
+import { captionsApi } from '../api/captions'
 
 export interface Operation {
   op: string
@@ -241,6 +242,57 @@ export async function applyPlan(ops: Operation[], selectedId: string | null): Pr
         if (!clip) break
         state.setProps(clip.id, { enhanceVoice: op.enabled !== false })
         result.applied.push('voice enhance')
+        break
+      }
+      case 'addText': {
+        const value = typeof op.text === 'string' ? op.text : ''
+        if (!value.trim()) {
+          result.skipped.push('addText (no text)')
+          break
+        }
+        state.addTextClip(value, {
+          start: typeof op.start === 'number' ? op.start : undefined,
+          duration: typeof op.duration === 'number' ? op.duration : undefined,
+        })
+        result.applied.push('text')
+        break
+      }
+      case 'generateCaptions': {
+        const source = clip?.src ? clip : state.clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+        if (!source?.src) {
+          result.skipped.push('captions (no media)')
+          break
+        }
+        try {
+          const transcription = await captionsApi.transcribe(
+            source.src,
+            typeof op.language === 'string' ? op.language : undefined
+          )
+          const count = state.addCaptions(transcription.cues, source.start - source.offset)
+          count ? result.applied.push(`${count} captions`) : result.skipped.push('captions (no speech)')
+        } catch {
+          result.skipped.push('captions (speech recognition unavailable)')
+        }
+        break
+      }
+      case 'styleCaptions': {
+        const targets = state.clips.filter((c) => c.text !== undefined && c.src == null)
+        if (!targets.length) {
+          result.skipped.push('styleCaptions (no text clips)')
+          break
+        }
+        for (const target of targets) {
+          state.setProps(target.id, {
+            position: typeof op.position === 'string' ? (op.position as 'top' | 'middle' | 'bottom') : undefined,
+            textStyle:
+              typeof op.textStyle === 'string'
+                ? (op.textStyle as 'clean' | 'boxed' | 'outline' | 'shadow')
+                : undefined,
+            fontSize: typeof op.fontSize === 'number' ? clamp(op.fontSize, 18, 140) : undefined,
+            animateWords: typeof op.animateWords === 'boolean' ? op.animateWords : undefined,
+          })
+        }
+        result.applied.push(`${targets.length} captions restyled`)
         break
       }
       case 'setExport': {

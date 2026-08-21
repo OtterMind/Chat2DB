@@ -617,3 +617,5 @@ button { font-family: inherit; cursor: pointer; }
 .ai-panel__log p { font-size: 12px; line-height: 1.8; }
 .ai-panel__log .is-ok { color: #86efac; }
 .ai-panel__log .is-warn { color: #fdba74; }
+
+.tb__colors { display: flex; align-items: center; gap: 8px; }

@@ -187,3 +187,28 @@ def test_audio_cleanup_renders(media, tmp_path):
     })
     output = compose.render(timeline, tmp_path / "audio.mp4")
     assert compose.probe_media(str(output))["has_audio"]
+
+
+@requires_ffmpeg
+def test_text_clips_are_burned_in(media, tmp_path):
+    """Text goes through libass; drawtext is absent from many FFmpeg builds."""
+    timeline = compose.Timeline.from_dict({
+        "width": 360, "height": 640, "fps": 25,
+        "tracks": [{"id": "v1", "kind": "video"}, {"id": "t1", "kind": "text"}],
+        "clips": [
+            _clip("v", media["clip_a"], 0, 2),
+            {"id": "t", "trackId": "t1", "start": 0.2, "duration": 1.5, "text": "Hello",
+             "props": {"fontSize": 40, "textStyle": "boxed"}},
+            {"id": "t2", "trackId": "t1", "start": 0.4, "duration": 1.0, "text": "سلام دنیا",
+             "words": [{"start": 0, "end": 0.5, "text": "سلام"}, {"start": 0.5, "end": 1.0, "text": "دنیا"}],
+             "props": {"animateWords": True, "position": "top"}},
+        ],
+    })
+    command = compose.build_command(timeline, tmp_path / "text.mp4", ass_path=tmp_path / "text.ass")
+    graph = command[command.index("-filter_complex") + 1]
+    assert "subtitles=" in graph
+
+    output = compose.render(timeline, tmp_path / "text.mp4")
+    assert compose.probe_media(str(output))["has_video"]
+    # the intermediate subtitle script must not be left behind
+    assert not (tmp_path / "text.ass").exists()

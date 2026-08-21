@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from app.config import settings
+from core.engine import subtitles as subs
 
 
 @dataclass
@@ -109,6 +110,20 @@ class Clip:
     label: str = ""
     kind: str = "video"
     props: ClipProps = field(default_factory=ClipProps)
+    #: Text clips carry their content and optional word timings instead of media.
+    text: str = ""
+    words: list[dict] = field(default_factory=list)
+    raw_props: dict = field(default_factory=dict)
+
+    def as_text_dict(self) -> dict:
+        return {
+            "start": self.start,
+            "duration": self.duration,
+            "text": self.text or self.label,
+            "label": self.label,
+            "words": self.words,
+            "props": self.raw_props,
+        }
 
     @property
     def end(self) -> float:
@@ -170,6 +185,9 @@ class Timeline:
                 label=c.get("label", ""),
                 kind=kind_by_track.get(str(c["trackId"]), "video"),
                 props=ClipProps.from_dict(c.get("props")),
+                text=str(c.get("text", "") or ""),
+                words=list(c.get("words") or []),
+                raw_props=dict(c.get("props") or {}),
             )
             for c in data.get("clips", [])
         ]
@@ -439,6 +457,7 @@ def build_command(
     *,
     ffmpeg: str | None = None,
     quality: dict | None = None,
+    ass_path: Path | None = None,
 ) -> list[str]:
     """Compose the full FFmpeg argument list for a timeline."""
     ffmpeg = ffmpeg or ffmpeg_binary()
@@ -446,7 +465,8 @@ def build_command(
     if total <= 0:
         raise ValueError("timeline is empty")
 
-    playable = [c for c in timeline.clips if c.src and Path(c.src).exists()]
+    text_clips = [c for c in timeline.clips if c.kind == "text" and (c.text or c.label)]
+    playable = [c for c in timeline.clips if c.src and Path(c.src).exists() and c.kind != "text"]
     muted = {t.id for t in timeline.tracks if t.muted}
     # Only branch a stream that the source actually contains.
     video_clips = [c for c in playable if c.kind == "video" and _has_video_stream(c.src)]  # type: ignore[arg-type]
@@ -590,6 +610,20 @@ def build_command(
     if placed == 0:
         steps.append("[0:v]null[vout]")
 
+    # ---- text and captions ---------------------------------------------
+    # One ASS document carries every text cue, so libass draws them in a single
+    # pass with correct shaping and bidi for Persian.
+    if text_clips and ass_path is not None:
+        cues = subs.cues_from_clips([c.as_text_dict() for c in text_clips])
+        if cues:
+            subs.write_ass(cues, timeline.width, timeline.height, ass_path)
+            fonts = subs.fonts_dir()
+            arg = f"subtitles={subs.filter_path(ass_path)}"
+            if fonts:
+                arg += f":fontsdir={subs.filter_path(Path(fonts))}"
+            steps.append(f"[vout]{arg}[vtext]")
+            steps.append("[vtext]null[voutfinal]")
+
     # ---- audio ---------------------------------------------------------
     audio_labels: list[str] = []
     for n, clip in enumerate(audio_clips):
@@ -635,7 +669,7 @@ def build_command(
         )
 
     args += ["-filter_complex", ";".join(steps)]
-    args += ["-map", "[vout]"]
+    args += ["-map", "[voutfinal]" if any("[voutfinal]" in step for step in steps) else "[vout]"]
     if audio_labels:
         args += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
     else:
@@ -671,7 +705,8 @@ def render(
     """Run the render, reporting progress in percent."""
     output.parent.mkdir(parents=True, exist_ok=True)
     total = timeline.duration
-    command = build_command(timeline, output, quality=quality)
+    ass_path = output.with_suffix(".ass")
+    command = build_command(timeline, output, quality=quality, ass_path=ass_path)
 
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1
@@ -695,6 +730,12 @@ def render(
         raise RuntimeError(f"ffmpeg failed ({code}): {_tail(stderr)}")
     if on_progress:
         on_progress(100.0, "render")
+    # the subtitle script is an intermediate artefact, not something to leave behind
+    try:
+        if ass_path.exists():
+            ass_path.unlink()
+    except OSError:
+        pass
     return output
 
 

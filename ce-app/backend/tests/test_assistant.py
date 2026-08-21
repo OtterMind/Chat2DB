@@ -73,3 +73,18 @@ def test_colour_and_audio_intents():
 def test_new_operations_are_in_the_whitelist():
     for name in ("setFilter", "setAdjust", "setAnimation", "denoise", "enhanceVoice"):
         assert name in planner.OPERATIONS
+
+
+def test_caption_and_text_intents():
+    assert "generateCaptions" in ops_for("add captions to this")
+    assert "generateCaptions" in ops_for("زیرنویس بساز")
+    plan = planner.rule_based_plan("add captions word by word at the top", TIMELINE)
+    names = [op["op"] for op in plan.ops]
+    assert names.count("styleCaptions") >= 1
+    assert any(op.get("animateWords") for op in plan.ops if op["op"] == "styleCaptions")
+
+
+def test_text_content_is_extracted():
+    plan = planner.rule_based_plan('add a title that says Hello World', TIMELINE)
+    text_op = next(op for op in plan.ops if op["op"] == "addText")
+    assert "hello world" in text_op["text"].lower()

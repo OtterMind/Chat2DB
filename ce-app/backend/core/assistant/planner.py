@@ -49,6 +49,9 @@ OPERATIONS: dict[str, str] = {
     "setAnimation": "Animate the clip in/out. args: clipId?, animIn?, animOut? (none|fade|zoomIn|zoomOut), duration?",
     "denoise": "Reduce background noise. args: clipId?, amount (0-1)",
     "enhanceVoice": "Clean up speech: high-pass, presence, compression, loudness. args: clipId?, enabled?",
+    "addText": "Put a text clip on the timeline. args: text, start?, duration?",
+    "generateCaptions": "Transcribe the clip and lay captions on the text lane. args: clipId?, language?",
+    "styleCaptions": "Restyle text clips. args: position?, textStyle?, fontSize?, animateWords?",
 }
 
 TRANSITION_WORDS = {
@@ -232,6 +235,26 @@ def rule_based_plan(prompt: str, timeline: dict) -> Plan:
     if wants("enhance voice", "clean up the voice", "بهبود صدا", "صدا رو تمیز", "voice clearer"):
         ops.append({"op": "enhanceVoice", "enabled": True})
         notes.append("voice enhancement")
+
+    # --- text and captions -------------------------------------------------
+    if wants("caption", "subtitle", "زیرنویس", "کپشن"):
+        ops.append({"op": "generateCaptions"})
+        notes.append("generate captions")
+        if wants("karaoke", "word by word", "کلمه به کلمه", "کلمه‌به‌کلمه"):
+            ops.append({"op": "styleCaptions", "animateWords": True})
+            notes.append("word-by-word highlight")
+        for place, keys in (("top", ("top", "بالا")), ("middle", ("middle", "center", "وسط"))):
+            if any(k in text for k in keys):
+                ops.append({"op": "styleCaptions", "position": place})
+                notes.append(f"captions at {place}")
+                break
+
+    title = re.search(r"(?:add|write|put)\s+(?:a\s+)?(?:title|text)\s+(?:that\s+says\s+)?['\"«]?([^'\"»]+)", text)
+    if not title:
+        title = re.search(r"(?:متن|عنوان)\s*[:،]?\s*['\"«]([^'\"»]+)", prompt)
+    if title:
+        ops.append({"op": "addText", "text": title.group(1).strip()[:120]})
+        notes.append("add text")
 
     # --- length ----------------------------------------------------------
     target = _number(

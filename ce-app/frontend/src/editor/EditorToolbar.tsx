@@ -4,7 +4,8 @@ import {
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers, Captions,
   Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend,
 } from 'lucide-react'
-import { Slider, Segmented, message } from 'antd'
+import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
+import { captionsApi } from '../api/captions'
 import { useEditor, propsOf, type Clip, type ClipProps } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
@@ -15,6 +16,7 @@ type PanelId =
   | 'adjust'
   | 'animate'
   | 'audio'
+  | 'text'
   | 'speed'
   | 'volume'
   | 'crop'
@@ -57,6 +59,38 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
   const clip = clips.find((c) => c.id === selectedId) ?? null
   const props = clip ? propsOf(clip) : null
 
+  /** Transcribe the clip under the playhead and lay captions on the text lane. */
+  const generateCaptions = async () => {
+    const state = useEditor.getState()
+    const source =
+      state.clips.find((c) => c.id === state.selectedId && c.src) ??
+      state.clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+    if (!source?.src) {
+      message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
+      return
+    }
+    const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
+    try {
+      const result = await captionsApi.transcribe(source.src)
+      const count = state.addCaptions(result.cues, source.start - source.offset)
+      message.success(
+        t(`${count} captions added (${result.language})`, `${count} زیرنویس اضافه شد (${result.language})`)
+      )
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string }; status?: number } }).response
+      message.error(
+        detail?.status === 503
+          ? t(
+              'Speech recognition is not available in this build.',
+              'تشخیص گفتار در این نسخه نصب نشده است.'
+            )
+          : detail?.data?.detail ?? (err as Error).message
+      )
+    } finally {
+      hide()
+    }
+  }
+
   const notReady = (label: [string, string]) => () => {
     setSoonLabel(label[i])
     setPanel('soon')
@@ -69,9 +103,23 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
       else onImport()
     } },
     { id: 'audio', icon: <Music4 {...ICON} />, label: ['Audio', 'صدا'], run: () => addTrack('audio') },
-    { id: 'text', icon: <Type {...ICON} />, label: ['Text', 'متن'], run: () => addTrack('text') },
+    {
+      id: 'text',
+      icon: <Type {...ICON} />,
+      label: ['Text', 'متن'],
+      run: () => {
+        const id = useEditor.getState().addTextClip(t('Your text', 'متن شما'))
+        select(id)
+        setPanel('text')
+      },
+    },
     { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
-    { id: 'captions', icon: <Captions {...ICON} />, label: ['Captions', 'زیرنویس'], soon: true },
+    {
+      id: 'captions',
+      icon: <Captions {...ICON} />,
+      label: ['Captions', 'زیرنویس'],
+      run: () => void generateCaptions(),
+    },
     { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], soon: true },
     { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
@@ -120,6 +168,9 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
     { id: 'clipfilters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'clipadjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'clipaudio', icon: <AudioLines {...ICON} />, label: ['Audio', 'پردازش صدا'], panel: 'audio' },
+    ...(clip?.text !== undefined && clip?.src == null
+      ? [{ id: 'edittext', icon: <Type {...ICON} />, label: ['Edit text', 'ویرایش متن'] as [string, string], panel: 'text' as PanelId }]
+      : []),
     { id: 'delete', icon: <Trash2 {...ICON} />, label: ['Delete', 'حذف'], run: removeSelected },
   ]
 
@@ -199,6 +250,14 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
                 denoise={props.denoise}
                 enhanceVoice={props.enhanceVoice}
                 onChange={(patch) => setProps(clip.id, patch)}
+              />
+            )}
+            {panel === 'text' && clip && props && (
+              <PanelText
+                text={clip.text ?? ''}
+                props={props}
+                onText={(value) => useEditor.getState().setText(clip.id, value)}
+                onProps={(patch) => setProps(clip.id, patch)}
               />
             )}
             {panel === 'ratio' && <PanelRatio />}
@@ -544,6 +603,85 @@ function PanelAudio({
           'بهبود صدا شامل حذف بم‌های مزاحم، تقویت وضوح، فشرده‌سازی و نرمال‌سازی روی -۱۶ است.'
         )}
       </p>
+    </div>
+  )
+}
+
+function PanelText({
+  text, props, onText, onProps,
+}: {
+  text: string
+  props: ClipProps
+  onText: (value: string) => void
+  onProps: (patch: Partial<ClipProps>) => void
+}) {
+  const { t, lang } = useI18n()
+  const i = lang === 'fa' ? 1 : 0
+  const styles: [ClipProps['textStyle'], [string, string]][] = [
+    ['clean', ['Clean', 'ساده']],
+    ['boxed', ['Boxed', 'کادردار']],
+    ['outline', ['Outline', 'خط دور']],
+    ['shadow', ['Shadow', 'سایه']],
+  ]
+  const places: [ClipProps['position'], [string, string]][] = [
+    ['top', ['Top', 'بالا']],
+    ['middle', ['Middle', 'وسط']],
+    ['bottom', ['Bottom', 'پایین']],
+  ]
+  return (
+    <div className="tb__stack">
+      <Field label={t('Text', 'متن')}>
+        <Input.TextArea
+          value={text}
+          autoSize={{ minRows: 1, maxRows: 3 }}
+          onChange={(e) => onText(e.target.value)}
+          placeholder={t('Type something…', 'چیزی بنویس…')}
+        />
+      </Field>
+      <div className="tb__row">
+        <Field label={t('Size', 'اندازه')} value={String(props.fontSize)}>
+          <Slider min={18} max={140} step={1} value={props.fontSize} onChange={(v) => onProps({ fontSize: v })} />
+        </Field>
+        <Field label={t('Position', 'موقعیت')}>
+          <Segmented
+            value={props.position}
+            onChange={(v) => onProps({ position: v as ClipProps['position'] })}
+            options={places.map(([id, label]) => ({ value: id, label: label[i] }))}
+          />
+        </Field>
+      </div>
+      <div className="tb__row">
+        <Field label={t('Style', 'سبک')}>
+          <Segmented
+            value={props.textStyle}
+            onChange={(v) => onProps({ textStyle: v as ClipProps['textStyle'] })}
+            options={styles.map(([id, label]) => ({ value: id, label: label[i] }))}
+          />
+        </Field>
+        <Field label={t('Colour', 'رنگ')}>
+          <div className="tb__colors">
+            <ColorPicker
+              value={props.color}
+              onChangeComplete={(c) => onProps({ color: c.toHexString() })}
+              size="small"
+            />
+            <ColorPicker
+              value={props.highlight}
+              onChangeComplete={(c) => onProps({ highlight: c.toHexString() })}
+              size="small"
+            />
+            <span className="ce-hint">{t('text / highlight', 'متن / تأکید')}</span>
+          </div>
+        </Field>
+      </div>
+      <Segmented
+        value={props.animateWords ? 'on' : 'off'}
+        onChange={(v) => onProps({ animateWords: v === 'on' })}
+        options={[
+          { value: 'off', label: t('Static', 'ثابت') },
+          { value: 'on', label: t('Word-by-word highlight', 'تأکید کلمه‌به‌کلمه') },
+        ]}
+      />
     </div>
   )
 }

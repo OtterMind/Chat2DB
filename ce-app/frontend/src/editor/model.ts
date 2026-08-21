@@ -41,6 +41,13 @@ export interface ClipProps {
   /** Spectral noise reduction, 0–1. */
   denoise: number
   enhanceVoice: boolean
+  /** Text-clip styling. */
+  fontSize: number
+  color: string
+  highlight: string
+  position: 'top' | 'middle' | 'bottom'
+  textStyle: 'clean' | 'boxed' | 'outline' | 'shadow'
+  animateWords: boolean
 }
 
 export const DEFAULT_PROPS: ClipProps = {
@@ -60,6 +67,12 @@ export const DEFAULT_PROPS: ClipProps = {
   animDuration: 0.6,
   denoise: 0,
   enhanceVoice: false,
+  fontSize: 54,
+  color: '#FFFFFF',
+  highlight: '#6366F1',
+  position: 'bottom',
+  textStyle: 'clean',
+  animateWords: false,
 }
 
 /** Cross-clip transition, always between two neighbours on the same lane. */
@@ -79,6 +92,9 @@ export interface Clip {
   /** Absolute path of the media this clip shows; null for placeholders. */
   src?: string | null
   props?: Partial<ClipProps>
+  /** Text clips carry their content instead of a media path. */
+  text?: string
+  words?: { start: number; end: number; text: string }[]
   /** Clips that move together. */
   groupId?: string | null
   /** position on the timeline, seconds */
@@ -139,6 +155,9 @@ interface EditorState extends Snapshot {
   removeSelected: () => void
   duplicateSelected: () => void
   addClip: (clip: Omit<Clip, 'id'>) => string
+  addTextClip: (text: string, options?: { start?: number; duration?: number; trackId?: string }) => string
+  setText: (id: string, text: string) => void
+  addCaptions: (cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string }[] }[], offset?: number) => number
   clearTimeline: () => void
   /** Replace a clip with the given source-time windows, closing the gaps. */
   keepRanges: (id: string, ranges: { start: number; end: number }[]) => number
@@ -433,6 +452,70 @@ export const useEditor = create<EditorState>((set, get) => ({
       s.clips.push({ ...clip, id })
     })
     return id
+  },
+
+  addTextClip: (text, options) => {
+    const state = get()
+    const lane =
+      options?.trackId ??
+      state.tracks.find((t) => t.kind === 'text')?.id ??
+      (() => {
+        state.addTrack('text')
+        return get().tracks.filter((t) => t.kind === 'text').slice(-1)[0].id
+      })()
+    return get().addClip({
+      trackId: lane,
+      start: options?.start ?? state.playhead,
+      duration: options?.duration ?? 3,
+      offset: 0,
+      sourceDuration: options?.duration ?? 3,
+      src: null,
+      text,
+      label: text.slice(0, 24),
+      color: '#F59E0B',
+    })
+  },
+
+  setText: (id, text) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      clip.text = text
+      clip.label = text.slice(0, 24) || 'text'
+    }),
+
+  addCaptions: (cues, offset = 0) => {
+    if (cues.length === 0) return 0
+    let lane = get().tracks.find((t) => t.kind === 'text')?.id
+    if (!lane) {
+      get().addTrack('text')
+      lane = get().tracks.filter((t) => t.kind === 'text').slice(-1)[0].id
+    }
+    get().commit((s) => {
+      for (const cue of cues) {
+        const duration = Math.max(0.4, cue.end - cue.start)
+        s.clips.push({
+          id: uid(),
+          trackId: lane!,
+          start: Math.max(0, cue.start + offset),
+          duration,
+          offset: 0,
+          sourceDuration: duration,
+          src: null,
+          text: cue.text,
+          // word timings are relative to the clip, which is what karaoke needs
+          words: (cue.words ?? []).map((w) => ({
+            start: Math.max(0, w.start - cue.start),
+            end: Math.max(0.05, w.end - cue.start),
+            text: w.text,
+          })),
+          label: cue.text.slice(0, 24),
+          color: '#0EA5E9',
+          props: { animateWords: (cue.words?.length ?? 0) > 0 },
+        })
+      }
+    })
+    return cues.length
   },
 
   clearTimeline: () =>
