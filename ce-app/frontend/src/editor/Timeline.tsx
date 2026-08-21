@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize } from 'lucide-react'
+import {
+  Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize, Crosshair,
+} from 'lucide-react'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
 import { thumbUrl } from '../api/render'
 import { useI18n } from '../i18n'
@@ -11,7 +13,11 @@ type DragState =
   | { mode: 'move'; id: string; grabOffset: number; originTrack: string }
   | { mode: 'trim-start' | 'trim-end'; id: string }
   | { mode: 'scrub' }
+  /** Centred mode: the whole timeline is dragged under a fixed playhead. */
+  | { mode: 'pan'; fromX: number; fromTime: number }
   | null
+
+const CENTRED_KEY = 'ce.timeline.centred'
 
 export default function Timeline() {
   const {
@@ -25,6 +31,36 @@ export default function Timeline() {
   const laneRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState>(null)
   const [guide, setGuide] = useState<number | null>(null)
+
+  /*
+   * Centred mode.
+   *
+   * The phone editors this app is compared with pin the playhead to the middle
+   * of the screen and slide the timeline underneath it: the frame you are
+   * looking at is always in the same place, and dragging the strip is the same
+   * gesture as scrubbing. The classic behaviour (a marker that travels along a
+   * still timeline) is one click away, because on a wide desktop screen some
+   * people prefer it.
+   */
+  const [centred, setCentred] = useState(() => localStorage.getItem(CENTRED_KEY) !== 'off')
+  const [pad, setPad] = useState(0)
+  const programmatic = useRef(false)
+
+  useEffect(() => {
+    localStorage.setItem(CENTRED_KEY, centred ? 'on' : 'off')
+  }, [centred])
+
+  // Half the viewport of empty space on both sides, so second 0 and the last
+  // frame can both reach the middle.
+  useEffect(() => {
+    const view = scrollRef.current
+    if (!view) return
+    const measure = () => setPad(centred ? view.clientWidth / 2 : 0)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(view)
+    return () => observer.disconnect()
+  }, [centred])
 
   const xToTime = useCallback(
     (clientX: number) => {
@@ -56,6 +92,12 @@ export default function Timeline() {
 
       if (drag.mode === 'scrub') {
         setPlayhead(time)
+        return
+      }
+
+      if (drag.mode === 'pan') {
+        // Dragging the strip to the left moves time forward, like a filmstrip.
+        setPlayhead(drag.fromTime - (e.clientX - drag.fromX) / pxPerSecond)
         return
       }
 
@@ -108,18 +150,44 @@ export default function Timeline() {
     }
   }, [drag, clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime])
 
-  // Keep the moving playhead inside the viewport while the preview plays,
-  // otherwise it walks off screen after a few seconds.
+  // Centred mode: the scroll position *is* the playhead. Classic mode: keep the
+  // marker inside the viewport, otherwise it walks off screen after a few seconds.
   useEffect(() => {
     const view = scrollRef.current
     if (!view) return
+
+    if (centred) {
+      const target = playhead * pxPerSecond
+      if (Math.abs(view.scrollLeft - target) > 0.5) {
+        programmatic.current = true
+        view.scrollLeft = target
+        requestAnimationFrame(() => {
+          programmatic.current = false
+        })
+      }
+      return
+    }
+
     const x = playhead * pxPerSecond
     const left = view.scrollLeft
     const right = left + view.clientWidth - HEADER_W / 2
     if (x < left + 40 || x > right - 60) {
       view.scrollTo({ left: Math.max(0, x - view.clientWidth * 0.35), behavior: playing ? 'auto' : 'smooth' })
     }
-  }, [playhead, pxPerSecond, playing])
+  }, [playhead, pxPerSecond, playing, centred, pad])
+
+  // …and scrolling by hand (wheel, trackpad, scrollbar) moves the playhead.
+  useEffect(() => {
+    const view = scrollRef.current
+    if (!view || !centred) return
+    const onScroll = () => {
+      if (programmatic.current || drag?.mode === 'move') return
+      const time = Math.max(0, view.scrollLeft / pxPerSecond)
+      if (Math.abs(time - useEditor.getState().playhead) > 0.002) setPlayhead(time)
+    }
+    view.addEventListener('scroll', onScroll, { passive: true })
+    return () => view.removeEventListener('scroll', onScroll)
+  }, [centred, pxPerSecond, setPlayhead, drag])
 
   // ruler ticks: keep roughly one label per 90px
   const step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120].find((s) => s * pxPerSecond >= 90) ?? 300
@@ -214,6 +282,17 @@ export default function Timeline() {
           >
             <Maximize size={12} />
           </button>
+          <button
+            className={`tl__hbtn ${centred ? 'is-on' : ''}`}
+            onClick={() => setCentred((v) => !v)}
+            title={
+              centred
+                ? t('Playhead pinned to the centre', 'نشانگر در وسط ثابت است')
+                : t('Playhead travels along the timeline', 'نشانگر روی تایم‌لاین حرکت می‌کند')
+            }
+          >
+            <Crosshair size={12} />
+          </button>
         </div>
         {tracks.map((track) => {
           const Icon = TRACK_ICON[track.kind]
@@ -233,11 +312,20 @@ export default function Timeline() {
       </div>
 
       <div className="tl__scroll" ref={scrollRef}>
-        <div className="tl__lanes" ref={laneRef} style={{ width }} dir="ltr">
+        <div
+          className="tl__lanes"
+          ref={laneRef}
+          style={{ width, marginInlineStart: pad, marginInlineEnd: pad }}
+          dir="ltr"
+        >
           <div
             className="tl__ruler"
             onPointerDown={(e) => {
               e.preventDefault()
+              if (centred) {
+                setDrag({ mode: 'pan', fromX: e.clientX, fromTime: playhead })
+                return
+              }
               setDrag({ mode: 'scrub' })
               setPlayhead(xToTime(e.clientX))
             }}
@@ -250,7 +338,18 @@ export default function Timeline() {
           </div>
 
           {tracks.map((track) => (
-            <div key={track.id} className={`tl__lane ${track.locked ? 'is-locked' : ''}`} data-track-id={track.id}>
+            <div
+              key={track.id}
+              className={`tl__lane ${track.locked ? 'is-locked' : ''}`}
+              data-track-id={track.id}
+              onPointerDown={(e) => {
+                // Only the empty part of a lane pans; clips handle their own drag.
+                if (!centred || e.target !== e.currentTarget) return
+                e.preventDefault()
+                select(null)
+                setDrag({ mode: 'pan', fromX: e.clientX, fromTime: playhead })
+              }}
+            >
               {/* A junction marker between neighbours, exactly where a
                   transition lives — click it to create or edit one. */}
               {clips
@@ -300,7 +399,10 @@ export default function Timeline() {
 
           {guide !== null && <div className="tl__guide" style={{ left: guide * pxPerSecond }} />}
 
-          <div className="tl__playhead" style={{ left: playhead * pxPerSecond }}>
+          <div
+            className={`tl__playhead ${centred ? 'is-centred' : ''}`}
+            style={{ left: playhead * pxPerSecond }}
+          >
             <span
               className="tl__playhead-grip"
               onPointerDown={(e) => {
@@ -338,7 +440,18 @@ function FilmStrip({ clip, width }: { clip: Clip; width: number }) {
   return (
     <span className="tl__strip" aria-hidden>
       {frames.map((frame) => (
-        <img key={frame.key} src={frame.url} alt="" loading="lazy" draggable={false} />
+        <img
+          key={frame.key}
+          src={frame.url}
+          alt=""
+          loading="lazy"
+          draggable={false}
+          // A missing or unreadable file must not leave a broken-image icon
+          // across the clip; the coloured block behind it is the fallback.
+          onError={(event) => {
+            ;(event.currentTarget as HTMLImageElement).style.visibility = 'hidden'
+          }}
+        />
       ))}
     </span>
   )

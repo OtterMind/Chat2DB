@@ -108,6 +108,11 @@ export interface Clip {
   /** Pixel size of the source, when known — the canvas follows it in Auto. */
   width?: number
   height?: number
+  /**
+   * A small copy used by the preview only. The export always reads `src`, so a
+   * proxy can never lower the quality of the finished file.
+   */
+  proxy?: string | null
   label: string
   color: string
 }
@@ -176,12 +181,22 @@ interface EditorState extends Snapshot {
   removeTransition: (id: string) => void
   neighbourOf: (clipId: string) => Clip | null
   trimClip: (id: string, edge: 'start' | 'end', seconds: number) => void
+  /** Trim an edge and close the gap: everything later on the lane moves with it. */
+  rippleTrim: (id: string, edge: 'start' | 'end', seconds: number) => void
+  /** Move the cut between two neighbours; the pair keeps its total length. */
+  rollEdit: (id: string, seconds: number) => void
+  /** Slide the source window inside a clip without moving the clip. */
+  slipClip: (id: string, deltaSeconds: number) => void
+  /** Delete a clip and pull the rest of the lane back over the hole. */
+  rippleDelete: (id: string) => void
   splitAtPlayhead: () => void
   removeSelected: () => void
   duplicateSelected: () => void
   addClip: (clip: Omit<Clip, 'id'>) => string
   addTextClip: (text: string, options?: { start?: number; duration?: number; trackId?: string }) => string
   setText: (id: string, text: string) => void
+  /** Attach a finished editing proxy to every clip that came from this file. */
+  setProxy: (src: string, proxy: string) => void
   addCaptions: (cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string }[] }[], offset?: number) => number
   clearTimeline: () => void
   /** Replace a clip with the given source-time windows, closing the gaps. */
@@ -474,6 +489,89 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }),
 
+  rippleTrim: (id, edge, seconds) => {
+    const before = get().clips.find((c) => c.id === id)
+    if (!before) return
+    get().trimClip(id, edge, seconds)
+    const after = get().clips.find((c) => c.id === id)
+    if (!after) return
+    // How much shorter (or longer) the clip became at each side.
+    const shift = edge === 'end'
+      ? after.start + after.duration - (before.start + before.duration)
+      : after.start - before.start
+    if (Math.abs(shift) < 0.0001) return
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)!
+      if (edge === 'start') {
+        // Pull the trimmed clip back to where it began and move the lane with it.
+        clip.start = before.start
+        for (const other of s.clips) {
+          if (other.trackId === clip.trackId && other.id !== id && other.start > before.start) {
+            other.start = Math.max(0, other.start - shift)
+          }
+        }
+      } else {
+        for (const other of s.clips) {
+          if (other.trackId === clip.trackId && other.start >= before.start + before.duration) {
+            other.start = Math.max(0, other.start + shift)
+          }
+        }
+      }
+    })
+  },
+
+  rollEdit: (id, seconds) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      const next = s.clips
+        .filter((c) => c.trackId === clip.trackId && c.start >= clip.start + clip.duration - 0.001)
+        .sort((a, b) => a.start - b.start)[0]
+      if (!next) return
+      const boundary = clip.start + clip.duration
+      // Both sides must keep at least MIN_CLIP and stay inside their source.
+      const lower = Math.max(
+        clip.start + MIN_CLIP,
+        next.start + next.duration - (next.sourceDuration - next.offset) - (next.start - boundary),
+        boundary - (next.offset)
+      )
+      const upper = Math.min(
+        next.start + next.duration - MIN_CLIP,
+        clip.start + (clip.sourceDuration - clip.offset)
+      )
+      const target = Math.min(Math.max(seconds, lower), upper)
+      const delta = target - boundary
+      if (Math.abs(delta) < 0.0001) return
+      clip.duration += delta
+      next.start += delta
+      next.offset = Math.max(0, next.offset + delta)
+      next.duration -= delta
+    }),
+
+  slipClip: (id, deltaSeconds) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      // The window slides inside the source; the clip does not move on the lane.
+      const maxOffset = Math.max(0, clip.sourceDuration - clip.duration)
+      clip.offset = Math.min(maxOffset, Math.max(0, clip.offset + deltaSeconds))
+    }),
+
+  rippleDelete: (id) => {
+    const target = get().clips.find((c) => c.id === id)
+    if (!target) return
+    get().commit((s) => {
+      s.clips = s.clips.filter((c) => c.id !== id)
+      s.transitions = s.transitions.filter((t) => t.fromClipId !== id && t.toClipId !== id)
+      for (const other of s.clips) {
+        if (other.trackId === target.trackId && other.start >= target.start) {
+          other.start = Math.max(0, other.start - target.duration)
+        }
+      }
+    })
+    set({ selectedId: null })
+  },
+
   splitAtPlayhead: () => {
     const { playhead, selectedId } = get()
     get().commit((s) => {
@@ -547,6 +645,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       color: '#F59E0B',
     })
   },
+
+  setProxy: (src, proxy) =>
+    set((state) => ({
+      clips: state.clips.map((clip) => (clip.src === src ? { ...clip, proxy } : clip)),
+    })),
 
   setText: (id, text) =>
     get().commit((s) => {

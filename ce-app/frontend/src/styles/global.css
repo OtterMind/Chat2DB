@@ -550,6 +550,10 @@ button { font-family: inherit; cursor: pointer; }
 .tl__handle--end { left: auto; right: 0; background: linear-gradient(270deg, rgba(255, 255, 255, .35), transparent); }
 
 .tl__playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #f43f5e; pointer-events: none; }
+/* centred mode: a brighter, taller line, because it is now the fixed reference */
+.tl__playhead.is-centred { width: 2.5px; box-shadow: 0 0 10px rgba(244, 63, 94, .65); }
+.tl__hbtn.is-on { color: #a5b4fc; }
+.tl__lane { touch-action: pan-y; }
 .tl__playhead-grip {
   position: absolute; top: 0; left: -6px; width: 14px; height: 14px; border-radius: 3px;
   background: #f43f5e; pointer-events: auto; cursor: ew-resize;

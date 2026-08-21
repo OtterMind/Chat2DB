@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.config import settings
+from core.engine import proxy as proxies
 from core.engine.compose import ffmpeg_binary
 
 router = APIRouter(prefix="/api/media", tags=["media"])
@@ -124,3 +125,28 @@ async def thumbnail(path: str, t: float = 0.0, h: int = 96):
             raise HTTPException(status_code=422, detail=f"No frame at {at}s")
 
     return FileResponse(cached, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
+
+
+# --------------------------------------------------------------------- proxies
+
+
+@router.post("/proxy")
+async def start_proxy(payload: dict):
+    """Ask for an editing proxy of a file; returns immediately.
+
+    Building runs in a worker thread, so a 4K import does not block the API. The
+    UI polls `GET /api/media/proxy` and swaps the preview source when it is ready.
+    """
+    path = str(payload.get("path") or "")
+    try:
+        state = await asyncio.get_running_loop().run_in_executor(
+            None, proxies.ensure, path, bool(payload.get("force"))
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    return state.__dict__
+
+
+@router.get("/proxy")
+def proxy_status(path: str):
+    return proxies.state_for(path).__dict__

@@ -118,15 +118,29 @@ await new Promise((r) => setTimeout(r, 1200))
 /* 1 — the playhead moves ---------------------------------------------------- */
 await page.evaluate(() => window.__ceEditor.getState().togglePlay(true))
 await new Promise((r) => setTimeout(r, 1500))
-const afterStart = await page.evaluate(() => ({
-  playhead: window.__ceEditor.getState().playhead,
-  marker: document.querySelector('.tl__playhead')?.style.left ?? '',
-  time: document.querySelector('video')?.currentTime ?? -1,
-}))
+const afterStart = await page.evaluate(() => {
+  const marker = document.querySelector('.tl__playhead')
+  const view = document.querySelector('.tl__scroll')
+  return {
+    playhead: window.__ceEditor.getState().playhead,
+    // In centred mode the marker stands still and the timeline scrolls under it,
+    // so "did the picture move" is the scroll position, not the marker's left.
+    centred: marker?.classList.contains('is-centred') ?? false,
+    marker: marker?.style.left ?? '',
+    scrollLeft: view?.scrollLeft ?? 0,
+    time: document.querySelector('video')?.currentTime ?? -1,
+  }
+})
 if (afterStart.playhead > 0.6) ok(`playhead advances (${afterStart.playhead.toFixed(2)}s)`)
 else bad('playhead does not advance during playback', `playhead=${afterStart.playhead}`)
-if (afterStart.marker && afterStart.marker !== '0px') ok(`red marker moved (left: ${afterStart.marker})`)
-else bad('the red marker did not move', `left=${afterStart.marker}`)
+const movedOnScreen = afterStart.centred ? afterStart.scrollLeft > 20 : afterStart.marker !== '0px'
+if (movedOnScreen)
+  ok(
+    afterStart.centred
+      ? `timeline scrolls under the pinned playhead (${Math.round(afterStart.scrollLeft)}px)`
+      : `red marker moved (left: ${afterStart.marker})`
+  )
+else bad('nothing moved while playing', JSON.stringify(afterStart))
 if (afterStart.time > 0.4) ok(`video element is playing (${afterStart.time.toFixed(2)}s)`)
 else bad('the video element is not playing', `currentTime=${afterStart.time}`)
 
@@ -425,6 +439,161 @@ const movedTools = ['Smart Captions', 'Silence Removal', 'Voice Over', 'Auto B-R
 const missing = movedTools.filter((label) => !rail.labels.includes(label))
 if (missing.length === 0) ok(`the moved tools are in the edit rail (${rail.count} tools)`)
 else bad('tools removed from home are missing in the rail', missing.join(', '))
+
+/* 11d — centred mode: pinned playhead, timeline scrolls -------------------- */
+const centred = await page.evaluate(async () => {
+  const store = window.__ceEditor
+  store.getState().setPlayhead(2)
+  await new Promise((r) => setTimeout(r, 400))
+  const view = document.querySelector('.tl__scroll')
+  const marker = document.querySelector('.tl__playhead')
+  const rect = marker.getBoundingClientRect()
+  const viewRect = view.getBoundingClientRect()
+  const centreOffset = Math.abs(rect.left + rect.width / 2 - (viewRect.left + viewRect.width / 2))
+  const scrollAt2 = view.scrollLeft
+
+  // scrolling by hand must move the playhead, not just the picture
+  view.scrollLeft = scrollAt2 + 200
+  await new Promise((r) => setTimeout(r, 300))
+  const afterScroll = store.getState().playhead
+
+  return {
+    pinnedToCentre: centreOffset < 6,
+    scrollFollowsPlayhead: Math.abs(scrollAt2 - 2 * store.getState().pxPerSecond) < 3,
+    playheadFollowsScroll: afterScroll > 2.05,
+  }
+})
+if (centred.pinnedToCentre) ok('the playhead is pinned to the middle of the timeline')
+else bad('the playhead is not centred', JSON.stringify(centred))
+if (centred.scrollFollowsPlayhead) ok('the timeline scrolls to the playhead')
+else bad('the timeline does not follow the playhead', JSON.stringify(centred))
+if (centred.playheadFollowsScroll) ok('scrolling the timeline scrubs')
+else bad('scrolling the timeline does not scrub', JSON.stringify(centred))
+
+/* 11e — editing proxies ----------------------------------------------------- */
+if (args.big ?? process.env.CE_TEST_BIG) {
+  const big = args.big ?? process.env.CE_TEST_BIG
+  const proxyResult = await page.evaluate(async (path) => {
+    const started = await fetch('http://127.0.0.1:8742/api/media/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }).then((r) => r.json())
+    let state = started
+    for (let i = 0; i < 90 && state.status === 'building'; i++) {
+      await new Promise((r) => setTimeout(r, 1000))
+      state = await fetch(
+        `http://127.0.0.1:8742/api/media/proxy?path=${encodeURIComponent(path)}`
+      ).then((r) => r.json())
+    }
+    return state
+  }, big)
+  if (proxyResult.status === 'ready' && proxyResult.proxy) ok('a 720p editing proxy was built for big footage')
+  else bad('the proxy was not built', JSON.stringify(proxyResult))
+
+  // …and the preview plays the proxy while the model still points at the source
+  const usesProxy = await page.evaluate((path, proxyPath) => {
+    const store = window.__ceEditor
+    store.getState().clearTimeline()
+    store.getState().addClip({
+      trackId: 'v1', start: 0, duration: 3, offset: 0, sourceDuration: 3,
+      src: path, label: 'big', color: '#6366F1', width: 2560, height: 1440,
+    })
+    store.getState().setProxy(path, proxyPath)
+    store.getState().setPlayhead(1)
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        const video = document.querySelector('video')
+        resolve({
+          videoSrc: decodeURIComponent(video?.getAttribute('src') ?? ''),
+          clipSrc: store.getState().clips[0].src,
+        })
+      }, 600)
+    )
+  }, big, proxyResult.proxy)
+  if (usesProxy.videoSrc.includes(proxyResult.proxy) && usesProxy.clipSrc === big)
+    ok('the preview plays the proxy while the project keeps the original')
+  else bad('the preview did not switch to the proxy', JSON.stringify(usesProxy))
+}
+
+/* 11f — ripple, roll and slip ----------------------------------------------- */
+const trims = await page.evaluate(() => {
+  const store = window.__ceEditor
+  const fresh = () => {
+    store.getState().clearTimeline()
+    // real paths, so the film strip does not spam 404s during the test
+    const src = window.__ceTestVertical
+    const a = store.getState().addClip({
+      trackId: 'v1', start: 0, duration: 4, offset: 2, sourceDuration: 12, src, label: 'A', color: '#111',
+    })
+    const b = store.getState().addClip({
+      trackId: 'v1', start: 4, duration: 4, offset: 0, sourceDuration: 12, src, label: 'B', color: '#222',
+    })
+    return [a, b]
+  }
+  const clip = (id) => store.getState().clips.find((c) => c.id === id)
+
+  // ripple trim: shortening A must pull B back, leaving no gap
+  let [a, b] = fresh()
+  store.getState().rippleTrim(a, 'end', 3)
+  const ripple = { a: clip(a).duration, bStart: clip(b).start }
+
+  // roll: the cut moves, the pair keeps its total length
+  ;[a, b] = fresh()
+  const totalBefore = clip(a).duration + clip(b).duration
+  store.getState().rollEdit(a, 5)
+  const roll = {
+    aDuration: clip(a).duration,
+    bStart: clip(b).start,
+    bOffset: clip(b).offset,
+    total: clip(a).duration + clip(b).duration,
+    totalBefore,
+  }
+
+  // slip: the window inside the clip moves, the clip does not
+  ;[a] = fresh()
+  const beforeSlip = { start: clip(a).start, duration: clip(a).duration, offset: clip(a).offset }
+  store.getState().slipClip(a, 1.5)
+  const slip = { ...beforeSlip, offset: clip(a).offset, start: clip(a).start, duration: clip(a).duration }
+
+  // slip must stop at the end of the source
+  store.getState().slipClip(a, 999)
+  const clamped = clip(a).offset
+
+  // ripple delete: the hole closes
+  ;[a, b] = fresh()
+  store.getState().rippleDelete(a)
+  const deleted = { count: store.getState().clips.length, bStart: clip(b).start }
+
+  return { ripple, roll, slip, clamped, deleted, sourceDuration: 12 }
+})
+
+if (Math.abs(trims.ripple.a - 3) < 0.01 && Math.abs(trims.ripple.bStart - 3) < 0.01)
+  ok('ripple trim closes the gap behind it')
+else bad('ripple trim left a gap', JSON.stringify(trims.ripple))
+
+if (
+  Math.abs(trims.roll.aDuration - 5) < 0.01 &&
+  Math.abs(trims.roll.bStart - 5) < 0.01 &&
+  Math.abs(trims.roll.bOffset - 1) < 0.01 &&
+  Math.abs(trims.roll.total - trims.roll.totalBefore) < 0.01
+)
+  ok('roll moves the cut and keeps the total length')
+else bad('roll edit is wrong', JSON.stringify(trims.roll))
+
+if (
+  Math.abs(trims.slip.offset - 3.5) < 0.01 &&
+  trims.slip.start === 0 &&
+  Math.abs(trims.slip.duration - 4) < 0.01
+)
+  ok('slip changes the content, not the position')
+else bad('slip moved the clip', JSON.stringify(trims.slip))
+
+if (Math.abs(trims.clamped - (trims.sourceDuration - 4)) < 0.01) ok('slip stops at the end of the source')
+else bad('slip ran past the end of the source', String(trims.clamped))
+
+if (trims.deleted.count === 1 && Math.abs(trims.deleted.bStart) < 0.01) ok('ripple delete closes the hole')
+else bad('ripple delete left a hole', JSON.stringify(trims.deleted))
 
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })

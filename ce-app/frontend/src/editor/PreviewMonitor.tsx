@@ -85,8 +85,10 @@ export default function PreviewMonitor() {
     return { transition, progress: (playhead - overlapStart) / span }
   }, [base, top, transitions, playhead])
 
-  const baseSrc = base?.src ? mediaUrl(base.src) : null
-  const topSrc = top?.src ? mediaUrl(top.src) : null
+  // The proxy is what makes scrubbing 4K footage bearable; the export ignores it.
+  const playable = (clip: Clip | null) => (clip?.proxy || clip?.src ? mediaUrl(clip.proxy || (clip.src as string)) : null)
+  const baseSrc = playable(base)
+  const topSrc = playable(top)
 
   useEffect(() => setFailed(null), [baseSrc])
 
@@ -283,7 +285,14 @@ export default function PreviewMonitor() {
         </div>
       )}
 
-      {activeAudio?.src && <audio key={mediaUrl(activeAudio.src)} ref={audioRef} src={mediaUrl(activeAudio.src)} preload="auto" />}
+      {activeAudio?.src && (
+        <audio
+          key={playable(activeAudio) ?? ''}
+          ref={audioRef}
+          src={playable(activeAudio) ?? undefined}
+          preload="auto"
+        />
+      )}
 
       {failed && <div className="ed__preview-error">{failed}</div>}
 

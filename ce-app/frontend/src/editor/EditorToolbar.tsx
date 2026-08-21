@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers,
-  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2,
+  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2, MoveHorizontal,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { captionsApi } from '../api/captions'
-import { useEditor, propsOf, type Clip, type ClipProps } from './model'
+import { useEditor, propsOf, MIN_CLIP, type Clip, type ClipProps } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
 import { FEATURES } from '../features/catalog'
@@ -25,6 +25,7 @@ type PanelId =
   | 'transform'
   | 'opacity'
   | 'transition'
+  | 'timing'
   | 'ratio'
   | 'soon'
 
@@ -174,6 +175,7 @@ export default function EditorToolbar({
 
   const clipTools: Tool[] = [
     { id: 'split', icon: <Scissors {...ICON} />, label: ['Split', 'برش'], run: splitAtPlayhead },
+    { id: 'timing', icon: <MoveHorizontal {...ICON} />, label: ['Trim & slip', 'تریم و لغزش'], panel: 'timing' },
     { id: 'speed', icon: <Gauge {...ICON} />, label: ['Speed', 'سرعت'], panel: 'speed' },
     { id: 'volume', icon: <Volume2 {...ICON} />, label: ['Volume', 'صدا'], panel: 'volume' },
     { id: 'transition', icon: <Blend {...ICON} />, label: ['Transition', 'ترنزیشن'], panel: 'transition' },
@@ -262,6 +264,7 @@ export default function EditorToolbar({
                 onChange={(transform) => setProps(clip.id, { transform })}
               />
             )}
+            {panel === 'timing' && clip && <PanelTiming clip={clip} />}
             {panel === 'transition' && clip && (
               <PanelTransition
                 clip={clip}
@@ -448,6 +451,82 @@ function PanelTransform({
       <Field label={t('Vertical', 'عمودی')} value={`${Math.round(transform.y * 100)}%`}>
         <Slider min={-0.5} max={0.5} step={0.01} value={transform.y} onChange={(v) => onChange({ ...transform, y: v })} />
       </Field>
+    </div>
+  )
+}
+
+/**
+ * The three trims every real editor has and a timeline drag cannot express:
+ * ripple (close the gap), roll (move the cut, keep the total length) and slip
+ * (change what is inside the clip without moving it).
+ */
+function PanelTiming({ clip }: { clip: Clip }) {
+  const { t } = useI18n()
+  const { rippleTrim, rollEdit, slipClip, rippleDelete, clips } = useEditor()
+  const neighbour = clips
+    .filter((c) => c.trackId === clip.trackId && c.start >= clip.start + clip.duration - 0.001)
+    .sort((a, b) => a.start - b.start)[0]
+  const slack = Math.max(0, clip.sourceDuration - clip.duration)
+
+  return (
+    <div className="tb__stack">
+      <div className="tb__row">
+        <Field label={t('Ripple trim start', 'تریم پیوسته از ابتدا')}>
+          <div className="tb__row">
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => rippleTrim(clip.id, 'start', clip.start + 0.5)}>
+              +0.5s
+            </button>
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => rippleTrim(clip.id, 'start', clip.start - 0.5)}>
+              −0.5s
+            </button>
+          </div>
+        </Field>
+        <Field label={t('Ripple trim end', 'تریم پیوسته از انتها')}>
+          <div className="tb__row">
+            <button
+              className="ce-btn ce-btn--ghost ce-btn--sm"
+              onClick={() => rippleTrim(clip.id, 'end', clip.start + clip.duration - 0.5)}
+            >
+              −0.5s
+            </button>
+            <button
+              className="ce-btn ce-btn--ghost ce-btn--sm"
+              onClick={() => rippleTrim(clip.id, 'end', clip.start + clip.duration + 0.5)}
+            >
+              +0.5s
+            </button>
+          </div>
+        </Field>
+      </div>
+
+      <Field
+        label={t('Roll the cut with the next clip', 'جابه‌جایی مرز با کلیپ بعدی')}
+        value={neighbour ? `${(clip.start + clip.duration).toFixed(2)}s` : '—'}
+      >
+        <Slider
+          min={clip.start + MIN_CLIP}
+          max={neighbour ? neighbour.start + neighbour.duration - MIN_CLIP : clip.start + clip.duration}
+          step={0.05}
+          disabled={!neighbour}
+          value={clip.start + clip.duration}
+          onChange={(v) => rollEdit(clip.id, v)}
+        />
+      </Field>
+
+      <Field label={t('Slip the content', 'لغزش محتوا')} value={`${clip.offset.toFixed(2)}s`}>
+        <Slider
+          min={0}
+          max={Math.max(0.01, slack)}
+          step={0.05}
+          disabled={slack < 0.05}
+          value={clip.offset}
+          onChange={(v) => slipClip(clip.id, v - clip.offset)}
+        />
+      </Field>
+
+      <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => rippleDelete(clip.id)}>
+        {t('Ripple delete (close the gap)', 'حذف پیوسته (بستن فاصله)')}
+      </button>
     </div>
   )
 }

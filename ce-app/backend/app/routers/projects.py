@@ -68,7 +68,16 @@ def _summary(path: Path) -> dict[str, Any]:
 
 @router.get("")
 def list_projects() -> dict:
-    files = sorted(projects_dir().glob("*.ceproj"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # st_mtime alone ties when two projects are saved in the same second (which a
+    # test, or a fast user, does hit); the document carries a finer timestamp.
+    def saved_at(path: Path) -> float:
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                return float(json.load(handle).get("updatedAt") or path.stat().st_mtime)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return path.stat().st_mtime
+
+    files = sorted(projects_dir().glob("*.ceproj"), key=saved_at, reverse=True)
     return {
         "projects": [_summary(f) for f in files if f.stem != AUTOSAVE_NAME],
         "hasAutosave": project_path(AUTOSAVE_NAME).exists(),

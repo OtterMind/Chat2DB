@@ -39,6 +39,16 @@ for i in 1 2; do
     -c:v libvpx -b:v 300k -c:a libvorbis -shortest "$MEDIA/clip$i.webm"
 done
 
+# a portrait file too: the monitor must take the shape of the footage
+[ -f "$MEDIA/vertical.webm" ] || "$FFDIR/ffmpeg" -y -loglevel error \
+  -f lavfi -i "testsrc=size=360x640:rate=25:duration=4" \
+  -f lavfi -i "sine=frequency=440:duration=4" \
+  -c:v libvpx -b:v 400k -c:a libvorbis -shortest "$MEDIA/vertical.webm"
+# and one big enough to trigger the editing proxy
+[ -f "$MEDIA/big.mp4" ] || "$FFDIR/ffmpeg" -y -loglevel error \
+  -f lavfi -i "testsrc=size=2560x1440:rate=25:duration=3" \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$MEDIA/big.mp4"
+
 echo "→ headless Chromium"
 mkdir -p "$HB"
 ( cd "$HB" && [ -d node_modules/@sparticuz ] || npm i --no-audit --no-fund --silent \
@@ -57,6 +67,8 @@ export LD_LIBRARY_PATH=/tmp/chromium-libs/lib:/tmp/chromium-libs
 export NODE_PATH=$HB/node_modules
 export CE_TEST_A=$MEDIA/clip1.webm
 export CE_TEST_B=$MEDIA/clip2.webm
+export CE_TEST_VERTICAL=$MEDIA/vertical.webm
+export CE_TEST_BIG=$MEDIA/big.mp4
 export CE_VENV=$VENV
 ENV
 

@@ -13,7 +13,7 @@ import AssistantButton from '../editor/AssistantButton'
 import ProjectBar from '../editor/ProjectBar'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
-import { pickMedia, renderApi, saveDialog, type Quality } from '../api/render'
+import { pickMedia, proxyApi, renderApi, saveDialog, type Quality } from '../api/render'
 import { analyzeApi } from '../api/analyze'
 import { useRuntime } from '../store/runtime'
 import { wsClient } from '../api/websocket'
@@ -160,6 +160,30 @@ export default function Studio() {
   const [lastOutput, setLastOutput] = useState<string | null>(null)
   const importedOnEntry = useRef(false)
 
+  /**
+   * Editing proxies.
+   *
+   * A 4K phone video makes every seek decode a huge frame, so the timeline feels
+   * broken even though nothing is wrong. The backend builds a small copy in a
+   * worker thread; this polls until it lands and then points the preview at it.
+   */
+  const requestProxy = async (path: string) => {
+    try {
+      let state = await proxyApi.start(path)
+      if (state.status === 'skipped') return
+      for (let attempt = 0; attempt < 600 && state.status === 'building'; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        state = await proxyApi.status(path)
+      }
+      if (state.status === 'ready' && state.proxy) {
+        useEditor.getState().setProxy(path, state.proxy)
+        message.success(t('Smooth preview ready', 'پیش‌نمایش روان آماده شد'))
+      }
+    } catch {
+      /* the original still plays; a proxy is an optimisation, not a requirement */
+    }
+  }
+
   /** Import real media: OS picker in the desktop app, typed path in the browser. */
   const importMedia = async () => {
     let paths: string[] = []
@@ -198,6 +222,9 @@ export default function Studio() {
           label: path.split(/[\\/]/).pop() ?? 'clip',
           color: info.has_video ? '#6366F1' : '#10B981',
         })
+        // Big footage gets a 720p editing proxy in the background; the preview
+        // switches to it when it is ready and the export never uses it.
+        void requestProxy(info.path)
       } catch (err) {
         const offline = /network error/i.test((err as Error).message)
         message.error(

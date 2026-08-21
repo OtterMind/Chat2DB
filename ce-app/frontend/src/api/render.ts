@@ -43,6 +43,20 @@ export function mediaUrl(path: string) {
   return `${backendOrigin}/api/media/file?path=${encodeURIComponent(path)}`
 }
 
+export interface ProxyState {
+  source: string
+  status: 'idle' | 'building' | 'ready' | 'failed' | 'skipped'
+  proxy: string | null
+  error: string | null
+}
+
+/** Editing proxies: a small, seek-friendly copy used only for the preview. */
+export const proxyApi = {
+  start: async (path: string): Promise<ProxyState> => (await api.post('/media/proxy', { path })).data,
+  status: async (path: string): Promise<ProxyState> =>
+    (await api.get('/media/proxy', { params: { path } })).data,
+}
+
 /** One frame of a file, for the timeline film strip. */
 export function thumbUrl(path: string, at: number, height = 96) {
   return `${backendOrigin}/api/media/thumb?path=${encodeURIComponent(path)}&t=${at.toFixed(1)}&h=${height}`
