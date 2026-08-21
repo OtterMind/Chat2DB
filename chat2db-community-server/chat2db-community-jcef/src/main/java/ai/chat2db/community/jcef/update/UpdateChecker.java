@@ -21,7 +21,10 @@ final class UpdateChecker {
         validateVersion(manifest.version());
         validateReleasePageUrl(manifest.releasePageUrl(), manifest.version());
         if (manifest.forceUpdate() == null || Boolean.TRUE.equals(manifest.forceUpdate())) {
-            throw new IOException("Remote GitHub manifest must declare forceUpdate=false");
+            throw new IOException("Update discovery manifest must declare forceUpdate=false");
+        }
+        if (manifest.metadataSha256() == null || !manifest.metadataSha256().matches("^[a-f0-9]{64}$")) {
+            throw new IOException("Update discovery manifest has an invalid metadata SHA-256");
         }
         if (manifest.releaseNotes() != null && manifest.releaseNotes().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 64 * 1024) {
             throw new IOException("Release notes exceed the 64 KiB limit");
@@ -31,7 +34,8 @@ final class UpdateChecker {
         boolean needsUpdate = localVersion == null || localVersion.isBlank()
                 || compareVersions(manifest.version(), localVersion) > 0;
         AvailableSnapshot snapshot = needsUpdate
-                ? new AvailableSnapshot(manifest.version(), manifest.exactBytes(), manifest.fetchedAtNanos()) : null;
+                ? new AvailableSnapshot(manifest.version(), manifest.exactBytes(), manifest.metadataSha256(),
+                manifest.fetchedAtNanos()) : null;
         return new UpdateCheckOutcome(needsUpdate, manifest.releaseNotes(), snapshot, manifest.releasePageUrl());
     }
 

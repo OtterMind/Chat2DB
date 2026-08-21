@@ -28,6 +28,11 @@ public final class TestUpdateSource implements UpdateSource {
     }
 
     @Override
+    public byte[] fetchVersionManifest(String version) {
+        return manifest.exactBytes();
+    }
+
+    @Override
     public UpdateResponse openPayload(ValidatedPayloadRequest request) throws IOException {
         Path path = assets.get(request.assetName());
         if (path == null) {

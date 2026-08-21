@@ -4,7 +4,6 @@ import org.cef.OS;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /** Owns process restart and delayed exit mechanics for the desktop runtime. */
 final class DesktopRestartController {
@@ -44,12 +43,4 @@ final class DesktopRestartController {
         exitThread.start();
     }
 
-    void exitAfterElevatedInstallerLaunch() {
-        try {
-            TimeUnit.SECONDS.sleep(2);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-        }
-        System.exit(0);
-    }
 }

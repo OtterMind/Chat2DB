@@ -6,10 +6,10 @@ import java.util.Objects;
 
 public final class DesktopUpdaterRegistry {
 
-    private static final IDesktopUpdater LEGACY_COMMUNITY_UPDATER = new LegacyDesktopUpdater();
     private static final IDesktopUpdater NO_OP_UPDATER = new NoOpDesktopUpdater();
 
     private static volatile IDesktopUpdater registeredUpdater;
+    private static volatile IDesktopUpdater communityUpdater;
 
     private DesktopUpdaterRegistry() {
     }
@@ -20,7 +20,7 @@ public final class DesktopUpdaterRegistry {
             return updater;
         }
         if (ConfigUtils.isCommunity() && ConfigUtils.isDesktop() && ConfigUtils.isShowGUI()) {
-            return LEGACY_COMMUNITY_UPDATER;
+            return communityUpdater();
         }
         return NO_OP_UPDATER;
     }
@@ -31,5 +31,20 @@ public final class DesktopUpdaterRegistry {
 
     static void resetForTests() {
         registeredUpdater = null;
+        communityUpdater = null;
+    }
+
+    private static IDesktopUpdater communityUpdater() {
+        IDesktopUpdater updater = communityUpdater;
+        if (updater == null) {
+            synchronized (DesktopUpdaterRegistry.class) {
+                updater = communityUpdater;
+                if (updater == null) {
+                    updater = new CommunityDesktopUpdater();
+                    communityUpdater = updater;
+                }
+            }
+        }
+        return updater;
     }
 }

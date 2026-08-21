@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GitHubReleaseUpdateSourceTest {
 
     private static final URI LATEST_URI = URI.create(
-            "https://github.com/OtterMind/Chat2DB/releases/latest/download/version.json");
+            "https://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json");
     private static final URI VERSIONED_URI = URI.create(
             "https://github.com/OtterMind/Chat2DB/releases/download/v5.4.0/version.json");
     private static final URI PAYLOAD_URI = URI.create(
@@ -47,6 +47,7 @@ class GitHubReleaseUpdateSourceTest {
                   "version": "5.4.0",
                   "releaseNotes": "Known issue fixes",
                   "releasePageUrl": "%s",
+                  "metadataSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                   "forceUpdate": %b
                 }
                 """.formatted(releasePageUrl, forceUpdate);
@@ -93,6 +94,15 @@ class GitHubReleaseUpdateSourceTest {
         FetchedUpdateManifest result = source.fetchLatestManifest();
 
         assertEquals("5.4.0", result.version());
+    }
+
+    @Test
+    void fetchVersionManifestUsesFixedVersionedAssetUrl() throws IOException {
+        byte[] bytes = "{\"version\":\"5.4.0\",\"files\":[]}".getBytes(StandardCharsets.UTF_8);
+        Map<String, MockHttpURLConnection> responses = Map.of(
+                VERSIONED_URI.toString(), new MockHttpURLConnection(VERSIONED_URI, 200).withBody(bytes));
+
+        assertArrayEquals(bytes, sourceFor(responses).fetchVersionManifest("5.4.0"));
     }
 
     @Test

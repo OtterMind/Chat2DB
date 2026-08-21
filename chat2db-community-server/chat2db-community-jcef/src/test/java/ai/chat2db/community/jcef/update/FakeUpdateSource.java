@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -29,6 +31,7 @@ final class FakeUpdateSource implements UpdateSource {
     private IOException payloadException;
     private PayloadResponseMode payloadResponseMode = PayloadResponseMode.PARTIAL_CONTENT;
     private final AtomicInteger fetchCount = new AtomicInteger(0);
+    private final AtomicInteger versionManifestFetchCount = new AtomicInteger(0);
     private final AtomicInteger payloadRequestCount = new AtomicInteger(0);
     private final AtomicLong nanoTime = new AtomicLong(0);
     private final AtomicReference<ValidatedPayloadRequest> lastPayloadRequest = new AtomicReference<>();
@@ -79,6 +82,10 @@ final class FakeUpdateSource implements UpdateSource {
         return fetchCount.get();
     }
 
+    int versionManifestFetchCount() {
+        return versionManifestFetchCount.get();
+    }
+
     ValidatedPayloadRequest lastPayloadRequest() {
         return lastPayloadRequest.get();
     }
@@ -101,7 +108,33 @@ final class FakeUpdateSource implements UpdateSource {
         String releaseNotes = text(root, "releaseNotes");
         String releasePageUrl = text(root, "releasePageUrl");
         Boolean forceUpdate = root.has("forceUpdate") ? root.get("forceUpdate").asBoolean() : null;
-        return new FetchedUpdateManifest(manifestBytes, version, releaseNotes, releasePageUrl, forceUpdate, fetchedAtNanos);
+        return new FetchedUpdateManifest(manifestBytes, version, releaseNotes, releasePageUrl, forceUpdate,
+                sha256(manifestBytes), fetchedAtNanos);
+    }
+
+    @Override
+    public byte[] fetchVersionManifest(String version) throws IOException {
+        versionManifestFetchCount.incrementAndGet();
+        if (manifestException != null) {
+            throw manifestException;
+        }
+        if (manifestBytes == null) {
+            fail("Manifest bytes not configured");
+        }
+        return manifestBytes.clone();
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder result = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                result.append(String.format("%02x", value & 0xff));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static String text(JsonNode root, String field) {

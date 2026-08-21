@@ -17,11 +17,17 @@ public final class AvailableSnapshot {
 
     private final String version;
     private final byte[] exactBytes;
+    private final String metadataSha256;
     private final long fetchedAtNanos;
 
     public AvailableSnapshot(String version, byte[] exactBytes, long fetchedAtNanos) {
+        this(version, exactBytes, null, fetchedAtNanos);
+    }
+
+    public AvailableSnapshot(String version, byte[] exactBytes, String metadataSha256, long fetchedAtNanos) {
         this.version = version;
         this.exactBytes = exactBytes != null ? exactBytes.clone() : new byte[0];
+        this.metadataSha256 = metadataSha256;
         this.fetchedAtNanos = fetchedAtNanos;
     }
 
@@ -35,6 +41,10 @@ public final class AvailableSnapshot {
 
     public long fetchedAtNanos() {
         return fetchedAtNanos;
+    }
+
+    public String metadataSha256() {
+        return metadataSha256;
     }
 
     /**

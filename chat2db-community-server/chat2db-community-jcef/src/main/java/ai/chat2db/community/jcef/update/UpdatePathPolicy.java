@@ -70,10 +70,16 @@ final class UpdatePathPolicy {
         Path current = root;
         for (Path segment : root.relativize(absolutePath)) {
             current = current.resolve(segment);
-            if (Files.isSymbolicLink(current)) {
+            if (Files.isSymbolicLink(current) && !isMacOsSystemAlias(current)) {
                 throw new IOException(description + " contains a symbolic link: " + value);
             }
         }
+    }
+
+    /** macOS exposes temporary directories beneath the system-owned /var -> /private/var alias. */
+    private static boolean isMacOsSystemAlias(Path path) {
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac")
+                && path.equals(Path.of("/var"));
     }
 
     private static boolean isBlank(String value) {

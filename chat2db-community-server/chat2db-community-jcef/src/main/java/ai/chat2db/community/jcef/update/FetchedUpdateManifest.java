@@ -10,6 +10,11 @@ public record FetchedUpdateManifest(
         String releaseNotes,
         String releasePageUrl,
         Boolean forceUpdate,
+        String metadataSha256,
         long fetchedAtNanos
 ) {
+    public FetchedUpdateManifest(byte[] exactBytes, String version, String releaseNotes, String releasePageUrl,
+                                 Boolean forceUpdate, long fetchedAtNanos) {
+        this(exactBytes, version, releaseNotes, releasePageUrl, forceUpdate, null, fetchedAtNanos);
+    }
 }

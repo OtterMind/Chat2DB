@@ -29,6 +29,33 @@ class UpdaterCliRuntimeBoundaryTest {
     }
 
     @Test
+    void automaticPayloadUpdatesAreWindowsOnlyWhileChecksRemainCrossPlatform(@TempDir Path temporaryDirectory) throws Exception {
+        assertTrue(Updater.isAutomaticUpdateSupported(true, false, true));
+        assertFalse(Updater.isAutomaticUpdateSupported(true, false, false));
+        String originalProfile = System.getProperty("spring.profiles.active");
+        String originalWebFrontend = System.getProperty("chat2db.jcef.web-frontend");
+        try {
+            System.setProperty("spring.profiles.active", "release");
+            System.setProperty("chat2db.jcef.web-frontend", "false");
+
+            Updater macUpdater = newAvailableUpdater(temporaryDirectory.resolve("mac"), false);
+            assertTrue(macUpdater.currentCheckResult().isNeedsUpdate());
+            assertThrows(BusinessException.class, () -> macUpdater.triggerDownload(new ConsoleResult()));
+            assertThrows(BusinessException.class, macUpdater::triggerInstallation);
+            assertThrows(BusinessException.class, macUpdater::triggerInstallationWithAuxiliaryProcess);
+            assertThrows(BusinessException.class, macUpdater::triggerInstallationWithAuxiliaryProcessNow);
+
+            Updater linuxUpdater = newAvailableUpdater(temporaryDirectory.resolve("linux"), false);
+            assertTrue(linuxUpdater.currentCheckResult().isNeedsUpdate());
+            assertThrows(BusinessException.class, () -> linuxUpdater.triggerDownload(new ConsoleResult()));
+            assertThrows(BusinessException.class, linuxUpdater::triggerInstallation);
+        } finally {
+            restoreProperty("spring.profiles.active", originalProfile);
+            restoreProperty("chat2db.jcef.web-frontend", originalWebFrontend);
+        }
+    }
+
+    @Test
     void developmentFrontendIsRejectedBeforeDownloadOrInstallationTouchesFiles(@TempDir Path temporaryDirectory) throws Exception {
         Updater updater = newAvailableUpdater(temporaryDirectory);
         String propertyName = "chat2db.jcef.web-frontend";
@@ -105,6 +132,10 @@ class UpdaterCliRuntimeBoundaryTest {
     }
 
     private static Updater newAvailableUpdater(Path directory) {
+        return newAvailableUpdater(directory, true);
+    }
+
+    private static Updater newAvailableUpdater(Path directory, boolean windows) {
         FakeUpdateSource source = new FakeUpdateSource().manifest("""
                 {
                   "version": "5.3.2",
@@ -114,7 +145,7 @@ class UpdaterCliRuntimeBoundaryTest {
                 }
                 """);
         Updater updater = new Updater(source, directory, directory.resolve("local_version.json"),
-                directory.resolve("downloads"), System::nanoTime);
+                directory.resolve("downloads"), System::nanoTime, () -> windows);
         assertTrue(updater.appCheckUpdate().isNeedsUpdate());
         return updater;
     }

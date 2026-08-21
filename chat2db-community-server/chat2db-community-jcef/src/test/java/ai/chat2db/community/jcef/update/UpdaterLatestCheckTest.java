@@ -25,6 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UpdaterLatestCheckTest {
 
     @Test
+    void checkDoesNotFetchTheCompleteVersionManifest(@TempDir Path temporaryDirectory) throws Exception {
+        FakeUpdateSource source = new FakeUpdateSource().manifest(githubManifest("5.3.2", "Notes", false));
+        withUpdater(temporaryDirectory, source, updater -> {
+            assertTrue(updater.appCheckUpdate().isNeedsUpdate());
+            assertEquals(1, source.fetchCount());
+            assertEquals(0, source.versionManifestFetchCount());
+        });
+    }
+
+    @Test
     void checkReadsOnlyDiscoveryFieldsAndRetainsManifestBytes(@TempDir Path temporaryDirectory) throws Exception {
         String manifest = githubManifest("5.3.2", "Test release notes", false);
         withUpdater(temporaryDirectory, manifest, updater -> {

@@ -1,6 +1,5 @@
 package ai.chat2db.community.jcef.update;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -17,7 +16,7 @@ import java.util.regex.Pattern;
  * <p>This source:
  * <ul>
  *   <li>uses the exact latest-asset URL for discovery and bypasses HTTP caches;</li>
- *   <li>fetches at most 1 MiB of manifest data;</li>
+ *   <li>fetches a small latest pointer during checking, then the complete version manifest during download;</li>
  *   <li>enforces the exact versioned payload URL shape;</li>
  *   <li>follows at most five redirects with a delegated-origin policy;</li>
  *   <li>streams payloads without buffering the full body.</li>
@@ -26,15 +25,14 @@ import java.util.regex.Pattern;
 public final class GitHubReleaseUpdateSource implements UpdateSource {
 
     private static final String LATEST_MANIFEST_URL =
-            "https://github.com/OtterMind/Chat2DB/releases/latest/download/version.json";
-    private static final long MAX_MANIFEST_BYTES = 1024 * 1024;
+            "https://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json";
+    private static final long MAX_LATEST_MANIFEST_BYTES = 64 * 1024;
+    private static final long MAX_VERSION_MANIFEST_BYTES = 1024 * 1024;
     private static final long MAX_RELEASE_NOTES_BYTES = 64 * 1024;
     private static final long CONNECT_TIMEOUT_MS = 15_000;
     private static final long MANIFEST_READ_TIMEOUT_MS = 30_000;
     private static final long PAYLOAD_READ_TIMEOUT_MS = 120_000;
     private static final Pattern VERSION_PATTERN = Pattern.compile("^[0-9]+(\\.[0-9]+)+$");
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     private final String userAgent;
     private final ConnectionOpener connectionOpener;
     private final AddressValidator addressValidator;
@@ -71,11 +69,32 @@ public final class GitHubReleaseUpdateSource implements UpdateSource {
                 throw new IOException("Unexpected status fetching latest manifest: " + status);
             }
             long contentLength = connection.getContentLengthLong();
-            if (contentLength > MAX_MANIFEST_BYTES) {
-                throw new IOException("Manifest Content-Length exceeds " + MAX_MANIFEST_BYTES + " bytes");
+            if (contentLength > MAX_LATEST_MANIFEST_BYTES) {
+                throw new IOException("Latest manifest Content-Length exceeds " + MAX_LATEST_MANIFEST_BYTES + " bytes");
             }
-            byte[] bytes = readBounded(connection.getInputStream(), MAX_MANIFEST_BYTES);
-            return parseManifest(bytes);
+            byte[] bytes = readBounded(connection.getInputStream(), MAX_LATEST_MANIFEST_BYTES);
+            return parseLatestManifest(bytes);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    @Override
+    public byte[] fetchVersionManifest(String version) throws IOException {
+        UpdateChecker.validateVersion(version);
+        URI uri = URI.create("https://github.com/OtterMind/Chat2DB/releases/download/v" + version + "/version.json");
+        UpdateUrlPolicy.validateVersionManifestUrl(uri, version);
+        HttpURLConnection connection = openConnection(uri, true, -1);
+        try {
+            int status = connection.getResponseCode();
+            if (status != HttpURLConnection.HTTP_OK) {
+                throw new IOException("Unexpected status fetching version manifest: " + status);
+            }
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > MAX_VERSION_MANIFEST_BYTES) {
+                throw new IOException("Version manifest Content-Length exceeds " + MAX_VERSION_MANIFEST_BYTES + " bytes");
+            }
+            return readBounded(connection.getInputStream(), MAX_VERSION_MANIFEST_BYTES);
         } finally {
             connection.disconnect();
         }
@@ -135,41 +154,41 @@ public final class GitHubReleaseUpdateSource implements UpdateSource {
         throw new IOException("Redirect limit exceeded");
     }
 
-    private FetchedUpdateManifest parseManifest(byte[] bytes) throws IOException {
-        DiscoveryManifest manifest = OBJECT_MAPPER.readValue(bytes, DiscoveryManifest.class);
-        if (manifest == null) {
-            throw new IOException("Manifest is empty");
-        }
-        if (manifest.version == null || manifest.version.isBlank()) {
+    private FetchedUpdateManifest parseLatestManifest(byte[] bytes) throws IOException {
+        DiscoveryManifestParser.DiscoveryManifest manifest = DiscoveryManifestParser.parse(bytes);
+        if (manifest.version() == null || manifest.version().isBlank()) {
             throw new IOException("Manifest version is missing");
         }
-        String version = manifest.version.trim();
+        String version = manifest.version().trim();
         if (version.startsWith("v") || version.startsWith("V")) {
             throw new IOException("Manifest version must not have a v prefix");
         }
         if (!VERSION_PATTERN.matcher(version).matches()) {
             throw new IOException("Manifest version is not a numeric version");
         }
-        if (manifest.forceUpdate == null) {
+        if (manifest.forceUpdate() == null) {
             throw new IOException("Remote GitHub manifest must include forceUpdate=false");
         }
-        if (manifest.forceUpdate) {
+        if (manifest.forceUpdate()) {
             throw new IOException("Remote GitHub manifest must not require forced updates");
         }
-        if (manifest.releaseNotes != null) {
-            byte[] notesBytes = manifest.releaseNotes.getBytes(StandardCharsets.UTF_8);
+        if (manifest.metadataSha256() == null || !manifest.metadataSha256().matches("^[a-f0-9]{64}$")) {
+            throw new IOException("Remote GitHub latest manifest must include a lowercase metadata SHA-256");
+        }
+        if (manifest.releaseNotes() != null) {
+            byte[] notesBytes = manifest.releaseNotes().getBytes(StandardCharsets.UTF_8);
             if (notesBytes.length > MAX_RELEASE_NOTES_BYTES) {
                 throw new IOException("Manifest releaseNotes exceeds " + MAX_RELEASE_NOTES_BYTES + " bytes");
             }
         }
-        if (manifest.releasePageUrl != null) {
+        if (manifest.releasePageUrl() != null) {
             String expected = "https://github.com/OtterMind/Chat2DB/releases/tag/v" + version;
-            if (!expected.equals(manifest.releasePageUrl)) {
+            if (!expected.equals(manifest.releasePageUrl())) {
                 throw new IOException("Manifest releasePageUrl does not match the expected release page");
             }
         }
-        return new FetchedUpdateManifest(bytes, version, manifest.releaseNotes, manifest.releasePageUrl,
-                Boolean.FALSE, System.nanoTime());
+        return new FetchedUpdateManifest(bytes, version, manifest.releaseNotes(), manifest.releasePageUrl(),
+                Boolean.FALSE, manifest.metadataSha256(), System.nanoTime());
     }
 
     private static byte[] readBounded(InputStream input, long maxBytes) throws IOException {
@@ -187,10 +206,4 @@ public final class GitHubReleaseUpdateSource implements UpdateSource {
         return buffer.toByteArray();
     }
 
-    private static class DiscoveryManifest {
-        public String version;
-        public String releaseNotes;
-        public String releasePageUrl;
-        public Boolean forceUpdate;
-    }
 }

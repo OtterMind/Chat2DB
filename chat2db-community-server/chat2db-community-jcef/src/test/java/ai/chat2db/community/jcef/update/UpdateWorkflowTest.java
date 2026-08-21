@@ -31,6 +31,7 @@ class UpdateWorkflowTest {
         assertFalse(result.isCheckFailed());
         assertNotNull(result.getAvailableSnapshot());
         assertEquals(1, source.fetchCount());
+        assertEquals(0, source.versionManifestFetchCount());
     }
 
     @Test

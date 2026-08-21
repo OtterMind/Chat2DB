@@ -10,7 +10,7 @@ final class UpdateUrlPolicy {
 
     static final String GITHUB_HOST = "github.com";
     static final String REPO_PATH = "/OtterMind/Chat2DB";
-    static final String LATEST_PATH = REPO_PATH + "/releases/latest/download/version.json";
+    static final String LATEST_PATH = REPO_PATH + "/releases/latest/download/latest_version.json";
 
     private UpdateUrlPolicy() {
     }
@@ -69,6 +69,10 @@ final class UpdateUrlPolicy {
                 throw new IOException("Payload URL contains a relative path segment");
             }
         }
+    }
+
+    static void validateVersionManifestUrl(URI uri, String expectedVersion) throws IOException {
+        validatePayloadUrl(uri, expectedVersion, "version.json");
     }
 
     private static void validateCommon(URI uri) throws IOException {

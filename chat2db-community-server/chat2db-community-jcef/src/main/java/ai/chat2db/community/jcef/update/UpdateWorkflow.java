@@ -104,7 +104,9 @@ final class UpdateWorkflow {
             progressReporter.resetProgressTracker();
 
             AvailableSnapshot snapshot = refreshSnapshotIfExpired(checkedResult.getAvailableSnapshot());
-            VersionMetadata remoteMetadata = objectMapper.readValue(snapshot.exactBytes(), VersionMetadata.class);
+            byte[] metadataBytes = updateSource.fetchVersionManifest(snapshot.version());
+            verifyMetadataSha256(metadataBytes, snapshot.metadataSha256());
+            VersionMetadata remoteMetadata = objectMapper.readValue(metadataBytes, VersionMetadata.class);
             manifestValidator.validate(remoteMetadata, snapshot.version());
 
             VersionMetadata localMetadata = localVersionStore.load(true);
@@ -233,7 +235,8 @@ final class UpdateWorkflow {
         String refreshedVersion = refreshed.version();
         UpdateChecker.validateVersion(refreshedVersion);
         if (!refreshedVersion.equals(snapshot.version())) {
-            AvailableSnapshot refreshedSnapshot = new AvailableSnapshot(refreshedVersion, refreshed.exactBytes(), refreshed.fetchedAtNanos());
+            AvailableSnapshot refreshedSnapshot = new AvailableSnapshot(refreshedVersion, refreshed.exactBytes(),
+                    refreshed.metadataSha256(), refreshed.fetchedAtNanos());
             coordinator.replaceCheckResult(previous -> new Updater.CheckResult(true, refreshed.releaseNotes(),
                     Collections.emptyList(), null, false, null, refreshedSnapshot, refreshed.releasePageUrl(), null, null));
             throw new BusinessException("A newer version is available. Please check again before downloading.");
@@ -241,7 +244,8 @@ final class UpdateWorkflow {
         if (!snapshot.sameBytes(refreshed.exactBytes())) {
             throw new IOException("Immutable Release contract violated: same version has different manifest bytes");
         }
-        AvailableSnapshot renewed = new AvailableSnapshot(refreshedVersion, refreshed.exactBytes(), refreshed.fetchedAtNanos());
+        AvailableSnapshot renewed = new AvailableSnapshot(refreshedVersion, refreshed.exactBytes(),
+                refreshed.metadataSha256(), refreshed.fetchedAtNanos());
         coordinator.replaceCheckResult(previous -> new Updater.CheckResult(true, previous.getReleaseNotes(),
                 Collections.emptyList(), null, false, null, renewed, previous.getReleasePageUrl(), null, null));
         return renewed;
@@ -276,6 +280,21 @@ final class UpdateWorkflow {
                     .mapToLong(action -> action.remoteFileInfo.fileSizeByte).reduce(0L, Math::addExact);
         } catch (ArithmeticException exception) {
             throw new IOException("Update download size overflow", exception);
+        }
+    }
+
+    private static void verifyMetadataSha256(byte[] metadataBytes, String expectedSha256)
+            throws IOException, NoSuchAlgorithmException {
+        if (expectedSha256 == null || !expectedSha256.matches("^[a-f0-9]{64}$")) {
+            throw new IOException("Latest manifest has an invalid metadata SHA-256");
+        }
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        StringBuilder actual = new StringBuilder(64);
+        for (byte value : digest.digest(metadataBytes)) {
+            actual.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+        }
+        if (!actual.toString().equals(expectedSha256)) {
+            throw new IOException("Version manifest SHA-256 does not match the latest manifest");
         }
     }
 

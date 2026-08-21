@@ -13,43 +13,43 @@ class UpdateUrlPolicyTest {
     @Test
     void acceptsExactLatestManifestUrl() {
         assertDoesNotThrow(() -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/version.json")));
+                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json")));
     }
 
     @Test
     void rejectsHttpLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("http://github.com/OtterMind/Chat2DB/releases/latest/download/version.json")));
+                URI.create("http://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json")));
     }
 
     @Test
     void rejectsUserinfoInLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://user:pass@github.com/OtterMind/Chat2DB/releases/latest/download/version.json")));
+                URI.create("https://user:pass@github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json")));
     }
 
     @Test
     void rejectsNonDefaultPortInLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://github.com:8443/OtterMind/Chat2DB/releases/latest/download/version.json")));
+                URI.create("https://github.com:8443/OtterMind/Chat2DB/releases/latest/download/latest_version.json")));
     }
 
     @Test
     void rejectsQueryInLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/version.json?x=1")));
+                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json?x=1")));
     }
 
     @Test
     void rejectsFragmentInLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/version.json#x")));
+                URI.create("https://github.com/OtterMind/Chat2DB/releases/latest/download/latest_version.json#x")));
     }
 
     @Test
     void rejectsDifferentRepoInLatestUrl() {
         assertThrows(IOException.class, () -> UpdateUrlPolicy.validateLatestUrl(
-                URI.create("https://github.com/Evil/Chat2DB/releases/latest/download/version.json")));
+                URI.create("https://github.com/Evil/Chat2DB/releases/latest/download/latest_version.json")));
     }
 
     @Test

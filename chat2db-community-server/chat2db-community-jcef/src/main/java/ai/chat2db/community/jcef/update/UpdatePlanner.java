@@ -35,6 +35,7 @@ final class UpdatePlanner {
         Map<String, FileInfo> localFilesMap = local != null && local.files != null
                 ? local.getFilesAsMap() : new HashMap<>();
         Map<String, FileInfo> remoteFilesMap = remote.getFilesAsMap();
+        boolean versionChanged = local == null || !Objects.equals(local.getVersion(), remote.getVersion());
 
         for (Map.Entry<String, FileInfo> entry : remoteFilesMap.entrySet()) {
             String fileId = entry.getKey();
@@ -61,10 +62,11 @@ final class UpdatePlanner {
                 actions.add(new FileUpdateAction(UpdateActionType.UPDATE_EXISTING, remoteFile, localFileMeta,
                         "Metadata checksum changed"));
             } else if ("zip".equals(remoteFile.type)) {
-                actions.add(new FileUpdateAction(Files.isDirectory(actualLocalPath)
-                        ? UpdateActionType.KEEP_LOCAL : UpdateActionType.UPDATE_EXISTING, remoteFile, localFileMeta,
-                        Files.isDirectory(actualLocalPath)
-                                ? "ZIP directory exists, metadata matches"
+                boolean keepLocal = !versionChanged && Files.isDirectory(actualLocalPath);
+                actions.add(new FileUpdateAction(keepLocal ? UpdateActionType.KEEP_LOCAL
+                        : UpdateActionType.UPDATE_EXISTING, remoteFile, localFileMeta,
+                        keepLocal ? "Same-version ZIP directory exists and metadata matches"
+                                : versionChanged ? "ZIP payloads are always replaced across versions"
                                 : "ZIP directory missing or is not a directory"));
             } else if (localFiles.checksumMatches(actualLocalPath, remoteFile.sha256)) {
                 actions.add(new FileUpdateAction(UpdateActionType.KEEP_LOCAL, remoteFile, localFileMeta,
