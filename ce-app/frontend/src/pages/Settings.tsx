@@ -4,7 +4,8 @@ import { RefreshCw, Download, CheckCircle2 } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
 
-const APP_VERSION = '0.2.2'
+declare const __APP_VERSION__: string
+const APP_VERSION = __APP_VERSION__
 
 export default function Settings() {
   const [form] = Form.useForm()

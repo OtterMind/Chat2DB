@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import pkg from './package.json'
 
 export default defineConfig({
   // Relative asset URLs are mandatory: the packaged app is loaded over file://,
@@ -17,4 +18,6 @@ export default defineConfig({
     },
   },
   build: { outDir: 'dist', sourcemap: false },
+  // one source of truth for the version shown in the UI
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
 })
