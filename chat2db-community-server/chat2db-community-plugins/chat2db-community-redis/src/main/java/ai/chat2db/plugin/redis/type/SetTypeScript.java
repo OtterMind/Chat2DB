@@ -44,7 +44,7 @@ public class SetTypeScript extends BaseTypeScript implements ITypeScript {
             }
             rs.setValues(zSetValues);
         });
-        String ttl = RedisScriptExecutor.getInstance().getTtl(redisKey.getName());
+        String ttl = RedisScriptExecutor.getInstance().getTtl(connection, redisKey.getName());
         if (StringUtils.isNotBlank(ttl)) {
             rs.setTtl(Long.parseLong(ttl));
         } else {

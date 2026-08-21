@@ -2,7 +2,6 @@ package ai.chat2db.plugin.clickhouse.constant;
 
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import cn.hutool.core.date.DateUtil;

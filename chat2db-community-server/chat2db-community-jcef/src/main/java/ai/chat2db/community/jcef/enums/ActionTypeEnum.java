@@ -9,8 +9,10 @@ public enum ActionTypeEnum {
     UPDATE_PROGRESS("update_progress", "Update progress"),
     OPEN_FILE("open_file", "Open specified file"),
     OSS_LOGIN("oss_login", "Single sign-on"),
+    WINDOW_FULL_SCREEN_CHANGED("window_full_screen_changed", "Native full screen state changed"),
     TERMINAL_OUTPUT("terminal_output", "Integrated terminal output"),
-    TERMINAL_EXIT("terminal_exit", "Integrated terminal exit")
+    TERMINAL_EXIT("terminal_exit", "Integrated terminal exit"),
+    APP_EXIT_REQUESTED("app_exit_requested", "Application exit requested")
     ;
 
     @Getter

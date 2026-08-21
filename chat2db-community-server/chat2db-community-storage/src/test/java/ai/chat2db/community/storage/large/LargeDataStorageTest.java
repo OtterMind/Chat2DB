@@ -15,6 +15,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,6 +45,26 @@ class LargeDataStorageTest {
     static class TestStorage extends LargeDataStorage<Item> {
         TestStorage(String name, int limit, File baseDir) {
             super(name, Item.class, limit, baseDir.getAbsolutePath());
+        }
+
+        TestStorage(String directoryName, String indexName, int limit, File baseDir) {
+            super(directoryName, indexName, Item.class, limit, baseDir.getAbsolutePath());
+        }
+    }
+
+    static class FailingDetailStorage extends TestStorage {
+        private boolean failWrites;
+
+        FailingDetailStorage(String name, int limit, File baseDir) {
+            super(name, limit, baseDir);
+        }
+
+        @Override
+        protected void saveDetailData(Long id, Item data) {
+            if (failWrites) {
+                throw new IllegalStateException("simulated detail write failure");
+            }
+            super.saveDetailData(id, data);
         }
     }
 
@@ -102,6 +123,46 @@ class LargeDataStorageTest {
         Item item = item(value);
         item.setId(id);
         return item;
+    }
+
+    @Test
+    void directoryAndIndexNamesCanDiffer() {
+        TestStorage storage = new TestStorage("task-v2", "task", 0, baseDir);
+
+        storage.save(item("value", 1L));
+
+        File taskDirectory = new File(baseDir, "task-v2");
+        assertTrue(new File(taskDirectory, "task.json").isFile());
+        assertTrue(new File(taskDirectory, "1.json").isFile());
+        assertFalse(new File(taskDirectory, "task-v2.json").exists());
+
+        TestStorage reloaded = new TestStorage("task-v2", "task", 0, baseDir);
+        assertEquals("value", reloaded.getById(1L).getValue());
+    }
+
+    @Test
+    void zeroLimitKeepsEveryRecordAndReloadsThem() {
+        TestStorage storage = new TestStorage(name, 0, baseDir);
+
+        for (long id = 1; id <= 25; id++) {
+            storage.save(item("value-" + id, id));
+        }
+
+        assertEquals(25, storage.getDataList().size());
+        assertEquals(25, FileUtil.readLines(indexFile(), "UTF-8").size());
+        assertEquals(25, new TestStorage(name, 0, baseDir).getDataList().size());
+    }
+
+    @Test
+    void failedDetailWriteDoesNotPublishRecordInMemoryOrIndex() {
+        FailingDetailStorage storage = new FailingDetailStorage(name, 0, baseDir);
+        storage.failWrites = true;
+
+        assertThrows(RuntimeException.class, () -> storage.save(item("value", 1L)));
+
+        assertNull(storage.getById(1L));
+        assertTrue(storage.getDataList().isEmpty());
+        assertEquals("", FileUtil.readUtf8String(indexFile()));
     }
 
     @Test

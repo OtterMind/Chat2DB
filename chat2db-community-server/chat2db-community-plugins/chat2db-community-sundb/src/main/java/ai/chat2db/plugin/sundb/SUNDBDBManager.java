@@ -5,11 +5,10 @@ import java.sql.*;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.plugin.sundb.identifier.SUNDBIdentifierProcessor;
 import ai.chat2db.spi.DefaultDBManager;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import cn.hutool.core.date.DateUtil;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -30,33 +29,39 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
 
 
     @Override
-    public void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext) throws SQLException {
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting tables");
-        exportTables(connection, schemaName, asyncContext);
-        asyncContext.setProgress(50);
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting views");
-        exportViews(connection, schemaName, asyncContext);
-        asyncContext.setProgress(60);
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting producers");
-        exportProcedures(connection, schemaName, asyncContext);
-        asyncContext.setProgress(70);
-        asyncContext.info(DateUtil.formatDateTime(new java.util.Date())+":Exporting triggers");
-        exportTriggers(connection,schemaName, asyncContext);
-        asyncContext.setProgress(90);
+    public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException {
+        logDatabaseObjectExportStarted(context, "tables");
+        exportTables(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "tables");
+        context.reportProgress(50, EXPORT_TASK_STAGE, "Exporting tables");
+        logDatabaseObjectExportStarted(context, "views");
+        exportViews(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "views");
+        context.reportProgress(60, EXPORT_TASK_STAGE, "Exporting views");
+        logDatabaseObjectExportStarted(context, "procedures");
+        exportProcedures(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "procedures");
+        context.reportProgress(70, EXPORT_TASK_STAGE, "Exporting procedures");
+        logDatabaseObjectExportStarted(context, "triggers");
+        exportTriggers(connection, schemaName, context);
+        logDatabaseObjectExportCompleted(context, "triggers");
+        context.reportProgress(90, EXPORT_TASK_STAGE, "Exporting triggers");
     }
 
-    private void exportTables(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTables(Connection connection, String schemaName, TaskExecutionContext context) throws SQLException {
         String sql =String.format(SQL_SELECT_TABLE_NAME_ALL_TABLES, SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName));
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql); ResultSet resultSet = preparedStatement.executeQuery()) {
             while (resultSet.next()) {
                 String tableName = resultSet.getString("TABLE_NAME");
-                exportTable(connection, tableName, schemaName, asyncContext);
+                exportTable(connection, tableName, schemaName, context);
             }
         }
     }
 
 
-    private void exportTable(Connection connection, String tableName, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTable(Connection connection, String tableName, String schemaName, TaskExecutionContext context)
+            throws SQLException {
 
 
     }
@@ -75,41 +80,45 @@ public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
     }
 
 
-    private void exportViews(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportViews(Connection connection, String schemaName, TaskExecutionContext context) throws SQLException {
         try (ResultSet resultSet = connection.getMetaData().getTables(null, schemaName, null, new String[]{"VIEW"})) {
             while (resultSet.next()) {
                 String viewName = resultSet.getString("TABLE_NAME");
-                exportView(connection, viewName, schemaName, asyncContext);
+                exportView(connection, viewName, schemaName, context);
             }
         }
     }
 
-    private void exportView(Connection connection, String viewName, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportView(Connection connection, String viewName, String schemaName, TaskExecutionContext context)
+            throws SQLException {
 
 
     }
 
-    private void exportProcedures(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportProcedures(Connection connection, String schemaName, TaskExecutionContext context)
+            throws SQLException {
         try (ResultSet resultSet = connection.getMetaData().getProcedures(null, schemaName, null)) {
             while (resultSet.next()) {
                 String procedureName = resultSet.getString("PROCEDURE_NAME");
-                exportProcedure(connection, schemaName,procedureName, asyncContext);
+                exportProcedure(connection, schemaName, procedureName, context);
             }
         }
     }
 
-    private void exportProcedure(Connection connection, String schemaName, String procedureName, AsyncContext asyncContext) throws SQLException {
+    private void exportProcedure(Connection connection, String schemaName, String procedureName,
+            TaskExecutionContext context) throws SQLException {
         String sql = String.format(ROUTINES_SQL,"PROC", SUNDBIdentifierProcessor.INSTANCE.escapeString(schemaName), SUNDBIdentifierProcessor.INSTANCE.escapeString(procedureName));
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
             if (resultSet.next()) {
                 StringBuilder sqlBuilder = new StringBuilder();
                 sqlBuilder.append(resultSet.getString("TEXT")).append("\n");
-                asyncContext.write(sqlBuilder.toString());
+                context.write(sqlBuilder.toString());
             }
         }
     }
 
-    private void exportTriggers(Connection connection, String schemaName, AsyncContext asyncContext) throws SQLException {
+    private void exportTriggers(Connection connection, String schemaName, TaskExecutionContext context)
+            throws SQLException {
 
 
     }

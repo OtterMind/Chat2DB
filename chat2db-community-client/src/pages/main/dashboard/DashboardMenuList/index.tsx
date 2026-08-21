@@ -11,12 +11,12 @@ import { useGlobalStore } from '@/store/global';
 const scrollId = 'chartMenuListDiv';
 
 interface DashboardMenuListProps {
-  setOpenAddDashboard?: () => void;
   dashboardId?: number;
+  onSelect?: () => void;
 }
 
 const DashboardMenuList: FC<DashboardMenuListProps> = (props) => {
-  const { dashboardId } = props;
+  const { dashboardId, onSelect } = props;
   const { styles, cx } = useStyles();
 
   const {
@@ -49,9 +49,7 @@ const DashboardMenuList: FC<DashboardMenuListProps> = (props) => {
   const [selectedId, setSelectedId] = useState<number | undefined>(currentDashboard?.id);
 
   useEffect(() => {
-    if (currentDashboard?.id !== undefined) {
-      setSelectedId(currentDashboard.id);
-    }
+    setSelectedId(currentDashboard?.id);
   }, [currentDashboard?.id]);
 
   useEffect(() => {
@@ -62,6 +60,7 @@ const DashboardMenuList: FC<DashboardMenuListProps> = (props) => {
 
   const handleCreateNewDashboard = () => {
     setSettingDashboard({});
+    onSelect?.();
   };
 
   return (
@@ -106,6 +105,7 @@ const DashboardMenuList: FC<DashboardMenuListProps> = (props) => {
                       setSelectedId(t.id);
                       getDashboardById(t.id);
                     }
+                    onSelect?.();
                   }}
                 >
                   <div className={styles.dashboardItemTitle}>{t.name}</div>

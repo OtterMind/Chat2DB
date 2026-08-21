@@ -1,6 +1,5 @@
 package ai.chat2db.plugin.h2;
 
-import java.io.File;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
@@ -11,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.Test;
@@ -24,9 +23,10 @@ class H2DBManagerSecurityTest {
     void exportSchemaEscapesSchemaName() throws Exception {
         List<String> captured = new ArrayList<>();
         Connection connection = captureConnection(captured);
-        AsyncContext asyncContext = new AsyncContext(null, null, tempFile(), false);
+        TaskExecutionContext context = proxy(TaskExecutionContext.class,
+                (p, method, args) -> defaultValue(method.getReturnType()));
 
-        new H2DBManager().exportDatabase(connection, "TEST", "EVIL\" SCHEMA", asyncContext);
+        new H2DBManager().exportDatabase(connection, "TEST", "EVIL\" SCHEMA", false, context);
 
         assertEquals(List.of("SCRIPT NODATA NOPASSWORDS NOSETTINGS DROP SCHEMA \"EVIL\"\" SCHEMA\";"),
             captured);
@@ -36,9 +36,10 @@ class H2DBManagerSecurityTest {
     void exportSchemaAppliesNodataSentinelBeforeSubstitutingSchemaName() throws Exception {
         List<String> captured = new ArrayList<>();
         Connection connection = captureConnection(captured);
-        AsyncContext asyncContext = new AsyncContext(null, null, tempFile(), true);
+        TaskExecutionContext context = proxy(TaskExecutionContext.class,
+                (p, method, args) -> defaultValue(method.getReturnType()));
 
-        new H2DBManager().exportDatabase(connection, "TEST", "ANODATA", asyncContext);
+        new H2DBManager().exportDatabase(connection, "TEST", "ANODATA", true, context);
 
         assertEquals(List.of("SCRIPT  NOPASSWORDS NOSETTINGS DROP SCHEMA \"ANODATA\";"), captured);
     }
@@ -67,12 +68,6 @@ class H2DBManagerSecurityTest {
         } finally {
             Chat2DBContext.removeContext();
         }
-    }
-
-    private static File tempFile() throws Exception {
-        File file = File.createTempFile("h2-export", ".sql");
-        file.deleteOnExit();
-        return file;
     }
 
     private static Connection captureConnection(List<String> captured) {

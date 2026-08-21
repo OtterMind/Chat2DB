@@ -1,6 +1,5 @@
 package ai.chat2db.community.test.spi.sql;
 
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import org.junit.jupiter.api.Test;
@@ -21,6 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -74,15 +74,15 @@ class DefaultSQLExecutorTaskCancellationTest {
         CountDownLatch cancelled = new CountDownLatch(1);
         PreparedStatement statement = blockingStatement(executeCalls, cancelCalls, executeStarted, cancelled);
         Connection connection = connection(statement, prepareCalls);
-        AsyncContext context = new AsyncContext(null, null, null, false);
+        TestCancellation cancellation = new TestCancellation();
         ExecutorService executor = Executors.newSingleThreadExecutor();
 
         try {
             var execution = executor.submit(() -> DefaultSQLExecutor.getInstance().executeBatchInsert(
-                    connection, List.of("first", "second"), context, context::checkCancelled));
+                    connection, List.of("first", "second"), cancellation, cancellation::checkCancelled));
             assertTrue(executeStarted.await(5, TimeUnit.SECONDS), "statement did not start executing");
 
-            assertTrue(context.stop());
+            assertTrue(cancellation.stop());
 
             ExecutionException failure = assertThrows(ExecutionException.class,
                     () -> execution.get(5, TimeUnit.SECONDS));
@@ -220,6 +220,40 @@ class DefaultSQLExecutorTaskCancellationTest {
         @Override
         public void onStatementClosed(Statement statement) {
             closed.incrementAndGet();
+        }
+    }
+
+    private static final class TestCancellation implements ISqlExecutionStatementListener {
+
+        private final AtomicBoolean stopped = new AtomicBoolean();
+
+        private final AtomicReference<Statement> statement = new AtomicReference<>();
+
+        boolean stop() throws SQLException {
+            if (!stopped.compareAndSet(false, true)) {
+                return false;
+            }
+            Statement current = statement.get();
+            if (current != null) {
+                current.cancel();
+            }
+            return true;
+        }
+
+        void checkCancelled() {
+            if (stopped.get()) {
+                throw new CancellationException("cancelled");
+            }
+        }
+
+        @Override
+        public void onStatementCreated(Statement statement) {
+            this.statement.set(statement);
+        }
+
+        @Override
+        public void onStatementClosed(Statement statement) {
+            this.statement.compareAndSet(statement, null);
         }
     }
 }

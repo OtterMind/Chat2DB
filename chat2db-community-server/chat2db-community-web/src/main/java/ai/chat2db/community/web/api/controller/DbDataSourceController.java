@@ -15,6 +15,7 @@ import ai.chat2db.community.web.api.converter.data.source.DataSourceWebConverter
 import ai.chat2db.community.web.api.converter.data.source.SSHWebConverter;
 import ai.chat2db.community.web.api.model.request.data.source.*;
 import ai.chat2db.community.web.api.model.response.data.source.DataSourceResponse;
+import ai.chat2db.community.web.api.model.response.data.source.DataSourceIdentityColorResponse;
 import ai.chat2db.community.web.api.model.response.data.source.DatabaseResponse;
 import ai.chat2db.community.web.api.model.response.data.source.ProgressResponse;
 import jakarta.validation.Valid;
@@ -232,5 +233,19 @@ public class DbDataSourceController {
         WorkspaceDataSource dataSource = workspaceDataSourceService.updateDataSource(
                 dataSourceWebConverter.response2storage(dataSourceWebConverter.request2response(request)));
         return DataResult.of(dataSourceWebConverter.storage2response(dataSource));
+    }
+
+    /**
+     * Updates or clears the shared datasource identity color without resubmitting connection credentials.
+     *
+     * @param request datasource identifier and nullable custom color.
+     * @return normalized identity color and its environment context.
+     */
+    @PostMapping("/datasource/identity_color")
+    public DataResult<DataSourceIdentityColorResponse> updateIdentityColor(
+            @Valid @RequestBody DataSourceIdentityColorUpdateRequest request) {
+        WorkspaceDataSource dataSource = workspaceDataSourceService.updateDataSourceIdentityColor(
+                request.getId(), request.getIdentityColor());
+        return DataResult.of(dataSourceWebConverter.storage2identityColorResponse(dataSource));
     }
 }

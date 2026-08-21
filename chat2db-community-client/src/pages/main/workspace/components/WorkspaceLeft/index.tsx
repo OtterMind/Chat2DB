@@ -8,7 +8,8 @@ import { useWorkspaceStore } from '@/store/workspace';
 import type { TreeNodeData } from '@/typings';
 import { isCommunityEnv, isDesktop, isDesktopEnv, isOfflineEnv, isWebEnv } from '@/utils/env';
 import feedback from '@/utils/feedback';
-import { Flex } from 'antd';
+import { Dropdown, Flex, type MenuProps } from 'antd';
+import { ChevronDown, Database, Folder, type LucideIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react';
 import {
   getActiveTabLocateTargetForPanel,
@@ -19,7 +20,9 @@ import {
   type WorkspaceLeftPanel,
 } from '../../utils/activeTabLocator';
 import WorkspaceExplorer, { type WorkspaceExplorerRef } from '../WorkspaceExplorer';
+import WorkspaceHeaderSearch from '../WorkspaceHeaderSearch';
 import WorkspaceLeftActionBar from '../WorkspaceLeftActionBar';
+import WorkspaceTreeSearch from '../WorkspaceTreeSearch';
 import { shouldProbeDesktopBridge } from './desktopBridge';
 import { loadDatabaseTreePath } from './loadDatabaseTreePath';
 import { useStyles } from './style';
@@ -141,6 +144,7 @@ const WorkspaceLeft = memo(() => {
     isDesktop,
   });
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => isDesktop || hasDesktopBridge());
+  const [explorerSearchKeyword, setExplorerSearchKeyword] = useState('');
   const { styles } = useStyles();
   const showExplorerPanel = canProbeDesktopBridge && desktopBridgeReady;
   const { activeConsoleId, workspaceTabList } = useWorkspaceStore((state) => ({
@@ -171,10 +175,27 @@ const WorkspaceLeft = memo(() => {
   const activeTabLocateTargets = useMemo(() => getActiveTabLocateTargets(activeTab), [activeTab]);
   const activeTabLocateTarget = getActiveTabLocateTargetForPanel(activeTabLocateTargets, currentPanel);
   const autoFollowActiveWorkspaceTab = userConfigTree.followActiveWorkspaceTab !== false;
-  const panelOptions: Array<{ label: string; value: WorkspaceLeftPanel }> = [
-    { label: i18n('workspace.explorer.title'), value: 'explorer' },
-    { label: i18n('workspace.explorer.databases'), value: 'database' },
+  const panelOptions: Array<{ icon: LucideIcon; label: string; value: WorkspaceLeftPanel }> = [
+    { icon: Database, label: i18n('workspace.explorer.dataSources'), value: 'database' },
+    { icon: Folder, label: i18n('workspace.explorer.title'), value: 'explorer' },
   ];
+  const visiblePanelOptions = showExplorerPanel
+    ? panelOptions
+    : panelOptions.filter((item) => item.value === 'database');
+  const currentPanelOption = panelOptions.find((item) => item.value === currentPanel) || panelOptions[0];
+  const panelMenuItems: MenuProps['items'] = visiblePanelOptions.map((item) => {
+    const OptionIcon = item.icon;
+    return {
+      key: item.value,
+      label: (
+        <span className={styles.resourceMenuItem}>
+          <OptionIcon aria-hidden size={15} strokeWidth={1.8} />
+          <span>{item.label}</span>
+        </span>
+      ),
+    };
+  });
+  const showResourceSwitcher = showExplorerPanel || isCommunityEnv;
   const locateDisabled = !activeTabLocateTarget;
 
   useEffect(() => {
@@ -368,28 +389,44 @@ const WorkspaceLeft = memo(() => {
   return (
     <>
       <MainSecondaryPanel tabIndex={-1} id="tree-search-area">
-        {showExplorerPanel && (
+        {showResourceSwitcher && (
           <div className={styles.resourceSwitcher}>
-            <div className={styles.resourceTabs}>
-              {panelOptions.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={[styles.resourceTitle, activePanel === item.value ? styles.resourceTitleActive : '']
-                    .filter(Boolean)
-                    .join(' ')}
-                  onClick={() => handlePanelSelection(item.value)}
-                >
-                  {item.label}
-                </button>
-              ))}
+            <Dropdown
+              menu={{
+                items: panelMenuItems,
+                selectable: true,
+                selectedKeys: [currentPanel],
+                onClick: ({ key }) => handlePanelSelection(key as WorkspaceLeftPanel),
+              }}
+              placement="bottomLeft"
+              trigger={['click']}
+            >
+              <button type="button" className={styles.resourceSelector} aria-label={currentPanelOption.label}>
+                <span className={styles.resourceSelectorLabel}>{currentPanelOption.label}</span>
+                <ChevronDown aria-hidden size={14} strokeWidth={1.8} />
+              </button>
+            </Dropdown>
+            <div className={styles.resourceHeaderActions}>
+              {currentPanel === 'database' && <WorkspaceTreeSearch />}
+              {currentPanel === 'explorer' && (
+                <WorkspaceHeaderSearch
+                  active
+                  onChange={setExplorerSearchKeyword}
+                  value={explorerSearchKeyword}
+                />
+              )}
             </div>
           </div>
         )}
         {showExplorerPanel ? (
           <>
             <div className={[styles.panelPane, currentPanel === 'explorer' ? styles.panelPaneActive : ''].join(' ')}>
-              <WorkspaceExplorer ref={explorerRef} active={currentPanel === 'explorer'} />
+              <WorkspaceExplorer
+                ref={explorerRef}
+                active={currentPanel === 'explorer'}
+                searchKeyword={explorerSearchKeyword}
+                onSearchKeywordChange={setExplorerSearchKeyword}
+              />
             </div>
             <div className={[styles.panelPane, currentPanel === 'database' ? styles.panelPaneActive : ''].join(' ')}>
               <WorkspaceLeftActionBar

@@ -8,21 +8,24 @@ export enum ImportExportFileType {
   CSV = 'CSV',
   XLS = 'XLS',
   XLSX = 'XLSX',
+  JSON = 'JSON',
   SQL = 'SQL',
 }
 
 export enum ImportExportTaskType {
-  DOWNLOAD_DATA = 'DOWNLOAD_DATA', // Download data
-  DOWNLOAD_TABLE_STRUCTURE = 'DOWNLOAD_TABLE_STRUCTURE', // Download table structure
-  UPLOAD_TABLE_DATA = 'UPLOAD_TABLE_DATA', // Upload table data
-  UPLOAD_TABLE_STRUCTURE = 'UPLOAD_TABLE_STRUCTURE', // Upload table structure
+  QUERY_RESULT_EXPORT = 'QUERY_RESULT_EXPORT',
+  SQL_EXPORT = 'SQL_EXPORT',
+  TABLE_DATA_EXPORT = 'TABLE_DATA_EXPORT',
+  DATA_FILE_IMPORT = 'DATA_FILE_IMPORT',
+  SQL_FILE_IMPORT = 'SQL_FILE_IMPORT',
 }
 
 export enum ImportExportTaskStatus {
-  INIT = 'INIT', // initialization
-  PROCESSING = 'PROCESSING', // Processing
-  RUNNING = 'RUNNING', // Processing
-  FINISHED = 'FINISHED', // Complete
-  ERROR = 'ERROR', // Error
-  STOP = 'STOP', // Error
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
 }
+
+export const ACTIVE_TASK_STATUSES = [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING];

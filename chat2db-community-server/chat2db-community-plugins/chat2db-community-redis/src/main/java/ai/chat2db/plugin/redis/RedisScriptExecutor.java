@@ -95,7 +95,10 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
     }
 
     public String getKeyType(String key) {
-        Connection connection = Chat2DBContext.getConnection();
+        return getKeyType(Chat2DBContext.getConnection(), key);
+    }
+
+    public String getKeyType(Connection connection, String key) {
         return DefaultSQLExecutor.getInstance().execute(connection, String.format(RedisConstants.COMMAND_TYPE_KEY, getRedisValue(key)), resultSet -> {
             if (resultSet.next()) {
                 return resultSet.getString(1);
@@ -105,7 +108,10 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
     }
 
     public String getTtl(String key) {
-        Connection connection = Chat2DBContext.getConnection();
+        return getTtl(Chat2DBContext.getConnection(), key);
+    }
+
+    public String getTtl(Connection connection, String key) {
         return DefaultSQLExecutor.getInstance().execute(connection, String.format(RedisConstants.COMMAND_TTL_KEY, getRedisValue(key)), resultSet -> {
             if (resultSet.next()) {
                 return resultSet.getString(1);
@@ -283,8 +289,11 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
     }
 
     public RedisKey getKey(String key) {
-        String keyType = getKeyType(key);
-        Connection connection = Chat2DBContext.getConnection();
+        return getKey(Chat2DBContext.getConnection(), key);
+    }
+
+    public RedisKey getKey(Connection connection, String key) {
+        String keyType = getKeyType(connection, key);
         ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
         RedisKey redisKey = RedisKey.builder()
                 .name(key)

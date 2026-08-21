@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tree, Checkbox } from 'antd';
-import { SearchBar } from '@chat2db/ui';
+import SearchBar from '@/components/SearchBar';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { parseChat2dbSpecificSymbolIdentifier, createChat2dbSpecificSymbolIdentifier } from '@/utils/chat2dbIdentifier';

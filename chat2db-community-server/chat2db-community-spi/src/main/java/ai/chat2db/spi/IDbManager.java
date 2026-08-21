@@ -1,7 +1,7 @@
 package ai.chat2db.spi;
 
-import ai.chat2db.community.domain.api.model.async.AsyncContext;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 
 import java.sql.Connection;
@@ -49,11 +49,11 @@ public interface IDbManager {
     void updateProcedure(Connection connection, String databaseName, String schemaName, Procedure procedure)
             throws SQLException;
 
-    void exportDatabase(Connection connection, String databaseName, String schemaName, AsyncContext asyncContext)
-            throws SQLException;
+    void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
+            TaskExecutionContext context) throws SQLException;
 
     void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
-            AsyncContext asyncContext) throws SQLException;
+            boolean containData, TaskExecutionContext context) throws SQLException;
 
     String truncateTable(Connection connection, String databaseName, String schemaName, String tableName)
             throws SQLException;
@@ -62,7 +62,7 @@ public interface IDbManager {
             boolean copyData) throws SQLException;
 
     void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
-            AsyncContext asyncContext) throws SQLException;
+            TaskExecutionContext context) throws SQLException;
 
     void dropView(Connection connection, String databaseName, String schemaName, String viewName);
 }

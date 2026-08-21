@@ -155,7 +155,11 @@ export default memo<IProps>((props) => {
                   ref={createListRef}
                   type={formValue.type}
                   originalValueList={
-                    formValue.values || formValue.listValues || formValue.hashValues || formValue.zsValues
+                    formValue.values ||
+                    formValue.listValues ||
+                    formValue.hashValues ||
+                    formValue.zsValues ||
+                    []
                   }
                 />
               </Form.Item>
@@ -165,7 +169,7 @@ export default memo<IProps>((props) => {
           {formValue.type === RedisFieldType.STREAM && (
             <div className={styles.createList}>
               <Form.Item label={i18n('redis.value')}>
-                <CreateStream ref={createStreamRef} originalStreamList={formValue.streamValues} />
+                <CreateStream ref={createStreamRef} originalStreamList={formValue.streamValues || []} />
               </Form.Item>
             </div>
           )}

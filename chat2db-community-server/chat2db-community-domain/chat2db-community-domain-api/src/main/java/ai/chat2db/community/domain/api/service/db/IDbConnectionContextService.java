@@ -52,7 +52,7 @@ public interface IDbConnectionContextService {
     /**
      * Rebinds the current connection context to another database and clears cached connection state.
      *
-     * @param databaseName target database name.
+     * @param databaseName target database name, or {@code null} for a server-level connection.
      */
     void rebindCurrentDatabase(String databaseName);
 

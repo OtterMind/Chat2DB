@@ -49,7 +49,7 @@ public class ZSetTypeScript extends BaseTypeScript implements ITypeScript {
             }
             rs.setZsValues(zSetValues);
         });
-        String ttl = RedisScriptExecutor.getInstance().getTtl(redisKey.getName());
+        String ttl = RedisScriptExecutor.getInstance().getTtl(connection, redisKey.getName());
         if (StringUtils.isNotBlank(ttl)) {
             rs.setTtl(Long.parseLong(ttl));
         } else {

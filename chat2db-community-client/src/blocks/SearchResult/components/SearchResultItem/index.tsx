@@ -76,7 +76,11 @@ export default memo<IProps>(
     }
 
     return (
-      <Fragment key={resultData.uuid}>{resultData.success ? renderSuccessResult() : renderErrorResult()}</Fragment>
+      <Fragment key={resultData.uuid}>
+        <div className={styles.resultContent}>
+          {resultData.success ? renderSuccessResult() : renderErrorResult()}
+        </div>
+      </Fragment>
     );
   },
   (prevProps, nextProps) =>

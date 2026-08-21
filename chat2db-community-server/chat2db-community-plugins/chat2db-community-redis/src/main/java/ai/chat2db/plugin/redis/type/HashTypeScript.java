@@ -58,7 +58,7 @@ public class HashTypeScript extends BaseTypeScript implements ITypeScript {
             }
             rs.setHashValues(hashValues);
         });
-        String ttl = RedisScriptExecutor.getInstance().getTtl(redisKey.getName());
+        String ttl = RedisScriptExecutor.getInstance().getTtl(connection, redisKey.getName());
         if (StringUtils.isNotBlank(ttl)) {
             rs.setTtl(Long.parseLong(ttl));
         } else {

@@ -8,48 +8,6 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-direction: column;
       overflow: hidden;
     `,
-    header: css`
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-      height: 32px;
-      padding: 0 8px 0 20px;
-      font-size: 12px;
-      color: ${token.colorTextTertiary};
-      white-space: nowrap;
-      position: relative;
-      overflow: hidden;
-    `,
-    headerContent: css`
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-    `,
-    headerContentHidden: css`
-      opacity: 0;
-      transform: translateY(-8px);
-      pointer-events: none;
-      position: absolute;
-      inset: 0;
-      padding: 0 8px 0 20px;
-    `,
-    headerSearch: css`
-      display: flex;
-      align-items: center;
-      width: 100%;
-      padding: 0 0 0 0;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-    `,
-    headerSearchHidden: css`
-      opacity: 0;
-      transform: translateY(8px);
-      pointer-events: none;
-      position: absolute;
-      inset: 0;
-      padding: 0 8px;
-    `,
     saveBoxList: css`
       flex: 1;
       min-height: 0;

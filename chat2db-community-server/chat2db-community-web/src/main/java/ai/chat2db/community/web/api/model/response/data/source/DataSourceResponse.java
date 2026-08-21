@@ -71,6 +71,15 @@ public class DataSourceResponse {
     private SimpleEnvironmentResponse environment;
 
 
+    private String identityColor;
+
+
+    private Boolean watermarkEnabled;
+
+
+    private String watermarkContent;
+
+
     private String kind;
 
 

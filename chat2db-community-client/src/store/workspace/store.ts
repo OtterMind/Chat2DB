@@ -9,7 +9,12 @@ import { CommonAction, createCommonAction } from './slices/common/action';
 import { ConfigAction, createConfigAction } from './slices/config/action';
 import { ConsoleAction, createConsoleAction } from './slices/console/action';
 import { ModalAction, createModalAction } from './slices/modal/action';
-import { getPersistableActiveConsoleId, getPersistableWorkspaceTabList } from './utils/workspaceTabPersistence';
+import {
+  getPersistableActiveConsoleId,
+  getHydratedWorkspaceLayout,
+  getPersistableWorkspaceLayout,
+  getPersistableWorkspaceTabList,
+} from './utils/workspaceTabPersistence';
 
 type WorkspaceAction = CommonAction & ConfigAction & ConsoleAction & ModalAction & AIAction;
 export type WorkspaceStore = WorkspaceState & WorkspaceAction;
@@ -40,7 +45,7 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
   partialize: (state) => {
     const workspaceTabList = getPersistableWorkspaceTabList(state.workspaceTabList);
     return {
-      layout: state.layout,
+      layout: getPersistableWorkspaceLayout(state.layout),
       currentConnectionDetails: state.currentConnectionDetails,
       defaultDataCollectionList: state.defaultDataCollectionList,
       workspaceTabList,
@@ -50,6 +55,14 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
         workspaceTabList,
       }),
       recentlyClosedWorkspaceTabs: getPersistableWorkspaceTabList(state.recentlyClosedWorkspaceTabs) || [],
+    };
+  },
+  merge: (persistedState, currentState) => {
+    const storedState = (persistedState || {}) as Partial<GlobalPersist>;
+    return {
+      ...currentState,
+      ...storedState,
+      layout: getHydratedWorkspaceLayout(currentState.layout, storedState.layout),
     };
   },
 };

@@ -15,7 +15,6 @@ import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.community.domain.api.enums.plugin.ResultSetEditorTypeEnum;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
-import ai.chat2db.community.domain.api.model.async.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
 import ai.chat2db.community.domain.api.model.form.*;
@@ -260,8 +259,8 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
 
     private void setColumnSize(TableColumn column, String columnType) {
         try {
-            if (columnType.contains(SQL_NAME_SIZE_OPEN)) {
-                String size = columnType.substring(columnType.indexOf(SQL_NAME_SIZE_OPEN) + 1, columnType.indexOf(SQL_NAME_SIZE_CLOSE));
+            String size = extractColumnTypeArguments(columnType);
+            if (size != null) {
                 if (SQL_SET_TYPE.equalsIgnoreCase(column.getColumnType()) || SQL_ENUM_TYPE.equalsIgnoreCase(column.getColumnType())) {
                     column.setValue(size);
                 } else {
@@ -281,6 +280,18 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         } catch (Exception e) {
             log.warn("parse column size failed: {}", columnType, e);
         }
+    }
+
+    static String extractColumnTypeArguments(String columnType) {
+        if (StringUtils.isBlank(columnType)) {
+            return null;
+        }
+        int openingParenthesis = columnType.indexOf(SQL_NAME_SIZE_OPEN);
+        int closingParenthesis = columnType.lastIndexOf(SQL_NAME_SIZE_CLOSE);
+        if (openingParenthesis < 0 || closingParenthesis <= openingParenthesis) {
+            return null;
+        }
+        return columnType.substring(openingParenthesis + 1, closingParenthesis);
     }
 
     @Override
@@ -394,6 +405,45 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
             return ResultSetEditorTypeEnum.TEXT.getCode();
         }
         return RESULT_SET_EDITOR_TYPE_BY_JDBC_TYPE.getOrDefault(type, ResultSetEditorTypeEnum.TEXT).getCode();
+    }
+
+    protected ResultSetEditorMetadata resolveMysqlResultSetEditorMetadata(TableColumn column) {
+        ResultSetEditorMetadata fallback = ResultSetEditorMetadata.builder()
+                .editorType(column == null ? ResultSetEditorTypeEnum.TEXT.getCode()
+                        : resolveResultSetEditorType(column.getColumnType(), column.getDataType()))
+                .editorOptions(List.of())
+                .build();
+        if (column == null || StringUtils.isBlank(column.getValue())) {
+            return fallback;
+        }
+        boolean enumColumn = SQL_ENUM_TYPE.equalsIgnoreCase(column.getColumnType());
+        boolean setColumn = SQL_SET_TYPE.equalsIgnoreCase(column.getColumnType());
+        if (!enumColumn && !setColumn) {
+            return fallback;
+        }
+        try {
+            List<ResultSetEditorOption> options = MysqlSqlGuards.parseEnumValues(column.getValue()).stream()
+                    .map(value -> new ResultSetEditorOption(value, value))
+                    .toList();
+            if (options.isEmpty()) {
+                return fallback;
+            }
+            if (setColumn && options.stream()
+                    .map(ResultSetEditorOption::getValue)
+                    .anyMatch(value -> value.isEmpty() || value.contains(SQL_TYPE_SIZE_SEPARATOR))) {
+                log.warn("MySQL SET options cannot be represented safely by the multi-select editor for column: {}",
+                        column.getName());
+                return fallback;
+            }
+            return ResultSetEditorMetadata.builder()
+                    .editorType((enumColumn ? ResultSetEditorTypeEnum.SELECT
+                            : ResultSetEditorTypeEnum.MULTI_SELECT).getCode())
+                    .editorOptions(options)
+                    .build();
+        } catch (IllegalArgumentException e) {
+            log.warn("Parse MySQL ENUM/SET values failed for column: {}", column.getName(), e);
+            return fallback;
+        }
     }
 
     @Override

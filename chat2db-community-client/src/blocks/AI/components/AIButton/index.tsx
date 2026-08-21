@@ -1,9 +1,10 @@
 import { useStyles } from './style';
 import { useAIStore } from '@/store/ai';
-import { IconButton } from '@chat2db/ui';
+import { IconButton, type IconSize } from '@chat2db/ui';
+import { Sparkles } from 'lucide-react';
 interface AIButtonProps {
   onClick: () => void;
-  size?: 'lg' | 'md';
+  size?: IconSize;
 }
 
 const AIButton = (props: AIButtonProps) => {
@@ -17,7 +18,7 @@ const AIButton = (props: AIButtonProps) => {
       size={size}
       className={styles.aiButton}
       onClick={onClick}
-      code={'icon-moren'}
+      icon={Sparkles}
     />
   );
 };

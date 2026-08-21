@@ -50,12 +50,6 @@ const generateCRUD = createRequest<TextToSQLParams, GetChatTokenResponse>(`${pre
   errorLevel: false,
 });
 
-/** Generate test data. */
-const generateTestData = createRequest<TextToSQLParams, GetChatTokenResponse>(`${prefix}/data_insert`, {
-  method: 'post',
-  errorLevel: false,
-});
-
 // SQL prompt
 const queryPrompt = createRequest<
   {
@@ -143,7 +137,6 @@ export default {
   optimizeSQL,
   convertSQL,
   generateCRUD,
-  generateTestData,
   queryPrompt,
   parseSQL,
   textToCreateTable,

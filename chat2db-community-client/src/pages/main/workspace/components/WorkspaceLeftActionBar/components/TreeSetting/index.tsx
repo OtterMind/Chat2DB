@@ -2,9 +2,11 @@ import { memo, useMemo } from 'react';
 import { useStyles } from './style';
 import { Dropdown } from 'antd';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
+import { EllipsisVertical } from 'lucide-react';
 import i18n from '@/i18n';
 import { useTreeStore } from '@/store/tree';
 import { exportConnections } from './exportConnections';
+import { WORKSPACE_TREE_TOOLBAR_SECONDARY_BUTTON_SIZE } from '../../constants';
 
 export default memo(() => {
   const { styles } = useStyles();
@@ -113,7 +115,12 @@ export default memo(() => {
       trigger={['click']}
     >
       {/* <Tooltip title={i18n('workspace.tips.createDatabase')} mouseEnterDelay={0.6}> */}
-      <IconButton size="sm" key="create-datasource" code="icon-more-dot" />
+      <IconButton
+        className={styles.trigger}
+        size={WORKSPACE_TREE_TOOLBAR_SECONDARY_BUTTON_SIZE}
+        key="tree-setting"
+        icon={EllipsisVertical}
+      />
       {/* </Tooltip> */}
     </Dropdown>
   );
