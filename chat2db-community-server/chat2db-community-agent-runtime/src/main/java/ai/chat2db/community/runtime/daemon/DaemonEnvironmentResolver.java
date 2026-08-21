@@ -6,19 +6,31 @@ import org.apache.commons.lang3.StringUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 
 public class DaemonEnvironmentResolver {
 
     private final Function<String, String> environmentLookup;
+    private final Map<String, String> discoveredEnvironment;
 
     public DaemonEnvironmentResolver() {
-        this(System::getenv);
+        this(System::getenv, Map.of());
+    }
+
+    public DaemonEnvironmentResolver(Map<String, String> discoveredEnvironment) {
+        this(System::getenv, discoveredEnvironment);
     }
 
     DaemonEnvironmentResolver(Function<String, String> environmentLookup) {
+        this(environmentLookup, Map.of());
+    }
+
+    DaemonEnvironmentResolver(Function<String, String> environmentLookup,
+                              Map<String, String> discoveredEnvironment) {
         this.environmentLookup = environmentLookup;
+        this.discoveredEnvironment = discoveredEnvironment == null ? Map.of() : Map.copyOf(discoveredEnvironment);
     }
 
     public Map<String, String> resolve(AgentRuntimeProfile profile) {
@@ -26,7 +38,7 @@ public class DaemonEnvironmentResolver {
             throw new IllegalArgumentException("Runtime Profile is required");
         }
         LinkedHashMap<String, String> resolved = new LinkedHashMap<>();
-        String path = environmentLookup.apply("PATH");
+        String path = StringUtils.defaultIfBlank(discoveredEnvironment.get("PATH"), environmentLookup.apply("PATH"));
         if (StringUtils.isNotBlank(path)) {
             resolved.put("PATH", path);
         }
@@ -74,10 +86,19 @@ public class DaemonEnvironmentResolver {
 
     private Path requireExecutable(Path path) {
         Path normalized = path.normalize();
-        if (!Files.isRegularFile(normalized) || !Files.isExecutable(normalized)) {
+        if (!Files.isRegularFile(normalized)
+                || (!Files.isExecutable(normalized) && !isWindowsScript(normalized))) {
             throw new IllegalStateException("Runtime executable is not an executable file: " + normalized);
         }
         return normalized;
+    }
+
+    private boolean isWindowsScript(Path path) {
+        if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
+            return false;
+        }
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return name.endsWith(".cmd") || name.endsWith(".bat") || name.endsWith(".ps1");
     }
 
     private void validateEnvironmentName(String name) {

@@ -6,6 +6,7 @@ import ai.chat2db.community.runtime.daemon.LocalRuntimeInstallation;
 import ai.chat2db.community.runtime.daemon.LocalRuntimeSupervisor;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.web.api.util.AgentRuntimeDaemonUtils;
+import ai.chat2db.community.web.api.event.AgentRuntimeDiscoveryRefreshEvent;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -34,9 +35,17 @@ public class CommunityDesktopAgentRuntimeLifecycle {
 
     @EventListener(ApplicationReadyEvent.class)
     public synchronized void start() {
+        refreshDiscovery();
+    }
+
+    @EventListener
+    public synchronized void refresh(AgentRuntimeDiscoveryRefreshEvent event) {
+        refreshDiscovery();
+    }
+
+    private void refreshDiscovery() {
         if (!ConfigUtils.isCommunity() || !ConfigUtils.isDesktop()
-                || !environment.getProperty(ENABLED_PROPERTY, Boolean.class, true)
-                || supervisor != null) {
+                || !environment.getProperty(ENABLED_PROPERTY, Boolean.class, true)) {
             return;
         }
         String token = AgentRuntimeDaemonUtils.runtimeToken();
@@ -46,7 +55,7 @@ public class CommunityDesktopAgentRuntimeLifecycle {
         }
         List<LocalRuntimeInstallation> installations = new LocalRuntimeDiscovery().discover(
                 Set.copyOf(ExternalRuntimeProviderCatalog.providers()));
-        if (installations.isEmpty()) {
+        if (installations.isEmpty() && supervisor == null) {
             log.info("No supported local Agent Runtime was detected");
             return;
         }
@@ -59,10 +68,14 @@ public class CommunityDesktopAgentRuntimeLifecycle {
         URI controlPlane = URI.create("http://127.0.0.1:" + port + "/");
         Path workspace = Path.of(ConfigUtils.getBasePath(), "agent-runtime").toAbsolutePath().normalize();
         String daemonId = "community-desktop-" + ConfigUtils.getClientId();
-        supervisor = new LocalRuntimeSupervisor(
-                daemonId, controlPlane, token, workspace, concurrency, installations);
-        supervisor.start();
-        log.info("Started local Agent Runtimes: {}", installations.stream()
+        if (supervisor == null) {
+            supervisor = new LocalRuntimeSupervisor(
+                    daemonId, controlPlane, token, workspace, concurrency, installations);
+            supervisor.start();
+        } else {
+            supervisor.refresh(installations);
+        }
+        log.info("Refreshed local Agent Runtimes: {}", installations.stream()
                 .map(installation -> installation.provider().name() + " " + installation.version())
                 .toList());
     }

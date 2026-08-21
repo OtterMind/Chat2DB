@@ -81,6 +81,24 @@ export default function AgentManagerPage({
     }
   }, []);
 
+  const redetectRuntimeOptions = useCallback(async () => {
+    setRuntimeOptionsLoading(true);
+    try {
+      await agentService.refreshRuntimeDiscovery();
+      let options: AgentRuntimeOption[] = [];
+      for (const delay of [200, 500, 1000]) {
+        await new Promise((resolve) => window.setTimeout(resolve, delay));
+        options = await agentService.listRuntimeOptions();
+      }
+      setRuntimeOptions(options);
+      setRuntimeOptionsError(false);
+    } catch {
+      setRuntimeOptionsError(true);
+    } finally {
+      setRuntimeOptionsLoading(false);
+    }
+  }, []);
+
   const filteredAgents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return agents;
@@ -407,7 +425,7 @@ export default function AgentManagerPage({
                   options={runtimeOptions}
                   loading={runtimeOptionsLoading}
                   error={runtimeOptionsError}
-                  onRefresh={() => void refreshRuntimeOptions()}
+                  onRefresh={() => void redetectRuntimeOptions()}
                   onChange={(nextRuntimeType, profileId) => {
                     form.setFieldsValue({
                       runtimeType: nextRuntimeType,

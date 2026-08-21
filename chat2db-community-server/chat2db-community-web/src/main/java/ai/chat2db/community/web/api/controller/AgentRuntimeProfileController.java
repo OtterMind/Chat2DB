@@ -9,6 +9,9 @@ import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeControlService
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
+import ai.chat2db.community.web.api.event.AgentRuntimeDiscoveryRefreshEvent;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,10 +27,18 @@ public class AgentRuntimeProfileController {
 
     private final IAgentRuntimeControlService runtimeService;
     private final IIdentityService identityService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public AgentRuntimeProfileController(IAgentRuntimeControlService runtimeService, IIdentityService identityService) {
+    @Autowired
+    public AgentRuntimeProfileController(IAgentRuntimeControlService runtimeService, IIdentityService identityService,
+                                         ApplicationEventPublisher eventPublisher) {
         this.runtimeService = runtimeService;
         this.identityService = identityService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    public AgentRuntimeProfileController(IAgentRuntimeControlService runtimeService, IIdentityService identityService) {
+        this(runtimeService, identityService, event -> { });
     }
 
     @PostMapping("/runtime-profiles")
@@ -75,6 +86,13 @@ public class AgentRuntimeProfileController {
     @GetMapping("/runtime-options")
     public ListResult<AgentRuntimeOption> listRuntimeOptions() {
         return ListResult.of(runtimeService.listRuntimeOptions(identityService.currentUserId()));
+    }
+
+    @PostMapping("/runtime-discovery/refresh")
+    public DataResult<Boolean> refreshRuntimeDiscovery() {
+        Long userId = identityService.currentUserId();
+        eventPublisher.publishEvent(new AgentRuntimeDiscoveryRefreshEvent(userId));
+        return DataResult.of(true);
     }
 
     @GetMapping("/runtime-instances/{instanceId}")
