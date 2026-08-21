@@ -97,7 +97,9 @@ const getEnvList = createRequest<void, IConnectionEnv[]>('/api/common/environmen
 
 const importConnection = createRequest<{ file: FormData }, void>('/api/converter/upload');
 
-const importCommunitDataSource = createRequest<void, void>('/api/connection/datasource/import_community');
+const importCommunitDataSource = createRequest<void, void>('/api/connection/datasource/import_community', {
+  method: 'post',
+});
 
 export interface NamespacesItem {
   id: number;
