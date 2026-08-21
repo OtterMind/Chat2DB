@@ -4,12 +4,13 @@ import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet, ZoomIn, ZoomOut,
   Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film,
 } from 'lucide-react'
-import { Input, Modal, message } from 'antd'
+import { Input, Modal, Radio, Select, message } from 'antd'
 import Page from '../components/Page'
 import Timeline from '../editor/Timeline'
+import PreviewMonitor from '../editor/PreviewMonitor'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
-import { pickMedia, renderApi } from '../api/render'
+import { pickMedia, renderApi, saveDialog, type Quality } from '../api/render'
 import { analyzeApi } from '../api/analyze'
 import { useRuntime } from '../store/runtime'
 import { wsClient } from '../api/websocket'
@@ -139,23 +140,38 @@ export default function Studio() {
     }
   }
 
-  /** Export: hands the edit model to the backend compositor. */
+  /** Export: ask for format and destination, then hand the model to the compositor. */
   const exportTimeline = async () => {
     const withMedia = clips.filter((c) => c.src)
     if (withMedia.length === 0) {
       message.warning(t('Import media into the timeline first.', 'اول یک فایل به تایم‌لاین اضافه کن.'))
       return
     }
+
+    const settings = await askExportSettings(t)
+    if (!settings) return
+
+    const suggested = `timeline-${settings.width}x${settings.height}.mp4`
+    const chosen = await (saveDialog(suggested) ?? Promise.resolve(null))
+
     setExporting(true)
     const { upsertTask, patchTask } = useRuntime.getState()
+    let renderId: string | null = null
+
     try {
-      const state = await renderApi.start('timeline', {
-        tracks,
-        clips: withMedia,
-        width: 1080,
-        height: 1920,
-        fps: 30,
-      })
+      const state = await renderApi.start(
+        'timeline',
+        {
+          tracks,
+          clips: withMedia,
+          width: settings.width,
+          height: settings.height,
+          fps: settings.fps,
+        },
+        { quality: settings.quality, output: chosen }
+      )
+      renderId = state.id
+
       upsertTask({
         id: state.id,
         kind: 'export',
@@ -166,75 +182,59 @@ export default function Studio() {
         route: '/studio',
       })
 
+      const finish = (ok: boolean, payload: { output?: string; error?: string }) => {
+        if (ok) {
+          patchTask(state.id, { progress: 100, status: 'done', stage: t('Ready', 'آماده') })
+          setLastOutput(payload.output ?? null)
+          message.success(t('Export finished', 'خروجی آماده شد'))
+        } else {
+          patchTask(state.id, { status: 'failed', error: payload.error })
+          message.error(payload.error ?? t('Export failed', 'خروجی گرفتن ناموفق بود'))
+        }
+        setExporting(false)
+        unsubscribe()
+        window.clearInterval(poll)
+      }
+
       const unsubscribe = wsClient.onEvent((event) => {
-        const e = event as unknown as { type: string; render_id?: string; progress?: number; output?: string; error?: string }
+        const e = event as unknown as {
+          type: string
+          render_id?: string
+          progress?: number
+          output?: string
+          error?: string
+        }
         if (e.render_id !== state.id) return
         if (e.type === 'render:progress') patchTask(state.id, { progress: e.progress ?? 0 })
-        if (e.type === 'render:done') {
-          patchTask(state.id, { progress: 100, status: 'done', stage: t('Ready', 'آماده') })
-          setLastOutput(e.output ?? null)
-          setExporting(false)
-          message.success(t('Export finished', 'خروجی آماده شد'))
-          unsubscribe()
-        }
-        if (e.type === 'render:failed') {
-          patchTask(state.id, { status: 'failed', error: e.error })
-          setExporting(false)
-          message.error(e.error ?? t('Export failed', 'خروجی گرفتن ناموفق بود'))
-          unsubscribe()
-        }
+        if (e.type === 'render:done') finish(true, e)
+        if (e.type === 'render:failed') finish(false, e)
       })
+
+      // The socket alone is not enough: a render that fails in the first
+      // milliseconds broadcasts before this screen has subscribed, which used to
+      // leave the task pinned at 0% forever. Polling closes that race.
+      const poll = window.setInterval(async () => {
+        if (!renderId) return
+        try {
+          const status = await renderApi.get(renderId)
+          if (status.status === 'running') {
+            patchTask(renderId, { progress: status.progress })
+          } else if (status.status === 'done') {
+            finish(true, { output: status.output })
+          } else if (status.status === 'failed') {
+            finish(false, { error: status.error ?? undefined })
+          }
+        } catch {
+          /* transient: the next tick retries */
+        }
+      }, 1500)
     } catch (err) {
       setExporting(false)
       const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
       message.error(detail ?? (err as Error).message)
+      if (renderId) useRuntime.getState().patchTask(renderId, { status: 'failed' })
     }
   }
-
-  // playback clock — advances the playhead until the last clip ends
-  const raf = useRef<number>()
-  useEffect(() => {
-    if (!playing) return
-    let last = performance.now()
-    const end = Math.max(0, ...clips.map((c) => c.start + c.duration))
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000
-      last = now
-      const next = useEditor.getState().playhead + dt
-      if (next >= Math.min(end, TIMELINE_MAX)) {
-        setPlayhead(end)
-        togglePlay(false)
-        return
-      }
-      setPlayhead(next)
-      raf.current = requestAnimationFrame(tick)
-    }
-    raf.current = requestAnimationFrame(tick)
-    return () => {
-      if (raf.current) cancelAnimationFrame(raf.current)
-    }
-  }, [playing, clips, setPlayhead, togglePlay])
-
-  // editor keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
-      const meta = e.ctrlKey || e.metaKey
-      if (meta && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return }
-      if (meta && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); return }
-      switch (e.key) {
-        case ' ': e.preventDefault(); togglePlay(); break
-        case 's': case 'S': splitAtPlayhead(); break
-        case 'Delete': case 'Backspace': removeSelected(); break
-        case 'Home': setPlayhead(0); break
-        case 'ArrowRight': setPlayhead(playhead + (e.shiftKey ? 1 : 1 / 30)); break
-        case 'ArrowLeft': setPlayhead(playhead - (e.shiftKey ? 1 : 1 / 30)); break
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [duplicateSelected, playhead, redo, removeSelected, setPlayhead, splitAtPlayhead, togglePlay, undo])
 
   return (
     <Page
@@ -244,12 +244,7 @@ export default function Studio() {
     >
       <div className="ed">
         <div className="ed__stage">
-          <div className="ed__preview">
-            <div className="ed__preview-box">
-              <span className="ed__preview-hint">{t('Preview', 'پیش‌نمایش')}</span>
-              <strong className="ed__tc">{formatTimecode(playhead, true)}</strong>
-            </div>
-          </div>
+          <PreviewMonitor />
 
           <aside className="ed__inspector">
             <h4>{t('Properties', 'مشخصات')}</h4>
@@ -392,6 +387,102 @@ function askForPath(t: (en: string, fa: string) => string): Promise<string | nul
       cancelText: t('Cancel', 'انصراف'),
       onOk: () => resolve(value.trim() || null),
       onCancel: () => resolve(null),
+    })
+  })
+}
+
+interface ExportSettings {
+  width: number
+  height: number
+  fps: number
+  quality: Quality
+}
+
+const FORMATS: { id: string; label: [string, string]; width: number; height: number }[] = [
+  { id: 'vertical', label: ['9:16 — Shorts, Reels, TikTok', '۹:۱۶ — شورتس، ریلز، تیک‌تاک'], width: 1080, height: 1920 },
+  { id: 'square', label: ['1:1 — Square', '۱:۱ — مربع'], width: 1080, height: 1080 },
+  { id: 'portrait', label: ['4:5 — Portrait feed', '۴:۵ — پرتره'], width: 1080, height: 1350 },
+  { id: 'landscape', label: ['16:9 — YouTube 1080p', '۱۶:۹ — یوتیوب ۱۰۸۰p'], width: 1920, height: 1080 },
+  { id: 'landscape4k', label: ['16:9 — 4K', '۱۶:۹ — چهار کی'], width: 3840, height: 2160 },
+]
+
+/** Format, quality and frame rate before anything starts encoding. */
+function askExportSettings(t: (en: string, fa: string) => string): Promise<ExportSettings | null> {
+  return new Promise((resolve) => {
+    const state: ExportSettings = { width: 1080, height: 1920, fps: 30, quality: 'balanced' }
+    let resolved = false
+    const done = (value: ExportSettings | null) => {
+      if (resolved) return
+      resolved = true
+      resolve(value)
+    }
+
+    Modal.confirm({
+      title: t('Export settings', 'تنظیمات خروجی'),
+      width: 460,
+      icon: null,
+      content: (
+        <div className="ce-exportform">
+          <label>
+            <span>{t('Format', 'قالب')}</span>
+            <Select
+              defaultValue="vertical"
+              style={{ width: '100%' }}
+              options={FORMATS.map((f) => ({ value: f.id, label: f.label[0] }))}
+              onChange={(id) => {
+                const format = FORMATS.find((f) => f.id === id)!
+                state.width = format.width
+                state.height = format.height
+              }}
+            />
+          </label>
+
+          <label>
+            <span>{t('Quality', 'کیفیت')}</span>
+            <Radio.Group
+              defaultValue="balanced"
+              optionType="button"
+              buttonStyle="solid"
+              onChange={(e) => {
+                state.quality = e.target.value as Quality
+              }}
+              options={[
+                { value: 'high', label: t('High', 'بالا') },
+                { value: 'balanced', label: t('Balanced', 'متعادل') },
+                { value: 'fast', label: t('Fast', 'سریع') },
+              ]}
+            />
+          </label>
+
+          <label>
+            <span>{t('Frame rate', 'نرخ فریم')}</span>
+            <Radio.Group
+              defaultValue={30}
+              optionType="button"
+              buttonStyle="solid"
+              onChange={(e) => {
+                state.fps = Number(e.target.value)
+              }}
+              options={[
+                { value: 24, label: '24' },
+                { value: 30, label: '30' },
+                { value: 60, label: '60' },
+              ]}
+            />
+          </label>
+
+          <p className="ce-hint">
+            {t(
+              'You will be asked where to save the file next.',
+              'در مرحله بعد محل ذخیره فایل را انتخاب می‌کنی.'
+            )}
+          </p>
+        </div>
+      ),
+      okText: t('Continue', 'ادامه'),
+      cancelText: t('Cancel', 'انصراف'),
+      onOk: () => done(state),
+      onCancel: () => done(null),
     })
   })
 }

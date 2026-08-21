@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('cuttingEdge', {
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => ipcRenderer.invoke('media:pick') as Promise<string[]>,
 
+  /** Ask the OS where to write the exported file. */
+  saveDialog: (suggestedName: string) =>
+    ipcRenderer.invoke('media:save-dialog', suggestedName) as Promise<string | null>,
+
   /** Fullscreen control; F11 and Escape do the same thing from the keyboard. */
   toggleFullscreen: () => ipcRenderer.invoke('window:fullscreen:toggle') as Promise<boolean>,
   isFullscreen: () => ipcRenderer.invoke('window:fullscreen:get') as Promise<boolean>,

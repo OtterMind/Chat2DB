@@ -34,6 +34,8 @@ import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
   },
   /** Opens the OS file picker and returns absolute paths of the chosen media. */
   pickMedia: () => import_electron.ipcRenderer.invoke("media:pick"),
+  /** Ask the OS where to write the exported file. */
+  saveDialog: (suggestedName) => import_electron.ipcRenderer.invoke("media:save-dialog", suggestedName),
   /** Fullscreen control; F11 and Escape do the same thing from the keyboard. */
   toggleFullscreen: () => import_electron.ipcRenderer.invoke("window:fullscreen:toggle"),
   isFullscreen: () => import_electron.ipcRenderer.invoke("window:fullscreen:get"),

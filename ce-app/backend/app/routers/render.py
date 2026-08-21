@@ -19,9 +19,18 @@ router = APIRouter(prefix="/api/render", tags=["render"])
 _renders: dict[str, dict[str, Any]] = {}
 
 
+QUALITY_PRESETS = {
+    "high": {"crf": 18, "preset": "slow", "nvenc_cq": 19},
+    "balanced": {"crf": 21, "preset": "veryfast", "nvenc_cq": 23},
+    "fast": {"crf": 26, "preset": "ultrafast", "nvenc_cq": 28},
+}
+
+
 class RenderRequest(BaseModel):
     name: str = Field(default="timeline")
     timeline: dict
+    quality: str = Field(default="balanced", description="high | balanced | fast")
+    output: str | None = Field(default=None, description="Absolute destination path")
 
 
 class ProbeRequest(BaseModel):
@@ -47,7 +56,12 @@ async def start_render(payload: RenderRequest) -> dict:
         )
 
     render_id = str(uuid.uuid4())
-    output = compose.unique_output(payload.name)
+    if payload.output:
+        output = Path(payload.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        output = compose.unique_output(payload.name)
+    quality = QUALITY_PRESETS.get(payload.quality, QUALITY_PRESETS["balanced"])
     _renders[render_id] = {
         "id": render_id,
         "status": "running",
@@ -78,7 +92,7 @@ async def start_render(payload: RenderRequest) -> dict:
                     }
                 )
 
-            compose.render(timeline, output, on_progress=on_progress)
+            compose.render(timeline, output, on_progress=on_progress, quality=quality)
             state.update(status="done", progress=100.0)
             publish({"type": "render:done", "render_id": render_id, "output": str(output)})
         except Exception as exc:  # noqa: BLE001 — surfaced to the UI verbatim

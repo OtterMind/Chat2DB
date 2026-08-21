@@ -114,6 +114,16 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('media:save-dialog', async (_event, suggestedName: string) => {
+    const result = await dialog.showSaveDialog({
+      title: 'Export video',
+      defaultPath: path.join(app.getPath('videos'), suggestedName || 'timeline.mp4'),
+      filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+    })
+    log.info('[CE] media:save-dialog ->', result.canceled ? 'cancelled' : result.filePath)
+    return result.canceled ? null : result.filePath
+  })
+
   ipcMain.handle('window:fullscreen:toggle', () => setFullscreen(!(mainWindow?.isFullScreen() ?? false)))
   ipcMain.handle('window:fullscreen:get', () => mainWindow?.isFullScreen() ?? false)
 

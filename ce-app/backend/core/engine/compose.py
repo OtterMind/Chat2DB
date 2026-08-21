@@ -207,7 +207,13 @@ def _has_nvenc(ffmpeg: str) -> bool:
         return False
 
 
-def build_command(timeline: Timeline, output: Path, *, ffmpeg: str | None = None) -> list[str]:
+def build_command(
+    timeline: Timeline,
+    output: Path,
+    *,
+    ffmpeg: str | None = None,
+    quality: dict | None = None,
+) -> list[str]:
     """Compose the full FFmpeg argument list for a timeline."""
     ffmpeg = ffmpeg or ffmpeg_binary()
     total = timeline.duration
@@ -279,10 +285,15 @@ def build_command(timeline: Timeline, output: Path, *, ffmpeg: str | None = None
     else:
         args += ["-an"]
 
+    quality = quality or {"crf": 21, "preset": "veryfast", "nvenc_cq": 23}
     if _has_nvenc(ffmpeg):
-        args += ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23"]
+        args += ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", str(quality.get("nvenc_cq", 23))]
     else:
-        args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21"]
+        args += [
+            "-c:v", "libx264",
+            "-preset", str(quality.get("preset", "veryfast")),
+            "-crf", str(quality.get("crf", 21)),
+        ]
 
     args += [
         "-pix_fmt", "yuv420p",
@@ -299,11 +310,12 @@ def render(
     timeline: Timeline,
     output: Path,
     on_progress: Callable[[float, str], None] | None = None,
+    quality: dict | None = None,
 ) -> Path:
     """Run the render, reporting progress in percent."""
     output.parent.mkdir(parents=True, exist_ok=True)
     total = timeline.duration
-    command = build_command(timeline, output)
+    command = build_command(timeline, output, quality=quality)
 
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1

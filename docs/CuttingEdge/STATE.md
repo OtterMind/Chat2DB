@@ -16,6 +16,8 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Render engine** | `core/engine/compose.py` — the edit model becomes one FFmpeg `filter_complex`; NVENC when present, libx264 otherwise; progress streamed over the WebSocket |
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
+| **Preview** | Real video in the program monitor, streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
+| **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
 | **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import media, export, remove silence, split scenes |
 | Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
 | **Languages** | English default + Persian, switch in Settings, flips LTR/RTL instantly, persisted |
@@ -107,9 +109,8 @@ to build a differential patch.
 
 ## 6. Next, in order
 
-1. Real video preview in the program monitor (currently a timecode).
-2. Project save/load — the timeline is lost when the app closes.
-3. Animated captions from the transcript (libass is already inside our FFmpeg).
-4. MediaPipe face tracking for reframing (currently centre-crop).
-5. YouTube/Instagram publishing.
-6. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).
+1. Project save/load — the timeline is lost when the app closes.
+2. Animated captions from the transcript (libass is already inside our FFmpeg).
+3. MediaPipe face tracking for reframing (currently centre-crop).
+4. YouTube/Instagram publishing.
+5. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).

@@ -2344,6 +2344,15 @@ function registerIpc() {
       throw error;
     }
   });
+  import_electron2.ipcMain.handle("media:save-dialog", async (_event, suggestedName) => {
+    const result = await import_electron2.dialog.showSaveDialog({
+      title: "Export video",
+      defaultPath: import_path.default.join(import_electron2.app.getPath("videos"), suggestedName || "timeline.mp4"),
+      filters: [{ name: "MP4 video", extensions: ["mp4"] }]
+    });
+    import_main.default.info("[CE] media:save-dialog ->", result.canceled ? "cancelled" : result.filePath);
+    return result.canceled ? null : result.filePath;
+  });
   import_electron2.ipcMain.handle("window:fullscreen:toggle", () => setFullscreen(!(mainWindow?.isFullScreen() ?? false)));
   import_electron2.ipcMain.handle("window:fullscreen:get", () => mainWindow?.isFullScreen() ?? false);
   import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
