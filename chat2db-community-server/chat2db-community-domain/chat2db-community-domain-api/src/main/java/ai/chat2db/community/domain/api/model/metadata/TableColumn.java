@@ -161,6 +161,8 @@ public class TableColumn implements Serializable {
 
     private Boolean generatedColumn;
 
+    private Boolean visible;
+
 
     private String extent;
 
