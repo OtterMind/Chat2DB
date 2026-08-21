@@ -6,7 +6,7 @@ import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { openWebPage } from '@/utils/url';
-import { Icon } from '@chat2db/ui';
+import { Icon, staticMessage } from '@chat2db/ui';
 import { Button, notification } from 'antd';
 import { useEffect } from 'react';
 import { useStyles } from './style';
@@ -125,6 +125,9 @@ const UpdateDetection = () => {
         break;
       case UpdatedStatus.Installed:
         openNotificationAuto();
+        break;
+      case UpdatedStatus.UpdateFailed:
+        staticMessage.error(i18n('common.text.failure'));
         break;
       default:
         break;

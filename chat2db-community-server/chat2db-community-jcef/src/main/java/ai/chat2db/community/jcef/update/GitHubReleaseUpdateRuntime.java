@@ -75,6 +75,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             parent_pid="$1"
             installer="$2"
             destination="$3"
+            set -e
             while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
             mount_point=$(/usr/bin/mktemp -d "/tmp/chat2db-community-update.XXXXXX")
             cleanup() {
@@ -151,7 +152,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
     GitHubReleaseUpdateRuntime() {
         this(
                 HttpClient.newBuilder()
-                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .followRedirects(HttpClient.Redirect.NEVER)
                         .connectTimeout(Duration.ofSeconds(20))
                         .build(),
                 new ObjectMapper(),
@@ -235,7 +236,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 .header("User-Agent", "Chat2DB-Community-Updater/" + release.version())
                 .GET()
                 .build();
-        HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response = sendInstallerRequest(request);
         try (InputStream input = response.body()) {
             if (response.statusCode() != 200 || !isAllowedDownloadResponse(response.uri())) {
                 throw new IOException("GitHub Release installer download failed: " + response.statusCode());
@@ -445,7 +446,10 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         String arguments = "/i \"" + installer + "\" /passive /norestart";
         StringBuilder script = new StringBuilder("$ErrorActionPreference='Stop';")
                 .append("Wait-Process -Id ").append(parentPid).append(" -ErrorAction SilentlyContinue;")
-                .append("try{$process=Start-Process -FilePath 'msiexec.exe' -ArgumentList ")
+                .append("$msiexec=Join-Path $env:WINDIR 'System32\\msiexec.exe';")
+                .append("if(!(Test-Path -LiteralPath $msiexec)){throw ")
+                .append(powerShellLiteral("System MSI installer is unavailable")).append("};")
+                .append("try{$process=Start-Process -FilePath $msiexec -ArgumentList ")
                 .append(powerShellLiteral(arguments))
                 .append(" -Verb RunAs -Wait -PassThru;")
                 .append("if(@(0,1641,3010) -notcontains $process.ExitCode){throw ")
@@ -619,14 +623,53 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         }
     }
 
-    private static boolean isAllowedDownloadResponse(URI uri) {
+    static boolean isAllowedDownloadResponse(URI uri) {
         if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
+            return false;
+        }
+        if (uri.getUserInfo() != null || uri.getFragment() != null) {
             return false;
         }
         String host = uri.getHost();
         return "github.com".equalsIgnoreCase(host)
                 || "release-assets.githubusercontent.com".equalsIgnoreCase(host)
                 || "objects.githubusercontent.com".equalsIgnoreCase(host);
+    }
+
+    private HttpResponse<InputStream> sendInstallerRequest(HttpRequest initialRequest) throws Exception {
+        URI currentUri = initialRequest.uri();
+        if (!isAllowedDownloadResponse(currentUri)) {
+            throw new IOException("GitHub Release installer URL is not allowed");
+        }
+        for (int redirect = 0; redirect <= 5; redirect++) {
+            HttpRequest request = initialRequest.newBuilder(currentUri).build();
+            HttpResponse<InputStream> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (!isRedirect(response.statusCode())) {
+                return response;
+            }
+            String location = response.headers().firstValue("Location").orElse("");
+            try (InputStream ignored = response.body()) {
+                if (location.isBlank()) {
+                    throw new IOException("GitHub Release installer redirect has no Location");
+                }
+            }
+            URI nextUri;
+            try {
+                nextUri = currentUri.resolve(location);
+            } catch (IllegalArgumentException exception) {
+                throw new IOException("GitHub Release installer redirect is invalid", exception);
+            }
+            if (!isAllowedDownloadResponse(nextUri)) {
+                throw new IOException("GitHub Release installer redirect host is not allowed");
+            }
+            currentUri = nextUri;
+        }
+        throw new IOException("GitHub Release installer redirect limit exceeded");
+    }
+
+    private static boolean isRedirect(int statusCode) {
+        return statusCode >= 300 && statusCode < 400;
     }
 
     private static Path findAncestorChild(Path start, String childName) {

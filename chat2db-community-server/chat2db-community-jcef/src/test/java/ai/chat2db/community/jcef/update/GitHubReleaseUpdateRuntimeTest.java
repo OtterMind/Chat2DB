@@ -175,6 +175,7 @@ class GitHubReleaseUpdateRuntimeTest {
         );
         assertTrue(powerShell.contains("Wait-Process -Id 42"));
         assertTrue(powerShell.contains("msiexec.exe"));
+        assertTrue(powerShell.contains("System32\\msiexec.exe"));
         assertTrue(powerShell.contains("/passive /norestart"));
         assertTrue(powerShell.contains("catch{exit 1}"));
 
@@ -224,6 +225,28 @@ class GitHubReleaseUpdateRuntimeTest {
         );
 
         assertEquals("5.3.4", runtime.currentVersion());
+    }
+
+    @Test
+    void onlyAllowsExpectedHttpsDownloadHostsWithoutUrlDecoration() {
+        assertTrue(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("https://github.com/OtterMind/Chat2DB/releases/download/v5.3.5/file.msi")
+        ));
+        assertTrue(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("https://release-assets.githubusercontent.com/assets/file")
+        ));
+        assertFalse(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("http://github.com/OtterMind/Chat2DB/releases/download/v5.3.5/file.msi")
+        ));
+        assertFalse(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("https://evil.example/OtterMind/Chat2DB/file.msi")
+        ));
+        assertFalse(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("https://github.com@evil.example/file.msi")
+        ));
+        assertFalse(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
+                URI.create("https://github.com/file.msi#fragment")
+        ));
     }
 
     @Test
