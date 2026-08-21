@@ -467,3 +467,6 @@ button { font-family: inherit; cursor: pointer; }
 @media (max-width: 900px) {
   .ed__stage { grid-template-columns: minmax(0, 1fr); }
 }
+
+.ce-update { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ce-update__row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }

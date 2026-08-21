@@ -1,29 +1,60 @@
 name: 🎬 Build Cutting Edge
 
-# Copy the contents of this file into .github/workflows/ce.yml
-# (the build agent's token is not allowed to modify workflow files).
+# Paste this into .github/workflows/ce.yml **once**. After that no manual step is
+# ever needed again: bumping the version in ce-app/frontend/package.json and
+# pushing is enough — CI builds the installer, publishes the release, and every
+# installed app picks it up through its "بررسی و نصب به‌روزرسانی" button (and the
+# silent check it runs at startup).
 #
-# What changed compared to the current ce.yml:
-#   1. the artifact now includes latest.yml and *.blockmap — without them
-#      auto-update cannot detect a new version and cannot compute a delta
-#   2. the installer is published to a GitHub Release, which is the feed
-#      electron-updater reads (and which supports HTTP range requests, the
-#      mechanism differential downloads rely on)
-#   3. pip failures fail the step instead of being swallowed
+# A release is only created when the version number is new, so ordinary pushes
+# never produce duplicate releases.
 
 on:
+  push:
+    branches: ['**']
+    paths:
+      - 'ce-app/**'
+      - '.github/workflows/ce.yml'
   workflow_dispatch:
     inputs:
-      publish_release:
-        description: 'Publish to GitHub Releases (required for auto-update)'
+      force:
+        description: 'Build even if this version was already released'
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: ce-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./ce-app/frontend/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$version already released — skipping"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -61,24 +92,28 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
 
-      - name: Package
+      - name: Package and publish
         shell: pwsh
         working-directory: ce-app/frontend
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if ('${{ inputs.publish_release }}' -eq 'true') {
-            npx electron-builder --win nsis --publish always
-          } else {
-            npx electron-builder --win nsis --publish never
-          }
+        run: npx electron-builder --win nsis --publish always
 
       - uses: actions/upload-artifact@v4
         with:
           name: Cutting-Edge-Windows-Setup
-          # latest.yml + blockmap are what make auto-update and delta patches work
+          # blockmap + latest.yml are what make delta updates possible
           path: |
             ce-app/frontend/release/*.exe
             ce-app/frontend/release/*.blockmap
             ce-app/frontend/release/latest.yml
           if-no-files-found: error
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem ce-app\frontend\release\*.exe | Select-Object -First 1
+          "## Cutting Edge v${{ needs.decide.outputs.version }}" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "installer: $([math]::Round($exe.Length/1MB,1)) MB" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "download: https://github.com/$env:GITHUB_REPOSITORY/releases/tag/v${{ needs.decide.outputs.version }}" |
+            Out-File -Append $env:GITHUB_STEP_SUMMARY

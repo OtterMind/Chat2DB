@@ -28,46 +28,67 @@ var import_electron = require("electron");
 function initUpdater(mainWindow) {
   import_electron_updater.autoUpdater.autoDownload = false;
   import_electron_updater.autoUpdater.autoInstallOnAppQuit = true;
-  import_electron_updater.autoUpdater.on("checking-for-update", () => {
-    mainWindow.webContents.send("update:checking");
-  });
+  import_electron_updater.autoUpdater.allowDowngrade = false;
+  import_electron_updater.autoUpdater.logger = null;
+  const send = (event) => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send("update:event", event);
+  };
+  let downloading = false;
+  import_electron_updater.autoUpdater.on("checking-for-update", () => send({ type: "checking" }));
   import_electron_updater.autoUpdater.on("update-available", (info) => {
-    mainWindow.webContents.send("update:available", {
+    send({
+      type: "available",
       version: info.version,
       releaseDate: info.releaseDate,
-      releaseNotes: info.releaseNotes
+      notes: typeof info.releaseNotes === "string" ? info.releaseNotes : null
     });
-  });
-  import_electron_updater.autoUpdater.on("update-not-available", () => {
-    mainWindow.webContents.send("update:not-available");
-  });
-  import_electron_updater.autoUpdater.on("download-progress", (p) => {
-    mainWindow.webContents.send("update:progress", {
-      percent: p.percent,
-      bytesPerSecond: p.bytesPerSecond,
-      downloaded: p.transferred,
-      total: p.total
-    });
-  });
-  import_electron_updater.autoUpdater.on("update-downloaded", () => {
-    mainWindow.webContents.send("update:downloaded");
-  });
-  import_electron_updater.autoUpdater.on("error", (err) => {
-    mainWindow.webContents.send("update:error", { error: err.message });
-  });
-  import_electron.ipcMain.on("update:check", () => {
-    try {
-      import_electron_updater.autoUpdater.checkForUpdates();
-    } catch (e) {
-      mainWindow.webContents.send("update:error", { error: e.message });
+    if (!downloading) {
+      downloading = true;
+      import_electron_updater.autoUpdater.downloadUpdate().catch((e) => {
+        downloading = false;
+        send({ type: "error", error: e.message });
+      });
     }
   });
-  import_electron.ipcMain.on("update:download", () => {
-    import_electron_updater.autoUpdater.downloadUpdate();
+  import_electron_updater.autoUpdater.on(
+    "update-not-available",
+    (info) => send({ type: "not-available", version: info?.version ?? import_electron.app.getVersion() })
+  );
+  import_electron_updater.autoUpdater.on(
+    "download-progress",
+    (p) => send({
+      type: "progress",
+      percent: p.percent,
+      transferred: p.transferred,
+      total: p.total,
+      bytesPerSecond: p.bytesPerSecond
+    })
+  );
+  import_electron_updater.autoUpdater.on("update-downloaded", (info) => {
+    downloading = false;
+    send({ type: "downloaded", version: info.version });
   });
-  import_electron.ipcMain.on("update:install", () => {
-    import_electron_updater.autoUpdater.quitAndInstall(true, true);
+  import_electron_updater.autoUpdater.on("error", (err) => {
+    downloading = false;
+    send({ type: "error", error: err?.message ?? String(err) });
   });
+  import_electron.ipcMain.on("update:run", async () => {
+    if (!import_electron.app.isPackaged) {
+      send({ type: "error", error: "\u0628\u0647\u200C\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0641\u0642\u0637 \u062F\u0631 \u0646\u0633\u062E\u0647\u200C\u06CC \u0646\u0635\u0628\u200C\u0634\u062F\u0647 \u06A9\u0627\u0631 \u0645\u06CC\u200C\u06A9\u0646\u062F" });
+      return;
+    }
+    try {
+      await import_electron_updater.autoUpdater.checkForUpdates();
+    } catch (e) {
+      send({ type: "error", error: e.message });
+    }
+  });
+  import_electron.ipcMain.on("update:install", () => import_electron_updater.autoUpdater.quitAndInstall(true, true));
+  if (import_electron.app.isPackaged) {
+    setTimeout(() => {
+      import_electron_updater.autoUpdater.checkForUpdates().catch(() => void 0);
+    }, 8e3);
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

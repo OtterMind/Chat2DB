@@ -67,7 +67,34 @@ never-changing parts inside the installer at all:
 
 These are tracked in `docs/CuttingEdge/ROADMAP_EDITOR.md` under packaging.
 
-## 5. Publishing a release correctly
+## 5. What the user clicks, and what the maintainer does
+
+**End user — one button, nothing else.**
+Settings → «بررسی و نصب به‌روزرسانی» runs the whole flow: check the feed, download
+only the changed blocks, then offer «نصب و راه‌اندازی مجدد». The app also performs a
+silent check 8 seconds after launch, so a new version announces itself without being
+asked. Progress is shown in MB, which is also how you verify the delta is working.
+
+> Bug fixed in 0.2.3: the main process emitted update events over an IPC channel
+> while the settings screen listened for `window` message events — two mechanisms
+> that never meet. The button appeared dead because the UI literally could not hear
+> the answer. `preload.ts` now exposes `onUpdateEvent()` and the renderer subscribes
+> to it.
+
+**Maintainer — no manual workflow run.**
+With the workflow in `ce-app/ci/ce-workflow.yml`, any push that touches `ce-app/**`
+triggers a build; a release is published only when the version in
+`ce-app/frontend/package.json` is one that has not been released yet. So the entire
+release procedure is:
+
+```
+bump version in ce-app/frontend/package.json  →  commit  →  push
+```
+
+Everything after that — build, blockmap, `latest.yml`, GitHub Release, and the
+update landing in installed apps — is automatic.
+
+## 6. Publishing a release correctly
 
 ```powershell
 # version must be bumped in ce-app/frontend/package.json first
