@@ -16,8 +16,8 @@ type DragState =
 export default function Timeline() {
   const {
     tracks, clips, transitions, selectedId, playhead, pxPerSecond, snapping,
-    select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock, addTransition, neighbourOf,
-    setZoom, zoomToFit,
+    select, setPlayhead, moveClip, trimClip, toggleMute, toggleLock, neighbourOf,
+    setZoom, zoomToFit, setPanel, playing,
   } = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -108,6 +108,19 @@ export default function Timeline() {
     }
   }, [drag, clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime])
 
+  // Keep the moving playhead inside the viewport while the preview plays,
+  // otherwise it walks off screen after a few seconds.
+  useEffect(() => {
+    const view = scrollRef.current
+    if (!view) return
+    const x = playhead * pxPerSecond
+    const left = view.scrollLeft
+    const right = left + view.clientWidth - HEADER_W / 2
+    if (x < left + 40 || x > right - 60) {
+      view.scrollTo({ left: Math.max(0, x - view.clientWidth * 0.35), behavior: playing ? 'auto' : 'smooth' })
+    }
+  }, [playhead, pxPerSecond, playing])
+
   // ruler ticks: keep roughly one label per 90px
   const step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120].find((s) => s * pxPerSecond >= 90) ?? 300
   const contentSeconds = Math.max(45, ...clips.map((c) => c.start + c.duration + 10))
@@ -194,8 +207,10 @@ export default function Timeline() {
                       title={existing ? existing.type : t('Add transition', 'افزودن ترنزیشن')}
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => {
+                        // Select the left clip and open the transition chooser
+                        // right away — the diamond is the transition control.
                         select(clip.id)
-                        if (!existing) addTransition(clip.id)
+                        setPanel('transition')
                       }}
                     >
                       <span />

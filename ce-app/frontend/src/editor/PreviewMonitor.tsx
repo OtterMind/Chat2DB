@@ -47,11 +47,13 @@ export default function PreviewMonitor() {
   const sync = (
     element: HTMLMediaElement | null,
     clip: { start: number; offset: number } | null,
-    gain: number
+    gain: number,
+    speed = 1
   ) => {
     if (!element || !clip) return
-    const target = playhead - clip.start + clip.offset
-    if (Number.isFinite(target) && Math.abs(element.currentTime - target) > 0.25) {
+    element.playbackRate = Math.min(4, Math.max(0.25, speed))
+    const target = (playhead - clip.start) * speed + clip.offset
+    if (Number.isFinite(target) && Math.abs(element.currentTime - target) > 0.3) {
       try {
         element.currentTime = Math.max(0, target)
       } catch {
@@ -65,8 +67,18 @@ export default function PreviewMonitor() {
   useEffect(() => {
     const videoProps = activeVideo ? propsOf(activeVideo) : null
     const audioProps = activeAudio ? propsOf(activeAudio) : null
-    sync(videoRef.current, activeVideo, videoProps ? (videoProps.muted ? 0 : videoProps.volume) : 0)
-    sync(audioRef.current, activeAudio, audioProps ? (audioProps.muted ? 0 : audioProps.volume) : 0)
+    sync(
+      videoRef.current,
+      activeVideo,
+      videoProps ? (videoProps.muted ? 0 : videoProps.volume) : 0,
+      videoProps?.speed ?? 1
+    )
+    sync(
+      audioRef.current,
+      activeAudio,
+      audioProps ? (audioProps.muted ? 0 : audioProps.volume) : 0,
+      audioProps?.speed ?? 1
+    )
   }, [playhead, activeVideo, activeAudio, master, muted])
 
   useEffect(() => {
@@ -76,6 +88,63 @@ export default function PreviewMonitor() {
       else element.pause()
     }
   }, [playing, videoSrc, audioSrc])
+
+  /*
+   * The transport clock.
+   *
+   * Without this the playhead never moves: the video played but the timeline
+   * stood still, and playback died at the end of the first clip. The clock
+   * prefers the video element's own currentTime (no drift, no stutter) and
+   * falls back to the wall clock over gaps or audio-only stretches. When it
+   * walks past the end of the active clip it steps just over the boundary, so
+   * the next clip becomes the active one and starts playing by itself.
+   */
+  const activeVideoRef = useRef(activeVideo)
+  activeVideoRef.current = activeVideo
+
+  useEffect(() => {
+    if (!playing) return
+    let frame = 0
+    let previous = performance.now()
+
+    const tick = () => {
+      const now = performance.now()
+      const wall = Math.min(0.25, (now - previous) / 1000)
+      previous = now
+
+      const state = useEditor.getState()
+      const head = state.playhead
+      const end = state.contentEnd()
+      const clip = activeVideoRef.current
+      const element = videoRef.current
+
+      let next = head + wall
+      if (clip && element && element.readyState >= 1 && !element.seeking) {
+        const speed = Math.min(4, Math.max(0.25, propsOf(clip).speed))
+        const derived = clip.start + (element.currentTime - clip.offset) / speed
+        // Trust the element only while it really is running and roughly in
+        // step; a stalled or freshly mounted element must not stop the clock.
+        if (Number.isFinite(derived) && !element.paused && Math.abs(derived - head) < 1) next = derived
+      }
+
+      if (clip && next >= clip.start + clip.duration - 0.001) {
+        // Hop over the cut so the following clip loads immediately.
+        next = clip.start + clip.duration + 0.02
+      }
+
+      if (end <= 0 || next >= end) {
+        state.setPlayhead(Math.max(0, end))
+        state.togglePlay(false)
+        return
+      }
+
+      state.setPlayhead(next)
+      frame = requestAnimationFrame(tick)
+    }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [playing])
 
   return (
     <div className="ed__preview">
@@ -87,6 +156,11 @@ export default function PreviewMonitor() {
           src={videoSrc}
           playsInline
           preload="auto"
+          onEnded={() => {
+            // The source ran out before the clip did — move on regardless.
+            const state = useEditor.getState()
+            if (activeVideo) state.setPlayhead(activeVideo.start + activeVideo.duration + 0.02)
+          }}
           onError={() => setFailed(t('This file could not be played', 'این فایل قابل پخش نیست'))}
         />
       ) : (

@@ -133,6 +133,12 @@ interface EditorState extends Snapshot {
   pxPerSecond: number
   playing: boolean
   snapping: boolean
+  /**
+   * Which tool panel the rail shows. It lives here, not inside the toolbar,
+   * because the timeline has to be able to open one — clicking the junction
+   * diamond between two clips must show the transition chooser straight away.
+   */
+  panel: string | null
   past: Snapshot[]
   future: Snapshot[]
 
@@ -146,6 +152,9 @@ interface EditorState extends Snapshot {
   zoomToFit: (viewportPx: number) => void
   togglePlay: (playing?: boolean) => void
   toggleSnapping: () => void
+  setPanel: (panel: string | null) => void
+  /** Furthest point any clip reaches — where playback stops. */
+  contentEnd: () => number
 
   moveClip: (id: string, start: number, trackId?: string) => void
   setProps: (id: string, patch: Partial<ClipProps>) => void
@@ -221,6 +230,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   pxPerSecond: 42,
   playing: false,
   snapping: true,
+  panel: null,
   past: [],
   future: [],
 
@@ -269,8 +279,17 @@ export const useEditor = create<EditorState>((set, get) => ({
     const content = Math.max(5, ...clips.map((c) => c.start + c.duration))
     set({ pxPerSecond: Math.max(8, Math.min(220, (viewportPx - 40) / content)) })
   },
-  togglePlay: (playing) => set((s) => ({ playing: playing ?? !s.playing })),
+  togglePlay: (playing) =>
+    set((s) => {
+      const next = playing ?? !s.playing
+      const end = s.clips.reduce((acc, c) => Math.max(acc, c.start + c.duration), 0)
+      // Pressing play at the very end starts over instead of doing nothing.
+      const rewind = next && !s.playing && s.playhead >= end - 0.05
+      return { playing: next, playhead: rewind ? 0 : s.playhead }
+    }),
   toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
+  setPanel: (panel) => set({ panel }),
+  contentEnd: () => get().clips.reduce((end, c) => Math.max(end, c.start + c.duration), 0),
 
   setProps: (id, patch) =>
     get().commit((s) => {
@@ -730,4 +749,10 @@ export function formatTimecode(seconds: number, withFrames = false) {
   if (!withFrames) return base
   const frames = Math.floor((s % 1) * 30)
   return `${base}:${frames.toString().padStart(2, '0')}`
+}
+
+// Dev-only handle so the headless playback test can drive the timeline the way
+// a user would, without clicking through the file picker.
+if (import.meta.env.DEV) {
+  ;(window as unknown as { __ceEditor?: typeof useEditor }).__ceEditor = useEditor
 }

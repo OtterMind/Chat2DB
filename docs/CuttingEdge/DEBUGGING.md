@@ -106,3 +106,46 @@ The Vite dev server proxies `/api` and `/ws` to port 8742, so the whole interfac
 including the timeline — is testable in a browser in under two seconds per change.
 Only packaging-level behaviour (auto-update, portable runtime, file:// paths) needs
 the real installer, and that is exactly what the smoke test now guards.
+
+## Testing playback headlessly
+
+The transport bugs of 0.3.3 (dead playhead, no roll-on to the next clip) could not
+be caught by TypeScript or by the route audit — they need a real browser playing
+real media. `ce-app/frontend/scripts/playback-test.mjs` does that.
+
+Two test files with picture and sound, in a codec plain Chromium can decode:
+
+```
+for i in 1 2; do
+  ffmpeg -y -f lavfi -i "testsrc=size=320x240:rate=25:duration=3" \
+         -f lavfi -i "sine=frequency=$((300*i)):duration=3" \
+         -c:v libvpx -c:a libvorbis -shortest /tmp/media/clip$i.webm
+done
+```
+
+H.264/AAC is deliberately avoided: an unbranded Chromium build has no proprietary
+codecs and every check would fail for the wrong reason.
+
+A Chromium for the sandbox:
+
+```
+npm i @sparticuz/chromium@131.0.1 puppeteer-core@23.9.0
+node -e "require('@sparticuz/chromium').executablePath()"      # unpacks /tmp/chromium
+node -e "const z=require('zlib'),f=require('fs');f.writeFileSync('/tmp/al2023.tar',
+  z.brotliDecompressSync(f.readFileSync('node_modules/@sparticuz/chromium/bin/al2023.tar.br')))"
+mkdir -p /tmp/chromium-libs && tar xf /tmp/al2023.tar -C /tmp/chromium-libs
+```
+
+Then, with the backend on 8742 and Vite on 5173:
+
+```
+LD_LIBRARY_PATH=/tmp/chromium-libs/lib:/tmp/chromium-libs CHROME_PATH=/tmp/chromium \
+  npm run test:playback -- --a /tmp/media/clip1.webm --b /tmp/media/clip2.webm
+```
+
+The test drives the timeline through `window.__ceEditor`, a handle exported only
+when `import.meta.env.DEV` is true, so nothing is exposed in the shipped app.
+
+Watch out for one trap that already produced a false failure: creating a transition
+ripples the second clip earlier, so any expected source time must be derived from
+the clip state, never hard-coded.

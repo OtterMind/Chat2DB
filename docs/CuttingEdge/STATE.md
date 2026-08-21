@@ -75,6 +75,7 @@ No Windows machine is needed for anything except packaging.
 | `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth — 7 tests |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
+| `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport: the playhead advances while playing, the red marker moves, playback crosses a cut into the next clip, stops at the end, pause really pauses, a manual seek is followed, and the junction diamond opens the transition chooser |
 | `ce-app/scripts/smoke-test.ps1` | the **packaged** app: asar entry, relative asset paths, ffmpeg+ffprobe, embeddable Python, live `/api/health` |
 
 The first two run anywhere. The third runs on the Windows runner in CI and is the
@@ -105,6 +106,15 @@ gate that stops a broken installer from being published.
    entry fails silently — `npm run check:bridge` now catches it.
 10. **Bad dependency pins.** The PyPI project is `scenedetect`, not `PySceneDetect`;
    `pexels-api` stops at 1.0.1.
+11. **A preview needs a clock.** Until 0.3.4 nothing advanced `playhead`: the video
+   element played, the red marker stood still and playback died at the first cut.
+   `PreviewMonitor` now runs a `requestAnimationFrame` transport that prefers the
+   video element's own `currentTime`, falls back to the wall clock over gaps, steps
+   over each cut so the next clip loads, and stops at the end of the timeline.
+   Guarded by `npm run test:playback`.
+12. **Panels the timeline can open.** The tool rail's open panel lives in the store
+   (`panel` / `setPanel`), because the junction diamond between two clips must open
+   the transition chooser. Local `useState` inside the toolbar made that impossible.
 
 ## 5. Release procedure
 

@@ -47,14 +47,17 @@ const ICON = { size: 19, strokeWidth: 1.8 } as const
 export default function EditorToolbar({ onImport }: { onImport: () => void }) {
   const { t, lang } = useI18n()
   const i = lang === 'fa' ? 1 : 0
-  const [panel, setPanel] = useState<PanelId>(null)
   const [soonLabel, setSoonLabel] = useState('')
 
   const {
-    clips, selectedId, playhead, transitions,
+    clips, selectedId, playhead, transitions, panel: openPanel, setPanel: setStorePanel,
     splitAtPlayhead, duplicateSelected, removeSelected, setProps, freezeFrame,
     addTransition, neighbourOf, addTrack, select, undo, redo, past, future,
   } = useEditor()
+
+  // The panel lives in the store so the timeline can open one too.
+  const panel = openPanel as PanelId
+  const setPanel = (next: PanelId) => setStorePanel(next)
 
   const history: Tool[] = [
     {
