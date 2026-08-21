@@ -77,6 +77,7 @@ No Windows machine is needed for anything except packaging.
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
 | the same test also guards the layout the user asked for: no scale bar above the timeline, no magnifiers in the transport, the scale control inside the timeline, Ctrl+wheel zoom, the canvas shape, and the home screen's starting cards |
+| the same test also checks the film strip renders decoded frames, the moved tools are in the rail, and no clip tools remain on the home screen |
 | `bash ce-app/scripts/sandbox-test-env.sh` | rebuilds the whole headless test environment (venv, ffmpeg, Chromium, test clips) after the sandbox wipes `/tmp` |
 | `ce-app/scripts/smoke-test.ps1` | the **packaged** app: asar entry, relative asset paths, ffmpeg+ffprobe, embeddable Python, live `/api/health` |
 
@@ -120,15 +121,24 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
+13. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
+   film strip from `GET /api/media/thumb?path&t&h` (one JPEG per frame, cached in
+   `~/CuttingEdge/data/thumbs`, times quantised to 0.1 s so zooming reuses the
+   cache). Scale is by Ctrl+wheel or a two-finger pinch, anchored under the
+   pointer — no slider anywhere, like the phone editors we are compared with.
+14. **Home starts sessions, the rail edits clips.** Catalogue entries carry
+   `place: 'editor'`; those tiles are gone from the home screen and appear in the
+   editor's global tool rail instead (captions and silence removal run in place,
+   the rest open their own screen).
+15. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
    a thin strip between black walls; the stage now takes the project ratio
    (`aspect`, default `auto` = the first video clip's real pixel size) and the
    export dialog opens on the matching format. Clips carry `width`/`height` from
    the probe for this.
-14. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+16. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
    while nothing listened for a key; Studio now owns one `keydown` handler and
    skips inputs, textareas and modals.
-15. **Panels the timeline can open.** The tool rail's open panel lives in the store
+17. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 

@@ -183,3 +183,24 @@ def test_speed_shortens_the_clip(media, tmp_path):
     assert abs(info["duration"] - 2.0) < 0.35   # the clip still occupies its slot
     command = " ".join(compose.build_command(compose.Timeline.from_dict(_timeline(media, {"speed": 2.0})), tmp_path / "s.mp4"))
     assert "setpts=PTS/2" in command
+
+
+@requires_ffmpeg
+def test_thumbnail_endpoint_returns_a_frame_and_caches_it(media):
+    """The timeline film strip depends on this: a real JPEG, then a cache hit."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as client:
+        source = str(media["clip_b"])
+        first = client.get("/api/media/thumb", params={"path": source, "t": 1.0, "h": 64})
+        assert first.status_code == 200
+        assert first.headers["content-type"] == "image/jpeg"
+        assert len(first.content) > 500                     # a real image, not an empty file
+
+        second = client.get("/api/media/thumb", params={"path": source, "t": 1.0, "h": 64})
+        assert second.status_code == 200
+        assert second.content == first.content              # served from the cache
+
+        assert client.get("/api/media/thumb", params={"path": "/no/such/file.mp4"}).status_code == 404

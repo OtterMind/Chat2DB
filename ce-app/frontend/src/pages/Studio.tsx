@@ -420,7 +420,7 @@ export default function Studio() {
 
         <AssistantButton />
 
-        <EditorToolbar onImport={importMedia} />
+        <EditorToolbar onImport={importMedia} onRemoveSilence={removeSilence} onSplitScenes={splitScenes} />
 
         <Timeline />
 

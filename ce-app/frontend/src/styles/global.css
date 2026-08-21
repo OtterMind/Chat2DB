@@ -490,8 +490,10 @@ button { font-family: inherit; cursor: pointer; }
   height: 28px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 2px; padding: 0 4px;
 }
-.tl__cornerslider { flex: 1; margin: 0 !important; min-width: 26px; }
-.tl__cornerslider .ant-slider-handle::after { transform: scale(.8); }
+.tl__cornerslider {
+  flex: 1; min-width: 26px; text-align: center; font-size: 10.5px; color: var(--muted);
+  direction: ltr;
+}
 .tl__header {
   height: 62px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
   border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px;
@@ -526,6 +528,15 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 6px 14px -10px #000; border: 1px solid rgba(255, 255, 255, .14);
 }
 .tl__clip:active { cursor: grabbing; }
+/* film strip: real frames behind the label, like every timeline the user knows */
+.tl__strip {
+  position: absolute; inset: 0; display: flex; overflow: hidden; border-radius: 8px;
+  pointer-events: none; opacity: .95;
+}
+.tl__strip img { height: 100%; flex: 1 1 0; min-width: 0; object-fit: cover; }
+.tl__clip-label, .tl__clip-dur {
+  position: relative; z-index: 1; text-shadow: 0 1px 4px rgba(0, 0, 0, .95);
+}
 .tl__clip.is-selected { outline: 2px solid #fff; outline-offset: -2px; }
 .tl__clip-label {
   flex: 1; font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap;
@@ -698,8 +709,9 @@ button { font-family: inherit; cursor: pointer; }
 
 /* editing assistant --------------------------------------------------------- */
 .ai-fab {
-  /* end side: the start side is where the timeline's track headers live */
-  position: fixed; inset-inline-end: 22px; bottom: 96px; z-index: 40;
+  /* end side, below the tool rail: the start side is where the track headers
+     live and the rail's last tool must stay clickable */
+  position: fixed; inset-inline-end: 16px; bottom: 16px; z-index: 40;
   width: 52px; height: 52px; border-radius: 50%; border: none; color: #fff;
   background: linear-gradient(140deg, #6366f1, #06b6d4);
   box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95);
@@ -709,7 +721,7 @@ button { font-family: inherit; cursor: pointer; }
 .ai-fab.is-open { background: var(--surface-2); border: 1px solid var(--border); }
 
 .ai-panel {
-  position: fixed; inset-inline-end: 22px; bottom: 160px; z-index: 40; width: min(420px, calc(100vw - 44px));
+  position: fixed; inset-inline-end: 16px; bottom: 80px; z-index: 40; width: min(420px, calc(100vw - 44px));
   background: rgba(17, 28, 49, .97); backdrop-filter: blur(10px);
   border: 1px solid var(--border); border-radius: 16px; padding: 14px;
   display: flex; flex-direction: column; gap: 10px;
@@ -757,4 +769,34 @@ button { font-family: inherit; cursor: pointer; }
 .pj kbd {
   font-size: 10px; opacity: .7; border: 1px solid rgba(255,255,255,.25);
   border-radius: 4px; padding: 0 4px; margin-inline-start: 4px;
+}
+
+
+/* ---------------------------------------------------- antd static dialogs --
+ * Modal.confirm() and message() are static calls: they render outside the
+ * ConfigProvider tree and therefore never see the dark theme, which is why the
+ * restore prompt used to appear as a white card on a dark app. Styling them here
+ * keeps the call sites simple and the app one colour.
+ */
+.ant-modal-content,
+.ant-modal-confirm .ant-modal-content {
+  background: #111c31 !important;
+  border: 1px solid var(--border);
+  box-shadow: 0 30px 70px -30px #000;
+}
+.ant-modal-confirm-title,
+.ant-modal-title,
+.ant-modal-confirm-content,
+.ant-modal-content .ant-typography,
+.ant-modal-content label > span {
+  color: var(--text) !important;
+}
+.ant-modal-confirm-content { color: var(--muted) !important; }
+.ant-modal-content .ant-btn-default {
+  background: var(--surface-2, #1e293b); border-color: var(--border); color: var(--text);
+}
+.ant-modal-content .ant-btn-default:hover { border-color: #6366f1; color: #c7d2fe; }
+.ant-modal-close { color: var(--muted); }
+.ant-message-notice-content {
+  background: #111c31; color: var(--text); border: 1px solid var(--border);
 }

@@ -16,6 +16,12 @@ export interface FeatureTile {
   badge?: 'new' | 'soon' | 'beta'
   /** Feature groups let the home screen stay readable as the catalog grows. */
   group: 'core' | 'ai' | 'polish' | 'publish' | 'system'
+  /**
+   * Where the tile belongs. The home screen keeps only the things you start a
+   * session with; everything that acts on a clip lives in the editor's tool
+   * rail, which is where the hand already is while editing.
+   */
+  place?: 'home' | 'editor' | 'both'
 }
 
 const ICON = { size: 26, strokeWidth: 2 } as const
@@ -63,6 +69,7 @@ export const FEATURES: FeatureTile[] = [
   // ---- ai ---------------------------------------------------------------
   {
     id: 'subtitles',
+    place: 'editor',
     label: ['Smart Captions', 'زیرنویس هوشمند'],
     hint: ['Transcribe and animate', 'رونویسی + استایل متحرک'],
     icon: <Captions {...ICON} />,
@@ -72,6 +79,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'silence',
+    place: 'editor',
     label: ['Silence Removal', 'حذف سکوت'],
     hint: ['Cut pauses and filler words', 'مکث‌ها و اِاِ‌ها پاک می‌شوند'],
     icon: <AudioLines {...ICON} />,
@@ -82,6 +90,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'voiceover',
+    place: 'editor',
     label: ['Voice Over', 'وویس‌اوور'],
     hint: ['Text to speech narration', 'متن به گفتار با edge-tts'],
     icon: <Mic {...ICON} />,
@@ -92,6 +101,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'broll',
+    place: 'editor',
     label: ['Auto B-Roll', 'بی‌رول خودکار'],
     hint: ['Relevant footage from Pexels', 'تصاویر مرتبط از Pexels'],
     icon: <Images {...ICON} />,
@@ -102,6 +112,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'translate',
+    place: 'editor',
     label: ['Translate & Dub', 'ترجمه و دوبله'],
     hint: ['Multilingual subs and audio', 'زیرنویس و صدای چندزبانه'],
     icon: <Languages {...ICON} />,
@@ -114,6 +125,7 @@ export const FEATURES: FeatureTile[] = [
   // ---- polish -----------------------------------------------------------
   {
     id: 'bgremove',
+    place: 'editor',
     label: ['Background Removal', 'حذف پس‌زمینه'],
     hint: ['Chroma key without a green screen', 'کروماکی بدون پرده سبز'],
     icon: <Eraser {...ICON} />,
@@ -124,6 +136,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'enhance',
+    place: 'editor',
     label: ['Enhance', 'ارتقای کیفیت'],
     hint: ['Denoise and sharpen', 'نویزگیری و شارپ‌سازی'],
     icon: <Sparkles {...ICON} />,
@@ -134,6 +147,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'titles',
+    place: 'editor',
     label: ['Titles & Text', 'تیتراژ و متن'],
     hint: ['Ready-made title templates', 'قالب‌های آماده تایتل'],
     icon: <Type {...ICON} />,
@@ -144,6 +158,7 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'music',
+    place: 'editor',
     label: ['Music & Mix', 'موسیقی و میکس'],
     hint: ['Automatic audio ducking', 'داکینگ خودکار صدا'],
     icon: <Music4 {...ICON} />,

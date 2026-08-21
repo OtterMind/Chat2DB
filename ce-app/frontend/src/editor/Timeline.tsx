@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize } from 'lucide-react'
-import { Slider } from 'antd'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
+import { thumbUrl } from '../api/render'
 import { useI18n } from '../i18n'
 
 const TRACK_ICON: Record<TrackKind, typeof Video> = { video: Video, audio: Music4, text: Type }
@@ -145,8 +145,44 @@ export default function Timeline() {
       const rect = view.getBoundingClientRect()
       view.scrollLeft = Math.max(0, anchor * next - (event.clientX - rect.left))
     }
+    // Two fingers on a touch screen do the same thing, which is how the phone
+    // editors the user compares us with handle the timeline scale.
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinchStart: { distance: number; zoom: number } | null = null
+    const distance = () => {
+      const [a, b] = [...touches.values()]
+      return Math.hypot(a.x - b.x, a.y - b.y)
+    }
+    const onDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (touches.size === 2) pinchStart = { distance: distance(), zoom: pxPerSecond }
+    }
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !touches.has(event.pointerId)) return
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (touches.size === 2 && pinchStart && pinchStart.distance > 0) {
+        event.preventDefault()
+        setZoom(Math.max(8, Math.min(220, (pinchStart.zoom * distance()) / pinchStart.distance)))
+      }
+    }
+    const onUp = (event: PointerEvent) => {
+      touches.delete(event.pointerId)
+      if (touches.size < 2) pinchStart = null
+    }
+
     view.addEventListener('wheel', onWheel, { passive: false })
-    return () => view.removeEventListener('wheel', onWheel)
+    view.addEventListener('pointerdown', onDown)
+    view.addEventListener('pointermove', onMove, { passive: false })
+    view.addEventListener('pointerup', onUp)
+    view.addEventListener('pointercancel', onUp)
+    return () => {
+      view.removeEventListener('wheel', onWheel)
+      view.removeEventListener('pointerdown', onDown)
+      view.removeEventListener('pointermove', onMove)
+      view.removeEventListener('pointerup', onUp)
+      view.removeEventListener('pointercancel', onUp)
+    }
   }, [pxPerSecond, setZoom, xToTime])
 
   return (
@@ -161,14 +197,9 @@ export default function Timeline() {
           >
             <Minus size={13} />
           </button>
-          <Slider
-            className="tl__cornerslider"
-            min={8}
-            max={220}
-            value={pxPerSecond}
-            tooltip={{ formatter: (v) => `${Math.round(v ?? 0)} px/s` }}
-            onChange={setZoom}
-          />
+          <span className="tl__cornerslider" title={`${Math.round(pxPerSecond)} px/s`}>
+            {formatTimecode(Math.max(1, Math.round(90 / pxPerSecond)))}
+          </span>
           <button
             className="tl__hbtn"
             onClick={() => setZoom(pxPerSecond * 1.4)}
@@ -284,6 +315,35 @@ export default function Timeline() {
   )
 }
 
+/**
+ * Film strip.
+ *
+ * A clip that is a flat colour tells the user nothing; real frames are how every
+ * editor makes a timeline readable. Frames are requested from the backend at
+ * whole steps so zooming reuses the cache instead of re-encoding.
+ */
+function FilmStrip({ clip, width }: { clip: Clip; width: number }) {
+  const frameWidth = 56
+  const count = Math.max(1, Math.min(24, Math.round(width / frameWidth)))
+  const frames = useMemo(() => {
+    if (!clip.src) return []
+    const step = clip.duration / count
+    return Array.from({ length: count }, (_, i) => {
+      const at = clip.offset + step * (i + 0.5)
+      return { key: `${i}`, url: thumbUrl(clip.src as string, at, 96) }
+    })
+  }, [clip.src, clip.offset, clip.duration, count])
+
+  if (frames.length === 0) return null
+  return (
+    <span className="tl__strip" aria-hidden>
+      {frames.map((frame) => (
+        <img key={frame.key} src={frame.url} alt="" loading="lazy" draggable={false} />
+      ))}
+    </span>
+  )
+}
+
 function ClipView({
   clip, pxPerSecond, selected, onSelect, onDragStart, xToTime,
 }: {
@@ -311,6 +371,7 @@ function ClipView({
         else onDragStart('move', xToTime(e.clientX))
       }}
     >
+      {clip.src && <FilmStrip clip={clip} width={Math.max(12, clip.duration * pxPerSecond)} />}
       <span className="tl__handle" data-handle="start" />
       <span className="tl__clip-label" dir="auto">{clip.label}</span>
       <span className="tl__clip-dur">{formatTimecode(clip.duration)}</span>

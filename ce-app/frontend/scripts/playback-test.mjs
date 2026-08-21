@@ -71,6 +71,20 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
 await page.goto(`${BASE}/#/studio`, { waitUntil: 'networkidle2' })
 await page.waitForFunction('Boolean(window.__ceEditor)', { timeout: 15000 })
+
+// An autosave left by an earlier run opens a modal that swallows every click.
+await new Promise((r) => setTimeout(r, 800))
+const dismissed = await page.evaluate(() => {
+  const buttons = [...document.querySelectorAll('.ant-modal-wrap button')]
+  const discard = buttons.find((b) => /Discard|دور/i.test(b.textContent ?? ''))
+  if (discard) {
+    discard.click()
+    return true
+  }
+  return false
+})
+if (dismissed) await new Promise((r) => setTimeout(r, 500))
+
 // a vertical file for the canvas-shape check, when one was provided
 await page.evaluate((v) => {
   window.__ceTestVertical = v
@@ -385,6 +399,33 @@ if (Math.abs(shapes.wide - 1.7778) < 0.05 && Math.abs(shapes.square - 1) < 0.05)
   ok('the ratio panel reshapes the monitor')
 else bad('the chosen ratio does not reshape the monitor', JSON.stringify(shapes))
 
+/* 11b — clips show real frames, not coloured blocks -------------------------- */
+const strip = await page.evaluate(async () => {
+  const store = window.__ceEditor
+  store.getState().setAspect('auto')
+  await new Promise((r) => setTimeout(r, 1500))
+  const images = [...document.querySelectorAll('.tl__clip .tl__strip img')]
+  return {
+    count: images.length,
+    loaded: images.filter((img) => img.naturalWidth > 0).length,
+    src: images[0]?.getAttribute('src') ?? null,
+  }
+})
+if (strip.count > 0) ok(`the clip shows a film strip (${strip.count} frames)`)
+else bad('timeline clips have no thumbnails')
+if (strip.loaded > 0) ok(`${strip.loaded} frames decoded from the backend`)
+else bad('the thumbnails never loaded', JSON.stringify(strip))
+
+/* 11c — the tools taken off the home screen are in the rail ------------------ */
+const rail = await page.evaluate(() => {
+  const labels = [...document.querySelectorAll('.tb__tool .tb__label')].map((n) => n.textContent?.trim())
+  return { labels, count: labels.length }
+})
+const movedTools = ['Smart Captions', 'Silence Removal', 'Voice Over', 'Auto B-Roll', 'Translate & Dub']
+const missing = movedTools.filter((label) => !rail.labels.includes(label))
+if (missing.length === 0) ok(`the moved tools are in the edit rail (${rail.count} tools)`)
+else bad('tools removed from home are missing in the rail', missing.join(', '))
+
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 900))
@@ -394,6 +435,9 @@ const home = await page.evaluate(() => ({
   editorTileSaysSoon: [...document.querySelectorAll('.ce-tile')].some(
     (tile) => /Editor/.test(tile.textContent ?? '') && /SOON/i.test(tile.textContent ?? '')
   ),
+  clipTools: [...document.querySelectorAll('.ce-tile')]
+    .map((tile) => tile.textContent ?? '')
+    .filter((text) => /Voice Over|Auto B-Roll|Translate|Silence Removal|Smart Captions/.test(text)).length,
 }))
 if (home.starters === 2) ok('the home screen leads with New video / Open editor')
 else bad('the home screen has no starting cards', JSON.stringify(home))
@@ -401,8 +445,13 @@ if (home.recents) ok('the recent projects strip is there')
 else bad('no recent projects strip on the home screen')
 if (!home.editorTileSaysSoon) ok('the editor tile no longer claims to be "soon"')
 else bad('the editor tile still says "soon"')
+if (home.clipTools === 0) ok('clip tools are no longer on the home screen')
+else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
 
-const hard = errors.filter((e) => !/favicon|ResizeObserver|DevTools/i.test(e))
+const hard = errors.filter(
+  // antd's static-function advisory is a warning about theming, handled in CSS.
+  (e) => !/favicon|ResizeObserver|DevTools|antd: Modal|Static function can not consume context/i.test(e)
+)
 if (hard.length) bad('console errors', hard.slice(0, 3).join(' | '))
 
 await browser.close()

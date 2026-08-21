@@ -43,6 +43,11 @@ export function mediaUrl(path: string) {
   return `${backendOrigin}/api/media/file?path=${encodeURIComponent(path)}`
 }
 
+/** One frame of a file, for the timeline film strip. */
+export function thumbUrl(path: string, at: number, height = 96) {
+  return `${backendOrigin}/api/media/thumb?path=${encodeURIComponent(path)}&t=${at.toFixed(1)}&h=${height}`
+}
+
 /** Native save dialog in the desktop app; null in the browser preview. */
 export function saveDialog(suggestedName: string): Promise<string | null> | null {
   const bridge = (window as unknown as { cuttingEdge?: { saveDialog?: (n: string) => Promise<string | null> } })

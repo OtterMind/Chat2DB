@@ -7,12 +7,18 @@ makes scrubbing work at all — and behaves identically in the browser preview.
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import mimetypes
 import re
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
+
+from app.config import settings
+from core.engine.compose import ffmpeg_binary
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -64,3 +70,57 @@ def stream(path: str, request: Request):
             "Content-Length": str(end - start + 1),
         },
     )
+
+
+# ------------------------------------------------------------------ thumbnails
+
+
+def _thumb_dir() -> Path:
+    path = settings.data_dir / "thumbs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _extract(source: Path, at: float, height: int, target: Path) -> None:
+    """One frame, scaled, as JPEG. Fast seek before the input keeps this cheap."""
+    subprocess.run(
+        [
+            ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+            "-ss", f"{max(0.0, at):.3f}", "-i", str(source),
+            "-frames:v", "1", "-vf", f"scale=-2:{height}", "-q:v", "6",
+            str(target),
+        ],
+        check=True,
+        timeout=25,
+    )
+
+
+@router.get("/thumb")
+async def thumbnail(path: str, t: float = 0.0, h: int = 96):
+    """A single frame of a media file, cached on disk.
+
+    The timeline draws film strips out of these, which is what makes a clip
+    recognisable at a glance instead of being a coloured rectangle.
+    """
+    source = Path(path)
+    if not source.exists() or not source.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    height = max(24, min(240, int(h)))
+    # Quantise the time so scrubbing reuses the cache instead of re-encoding.
+    at = round(max(0.0, float(t)), 1)
+    key = hashlib.sha1(
+        f"{source.resolve()}|{source.stat().st_mtime_ns}|{at}|{height}".encode()
+    ).hexdigest()
+    cached = _thumb_dir() / f"{key}.jpg"
+
+    if not cached.exists():
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, _extract, source, at, height, cached)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            raise HTTPException(status_code=422, detail=f"No frame at {at}s") from error
+        if not cached.exists():
+            raise HTTPException(status_code=422, detail=f"No frame at {at}s")
+
+    return FileResponse(cached, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})

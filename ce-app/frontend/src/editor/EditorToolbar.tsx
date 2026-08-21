@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
-  Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers, Captions,
+  Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers,
   Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
@@ -9,6 +10,7 @@ import { captionsApi } from '../api/captions'
 import { useEditor, propsOf, type Clip, type ClipProps } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
+import { FEATURES } from '../features/catalog'
 
 type PanelId =
   | null
@@ -44,8 +46,17 @@ const ICON = { size: 19, strokeWidth: 1.8 } as const
  * with a back arrow. Rows scroll horizontally instead of wrapping, so adding
  * tools never reflows the editor.
  */
-export default function EditorToolbar({ onImport }: { onImport: () => void }) {
+export default function EditorToolbar({
+  onImport,
+  onRemoveSilence,
+  onSplitScenes,
+}: {
+  onImport: () => void
+  onRemoveSilence?: () => void
+  onSplitScenes?: () => void
+}) {
   const { t, lang } = useI18n()
+  const navigate = useNavigate()
   const i = lang === 'fa' ? 1 : 0
   const [soonLabel, setSoonLabel] = useState('')
 
@@ -134,16 +145,31 @@ export default function EditorToolbar({ onImport }: { onImport: () => void }) {
       },
     },
     { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
-    {
-      id: 'captions',
-      icon: <Captions {...ICON} />,
-      label: ['Captions', 'زیرنویس'],
-      run: () => void generateCaptions(),
-    },
     { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], soon: true },
     { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
+    // Everything that was taken off the home screen: these act on footage, so
+    // they belong next to the footage.
+    ...FEATURES.filter((feature) => feature.place === 'editor').map<Tool>((feature) => {
+      // Two of them already exist here for real; the rest either open their own
+      // screen or admit they are not built yet.
+      const local: Record<string, (() => void) | undefined> = {
+        subtitles: () => void generateCaptions(),
+        silence: onRemoveSilence,
+      }
+      const run = local[feature.id]
+      return {
+        id: `f-${feature.id}`,
+        icon: feature.icon,
+        label: feature.label,
+        soon: !run && feature.badge === 'soon',
+        run: run ?? (() => navigate(feature.route)),
+      }
+    }),
+    ...(onSplitScenes
+      ? [{ id: 'scenes', icon: <Film {...ICON} />, label: ['Split scenes', 'تقسیم نما'] as [string, string], run: onSplitScenes }]
+      : []),
   ]
 
   const clipTools: Tool[] = [

@@ -71,6 +71,9 @@ page.on('console', (m) => {
   const text = m.text()
   // the dev server has no backend attached in CI; ignore only that noise
   if (/Failed to load resource|WebSocket connection/.test(text)) return
+  // antd's advisory about static Modal/message not reading the theme context:
+  // the dialogs are themed from our own stylesheet instead.
+  if (/antd: Modal|Static function can not consume context/.test(text)) return
   errors.push(text.slice(0, 200))
 })
 
@@ -132,23 +135,29 @@ if (after.scrollTop !== 0) note('rapid-switch', 'scroll position leaked between 
 console.log(`rapid-switch   mounted=${after.mounted} headers=${after.headers} scrollTop=${after.scrollTop}`)
 
 // editor invariants: empty start, no overlapping clips, zoom control present
-await page.goto(`${BASE}/#/studio`, { waitUntil: 'networkidle0' })
-await new Promise((r) => setTimeout(r, 900))
-const editor = await page.evaluate(() =>
-  import('/src/editor/model.ts').then((m) => {
-    const s = m.useEditor.getState()
-    s.clearTimeline()
-    const a = s.addClip({ trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'A', color: '#111' })
-    const b = s.addClip({ trackId: 'v1', start: 6, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'B', color: '#222' })
-    m.useEditor.getState().moveClip(b, 1) // aim straight at A
-    const clips = m.useEditor.getState().clips
-    const first = clips.find((c) => c.id === a)
-    const second = clips.find((c) => c.id === b)
-    const overlapping =
-      second.start < first.start + first.duration && second.start + second.duration > first.start
-    return { overlapping, zoomBar: !!document.querySelector(".tl__cornerslider") }
-  })
-)
+// A hash change, not goto(): re-navigating to the same document raced with the
+// evaluate below and killed the execution context ("Promise was collected").
+await page.evaluate(() => {
+  location.hash = '#/studio'
+})
+await new Promise((r) => setTimeout(r, 1200))
+// The store is reachable as window.__ceEditor in dev builds. A dynamic import
+// inside evaluate() was collected by the GC now and then and failed the run.
+await page.waitForFunction('Boolean(window.__ceEditor)', { timeout: 15000 })
+const editor = await page.evaluate(() => {
+  const store = window.__ceEditor
+  const s = store.getState()
+  s.clearTimeline()
+  const a = store.getState().addClip({ trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'A', color: '#111' })
+  const b = store.getState().addClip({ trackId: 'v1', start: 6, duration: 4, offset: 0, sourceDuration: 10, src: 'x', label: 'B', color: '#222' })
+  store.getState().moveClip(b, 1) // aim straight at A
+  const clips = store.getState().clips
+  const first = clips.find((c) => c.id === a)
+  const second = clips.find((c) => c.id === b)
+  const overlapping =
+    second.start < first.start + first.duration && second.start + second.duration > first.start
+  return { overlapping, zoomBar: !!document.querySelector('.tl__cornerslider') }
+})
 if (editor.overlapping) note('editor', 'clips are allowed to overlap on a lane')
 if (!editor.zoomBar) note('editor', 'timeline zoom control missing')
 console.log(`editor         overlapping=${editor.overlapping} zoomBar=${editor.zoomBar}`)

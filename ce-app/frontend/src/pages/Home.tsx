@@ -46,11 +46,13 @@ export default function Home() {
   })
 
   const groups = useMemo(() => {
+    // Clip tools live in the editor's rail now; the home screen is for starting.
+    const startable = FEATURES.filter((f) => (f.place ?? 'home') !== 'editor')
     const filtered = query.trim()
       ? FEATURES.filter((f) =>
           [...f.label, ...f.hint].some((v) => v.toLowerCase().includes(query.trim().toLowerCase()))
         )
-      : FEATURES
+      : startable
     const order: FeatureTile['group'][] = ['core', 'ai', 'polish', 'publish', 'system']
     return order
       .map((g) => ({ group: g, items: filtered.filter((f) => f.group === g) }))
