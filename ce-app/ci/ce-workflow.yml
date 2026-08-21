@@ -106,6 +106,8 @@ jobs:
         working-directory: ce-app/frontend
         run: |
           npm install --no-audit --no-fund
+          # types + the renderer/preload bridge contract, before anything is packaged
+          npm run verify
           npm run build
 
       - name: Package and publish

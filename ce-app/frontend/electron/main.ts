@@ -50,6 +50,43 @@ function startBackend() {
   backendProcess.on('exit', (code) => { log.warn('[CE] Backend exited:', code); backendProcess = null })
 }
 
+/**
+ * IPC is registered once, at module scope.
+ *
+ * Registering inside createWindow() meant a second window (or a reload) would
+ * throw "second handler for ..." and, worse, hid the fact that a channel was
+ * missing entirely: the renderer's invoke() simply rejected and the UI showed
+ * nothing at all.
+ */
+function registerIpc() {
+  ipcMain.on('log:renderer', (_e, level: string, message: string) => {
+    ;(log as unknown as Record<string, (m: string) => void>)[level === 'error' ? 'error' : 'info'](
+      `[renderer] ${message}`
+    )
+  })
+
+  ipcMain.handle('media:pick', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Import media',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: 'Media', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'wav', 'm4a', 'aac', 'flac'] },
+          { name: 'All files', extensions: ['*'] },
+        ],
+      })
+      log.info('[CE] media:pick ->', result.canceled ? 'cancelled' : result.filePaths.join(', '))
+      return result.canceled ? [] : result.filePaths
+    } catch (error) {
+      log.error('[CE] media:pick failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('log:path', () => log.transports.file.getFile().path)
+  ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
+}
+
 function showFatal(win: BrowserWindow, message: string) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     body{background:#0F172A;color:#F8FAFC;font-family:Segoe UI,system-ui,sans-serif;
@@ -91,32 +128,12 @@ function createWindow() {
     log.error('[CE] Renderer process gone:', details.reason)
   })
 
-  // Uncaught renderer errors are forwarded by preload and land in the same file.
-  ipcMain.on('log:renderer', (_e, level: string, message: string) => {
-    ;(log as unknown as Record<string, (m: string) => void>)[level === 'error' ? 'error' : 'info'](
-      `[renderer] ${message}`
-    )
-  })
-  // Native file picker for the editor — the renderer only ever sees paths.
-  ipcMain.handle('media:pick', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Import media',
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'Media', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'wav', 'm4a', 'aac', 'flac'] },
-        { name: 'All files', extensions: ['*'] },
-      ],
-    })
-    return result.canceled ? [] : result.filePaths
-  })
-
-  ipcMain.handle('log:path', () => log.transports.file.getFile().path)
-  ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
 }
 
 app.whenReady().then(() => {
+  registerIpc()
   log.info(`[CE] Cutting Edge ${app.getVersion()} starting — logs at ${log.transports.file.getFile().path}`)
   startBackend()
   createWindow()

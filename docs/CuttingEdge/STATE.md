@@ -61,6 +61,7 @@ No Windows machine is needed for anything except packaging.
 | Command | What it guards |
 |---|---|
 | `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth — 7 tests |
+| `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `ce-app/scripts/smoke-test.ps1` | the **packaged** app: asar entry, relative asset paths, ffmpeg+ffprobe, embeddable Python, live `/api/health` |
 
@@ -83,7 +84,10 @@ gate that stops a broken installer from being published.
    actually contain audio, or FFmpeg aborts the whole graph.
 7. **Event loop in worker threads.** Endpoints that hand work to a thread must be
    `async def` and capture `asyncio.get_running_loop()`.
-8. **Bad dependency pins.** The PyPI project is `scenedetect`, not `PySceneDetect`;
+8. **Bridge contract.** Anything the renderer calls on `window.cuttingEdge` must be
+   exposed in `electron/preload.ts` *and* handled in `electron/main.ts`. A missing
+   entry fails silently — `npm run check:bridge` now catches it.
+9. **Bad dependency pins.** The PyPI project is `scenedetect`, not `PySceneDetect`;
    `pexels-api` stops at 1.0.1.
 
 ## 5. Release procedure

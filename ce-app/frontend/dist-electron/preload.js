@@ -32,6 +32,12 @@ import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
     chrome: process.versions.chrome,
     node: process.versions.node
   },
+  /** Opens the OS file picker and returns absolute paths of the chosen media. */
+  pickMedia: () => import_electron.ipcRenderer.invoke("media:pick"),
+  /** Absolute path of the log file, for the diagnostics screen. */
+  logPath: () => import_electron.ipcRenderer.invoke("log:path"),
+  /** Reveal the log file in Explorer so the user can attach it to a report. */
+  openLogFolder: () => import_electron.ipcRenderer.send("log:open"),
   /** Check + download in one shot. */
   runUpdate: () => import_electron.ipcRenderer.send("update:run"),
   /** Restart into the freshly downloaded version. */

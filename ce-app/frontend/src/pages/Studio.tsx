@@ -4,7 +4,7 @@ import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet, ZoomIn, ZoomOut,
   Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film,
 } from 'lucide-react'
-import { message } from 'antd'
+import { Input, Modal, message } from 'antd'
 import Page from '../components/Page'
 import Timeline from '../editor/Timeline'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
@@ -89,15 +89,22 @@ export default function Studio() {
   const [exporting, setExporting] = useState(false)
   const [lastOutput, setLastOutput] = useState<string | null>(null)
 
-  /** Import real media: OS picker in the desktop app, manual path in the browser. */
+  /** Import real media: OS picker in the desktop app, typed path in the browser. */
   const importMedia = async () => {
-    const picked = await pickMedia()
-    const paths =
-      picked ??
-      (() => {
-        const manual = window.prompt(t('Absolute path of a video or audio file', 'مسیر کامل فایل ویدیو یا صدا'))
-        return manual ? [manual] : []
-      })()
+    let paths: string[] = []
+    try {
+      const picker = pickMedia()
+      if (picker) {
+        paths = await picker
+      } else {
+        // Electron blocks window.prompt(), so the browser fallback asks in-app.
+        const manual = await askForPath(t)
+        paths = manual ? [manual] : []
+      }
+    } catch (err) {
+      message.error(t('Could not open the file picker: ', 'باز کردن پنجره انتخاب فایل ممکن نشد: ') + (err as Error).message)
+      return
+    }
     if (!paths.length) return
 
     for (const path of paths) {
@@ -355,4 +362,30 @@ export default function Studio() {
       </div>
     </Page>
   )
+}
+
+/**
+ * Small prompt used only in the browser preview — Electron refuses
+ * window.prompt(), which previously made the import button fail in total silence.
+ */
+function askForPath(t: (en: string, fa: string) => string): Promise<string | null> {
+  return new Promise((resolve) => {
+    let value = ''
+    Modal.confirm({
+      title: t('Import media', 'افزودن رسانه'),
+      content: (
+        <Input
+          dir="ltr"
+          placeholder="/path/to/video.mp4"
+          onChange={(e) => {
+            value = e.target.value
+          }}
+        />
+      ),
+      okText: t('Import', 'افزودن'),
+      cancelText: t('Cancel', 'انصراف'),
+      onOk: () => resolve(value.trim() || null),
+      onCancel: () => resolve(null),
+    })
+  })
 }

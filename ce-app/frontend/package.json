@@ -1,6 +1,6 @@
 {
   "name": "cutting-edge-frontend",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Cutting Edge (CE) — AI-powered video clipping studio",
   "private": true,
   "main": "dist-electron/main.js",
@@ -12,7 +12,9 @@
     "electron:build": "npm run build && electron-builder",
     "build:electron": "esbuild electron/main.ts electron/preload.ts electron/updater.ts --bundle --platform=node --target=node18 --format=cjs --outdir=dist-electron --external:electron --external:electron-updater",
     "release": "npm run build && electron-builder --win nsis --publish always",
-    "test:ui": "node scripts/ui-audit.mjs"
+    "test:ui": "node scripts/ui-audit.mjs",
+    "check:bridge": "node scripts/check-bridge.mjs",
+    "verify": "tsc --noEmit && node scripts/check-bridge.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.4.0",

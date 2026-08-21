@@ -27,6 +27,14 @@ contextBridge.exposeInMainWorld('cuttingEdge', {
     node: process.versions.node,
   },
 
+  /** Opens the OS file picker and returns absolute paths of the chosen media. */
+  pickMedia: () => ipcRenderer.invoke('media:pick') as Promise<string[]>,
+
+  /** Absolute path of the log file, for the diagnostics screen. */
+  logPath: () => ipcRenderer.invoke('log:path') as Promise<string>,
+  /** Reveal the log file in Explorer so the user can attach it to a report. */
+  openLogFolder: () => ipcRenderer.send('log:open'),
+
   /** Check + download in one shot. */
   runUpdate: () => ipcRenderer.send('update:run'),
   /** Restart into the freshly downloaded version. */

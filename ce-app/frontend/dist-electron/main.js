@@ -2299,6 +2299,33 @@ function startBackend() {
     backendProcess = null;
   });
 }
+function registerIpc() {
+  import_electron2.ipcMain.on("log:renderer", (_e, level, message) => {
+    ;
+    import_main.default[level === "error" ? "error" : "info"](
+      `[renderer] ${message}`
+    );
+  });
+  import_electron2.ipcMain.handle("media:pick", async () => {
+    try {
+      const result = await import_electron2.dialog.showOpenDialog({
+        title: "Import media",
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          { name: "Media", extensions: ["mp4", "mov", "mkv", "webm", "avi", "mp3", "wav", "m4a", "aac", "flac"] },
+          { name: "All files", extensions: ["*"] }
+        ]
+      });
+      import_main.default.info("[CE] media:pick ->", result.canceled ? "cancelled" : result.filePaths.join(", "));
+      return result.canceled ? [] : result.filePaths;
+    } catch (error) {
+      import_main.default.error("[CE] media:pick failed:", error);
+      throw error;
+    }
+  });
+  import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
+  import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
+}
 function showFatal(win, message) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     body{background:#0F172A;color:#F8FAFC;font-family:Segoe UI,system-ui,sans-serif;
@@ -2340,31 +2367,13 @@ ${validatedURL}`);
   mainWindow.webContents.on("render-process-gone", (_e, details) => {
     import_main.default.error("[CE] Renderer process gone:", details.reason);
   });
-  import_electron2.ipcMain.on("log:renderer", (_e, level, message) => {
-    ;
-    import_main.default[level === "error" ? "error" : "info"](
-      `[renderer] ${message}`
-    );
-  });
-  import_electron2.ipcMain.handle("media:pick", async () => {
-    const result = await import_electron2.dialog.showOpenDialog(mainWindow, {
-      title: "Import media",
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        { name: "Media", extensions: ["mp4", "mov", "mkv", "webm", "avi", "mp3", "wav", "m4a", "aac", "flac"] },
-        { name: "All files", extensions: ["*"] }
-      ]
-    });
-    return result.canceled ? [] : result.filePaths;
-  });
-  import_electron2.ipcMain.handle("log:path", () => import_main.default.transports.file.getFile().path);
-  import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     import_electron2.shell.openExternal(url);
     return { action: "deny" };
   });
 }
 import_electron2.app.whenReady().then(() => {
+  registerIpc();
   import_main.default.info(`[CE] Cutting Edge ${import_electron2.app.getVersion()} starting \u2014 logs at ${import_main.default.transports.file.getFile().path}`);
   startBackend();
   createWindow();
