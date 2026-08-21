@@ -112,6 +112,45 @@ async function ensureFfprobe(ffmpegDir) {
   fs.rmSync(work, { recursive: true, force: true })
 }
 
+/**
+ * Differential updates only pay off when unchanged files are byte-identical
+ * between releases. Python writes .pyc caches and every extraction stamps fresh
+ * mtimes, which would rewrite most blocks of a 500 MB payload on every build —
+ * so we strip the caches and pin timestamps to a fixed epoch.
+ */
+const DETERMINISTIC_MTIME = new Date('2020-01-01T00:00:00Z')
+
+function normalizeForDelta(root) {
+  if (!fs.existsSync(root)) return { removed: 0, touched: 0 }
+  let removed = 0
+  let touched = 0
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name === '__pycache__') {
+          fs.rmSync(full, { recursive: true, force: true })
+          removed++
+          continue
+        }
+        walk(full)
+        try { fs.utimesSync(full, DETERMINISTIC_MTIME, DETERMINISTIC_MTIME) } catch { /* ignore */ }
+        touched++
+      } else {
+        if (/\.(pyc|pyo)$/i.test(entry.name)) {
+          fs.rmSync(full, { force: true })
+          removed++
+          continue
+        }
+        try { fs.utimesSync(full, DETERMINISTIC_MTIME, DETERMINISTIC_MTIME) } catch { /* ignore */ }
+        touched++
+      }
+    }
+  }
+  walk(root)
+  return { removed, touched }
+}
+
 module.exports = async function beforePack(context) {
   if (process.platform !== 'win32') {
     log('not running on Windows — skipping backend runtime conversion')
@@ -196,6 +235,14 @@ module.exports = async function beforePack(context) {
     throw new Error('portable backend runtime is still incomplete — aborting build')
   }
   log('portable backend runtime ready')
+
+  // Make the shipped payload reproducible so update patches stay small.
+  const backendNorm = normalizeForDelta(backendDir)
+  const ffmpegNorm = normalizeForDelta(path.join(buildRoot, 'ffmpeg'))
+  log(
+    `normalised for differential updates: removed ${backendNorm.removed + ffmpegNorm.removed} cache entries, ` +
+      `pinned ${backendNorm.touched + ffmpegNorm.touched} timestamps`
+  )
 }
 
 function canImport(exe, cwd) {

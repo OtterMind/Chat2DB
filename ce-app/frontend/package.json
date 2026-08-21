@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
-    "build:electron": "esbuild electron/main.ts electron/preload.ts electron/updater.ts --bundle --platform=node --target=node18 --format=cjs --outdir=dist-electron --external:electron --external:electron-updater"
+    "build:electron": "esbuild electron/main.ts electron/preload.ts electron/updater.ts --bundle --platform=node --target=node18 --format=cjs --outdir=dist-electron --external:electron --external:electron-updater",
+    "release": "npm run build && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "@ant-design/icons": "^5.4.0",
@@ -87,8 +88,12 @@
       "runAfterFinish": true,
       "shortcutName": "Cutting Edge",
       "installerIcon": "build-assets/icon.ico",
-      "uninstallerIcon": "build-assets/icon.ico"
+      "uninstallerIcon": "build-assets/icon.ico",
+      "differentialPackage": true,
+      "deleteAppDataOnUninstall": false
     },
-    "beforePack": "scripts/before-pack.js"
+    "beforePack": "scripts/before-pack.js",
+    "compression": "normal",
+    "generateUpdatesFilesForAllChannels": true
   }
 }
