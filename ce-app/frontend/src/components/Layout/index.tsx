@@ -28,9 +28,8 @@ export default function AppLayout() {
           {activeCount > 0 && <span className="ce-header__dot" />}
         </button>
 
-        <div className="ce-header__brand">
+        <div className="ce-header__brand" title="Cutting Edge">
           <span className="ce-logo">CE</span>
-          <span>Cutting Edge</span>
         </div>
 
         <button className="ce-iconbtn" aria-label="اعلان‌ها" onClick={() => navigate('/dashboard')}>

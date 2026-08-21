@@ -40,11 +40,12 @@ button { font-family: inherit; cursor: pointer; }
   padding: 14px 18px; background: var(--bg-elevated);
   border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 30;
 }
-.ce-header__brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+.ce-header__brand { display: flex; align-items: center; }
 .ce-logo {
-  width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
   background: linear-gradient(145deg, var(--brand), var(--brand-2));
-  font-size: 13px; font-weight: 800; letter-spacing: .5px; color: #fff;
+  font-size: 16px; font-weight: 800; letter-spacing: .5px; color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(99, 102, 241, .9);
 }
 .ce-header__dot {
   position: absolute; inset-inline-start: 6px; top: 6px; width: 8px; height: 8px;
