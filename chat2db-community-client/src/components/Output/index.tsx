@@ -1,6 +1,11 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classnames from 'classnames';
 import ScrollLoading from '@/components/ScrollLoading';
+import OperationLogFilters, {
+  OperationLogFilterValues,
+  useDebouncedOperationLogFilters,
+} from '@/components/OperationLogFilters';
+import { buildOperationLogListParams } from '@/components/OperationLogFilters/model';
 import historyService, { IHistoryRecord, OperationTypeEnum } from '@/service/history';
 import i18n from '@/i18n';
 import { useStyles } from './style';
@@ -53,17 +58,13 @@ function getHistoryDataSourceName(item: IDatasource, sourceInfo?: TreeNodeData, 
 }
 
 function getHistoryTitle(item: IDatasource, sourceInfo?: TreeNodeData, cachedSourceName?: string) {
-  const dataSourceName =
-    getHistoryDataSourceName(item, sourceInfo, cachedSourceName);
+  const dataSourceName = getHistoryDataSourceName(item, sourceInfo, cachedSourceName);
   const nameList = [dataSourceName, item.databaseName || item.schemaName].filter(Boolean);
   return nameList.join(' / ');
 }
 
 function getHistoryPopover(item: IDatasource, sourceInfo?: TreeNodeData, cachedSourceName?: string) {
-  return [
-    getHistoryTitle(item, sourceInfo, cachedSourceName),
-    item.gmtCreate,
-  ].filter(Boolean).join('\n');
+  return [getHistoryTitle(item, sourceInfo, cachedSourceName), item.gmtCreate].filter(Boolean).join('\n');
 }
 
 export default memo<IProps>((props) => {
@@ -77,11 +78,16 @@ export default memo<IProps>((props) => {
   const savedConsoleList = useWorkspaceStore((state) => state.savedConsoleList);
   const dataSourceList = useTreeStore((state) => state.dataSourceList);
   const [dataSource, setDataSource] = useState<IDatasource[]>([]);
+  const [filters, setFilters] = useState<OperationLogFilterValues>({});
   const [finished, setFinished] = useState(false);
+  const appliedFilters = useDebouncedOperationLogFilters(filters);
   const outputContentRef = useRef<HTMLDivElement>(null);
   const curPageRef = useRef(1);
-  const loadingRef = useRef(false);
   const finishedRef = useRef(false);
+  const initializedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const requestGenerationRef = useRef(0);
+  const activeRequestRef = useRef<{ generation: number; pageNo: number } | null>(null);
 
   const dataSourceInfoMap = useMemo(() => {
     return (dataSourceList || []).reduce<Record<string, TreeNodeData>>((map, item) => {
@@ -123,42 +129,84 @@ export default memo<IProps>((props) => {
     return item;
   }, []);
 
-  const getHistoryList = useCallback(async () => {
-    if (loadingRef.current || finishedRef.current) {
-      return;
-    }
-    loadingRef.current = true;
-    try {
-      const res = await historyService.getHistoryList({
-        pageNo: curPageRef.current,
-        pageSize: 40,
-        operationType: OperationTypeEnum.SQL_EXECUTE,
-      });
+  const loadHistoryPage = useCallback(
+    async (pageNo: number, requestFilters: OperationLogFilterValues, generation: number, replace: boolean) => {
+      if (generation !== requestGenerationRef.current || (!replace && finishedRef.current)) {
+        return;
+      }
 
-      curPageRef.current += 1;
-      finishedRef.current = !res.hasNextPage;
-      setFinished(finishedRef.current);
-      setDataSource((prev) => [...prev, ...((res.data || []) as IDatasource[])]);
-    } finally {
-      loadingRef.current = false;
-    }
-  }, []);
+      if (activeRequestRef.current?.generation === generation) {
+        return;
+      }
 
-  const refresh = useCallback(() => {
+      const activeRequest = { generation, pageNo };
+      activeRequestRef.current = activeRequest;
+
+      try {
+        const res = await historyService.getHistoryList(
+          buildOperationLogListParams(requestFilters, pageNo, 40, OperationTypeEnum.SQL_EXECUTE),
+        );
+
+        if (!mountedRef.current || generation !== requestGenerationRef.current) {
+          return;
+        }
+
+        const records = (res.data || []) as IDatasource[];
+        curPageRef.current = pageNo + 1;
+        finishedRef.current = !res.hasNextPage;
+        setFinished(finishedRef.current);
+        setDataSource((previousRecords) => (replace ? records : [...previousRecords, ...records]));
+      } catch {
+        // Request errors are surfaced by the shared request layer. Keep pagination retryable.
+      } finally {
+        if (activeRequestRef.current === activeRequest) {
+          activeRequestRef.current = null;
+        }
+      }
+    },
+    [],
+  );
+
+  const resetAndLoadHistory = useCallback(() => {
+    const generation = requestGenerationRef.current + 1;
+    requestGenerationRef.current = generation;
+    initializedRef.current = true;
     curPageRef.current = 1;
-    loadingRef.current = false;
     finishedRef.current = false;
     setFinished(false);
     setDataSource([]);
-    getHistoryList();
-  }, [getHistoryList]);
+    return loadHistoryPage(1, appliedFilters, generation, true);
+  }, [appliedFilters, loadHistoryPage]);
+
+  useEffect(() => {
+    void resetAndLoadHistory();
+  }, [resetAndLoadHistory]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestGenerationRef.current += 1;
+    };
+  }, []);
+
+  const getHistoryList = useCallback(() => {
+    if (!initializedRef.current || finishedRef.current) {
+      return Promise.resolve();
+    }
+
+    return loadHistoryPage(curPageRef.current, appliedFilters, requestGenerationRef.current, false);
+  }, [appliedFilters, loadHistoryPage]);
+
+  const refresh = useCallback(() => {
+    void resetAndLoadHistory();
+  }, [resetAndLoadHistory]);
 
   const openHistoryConsole = useCallback(
     async (item: IDatasource, readOnly: boolean) => {
       const detail = await getFullHistoryRecord(item);
       const tabId = getTemporaryId(`${readOnly ? 'execution-log' : 'execution-log-copy'}-${item.id || Date.now()}`);
-      const sourceInfo =
-        dataSourceInfoMap[getHistorySourceKey(detail)] || dataSourceInfoMap[getHistorySourceKey(item)];
+      const sourceInfo = dataSourceInfoMap[getHistorySourceKey(detail)] || dataSourceInfoMap[getHistorySourceKey(item)];
       const cachedSourceName =
         dataSourceNameMap[getHistorySourceKey(detail)] || dataSourceNameMap[getHistorySourceKey(item)];
       const dataSourceName = getHistoryDataSourceName(detail, sourceInfo, cachedSourceName);
@@ -187,10 +235,7 @@ export default memo<IProps>((props) => {
     [addWorkspaceTab, dataSourceInfoMap, dataSourceNameMap, getFullHistoryRecord],
   );
 
-  const openHistoryTab = useCallback(
-    (item: IDatasource) => openHistoryConsole(item, true),
-    [openHistoryConsole],
-  );
+  const openHistoryTab = useCallback((item: IDatasource) => openHistoryConsole(item, true), [openHistoryConsole]);
 
   const openEditableHistoryTab = useCallback(
     (event: React.MouseEvent, item: IDatasource) => {
@@ -244,6 +289,7 @@ export default memo<IProps>((props) => {
         leading={headerLeading ?? <span>{i18n('common.title.executiveLogging')}</span>}
         trailing={<IconButton size={PANEL_TOOLBAR_BUTTON_SIZE} icon={RotateCw} onClick={refresh} />}
       />
+      <OperationLogFilters className={styles.outputFilters} size="small" value={filters} onChange={setFilters} />
       <div className={styles.outputContent} ref={outputContentRef}>
         <ScrollLoading
           onReachBottom={getHistoryList}
