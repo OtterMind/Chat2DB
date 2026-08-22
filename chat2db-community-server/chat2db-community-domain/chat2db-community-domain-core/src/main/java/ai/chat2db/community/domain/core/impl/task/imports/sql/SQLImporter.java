@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
 import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.community.domain.core.impl.task.imports.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -41,6 +42,7 @@ public class SQLImporter implements IImportStrategy {
         try {
             context.checkCancelled();
             File sourceFile = new File(spec.getSourceFile());
+            Charset charset = resolveCharset(spec.getEncoding());
             ImportSqlExecutor sqlExecutor = new ImportSqlExecutor(context);
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             String databaseType = connectInfo.getDbType();
@@ -50,9 +52,11 @@ public class SQLImporter implements IImportStrategy {
                     DatabaseTypeEnum.SQLSERVER.name(), DatabaseTypeEnum.POSTGRESQL.name())) {
                 ConsoleTaskProgressListener consoleProgressListener =
                         new ConsoleTaskProgressListener(context, sourceFile);
-                SyncSqlBatchHandler syncSqlBatchHandler = new SyncSqlBatchHandler(context, sqlExecutor);
+                ISqlBatchHandler sqlBatchHandler = SqlFileOptionsHandler.supportsOptions(spec)
+                        ? new SqlFileOptionsHandler(spec, context)
+                        : new SyncSqlBatchHandler(context, sqlExecutor);
                 int statementCount = DefaultSqlSyntaxHandler.parserSqlScript(
-                        sourceFile, databaseType, consoleProgressListener, syncSqlBatchHandler);
+                        sourceFile, databaseType, consoleProgressListener, sqlBatchHandler, charset);
                 context.checkCancelled();
                 context.logInfo(TaskEventCode.FILE_READ_COMPLETED.name(), "SQL file parsed",
                         Map.of("statementCount", statementCount));
@@ -64,7 +68,7 @@ public class SQLImporter implements IImportStrategy {
                 AtomicLong bytesRead = new AtomicLong();
                 StringBuilder processStr = new StringBuilder();
                 long startedAt = System.currentTimeMillis();
-                FileUtil.readLines(sourceFile, Charset.forName("UTF-8"), (LineHandler) line -> {
+                FileUtil.readLines(sourceFile, charset, (LineHandler) line -> {
                     context.checkCancelled();
                     bytesRead.addAndGet(line.getBytes().length + System.lineSeparator().getBytes().length);
                     setProgress(context, bytesRead.get(), totalBytes, processStr);
@@ -125,5 +129,14 @@ public class SQLImporter implements IImportStrategy {
                             + ",current bytes:" + i + ",progress:" + progress + "%");
         }
 
+    }
+
+    private Charset resolveCharset(String encoding) {
+        try {
+            return StringUtils.isBlank(encoding) ? Charset.forName("UTF-8") : Charset.forName(encoding);
+        } catch (Exception e) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Unsupported SQL file encoding: " + encoding, e);
+        }
     }
 }

@@ -25,6 +25,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -204,7 +205,15 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                                ITaskProgressListener progressListener,
                                ISqlBatchHandler sqlBatchHandler) {
 
-        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, StandardCharsets.UTF_8)) {
+        return parserSqlScript(file, progressListener, sqlBatchHandler, StandardCharsets.UTF_8);
+    }
+
+    public int parserSqlScript(File file,
+                               ITaskProgressListener progressListener,
+                               ISqlBatchHandler sqlBatchHandler,
+                               Charset charset) {
+
+        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, charset)) {
             String content;
             long bytesRead = 0L;
             int statementCount = 0;
@@ -213,7 +222,7 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
             IRuleManager ruleManager = dialect.getRuleManager();
             List<Token> currentTokens = new ArrayList<>(50);
             while (StringUtils.isNotBlank(content = safeSQLFileSplitter.nextContent())) {
-                bytesRead += content.getBytes(StandardCharsets.UTF_8).length;
+                bytesRead += content.getBytes(charset).length;
                 if (CollectionUtils.isNotEmpty(currentTokens)) {
                     charStream = CharStreams.fromString(currentTokens.stream().map(Token::getText).collect(Collectors.joining()) + content);
                     currentTokens.clear();

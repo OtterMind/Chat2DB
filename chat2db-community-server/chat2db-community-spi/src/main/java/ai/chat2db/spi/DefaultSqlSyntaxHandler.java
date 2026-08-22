@@ -216,6 +216,23 @@ public class DefaultSqlSyntaxHandler {
        return sqlParser.parserSqlScript(file, progressListener, sqlBatchHandler);
     }
 
+    public static int parserSqlScript(File file, String databaseType, ITaskProgressListener progressListener,
+                                      ISqlBatchHandler sqlBatchHandler, java.nio.charset.Charset charset) {
+        ISQLParser sqlParser = getSQLParser(databaseType.toUpperCase());
+        if (Objects.isNull(sqlParser)) {
+            return 0;
+        }
+        try {
+            java.lang.reflect.Method method = sqlParser.getClass().getMethod("parserSqlScript", File.class,
+                    ITaskProgressListener.class, ISqlBatchHandler.class, java.nio.charset.Charset.class);
+            return (int) method.invoke(sqlParser, file, progressListener, sqlBatchHandler, charset);
+        } catch (NoSuchMethodException ignored) {
+            return sqlParser.parserSqlScript(file, progressListener, sqlBatchHandler);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not parse SQL file with the requested charset", e);
+        }
+    }
+
     private static void loadFromDatabasePlugins() {
         Chat2DBContext.PLUGIN_MAP.forEach((databaseType, plugin) -> {
             if (plugin == null) {

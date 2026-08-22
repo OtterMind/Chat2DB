@@ -107,6 +107,22 @@ class TaskWebConverterTest {
         assertEquals("Import SQL file - app.orders", sqlSpec.getTaskName());
     }
 
+    @Test
+    void preservesSqlFileExecutionOptions() {
+        TaskImportRequest request = importRequest(TaskType.SQL_FILE_IMPORT.name());
+        request.setEncoding("GB18030");
+        request.setErrorPolicy("CONTINUE");
+        request.setCommitMode("BATCH");
+        request.setBatchSize(250);
+
+        ImportTaskSpec spec = converter.importRequest2spec(request);
+
+        assertEquals("GB18030", spec.getEncoding());
+        assertEquals("CONTINUE", spec.getErrorPolicy());
+        assertEquals("BATCH", spec.getCommitMode());
+        assertEquals(250, spec.getBatchSize());
+    }
+
     private TaskExportRequest exportRequest(String taskType, String databaseName, String tableName) {
         TaskExportRequest request = new TaskExportRequest();
         request.setTaskType(taskType);

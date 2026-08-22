@@ -63,6 +63,10 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   displayFileName?: string;
   format: ImportExportFileType;
   dataTimeFormat?: string;
+  encoding?: string;
+  errorPolicy?: 'STOP' | 'CONTINUE';
+  commitMode?: 'SCRIPT' | 'BATCH' | 'SINGLE_TRANSACTION';
+  batchSize?: number;
 }
 
 const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });
