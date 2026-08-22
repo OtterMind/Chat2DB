@@ -17,10 +17,10 @@ public class MultipartJdbcDriverUploadAdapter implements IDbJdbcDriverUploadServ
     @Override
     public List<String> upload(MultipartFile[] files) throws IOException {
         List<String> uploadedFiles = new ArrayList<>();
+        File driverDirectory = JdbcDriverConstants.createDriverLibDirectory();
         for (MultipartFile file : files) {
             String originalFilename = FilenameUtils.getName(file.getOriginalFilename());
-            String location = JdbcDriverConstants.DRIVER_LIB_PATH + originalFilename;
-            file.transferTo(new File(location));
+            file.transferTo(new File(driverDirectory, originalFilename));
             uploadedFiles.add(originalFilename);
         }
         return uploadedFiles;

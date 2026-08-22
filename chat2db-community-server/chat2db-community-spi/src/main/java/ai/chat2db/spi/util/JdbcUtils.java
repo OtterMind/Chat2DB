@@ -173,7 +173,7 @@ public class JdbcUtils {
                 url = replaceUrlHostAndPortForSsh(url, host, port, ssh.getLocalPort());
             }
             connection = JdbcDriverManager.getConnection(url, userName, password,
-                    driverConfig, properties);
+                    dbType, driverConfig, properties);
 
             if (DataSourceTypeEnum.MONGODB.name().equals(dbType)) {
                 statement = connection.prepareStatement(MONGODB_TEST_CONNECT_COMMAND);
