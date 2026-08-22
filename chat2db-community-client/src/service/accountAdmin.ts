@@ -9,6 +9,8 @@ export enum AccountActionType {
   DROP_USER = 'DROP_USER',
   GRANT_PRIVILEGE = 'GRANT_PRIVILEGE',
   REVOKE_PRIVILEGE = 'REVOKE_PRIVILEGE',
+  ALTER_PASSWORD_POLICY = 'ALTER_PASSWORD_POLICY',
+  ALTER_RESOURCE_LIMITS = 'ALTER_RESOURCE_LIMITS',
 }
 
 export enum AccountPrivilegeScope {
@@ -69,6 +71,12 @@ export interface AccountCommand extends AccountBaseParams {
   grantOption?: boolean;
   password?: string;
   previewToken?: string;
+  passwordExpirePolicy?: string;
+  passwordExpireDays?: number;
+  maxQueriesPerHour?: number;
+  maxUpdatesPerHour?: number;
+  maxConnectionsPerHour?: number;
+  maxUserConnections?: number;
 }
 
 export interface AccountPreview {
