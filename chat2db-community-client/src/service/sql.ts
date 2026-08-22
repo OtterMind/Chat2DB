@@ -422,6 +422,12 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// InnoDB status diagnostics
+const getInnodbStatus = createRequest<{ dataSourceId: number; databaseName?: string }, string>(
+  '/api/rdb/diagnostics/innodb_status',
+  { method: 'post' },
+);
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -443,6 +449,7 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  getInnodbStatus,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,
