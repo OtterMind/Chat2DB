@@ -574,6 +574,21 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tl__handle--end { left: auto; right: 0; background: linear-gradient(270deg, rgba(255, 255, 255, .35), transparent); }
 
+/* keyframe markers: only on the selected clip, so the lane stays readable */
+.tl__key {
+  position: absolute; bottom: 3px; width: 7px; height: 7px; margin-inline-start: -3.5px;
+  background: #fbbf24; transform: rotate(45deg); border-radius: 1px; z-index: 2;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .6);
+}
+.tb__keys { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb__key {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; direction: ltr;
+  background: rgba(251, 191, 36, .14); border: 1px solid rgba(251, 191, 36, .5);
+  color: #fde68a; border-radius: 999px; padding: 2px 8px; cursor: pointer;
+}
+.tb__grow { flex: 1; margin: 0 !important; }
+.ce-btn.is-on { border-color: #fbbf24; color: #fde68a; }
+
 .tl__playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #f43f5e; pointer-events: none; }
 /* centred mode: a brighter, taller line, because it is now the fixed reference */
 .tl__playhead.is-centred { width: 2.5px; box-shadow: 0 0 10px rgba(244, 63, 94, .65); }

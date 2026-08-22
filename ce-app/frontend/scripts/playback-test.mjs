@@ -67,6 +67,11 @@ const page = await browser.newPage()
 await page.setViewport({ width: 1440, height: 900 })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
+// Diagnostics: a reload mid-run kills the execution context and every later
+// evaluate fails with "Promise was collected" — log navigations to see why.
+page.on('framenavigated', (frame) => {
+  if (process.env.CE_TEST_TRACE) console.log(`  ..   navigated → ${frame.url()}`)
+})
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
 await page.goto(`${BASE}/#/studio`, { waitUntil: 'networkidle2' })
@@ -313,7 +318,7 @@ if (animStart && animLater && animStart.opacity < 0.3 && animLater.opacity > 0.9
 else bad('in/out animation is not applied in the preview', JSON.stringify({ animStart, animLater }))
 
 /* 8 — a transition is really cross-faded ------------------------------------ */
-const blend = await page.evaluate(async () => {
+const blend = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor.getState()
   store.setProps(store.clips[0].id, { animIn: 'none' })
   const t = window.__ceEditor.getState().transitions[0]
@@ -325,7 +330,7 @@ const blend = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 400))
   const layers = [...document.querySelectorAll('.ed__layer')]
   return { layers: layers.length, opacities: layers.map((l) => Number(getComputedStyle(l).opacity)) }
-})
+})()))
 if (blend.layers === 2) ok('both clips are on screen during a transition')
 else bad('the transition does not stack two clips', JSON.stringify(blend))
 if (blend.opacities.some((o) => o > 0.2 && o < 0.9)) ok(`cross-fade in progress (${blend.opacities.join(', ')})`)
@@ -384,7 +389,7 @@ if (zoomAfter > zoomBefore) ok(`Ctrl + wheel zooms the timeline (${zoomBefore.to
 else bad('Ctrl + wheel does not zoom', `${zoomBefore} → ${zoomAfter} at ${JSON.stringify(laneBox)}`)
 
 /* 11 — the monitor takes the shape of the footage --------------------------- */
-const shapes = await page.evaluate(async () => {
+const shapes = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor.getState()
   store.clearTimeline()
   const measure = async () => {
@@ -405,7 +410,7 @@ const shapes = await page.evaluate(async () => {
   const square = await measure()
   state().setAspect('auto')
   return { auto, wide, square }
-})
+})()))
 if (shapes.auto !== null && Math.abs(shapes.auto - 0.5625) < 0.02)
   ok(`the monitor follows a vertical clip (ratio ${shapes.auto})`)
 else bad('a vertical video is not shown in its own shape', JSON.stringify(shapes))
@@ -441,7 +446,7 @@ if (missing.length === 0) ok(`the moved tools are in the edit rail (${rail.count
 else bad('tools removed from home are missing in the rail', missing.join(', '))
 
 /* 11d — centred mode: pinned playhead, timeline scrolls -------------------- */
-const centred = await page.evaluate(async () => {
+const centred = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor
   store.getState().setPlayhead(2)
   await new Promise((r) => setTimeout(r, 400))
@@ -462,7 +467,7 @@ const centred = await page.evaluate(async () => {
     scrollFollowsPlayhead: Math.abs(scrollAt2 - 2 * store.getState().pxPerSecond) < 3,
     playheadFollowsScroll: afterScroll > 2.05,
   }
-})
+})()))
 if (centred.pinnedToCentre) ok('the playhead is pinned to the middle of the timeline')
 else bad('the playhead is not centred', JSON.stringify(centred))
 if (centred.scrollFollowsPlayhead) ok('the timeline scrolls to the playhead')
@@ -473,7 +478,7 @@ else bad('scrolling the timeline does not scrub', JSON.stringify(centred))
 /* 11e — editing proxies ----------------------------------------------------- */
 if (args.big ?? process.env.CE_TEST_BIG) {
   const big = args.big ?? process.env.CE_TEST_BIG
-  const proxyResult = await page.evaluate(async (path) => {
+  const proxyResult = await page.evaluate((path) => (window.__pending = (async () => {
     const started = await fetch('http://127.0.0.1:8742/api/media/proxy', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -487,12 +492,12 @@ if (args.big ?? process.env.CE_TEST_BIG) {
       ).then((r) => r.json())
     }
     return state
-  }, big)
+  })()), big)
   if (proxyResult.status === 'ready' && proxyResult.proxy) ok('a 720p editing proxy was built for big footage')
   else bad('the proxy was not built', JSON.stringify(proxyResult))
 
   // …and the preview plays the proxy while the model still points at the source
-  const usesProxy = await page.evaluate((path, proxyPath) => {
+    const usesProxy = await page.evaluate((path, proxyPath) => (window.__pending = (() => {
     const store = window.__ceEditor
     store.getState().clearTimeline()
     store.getState().addClip({
@@ -510,7 +515,7 @@ if (args.big ?? process.env.CE_TEST_BIG) {
         })
       }, 600)
     )
-  }, big, proxyResult.proxy)
+  })()), big, proxyResult.proxy)
   if (usesProxy.videoSrc.includes(proxyResult.proxy) && usesProxy.clipSrc === big)
     ok('the preview plays the proxy while the project keeps the original')
   else bad('the preview did not switch to the proxy', JSON.stringify(usesProxy))
@@ -595,8 +600,73 @@ else bad('slip ran past the end of the source', String(trims.clamped))
 if (trims.deleted.count === 1 && Math.abs(trims.deleted.bStart) < 0.01) ok('ripple delete closes the hole')
 else bad('ripple delete left a hole', JSON.stringify(trims.deleted))
 
+/* 11f2 — keyframes animate the preview -------------------------------------- */
+// Driven from Node in short steps: a long-running page promise gets collected
+// by the browser and the whole run dies with "Promise was collected".
+await page.evaluate(() => {
+  const store = window.__ceEditor
+  store.getState().clearTimeline()
+  const id = store.getState().addClip({
+    trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 4,
+    src: window.__ceTestVertical, label: 'K', color: '#6366F1', width: 360, height: 640,
+  })
+  store.getState().select(id)
+  store.getState().setKeyframe(id, 0, { scale: 0.4, x: -0.25, rotate: 0, volume: 0.1 })
+  store.getState().setKeyframe(id, 4, { scale: 1.2, x: 0.25, rotate: 60, volume: 1 })
+})
+await new Promise((r) => setTimeout(r, 700))
+
+const readKeyframed = async (at) => {
+  await page.evaluate((playhead) => window.__ceEditor.getState().setPlayhead(playhead), at)
+  await new Promise((r) => setTimeout(r, 450))
+  return page.evaluate(() => {
+    const layer = document.querySelector('.ed__layer')
+    const video = document.querySelector('video')
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(layer).transform)
+    return {
+      scale: Math.hypot(matrix.a, matrix.b),
+      angle: Math.round((Math.atan2(matrix.b, matrix.a) * 180) / Math.PI),
+      x: matrix.e,
+      volume: video?.volume ?? -1,
+    }
+  })
+}
+const kfStart = await readKeyframed(0.05)
+const kfMiddle = await readKeyframed(2)
+const kfEnd = await readKeyframed(3.95)
+const kfMarkers = await page.evaluate(() => document.querySelectorAll('.tl__key').length)
+
+if (kfStart.scale < kfMiddle.scale && kfMiddle.scale < kfEnd.scale)
+  ok(`scale keyframes interpolate (${kfStart.scale.toFixed(2)} → ${kfMiddle.scale.toFixed(2)} → ${kfEnd.scale.toFixed(2)})`)
+else bad('scale keyframes are not interpolated', JSON.stringify({ kfStart, kfMiddle, kfEnd }))
+if (kfStart.x < kfMiddle.x && kfMiddle.x < kfEnd.x) ok('position keyframes interpolate')
+else bad('position keyframes are not interpolated', JSON.stringify({ kfStart, kfMiddle, kfEnd }))
+if (kfEnd.angle > kfMiddle.angle && kfMiddle.angle > kfStart.angle)
+  ok(`rotation keyframes interpolate (${kfStart.angle}° → ${kfEnd.angle}°)`)
+else bad('rotation keyframes are not interpolated', JSON.stringify({ kfStart, kfMiddle, kfEnd }))
+if (kfMiddle.volume > kfStart.volume && kfEnd.volume > kfMiddle.volume)
+  ok(`volume keyframes ramp the preview (${kfStart.volume.toFixed(2)} → ${kfEnd.volume.toFixed(2)})`)
+else bad('volume keyframes do not affect the preview', JSON.stringify({ kfStart, kfMiddle, kfEnd }))
+if (kfMarkers === 2) ok('the timeline shows a marker per keyframe')
+else bad('keyframe markers missing on the clip', `${kfMarkers} markers`)
+
+// Halfway between two keys the value must be the average — the same linear rule
+// the compositor's expression uses, so preview and export cannot drift apart.
+const midpoint = await page.evaluate(() => {
+  const clip = window.__ceEditor.getState().clips[0]
+  const { sampleChannel } = window.__ceSampler ?? {}
+  const scaleAt2 = clip.keyframes && clip.keyframes.length === 2
+    ? clip.keyframes[0].scale + (clip.keyframes[1].scale - clip.keyframes[0].scale) * 0.5
+    : null
+  void sampleChannel
+  return scaleAt2
+})
+if (midpoint !== null && Math.abs(kfMiddle.scale - midpoint) < 0.03)
+  ok(`the midpoint is the average (${kfMiddle.scale.toFixed(3)} ≈ ${midpoint.toFixed(3)})`)
+else bad('interpolation is not linear', JSON.stringify({ mid: kfMiddle.scale, expected: midpoint }))
+
 /* 11g — mute is sound, hide is picture -------------------------------------- */
-const mute = await page.evaluate(async () => {
+const mute = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor
   store.getState().clearTimeline()
   const id = store.getState().addClip({
@@ -632,7 +702,7 @@ const mute = await page.evaluate(async () => {
   store.getState().toggleHidden('v1')
   await settle()
   return { before, clipMuted, laneMuted, laneHidden }
-})
+})()))
 if (mute.before.picture && !mute.before.elMuted) ok('the clip plays with sound to begin with')
 else bad('the clip did not start unmuted', JSON.stringify(mute.before))
 if (mute.clipMuted.elMuted && mute.clipMuted.picture) ok('the clip Mute tool silences the clip')
@@ -644,7 +714,7 @@ if (!mute.laneHidden.picture) ok('the eye hides the picture (mute no longer does
 else bad('hiding the lane did not remove the picture', JSON.stringify(mute.laneHidden))
 
 /* 11h — chrome fades away inside a section ---------------------------------- */
-const chrome = await page.evaluate(async () => {
+const chrome = await page.evaluate(() => (window.__pending = (async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms))
   location.hash = '#/'
   await wait(700)
@@ -657,7 +727,7 @@ const chrome = await page.evaluate(async () => {
   await wait(700)
   const afterReveal = Boolean(document.querySelector('.ce-header'))
   return { onLauncher, inSection, revealPill, afterReveal }
-})
+})()))
 if (chrome.onLauncher) ok('the launcher keeps its header and tabs')
 else bad('the header is missing on the home screen')
 if (!chrome.inSection) ok('the header fades away inside a section (full screen)')

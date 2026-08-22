@@ -8,7 +8,7 @@
  * and the export stays authoritative — that is stated in the UI, not hidden.
  */
 import type { CSSProperties } from 'react'
-import { propsOf, type Clip, type ClipProps } from './model'
+import { propsOf, sampleChannel, type Clip, type ClipProps } from './model'
 
 /** CSS twin of LOOKS in compose.py. `tint` is painted as a blended overlay. */
 export const LOOKS_CSS: Record<string, { filter: string; tint?: string; blend?: string }> = {
@@ -80,7 +80,17 @@ export function layerStyle(clip: Clip, local: number, extraOpacity = 1): LayerSt
   const cropShiftX = cropped ? ((right - left) / 2 / keptW) * 100 : 0
   const cropShiftY = cropped ? ((bottom - top) / 2 / keptH) * 100 : 0
 
-  const { x, y, scale, rotate } = props.transform
+  // Keyframes win over the static value wherever they define one.
+  const animated = {
+    x: sampleChannel(clip, 'x', local),
+    y: sampleChannel(clip, 'y', local),
+    scale: sampleChannel(clip, 'scale', local),
+    rotate: sampleChannel(clip, 'rotate', local),
+  }
+  const x = animated.x ?? props.transform.x
+  const y = animated.y ?? props.transform.y
+  const scale = animated.scale ?? props.transform.scale
+  const rotate = animated.rotate ?? props.transform.rotate
 
   /* animations and fades -------------------------------------------------- */
   const duration = Math.max(0.05, clip.duration)

@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers,
-  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2, MoveHorizontal,
+  Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2, MoveHorizontal, Diamond, X,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { captionsApi } from '../api/captions'
-import { useEditor, propsOf, MIN_CLIP, type Clip, type ClipProps } from './model'
+import {
+  useEditor, propsOf, sampleChannel, MIN_CLIP, KEYFRAME_CHANNELS,
+  type Clip, type ClipProps, type KeyframeChannel,
+} from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
 import { FEATURES } from '../features/catalog'
@@ -26,6 +29,7 @@ type PanelId =
   | 'opacity'
   | 'transition'
   | 'timing'
+  | 'keyframes'
   | 'ratio'
   | 'soon'
 
@@ -178,6 +182,7 @@ export default function EditorToolbar({
   const clipTools: Tool[] = [
     { id: 'split', icon: <Scissors {...ICON} />, label: ['Split', 'برش'], run: splitAtPlayhead },
     { id: 'timing', icon: <MoveHorizontal {...ICON} />, label: ['Trim & slip', 'تریم و لغزش'], panel: 'timing' },
+    { id: 'keyframes', icon: <Diamond {...ICON} />, label: ['Keyframes', 'کی‌فریم'], panel: 'keyframes' },
     { id: 'speed', icon: <Gauge {...ICON} />, label: ['Speed', 'سرعت'], panel: 'speed' },
     { id: 'volume', icon: <Volume2 {...ICON} />, label: ['Volume', 'صدا'], panel: 'volume' },
     { id: 'transition', icon: <Blend {...ICON} />, label: ['Transition', 'ترنزیشن'], panel: 'transition' },
@@ -275,6 +280,7 @@ export default function EditorToolbar({
               />
             )}
             {panel === 'timing' && clip && <PanelTiming clip={clip} />}
+            {panel === 'keyframes' && clip && <PanelKeyframes clip={clip} />}
             {panel === 'transition' && clip && (
               <PanelTransition
                 clip={clip}
@@ -539,6 +545,105 @@ function PanelTiming({ clip }: { clip: Clip }) {
       <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => rippleDelete(clip.id)}>
         {t('Ripple delete (close the gap)', 'حذف پیوسته (بستن فاصله)')}
       </button>
+    </div>
+  )
+}
+
+/**
+ * Keyframes.
+ *
+ * Only the five channels FFmpeg can genuinely animate are offered — position,
+ * scale, rotation and volume — because a keyframe the export cannot reproduce
+ * would make the monitor lie. Values move linearly between keys, which is
+ * exactly what the expressions in the compositor do.
+ */
+function PanelKeyframes({ clip }: { clip: Clip }) {
+  const { t } = useI18n()
+  const { playhead, setKeyframe, removeKeyframe, clearKeyframes } = useEditor()
+  const props = propsOf(clip)
+  const local = Math.max(0, Math.min(clip.duration, playhead - clip.start))
+  const keys = clip.keyframes ?? []
+
+  const i = useI18n().lang === 'fa' ? 1 : 0
+  const RANGES: Record<KeyframeChannel, { min: number; max: number; step: number; label: [string, string]; unit?: string }> = {
+    x: { min: -0.5, max: 0.5, step: 0.01, label: ['Horizontal', 'افقی'] },
+    y: { min: -0.5, max: 0.5, step: 0.01, label: ['Vertical', 'عمودی'] },
+    scale: { min: 0.1, max: 3, step: 0.01, label: ['Scale', 'مقیاس'] },
+    rotate: { min: -180, max: 180, step: 1, label: ['Rotation', 'چرخش'], unit: '°' },
+    volume: { min: 0, max: 2, step: 0.01, label: ['Volume', 'بلندی صدا'] },
+  }
+  const staticValue = (channel: KeyframeChannel) =>
+    channel === 'volume' ? props.volume : (props.transform as Record<string, number>)[channel]
+
+  return (
+    <div className="tb__stack">
+      <span className="ce-hint">
+        {t(
+          `Keys are placed at the playhead — now ${local.toFixed(2)}s into this clip. Values move linearly between keys, in the preview and in the export alike.`,
+          `کی‌فریم روی پلی‌هد ساخته می‌شود — الان ثانیه‌ی ${local.toFixed(2)} از این کلیپ. بین دو کی‌فریم مقدار خطی تغییر می‌کند، هم در پیش‌نمایش هم در خروجی.`
+        )}
+      </span>
+
+      <div className="tb__grid">
+        {KEYFRAME_CHANNELS.map((channel) => {
+          const range = RANGES[channel]
+          const current = sampleChannel(clip, channel, local) ?? staticValue(channel)
+          const keyed = keys.some((k) => k[channel] !== undefined)
+          const here = keys.find((k) => Math.abs(k.t - local) < 0.02 && k[channel] !== undefined)
+          return (
+            <Field
+              key={channel}
+              label={range.label[i]}
+              value={`${current.toFixed(2)}${range.unit ?? ''}${keyed ? ' ◆' : ''}`}
+            >
+              <div className="tb__row">
+                <Slider
+                  className="tb__grow"
+                  min={range.min}
+                  max={range.max}
+                  step={range.step}
+                  value={current}
+                  onChange={(value) => setKeyframe(clip.id, local, { [channel]: value })}
+                />
+                <button
+                  className={`ce-btn ce-btn--ghost ce-btn--sm ${here ? 'is-on' : ''}`}
+                  title={
+                    here
+                      ? t('Remove the key here', 'حذف کی‌فریم اینجا')
+                      : t('Add a key here', 'افزودن کی‌فریم اینجا')
+                  }
+                  onClick={() =>
+                    here ? removeKeyframe(clip.id, here.t) : setKeyframe(clip.id, local, { [channel]: current })
+                  }
+                >
+                  <Diamond size={13} />
+                </button>
+              </div>
+            </Field>
+          )
+        })}
+      </div>
+
+      {keys.length > 0 && (
+        <>
+          <div className="tb__keys">
+            {keys.map((key) => (
+              <button
+                key={key.t}
+                className="tb__key"
+                onClick={() => removeKeyframe(clip.id, key.t)}
+                title={t('Remove this keyframe', 'حذف این کی‌فریم')}
+              >
+                <span dir="ltr">{key.t.toFixed(2)}s</span>
+                <X size={11} />
+              </button>
+            ))}
+          </div>
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => clearKeyframes(clip.id)}>
+            {t('Clear all keyframes', 'حذف همه‌ی کی‌فریم‌ها')}
+          </button>
+        </>
+      )}
     </div>
   )
 }

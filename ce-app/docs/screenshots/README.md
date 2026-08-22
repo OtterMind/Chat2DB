@@ -52,6 +52,16 @@ The pointer at the top edge, `Escape`, or the small pill: the header returns wit
 
 ---
 
+## Keyframes
+
+Position, scale, rotation and volume animate over time. Keys are placed at the playhead,
+shown as diamonds on the clip, and interpolate linearly — the same rule the FFmpeg
+expressions in the compositor use, so the monitor and the exported file agree.
+
+![Keyframes](09-keyframes.png)
+
+---
+
 ## Looks and colour
 
 ![Filters](07-filters.png)

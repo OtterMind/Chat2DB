@@ -121,45 +121,54 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **Mute silences, hide blanks — never the same switch.** Muting a video lane
+13. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
+   for exactly the five channels FFmpeg can genuinely animate — x, y, scale,
+   rotate, volume — built by `keyframe_expression()` in `compose.py` as
+   piecewise-linear `if(lt(t,..),..)` chains (commas escaped!). Opacity is
+   deliberately absent: it needs a per-pixel `geq` pass; fade in/out and the
+   in/out animations cover that case. Animated geometry switches the clip chain
+   to `scale=eval=frame` plus an `overlay` onto a transparent canvas, which is
+   the only combination that reproduces "scale about the centre, then translate".
+   Static clips keep the old, fast chain — `tests/test_keyframes.py` asserts that.
+14. **Mute silences, hide blanks — never the same switch.** Muting a video lane
    used to remove it from the monitor (black screen). A lane now has two flags:
    `muted` (audio only, speaker icon) and `hidden` (picture, eye icon), and the
    compositor makes the identical distinction — `tests/test_effects.py` renders
    both cases and measures the frame.
-14. **One React instance.** Adding `framer-motion` to a running dev server
+15. **One React instance.** Adding `framer-motion` to a running dev server
    produced "invalid hook call" from a duplicated React in the optimiser cache
    while `tsc` stayed silent. `vite.config.ts` now sets
    `resolve.dedupe: ['react', 'react-dom']`.
-15. **A toggle must look pressed.** The clip Mute tool worked all along but gave
+16. **A toggle must look pressed.** The clip Mute tool worked all along but gave
    no feedback, so it read as broken. Toggles in the rail now render with an
    active state and confirm with a toast.
-16. **The preview may use a proxy, the export never may.** Import builds a 720p
+17. **The preview may use a proxy, the export never may.** Import builds a 720p
    H.264 copy (keyframe every 15 frames) in a worker thread for anything wider
    than 1280 px; `clip.proxy` is used by `PreviewMonitor` only, and
    `tests/test_proxy.py` asserts the render command still points at the original.
-17. **Centred playhead is a view mode, not a model change.** The marker is pinned
+18. **Centred playhead is a view mode, not a model change.** The marker is pinned
    to the middle and the lane carries half a viewport of padding on both sides, so
    `scrollLeft === playhead * pxPerSecond`. Scroll events set the playhead and the
    playhead sets the scroll — the loop is broken with a `programmatic` flag, not
    with timers. The classic mode is one click away in the timeline corner.
-18. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
+19. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
    film strip from `GET /api/media/thumb?path&t&h` (one JPEG per frame, cached in
    `~/CuttingEdge/data/thumbs`, times quantised to 0.1 s so zooming reuses the
    cache). Scale is by Ctrl+wheel or a two-finger pinch, anchored under the
    pointer — no slider anywhere, like the phone editors we are compared with.
-19. **Home starts sessions, the rail edits clips.** Catalogue entries carry
+20. **Home starts sessions, the rail edits clips.** Catalogue entries carry
    `place: 'editor'`; those tiles are gone from the home screen and appear in the
    editor's global tool rail instead (captions and silence removal run in place,
    the rest open their own screen).
-20. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
+21. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
    a thin strip between black walls; the stage now takes the project ratio
    (`aspect`, default `auto` = the first video clip's real pixel size) and the
    export dialog opens on the matching format. Clips carry `width`/`height` from
    the probe for this.
-21. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+22. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
    while nothing listened for a key; Studio now owns one `keydown` handler and
    skips inputs, textareas and modals.
-22. **Panels the timeline can open.** The tool rail's open panel lives in the store
+23. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 
@@ -207,18 +216,17 @@ freesound-python, apscheduler.
 
 ## 6. Next, in order
 
-1. Keyframes for position, scale, rotation, opacity and volume. The model part is
-   easy; the honest difficulty is the export — FFmpeg animates `overlay` x/y and
-   alpha with time expressions, but `scale` needs a crop/zoompan trick like the
-   zoom animations already use. Do not ship a keyframe UI whose export is a lie.
-2. Slim the installer: fetch the Python runtime and models on first launch
+1. Slim the installer: fetch the Python runtime and models on first launch
    (~479 MB → ~120 MB). Delta updates are verified working (< 50 MB per update on
    the user's machine), so this is measurable — re-check that number right after.
-3. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
-4. Beat detection + automatic ducking; then YouTube/Instagram publishing.
-5. Template gallery, title animation pack, sound-effect pack.
+2. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
+3. Audio waveforms on the audio lane (wavesurfer.js, BSD-3).
+4. Beat detection (librosa) + automatic ducking (Demucs); then YouTube publishing.
+5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.4.0: keyframes (x, y, scale, rotate, volume) in the monitor and in the
+export, with markers on the clip and a panel that keys at the playhead.
 Done in 0.3.9: immersive sections (the chrome fades, the section fills the window,
 Escape or the top edge brings it back), route transitions with `framer-motion`
 (MIT), mute/hide split on lanes, pressed-state toggles.

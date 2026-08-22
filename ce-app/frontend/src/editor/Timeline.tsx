@@ -500,6 +500,10 @@ function ClipView({
       }}
     >
       {clip.src && <FilmStrip clip={clip} width={Math.max(12, clip.duration * pxPerSecond)} />}
+      {selected &&
+        (clip.keyframes ?? []).map((key) => (
+          <span key={key.t} className="tl__key" style={{ left: key.t * pxPerSecond }} />
+        ))}
       <span className="tl__handle" data-handle="start" />
       <span className="tl__clip-label" dir="auto">{clip.label}</span>
       <span className="tl__clip-dur">{formatTimecode(clip.duration)}</span>

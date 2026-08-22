@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
 import { Slider } from 'antd'
 import { mediaUrl } from '../api/render'
-import { useEditor, formatTimecode, propsOf, type Clip, type Transition } from './model'
+import { useEditor, formatTimecode, propsOf, sampleChannel, type Clip, type Transition } from './model'
 import { layerStyle, transitionStyle, transitionWash } from './preview'
 import { useI18n } from '../i18n'
 
@@ -125,7 +125,7 @@ export default function PreviewMonitor() {
     if (props.muted || tracks.find((track) => track.id === clip.trackId)?.muted) return 0
     // Honour the clip's own audio fades, like the export does.
     const local = playhead - clip.start
-    let gain = props.volume
+    let gain = sampleChannel(clip, 'volume', local) ?? props.volume
     if (props.fadeIn > 0 && local < props.fadeIn) gain *= Math.max(0, local / props.fadeIn)
     if (props.fadeOut > 0 && local > clip.duration - props.fadeOut) {
       gain *= Math.max(0, (clip.duration - local) / props.fadeOut)

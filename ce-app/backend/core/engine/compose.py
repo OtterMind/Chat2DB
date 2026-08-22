@@ -49,6 +49,9 @@ class ClipProps:
     anim_duration: float = 0.6
     denoise: float = 0.0
     enhance_voice: bool = False
+    #: Animation over time: [{"t": seconds, "x": .., "y": .., "scale": ..,
+    #: "rotate": .., "opacity": .., "volume": ..}, ...] — sorted, clip-local.
+    keyframes: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "ClipProps":
@@ -86,6 +89,10 @@ class ClipProps:
             anim_duration=max(0.1, float(data.get("animDuration", 0.6) or 0.6)),
             denoise=min(1.0, max(0.0, float(data.get("denoise", 0.0) or 0.0))),
             enhance_voice=bool(data.get("enhanceVoice", False)),
+            keyframes=sorted(
+                [k for k in (data.get("keyframes") or []) if isinstance(k, dict)],
+                key=lambda k: float(k.get("t", 0.0)),
+            ),
         )
 
 
@@ -399,6 +406,42 @@ def _animation_filters(
     return []
 
 
+def keyframe_expression(keyframes: list[dict], channel: str, default: float) -> str | None:
+    """A piecewise-linear FFmpeg expression for one animated channel.
+
+    Returns None when the channel is not animated, so a static clip keeps the
+    simple, fast filter chain. The shape mirrors `sampleChannel()` in the editor
+    exactly — hold before the first key, linear between keys, hold after the last
+    — because the monitor and the render must never disagree.
+
+    Commas inside the expression are escaped: an unescaped one ends the filter
+    and silently truncates the graph (the bug that broke the zoom animations).
+    """
+    points = [
+        (float(k.get("t", 0.0)), float(k[channel]))
+        for k in keyframes
+        if channel in k and k[channel] is not None
+    ]
+    if not points:
+        return None
+    points.sort(key=lambda p: p[0])
+    if len(points) == 1:
+        return f"{points[0][1]:.6f}"
+
+    # Built from the last segment backwards: if(lt(t,t1), seg0, if(lt(t,t2), seg1, ...))
+    expression = f"{points[-1][1]:.6f}"
+    for i in range(len(points) - 2, -1, -1):
+        t0, v0 = points[i]
+        t1, v1 = points[i + 1]
+        span = max(1e-6, t1 - t0)
+        slope = (v1 - v0) / span
+        segment = f"({v0:.6f}+({slope:.6f})*(t-{t0:.6f}))"
+        if i == 0:
+            segment = f"if(lt(t\\,{t0:.6f})\\,{v0:.6f}\\,{segment})"
+        expression = f"if(lt(t\\,{t1:.6f})\\,{segment}\\,{expression})"
+    return expression
+
+
 def _atempo_chain(speed: float) -> list[float]:
     """atempo only accepts 0.5–2.0, so extreme speeds need to be chained."""
     factors: list[float] = []
@@ -533,16 +576,38 @@ def build_command(
             )
 
         x, y, scale, rotate = clip.props.transform
-        if abs(rotate) > 0.01:
+
+        # Animated channels, if any. `t` inside a clip chain is clip-local, which
+        # is the same clock the editor samples its keyframes on.
+        rotate_expr = keyframe_expression(clip.props.keyframes, "rotate", rotate)
+        scale_expr = keyframe_expression(clip.props.keyframes, "scale", scale)
+        x_expr = keyframe_expression(clip.props.keyframes, "x", x)
+        y_expr = keyframe_expression(clip.props.keyframes, "y", y)
+        animated_geometry = any(e is not None for e in (scale_expr, x_expr, y_expr))
+
+        if rotate_expr is not None:
+            # Keep the frame size fixed: a per-frame rotw()/roth() would resize
+            # the stream on every frame and the overlay below would jitter.
+            parts.append(f"rotate=a='({rotate_expr})*PI/180':c=none:ow=iw:oh=ih")
+        elif abs(rotate) > 0.01:
             parts.append(f"rotate={rotate}*PI/180:c=none:ow=rotw({rotate}*PI/180):oh=roth({rotate}*PI/180)")
 
-        target_w = max(2, int(timeline.width * scale))
-        target_h = max(2, int(timeline.height * scale))
-        parts.append(f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease")
-        parts.append(
-            f"pad={timeline.width}:{timeline.height}:(ow-iw)/2+{int(x * timeline.width)}"
-            f":(oh-ih)/2+{int(y * timeline.height)}:color=black@0"
-        )
+        if animated_geometry:
+            # Resize per frame, then place the (varying) picture on a transparent
+            # canvas with expressions — this is the only combination in FFmpeg
+            # that reproduces "scale about the centre, then translate".
+            size = scale_expr if scale_expr is not None else f"{scale:.6f}"
+            parts.append(
+                f"scale=w='trunc(({size})*{timeline.width}/2)*2':h=-2:eval=frame"
+            )
+        else:
+            target_w = max(2, int(timeline.width * scale))
+            target_h = max(2, int(timeline.height * scale))
+            parts.append(f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease")
+            parts.append(
+                f"pad={timeline.width}:{timeline.height}:(ow-iw)/2+{int(x * timeline.width)}"
+                f":(oh-ih)/2+{int(y * timeline.height)}:color=black@0"
+            )
         parts.extend(_look_filters(clip.props.filter))
         parts.extend(_adjust_filters(clip.props.adjust))
         parts.append("setsar=1")
@@ -575,6 +640,24 @@ def build_command(
                 f"fade=t=out:st={max(0.0, clip.duration - clip.props.fade_out):.3f}"
                 f":d={clip.props.fade_out:.3f}:alpha=1"
             )
+
+        if animated_geometry:
+            # Finish the per-clip chain, then composite it onto a transparent
+            # canvas of the project size with time-varying placement.
+            moving = f"{label[:-1]}_kf]"
+            canvas = f"{label[:-1]}_bg]"
+            steps.append("".join(chain) + ",".join(parts) + moving)
+            steps.append(
+                f"color=c=black@0:s={timeline.width}x{timeline.height}"
+                f":r={timeline.fps}:d={clip.duration:.3f}{canvas}"
+            )
+            place_x = x_expr if x_expr is not None else f"{x:.6f}"
+            place_y = y_expr if y_expr is not None else f"{y:.6f}"
+            steps.append(
+                f"{canvas}{moving}overlay=x='(main_w-w)/2+({place_x})*main_w'"
+                f":y='(main_h-h)/2+({place_y})*main_h':eval=frame:shortest=1{label}"
+            )
+            return label
 
         steps.append("".join(chain) + ",".join(parts) + label)
         return label
@@ -659,7 +742,11 @@ def build_command(
                 "acompressor=threshold=-18dB:ratio=3:attack=15:release=180",
                 "loudnorm=I=-16:TP=-1.5:LRA=11",
             ])
-        if clip.props.volume != 1.0:
+        volume_expr = keyframe_expression(clip.props.keyframes, "volume", clip.props.volume)
+        if volume_expr is not None:
+            # eval=frame is what makes the expression time-varying at all.
+            parts.append(f"volume=volume='{volume_expr}':eval=frame")
+        elif clip.props.volume != 1.0:
             parts.append(f"volume={clip.props.volume:.3f}")
         if clip.props.fade_in > 0:
             parts.append(f"afade=t=in:st=0:d={clip.props.fade_in:.3f}")

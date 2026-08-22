@@ -75,6 +75,32 @@ export const DEFAULT_PROPS: ClipProps = {
   animateWords: false,
 }
 
+/**
+ * A keyframe: what the clip should look like at one moment inside itself.
+ *
+ * Only channels FFmpeg can genuinely animate are here, because a keyframe the
+ * export cannot reproduce is a lie told twice — once in the monitor and once in
+ * the finished file.
+ */
+export interface Keyframe {
+  /** Seconds from the start of the clip. */
+  t: number
+  x?: number
+  y?: number
+  scale?: number
+  rotate?: number
+  volume?: number
+}
+
+/**
+ * Opacity is deliberately absent: FFmpeg cannot vary alpha over time without a
+ * per-pixel `geq` pass that would slow every export, and the clip already has
+ * fade in/out plus the in/out animations for that. Better one honest gap than a
+ * keyframe that renders differently from the monitor.
+ */
+export const KEYFRAME_CHANNELS = ['x', 'y', 'scale', 'rotate', 'volume'] as const
+export type KeyframeChannel = (typeof KEYFRAME_CHANNELS)[number]
+
 /** Cross-clip transition, always between two neighbours on the same lane. */
 export interface Transition {
   id: string
@@ -95,6 +121,8 @@ export interface Clip {
   /** Text clips carry their content instead of a media path. */
   text?: string
   words?: { start: number; end: number; text: string }[]
+  /** Animation over time; empty or missing means the clip is static. */
+  keyframes?: Keyframe[]
   /** Clips that move together. */
   groupId?: string | null
   /** position on the timeline, seconds */
@@ -198,6 +226,10 @@ interface EditorState extends Snapshot {
   addClip: (clip: Omit<Clip, 'id'>) => string
   addTextClip: (text: string, options?: { start?: number; duration?: number; trackId?: string }) => string
   setText: (id: string, text: string) => void
+  /** Add or update the keyframe at `t` (seconds inside the clip). */
+  setKeyframe: (id: string, t: number, patch: Partial<Omit<Keyframe, 't'>>) => void
+  removeKeyframe: (id: string, t: number) => void
+  clearKeyframes: (id: string) => void
   /** Attach a finished editing proxy to every clip that came from this file. */
   setProxy: (src: string, proxy: string) => void
   addCaptions: (cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string }[] }[], offset?: number) => number
@@ -222,6 +254,31 @@ const clone = (s: Snapshot): Snapshot => ({
   clips: s.clips.map((c) => ({ ...c, props: c.props ? { ...c.props } : undefined })),
   transitions: s.transitions.map((t) => ({ ...t })),
 })
+
+/**
+ * The value of one animated channel at a moment inside the clip.
+ *
+ * Between two keyframes the value moves linearly; before the first and after the
+ * last it holds. Linear is deliberate: it is what the FFmpeg expressions in the
+ * compositor reproduce exactly, so the monitor and the export cannot disagree.
+ */
+export function sampleChannel(clip: Clip, channel: KeyframeChannel, local: number): number | null {
+  const frames = (clip.keyframes ?? []).filter((k) => k[channel] !== undefined)
+  if (frames.length === 0) return null
+  if (frames.length === 1 || local <= frames[0].t) return frames[0][channel] as number
+  const last = frames[frames.length - 1]
+  if (local >= last.t) return last[channel] as number
+  for (let i = 0; i < frames.length - 1; i++) {
+    const a = frames[i]
+    const b = frames[i + 1]
+    if (local >= a.t && local <= b.t) {
+      const span = Math.max(0.0001, b.t - a.t)
+      const ratio = (local - a.t) / span
+      return (a[channel] as number) + ((b[channel] as number) - (a[channel] as number)) * ratio
+    }
+  }
+  return last[channel] as number
+}
 
 /** Merged view of a clip's effect settings. */
 export function propsOf(clip: Clip): ClipProps {
@@ -649,6 +706,31 @@ export const useEditor = create<EditorState>((set, get) => ({
       color: '#F59E0B',
     })
   },
+
+  setKeyframe: (id, t, patch) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      const at = Math.max(0, Math.round(Math.min(t, clip.duration) * 100) / 100)
+      const frames = [...(clip.keyframes ?? [])]
+      const existing = frames.find((k) => Math.abs(k.t - at) < 0.005)
+      if (existing) Object.assign(existing, patch)
+      else frames.push({ t: at, ...patch })
+      clip.keyframes = frames.sort((a, b) => a.t - b.t)
+    }),
+
+  removeKeyframe: (id, t) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      clip.keyframes = (clip.keyframes ?? []).filter((k) => Math.abs(k.t - t) >= 0.005)
+    }),
+
+  clearKeyframes: (id) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (clip) clip.keyframes = []
+    }),
 
   setProxy: (src, proxy) =>
     set((state) => ({
