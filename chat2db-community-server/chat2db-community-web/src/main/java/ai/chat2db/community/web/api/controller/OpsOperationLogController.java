@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.service.ops.IOpsOperationLogQueryService;
@@ -52,7 +54,7 @@ public class OpsOperationLogController {
      * @return data result containing long.
      */
     @PostMapping("/create")
-    public DataResult<Long> create(@RequestBody OperationLog request) {
+    public DataResult<Long> create(@Valid @RequestBody OperationLog request) {
         return DataResult.of(operationLogQueryService.createOperationLog(request));
     }
 
