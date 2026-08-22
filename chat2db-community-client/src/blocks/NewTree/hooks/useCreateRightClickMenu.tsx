@@ -54,6 +54,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import LockWaitsContent from '../components/LockWaitsContent';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
@@ -402,6 +403,19 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.LockWaits]: {
+        text: i18n('workspace.ops.lockWaits'),
+        icon: 'icon-lock',
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.lockWaits'),
+            content: <LockWaitsContent />,
+            footer: null,
+            width: 1100,
           });
         },
       },

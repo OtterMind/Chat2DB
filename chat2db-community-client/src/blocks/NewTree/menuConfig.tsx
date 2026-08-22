@@ -44,6 +44,7 @@ export const dropMenuConfig = {
       OperationColumn.CopyMcpConfig,
       OperationColumn.Divider,
       OperationColumn.MoveToGroup,
+      OperationColumn.LockWaits,
       OperationColumn.Refresh,
       OperationColumn.Divider,
       OperationColumn.RemoveDataSource,
