@@ -336,11 +336,16 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
                 scripts.addAll(script);
             }
         }
-        if (newKey != null && newKey.getTtl() != null && newKey.getTtl() > 0) {
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(newKey.getName()))
-                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(newKey.getTtl());
-            scripts.add(stringBuilder.toString());
+        if (newKey != null && newKey.getTtl() != null) {
+            if (newKey.getTtl() > 0) {
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(newKey.getName()))
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(newKey.getTtl());
+                scripts.add(stringBuilder.toString());
+            } else if (!typeChanged && newKey.getTtl() == -1L && oldKey != null
+                    && oldKey.getTtl() != null && oldKey.getTtl() >= 0) {
+                scripts.add(RedisConstants.COMMAND_PERSIST_KEY_PREFIX + getRedisValue(newKey.getName()));
+            }
         }
         ExecuteResponse executeResult = new ExecuteResponse();
         for (String s : scripts) {
