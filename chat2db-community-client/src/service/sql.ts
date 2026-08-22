@@ -422,6 +422,17 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// Session list
+interface ISessionRequest {
+  dataSourceId: number;
+  databaseName?: string;
+}
+
+const getSessionList = createRequest<ISessionRequest, { id: number; user: string; host: string; db: string | null; command: string; time: number; state: string | null; info: string | null }[]>('/api/rdb/session/list', { method: 'post' });
+
+// Kill session
+const killSession = createRequest<ISessionRequest & { connectionId: number; killType: string }, void>('/api/rdb/session/kill', { method: 'post' });
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -443,6 +454,8 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  getSessionList,
+  killSession,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,
