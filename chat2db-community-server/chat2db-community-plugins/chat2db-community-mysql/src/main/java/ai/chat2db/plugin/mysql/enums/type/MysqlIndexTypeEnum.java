@@ -112,11 +112,41 @@ public enum MysqlIndexTypeEnum {
                     script.append(" ").append(MysqlSqlGuards.requireAscOrDesc(column.getAscOrDesc()));
                 }
                 script.append(",");
+            } else if (StringUtils.isNotBlank(column.getExpression())) {
+                script.append("(").append(normalizeFunctionalExpression(column.getExpression())).append(")");
+                script.append(",");
             }
         }
         script.deleteCharAt(script.length() - 1);
         script.append(")");
         return script.toString();
+    }
+
+    private String normalizeFunctionalExpression(String expression) {
+        String normalized = expression.trim();
+        while (hasOuterParentheses(normalized)) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized;
+    }
+
+    private boolean hasOuterParentheses(String expression) {
+        if (expression.length() < 2 || expression.charAt(0) != '(' || expression.charAt(expression.length() - 1) != ')') {
+            return false;
+        }
+        int depth = 0;
+        for (int index = 0; index < expression.length(); index++) {
+            char character = expression.charAt(index);
+            if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth--;
+                if (depth == 0 && index < expression.length() - 1) {
+                    return false;
+                }
+            }
+        }
+        return depth == 0;
     }
 
     private String buildIndexName(TableIndex tableIndex) {

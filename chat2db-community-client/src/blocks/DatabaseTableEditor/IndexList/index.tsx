@@ -272,7 +272,7 @@ const IndexList = forwardRef((props: IProps, ref: ForwardedRef<IIndexListRef>) =
           const editable = isEditing(record);
           const text = columnList
             ?.map((t) => {
-              return `${t.columnName}`;
+              return t.expression ? `(${t.expression})` : `${t.columnName}`;
             })
             .join(',');
           return editable ? (

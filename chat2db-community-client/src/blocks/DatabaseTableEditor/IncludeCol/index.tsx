@@ -12,7 +12,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import classnames from 'classnames';
-import { Table, Form, Select, Button } from 'antd';
+import { Table, Form, Select, Button, Input } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { Context } from '../index';
 import { IColumnItemNew, IIndexIncludeColumnItem } from '@/typings';
@@ -119,6 +119,17 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
       // width: '45%',
       render: (text: string, record: IIndexIncludeColumnItem) => {
         const editable = isEditing(record);
+        if (record.expression) {
+          return editable ? (
+            <Form.Item name="expression" style={{ margin: 0 }}>
+              <Input autoComplete="off" />
+            </Form.Item>
+          ) : (
+            <div className={styles.editableCell} onClick={() => edit(record)}>
+              {`(${record.expression})`}
+            </div>
+          );
+        }
         return editable ? (
           <Form.Item name="columnName" style={{ margin: 0 }}>
             <Select options={columnList.map((i) => ({ label: i.name, value: i.name }))} />
@@ -234,7 +245,7 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
       .map((t) => {
         return lodash.omit(t, 'key');
       })
-      .filter((t) => t.columnName);
+      .filter((t) => t.columnName || t.expression);
   };
 
   useImperativeHandle(ref, () => ({

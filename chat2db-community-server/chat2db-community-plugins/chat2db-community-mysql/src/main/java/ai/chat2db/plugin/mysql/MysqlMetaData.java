@@ -324,7 +324,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 TableIndex tableIndex = map.get(keyName);
                 if (tableIndex != null) {
                     List<TableIndexColumn> columnList = tableIndex.getColumnList();
-                    columnList.add(getTableIndexColumn(resultSet));
+                    columnList.add(toTableIndexColumn(resultSet));
                     columnList = columnList.stream().sorted(Comparator.comparing(TableIndexColumn::getOrdinalPosition))
                             .collect(Collectors.toList());
                     tableIndex.setColumnList(columnList);
@@ -345,7 +345,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                         index.setComment(resultSet.getString(FIELD_INDEX_COMMENT_FALLBACK));
                     }
                     List<TableIndexColumn> tableIndexColumns = new ArrayList<>();
-                    tableIndexColumns.add(getTableIndexColumn(resultSet));
+                    tableIndexColumns.add(toTableIndexColumn(resultSet));
                     index.setColumnList(tableIndexColumns);
                     if (SQL_PRIMARY_INDEX_NAME.equalsIgnoreCase(keyName)) {
                         index.setType(MysqlIndexTypeEnum.PRIMARY_KEY.getName());
@@ -366,13 +366,21 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
 
     }
 
-    private TableIndexColumn getTableIndexColumn(ResultSet resultSet) throws SQLException {
+    static TableIndexColumn toTableIndexColumn(ResultSet resultSet) throws SQLException {
         TableIndexColumn tableIndexColumn = new TableIndexColumn();
         tableIndexColumn.setColumnName(resultSet.getString(FIELD_COLUMN_NAME));
         tableIndexColumn.setOrdinalPosition(resultSet.getShort(FIELD_SEQ_IN_INDEX));
         tableIndexColumn.setCollation(resultSet.getString(FIELD_COLLATION));
         tableIndexColumn.setCardinality(resultSet.getLong(FIELD_CARDINALITY));
         tableIndexColumn.setSubPart(resultSet.getLong(FIELD_SUB_PART));
+        try {
+            String expression = resultSet.getString(FIELD_EXPRESSION);
+            if (StringUtils.isNotBlank(expression)) {
+                tableIndexColumn.setExpression(expression);
+            }
+        } catch (SQLException e) {
+            // MySQL 5.7 and 8.0.12 or earlier do not have the Expression column
+        }
         String collation = resultSet.getString(FIELD_COLLATION);
         if (INDEX_COLLATION_ASC.equalsIgnoreCase(collation)) {
             tableIndexColumn.setAscOrDesc(INDEX_ASC);
