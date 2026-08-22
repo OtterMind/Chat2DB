@@ -268,6 +268,11 @@ export default {
   'workspace.databaseAccount.lockAccount': 'アカウントをロック',
   'workspace.databaseAccount.unlockAccount': 'アカウントのロックを解除',
   'workspace.databaseAccount.deleteUser': 'ユーザーを削除',
+  'workspace.databaseAccount.renameUser': 'ユーザー名を変更',
+  'workspace.databaseAccount.newUser': '新しいユーザー',
+  'workspace.databaseAccount.newHost': '新しいホスト',
+  'workspace.databaseAccount.renameDefinerWarning': '続行する前に、このアカウントを DEFINER とするビュー、ルーチン、イベントを確認してください。',
+  'mysql.account.renameTargetExists': '変更先のユーザーとホストは既に存在します。',
   'workspace.databaseAccount.selectUserFromTree': '左側のユーザーノードからアカウントを選択してください',
   'workspace.databaseAccount.accountListUnreadable':
     '現在の接続では mysql.user を読み取れないため、ユーザー一覧を読み込めない可能性があります。管理権限のあるアカウントで接続してください。',

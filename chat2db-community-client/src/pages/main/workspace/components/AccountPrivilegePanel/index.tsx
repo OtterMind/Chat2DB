@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tooltip, theme } from 'antd';
-import { DeleteOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import SQLPreview from '@/components/SQLPreview';
@@ -376,6 +376,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     accountForm.setFieldsValue({
       user: selectedAccount?.user,
       host: selectedAccount?.host,
+      newUser: selectedAccount?.user,
+      newHost: selectedAccount?.host,
       password: '',
     });
   }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
@@ -391,6 +393,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         user: values.user,
         host: values.host,
         password: values.password,
+        newUser: values.newUser,
+        newHost: values.newHost,
         actionType: accountActionType,
       }).then(() => {
         setAccountModalOpen(false);
@@ -480,6 +484,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                   disabled={!selectedAccount}
                   icon={<DeleteOutlined />}
                   onClick={() => handleSelectedAccountCommand(AccountActionType.DROP_USER)}
+                />
+              </Tooltip>
+              <Tooltip title={i18n('workspace.databaseAccount.renameUser')}>
+                <Button
+                  disabled={!selectedAccount}
+                  icon={<EditOutlined />}
+                  onClick={() => openAccountModal(AccountActionType.RENAME_USER)}
                 />
               </Tooltip>
             </Space>
@@ -598,6 +609,16 @@ const AccountPrivilegePanel = memo((props: IProps) => {
           <Form.Item name="host" label={i18n('workspace.databaseAccount.host')} rules={[{ required: true }]}>
             <Input disabled />
           </Form.Item>
+          {accountActionType === AccountActionType.RENAME_USER && (
+            <>
+              <Form.Item name="newUser" label={i18n('workspace.databaseAccount.newUser')} rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="newHost" label={i18n('workspace.databaseAccount.newHost')} rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+            </>
+          )}
           {accountActionType === AccountActionType.ALTER_PASSWORD && (
             <Form.Item name="password" label={i18n('workspace.databaseAccount.password')} rules={[{ required: true }]}>
               <Input.Password />
@@ -615,6 +636,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         onCancel={() => setExecuteModalOpen(false)}
       >
         <SqlPreview sql={confirmPreviewState?.sql || ''} />
+        {confirmPreviewState?.command.actionType === AccountActionType.RENAME_USER && (
+          <Alert className={styles.alert} type="warning" showIcon message={i18n('workspace.databaseAccount.renameDefinerWarning')} />
+        )}
       </Modal>
     </div>
   );
@@ -652,6 +676,8 @@ function accountActionTitle(actionType: AccountActionType) {
   switch (actionType) {
     case AccountActionType.ALTER_PASSWORD:
       return i18n('workspace.databaseAccount.changePassword');
+    case AccountActionType.RENAME_USER:
+      return i18n('workspace.databaseAccount.renameUser');
     case AccountActionType.LOCK_ACCOUNT:
       return i18n('workspace.databaseAccount.lockAccount');
     case AccountActionType.UNLOCK_ACCOUNT:

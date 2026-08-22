@@ -18,4 +18,6 @@ public class AccountCommandRequest extends AccountRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private String newUser;
+    private String newHost;
 }

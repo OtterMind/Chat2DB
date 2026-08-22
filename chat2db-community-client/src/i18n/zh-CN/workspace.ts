@@ -260,6 +260,11 @@ export default {
   'workspace.databaseAccount.lockAccount': '锁定账号',
   'workspace.databaseAccount.unlockAccount': '解锁账号',
   'workspace.databaseAccount.deleteUser': '删除用户',
+  'workspace.databaseAccount.renameUser': '重命名用户',
+  'workspace.databaseAccount.newUser': '新用户名',
+  'workspace.databaseAccount.newHost': '新主机',
+  'workspace.databaseAccount.renameDefinerWarning': '继续前请检查以该账号为 DEFINER 的视图、例程和事件。',
+  'mysql.account.renameTargetExists': '目标用户名和主机已存在。',
   'workspace.databaseAccount.selectUserFromTree': '请在左侧用户节点下选择账号',
   'workspace.databaseAccount.accountListUnreadable':
     '当前连接无法读取 mysql.user，用户列表可能无法加载，请使用有管理权限的账号连接。',

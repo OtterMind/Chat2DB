@@ -267,6 +267,11 @@ export default {
   'workspace.databaseAccount.lockAccount': '계정 잠금',
   'workspace.databaseAccount.unlockAccount': '계정 잠금 해제',
   'workspace.databaseAccount.deleteUser': '사용자 삭제',
+  'workspace.databaseAccount.renameUser': '사용자 이름 변경',
+  'workspace.databaseAccount.newUser': '새 사용자',
+  'workspace.databaseAccount.newHost': '새 호스트',
+  'workspace.databaseAccount.renameDefinerWarning': '계속하기 전에 이 계정을 DEFINER로 사용하는 뷰, 루틴 및 이벤트를 검토하세요.',
+  'mysql.account.renameTargetExists': '대상 사용자와 호스트가 이미 존재합니다.',
   'workspace.databaseAccount.selectUserFromTree': '왼쪽 트리의 사용자 아래에서 계정을 선택하세요',
   'workspace.databaseAccount.accountListUnreadable':
     '현재 연결에서 mysql.user를 읽을 수 없어 사용자 목록을 불러오지 못할 수 있습니다. 관리자 계정으로 연결하세요.',

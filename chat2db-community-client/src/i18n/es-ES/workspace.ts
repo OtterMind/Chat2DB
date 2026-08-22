@@ -269,6 +269,12 @@ export default {
   'workspace.databaseAccount.lockAccount': 'Bloquear cuenta',
   'workspace.databaseAccount.unlockAccount': 'Desbloquear cuenta',
   'workspace.databaseAccount.deleteUser': 'Eliminar usuario',
+  'workspace.databaseAccount.renameUser': 'Cambiar nombre de usuario',
+  'workspace.databaseAccount.newUser': 'Nuevo usuario',
+  'workspace.databaseAccount.newHost': 'Nuevo host',
+  'workspace.databaseAccount.renameDefinerWarning':
+    'Revise las vistas, rutinas y eventos que usan esta cuenta como DEFINER antes de continuar.',
+  'mysql.account.renameTargetExists': 'El usuario y host de destino ya existen.',
   'workspace.databaseAccount.selectUserFromTree': 'Seleccione una cuenta en Usuarios, en el árbol de la izquierda',
   'workspace.databaseAccount.accountListUnreadable':
     'La conexión actual no puede leer mysql.user, por lo que quizá no se cargue la lista de usuarios. Conéctese con una cuenta de administrador.',

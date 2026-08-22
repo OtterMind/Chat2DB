@@ -84,6 +84,13 @@ public class MysqlAccountManager implements IAccountManager {
         result.setSql(preview.getSql());
         String executionSql = MysqlAccountSqlBuilder.buildSql(command);
 
+        if (isRename(command) && targetAccountExists(connection, command)) {
+            result.setSuccess(Boolean.FALSE);
+            result.setMessage(ERROR_KEY_ACCOUNT_RENAME_TARGET_EXISTS);
+            result.setFailureCode(ERROR_KEY_ACCOUNT_RENAME_TARGET_EXISTS);
+            return result;
+        }
+
         try (PreparedStatement statement = connection.prepareStatement(executionSql)) {
             statement.execute();
             result.setSuccess(Boolean.TRUE);
@@ -96,6 +103,23 @@ public class MysqlAccountManager implements IAccountManager {
             result.setSqlState(e.getSQLState());
         }
         return result;
+    }
+
+    private boolean isRename(AccountOperationRequest command) {
+        return "RENAME_USER".equals(command.getActionType());
+    }
+
+    private boolean targetAccountExists(Connection connection, AccountOperationRequest command) {
+        try (PreparedStatement statement = connection.prepareStatement(SQL_SELECT_MYSQL_USER_BY_ACCOUNT)) {
+            statement.setString(1, command.getNewUser());
+            statement.setString(2, command.getNewHost());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        } catch (SQLException ignored) {
+            // A user with RENAME USER may not have mysql.user read access. MySQL remains the authority in that case.
+            return false;
+        }
     }
 
     private List<AccountInfo> queryAccounts(Connection connection, boolean includeLocked) throws SQLException {
