@@ -429,6 +429,37 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Events (MYSQL-OBJ-013). */
+export interface IEventItem {
+  eventName: string;
+  definer: string | null;
+  timeZone: string | null;
+  eventType: string | null;
+  executeAt: string | null;
+  intervalValue: string | null;
+  intervalField: string | null;
+  starts: string | null;
+  ends: string | null;
+  status: string | null;
+  onCompletion: string | null;
+  comment: string | null;
+  definition: string | null;
+}
+
+const getEventList = createRequest<{ databaseName: string }, IEventItem[]>('/api/rdb/event/list', { method: 'get' });
+const getEventSchedulerStatus = createRequest<Record<string, never>, { schedulerEnabled: boolean }>(
+  '/api/rdb/event/scheduler_status',
+  { method: 'get' },
+);
+const getEventDropSql = createRequest<{ databaseName: string; eventName: string }, string>(
+  '/api/rdb/event/drop_sql',
+  { method: 'post' },
+);
+const getEventEnabledSql = createRequest<{ databaseName: string; eventName: string; enabled: boolean }, string>(
+  '/api/rdb/event/enabled_sql',
+  { method: 'post' },
+);
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -487,5 +518,9 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getEventList,
+  getEventSchedulerStatus,
+  getEventDropSql,
+  getEventEnabledSql,
   getDataSourceList,
 };

@@ -64,6 +64,7 @@ export default {
   'common.text.functions': '関数',
   'common.text.procedures': 'プロシージャ',
   'common.text.triggers': 'トリガー',
+  'common.text.events': 'イベント',
   'common.text.consoles': 'コンソール',
   'common.text.columns': '列',
   'common.text.keys': 'キー',

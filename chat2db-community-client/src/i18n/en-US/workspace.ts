@@ -295,6 +295,12 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revoke privileges',
   'workspace.databaseAccount.lockUnsupported':
     'Account lock is not supported by this MySQL version or current account privileges',
+  'workspace.menu.createEvent': 'Create event',
+  'workspace.menu.openEvent': 'Open event',
+  'workspace.menu.enableEvent': 'Enable event',
+  'workspace.menu.disableEvent': 'Disable event',
+  'workspace.menu.dropEvent': 'Drop event',
+  'workspace.menu.eventPreviewTitle': 'Confirm SQL',
   'workspace.routine.button.invoke': 'Invoke routine',
   'workspace.routine.button.apply': 'Apply changes',
   'workspace.routine.button.refresh': 'Reload DDL',
