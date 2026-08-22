@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
+import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import ai.chat2db.community.domain.api.model.er.ERPosition;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
 import ai.chat2db.community.domain.api.model.workspace.Node;
@@ -61,6 +62,7 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
         dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
         dataSource.setPassword(encryptString(dataSource.getPassword()));
+        encryptSslSensitiveFields(dataSource.getSsl());
         dataSource.setId(DataSourceStorage.INSTANCE.generateId());
         Long id = DataSourceStorage.INSTANCE.save(storageConverter.workspace2dataSource(dataSource));
         if (dataSource.getSpaceId() != null && dataSource.getSpaceId() > 0) {
@@ -78,11 +80,14 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     public Long updateDataSource(WorkspaceDataSource dataSource) {
         dataSource.setIdentityColor(DataSourceIdentityColorUtils.normalize(dataSource.getIdentityColor()));
         dataSource.setStorageType(StorageTypeEnum.LOCAL.name());
+        DataSource oldDataSource = DataSourceStorage.INSTANCE.getById(dataSource.getId());
         if (dataSource.getPassword() != null && !dataSource.getPassword().isEmpty()) {
             dataSource.setPassword(encryptString(dataSource.getPassword()));
         } else {
             dataSource.setPassword(null);
         }
+        dataSource.setSsl(mergeAndEncryptSsl(dataSource.getSsl(),
+                oldDataSource == null ? null : oldDataSource.getSsl()));
         DataSourceStorage.INSTANCE.update(storageConverter.workspace2dataSource(dataSource));
         return dataSource.getId();
     }
@@ -217,6 +222,41 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
             return password;
         }
         return AesGcmUtil.configured().encrypt(password);
+    }
+
+    /**
+     * Encrypt the secret TLS fields in place on create. Public material (CA/client cert PEM,
+     * keystore type, mode) is left cleartext.
+     */
+    private void encryptSslSensitiveFields(SSLInfo ssl) {
+        if (ssl == null) {
+            return;
+        }
+        ssl.setClientPrivateKeyPem(encryptString(ssl.getClientPrivateKeyPem()));
+        ssl.setClientKeyPassword(encryptString(ssl.getClientKeyPassword()));
+        ssl.setKeyStoreBytes(encryptString(ssl.getKeyStoreBytes()));
+        ssl.setKeyStorePassword(encryptString(ssl.getKeyStorePassword()));
+    }
+
+    /** Reconcile incoming TLS material and clear all saved material when TLS is omitted. */
+    private SSLInfo mergeAndEncryptSsl(SSLInfo incoming, SSLInfo oldEncrypted) {
+        if (incoming == null) {
+            return null;
+        }
+        if (oldEncrypted == null) {
+            encryptSslSensitiveFields(incoming);
+            return incoming;
+        }
+        // Public fields: incoming wins (empty string clears).
+        oldEncrypted.setTlsMode(incoming.getTlsMode());
+        oldEncrypted.setCaPem(incoming.getCaPem());
+        oldEncrypted.setClientCertPem(incoming.getClientCertPem());
+        oldEncrypted.setKeyStoreType(incoming.getKeyStoreType());
+        oldEncrypted.setClientPrivateKeyPem(encryptString(incoming.getClientPrivateKeyPem()));
+        oldEncrypted.setClientKeyPassword(encryptString(incoming.getClientKeyPassword()));
+        oldEncrypted.setKeyStoreBytes(encryptString(incoming.getKeyStoreBytes()));
+        oldEncrypted.setKeyStorePassword(encryptString(incoming.getKeyStorePassword()));
+        return oldEncrypted;
     }
 
     private int normalizePageNo(Integer pageNo) {
