@@ -40,6 +40,8 @@ export default {
   'common.button.hideHistoryResult': '기록 숨기기',
   'common.button.format': '서식 지정',
   'common.button.explain': '설명',
+  'common.button.explainJson': 'EXPLAIN JSON',
+  'common.button.explainAnalyze': 'EXPLAIN ANALYZE',
   'common.button.optimize': 'SQL 최적화',
   'common.message.successfulConfig': '구성이 완료되었습니다',
   'common.text.successful': '성공',

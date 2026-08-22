@@ -406,6 +406,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           explain: true,
         });
         break;
+      case SQLOptType.EXPLAIN_JSON:
+        void handleMysqlExplain('json');
+        break;
+      case SQLOptType.EXPLAIN_ANALYZE:
+        void handleMysqlExplain('analyze');
+        break;
       case SQLOptType.OPEN_SETTINGS:
         setSettingPageActiveTab('editSetting');
         break;
@@ -857,6 +863,24 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       .catch((error) => {
         setErrorMessage(error.errorMessage || '');
       });
+  };
+
+  const handleMysqlExplain = async (mode: 'json' | 'analyze') => {
+    const sql = sqlEditorRef.current?.getSelectedContent() || getValue();
+    if (!sql) {
+      staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+      return;
+    }
+    try {
+      const result = mode === 'json' ? await sqlService.getExplainJson(sql) : await sqlService.getExplainAnalyze(sql);
+      modal.info({
+        title: mode === 'json' ? i18n('common.button.explainJson') : i18n('common.button.explainAnalyze'),
+        width: 860,
+        content: <pre style={{ maxHeight: 560, margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{result}</pre>,
+      });
+    } catch (error: any) {
+      setErrorMessage(error?.errorMessage || '');
+    }
   };
 
   /**

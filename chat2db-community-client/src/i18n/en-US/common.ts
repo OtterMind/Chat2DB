@@ -40,6 +40,8 @@ export default {
   'common.button.hideHistoryResult': 'Hide History',
   'common.button.format': 'Format',
   'common.button.explain': 'Explain',
+  'common.button.explainJson': 'EXPLAIN JSON',
+  'common.button.explainAnalyze': 'EXPLAIN ANALYZE',
   'common.button.optimize': 'SQL Optimize',
   'common.message.successfulConfig': 'Successful configuration',
   'common.text.successful': 'successful',

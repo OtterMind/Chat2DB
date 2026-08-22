@@ -43,6 +43,10 @@ const OperationLine = ({
     return [WorkspaceTabType.CONSOLE, WorkspaceTabType.LocalSQLFile].includes(type);
   }, [type]);
 
+  const showMysqlExplainButtons = useMemo(() => {
+    return showRunButton && dbInfo.databaseType?.toUpperCase() === 'MYSQL';
+  }, [dbInfo.databaseType, showRunButton]);
+
   const showRoutineButtons = useMemo(() => {
     return isRoutineOperationSupportedDatabaseType(dbInfo.databaseType)
       && [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type);
@@ -149,6 +153,26 @@ const OperationLine = ({
               action(SQLOptType.EXECUTE_SINGLE_SQL);
             }}
           />
+        )}
+        {showMysqlExplainButtons && (
+          <>
+            <IconButton
+              className={styles.operatingButtonIcon}
+              code="icon-sort-ascending1"
+              size="sm"
+              disabled={shouldDisableActionButton}
+              title={i18n('common.button.explainJson')}
+              onClick={() => action(SQLOptType.EXPLAIN_JSON)}
+            />
+            <IconButton
+              className={styles.operatingButtonIcon}
+              code="icon-play1"
+              size="sm"
+              disabled={shouldDisableActionButton}
+              title={i18n('common.button.explainAnalyze')}
+              onClick={() => action(SQLOptType.EXPLAIN_ANALYZE)}
+            />
+          </>
         )}
         {showRunButton && (
           <IconButton

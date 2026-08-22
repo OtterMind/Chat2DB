@@ -40,6 +40,8 @@ export default {
   'common.button.hideHistoryResult': '履歴結果を非表示',
   'common.button.format': 'フォーマット',
   'common.button.explain': '実行計画',
+  'common.button.explainJson': 'EXPLAIN JSON',
+  'common.button.explainAnalyze': 'EXPLAIN ANALYZE',
   'common.button.optimize': 'SQL最適化',
   'common.message.successfulConfig': '設定成功',
   'common.text.successful': '成功',

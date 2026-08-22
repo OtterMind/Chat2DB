@@ -40,6 +40,8 @@ export default {
   'common.button.hideHistoryResult': '隐藏历史结果',
   'common.button.format': '格式化',
   'common.button.explain': '执行计划',
+  'common.button.explainJson': 'JSON 执行计划',
+  'common.button.explainAnalyze': '执行计划分析',
   'common.button.optimize': 'SQL优化',
   'common.message.successfulConfig': '配置成功',
   'common.text.successful': '成功',
