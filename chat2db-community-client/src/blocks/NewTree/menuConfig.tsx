@@ -182,6 +182,8 @@ export const dropMenuConfig = {
       // Copy & Tools
       OperationColumn.CopyMcpConfig,
       OperationColumn.CopyName,
+      OperationColumn.DatabaseProperties,
+      OperationColumn.Refresh,
       OperationColumn.Divider,
       OperationColumn.DeleteDatabase,
     ],

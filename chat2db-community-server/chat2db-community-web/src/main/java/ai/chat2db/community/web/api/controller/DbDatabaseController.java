@@ -25,6 +25,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import java.util.Map;
+import lombok.Data;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -115,6 +119,38 @@ public class DbDatabaseController {
         Database database = databaseConverter.createRequest2param(request);
         return DataResult.of(databaseService.createDatabase(database));
     }
+
+    /**
+     * Returns the database default character set and collation.
+     * <p>
+     * Endpoint: {@code GET /api/rdb/database/info?name=xxx}.
+     */
+    @GetMapping("/info")
+    public DataResult<Map<String, String>> info(@RequestParam("name") String name) {
+        return DataResult.of(databaseService.databaseInfo(name));
+    }
+
+    /**
+     * Generates an ALTER DATABASE statement preview for a character set / collation change.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/database/alter_preview}.
+     */
+    @PostMapping("/alter_preview")
+    public DataResult<String> alterPreview(@RequestBody @Valid AlterDatabasePreviewRequest request) {
+        return DataResult.of(databaseService.previewAlterDatabaseSql(
+                request.getDatabaseName(), request.getCharset(), request.getCollation()));
+    }
+
+    @Data
+    public static class AlterDatabasePreviewRequest {
+        @NotBlank
+        private String databaseName;
+
+        private String charset;
+
+        private String collation;
+    }
+
 
     /**
      * Handles modify database for databases.
