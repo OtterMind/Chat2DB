@@ -50,6 +50,7 @@ export enum OperationColumn {
   // Universal
   DeleteTreeNode = 'deleteTreeNode', // delete tree node
   Refresh = 'refresh', // Refresh menus at all levels
+  VariablesStatus = 'variablesStatus', // Variables and status (MYSQL-OPS-004)
   CreateConsole = 'createConsole', // Create a new console
   Rename = 'rename', // Rename
 

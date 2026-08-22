@@ -429,6 +429,34 @@ export interface ICopyTableParams extends ITableParams {
 // Copy table
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
+
+/** Variables / status (MYSQL-OPS-004). */
+export interface IVariableItem {
+  name: string;
+  value: string | null;
+}
+
+export interface IVariableEditMeta {
+  name: string;
+  type: 'STRING' | 'NUMBER' | 'ONOFF';
+  scope: 'SESSION' | 'GLOBAL' | 'BOTH';
+  highRisk: boolean;
+}
+
+const getVariableList = createRequest<{ scope: string; kind: string }, IVariableItem[]>(
+  '/api/rdb/variable/list',
+  { method: 'get' },
+);
+
+const getVariableEditable = createRequest<{ name: string }, IVariableEditMeta | null>(
+  '/api/rdb/variable/editable',
+  { method: 'get' },
+);
+
+const previewSetVariableSql = createRequest<
+  { variableName: string; value: string; scope: string },
+  string
+>('/api/rdb/variable/set_preview', { method: 'post' });
 const checkIsSelectSQL = createRequest<{ sql: string; dbType: DatabaseTypeCode }, boolean>('/api/sql/valid_select');
 
 const getDataSourceList = createRequest<IPageParams, IPageResponse<IConnectionDetails>>(
@@ -487,5 +515,8 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getVariableList,
+  getVariableEditable,
+  previewSetVariableSql,
   getDataSourceList,
 };
