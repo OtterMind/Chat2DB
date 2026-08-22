@@ -93,27 +93,30 @@ public class ClickHouseDBManager extends DefaultDBManager implements IDbManager 
     }
 
     private String setDatabaseInJdbcUrl(ConnectInfo connectInfo) {
-        String schemaName = connectInfo.getSchemaName();
-        String url = connectInfo.getUrl();
-        if (StringUtils.isBlank(schemaName)) {
+        return replaceDatabaseInJdbcUrl(connectInfo.getUrl(), connectInfo.getSchemaName());
+    }
+
+    static String replaceDatabaseInJdbcUrl(String url, String schemaName) {
+        if (StringUtils.isBlank(url) || StringUtils.isBlank(schemaName)) {
             return url;
         }
-        String connectAddress = connectInfo.getHost() + ":" + connectInfo.getPort();
-        String[] addressSplit = url.split(connectAddress);
-        if(addressSplit == null){
+
+        int queryStart = url.indexOf('?');
+        int fragmentStart = url.indexOf('#');
+        int suffixStart = queryStart >= 0 ? queryStart : url.length();
+        if (fragmentStart >= 0) {
+            suffixStart = Math.min(suffixStart, fragmentStart);
+        }
+        int authorityStart = url.indexOf("://");
+        if (authorityStart < 0 || authorityStart + 3 >= suffixStart) {
             return url;
         }
-        StringBuilder newUrl = new StringBuilder();
-        newUrl.append(addressSplit[0]).append(connectAddress).append("/").append(schemaName);
-        if (addressSplit.length == 2) {
-            if (StringUtils.isNotBlank(addressSplit[1])) {
-                String[] param = addressSplit[1].split("\\?");
-                if (param.length == 2) {
-                    newUrl.append("?").append(param[1]);
-                }
-            }
+
+        int pathStart = url.indexOf('/', authorityStart + 3);
+        if (pathStart < 0 || pathStart >= suffixStart) {
+            pathStart = suffixStart;
         }
-        return newUrl.toString();
+        return url.substring(0, pathStart) + "/" + schemaName + url.substring(suffixStart);
     }
 
     @Override
