@@ -295,6 +295,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revoke privileges',
   'workspace.databaseAccount.lockUnsupported':
     'Account lock is not supported by this MySQL version or current account privileges',
+  'workspace.databaseAccount.scopeFunction': 'Function (db.func)',
+  'workspace.databaseAccount.scopeProcedure': 'Procedure (db.proc)',
+  'workspace.databaseAccount.object': 'Object',
+  'workspace.databaseAccount.selectObject': 'Select object',
   'workspace.routine.button.invoke': 'Invoke routine',
   'workspace.routine.button.apply': 'Apply changes',
   'workspace.routine.button.refresh': 'Reload DDL',

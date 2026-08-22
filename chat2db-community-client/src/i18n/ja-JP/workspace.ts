@@ -295,6 +295,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.databaseAccount.scopeFunction': '関数 (db.func)',
+  'workspace.databaseAccount.scopeProcedure': 'プロシージャ (db.proc)',
+  'workspace.databaseAccount.object': 'オブジェクト',
+  'workspace.databaseAccount.selectObject': 'オブジェクトを選択',
   'workspace.routine.button.invoke': 'ルーチンを呼び出す',
   'workspace.routine.button.apply': '変更を適用',
   'workspace.routine.button.refresh': 'DDL を再読み込み',
