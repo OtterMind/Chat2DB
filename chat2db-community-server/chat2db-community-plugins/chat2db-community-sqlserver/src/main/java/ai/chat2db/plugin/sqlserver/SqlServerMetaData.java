@@ -725,11 +725,11 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
         TableIndexColumn tableIndexColumn = new TableIndexColumn();
         tableIndexColumn.setColumnName(resultSet.getString("COLUMN_NAME"));
         tableIndexColumn.setOrdinalPosition(resultSet.getShort("COLUMN_POSITION"));
-        int collation = resultSet.getInt("DESCEND");
-        if (collation == 1) {
-            tableIndexColumn.setAscOrDesc("ASC");
-        } else {
+        int isDescending = resultSet.getInt("DESCEND");
+        if (isDescending == 1) {
             tableIndexColumn.setAscOrDesc("DESC");
+        } else {
+            tableIndexColumn.setAscOrDesc("ASC");
         }
         return tableIndexColumn;
     }
