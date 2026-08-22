@@ -9,6 +9,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MysqlAccountSqlBuilderTest {
 
@@ -81,6 +82,45 @@ class MysqlAccountSqlBuilderTest {
                 "SHOW GRANTS FOR 'alice''s'@'10.0.%'",
                 MysqlAccountSqlBuilder.showGrantsSql("alice's", "10.0.%")
         );
+    }
+
+    @Test
+    void alterAuthPluginBuildsPluginPasswordAndTlsPreview() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_AUTH_PLUGIN);
+        command.setAuthPlugin("caching_sha2_password");
+        command.setPassword("secret");
+        command.setTlsRequirement("SPECIFIED");
+        command.setTlsCipher("AES256");
+        command.setTlsIssuer("issuer");
+
+        assertEquals(
+                "ALTER USER 'alice''s'@'10.0.%' IDENTIFIED WITH caching_sha2_password BY 'secret' REQUIRE CIPHER 'AES256' AND ISSUER 'issuer'",
+                MysqlAccountSqlBuilder.buildSql(command));
+        assertEquals(
+                "ALTER USER 'alice''s'@'10.0.%' IDENTIFIED WITH caching_sha2_password BY '******' REQUIRE CIPHER 'AES256' AND ISSUER 'issuer'",
+                MysqlAccountSqlBuilder.buildDisplaySql(command));
+    }
+
+    @Test
+    void alterAuthPluginRejectsEmptyAndInvalidTlsCombinations() {
+        AccountOperationRequest empty = base(AccountActionTypeEnum.ALTER_AUTH_PLUGIN);
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(empty));
+
+        AccountOperationRequest x509WithMaterial = base(AccountActionTypeEnum.ALTER_AUTH_PLUGIN);
+        x509WithMaterial.setTlsRequirement("X509");
+        x509WithMaterial.setTlsSubject("CN=app");
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(x509WithMaterial));
+
+        AccountOperationRequest specifiedWithoutMaterial = base(AccountActionTypeEnum.ALTER_AUTH_PLUGIN);
+        specifiedWithoutMaterial.setTlsRequirement("SPECIFIED");
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(specifiedWithoutMaterial));
+    }
+
+    @Test
+    void alterAuthPluginRejectsUnsafePluginName() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_AUTH_PLUGIN);
+        command.setAuthPlugin("native_password; DROP USER root");
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(command));
     }
 
     private AccountOperationRequest base(AccountActionTypeEnum actionType) {

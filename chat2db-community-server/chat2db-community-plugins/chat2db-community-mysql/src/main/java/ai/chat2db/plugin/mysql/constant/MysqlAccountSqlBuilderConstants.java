@@ -38,6 +38,21 @@ public final class MysqlAccountSqlBuilderConstants {
     public static final String ERROR_KEY_ACCOUNT_ACTION_REQUIRED = "mysql.account.actionRequired";
     public static final String ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED = "mysql.account.passwordRequired";
     public static final String ERROR_KEY_ACCOUNT_INVALID_ACCOUNT_NAME = "mysql.account.invalidAccountName";
+    public static final String ERROR_KEY_ACCOUNT_INVALID_AUTH_PLUGIN = "mysql.account.invalidAuthPlugin";
+    public static final String ERROR_KEY_ACCOUNT_SECURITY_CHANGE_REQUIRED = "mysql.account.securityChangeRequired";
+    public static final String ERROR_KEY_ACCOUNT_TLS_MATERIAL_UNSUPPORTED = "mysql.account.tlsMaterialUnsupported";
+    public static final String ERROR_KEY_ACCOUNT_TLS_MATERIAL_REQUIRED = "mysql.account.tlsMaterialRequired";
+
+    public static final String SQL_IDENTIFIED_WITH = " IDENTIFIED WITH ";
+    public static final String SQL_BY = " BY ";
+    public static final String SQL_REQUIRE = " REQUIRE ";
+    public static final String SQL_CIPHER = " CIPHER ";
+    public static final String SQL_ISSUER = " ISSUER ";
+    public static final String SQL_SUBJECT = " SUBJECT ";
+    public static final String SQL_AND = " AND ";
+    public static final String SQL_TLS_NONE = "NONE";
+    public static final String SQL_TLS_SSL = "SSL";
+    public static final String SQL_TLS_X509 = "X509";
 
     private MysqlAccountSqlBuilderConstants() {
     }

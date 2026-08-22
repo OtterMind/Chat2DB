@@ -40,7 +40,7 @@ public class DbAccountAdminServiceImpl implements IDbAccountAdminService {
 
     @Override
     public AccountPreview preview(AccountOperationRequest command) {
-        return requireAccountManager().preview(command);
+        return requireAccountManager().preview(requireConnection(), command);
     }
 
     @Override

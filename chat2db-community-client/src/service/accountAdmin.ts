@@ -9,6 +9,7 @@ export enum AccountActionType {
   DROP_USER = 'DROP_USER',
   GRANT_PRIVILEGE = 'GRANT_PRIVILEGE',
   REVOKE_PRIVILEGE = 'REVOKE_PRIVILEGE',
+  ALTER_AUTH_PLUGIN = 'ALTER_AUTH_PLUGIN',
 }
 
 export enum AccountPrivilegeScope {
@@ -56,6 +57,9 @@ export interface AccountCapability {
   connectionUser?: string;
   accountListReadable: boolean;
   accountLockSupported: boolean;
+  authPluginManagementSupported?: boolean;
+  tlsRequirementManagementSupported?: boolean;
+  authenticationPlugins?: string[];
   editablePrivileges: AccountPrivilege[];
   message?: string;
 }
@@ -69,6 +73,11 @@ export interface AccountCommand extends AccountBaseParams {
   grantOption?: boolean;
   password?: string;
   previewToken?: string;
+  authPlugin?: string;
+  tlsRequirement?: string;
+  tlsCipher?: string;
+  tlsIssuer?: string;
+  tlsSubject?: string;
 }
 
 export interface AccountPreview {

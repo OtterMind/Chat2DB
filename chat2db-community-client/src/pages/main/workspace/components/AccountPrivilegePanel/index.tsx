@@ -59,6 +59,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const previewRequestRef = useRef(0);
   const updateTreeNodeDataByDetail = useTreeStore((state) => state.updateTreeNodeDataByDetail);
   const accountLockSupported = capability?.accountLockSupported !== false;
+  const securityManagementSupported = capability?.authPluginManagementSupported === true;
   const { token } = theme.useToken();
   const submitButtonStyle = useMemo(
     () =>
@@ -79,6 +80,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const watchedPrivileges = Form.useWatch('privileges', form);
   const watchedGrantOption = Form.useWatch('grantOption', form);
   const watchedActionType = Form.useWatch('actionType', form);
+  const watchedTlsRequirement = Form.useWatch('tlsRequirement', accountForm);
 
   const selectedAccount =
     uniqueData?.user && uniqueData?.host
@@ -377,6 +379,11 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       user: selectedAccount?.user,
       host: selectedAccount?.host,
       password: '',
+      authPlugin: undefined,
+      tlsRequirement: undefined,
+      tlsCipher: undefined,
+      tlsIssuer: undefined,
+      tlsSubject: undefined,
     });
   }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
 
@@ -391,6 +398,11 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         user: values.user,
         host: values.host,
         password: values.password,
+        authPlugin: values.authPlugin,
+        tlsRequirement: values.tlsRequirement,
+        tlsCipher: values.tlsCipher,
+        tlsIssuer: values.tlsIssuer,
+        tlsSubject: values.tlsSubject,
         actionType: accountActionType,
       }).then(() => {
         setAccountModalOpen(false);
@@ -448,6 +460,20 @@ const AccountPrivilegePanel = memo((props: IProps) => {
               >
                 {i18n('workspace.databaseAccount.changePassword')}
               </Button>
+              <Tooltip
+                title={
+                  securityManagementSupported
+                    ? i18n('workspace.databaseAccount.manageSecurity')
+                    : i18n('workspace.databaseAccount.securityUnsupported')
+                }
+              >
+                <Button
+                  disabled={!selectedAccount || !securityManagementSupported}
+                  onClick={() => openAccountModal(AccountActionType.ALTER_AUTH_PLUGIN)}
+                >
+                  {i18n('workspace.databaseAccount.manageSecurity')}
+                </Button>
+              </Tooltip>
               <Tooltip
                 title={
                   accountLockSupported
@@ -603,6 +629,47 @@ const AccountPrivilegePanel = memo((props: IProps) => {
               <Input.Password />
             </Form.Item>
           )}
+          {accountActionType === AccountActionType.ALTER_AUTH_PLUGIN && (
+            <>
+              <Form.Item name="authPlugin" label={i18n('workspace.databaseAccount.authenticationPlugin')}>
+                <Select
+                  allowClear
+                  options={(capability?.authenticationPlugins || []).map((plugin) => ({
+                    label: plugin,
+                    value: plugin,
+                  }))}
+                  placeholder={i18n('workspace.databaseAccount.authenticationPluginPlaceholder')}
+                />
+              </Form.Item>
+              <Form.Item name="password" label={i18n('workspace.databaseAccount.password')}>
+                <Input.Password />
+              </Form.Item>
+              <Form.Item name="tlsRequirement" label={i18n('workspace.databaseAccount.tlsRequirement')}>
+                <Select
+                  allowClear
+                  options={[
+                    { label: 'NONE', value: 'NONE' },
+                    { label: 'SSL', value: 'SSL' },
+                    { label: 'X509', value: 'X509' },
+                    { label: i18n('workspace.databaseAccount.tlsSpecified'), value: 'SPECIFIED' },
+                  ]}
+                />
+              </Form.Item>
+              {watchedTlsRequirement === 'SPECIFIED' && (
+                <>
+                  <Form.Item name="tlsCipher" label={i18n('workspace.databaseAccount.tlsCipher')}>
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="tlsIssuer" label={i18n('workspace.databaseAccount.tlsIssuer')}>
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="tlsSubject" label={i18n('workspace.databaseAccount.tlsSubject')}>
+                    <Input />
+                  </Form.Item>
+                </>
+              )}
+            </>
+          )}
         </Form>
       </Modal>
       <Modal
@@ -652,6 +719,8 @@ function accountActionTitle(actionType: AccountActionType) {
   switch (actionType) {
     case AccountActionType.ALTER_PASSWORD:
       return i18n('workspace.databaseAccount.changePassword');
+    case AccountActionType.ALTER_AUTH_PLUGIN:
+      return i18n('workspace.databaseAccount.manageSecurity');
     case AccountActionType.LOCK_ACCOUNT:
       return i18n('workspace.databaseAccount.lockAccount');
     case AccountActionType.UNLOCK_ACCOUNT:
