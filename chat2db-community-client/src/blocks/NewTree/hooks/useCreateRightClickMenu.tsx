@@ -54,6 +54,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import ActiveTransactionsContent from '../components/ActiveTransactionsContent';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
@@ -402,6 +403,19 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.ActiveTransactions]: {
+        text: i18n('workspace.ops.activeTransactions'),
+        icon: 'icon-file-text',
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.activeTransactions'),
+            content: <ActiveTransactionsContent />,
+            footer: null,
+            width: 1100,
           });
         },
       },
