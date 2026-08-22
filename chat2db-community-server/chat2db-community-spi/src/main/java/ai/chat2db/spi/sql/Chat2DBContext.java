@@ -174,7 +174,12 @@ public class Chat2DBContext {
         ConnectInfo connectInfo = CONNECT_INFO_THREAD_LOCAL.get();
         if (connectInfo != null) {
             CONNECT_INFO_THREAD_LOCAL.remove();
-            ConnectionPool.close(connectInfo);
+            // Console-bound connections (manual transaction mode) stay bound across requests;
+            // only their ThreadLocal reference is cleared, the live connection is retained by
+            // ConsoleTransactionRegistry. Pool-owned connections are returned to the pool.
+            if (!Boolean.TRUE.equals(connectInfo.getConsoleOwn())) {
+                ConnectionPool.close(connectInfo);
+            }
         }
     }
 

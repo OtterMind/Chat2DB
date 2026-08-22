@@ -285,6 +285,9 @@ public class ConnectionPool {
         if (datasourceId == null) {
             return;
         }
+        // Sweep console-bound connections held outside the pool queue before invalidating
+        // generations, so editing/closing a datasource also reclaims open transactions.
+        ConsoleTransactionRegistry.releaseByDataSourceId(datasourceId);
         CONNECTION_GENERATIONS.merge(datasourceId, 1L, Long::sum);
         CONNECTION_MAP.computeIfPresent(datasourceId, (key, keyMap) -> {
             for (Map.Entry<String, LinkedBlockingQueue<ConnectInfo>> entry : keyMap.entrySet()) {
@@ -317,6 +320,12 @@ public class ConnectionPool {
 
 
     public static void close(ConnectInfo connectInfo) {
+        // Console-bound connections (manual transaction mode) are owned by
+        // ConsoleTransactionRegistry. They must NOT be returned to the pool queue while a
+        // transaction is open; their lifecycle is resolved by commit/rollback/release.
+        if (Boolean.TRUE.equals(connectInfo.getConsoleOwn())) {
+            return;
+        }
         connectInfo.setLastAccessTime(new Date());
         connectInfo.releaseInUse();
 

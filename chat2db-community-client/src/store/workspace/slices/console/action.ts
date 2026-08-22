@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand/vanilla';
 import { WorkspaceStore } from '../../store';
-import { ConsoleState } from './initialState';
+import { ConsoleState, TransactionMode, TransactionState } from './initialState';
 import { ICreateConsoleParams, IBoundInfo, IWorkspaceTab } from '@/typings';
 import historyService from '@/service/history';
 import { ConsoleOpenedStatus, ConsoleStatus, WorkspaceTabType } from '@/constants';
@@ -11,6 +11,8 @@ import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
+import { confirmAndKillTerminalTabs } from '@/utils/terminalSession';
+import confirmAndReleaseTransaction from '@/utils/transactionSession';
 import { applyWorkspaceTabBoundInfo, buildConsoleDefaultTabName } from '../../utils/consoleTabName';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
@@ -87,6 +89,14 @@ export interface ConsoleAction {
   deleteEditor: (id: number | string) => void;
   appendConsole: (params: { id: number | string; content: string; type?: EditorSetValueType; space?: boolean }) => void;
   deleteActiveWorkspaceTab: () => Promise<void>;
+  /** Toggles the console between auto-commit and manual transaction mode. */
+  setTransactionMode: (consoleId: number, mode: TransactionMode) => void;
+  /** Updates the console's runtime transaction state (in-transaction / outcome). */
+  setTransactionState: (consoleId: number, patch: Partial<TransactionState>) => void;
+  /** Clears the console's transaction state (e.g. after release or on close). */
+  clearTransactionState: (consoleId: number) => void;
+  /** Returns the console's current transaction state, or undefined. */
+  getTransactionState: (consoleId: number) => TransactionState | undefined;
 }
 
 export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtools', never]], [], ConsoleAction> = (
@@ -311,6 +321,9 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     ) {
       return;
     }
+    if (activeWorkspaceTab && !(await confirmAndReleaseTransaction([activeWorkspaceTab]))) {
+      return;
+    }
 
     // Delete editor instance
     if (editorList && editorList[activeConsoleId]) {
@@ -386,5 +399,42 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     set({ workspaceTabSplitLayout: nextWorkspaceTabSplitLayout });
     get().setWorkspaceTabList(newList);
     get().setActiveConsoleId(newActiveId);
+  },
+
+  setTransactionMode: (consoleId, mode) => {
+    const map = get().transactionStateMap || {};
+    const current = map[consoleId] || { mode: 'auto', inTransaction: false };
+    set({
+      transactionStateMap: {
+        ...map,
+        [consoleId]: { ...current, mode },
+      },
+    });
+  },
+
+  setTransactionState: (consoleId, patch) => {
+    const map = get().transactionStateMap || {};
+    const current = map[consoleId] || { mode: 'auto', inTransaction: false };
+    set({
+      transactionStateMap: {
+        ...map,
+        [consoleId]: { ...current, ...patch },
+      },
+    });
+  },
+
+  clearTransactionState: (consoleId) => {
+    const map = get().transactionStateMap || {};
+    if (!(consoleId in map)) {
+      return;
+    }
+    const next = { ...map };
+    delete next[consoleId];
+    set({ transactionStateMap: next });
+  },
+
+  getTransactionState: (consoleId) => {
+    const map = get().transactionStateMap || {};
+    return map[consoleId];
   },
 });

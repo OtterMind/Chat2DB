@@ -257,6 +257,24 @@ export default {
   'workspace.terminal.closeBusyContent':
     'A program is running in this terminal. Closing the tab will terminate the program and terminal process.',
   'workspace.terminal.closeConfirm': 'Close and terminate',
+  'workspace.transaction.closeTitle': 'Uncommitted transaction',
+  'workspace.transaction.closeContent':
+    'This console has an open transaction with uncommitted changes. How do you want to proceed?',
+  'workspace.transaction.commit': 'Commit and close',
+  'workspace.transaction.rollback': 'Roll back and close',
+  'workspace.transaction.cancel': 'Cancel',
+  'workspace.transaction.inTransaction': 'In transaction',
+  'workspace.transaction.autoCommitOn': 'Auto-commit',
+  'workspace.transaction.ddlImplicitCommitWarning':
+    'This statement implicitly commits the current transaction.',
+  'workspace.transaction.myIsamNotProtected':
+    'Non-transactional engines (e.g. MyISAM) are not protected by Rollback.',
+  'workspace.transaction.rollbackOutcomeUnknown':
+    'Rollback outcome is unknown. The connection was discarded; please verify the data manually.',
+  'workspace.transaction.switchConnectionTitle': 'Uncommitted transaction',
+  'workspace.transaction.switchConnectionContent':
+    'Switching the connection will roll back the current uncommitted transaction. Continue?',
+  'workspace.transaction.releaseFailed': 'Commit/Rollback failed. The transaction is still open; the console was not closed.',
   'workspace.localSqlFileTree.revealFailed': 'Failed to reveal file',
   'workspace.databaseAccount.title': 'Users',
   'workspace.databaseAccount.open': 'Open Users',
@@ -295,6 +313,27 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revoke privileges',
   'workspace.databaseAccount.lockUnsupported':
     'Account lock is not supported by this MySQL version or current account privileges',
+  'workspace.tablespace.title': 'Tablespaces',
+  'workspace.tablespace.create': 'Create Tablespace',
+  'workspace.tablespace.createTitle': 'Create InnoDB General Tablespace',
+  'workspace.tablespace.createSuccess': 'Tablespace created successfully',
+  'workspace.tablespace.name': 'Tablespace name',
+  'workspace.tablespace.newName': 'New tablespace name',
+  'workspace.tablespace.dataFile': 'Data file',
+  'workspace.tablespace.dataFileTooltip':
+    'Path on the MySQL server filesystem (e.g. ts_data.ibd). Emitted verbatim; never validated or written by the application.',
+  'workspace.tablespace.fileBlockSize': 'File block size',
+  'workspace.tablespace.fileBlockSizeTooltip': 'Optional. Page size for compressed tables (e.g. 8192).',
+  'workspace.tablespace.rename': 'Rename Tablespace',
+  'workspace.tablespace.renameTitle': 'Rename Tablespace',
+  'workspace.tablespace.renameSuccess': 'Tablespace renamed successfully',
+  'workspace.tablespace.renameNotSupported': 'Renaming a tablespace requires MySQL 8.0 or later',
+  'workspace.tablespace.delete': 'Delete Tablespace',
+  'workspace.tablespace.deleteTitle': 'Delete Tablespace',
+  'workspace.tablespace.inputTablespaceName': 'Type tablespace name ',
+  'workspace.tablespace.confirmNameMismatch': 'The input does not match the name',
+  'workspace.deleteDatabaseSchema.tablespace.warningDesc':
+    'This cannot be undone. Confirm the tablespace name and SQL preview are exactly correct. A non-empty tablespace cannot be dropped.',
   'workspace.routine.button.invoke': 'Invoke routine',
   'workspace.routine.button.apply': 'Apply changes',
   'workspace.routine.button.refresh': 'Reload DDL',

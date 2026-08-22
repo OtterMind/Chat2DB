@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.model.runtime.TransactionStateResponse;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.McpConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbObjectsQueryRequest;
@@ -60,6 +61,62 @@ public interface IDbConnectionContextService {
      * Closes the current connection context and releases runtime resources.
      */
     void close();
+
+    /**
+     * Begins a manual transaction for the console identified by the request: borrows one
+     * isolated JDBC connection, switches it to auto-commit off, and binds it to the console
+     * so subsequent executions in the same console reuse it.
+     *
+     * @param dbConnectionContextRequest connection context parameters (consoleId required).
+     * @return resulting transaction state.
+     */
+    TransactionStateResponse beginManualTransaction(DbConnectionContextRequest dbConnectionContextRequest);
+
+    /**
+     * Commits the console's open transaction and releases the bound connection.
+     *
+     * @param dbConnectionContextRequest connection context parameters (consoleId required).
+     * @return resulting transaction state, including the commit outcome.
+     */
+    TransactionStateResponse commitTransaction(DbConnectionContextRequest dbConnectionContextRequest);
+
+    /**
+     * Rolls back the console's open transaction and releases the bound connection.
+     *
+     * @param dbConnectionContextRequest connection context parameters (consoleId required).
+     * @return resulting transaction state, including the rollback outcome.
+     */
+    TransactionStateResponse rollbackTransaction(DbConnectionContextRequest dbConnectionContextRequest);
+
+    /**
+     * Returns the current transaction state for the console.
+     *
+     * @param dbConnectionContextRequest connection context parameters (consoleId required).
+     * @return current transaction state.
+     */
+    TransactionStateResponse getTransactionState(DbConnectionContextRequest dbConnectionContextRequest);
+
+    /**
+     * Releases the console's bound connection. Used when a console is closed or its
+     * connection changes; rolls back any open transaction first.
+     *
+     * @param dbConnectionContextRequest connection context parameters (consoleId required).
+     */
+    void releaseBoundConnection(DbConnectionContextRequest dbConnectionContextRequest);
+
+    /**
+     * Checks whether the console currently has an open (uncommitted) manual transaction.
+     *
+     * @param consoleId console identifier.
+     * @return true when a manual transaction is open for the console.
+     */
+    boolean isInTransaction(Long consoleId);
+
+    /**
+     * Releases every console-bound transaction, rolling back any open ones. Intended for
+     * application shutdown so no bound connection leaks.
+     */
+    void releaseAllBoundTransactions();
 
     /**
      * Returns the current connection profile bound to the execution scope.

@@ -330,6 +330,11 @@ class DatabaseObjectDeleteServiceImplTest {
         }
 
         @Override
+        public void releaseAllBoundTransactions() {
+            // No-op mock: the delete flow does not open console-bound transactions.
+        }
+
+        @Override
         public ConnectionProfile currentProfile() {
             if (Chat2DBContext.getConnectInfo() == null) {
                 bindProfile(profile);

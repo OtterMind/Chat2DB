@@ -26,6 +26,7 @@ import { useTreeStore } from '@/store/tree';
 import { isTemporaryId } from '@/utils';
 import { readClipboard } from '@/utils/clipboard';
 import executeSql from '@/service/executeSql';
+import transactionServer from '@/service/transaction';
 import { parseClipboardTextToSqlInTokens } from '@/utils/sqlInClipboard';
 import {
   createDatabaseObjectTreeNodeKey,
@@ -105,6 +106,9 @@ const BASIC_EDITOR_ACTIONS = new Set<SQLOptType>([
   SQLOptType.SAVE_FILE,
   SQLOptType.SAVE_FILE_TO_DESKTOP,
   SQLOptType.OPEN_CONTENT_DIFF,
+  SQLOptType.TOGGLE_AUTO_COMMIT,
+  SQLOptType.COMMIT_TRANSACTION,
+  SQLOptType.ROLLBACK_TRANSACTION,
 ]);
 
 const READONLY_ALLOWED_ACTIONS = new Set<SQLOptType>([
@@ -328,6 +332,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     savedSqlRecord: hasSavedSqlRecord,
   });
 
+  const consoleIdForTx = typeof dbInfo?.consoleId === 'number' ? dbInfo.consoleId : undefined;
+  const transactionState = useWorkspaceStore((state) =>
+    consoleIdForTx != null ? state.transactionStateMap?.[consoleIdForTx] : undefined,
+  );
+  const showTransactionControls = isConsole && consoleIdForTx != null;
+
   const handleAction = (actionType: SQLOptType, params?: any) => {
     if (isReadOnly && !READONLY_ALLOWED_ACTIONS.has(actionType)) {
       return;
@@ -415,12 +425,95 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       case SQLOptType.EDIT_TABLE:
         handleEditTable(contextTableIdentifier);
         break;
+      case SQLOptType.TOGGLE_AUTO_COMMIT:
+        void handleToggleAutoCommit();
+        break;
+      case SQLOptType.COMMIT_TRANSACTION:
+        void handleCommitTransaction();
+        break;
+      case SQLOptType.ROLLBACK_TRANSACTION:
+        void handleRollbackTransaction();
+        break;
       default:
         break;
     }
     setContextMenuInfo(contextMenuDefaultConfig);
     setContextTableIdentifier(null);
   };
+
+  const resolveConsoleId = (): number | undefined => {
+    const consoleId = dbInfo?.consoleId;
+    return typeof consoleId === 'number' ? consoleId : undefined;
+  };
+
+  // Manual transaction controls. Auto-commit toggle switches the console's mode; the actual
+  // server-side transaction is opened lazily before the next execution (see useSqlExecutor).
+  const handleToggleAutoCommit = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    const current = store.getTransactionState(consoleId);
+    const nextMode = current?.mode === 'manual' ? 'auto' : 'manual';
+    // Leaving manual mode with an open transaction: roll it back first so no uncommitted work
+    // is left dangling on the server.
+    if (current?.inTransaction && nextMode === 'auto') {
+      try {
+        await transactionServer.rollbackTransaction(transactionRequest(consoleId));
+      } catch (error) {
+        // Rollback failed; stay in manual mode so the Commit/Rollback controls remain
+        // available and the open transaction is not silently abandoned.
+        staticMessage.error(String(error));
+        return;
+      }
+    }
+    store.setTransactionMode(consoleId, nextMode);
+  };
+
+  const handleCommitTransaction = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    try {
+      const result = await transactionServer.commitTransaction(transactionRequest(consoleId));
+      useWorkspaceStore.getState().setTransactionState(consoleId, {
+        inTransaction: false,
+        lastOutcome: result?.outcome,
+        lastError: result?.lastError,
+      });
+    } catch (error) {
+      staticMessage.error(String(error));
+    }
+  };
+
+  const handleRollbackTransaction = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    try {
+      const result = await transactionServer.rollbackTransaction(transactionRequest(consoleId));
+      useWorkspaceStore.getState().setTransactionState(consoleId, {
+        inTransaction: false,
+        lastOutcome: result?.outcome,
+        lastError: result?.lastError,
+      });
+      if (result?.outcome === 'UNKNOWN') {
+        staticMessage.warning(i18n('workspace.transaction.rollbackOutcomeUnknown'));
+      }
+    } catch (error) {
+      staticMessage.error(String(error));
+    }
+  };
+
+  const transactionRequest = (consoleId: number) => ({
+    dataSourceId: dbInfo?.dataSourceId as number,
+    databaseName: dbInfo?.databaseName,
+    schemaName: dbInfo?.schemaName,
+    consoleId,
+  });
 
   const handleExecuteRoutine = async () => {
     const routineRequest = getRoutineOperationRequest(type, dbInfo);
@@ -1170,6 +1263,8 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           setDBInfo={setDBInfo}
           contentDiffEnabled={enableContentDiffHints}
           action={handleAction}
+          transactionState={transactionState}
+          showTransactionControls={showTransactionControls}
         />
       )}
       <div ref={editorViewportRef} style={{ position: 'relative', flex: 1, height: '0px', width: '100%' }}>
