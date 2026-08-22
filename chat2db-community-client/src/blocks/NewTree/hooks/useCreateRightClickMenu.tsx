@@ -54,6 +54,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import PartitionsContent from '../components/PartitionsContent';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
@@ -402,6 +403,25 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.Partitions]: {
+        text: i18n('workspace.ops.partitions'),
+        icon: 'icon-table',
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.partitions'),
+            content: (
+              <PartitionsContent
+                dataSourceId={dataSourceId!}
+                databaseName={extraParams.databaseName}
+                tableName={originalTitle}
+              />
+            ),
+            footer: null,
+            width: 1150,
           });
         },
       },
