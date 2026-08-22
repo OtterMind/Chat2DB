@@ -358,27 +358,10 @@ export default function Studio() {
       <div className="ed">
         <ProjectAutosave />
 
+        {/* The monitor is the stage: the properties panel it used to share the
+            row with said nothing the timeline does not already show. */}
         <div className="ed__stage">
           <PreviewMonitor />
-
-          <aside className="ed__inspector">
-            <h4>{t('Properties', 'مشخصات')}</h4>
-            {selectedId ? (
-              (() => {
-                const clip = clips.find((c) => c.id === selectedId)!
-                return (
-                  <>
-                    <div className="ce-kv"><span>{t('Name', 'نام')}</span><strong>{clip.label}</strong></div>
-                    <div className="ce-kv"><span>{t('Start', 'شروع')}</span><strong className="ce-num" dir="ltr">{formatTimecode(clip.start, true)}</strong></div>
-                    <div className="ce-kv"><span>{t('Duration', 'مدت')}</span><strong className="ce-num" dir="ltr">{formatTimecode(clip.duration, true)}</strong></div>
-                    <div className="ce-kv"><span>{t('In point', 'نقطه ورود')}</span><strong className="ce-num" dir="ltr">{formatTimecode(clip.offset, true)}</strong></div>
-                  </>
-                )
-              })()
-            ) : (
-              <p className="ce-hint">{t('Select a clip to see its properties.', 'یک کلیپ را انتخاب کن تا مشخصاتش اینجا بیاید.')}</p>
-            )}
-          </aside>
         </div>
 
         <div className="ed__toolbar">

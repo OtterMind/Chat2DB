@@ -363,6 +363,11 @@ const layout = await page.evaluate(() => ({
   toolbarZoomSlider: Boolean(document.querySelector('.ed__zoom')),
   scaleInsideTimeline: Boolean(document.querySelector('.tl__corner .tl__cornerslider')),
   pageHeading: Boolean(document.querySelector('.ce-page__head')),
+  tabs: Boolean(document.querySelector('.ce-tabs')),
+  oldHeader: Boolean(document.querySelector('.ce-header')),
+  projectBar: Boolean(document.querySelector('.pj')),
+  inspector: Boolean(document.querySelector('.ed__inspector')),
+  dockedBrand: Boolean(document.querySelector('.ce-brandbtn.is-docked')),
 }))
 if (!layout.zoomBarAboveTimeline && !layout.toolbarZoomSlider) ok('the separate scale bar and the magnifiers are gone')
 else bad('the old zoom controls are still there', JSON.stringify(layout))
@@ -370,6 +375,14 @@ if (layout.scaleInsideTimeline) ok('the scale control lives inside the timeline'
 else bad('the timeline has no scale control', JSON.stringify(layout))
 if (!layout.pageHeading) ok('the editor has no heading strip above it')
 else bad('the editor still has a page heading', JSON.stringify(layout))
+if (!layout.tabs && !layout.oldHeader) ok('the tab bar and the old header are gone')
+else bad('a top bar is still rendered', JSON.stringify(layout))
+if (!layout.projectBar) ok('the save bar is out of the editor')
+else bad('the project bar is still above the preview', JSON.stringify(layout))
+if (!layout.inspector) ok('the Properties panel is gone')
+else bad('the Properties panel is still there', JSON.stringify(layout))
+if (layout.dockedBrand) ok('the wordmark is docked in the corner of a section')
+else bad('the docked wordmark is missing', JSON.stringify(layout))
 
 // Ctrl + wheel zooms the timeline.
 const zoomBefore = await page.evaluate(() => window.__ceEditor.getState().pxPerSecond)
@@ -713,27 +726,71 @@ else bad('muting the lane blanked the preview', JSON.stringify(mute.laneMuted))
 if (!mute.laneHidden.picture) ok('the eye hides the picture (mute no longer does)')
 else bad('hiding the lane did not remove the picture', JSON.stringify(mute.laneHidden))
 
-/* 11h — chrome fades away inside a section ---------------------------------- */
-const chrome = await page.evaluate(() => (window.__pending = (async () => {
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+/* 11h — the wordmark is the whole chrome ------------------------------------ */
+await page.evaluate(() => {
   location.hash = '#/'
-  await wait(700)
-  const onLauncher = Boolean(document.querySelector('.ce-header'))
+})
+await new Promise((r) => setTimeout(r, 900))
+const onLauncher = await page.evaluate(() => ({
+  hero: Boolean(document.querySelector('.ce-brandbtn.is-hero')),
+  docked: Boolean(document.querySelector('.ce-brandbtn.is-docked')),
+  actions: document.querySelectorAll('.ce-launcheractions button').length,
+}))
+if (onLauncher.hero && !onLauncher.docked) ok('the wordmark is centred on the launcher')
+else bad('the launcher wordmark is not centred', JSON.stringify(onLauncher))
+if (onLauncher.actions === 3) ok('the launcher keeps its three window actions')
+else bad('the launcher actions are missing', JSON.stringify(onLauncher))
+
+await page.evaluate(() => {
   location.hash = '#/studio'
-  await wait(900)
-  const inSection = Boolean(document.querySelector('.ce-header'))
-  const revealPill = Boolean(document.querySelector('.ce-reveal'))
-  document.querySelector('.ce-reveal')?.click()
-  await wait(700)
-  const afterReveal = Boolean(document.querySelector('.ce-header'))
-  return { onLauncher, inSection, revealPill, afterReveal }
+})
+await new Promise((r) => setTimeout(r, 900))
+const inSection = await page.evaluate(() => ({
+  hero: Boolean(document.querySelector('.ce-brandbtn.is-hero')),
+  docked: Boolean(document.querySelector('.ce-brandbtn.is-docked')),
+  actions: document.querySelectorAll('.ce-launcheractions button').length,
+}))
+if (inSection.docked && !inSection.hero) ok('entering a section docks the wordmark')
+else bad('the wordmark did not dock', JSON.stringify(inSection))
+if (inSection.actions === 0) ok('a section shows nothing but the wordmark')
+else bad('window actions leaked into a section', JSON.stringify(inSection))
+
+// …and the wordmark is the way home.
+await page.click('.ce-brandbtn')
+await new Promise((r) => setTimeout(r, 900))
+const backHome = await page.evaluate(() => ({
+  hash: location.hash,
+  hero: Boolean(document.querySelector('.ce-brandbtn.is-hero')),
+}))
+if ((backHome.hash === '' || backHome.hash === '#/') && backHome.hero)
+  ok('clicking the wordmark goes home')
+else bad('the wordmark does not navigate home', JSON.stringify(backHome))
+
+/* 11i — notifications are readable ------------------------------------------ */
+const toast = await page.evaluate(() => (window.__pending = (async () => {
+  location.hash = '#/studio'
+  await new Promise((r) => setTimeout(r, 800))
+  const store = window.__ceEditor
+  store.getState().clearTimeline()
+  const id = store.getState().addClip({
+    trackId: 'v1', start: 0, duration: 3, offset: 0, sourceDuration: 3,
+    src: window.__ceTestVertical, label: 'T', color: '#6366F1',
+  })
+  store.getState().select(id)
+  await new Promise((r) => setTimeout(r, 400))
+  const button = [...document.querySelectorAll('.tb__tool')].find((b) => /Mute/i.test(b.textContent ?? ''))
+  button?.click()
+  await new Promise((r) => setTimeout(r, 600))
+  const notice = document.querySelector('.ant-message-notice-content')
+  if (!notice) return { visible: false }
+  const style = getComputedStyle(notice)
+  const rgb = style.backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255]
+  const luma = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
+  return { visible: true, background: style.backgroundColor, luma, text: notice.textContent }
 })()))
-if (chrome.onLauncher) ok('the launcher keeps its header and tabs')
-else bad('the header is missing on the home screen')
-if (!chrome.inSection) ok('the header fades away inside a section (full screen)')
-else bad('the header is still there inside a section', JSON.stringify(chrome))
-if (chrome.revealPill && chrome.afterReveal) ok('the menu can be brought back')
-else bad('there is no way back to the menu', JSON.stringify(chrome))
+if (toast.visible && toast.luma < 0.35)
+  ok(`the notification is dark and readable (${toast.background}, "${toast.text?.trim()}")`)
+else bad('the notification is still unreadable', JSON.stringify(toast))
 
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
@@ -756,6 +813,16 @@ if (!home.editorTileSaysSoon) ok('the editor tile no longer claims to be "soon"'
 else bad('the editor tile still says "soon"')
 if (home.clipTools === 0) ok('clip tools are no longer on the home screen')
 else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
+
+const recents = await page.evaluate(() => ({
+  cards: document.querySelectorAll('.ce-reelcard').length,
+  draft: Boolean(document.querySelector('.ce-reelcard.is-unfinished')),
+  deletes: document.querySelectorAll('.ce-reelcard__del').length,
+}))
+if (recents.draft) ok('the unfinished project appears in Recent projects')
+else bad('the unfinished (autosaved) project is not offered on the home screen', JSON.stringify(recents))
+if (recents.deletes > 0) ok(`each saved project has a delete button (${recents.deletes})`)
+else bad('saved projects cannot be deleted from the home screen', JSON.stringify(recents))
 
 const hard = errors.filter(
   // antd's static-function advisory is a warning about theming, handled in CSS.

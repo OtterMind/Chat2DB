@@ -492,7 +492,7 @@ button { font-family: inherit; cursor: pointer; }
 /* ------------------------------------------------------------ editor ----- */
 .ed { display: flex; flex-direction: column; gap: 14px; }
 
-.ed__stage { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 240px; align-items: start; }
+.ed__stage { display: block; }
 /* the timeline is the working surface: cap the monitor so it stays on screen */
 .ed__preview {
   background: #06090f; border: 1px solid var(--border); border-radius: 16px;
@@ -503,12 +503,6 @@ button { font-family: inherit; cursor: pointer; }
 .ed__preview-hint { font-size: 12.5px; }
 .ed__tc { font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #e2e8f0; direction: ltr; }
 .ed__tc--sm { font-size: 13px; font-weight: 600; min-width: 68px; text-align: center; }
-
-.ed__inspector {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
-  max-height: 46vh; overflow: auto;
-}
-.ed__inspector h4 { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; }
 
 .ed__toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
@@ -632,7 +626,6 @@ button { font-family: inherit; cursor: pointer; }
 .tl__guide { position: absolute; top: 28px; bottom: 0; width: 1px; background: #38bdf8; pointer-events: none; }
 
 @media (max-width: 900px) {
-  .ed__stage { grid-template-columns: minmax(0, 1fr); }
 }
 
 .ce-update { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

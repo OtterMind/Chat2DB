@@ -121,7 +121,21 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
+13. **The wordmark is the only chrome.** No Electron menu (`Menu.setApplicationMenu(null)`
+   plus `autoHideMenuBar` — that white strip survived fullscreen), no tab bar, no
+   heading band, no properties panel, no save bar. The wordmark is a shared
+   `layoutId` element: centred on the launcher, docked top-left in a section, and
+   it is the way home. Anything that used to live in a bar now lives on the
+   launcher.
+14. **Persistence stays even when its UI goes.** `ProjectAutosave` is headless:
+   autosave every 20 s, `Ctrl+S`, and a flush on unload. Unfinished work is
+   offered as the first card under "Recent projects" on the home screen — where a
+   person looks for it — and every saved project has a delete button.
+15. **A message nobody can read is no message.** Static antd toasts/tooltips render
+   outside the theme provider and appeared as blank white shapes; they are styled
+   in `global.css` and the browser test asserts the notice's computed background
+   is dark.
+16. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
    for exactly the five channels FFmpeg can genuinely animate — x, y, scale,
    rotate, volume — built by `keyframe_expression()` in `compose.py` as
    piecewise-linear `if(lt(t,..),..)` chains (commas escaped!). Opacity is
@@ -130,45 +144,45 @@ gate that stops a broken installer from being published.
    to `scale=eval=frame` plus an `overlay` onto a transparent canvas, which is
    the only combination that reproduces "scale about the centre, then translate".
    Static clips keep the old, fast chain — `tests/test_keyframes.py` asserts that.
-14. **Mute silences, hide blanks — never the same switch.** Muting a video lane
+17. **Mute silences, hide blanks — never the same switch.** Muting a video lane
    used to remove it from the monitor (black screen). A lane now has two flags:
    `muted` (audio only, speaker icon) and `hidden` (picture, eye icon), and the
    compositor makes the identical distinction — `tests/test_effects.py` renders
    both cases and measures the frame.
-15. **One React instance.** Adding `framer-motion` to a running dev server
+18. **One React instance.** Adding `framer-motion` to a running dev server
    produced "invalid hook call" from a duplicated React in the optimiser cache
    while `tsc` stayed silent. `vite.config.ts` now sets
    `resolve.dedupe: ['react', 'react-dom']`.
-16. **A toggle must look pressed.** The clip Mute tool worked all along but gave
+19. **A toggle must look pressed.** The clip Mute tool worked all along but gave
    no feedback, so it read as broken. Toggles in the rail now render with an
    active state and confirm with a toast.
-17. **The preview may use a proxy, the export never may.** Import builds a 720p
+20. **The preview may use a proxy, the export never may.** Import builds a 720p
    H.264 copy (keyframe every 15 frames) in a worker thread for anything wider
    than 1280 px; `clip.proxy` is used by `PreviewMonitor` only, and
    `tests/test_proxy.py` asserts the render command still points at the original.
-18. **Centred playhead is a view mode, not a model change.** The marker is pinned
+21. **Centred playhead is a view mode, not a model change.** The marker is pinned
    to the middle and the lane carries half a viewport of padding on both sides, so
    `scrollLeft === playhead * pxPerSecond`. Scroll events set the playhead and the
    playhead sets the scroll — the loop is broken with a `programmatic` flag, not
    with timers. The classic mode is one click away in the timeline corner.
-19. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
+22. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
    film strip from `GET /api/media/thumb?path&t&h` (one JPEG per frame, cached in
    `~/CuttingEdge/data/thumbs`, times quantised to 0.1 s so zooming reuses the
    cache). Scale is by Ctrl+wheel or a two-finger pinch, anchored under the
    pointer — no slider anywhere, like the phone editors we are compared with.
-20. **Home starts sessions, the rail edits clips.** Catalogue entries carry
+23. **Home starts sessions, the rail edits clips.** Catalogue entries carry
    `place: 'editor'`; those tiles are gone from the home screen and appear in the
    editor's global tool rail instead (captions and silence removal run in place,
    the rest open their own screen).
-21. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
+24. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
    a thin strip between black walls; the stage now takes the project ratio
    (`aspect`, default `auto` = the first video clip's real pixel size) and the
    export dialog opens on the matching format. Clips carry `width`/`height` from
    the probe for this.
-22. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+25. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
    while nothing listened for a key; Studio now owns one `keydown` handler and
    skips inputs, textareas and modals.
-23. **Panels the timeline can open.** The tool rail's open panel lives in the store
+26. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 
@@ -225,6 +239,9 @@ freesound-python, apscheduler.
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.4.1: the bars are gone (menu bar, tabs, heading, properties, save bar),
+the wordmark navigates home and animates between hero and docked, readable toasts,
+unfinished projects and deletion on the home screen.
 Done in 0.4.0: keyframes (x, y, scale, rotate, volume) in the monitor and in the
 export, with markers on the clip and a panel that keys at the playhead.
 Done in 0.3.9: immersive sections (the chrome fades, the section fills the window,

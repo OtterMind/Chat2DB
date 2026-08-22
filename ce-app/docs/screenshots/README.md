@@ -1,6 +1,18 @@
-# Cutting Edge — the interface at 0.3.9
+# Cutting Edge — the interface at 0.4.1
 
 Every image below was captured from the **running application** at 1440×900 — no mock-ups.
+
+---
+
+## 0.4.1 — no bars at all
+
+The Electron menu, the tab strip, the heading band, the properties panel and the save
+bar are gone. The wordmark is centred on the launcher, docks into the top-left corner of
+a section, and is the way home.
+
+![Editor without any bars](10-editor-clean.png)
+
+![Home](11-home-clean.png)
 
 ---
 

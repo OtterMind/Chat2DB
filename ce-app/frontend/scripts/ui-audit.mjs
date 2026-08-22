@@ -126,13 +126,15 @@ for (const hash of ['#/dashboard', '#/studio', '#/settings', '#/', '#/new', '#/d
 await new Promise((r) => setTimeout(r, 700))
 const after = await page.evaluate(() => ({
   mounted: document.querySelectorAll('.ce-route').length,
-  headers: document.querySelectorAll('.ce-header').length,
+  // The header and the tab strip are gone by design; the single shared wordmark
+  // is the whole chrome now, and there must be exactly one of it.
+  headers: document.querySelectorAll('.ce-brandbtn').length,
   scrollTop: document.querySelector('.ce-content')?.scrollTop ?? 0,
 }))
 if (after.mounted !== 1) note('rapid-switch', `${after.mounted} screens mounted`)
-if (after.headers !== 1) note('rapid-switch', `${after.headers} headers mounted`)
+if (after.headers !== 1) note('rapid-switch', `${after.headers} wordmarks mounted`)
 if (after.scrollTop !== 0) note('rapid-switch', 'scroll position leaked between screens')
-console.log(`rapid-switch   mounted=${after.mounted} headers=${after.headers} scrollTop=${after.scrollTop}`)
+console.log(`rapid-switch   mounted=${after.mounted} wordmark=${after.headers} scrollTop=${after.scrollTop}`)
 
 // editor invariants: empty start, no overlapping clips, zoom control present
 // A hash change, not goto(): re-navigating to the same document raced with the
