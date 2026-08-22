@@ -38,6 +38,8 @@ export interface IColumnItemNew {
   ordinalPosition: number | null; // location
   nullable: NullableType | null; //Is it empty
   generatedColumn: string | null; // Whether to generate columns
+  generationExpression: string | null; // Generated column expression (MYSQL-OBJ-002)
+  generatedColumnType: string | null; // VIRTUAL | STORED
 
   charSetName: string | null; // Character set name
   collationName: string | null; // collation name

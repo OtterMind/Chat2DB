@@ -170,6 +170,10 @@ export const isSqliteExistingColumnReadonly = (
   );
 };
 
+export const shouldShowMysqlGeneratedColumn = (databaseType?: DatabaseTypeInput): boolean => {
+  return containsStrict(databaseCapabilities.tableEditorMysqlGeneratedColumnSupported, databaseType);
+};
+
 export const shouldShowSqlServerSparse = (databaseType?: DatabaseTypeInput): boolean => {
   return containsStrict(databaseCapabilities.tableEditorSqlServerSparseSupported, databaseType);
 };

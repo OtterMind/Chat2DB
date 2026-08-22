@@ -20,7 +20,7 @@ import { Context } from '../index';
 import { IColumnItemNew, IColumnTypes } from '@/typings';
 import i18n from '@/i18n';
 import { EditColumnOperationType, NullableType } from '@/constants';
-import { isSqliteExistingColumnReadonly, shouldShowSqlServerSparse } from '@/utils/databaseJudgments';
+import { isSqliteExistingColumnReadonly, shouldShowMysqlGeneratedColumn, shouldShowSqlServerSparse } from '@/utils/databaseJudgments';
 import CustomSelect from '@/components/CustomSelect';
 import Iconfont from '@/components/Iconfont';
 import { useStyles } from './style';
@@ -100,6 +100,8 @@ const createInitialData = () => {
     ordinalPosition: null,
     nullable: NullableType.Null,
     generatedColumn: null,
+    generationExpression: null,
+    generatedColumnType: null,
     charSetName: null,
     collationName: null,
     value: null,
@@ -581,6 +583,27 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
           <Form.Item labelCol={labelCol} label={i18n('editTable.label.defaultValue')} name="defaultValue">
             <CustomSelect options={databaseSupportField.defaultValues} />
           </Form.Item>
+        )}
+        {shouldShowMysqlGeneratedColumn(databaseType) && (
+          <>
+            <Form.Item
+              labelCol={labelCol}
+              label={i18n('editTable.label.generationExpression')}
+              name="generationExpression"
+            >
+              <Input autoComplete="off" placeholder={i18n('editTable.label.generationExpressionPlaceholder')} />
+            </Form.Item>
+            <Form.Item labelCol={labelCol} label={i18n('editTable.label.generatedColumnType')} name="generatedColumnType">
+              <Select
+                allowClear
+                placeholder={i18n('editTable.label.notGeneratedColumn')}
+                options={[
+                  { value: 'VIRTUAL', label: 'VIRTUAL' },
+                  { value: 'STORED', label: 'STORED' },
+                ]}
+              />
+            </Form.Item>
+          </>
         )}
         {editingConfig?.supportOnUpdateCurrentTimestamp && (
           <Form.Item

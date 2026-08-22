@@ -15,6 +15,7 @@ export const databaseCapabilities = {
   createDatabaseUnsupported: [DatabaseTypeCode.H2],
   createDatabaseCharsetSupported: [DatabaseTypeCode.MYSQL],
   createDatabaseCollationSupported: [DatabaseTypeCode.MYSQL],
+  tableEditorMysqlGeneratedColumnSupported: [DatabaseTypeCode.MYSQL],
   createSchemaUnsupported: [DatabaseTypeCode.ORACLE, DatabaseTypeCode.OSCAR],
   importExportUnsupported: [
     DatabaseTypeCode.REDIS,

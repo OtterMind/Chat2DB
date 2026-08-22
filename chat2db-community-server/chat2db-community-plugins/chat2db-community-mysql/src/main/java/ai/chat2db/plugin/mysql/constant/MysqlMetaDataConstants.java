@@ -68,6 +68,9 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_DATA_TYPE = "DATA_TYPE";
     public static final String FIELD_ENGINE_UPPER = "ENGINE";
     public static final String FIELD_EXTRA = "EXTRA";
+    public static final String FIELD_GENERATION_EXPRESSION = "GENERATION_EXPRESSION";
+    public static final String SQL_VIRTUAL_GENERATED = "VIRTUAL GENERATED";
+    public static final String SQL_STORED_GENERATED = "STORED GENERATED";
     public static final String FIELD_INDEX_COMMENT = "Index_comment";
     public static final String FIELD_INDEX_COMMENT_FALLBACK = "Comment";
     public static final String FIELD_INDEX_TYPE = "Index_type";

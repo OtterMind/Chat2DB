@@ -245,6 +245,15 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 column.setComment(resultSet.getString(FIELD_COLUMN_COMMENT));
                 column.setPrimaryKey(SQL_PRIMARY_KEY_FLAG.equalsIgnoreCase(resultSet.getString(FIELD_COLUMN_KEY)));
                 column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);
+                String extra = resultSet.getString(FIELD_EXTRA);
+                String generationExpression = resultSet.getString(FIELD_GENERATION_EXPRESSION);
+                if (StringUtils.isNotBlank(generationExpression)) {
+                    // VIRTUAL GENERATED / STORED GENERATED appear in EXTRA for generated columns.
+                    column.setGeneratedColumn(Boolean.TRUE);
+                    column.setGenerationExpression(generationExpression);
+                    column.setGeneratedColumnType(
+                            StringUtils.containsIgnoreCase(extra, SQL_VIRTUAL_GENERATED) ? "VIRTUAL" : "STORED");
+                }
                 column.setOrdinalPosition(resultSet.getInt(FIELD_ORDINAL_POSITION));
                 column.setDecimalDigits(resultSet.getInt(FIELD_NUMERIC_SCALE));
                 column.setCharSetName(resultSet.getString(FIELD_CHARACTER_SET_NAME));
