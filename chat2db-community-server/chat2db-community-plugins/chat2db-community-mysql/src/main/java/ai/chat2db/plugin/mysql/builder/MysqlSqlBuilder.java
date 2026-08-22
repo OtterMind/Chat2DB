@@ -8,6 +8,7 @@ import ai.chat2db.plugin.mysql.enums.MysqlViewSqlSecurityOptionEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlIndexTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
+import ai.chat2db.community.domain.api.enums.plugin.ForeignKeyActionEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.request.PageLimitRequest;
@@ -48,6 +49,12 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_PARTITION_S
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SECURITY;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_FOREIGN_KEY;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ADD_CONSTRAINT;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_FOREIGN_KEY_PREFIX;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_REFERENCES;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ON_DELETE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ON_UPDATE;
 
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
@@ -206,6 +213,33 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             }
         }
 
+        List<ForeignKeyInfo> foreignKeyList = newTable.getForeignKeyList();
+        if (CollectionUtils.isNotEmpty(foreignKeyList)) {
+            Map<String, List<ForeignKeyInfo>> foreignKeys = foreignKeyList.stream()
+                    .collect(Collectors.groupingBy(this::foreignKeyGroupKey, LinkedHashMap::new, Collectors.toList()));
+            for (List<ForeignKeyInfo> foreignKeyColumns : foreignKeys.values()) {
+                foreignKeyColumns.sort(Comparator.comparingInt(ForeignKeyInfo::getKeySeq));
+                ForeignKeyInfo fk = foreignKeyColumns.get(0);
+                if (StringUtils.isBlank(fk.getEditStatus())) {
+                    continue;
+                }
+                if (EditStatusEnum.DELETE.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append(SQL_DROP_FOREIGN_KEY)
+                            .append(quoteMysqlIdentifier(fk.getFkName()))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.ADD.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append(buildAddForeignKey(foreignKeyColumns))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.MODIFY.name().equals(fk.getEditStatus())) {
+                    script.append(SQLConstants.TAB).append(SQL_DROP_FOREIGN_KEY)
+                            .append(quoteMysqlIdentifier(fk.getFkName()))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                    script.append(SQLConstants.TAB).append(buildAddForeignKey(foreignKeyColumns))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                }
+            }
+        }
+
         if (script.length() > 2) {
             script = new StringBuilder(script.substring(0, script.length() - 2));
             script.append(SQLConstants.SEMICOLON);
@@ -214,6 +248,42 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             return StringUtils.EMPTY;
         }
 
+    }
+
+    private String foreignKeyGroupKey(ForeignKeyInfo foreignKey) {
+        return StringUtils.defaultString(foreignKey.getFkName()) + '\u0000'
+                + StringUtils.defaultString(foreignKey.getPkTableName());
+    }
+
+    private String buildAddForeignKey(List<ForeignKeyInfo> foreignKeyColumns) {
+        ForeignKeyInfo fk = foreignKeyColumns.get(0);
+        StringBuilder sb = new StringBuilder();
+        sb.append(SQL_ADD_CONSTRAINT);
+        if (StringUtils.isNotBlank(fk.getFkName())) {
+            sb.append(quoteMysqlIdentifier(fk.getFkName())).append(" ");
+        }
+        sb.append(SQL_FOREIGN_KEY_PREFIX);
+        sb.append(foreignKeyColumns.stream().map(ForeignKeyInfo::getFkColumnName)
+                .map(MysqlSqlBuilder::quoteMysqlIdentifier).collect(Collectors.joining(SQLConstants.COMMA_SPACE)));
+        sb.append(SQL_REFERENCES);
+        sb.append(quoteMysqlIdentifier(fk.getPkTableName()));
+        sb.append("(").append(foreignKeyColumns.stream().map(ForeignKeyInfo::getPkColumnName)
+                .map(MysqlSqlBuilder::quoteMysqlIdentifier).collect(Collectors.joining(SQLConstants.COMMA_SPACE))).append(")");
+        // Always emit both actions explicitly; an unknown JDBC code resolves to MySQL's
+        // default RESTRICT instead of silently omitting the clause.
+        sb.append(SQL_ON_DELETE).append(foreignKeyActionSql(fk.getDeleteRule()));
+        sb.append(SQL_ON_UPDATE).append(foreignKeyActionSql(fk.getUpdateRule()));
+        return sb.toString();
+    }
+
+    /**
+     * Resolves a JDBC rule code to a SQL keyword, falling back to MySQL's default
+     * {@code RESTRICT} when the code is null, so the emitted DDL never silently drops an
+     * action the UI asked for (the server would apply its default instead).
+     */
+    private static String foreignKeyActionSql(Short jdbcCode) {
+        ForeignKeyActionEnum action = ForeignKeyActionEnum.fromJdbcCode(jdbcCode);
+        return action == null ? "RESTRICT" : action.sqlKeyword();
     }
 
     private String findPrevious(TableColumn tableColumn, Table newTable) {

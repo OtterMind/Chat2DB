@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import ai.chat2db.community.domain.api.enums.plugin.DataTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
@@ -24,6 +25,31 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MysqlSqlBuilderTest {
+
+    @Test
+    void shouldBuildCompositeForeignKeyOnceAndUseRestrictForMissingActions() {
+        ForeignKeyInfo first = foreignKey("child_a", "parent_a", (short) 1);
+        ForeignKeyInfo second = foreignKey("child_b", "parent_b", (short) 2);
+        Table oldTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of()).build();
+        Table newTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of())
+                .foreignKeyList(List.of(second, first)).build();
+
+        String sql = new MysqlSqlBuilder().ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`child`\n"
+                + "\tADD CONSTRAINT `fk_child_parent` FOREIGN KEY (`child_a`, `child_b`) REFERENCES `parent`(`parent_a`, `parent_b`) ON DELETE RESTRICT ON UPDATE RESTRICT;", sql);
+    }
+
+    private static ForeignKeyInfo foreignKey(String fkColumn, String pkColumn, short keySeq) {
+        ForeignKeyInfo foreignKey = new ForeignKeyInfo();
+        foreignKey.setFkName("fk_child_parent");
+        foreignKey.setFkColumnName(fkColumn);
+        foreignKey.setPkTableName("parent");
+        foreignKey.setPkColumnName(pkColumn);
+        foreignKey.setKeySeq(keySeq);
+        foreignKey.setEditStatus(EditStatusEnum.ADD.name());
+        return foreignKey;
+    }
 
     @Test
     void shouldUseEnumExtentInsteadOfColumnComment() {
