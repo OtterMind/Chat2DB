@@ -33,8 +33,10 @@ public class MysqlAccountManager implements IAccountManager {
             DatabaseMetaData metaData = connection.getMetaData();
             capability.setProductName(metaData.getDatabaseProductName());
             capability.setProductVersion(metaData.getDatabaseProductVersion());
+            capability.setRoleManagementSupported(supportsRoles(metaData));
         } catch (SQLException e) {
             capability.setMessage(e.getMessage());
+            capability.setRoleManagementSupported(Boolean.FALSE);
         }
         capability.setCurrentUser(querySingleString(connection, SQL_SELECT_CURRENT_USER));
         return capability;
@@ -63,7 +65,8 @@ public class MysqlAccountManager implements IAccountManager {
     }
 
     @Override
-    public AccountPreview preview(AccountOperationRequest command) {
+    public AccountPreview preview(Connection connection, AccountOperationRequest command) {
+        validateRoleCapability(connection, command);
         String sql = MysqlAccountSqlBuilder.buildSql(command);
         AccountPreview preview = new AccountPreview();
         preview.setActionType(command.getActionType());
@@ -74,7 +77,7 @@ public class MysqlAccountManager implements IAccountManager {
 
     @Override
     public AccountExecuteResponse execute(Connection connection, AccountOperationRequest command) {
-        AccountPreview preview = preview(command);
+        AccountPreview preview = preview(connection, command);
         if (!StringUtils.equals(preview.getPreviewToken(), command.getPreviewToken())) {
             throw new BusinessException(ERROR_KEY_ACCOUNT_PREVIEW_TOKEN_MISMATCH);
         }
@@ -96,6 +99,24 @@ public class MysqlAccountManager implements IAccountManager {
             result.setSqlState(e.getSQLState());
         }
         return result;
+    }
+
+    private void validateRoleCapability(Connection connection, AccountOperationRequest command) {
+        if (!command.getActionType().contains("ROLE")) {
+            return;
+        }
+        try {
+            if (!supportsRoles(connection.getMetaData())) {
+                throw new BusinessException(ERROR_KEY_ACCOUNT_ROLE_UNSUPPORTED);
+            }
+        } catch (SQLException e) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_ROLE_UNSUPPORTED, null, e);
+        }
+    }
+
+    private boolean supportsRoles(DatabaseMetaData metadata) throws SQLException {
+        String productName = StringUtils.defaultString(metadata.getDatabaseProductName()).toLowerCase(java.util.Locale.ROOT);
+        return !productName.contains("mariadb") && metadata.getDatabaseMajorVersion() >= 8;
     }
 
     private List<AccountInfo> queryAccounts(Connection connection, boolean includeLocked) throws SQLException {

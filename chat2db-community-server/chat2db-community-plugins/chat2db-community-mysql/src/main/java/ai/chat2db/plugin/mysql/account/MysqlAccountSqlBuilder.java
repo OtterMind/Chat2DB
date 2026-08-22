@@ -5,6 +5,7 @@ import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.enums.plugin.AccountActionTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.PrivilegeScopeEnum;
+import ai.chat2db.community.domain.api.enums.plugin.DefaultRoleModeEnum;
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.plugin.mysql.enums.account.MysqlPrivilege;
 import org.apache.commons.lang3.StringUtils;
@@ -68,6 +69,39 @@ class MysqlAccountSqlBuilder {
                 requirePrivileges(command);
                 yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
+            }
+            case CREATE_ROLE -> SQL_CREATE_ROLE + account(command);
+            case DROP_ROLE -> SQL_DROP_ROLE_IF_EXISTS + account(command);
+            case GRANT_ROLE -> {
+                String role = roleAccount(command);
+                StringBuilder sb = new StringBuilder();
+                sb.append(SQL_GRANT).append(role).append(SQLConstants.SQL_TO).append(account(command));
+                if (Boolean.TRUE.equals(command.getWithAdminOption())) {
+                    sb.append(SQL_WITH_ADMIN_OPTION);
+                }
+                yield sb.toString();
+            }
+            case REVOKE_ROLE -> {
+                yield SQL_REVOKE + roleAccount(command) + SQL_FROM + account(command);
+            }
+            case SET_DEFAULT_ROLE -> {
+                DefaultRoleModeEnum mode = DefaultRoleModeEnum.from(command.getDefaultRoleMode());
+                StringBuilder sb = new StringBuilder();
+                sb.append(SQL_SET_DEFAULT_ROLE);
+                switch (mode) {
+                    case ALL -> sb.append(SQL_ROLE_ALL);
+                    case NONE -> sb.append(SQL_ROLE_NONE);
+                    case SELECTED -> {
+                        if (command.getRoleList() == null || command.getRoleList().isEmpty()) {
+                            throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
+                        }
+                        sb.append(command.getRoleList().stream()
+                                .map(role -> account(role, command.getRoleHost()))
+                                .collect(Collectors.joining(", ")));
+                    }
+                }
+                sb.append(SQLConstants.SQL_TO).append(account(command));
+                yield sb.toString();
             }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
         };
@@ -175,6 +209,13 @@ class MysqlAccountSqlBuilder {
         if (command.getPrivileges() == null || command.getPrivileges().isEmpty()) {
             throw new BusinessException(ERROR_KEY_ACCOUNT_PRIVILEGE_REQUIRED);
         }
+    }
+
+    private static String roleAccount(AccountOperationRequest command) {
+        if (StringUtils.isBlank(command.getRoleName())) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_ROLE_REQUIRED);
+        }
+        return account(command.getRoleName(), command.getRoleHost());
     }
 
     private static void validateAccountPart(String value, String code) {

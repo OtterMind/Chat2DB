@@ -13,6 +13,7 @@ public class AccountCapabilityResponse {
     private String connectionUser;
     private Boolean accountListReadable;
     private Boolean accountLockSupported;
+    private Boolean roleManagementSupported;
     private List<String> editablePrivileges;
     private String message;
 }

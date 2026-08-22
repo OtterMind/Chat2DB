@@ -7,6 +7,7 @@ public final class MysqlAccountManageConstants {
     public static final String ERROR_KEY_ACCOUNT_GRANTS_UNAVAILABLE = "mysql.account.grantsUnavailable";
     public static final String ERROR_KEY_ACCOUNT_LIST_UNAVAILABLE = "mysql.account.listUnavailable";
     public static final String ERROR_KEY_ACCOUNT_PREVIEW_TOKEN_MISMATCH = "mysql.account.previewTokenMismatch";
+    public static final String ERROR_KEY_ACCOUNT_ROLE_UNSUPPORTED = "mysql.account.roleUnsupported";
     public static final String FIELD_ACCOUNT_LOCKED = "account_locked";
     public static final String FIELD_HOST = "Host";
     public static final String FIELD_PLUGIN = "plugin";

@@ -9,7 +9,12 @@ public enum AccountActionTypeEnum {
     UNLOCK_ACCOUNT,
     DROP_USER,
     GRANT_PRIVILEGE,
-    REVOKE_PRIVILEGE;
+    REVOKE_PRIVILEGE,
+    CREATE_ROLE,
+    DROP_ROLE,
+    GRANT_ROLE,
+    REVOKE_ROLE,
+    SET_DEFAULT_ROLE;
 
     public static AccountActionTypeEnum from(String value) {
         if (value == null) {

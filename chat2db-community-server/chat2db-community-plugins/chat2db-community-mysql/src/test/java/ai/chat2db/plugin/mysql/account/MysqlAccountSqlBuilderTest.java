@@ -83,6 +83,18 @@ class MysqlAccountSqlBuilderTest {
         );
     }
 
+    @Test
+    void grantRoleUsesRoleAccountSyntaxIncludingHost() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.GRANT_ROLE);
+        command.setRoleName("reporting_role");
+        command.setRoleHost("10.%");
+        command.setWithAdminOption(Boolean.TRUE);
+
+        assertEquals(
+                "GRANT 'reporting_role'@'10.%' TO 'alice''s'@'10.0.%' WITH ADMIN OPTION",
+                MysqlAccountSqlBuilder.buildSql(command));
+    }
+
     private AccountOperationRequest base(AccountActionTypeEnum actionType) {
         AccountOperationRequest command = new AccountOperationRequest();
         command.setActionType(actionType.name());
