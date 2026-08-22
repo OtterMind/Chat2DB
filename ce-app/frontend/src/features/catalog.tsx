@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   Scissors, Captions, AudioLines, ScanFace, Mic, Images, Languages, Eraser,
-  Sparkles, UploadCloud, Film, Stethoscope, Wand2, Music4, Type, Crop,
+  Sparkles, UploadCloud, Film, Stethoscope, Wand2, Music4, Type, Crop, SlidersHorizontal,
 } from 'lucide-react'
 
 export interface FeatureTile {
@@ -187,6 +187,15 @@ export const FEATURES: FeatureTile[] = [
     route: '/settings?tab=presets',
     badge: 'soon',
     group: 'publish',
+  },
+  {
+    id: 'settings',
+    label: ['Settings', 'تنظیمات'],
+    hint: ['Language, FFmpeg path, updates', 'زبان، مسیر FFmpeg، به‌روزرسانی'],
+    icon: <SlidersHorizontal {...ICON} />,
+    gradient: 'linear-gradient(145deg,#64748B,#334155)',
+    route: '/settings',
+    group: 'system',
   },
   {
     id: 'doctor',

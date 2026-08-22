@@ -877,6 +877,59 @@ else bad('the editor tile still says "soon"')
 if (home.clipTools === 0) ok('clip tools are no longer on the home screen')
 else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
 
+/* 12b — nothing is unreachable from the home screen ------------------------- */
+// The tab bar used to be the only way into Settings, and when it went away the
+// user could no longer update the app. Every route must be reachable by
+// clicking, not just by typing a URL.
+const reachable = await page.evaluate(() => {
+  const routes = new Set()
+  for (const tile of document.querySelectorAll('.ce-tile')) {
+    routes.add((tile.textContent ?? '').trim())
+  }
+  return {
+    updateCard: Boolean(document.querySelector('.ce-updatecard')),
+    updateButton: Boolean(
+      [...document.querySelectorAll('.ce-updatecard button')].find((b) => /Check for updates|بررسی/.test(b.textContent ?? ''))
+    ),
+    settingsButton: Boolean(document.querySelector('.ce-updatecard__actions .ce-iconbtn')),
+    settingsTile: [...routes].some((label) => /Settings|تنظیمات/.test(label)),
+    doctorTile: [...routes].some((label) => /System Health|Doctor|Diagnostics|سلامت|عیب/.test(label)),
+  }
+})
+if (reachable.updateCard && reachable.updateButton) ok('the update control is on the home screen')
+else bad('the update control is missing from the home screen', JSON.stringify(reachable))
+if (reachable.settingsTile || reachable.settingsButton) ok('Settings is reachable from the home screen')
+else bad('Settings cannot be reached by clicking', JSON.stringify(reachable))
+if (reachable.doctorTile) ok('Diagnostics is reachable from the home screen')
+else bad('Diagnostics cannot be reached by clicking', JSON.stringify(reachable))
+
+// …and the buttons really navigate.
+const gearWorks = await page.evaluate(() => (window.__pending = (async () => {
+  const gear = document.querySelector('.ce-updatecard__actions .ce-iconbtn')
+  gear?.click()
+  await new Promise((r) => setTimeout(r, 700))
+  const hash = location.hash
+  location.hash = '#/'
+  await new Promise((r) => setTimeout(r, 600))
+  return hash
+})()))
+if (/settings/.test(gearWorks)) ok('the gear opens Settings')
+else bad('the gear does not open Settings', String(gearWorks))
+
+// A saved project must exist before its delete button can be looked for; a
+// fresh machine has none.
+await page.evaluate(() => (window.__pending = (async () => {
+  await fetch('http://127.0.0.1:8742/api/projects', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Test project', timeline: window.__ceEditor.getState().toDocument() }),
+  })
+  location.hash = '#/studio'
+  await new Promise((r) => setTimeout(r, 400))
+  location.hash = '#/'
+  await new Promise((r) => setTimeout(r, 1200))
+})()))
+
 const recents = await page.evaluate(() => ({
   cards: document.querySelectorAll('.ce-reelcard').length,
   draft: Boolean(document.querySelector('.ce-reelcard.is-unfinished')),

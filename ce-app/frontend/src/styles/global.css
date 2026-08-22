@@ -149,6 +149,18 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-searchbar input:focus { outline: none; border-color: var(--brand); }
 
+/* the update card: the one control that keeps the app alive, on the first screen */
+.ce-updatecard {
+  border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+  background: linear-gradient(130deg, rgba(99, 102, 241, .12), rgba(15, 23, 42, .6));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ce-updatecard__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.ce-updatecard h3 { font-size: 14px; }
+.ce-updatecard__version { font-size: 12px; color: var(--muted); }
+.ce-updatecard__actions { display: flex; align-items: center; gap: 8px; }
+.ce-updatecard__error { font-size: 12px; color: #fca5a5; }
+
 /* home: the two starting points, then a strip of recent projects ------------- */
 .ce-start { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ce-start__main {
@@ -439,7 +451,19 @@ button { font-family: inherit; cursor: pointer; }
   .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
-  /* home: the two starting points, then a strip of recent projects ------------- */
+  /* the update card: the one control that keeps the app alive, on the first screen */
+.ce-updatecard {
+  border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+  background: linear-gradient(130deg, rgba(99, 102, 241, .12), rgba(15, 23, 42, .6));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ce-updatecard__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.ce-updatecard h3 { font-size: 14px; }
+.ce-updatecard__version { font-size: 12px; color: var(--muted); }
+.ce-updatecard__actions { display: flex; align-items: center; gap: 8px; }
+.ce-updatecard__error { font-size: 12px; color: #fca5a5; }
+
+/* home: the two starting points, then a strip of recent projects ------------- */
 .ce-start { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ce-start__main {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;

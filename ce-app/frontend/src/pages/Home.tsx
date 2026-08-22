@@ -8,6 +8,7 @@ import { useI18n } from '../i18n'
 import { jobsApi, systemApi } from '../api/jobs'
 import { projectsApi } from '../api/projects'
 import { useEditor, formatTimecode } from '../editor/model'
+import UpdateCard from '../components/UpdateCard'
 import { stageLabel, statusLabel } from '../lib/labels'
 
 function Tile({ tile, onOpen }: { tile: FeatureTile; onOpen: (t: FeatureTile) => void }) {
@@ -66,7 +67,11 @@ export default function Home() {
   const { data: projectData, refetch: refetchProjects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.list(),
-    staleTime: 5_000,
+    // Always refetch on arrival: coming back from the editor after saving and
+    // not seeing the project is indistinguishable from the save having failed.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
   const projects = (projectData?.projects ?? []).slice(0, 8)
   const hasAutosave = projectData?.hasAutosave ?? false
@@ -119,6 +124,10 @@ export default function Home() {
           aria-label={t('Search', 'جست‌وجو')}
         />
       </div>
+
+      {/* Updating must be reachable from the first screen: it used to hide in
+          Settings, which the removed tab bar was the only way into. */}
+      <UpdateCard />
 
       {/* The two things a video app is opened for, side by side. */}
       <section className="ce-start">
