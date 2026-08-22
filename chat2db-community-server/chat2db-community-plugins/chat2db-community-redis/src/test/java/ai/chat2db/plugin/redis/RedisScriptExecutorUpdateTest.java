@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.redis;
 
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.plugin.redis.model.RedisKey;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,7 @@ import java.sql.PreparedStatement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -30,6 +32,19 @@ class RedisScriptExecutorUpdateTest {
         RedisKey newKey = RedisKey.builder().name("k").type("string").value(null).build();
 
         assertNotNull(RedisScriptExecutor.getInstance().update(oldKey, newKey));
+    }
+
+    @Test
+    void rejectsNullAndUnknownKeyTypesBeforeGeneratingCommands() {
+        RedisKey valid = RedisKey.builder().name("k").type("string").build();
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type(null).build(), valid));
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(valid, RedisKey.builder().name("k").type(null).build()));
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type(null).build(), RedisKey.builder().name("k").type(null).build()));
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(valid, RedisKey.builder().name("k").type("unknown").build()));
     }
 
     @Test

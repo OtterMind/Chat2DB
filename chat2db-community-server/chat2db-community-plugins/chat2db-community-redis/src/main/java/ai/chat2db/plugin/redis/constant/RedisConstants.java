@@ -53,6 +53,7 @@ public final class RedisConstants {
     public static final String ERROR_SQL_ANALYSIS = "dataSource.sqlAnalysisError";
     public static final String ERROR_SQL_MUST_NOT_BE_NULL = "SQL must not be null";
     public static final String ERROR_UNSUPPORTED_SQL_BUILDER_METHOD_PREFIX = "Redis SQL builder does not support ";
+    public static final String ERROR_UNSUPPORTED_KEY_TYPE = "Redis key type '%s' is not supported; valid types are string, list, set, zset, hash, stream.";
     public static final String FIELD_FIELD = "field";
     public static final String FIELD_FIELDS = "fields";
     public static final String FIELD_ID = "id";
