@@ -177,6 +177,10 @@ public class JdbcDriverManager {
         String file = getFilePath(zipFilePath, clean);
         File unzipFile = new File(file);
         File[] files = unzipFile.listFiles();
+        if (files == null) {
+            throw new IOException("Driver zip extraction directory not found: "
+                    + unzipFile.getAbsolutePath() + ". Please re-upload the driver.");
+        }
         for (File f : files) {
             if (f.getName().endsWith(".jar")) {
                 jarUrls.add(f.toURI().toURL());
