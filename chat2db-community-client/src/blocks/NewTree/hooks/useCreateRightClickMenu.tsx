@@ -53,7 +53,9 @@ import { clientRuntime } from '@client-runtime';
 import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization';
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
+import CreateTablespaceContent, { CreateTablespaceValues } from '../components/CreateTablespaceContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import tablespaceService from '@/service/tablespace';
 import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
@@ -131,6 +133,7 @@ export const canBeDoubleClicked = [
 
 export const useCreateRightClickMenu = () => {
   const [createAccountForm] = Form.useForm<CreateAccountValues>();
+  const [createTablespaceForm] = Form.useForm<CreateTablespaceValues>();
   const identityColorRequestRegistryRef = useRef(new DataSourceIdentityColorRequestRegistry());
   // Read only store actions here; dynamic data must be fetched again for each operation.
   const {
@@ -199,6 +202,7 @@ export const useCreateRightClickMenu = () => {
       databaseName,
       schemaName,
       tableName,
+      tablespaceName,
       environmentId,
       environment,
       identityColor,
@@ -351,6 +355,42 @@ export const useCreateRightClickMenu = () => {
         });
     };
 
+    const openDeleteTablespaceModal = () => {
+      tablespaceService
+        .prepareDelete({
+          dataSourceId: dataSourceId!,
+          tablespaceName: tablespaceName!,
+        })
+        .then((prepared) => {
+          openUnifiedConfirmationModal({
+            title: i18n('workspace.tablespace.deleteTitle'),
+            width: 560,
+            content: (
+              <DeleteDatabaseSchemaConfirmContent sqlPreview={prepared.sqlPreview} objectType="tablespace" />
+            ),
+            needInputConfirmText: prepared.confirmName,
+            inputConfirmLabel: renderDeleteInputConfirmLabel(
+              'workspace.tablespace.inputTablespaceName',
+              prepared.confirmName,
+            ),
+            inputConfirmPlaceholder: prepared.confirmName,
+            inputConfirmMismatchTip: i18n('workspace.tablespace.confirmNameMismatch'),
+            onOk: (confirmName) => {
+              return tablespaceService
+                .executeDelete({
+                  dataSourceId: dataSourceId!,
+                  tablespaceName: tablespaceName!,
+                  confirmName: confirmName || '',
+                })
+                .then(() => {
+                  staticMessage.success(i18n('common.text.successfullyDelete'));
+                  refreshAfterDelete();
+                });
+            },
+          });
+        });
+    };
+
     const operationColumnConfig: { [key in string]: IOperationColumnConfigItem } = {
       // copyName
       [OperationColumn.CopyName]: {
@@ -443,6 +483,97 @@ export const useCreateRightClickMenu = () => {
               });
             },
           });
+        },
+      },
+
+      [OperationColumn.CreateTablespace]: {
+        text: i18n('workspace.tablespace.create'),
+        icon: 'icon-newdatabase',
+        handle: () => {
+          createTablespaceForm.resetFields();
+          staticModal.confirm({
+            title: i18n('workspace.tablespace.createTitle'),
+            content: <CreateTablespaceContent form={createTablespaceForm} />,
+            onOk: () => {
+              return createTablespaceForm.validateFields().then((values) => {
+                return tablespaceService
+                  .createSql({
+                    dataSourceId: dataSourceId!,
+                    name: values.name,
+                    dataFile: values.dataFile,
+                    fileBlockSize: values.fileBlockSize,
+                  })
+                  .then((preview) => {
+                    return sqlService
+                      .executeDDL({
+                        dataSourceId: dataSourceId!,
+                        sql: preview.sql,
+                      })
+                      .then((result) => {
+                        if (!result.success) {
+                          staticMessage.error(result.message);
+                          return Promise.reject(new Error(result.message));
+                        }
+                        staticMessage.success(i18n('workspace.tablespace.createSuccess'));
+                        refreshCurrentNode();
+                        return result;
+                      });
+                  });
+              });
+            },
+          });
+        },
+      },
+
+      [OperationColumn.RenameTablespace]: {
+        text: i18n('workspace.tablespace.rename'),
+        icon: 'icon-edit',
+        handle: () => {
+          tablespaceService
+            .capability({ dataSourceId: dataSourceId! })
+            .then((cap) => {
+              if (!cap.renameSupported) {
+                staticMessage.warning(i18n('workspace.tablespace.renameNotSupported'));
+                return;
+              }
+              createTablespaceForm.resetFields();
+              staticModal.confirm({
+                title: i18n('workspace.tablespace.renameTitle'),
+                content: (
+                  <CreateTablespaceContent form={createTablespaceForm} renameFrom={tablespaceName!} />
+                ),
+                onOk: () => {
+                  return createTablespaceForm.validateFields().then((values) => {
+                    return tablespaceService
+                      .modify({
+                        dataSourceId: dataSourceId!,
+                        oldName: tablespaceName!,
+                        newName: values.name,
+                      })
+                      .then((result) => {
+                        if (!result.success) {
+                          staticMessage.error(result.message);
+                          return Promise.reject(new Error(result.message));
+                        }
+                        staticMessage.success(i18n('workspace.tablespace.renameSuccess'));
+                        refreshAfterDelete();
+                        return result;
+                      });
+                  });
+                },
+              });
+            })
+            .catch(() => {
+              // capability fetch failed (errorLevel: false) — best-effort, no toast.
+            });
+        },
+      },
+
+      [OperationColumn.DeleteTablespace]: {
+        text: i18n('workspace.tablespace.delete'),
+        icon: 'icon-delete',
+        handle: () => {
+          openDeleteTablespaceModal();
         },
       },
 

@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.db.DatabaseObjectDeletePrepare;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseDeletePrepareRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseObjectDeleteExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaDeletePrepareRequest;
+import ai.chat2db.community.domain.api.model.request.db.DbTablespaceDeletePrepareRequest;
 
 /**
  * Prepares and executes database-object deletion operations.
@@ -39,4 +40,15 @@ public interface IDbDatabaseObjectDeleteService {
      * @param dbDatabaseObjectDeleteExecuteRequest database object deletion execution parameters.
      */
     void executeSchemaDelete(DbDatabaseObjectDeleteExecuteRequest dbDatabaseObjectDeleteExecuteRequest);
+
+    /**
+     * Prepares tablespace deletion, surfacing occupying tables so the UI can block a non-empty
+     * tablespace and require name-typing for an empty one.
+     */
+    DatabaseObjectDeletePrepare prepareTablespaceDelete(DbTablespaceDeletePrepareRequest param);
+
+    /**
+     * Executes a prepared tablespace deletion (empty tablespace only).
+     */
+    void executeTablespaceDelete(DbDatabaseObjectDeleteExecuteRequest param);
 }

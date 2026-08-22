@@ -26,8 +26,10 @@ import ai.chat2db.community.domain.api.model.view.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.IResultSetFunction;
+import ai.chat2db.spi.constant.SQLConstants;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
@@ -59,6 +61,106 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         return sortDatabase(databases, SYSTEM_DATABASES, connection);
     }
 
+    @Override
+    public List<Tablespace> tablespaces(Connection connection) {
+        return DefaultSQLExecutor.getInstance().execute(connection, TABLESPACES_SQL, resultSet -> {
+            Map<String, Tablespace> byName = new LinkedHashMap<>();
+            while (resultSet.next()) {
+                String name = resultSet.getString(FIELD_TABLESPACE_NAME);
+                Tablespace tablespace = byName.computeIfAbsent(name, k -> new Tablespace());
+                tablespace.setName(name);
+                tablespace.setEngine(resultSet.getString(FIELD_TABLESPACE_ENGINE));
+                long spaceId = resultSet.getLong(FIELD_TABLESPACE_SPACE);
+                tablespace.setSpaceId(resultSet.wasNull() ? null : spaceId);
+                long fileBlockSize = resultSet.getLong(FIELD_TABLESPACE_FILE_BLOCK_SIZE);
+                tablespace.setFileBlockSize(resultSet.wasNull() ? null : fileBlockSize);
+                tablespace.setStatus(resultSet.getString(FIELD_TABLESPACE_STATUS));
+                // FILES columns may be null when the user lacks PROCESS/FILE privilege.
+                String dataFile = resultSet.getString(FIELD_TABLESPACE_DATA_FILE);
+                if (StringUtils.isNotBlank(dataFile)) {
+                    List<String> dataFiles = tablespace.getDataFiles();
+                    if (dataFiles == null) {
+                        dataFiles = new ArrayList<>();
+                        tablespace.setDataFiles(dataFiles);
+                    }
+                    dataFiles.add(dataFile);
+                }
+                long autoextend = resultSet.getLong(FIELD_TABLESPACE_AUTOEXTEND_SIZE);
+                if (!resultSet.wasNull()) {
+                    tablespace.setAutoextendSize(autoextend);
+                }
+                long maxSize = resultSet.getLong(FIELD_TABLESPACE_MAX_SIZE);
+                if (!resultSet.wasNull()) {
+                    tablespace.setMaxSize(maxSize);
+                }
+                long extentSize = resultSet.getLong(FIELD_TABLESPACE_EXTENT_SIZE);
+                if (!resultSet.wasNull()) {
+                    tablespace.setExtentSize(extentSize);
+                }
+                long initialSize = resultSet.getLong(FIELD_TABLESPACE_INITIAL_SIZE);
+                if (!resultSet.wasNull()) {
+                    tablespace.setInitialSize(initialSize);
+                }
+            }
+            return new ArrayList<>(byName.values());
+        });
+    }
+
+    @Override
+    public Tablespace tablespace(Connection connection, String tablespaceName) {
+        if (StringUtils.isBlank(tablespaceName)) {
+            return null;
+        }
+        String sql = String.format(TABLESPACE_DETAIL_SQL_TEMPLATE,
+                getSQLIdentifierProcessor().escapeString(tablespaceName));
+        List<Tablespace> tablespaces = DefaultSQLExecutor.getInstance().execute(connection, sql,
+                resultSet -> {
+                    Map<String, Tablespace> byName = new LinkedHashMap<>();
+                    while (resultSet.next()) {
+                        String name = resultSet.getString(FIELD_TABLESPACE_NAME);
+                        Tablespace tablespace = byName.computeIfAbsent(name, k -> new Tablespace());
+                        tablespace.setName(name);
+                        tablespace.setEngine(resultSet.getString(FIELD_TABLESPACE_ENGINE));
+                        long spaceId = resultSet.getLong(FIELD_TABLESPACE_SPACE);
+                        tablespace.setSpaceId(resultSet.wasNull() ? null : spaceId);
+                        long fileBlockSize = resultSet.getLong(FIELD_TABLESPACE_FILE_BLOCK_SIZE);
+                        tablespace.setFileBlockSize(resultSet.wasNull() ? null : fileBlockSize);
+                        tablespace.setStatus(resultSet.getString(FIELD_TABLESPACE_STATUS));
+                        String dataFile = resultSet.getString(FIELD_TABLESPACE_DATA_FILE);
+                        if (StringUtils.isNotBlank(dataFile)) {
+                            List<String> dataFiles = tablespace.getDataFiles();
+                            if (dataFiles == null) {
+                                dataFiles = new ArrayList<>();
+                                tablespace.setDataFiles(dataFiles);
+                            }
+                            dataFiles.add(dataFile);
+                        }
+                    }
+                    return new ArrayList<>(byName.values());
+                });
+        Tablespace tablespace = CollectionUtils.isEmpty(tablespaces) ? null : tablespaces.get(0);
+        if (tablespace != null) {
+            tablespace.setOccupyingTables(occupyingTables(connection, tablespaceName));
+        }
+        return tablespace;
+    }
+
+    /**
+     * Tables occupying a tablespace (qualified as {@code schema.table}). The tablespace name is a
+     * value, so it is bound as a prepared-statement parameter.
+     */
+    public List<String> occupyingTables(Connection connection, String tablespaceName) {
+        return DefaultSQLExecutor.getInstance().preExecute(connection, TABLESPACE_OCCUPYING_TABLES_SQL,
+                new String[] {tablespaceName}, resultSet -> {
+                    List<String> tables = new ArrayList<>();
+                    while (resultSet.next()) {
+                        tables.add(resultSet.getString(FIELD_TABLESPACE_TABLE_SCHEMA)
+                                + SQLConstants.DOT + resultSet.getString(FIELD_TABLE_NAME));
+                    }
+                    return tables;
+                });
+    }
+
 
     @Override
     public List<Table> tables(Connection connection, @NotEmpty String databaseName, String schemaName, String tableName) {
@@ -83,6 +185,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 table.setCollate(collationName);
                 table.setComment(resultSet.getString(FIELD_TABLE_COMMENT));
                 table.setIncrementValue(resultSet.getLong(FIELD_AUTO_INCREMENT));
+                table.setTablespace(resultSet.getString(FIELD_TABLESPACE_NAME_REF));
                 if (StringUtils.isNotBlank(collationName)) {
                     table.setCharset(collationMap.get(collationName));
                 }
@@ -455,6 +558,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 .indexTypes(MysqlIndexTypeEnum.getIndexTypes())
                 .defaultValues(MysqlDefaultValueEnum.getDefaultValues())
                 .engineTypes(getEngineTypes())
+                .tablespaces(getTablespaces())
                 .build();
     }
 
@@ -489,6 +593,26 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
             }
             return list;
         }, MysqlEngineTypeEnum.getEngineTypes(), "engines");
+    }
+
+    /**
+     * InnoDB General Tablespaces available on the server, for the create/edit-table tablespace
+     * dropdown. Mirrors the other table-meta option helpers: obtain a connection from
+     * {@link Chat2DBContext}, delegate to {@link #tablespaces(Connection)}, and degrade to an
+     * empty list (no static fallback needed — empty is the correct value when unsupported).
+     */
+    private List<Tablespace> getTablespaces() {
+        try {
+            Connection connection = Chat2DBContext.getConnection();
+            if (connection == null) {
+                return Collections.emptyList();
+            }
+            List<Tablespace> tablespaces = tablespaces(connection);
+            return tablespaces == null ? Collections.emptyList() : tablespaces;
+        } catch (Exception e) {
+            log.warn("query mysql tablespaces for table meta failed", e);
+            return Collections.emptyList();
+        }
     }
 
     private <T> List<T> queryTableMetaOptions(String sql, IResultSetFunction<List<T>> function,

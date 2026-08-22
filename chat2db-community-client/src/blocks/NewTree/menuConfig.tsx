@@ -167,6 +167,12 @@ export const dropMenuConfig = {
     ],
     [TreeNodeType.DATABASE_ACCOUNTS]: [OperationColumn.CreateAccount, OperationColumn.Refresh],
     [TreeNodeType.DATABASE_ACCOUNT]: [OperationColumn.OpenAccountPrivileges],
+    [TreeNodeType.TABLESPACES]: [OperationColumn.CreateTablespace, OperationColumn.Refresh],
+    [TreeNodeType.TABLESPACE]: [
+      OperationColumn.RenameTablespace,
+      OperationColumn.Divider,
+      OperationColumn.DeleteTablespace,
+    ],
     [TreeNodeType.SCHEMAS]: [],
     [TreeNodeType.ALL_DATA]: [OperationColumn.CreateConsole, OperationColumn.OpenAllData],
     [TreeNodeType.DATABASE]: [

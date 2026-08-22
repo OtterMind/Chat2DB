@@ -8,7 +8,7 @@
       "common.ts": "24aa2228702754bc019f1e21dd7be9f6d1c6ff02ed9bd9227ab319f331248b11",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",
       "dashboard.ts": "b99f5e6b81271573a8db1a585ac879724441b7163050899c3abaf9498217bd21",
-      "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
+      "editTable.ts": "f03732275fd9021ef3a828c4127034359b97f19d58d6c1ffc3e14006805fde47",
       "editTableData.ts": "b6f40d2e1f612b716c0dbc2ade925069a039585a28ada997e004c33ce2fd0901",
       "feedback.ts": "080fbb0b2e6578d10499d47e0f23b7161feffb769c8a574048c5a737c9624eea",
       "invite.ts": "4689a17ff6e5913e1c6399e3f75f385c8a5a26f8313a993fa0fa1379bf0b457b",
@@ -26,7 +26,7 @@
       "stream.ts": "8418dd25b0fd54b2ef2b15a2573edf0a4876efb4e69936ff82a157ea5cf42be4",
       "team.ts": "b24fbb075daccb2c44a24f732e7f338d8d08c9b1ee3599c3870171aa2e986512",
       "userGuide.ts": "0103ba35af95a3a0ff7a414130b68a7dd5f5f8196e59cd951631ac2090cb04fe",
-      "workspace.ts": "ff3ba00ee05c5e04c6ccaef4083a83e4f01b5307eff17b9afc6480525a9ef141"
+      "workspace.ts": "ab18493e60c5e4a83fab91f3e38fd5b48176c73bf210ac852b14268a95de9b86"
     },
     "ko-KR": {
       "ai.ts": "e7a2fcbfb3ed647bd14f63aca4b6c35c8fb402c49a6a1f36bb04f76f4e8415af",
@@ -34,7 +34,7 @@
       "common.ts": "24aa2228702754bc019f1e21dd7be9f6d1c6ff02ed9bd9227ab319f331248b11",
       "connection.ts": "d70578a3444978b60ea41c670e8b180849eaab297e33325db56c891e1058e899",
       "dashboard.ts": "b99f5e6b81271573a8db1a585ac879724441b7163050899c3abaf9498217bd21",
-      "editTable.ts": "0f7a808f50053cd52b183d156bb4fd46bb125b8058f8774deb61c7f02894a350",
+      "editTable.ts": "f03732275fd9021ef3a828c4127034359b97f19d58d6c1ffc3e14006805fde47",
       "editTableData.ts": "b6f40d2e1f612b716c0dbc2ade925069a039585a28ada997e004c33ce2fd0901",
       "feedback.ts": "080fbb0b2e6578d10499d47e0f23b7161feffb769c8a574048c5a737c9624eea",
       "invite.ts": "4689a17ff6e5913e1c6399e3f75f385c8a5a26f8313a993fa0fa1379bf0b457b",
@@ -52,7 +52,7 @@
       "stream.ts": "8418dd25b0fd54b2ef2b15a2573edf0a4876efb4e69936ff82a157ea5cf42be4",
       "team.ts": "b24fbb075daccb2c44a24f732e7f338d8d08c9b1ee3599c3870171aa2e986512",
       "userGuide.ts": "0103ba35af95a3a0ff7a414130b68a7dd5f5f8196e59cd951631ac2090cb04fe",
-      "workspace.ts": "ff3ba00ee05c5e04c6ccaef4083a83e4f01b5307eff17b9afc6480525a9ef141"
+      "workspace.ts": "ab18493e60c5e4a83fab91f3e38fd5b48176c73bf210ac852b14268a95de9b86"
     }
   }
 }

@@ -4,10 +4,11 @@ import accountAdminService from '@/service/accountAdmin';
 import connectionService from '@/service/connection';
 import historyService from '@/service/history';
 import mysqlServer from '@/service/sql';
+import tablespaceService from '@/service/tablespace';
 import { useTreeStore } from '@/store/tree';
 import { IConnectionDetails, TreeNodeData } from '@/typings';
 import { getDatabaseSupport } from '@/utils/database';
-import { canUseAccountManage, isMongodbTreeDataSource, isRedisTreeDataSource } from '@/utils/databaseJudgments';
+import { canUseAccountManage, canUseTablespaceManage, isMongodbTreeDataSource, isRedisTreeDataSource } from '@/utils/databaseJudgments';
 import { v4 as uuid } from 'uuid';
 import { createSavedConsoleTreeNodeKey } from '@/store/tree/backgroundRefresh';
 
@@ -43,6 +44,14 @@ export const switchIcon: Partial<{
   },
   [TreeNodeType.DATABASE_ACCOUNT]: {
     icon: 'icon-users',
+  },
+  [TreeNodeType.TABLESPACES]: {
+    icon: fileIcon,
+    iconExistDark: true,
+    unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.TABLESPACE]: {
+    icon: 'icon-database',
   },
   [TreeNodeType.SCHEMAS]: {
     icon: fileIcon,
@@ -265,6 +274,16 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               extraParams,
             }
           : null;
+        const tablespaceNode: TreeNodeData | null = canUseTablespaceManage(databaseType)
+          ? {
+              key: treeConfig[TreeNodeType.TABLESPACES].createTreeNodeKey!({ dataSourceId }),
+              originalTitle: i18n('workspace.tablespace.title'),
+              title: null,
+              treeNodeType: TreeNodeType.TABLESPACES,
+              isLeaf: false,
+              extraParams,
+            }
+          : null;
         if (supportDatabase === false && supportSchema === false) {
           // No database or schema level at all (Firebird, IoTDB, ...): the
           // connection itself is the namespace, so show the object folders
@@ -345,6 +364,9 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               if (accountNode) {
                 data.push(accountNode);
               }
+              if (tablespaceNode) {
+                data.push(tablespaceNode);
+              }
               r(data);
             })
             .catch(() => {
@@ -374,6 +396,9 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               });
               if (accountNode) {
                 data.push(accountNode);
+              }
+              if (tablespaceNode) {
+                data.push(tablespaceNode);
               }
               r(data);
             })
@@ -428,6 +453,48 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
       return `dataSource_${dataSourceId}-databaseAccount_${encodeURIComponent(user || '')}_${encodeURIComponent(
         host || '',
       )}`;
+    },
+  },
+
+  [TreeNodeType.TABLESPACES]: {
+    getChildren: (extraParams: any) => {
+      return tablespaceService
+        .list({ dataSourceId: extraParams.dataSourceId, refresh: extraParams.refresh })
+        .then((tablespaces: any[]) => {
+          return (tablespaces || []).map((tablespace) => {
+            const key = treeConfig[TreeNodeType.TABLESPACE].createTreeNodeKey!({
+              dataSourceId: extraParams.dataSourceId,
+              tablespaceName: tablespace.name,
+            });
+            return {
+              key,
+              originalTitle: tablespace.name,
+              title: null,
+              treeNodeType: TreeNodeType.TABLESPACE,
+              isLeaf: true,
+              extraParams: {
+                ...extraParams,
+                tablespaceName: tablespace.name,
+              },
+            };
+          });
+        });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId } = formatObject(params);
+      return `dataSource_${dataSourceId}-tablespaces`;
+    },
+  },
+
+  [TreeNodeType.TABLESPACE]: {
+    getChildren: () => {
+      return new Promise((r: (value: TreeNodeData[]) => void) => {
+        r([]);
+      });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, tablespaceName } = formatObject(params);
+      return `dataSource_${dataSourceId}-tablespace_${encodeURIComponent(tablespaceName || '')}`;
     },
   },
 

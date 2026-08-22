@@ -9,4 +9,6 @@ public interface IDdlSqlBuilder {
     ITableSqlBuilder table();
 
     IViewSqlBuilder view();
+
+    ITablespaceSqlBuilder tablespace();
 }

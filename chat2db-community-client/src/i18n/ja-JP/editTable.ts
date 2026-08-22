@@ -31,6 +31,7 @@ export default {
   'editTable.label.autoIncrement': '自動インクリメント',
   'editTable.label.engine': 'エンジン',
   'editTable.label.incrementValue': '増分値',
+  'editTable.label.tablespace': 'テーブルスペース',
   'editTable.label.order': '順序',
   'editTable.label.primaryKey': 'キー',
   'editTable.title.sqlPreview': 'SQLプレビュー',

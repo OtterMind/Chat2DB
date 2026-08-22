@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.request.PageLimitRequest;
+import ai.chat2db.spi.sql.builder.ITablespaceSqlBuilder;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
@@ -47,6 +48,7 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_MODIFY_COLU
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_PARTITION_SEPARATOR;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SECURITY;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_TABLESPACE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
 
 
@@ -131,6 +133,9 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         if (StringUtils.isNotBlank(table.getPartition())) {
             script.append(SQL_PARTITION_SEPARATOR).append(table.getPartition());
         }
+        if (StringUtils.isNotBlank(table.getTablespace())) {
+            script.append(SQL_TABLESPACE).append(quoteMysqlIdentifier(table.getTablespace()));
+        }
         script.append(SQLConstants.SEMICOLON);
 
         return script.toString();
@@ -170,6 +175,12 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         }
         if (!Objects.equals(oldTable.getIncrementValue(), newTable.getIncrementValue())) {
             script.append(SQLConstants.TAB).append(SQL_AUTO_INCREMENT_ASSIGNMENT).append(newTable.getIncrementValue()).append(SQLConstants.COMMA_LINE_SEPARATOR);
+        }
+        if (StringUtils.isNotBlank(newTable.getTablespace())
+                && !StringUtils.equalsIgnoreCase(oldTable.getTablespace(), newTable.getTablespace())) {
+            script.append(SQLConstants.TAB).append(SQL_TABLESPACE)
+                    .append(quoteMysqlIdentifier(newTable.getTablespace()))
+                    .append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         List<TableColumn> addColumnList = new ArrayList<>();
         for (TableColumn tableColumn : newTable.getColumnList()) {
@@ -271,6 +282,11 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
     @Override
     public String buildDropDatabase(String databaseName) {
         return String.format(SQL_DROP_DATABASE_TEMPLATE, quoteMysqlIdentifier(databaseName));
+    }
+
+    @Override
+    public ITablespaceSqlBuilder tablespace() {
+        return new MysqlTablespaceSqlBuilder();
     }
 
     public static List<TableColumn> movedElements(List<TableColumn> original, List<TableColumn> modified) {

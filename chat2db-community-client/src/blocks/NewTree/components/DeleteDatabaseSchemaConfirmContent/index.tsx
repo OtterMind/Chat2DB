@@ -5,7 +5,7 @@ import { useStyles } from './style';
 
 interface IProps {
   sqlPreview: string;
-  objectType: 'database' | 'schema';
+  objectType: 'database' | 'schema' | 'tablespace';
 }
 
 export default memo<IProps>((props) => {

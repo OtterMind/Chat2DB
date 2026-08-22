@@ -17,6 +17,10 @@ public class CacheKey {
         return "databases_datasourceId_" + dataSourceId;
     }
 
+    public static String getTablespacesKey(Long dataSourceId) {
+        return "tablespaces_datasourceId_" + dataSourceId;
+    }
+
     public static String getSchemasKey(Long dataSourceId, String databaseName) {
 
         return "databases_datasourceId_" + dataSourceId + "_databaseName_" + databaseName;

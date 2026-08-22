@@ -220,6 +220,7 @@ export interface IDatabaseSupportField {
   indexTypes: IIndexTypes[];
   defaultValues: IDefaultValue[];
   engineTypes: IEngineType[];
+  tablespaces: ITablespace[];
 }
 
 /** The character set corresponding to the field */
@@ -240,6 +241,11 @@ export interface IIndexTypes {
 
 /** Table engine type */
 export interface IEngineType {
+  name: string;
+}
+
+/** InnoDB General Tablespace (instance-level). Only `name` is needed for the table-option dropdown. */
+export interface ITablespace {
   name: string;
 }
 

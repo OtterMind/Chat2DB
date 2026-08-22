@@ -161,8 +161,13 @@ export interface IDatabaseObjectDeleteExecuteParams {
 export interface IDatabaseObjectDeletePrepareVO {
   confirmName: string;
   sqlPreview: string;
-  objectType: 'DATABASE' | 'SCHEMA';
+  objectType: 'DATABASE' | 'SCHEMA' | 'TABLESPACE';
   dbType: string;
+  /**
+   * Tables occupying a tablespace (qualified as `schema.table`). Populated by the tablespace
+   * delete-prepare step when the tablespace is non-empty; absent for database/schema deletes.
+   */
+  occupyingTables?: string[];
 }
 
 const deleteTable = createRequest<ITableParams, void>('/api/rdb/ddl/delete', { method: 'post' });

@@ -7,6 +7,8 @@ export enum TreeNodeType {
   DATA_SOURCE = 'dataSource',
   DATABASE_ACCOUNTS = 'databaseAccounts',
   DATABASE_ACCOUNT = 'databaseAccount',
+  TABLESPACES = 'tablespaces',
+  TABLESPACE = 'tablespace',
   DATABASE = 'database',
   SCHEMA = 'schema',
   TABLES = 'tables',
@@ -64,6 +66,9 @@ export enum OperationColumn {
   CopyDataSource = 'copyDataSource', // Copy data source
   CreateTable = 'createTable', //Create table
   DeleteTable = 'deleteTable', // Delete table
+  CreateTablespace = 'createTablespace', // Create InnoDB general tablespace
+  RenameTablespace = 'renameTablespace', // Rename tablespace (MySQL 8.0+)
+  DeleteTablespace = 'deleteTablespace', // Delete tablespace
   OpenTable = 'openTable', // open table
   ViewDDL = 'viewDDL', // View ddl
   Pin = 'pin', // pin to top

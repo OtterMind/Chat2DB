@@ -1,6 +1,7 @@
 package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 
@@ -31,6 +32,41 @@ public interface IDbManager {
     void createDatabase(Connection connection, String databaseName);
 
     void dropDatabase(Connection connection, String databaseName);
+
+    /**
+     * Creates an InnoDB General Tablespace. No-op (throws) for dialects that do not support
+     * tablespaces. The data-file path is user-supplied and emitted verbatim; the application
+     * never touches the filesystem.
+     */
+    default void createTablespace(Connection connection, Tablespace tablespace) {
+        throw new UnsupportedOperationException("createTablespace not supported");
+    }
+
+    /**
+     * Drops a tablespace. MySQL rejects a non-empty tablespace ({@code ER_TABLESPACE_NOT_EMPTY});
+     * callers should surface occupying tables via the two-phase delete prepare step before calling.
+     */
+    default void dropTablespace(Connection connection, String tablespaceName) {
+        throw new UnsupportedOperationException("dropTablespace not supported");
+    }
+
+    /**
+     * Renames a tablespace. MySQL 8.0+ only; dialects/versions that do not support rename should
+     * throw {@link ai.chat2db.community.tools.exception.BusinessException} with key
+     * {@code tablespace.rename.notSupported}.
+     */
+    default void alterTablespaceRename(Connection connection, String oldTablespaceName,
+            String newTablespaceName) {
+        throw new UnsupportedOperationException("alterTablespaceRename not supported");
+    }
+
+    /**
+     * Whether the current dialect/server supports {@code ALTER TABLESPACE ... RENAME TO}
+     * (MySQL 8.0+). Used to gate the rename action in the UI.
+     */
+    default boolean supportsTablespaceRename() {
+        return false;
+    }
 
     void createSchema(Connection connection, String databaseName, String schemaName);
 
