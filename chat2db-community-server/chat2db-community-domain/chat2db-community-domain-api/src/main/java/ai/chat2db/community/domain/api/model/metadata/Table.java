@@ -52,6 +52,8 @@ public class Table implements Serializable {
 
     private List<ForeignKeyInfo> foreignKeyList;
 
+    private List<CheckConstraintInfo> checkConstraintList;
+
 
 
 

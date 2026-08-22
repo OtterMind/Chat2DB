@@ -128,6 +128,8 @@ public class DbTableServiceImpl implements IDbTableService {
                     table.setColumnList(
                             metaSchema.columns(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
+                    table.setCheckConstraintList(metaSchema.checkConstraints(Chat2DBContext.getConnection(),
+                            new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
                     setPrimaryKey(table);
                     return filterTableDetail(param, table);
                 }

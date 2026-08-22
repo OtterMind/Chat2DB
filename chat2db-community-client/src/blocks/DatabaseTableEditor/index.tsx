@@ -3,6 +3,7 @@ import { Button, Modal, Segmented } from 'antd';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import IndexList, { IIndexListRef } from './IndexList';
+import CheckConstraintList, { ICheckConstraintListRef } from './CheckConstraintList';
 import ColumnList, { IColumnListRef } from './ColumnList';
 import BaseInfo, { IBaseInfoRef } from './BaseInfo';
 import sqlService, { IModifyTableSqlParams } from '@/service/sql';
@@ -28,6 +29,7 @@ interface IContext extends IProps {
   baseInfoRef: React.RefObject<IBaseInfoRef>;
   columnListRef: React.RefObject<IColumnListRef>;
   indexListRef: React.RefObject<IIndexListRef>;
+  checkConstraintListRef: React.RefObject<ICheckConstraintListRef>;
   databaseSupportField: IDatabaseSupportField;
 }
 
@@ -61,6 +63,7 @@ export default memo((props: IProps) => {
   const baseInfoRef = useRef<IBaseInfoRef>(null);
   const columnListRef = useRef<IColumnListRef>(null);
   const indexListRef = useRef<IIndexListRef>(null);
+  const checkConstraintListRef = useRef<ICheckConstraintListRef>(null);
   const [appendValue, setAppendValue] = useState<string>('');
   const aiEntryButtonRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +83,7 @@ export default memo((props: IProps) => {
       label: i18n('editTable.tab.indexInfo'),
       content: <IndexList ref={indexListRef} />,
     },
+    { key: 'check', label: 'CHECK', content: <CheckConstraintList ref={checkConstraintListRef} /> },
   ];
 
   const segmentedOptions = useMemo(() => {
@@ -214,12 +218,13 @@ export default memo((props: IProps) => {
   };
 
   function submit() {
-    if (baseInfoRef.current && columnListRef.current && indexListRef.current) {
+    if (baseInfoRef.current && columnListRef.current && indexListRef.current && checkConstraintListRef.current) {
       const newTable = {
         ...oldTableDetails,
         ...baseInfoRef.current.getBaseInfo(),
         columnList: columnListRef.current.getColumnListInfo()!,
         indexList: indexListRef.current.getIndexListInfo()!,
+        checkConstraintList: checkConstraintListRef.current.getCheckConstraintListInfo(),
       };
 
       const params: IModifyTableSqlParams = {
@@ -270,6 +275,7 @@ export default memo((props: IProps) => {
     baseInfoRef,
     columnListRef,
     indexListRef,
+    checkConstraintListRef,
     databaseSupportField,
   }), [databaseBaseInfo, changeTabDetails, tabDetails, submitCallback, tableDetails, databaseSupportField]);
 
