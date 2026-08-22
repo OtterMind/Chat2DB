@@ -297,6 +297,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revocar privilegios',
   'workspace.databaseAccount.lockUnsupported':
     'Esta versión de MySQL o los privilegios de la cuenta actual no admiten el bloqueo de cuentas',
+  'workspace.databaseAccount.scopeColumn': 'Columna (db.tabla.col)',
+  'workspace.databaseAccount.columns': 'Columnas',
+  'workspace.databaseAccount.selectColumns': 'Seleccionar columnas',
+  'workspace.databaseAccount.columnsRequired': 'Se requiere al menos una columna',
   'workspace.routine.button.invoke': 'Invocar rutina',
   'workspace.routine.button.apply': 'Aplicar cambios',
   'workspace.routine.button.refresh': 'Volver a cargar DDL',

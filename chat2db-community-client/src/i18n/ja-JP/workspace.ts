@@ -295,6 +295,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.databaseAccount.scopeColumn': '列 (db.table.col)',
+  'workspace.databaseAccount.columns': '列',
+  'workspace.databaseAccount.selectColumns': '列を選択',
+  'workspace.databaseAccount.columnsRequired': '少なくとも1つの列が必要です',
   'workspace.routine.button.invoke': 'ルーチンを呼び出す',
   'workspace.routine.button.apply': '変更を適用',
   'workspace.routine.button.refresh': 'DDL を再読み込み',
