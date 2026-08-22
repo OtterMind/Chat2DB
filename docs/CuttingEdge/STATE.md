@@ -195,6 +195,16 @@ API + PyPI, on the day of writing) of what we may and may not use. Headlines:
 * wavesurfer.js (BSD-3) for audio waveforms, OpenTimelineIO (Apache-2.0) for project
   interchange, DeepFilterNet (MIT/Apache) for denoise, Demucs (MIT) for ducking.
 
+## 5c. Third-party roadmap review
+
+`docs/CuttingEdge/ROADMAP_REVIEW.md` audits the `video-editing-app-roadmap` archive the
+user uploaded to the `Gif` branch. Short version: the phases match ours and no repository
+in it is invented, but Remotion (commercial), Shepherd (AGPL), pedalboard (GPL-3),
+pyvideotrans (GPL-3) and GSAP (no licence file) cannot be shipped, `edge-tts` is an online
+service rather than local, and celery/better-sqlite3/dnd-kit/i18next are the wrong tools
+for a single-process desktop app. Adopted from it: bezierjs, colour-science,
+freesound-python, apscheduler.
+
 ## 6. Next, in order
 
 1. Keyframes for position, scale, rotation, opacity and volume. The model part is
