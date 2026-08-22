@@ -20,6 +20,8 @@ export default {
   'editTable.label.columnType': '유형',
   'editTable.label.nullable': 'NULL 허용',
   'editTable.label.prefixLength': '접두사 길이',
+  'editTable.tips.prefixLengthUnsupported': '접두사 길이는 문자열 또는 이진 열에서만 지원됩니다',
+  'editTable.tips.prefixLengthTooLarge': '접두사 길이는 열 길이 ({1})를 초과할 수 없습니다',
   'editTable.label.defaultValue': '기본값',
   'editTable.label.updateTime': '현재 타임스탬프에 따라 업데이트',
   'editTable.label.sparse': '희소',

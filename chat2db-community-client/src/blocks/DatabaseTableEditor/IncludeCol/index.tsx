@@ -12,11 +12,11 @@ import {
   useImperativeHandle,
 } from 'react';
 import classnames from 'classnames';
-import { Table, Form, Select, Button } from 'antd';
+import { Table, Form, Select, Button, InputNumber } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { Context } from '../index';
 import { IColumnItemNew, IIndexIncludeColumnItem } from '@/typings';
-import { shouldShowSqliteIncludeCollation } from '@/utils/databaseJudgments';
+import { shouldShowSqliteIncludeCollation, shouldShowMysqlIndexMethod } from '@/utils/databaseJudgments';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import Iconfont from '@/components/Iconfont';
@@ -82,6 +82,28 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
     const columnListInfo = columnListRef.current?.getColumnListInfo()?.filter((i) => i.name !== null);
     return columnListInfo || [];
   }, []);
+
+  const getPrefixLengthRule = (columnName?: string | null) => {
+    const column = columnList.find((item) => item.name === columnName);
+    const columnType = column?.columnType || '';
+    const prefixSupported = /^(char|varchar|binary|varbinary|tinytext|text|mediumtext|longtext|tinyblob|blob|mediumblob|longblob)/i.test(
+      columnType,
+    );
+    return {
+      validator: (_: unknown, value?: number | null) => {
+        if (value == null) {
+          return Promise.resolve();
+        }
+        if (!prefixSupported) {
+          return Promise.reject(new Error(i18n('editTable.tips.prefixLengthUnsupported')));
+        }
+        if (column?.columnSize && value > column.columnSize) {
+          return Promise.reject(new Error(i18n('editTable.tips.prefixLengthTooLarge', { 1: column.columnSize })));
+        }
+        return Promise.resolve();
+      },
+    };
+  };
 
   const edit = (record: any) => {
     form.setFieldsValue({ ...record });
@@ -168,25 +190,27 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
         );
       },
     },
-
-    // {
-    //   title: i18n('editTable.label.prefixLength'),
-    //   dataIndex: 'prefixLength',
-    //   width: '45%',
-    //   render: (text: string, record: IIndexIncludeColumnItem) => {
-    //     const editable = isEditing(record);
-    //     return editable ? (
-    //       <Form.Item name="prefixLength" style={{ margin: 0 }}>
-    //         <InputNumber style={{ width: '100%' }} />
-    //       </Form.Item>
-    //     ) : (
-    //       <div className={styles.editableCell} onClick={() => edit(record)}>
-    //         {text}
-    //       </div>
-    //     );
-    //   },
-    // },
   ];
+
+  if (shouldShowMysqlIndexMethod(databaseType)) {
+    columns.splice(-1, 0, {
+      title: i18n('editTable.label.prefixLength'),
+      dataIndex: 'subPart',
+      width: '120px',
+      render: (text: number | null, record: IIndexIncludeColumnItem) => {
+        const editable = isEditing(record);
+        return editable ? (
+          <Form.Item name="subPart" rules={[getPrefixLengthRule(record.columnName)]} style={{ margin: 0 }}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+        ) : (
+          <div className={styles.editableCell} onClick={() => edit(record)}>
+            {text ?? ''}
+          </div>
+        );
+      },
+    });
+  }
   // sqlLite Add sorting rules
   if (shouldShowSqliteIncludeCollation(databaseType)) {
     columns.splice(2, 0, {

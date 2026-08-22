@@ -20,6 +20,8 @@ export default {
   'editTable.label.columnType': 'タイプ',
   'editTable.label.nullable': 'Null許容',
   'editTable.label.prefixLength': 'プレフィックス長',
+  'editTable.tips.prefixLengthUnsupported': 'プレフィックス長は文字列またはバイナリ列でのみ利用できます',
+  'editTable.tips.prefixLengthTooLarge': 'プレフィックス長は列の長さ ({1}) を超えることはできません',
   'editTable.label.defaultValue': 'デフォルト値',
   'editTable.label.updateTime': '現在のタイムスタンプに基づいて更新',
   'editTable.label.sparse': 'スパース',

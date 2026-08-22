@@ -20,6 +20,8 @@ export default {
   'editTable.label.columnType': '类型',
   'editTable.label.nullable': '可空',
   'editTable.label.prefixLength': '前缀长度',
+  'editTable.tips.prefixLengthUnsupported': '前缀长度仅支持字符串或二进制列',
+  'editTable.tips.prefixLengthTooLarge': '前缀长度不能超过列长度 ({1})',
   'editTable.label.defaultValue': '默认值',
   'editTable.label.updateTime': '根据当前时间戳更新',
   'editTable.label.sparse': '稀疏',
