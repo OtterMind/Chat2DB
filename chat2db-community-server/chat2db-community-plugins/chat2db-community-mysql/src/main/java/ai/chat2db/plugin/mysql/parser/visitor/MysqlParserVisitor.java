@@ -405,6 +405,18 @@ public class MysqlParserVisitor extends MySqlParserBaseVisitor<Void> {
 
 
     @Override
+    public Void visitSimpleDescribeStatement(MySqlParser.SimpleDescribeStatementContext ctx) {
+        Token command = ctx.command;
+        if (command == null || (command.getType() != MySqlParser.DESC && command.getType() != MySqlParser.DESCRIBE)) {
+            return super.visitSimpleDescribeStatement(ctx);
+        }
+        context.setStatementType(SqlTypeEnum.DESCRIBE);
+        visitTableNameContext(ctx.tableReferenceName().tableName());
+        return null;
+    }
+
+
+    @Override
     public Void visitUseStatement(MySqlParser.UseStatementContext ctx) {
         context.setStatementType(SqlTypeEnum.USE_DATABASE);
         MySqlParser.UidContext uid = ctx.databaseReferenceName().uid();
