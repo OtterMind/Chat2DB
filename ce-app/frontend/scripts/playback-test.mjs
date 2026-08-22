@@ -678,6 +678,69 @@ if (midpoint !== null && Math.abs(kfMiddle.scale - midpoint) < 0.03)
   ok(`the midpoint is the average (${kfMiddle.scale.toFixed(3)} ≈ ${midpoint.toFixed(3)})`)
 else bad('interpolation is not linear', JSON.stringify({ mid: kfMiddle.scale, expected: midpoint }))
 
+/* 11f3 — waveform, beat grid and cut-on-beat -------------------------------- */
+if (args.beat ?? process.env.CE_TEST_BEAT) {
+  const beatFile = args.beat ?? process.env.CE_TEST_BEAT
+  await page.evaluate((audioPath, videoPath) => {
+    const S = () => window.__ceEditor.getState()
+    S().clearTimeline()
+    S().setBeats([], 0)
+    // 4 s: the real length of the test clip, so the film strip is not asking
+    // for frames the file does not have.
+    S().addClip({
+      trackId: 'v1', start: 0, duration: 4, offset: 0, sourceDuration: 4,
+      src: videoPath, label: 'picture', color: '#6366F1', width: 360, height: 640,
+    })
+    S().addClip({
+      trackId: 'a1', start: 0, duration: 8, offset: 0, sourceDuration: 8,
+      src: audioPath, label: 'music', color: '#10B981',
+    })
+  }, beatFile, args.vertical ?? process.env.CE_TEST_VERTICAL ?? A)
+  await new Promise((r) => setTimeout(r, 1800))
+
+  const wave = await page.evaluate(() => {
+    const polygon = document.querySelector('.tl__wave polygon')
+    return { drawn: Boolean(polygon), points: polygon?.getAttribute('points')?.split(' ').length ?? 0 }
+  })
+  if (wave.drawn && wave.points > 50) ok(`the audio clip draws a waveform (${wave.points} points)`)
+  else bad('no waveform on the audio clip', JSON.stringify(wave))
+
+  // Find the beat: the number must match the click track we synthesised.
+  const detected = await page.evaluate((path) => (window.__pending = (async () => {
+    const response = await fetch('http://127.0.0.1:8742/api/analyze/beats', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }).then((r) => r.json())
+    window.__ceEditor.getState().setBeats(response.beats, response.bpm)
+    await new Promise((r) => setTimeout(r, 500))
+    return { bpm: response.bpm, beats: response.beats.length, markers: document.querySelectorAll('.tl__beat').length }
+  })()), beatFile)
+  if (Math.abs(detected.bpm - 120) < 3) ok(`the beat detector reads 120 BPM (${detected.bpm})`)
+  else bad('the tempo is wrong', JSON.stringify(detected))
+  if (detected.markers === detected.beats && detected.markers > 10)
+    ok(`the beat grid is drawn on the ruler (${detected.markers} lines)`)
+  else bad('the beat grid is missing', JSON.stringify(detected))
+
+  // Cut on beat: one clip becomes one piece per beat.
+  const cut = await page.evaluate(() => {
+    const S = () => window.__ceEditor.getState()
+    const picture = S().clips.find((c) => c.label === 'picture')
+    S().select(picture.id)
+    const before = S().clips.length
+    const cuts = S().splitAtBeats(picture.id)
+    const after = S().clips
+    const lane = after.filter((c) => c.trackId === 'v1').sort((a, b) => a.start - b.start)
+    const gaps = lane.slice(1).map((c, i) => Math.abs(c.start - (lane[i].start + lane[i].duration)))
+    return { before, cuts, count: after.length, biggestGap: gaps.length ? Math.max(...gaps) : 0 }
+  })
+  if (cut.cuts > 5 && cut.count === cut.before + cut.cuts)
+    ok(`cut on beat split the clip into ${cut.cuts + 1} pieces`)
+  else bad('cut on beat did not split the clip', JSON.stringify(cut))
+  if (cut.biggestGap < 0.001) ok('the pieces tile the lane with no gaps')
+  else bad('cutting on the beat left a gap', JSON.stringify(cut))
+}
+
 /* 11g — mute is sound, hide is picture -------------------------------------- */
 const mute = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor

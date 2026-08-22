@@ -44,6 +44,9 @@ done
   -f lavfi -i "testsrc=size=360x640:rate=25:duration=4" \
   -f lavfi -i "sine=frequency=440:duration=4" \
   -c:v libvpx -b:v 400k -c:a libvorbis -shortest "$MEDIA/vertical.webm"
+# a click track at an exact 120 BPM: ground truth for beat detection
+[ -f "$MEDIA/beat120.wav" ] || "$FFDIR/ffmpeg" -y -loglevel error \
+  -f lavfi -i "aevalsrc='0.9*sin(2*PI*880*t)*exp(-30*mod(t\,0.5))':d=8:s=44100" "$MEDIA/beat120.wav"
 # and one big enough to trigger the editing proxy
 [ -f "$MEDIA/big.mp4" ] || "$FFDIR/ffmpeg" -y -loglevel error \
   -f lavfi -i "testsrc=size=2560x1440:rate=25:duration=3" \
@@ -69,6 +72,7 @@ export CE_TEST_A=$MEDIA/clip1.webm
 export CE_TEST_B=$MEDIA/clip2.webm
 export CE_TEST_VERTICAL=$MEDIA/vertical.webm
 export CE_TEST_BIG=$MEDIA/big.mp4
+export CE_TEST_BEAT=$MEDIA/beat120.wav
 export CE_VENV=$VENV
 ENV
 

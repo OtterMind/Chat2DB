@@ -177,6 +177,9 @@ interface EditorState extends Snapshot {
    * makes a phone video fill the monitor instead of sitting in a wide letterbox.
    */
   aspect: 'auto' | '9:16' | '1:1' | '4:5' | '16:9'
+  /** Beat grid of the music, in timeline seconds — drawn on the ruler. */
+  beats: number[]
+  bpm: number
   /**
    * Which tool panel the rail shows. It lives here, not inside the toolbar,
    * because the timeline has to be able to open one — clicking the junction
@@ -198,6 +201,9 @@ interface EditorState extends Snapshot {
   toggleSnapping: () => void
   setPanel: (panel: string | null) => void
   setAspect: (aspect: EditorState['aspect']) => void
+  setBeats: (beats: number[], bpm: number) => void
+  /** Split a clip at every beat that falls inside it. */
+  splitAtBeats: (id: string) => number
   /** Width / height of the canvas as a number, resolving 'auto'. */
   canvasRatio: () => number
   /** Furthest point any clip reaches — where playback stops. */
@@ -319,6 +325,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   snapping: true,
   panel: null,
   aspect: 'auto',
+  beats: [],
+  bpm: 0,
   past: [],
   future: [],
 
@@ -378,6 +386,36 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
   setPanel: (panel) => set({ panel }),
   setAspect: (aspect) => set({ aspect, dirty: true }),
+  setBeats: (beats, bpm) => set({ beats, bpm }),
+
+  splitAtBeats: (id) => {
+    const state = get()
+    const clip = state.clips.find((c) => c.id === id)
+    if (!clip) return 0
+    // Beats are timeline times; the split points are the ones strictly inside
+    // the clip, far enough from both edges to leave a usable piece.
+    const inside = state.beats
+      .filter((t) => t > clip.start + MIN_CLIP && t < clip.start + clip.duration - MIN_CLIP)
+      .sort((a, b) => a - b)
+    if (inside.length === 0) return 0
+    get().commit((s) => {
+      const target = s.clips.find((c) => c.id === id)
+      if (!target) return
+      const bounds = [target.start, ...inside, target.start + target.duration]
+      s.clips = s.clips.filter((c) => c.id !== id)
+      for (let i = 0; i < bounds.length - 1; i++) {
+        const start = bounds[i]
+        s.clips.push({
+          ...target,
+          id: uid(),
+          start,
+          offset: target.offset + (start - target.start),
+          duration: bounds[i + 1] - start,
+        })
+      }
+    })
+    return inside.length
+  },
   canvasRatio: () => {
     const { aspect, clips, tracks } = get()
     const named: Record<string, number> = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 }

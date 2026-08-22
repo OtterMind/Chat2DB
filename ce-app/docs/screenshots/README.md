@@ -16,6 +16,15 @@ a section, and is the way home.
 
 ---
 
+## Waveforms and the beat grid
+
+The audio lane draws the shape of the sound, and "Find the beat" puts the tempo grid on
+the ruler so cuts can land on the music. Detected here: 120 BPM from a click track.
+
+![Waveform and beat grid](12-waveform-beats-crop.png)
+
+---
+
 ## Home — the launcher
 
 The only screen that keeps the brand line and the tab bar: search, two starting cards,

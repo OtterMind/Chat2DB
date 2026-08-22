@@ -12,7 +12,14 @@ export interface SilenceResult {
   speech: TimeRange[]
 }
 
+export interface BeatResult {
+  bpm: number
+  beats: number[]
+  confidence: number
+}
+
 export const analyzeApi = {
+  beats: async (path: string): Promise<BeatResult> => (await api.post('/analyze/beats', { path })).data,
   silence: async (path: string, options?: { noise_db?: number; min_silence?: number }): Promise<SilenceResult> =>
     (await api.post('/analyze/silence', { path, ...options })).data,
   scenes: async (path: string): Promise<{ scenes: number[] }> =>

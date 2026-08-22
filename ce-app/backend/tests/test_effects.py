@@ -236,3 +236,17 @@ def test_hiding_a_lane_removes_the_picture(media, tmp_path):
     output = _render(data, tmp_path, "hidden_lane.mp4")
     # Nothing but the canvas is left, so the frame is black.
     assert _stats(output, at=0.3)["YAVG"] < 20
+
+
+@requires_ffmpeg
+def test_a_thumbnail_past_the_end_returns_the_last_frame(media):
+    """Regression: it used to 422, filling the console while the strip drew nothing."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as client:
+        source = str(media["clip_b"])          # three seconds long
+        late = client.get("/api/media/thumb", params={"path": source, "t": 99.0, "h": 64})
+        assert late.status_code == 200
+        assert len(late.content) > 500

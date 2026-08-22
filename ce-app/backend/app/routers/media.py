@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.config import settings
+from core.engine import audio as audio_engine
 from core.engine import proxy as proxies
 from core.engine.compose import ffmpeg_binary
 
@@ -83,16 +84,28 @@ def _thumb_dir() -> Path:
 
 
 def _extract(source: Path, at: float, height: int, target: Path) -> None:
-    """One frame, scaled, as JPEG. Fast seek before the input keeps this cheap."""
+    """One frame, scaled, as JPEG. Fast seek before the input keeps this cheap.
+
+    Asking past the end of a file is normal — a clip can be longer than its
+    source while media is being replaced — so that falls back to the last frame
+    instead of failing. A film strip that repeats its final frame reads as "the
+    material ends here"; a row of broken images reads as "this app is broken".
+    """
+    common = [ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y"]
+    tail = ["-frames:v", "1", "-vf", f"scale=-2:{height}", "-q:v", "6", str(target)]
+    try:
+        subprocess.run(
+            [*common, "-ss", f"{max(0.0, at):.3f}", "-i", str(source), *tail],
+            check=True, timeout=25,
+        )
+        if target.exists():
+            return
+    except subprocess.CalledProcessError:
+        pass
+    # Last frame of the file.
     subprocess.run(
-        [
-            ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
-            "-ss", f"{max(0.0, at):.3f}", "-i", str(source),
-            "-frames:v", "1", "-vf", f"scale=-2:{height}", "-q:v", "6",
-            str(target),
-        ],
-        check=True,
-        timeout=25,
+        [*common, "-sseof", "-0.5", "-i", str(source), *tail],
+        check=True, timeout=25,
     )
 
 
@@ -150,3 +163,19 @@ async def start_proxy(payload: dict):
 @router.get("/proxy")
 def proxy_status(path: str):
     return proxies.state_for(path).__dict__
+
+
+# ---------------------------------------------------------------- waveforms
+
+
+@router.get("/peaks")
+async def waveform(path: str, points: int = 800):
+    """A min/max envelope of the audio, for drawing on the timeline."""
+    try:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, audio_engine.peaks, path, points
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    # A silent video answers with an empty envelope, not an error: the clip
+    # simply draws no waveform.

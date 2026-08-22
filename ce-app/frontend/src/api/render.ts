@@ -57,6 +57,18 @@ export const proxyApi = {
     (await api.get('/media/proxy', { params: { path } })).data,
 }
 
+export interface Peaks {
+  duration: number
+  points: number
+  peaks: number[]
+}
+
+/** Waveform envelope for the timeline. */
+export const peaksApi = {
+  get: async (path: string, points = 600): Promise<Peaks> =>
+    (await api.get('/media/peaks', { params: { path, points } })).data,
+}
+
 /** One frame of a file, for the timeline film strip. */
 export function thumbUrl(path: string, at: number, height = 96) {
   return `${backendOrigin}/api/media/thumb?path=${encodeURIComponent(path)}&t=${at.toFixed(1)}&h=${height}`

@@ -594,6 +594,15 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tl__handle--end { left: auto; right: 0; background: linear-gradient(270deg, rgba(255, 255, 255, .35), transparent); }
 
+/* waveform: the shape of the sound, drawn inside the clip */
+.tl__wave { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.tl__wave polygon { fill: rgba(226, 232, 240, .55); }
+.tl__clip.is-selected .tl__wave polygon { fill: rgba(255, 255, 255, .8); }
+
+/* beat grid on the ruler */
+.tl__beat { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(251, 191, 36, .45); pointer-events: none; }
+.tl__beat.is-bar { background: rgba(251, 191, 36, .85); }
+
 /* keyframe markers: only on the selected clip, so the lane stays readable */
 .tl__key {
   position: absolute; bottom: 3px; width: 7px; height: 7px; margin-inline-start: -3.5px;

@@ -4,6 +4,7 @@ import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers,
   Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2, MoveHorizontal, Diamond, X,
+  AudioWaveform,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { captionsApi } from '../api/captions'
@@ -57,10 +58,14 @@ export default function EditorToolbar({
   onImport,
   onRemoveSilence,
   onSplitScenes,
+  onDetectBeats,
+  onCutOnBeat,
 }: {
   onImport: () => void
   onRemoveSilence?: () => void
   onSplitScenes?: () => void
+  onDetectBeats?: () => void
+  onCutOnBeat?: () => void
 }) {
   const { t, lang } = useI18n()
   const navigate = useNavigate()
@@ -156,6 +161,9 @@ export default function EditorToolbar({
     { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
+    ...(onDetectBeats
+      ? [{ id: 'beats', icon: <AudioWaveform {...ICON} />, label: ['Find the beat', 'یافتن ضرب'] as [string, string], run: onDetectBeats }]
+      : []),
     // Everything that was taken off the home screen: these act on footage, so
     // they belong next to the footage.
     ...FEATURES.filter((feature) => feature.place === 'editor').map<Tool>((feature) => {
@@ -174,6 +182,9 @@ export default function EditorToolbar({
         run: run ?? (() => navigate(feature.route)),
       }
     }),
+    ...(onCutOnBeat
+      ? [{ id: 'cutbeat', icon: <AudioWaveform {...ICON} />, label: ['Cut on beat', 'برش روی ضرب'] as [string, string], run: onCutOnBeat }]
+      : []),
     ...(onSplitScenes
       ? [{ id: 'scenes', icon: <Film {...ICON} />, label: ['Split scenes', 'تقسیم نما'] as [string, string], run: onSplitScenes }]
       : []),

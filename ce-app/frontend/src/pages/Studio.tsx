@@ -37,7 +37,60 @@ export default function Studio() {
     keepRanges, splitAtSourceTimes, transitions,
   } = useEditor()
 
-  const [analysing, setAnalysing] = useState<'silence' | 'scenes' | null>(null)
+  const [analysing, setAnalysing] = useState<'silence' | 'scenes' | 'beats' | null>(null)
+
+  /**
+   * Beat detection.
+   *
+   * The grid is drawn on the ruler and every cut can then land on the music;
+   * "cut on beat" splits the selected clip at every beat inside it.
+   */
+  const detectBeats = async () => {
+    const source =
+      clips.find((c) => c.id === selectedId && c.src) ??
+      clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+    if (!source?.src) {
+      message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
+      return
+    }
+    setAnalysing('beats')
+    try {
+      const result = await analyzeApi.beats(source.src)
+      if (!result.beats.length) {
+        message.info(t('No steady beat found.', 'ضرب منظمی پیدا نشد.'))
+        return
+      }
+      // Beat times are inside the source; place them on the timeline.
+      const shift = source.start - source.offset
+      useEditor.getState().setBeats(result.beats.map((b) => b + shift), result.bpm)
+      message.success(
+        t(
+          `${result.bpm.toFixed(0)} BPM — ${result.beats.length} beats on the ruler`,
+          `${result.bpm.toFixed(0)} ضرب در دقیقه — ${result.beats.length} ضرب روی خط‌کش`
+        )
+      )
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setAnalysing(null)
+    }
+  }
+
+  const cutOnBeat = () => {
+    const state = useEditor.getState()
+    if (state.beats.length === 0) {
+      message.warning(t('Find the beat first.', 'اول ضرب را پیدا کن.'))
+      return
+    }
+    const target = state.clips.find((c) => c.id === state.selectedId) ?? state.clips[0]
+    if (!target) return
+    const cuts = state.splitAtBeats(target.id)
+    message.success(
+      cuts > 0
+        ? t(`Cut into ${cuts + 1} pieces on the beat`, `روی ضرب به ${cuts + 1} تکه بریده شد`)
+        : t('No beat inside this clip', 'ضربی داخل این کلیپ نیست')
+    )
+  }
 
   /*
    * Keyboard shortcuts.
@@ -430,7 +483,13 @@ export default function Studio() {
 
         <AssistantButton />
 
-        <EditorToolbar onImport={importMedia} onRemoveSilence={removeSilence} onSplitScenes={splitScenes} />
+        <EditorToolbar
+          onImport={importMedia}
+          onRemoveSilence={removeSilence}
+          onSplitScenes={splitScenes}
+          onDetectBeats={detectBeats}
+          onCutOnBeat={cutOnBeat}
+        />
 
         <Timeline />
 

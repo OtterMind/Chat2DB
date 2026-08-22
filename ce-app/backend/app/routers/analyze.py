@@ -6,7 +6,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+import asyncio
+
 from core.engine import analyze
+from core.engine import audio as audio_engine
 
 router = APIRouter(prefix="/api/analyze", tags=["analyze"])
 
@@ -57,3 +60,26 @@ def full(payload: AnalyzeRequest) -> dict:
         return analyze.analyse(payload.path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class BeatRequest(BaseModel):
+    path: str
+    min_bpm: float = Field(default=60.0, ge=20.0, le=300.0)
+    max_bpm: float = Field(default=200.0, ge=40.0, le=400.0)
+
+
+@router.post("/beats")
+async def detect_beats(payload: BeatRequest) -> dict:
+    """Tempo and beat times, so cuts can land on the music.
+
+    Runs in a worker thread: decoding and an FFT over a whole song is seconds of
+    CPU, and the event loop has a WebSocket to keep answering.
+    """
+    _require_file(payload.path)
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, audio_engine.beats, payload.path, payload.min_bpm, payload.max_bpm
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=f"No audio to analyse: {error}") from error
+    return {"bpm": result.bpm, "beats": result.beats, "confidence": result.confidence}

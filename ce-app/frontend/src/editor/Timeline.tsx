@@ -3,7 +3,7 @@ import {
   Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize, Crosshair, Eye, EyeOff,
 } from 'lucide-react'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
-import { thumbUrl } from '../api/render'
+import { peaksApi, thumbUrl } from '../api/render'
 import { useI18n } from '../i18n'
 
 const TRACK_ICON: Record<TrackKind, typeof Video> = { video: Video, audio: Music4, text: Type }
@@ -23,7 +23,7 @@ export default function Timeline() {
   const {
     tracks, clips, transitions, selectedId, playhead, pxPerSecond, snapping,
     select, setPlayhead, moveClip, trimClip, toggleMute, toggleHidden, toggleLock, neighbourOf,
-    setZoom, zoomToFit, setPanel, playing,
+    setZoom, zoomToFit, setPanel, playing, beats,
   } = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -350,6 +350,14 @@ export default function Timeline() {
                 {formatTimecode(t)}
               </span>
             ))}
+            {/* Beat grid: every fourth line is brighter, so bars are readable. */}
+            {beats.map((beat, index) => (
+              <span
+                key={`beat-${beat}`}
+                className={`tl__beat ${index % 4 === 0 ? 'is-bar' : ''}`}
+                style={{ left: beat * pxPerSecond }}
+              />
+            ))}
           </div>
 
           {tracks.map((track) => (
@@ -398,6 +406,7 @@ export default function Timeline() {
                     clip={clip}
                     pxPerSecond={pxPerSecond}
                     selected={clip.id === selectedId}
+                    kind={track.kind}
                     onSelect={() => select(clip.id)}
                     onDragStart={(mode, grabTime) =>
                       setDrag(
@@ -472,8 +481,49 @@ function FilmStrip({ clip, width }: { clip: Clip; width: number }) {
   )
 }
 
+/**
+ * Waveform.
+ *
+ * An audio lane made of flat rectangles gives no way to aim a cut at a word or a
+ * downbeat. The envelope comes from the backend already bucketed, so a ten-minute
+ * file costs a few kilobytes instead of a hundred megabytes of samples.
+ */
+function Waveform({ clip }: { clip: Clip }) {
+  const [points, setPoints] = useState<number[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!clip.src) return
+    peaksApi
+      .get(clip.src, 600)
+      .then((data) => !cancelled && setPoints(data.peaks))
+      .catch(() => !cancelled && setPoints(null))
+    return () => {
+      cancelled = true
+    }
+  }, [clip.src])
+
+  if (!points || points.length === 0) return null
+
+  // Only the part of the source this clip actually shows.
+  const from = Math.floor((clip.offset / Math.max(0.001, clip.sourceDuration)) * points.length)
+  const to = Math.ceil(((clip.offset + clip.duration) / Math.max(0.001, clip.sourceDuration)) * points.length)
+  const window = points.slice(Math.max(0, from), Math.max(from + 1, to))
+  const step = 100 / Math.max(1, window.length - 1)
+  const top = window.map((v, i) => `${(i * step).toFixed(3)},${(50 - v * 46).toFixed(2)}`).join(' ')
+  const bottom = window
+    .map((v, i) => `${((window.length - 1 - i) * step).toFixed(3)},${(50 + v * 46).toFixed(2)}`)
+    .join(' ')
+
+  return (
+    <svg className="tl__wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+      <polygon points={`${top} ${bottom}`} />
+    </svg>
+  )
+}
+
 function ClipView({
-  clip, pxPerSecond, selected, onSelect, onDragStart, xToTime,
+  clip, pxPerSecond, selected, onSelect, onDragStart, xToTime, kind,
 }: {
   clip: Clip
   pxPerSecond: number
@@ -481,6 +531,7 @@ function ClipView({
   onSelect: () => void
   onDragStart: (mode: 'move' | 'trim-start' | 'trim-end', grabTime: number) => void
   xToTime: (clientX: number) => number
+  kind: TrackKind
 }) {
   return (
     <div
@@ -499,7 +550,10 @@ function ClipView({
         else onDragStart('move', xToTime(e.clientX))
       }}
     >
-      {clip.src && <FilmStrip clip={clip} width={Math.max(12, clip.duration * pxPerSecond)} />}
+      {clip.src && kind === 'video' && (
+        <FilmStrip clip={clip} width={Math.max(12, clip.duration * pxPerSecond)} />
+      )}
+      {clip.src && kind === 'audio' && <Waveform clip={clip} />}
       {selected &&
         (clip.keyframes ?? []).map((key) => (
           <span key={key.t} className="tl__key" style={{ left: key.t * pxPerSecond }} />
