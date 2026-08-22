@@ -12,6 +12,7 @@ import {
 import i18n from '@/i18n';
 import { staticMessage } from '@chat2db/ui';
 import { filterSchemaByChartIds } from '@/utils/dashboard';
+import { runDashboardRefresh } from './refreshCurrentDashboard';
 
 export interface CommonAction {
   /** Set up Dashboard list */
@@ -133,16 +134,6 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
   },
   refreshCurrentDashboard: () => {
     const currentDashboardId = get().currentDashboard?.id;
-    return new Promise((resolve) => {
-      if (!currentDashboardId) {
-        resolve(false);
-        return;
-      }
-      get()
-        .getDashboardById(currentDashboardId)
-        .then(() => {
-          resolve(true);
-        });
-    });
+    return runDashboardRefresh(currentDashboardId, (dashboardId) => get().getDashboardById(dashboardId));
   },
 });
