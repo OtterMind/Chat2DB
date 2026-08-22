@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, Menu, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { spawn } from 'child_process'
 import { existsSync, createWriteStream, mkdirSync, readFileSync, statSync } from 'fs'
@@ -187,9 +187,14 @@ function showFatal(win: BrowserWindow, message: string) {
 }
 
 function createWindow() {
+  Menu.setApplicationMenu(null)
   mainWindow = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1024, minHeight: 768,
     title: 'Cutting Edge', backgroundColor: '#0F172A',
+    // The default menu bar (File/Edit/View/Window/Help) is a white strip that
+    // survived even in fullscreen. The app has no use for it: every action lives
+    // in the interface, so the whole bar goes.
+    autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   })
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)

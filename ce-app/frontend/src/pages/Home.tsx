@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { message } from 'antd'
-import { ArrowLeft, Plus, Zap, TrendingUp, Film, Clock3, Wand2 } from 'lucide-react'
+import { ArrowLeft, Plus, Zap, TrendingUp, Film, Clock3, Wand2, Trash2, CircleDashed } from 'lucide-react'
 import { BADGE_LABELS, FEATURES, GROUP_TITLES, type FeatureTile } from '../features/catalog'
 import { useI18n } from '../i18n'
 import { jobsApi, systemApi } from '../api/jobs'
@@ -63,12 +63,35 @@ export default function Home() {
   const jobs = jobsData?.jobs ?? []
 
   /* Saved editor projects are the real "recents" of a video app. */
-  const { data: projectData } = useQuery({
+  const { data: projectData, refetch: refetchProjects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.list(),
     staleTime: 5_000,
   })
   const projects = (projectData?.projects ?? []).slice(0, 8)
+  const hasAutosave = projectData?.hasAutosave ?? false
+
+  /** Unfinished work: the autosave slot, offered here instead of as a popup. */
+  const openAutosave = async () => {
+    try {
+      const doc = await projectsApi.loadAutosave()
+      useEditor.getState().loadSnapshot(doc.timeline as never, doc.name)
+      navigate('/studio')
+    } catch {
+      message.error(t('The unfinished project could not be opened.', 'پروژه‌ی نیمه‌کاره باز نشد.'))
+    }
+  }
+
+  const removeProject = async (event: React.MouseEvent, name: string) => {
+    event.stopPropagation()
+    try {
+      await projectsApi.remove(name)
+      await refetchProjects()
+      message.success(t('Project deleted', 'پروژه حذف شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
 
   const openProject = async (name: string) => {
     try {
@@ -121,28 +144,50 @@ export default function Home() {
             </button>
           )}
         </div>
-        {projects.length === 0 ? (
+        {projects.length === 0 && !hasAutosave ? (
           <div className="ce-empty">
             {t('No saved projects yet — “New video” starts one.', 'هنوز پروژه‌ای ذخیره نشده — با «ویدیوی جدید» شروع کن.')}
           </div>
         ) : (
           <div className="ce-reel">
+            {/* Unfinished work first: it is the thing most likely to be wanted. */}
+            {hasAutosave && (
+              <button className="ce-reelcard is-unfinished" onClick={() => void openAutosave()}>
+                <span className="ce-reelcard__art">
+                  <CircleDashed size={20} />
+                  <span className="ce-reelcard__len">{t('draft', 'پیش‌نویس')}</span>
+                </span>
+                <span className="ce-reelcard__name">{t('Unfinished project', 'پروژه‌ی نیمه‌کاره')}</span>
+                <span className="ce-reelcard__meta">{t('Autosaved', 'ذخیره‌ی خودکار')}</span>
+              </button>
+            )}
             {projects.map((project) => (
-              <button
+              <div
                 key={project.name}
                 className={`ce-reelcard ${project.broken ? 'is-broken' : ''}`}
                 onClick={() => void openProject(project.name)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && void openProject(project.name)}
                 title={project.name}
               >
                 <span className="ce-reelcard__art">
                   <Film size={20} />
                   <span className="ce-reelcard__len" dir="ltr">{formatTimecode(project.duration)}</span>
+                  <button
+                    className="ce-reelcard__del"
+                    onClick={(e) => void removeProject(e, project.name)}
+                    title={t('Delete this project', 'حذف این پروژه')}
+                    aria-label={t('Delete', 'حذف')}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </span>
                 <span className="ce-reelcard__name" dir="auto">{project.name}</span>
                 <span className="ce-reelcard__meta">
                   <Clock3 size={11} /> {new Date(project.updatedAt * 1000).toLocaleDateString()}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         )}

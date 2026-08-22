@@ -35,6 +35,21 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------------------------------------------------------------- shell -- */
 .ce-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 
+/* the wordmark is the only chrome: hero on the launcher, dock in a section */
+.ce-brandbtn {
+  position: fixed; z-index: 60; border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; padding: 6px 10px; border-radius: 12px;
+}
+.ce-brandbtn.is-hero { top: 26px; left: 50%; transform: translateX(-50%); }
+.ce-brandbtn.is-docked { top: 8px; left: 12px; transform: scale(.78); transform-origin: left top; }
+.ce-brandbtn.is-docked:hover { background: rgba(148, 163, 184, .12); }
+.ce-launcheractions {
+  position: fixed; top: 22px; inset-inline-end: 18px; z-index: 60;
+  display: flex; align-items: center; gap: 8px;
+}
+.ce-shell.is-launcher .ce-content { padding-top: 92px; }
+.ce-shell.is-immersive .ce-content { padding-top: 44px; }
+
 /*
  * Immersive sections.
  *
@@ -44,16 +59,7 @@ button { font-family: inherit; cursor: pointer; }
  * fade with a short rise — never a jump, which is what makes an interface feel
  * built rather than assembled.
  */
-.ce-chrome { position: sticky; top: 0; z-index: 30; }
 .ce-shell.is-immersive .ce-content { padding-top: 26px; }
-.ce-reveal {
-  position: fixed; top: 0; inset-inline-start: 50%; transform: translateX(-50%);
-  z-index: 45; width: 54px; height: 20px; padding: 0;
-  display: grid; place-items: center; cursor: pointer; color: var(--muted);
-  background: var(--bg-elevated); border: 1px solid var(--border); border-top: none;
-  border-radius: 0 0 12px 12px; opacity: .55; transition: opacity .2s ease, color .2s ease;
-}
-.ce-reveal:hover { opacity: 1; color: #c7d2fe; }
 
 /* One motion language for the whole app. */
 @media (prefers-reduced-motion: reduce) {
@@ -169,6 +175,16 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-reelcard:hover { border-color: #6366f1; }
 .ce-reelcard.is-broken { opacity: .6; }
+.ce-reelcard.is-unfinished { border-color: rgba(251, 191, 36, .55); }
+.ce-reelcard.is-unfinished .ce-reelcard__art { color: #fbbf24; }
+.ce-reelcard__del {
+  position: absolute; top: 4px; inset-inline-end: 4px; width: 22px; height: 22px;
+  display: grid; place-items: center; border-radius: 7px; cursor: pointer;
+  background: rgba(2, 6, 23, .78); border: 1px solid rgba(248, 113, 113, .5);
+  color: #fca5a5; opacity: 0; transition: opacity .15s ease;
+}
+.ce-reelcard:hover .ce-reelcard__del { opacity: 1; }
+.ce-reelcard__del:hover { background: rgba(239, 68, 68, .3); color: #fff; }
 .ce-reelcard__art {
   position: relative; height: 66px; border-radius: 10px; display: grid; place-items: center;
   background: linear-gradient(150deg, #1e293b, #0f172a); color: #94a3b8;
@@ -449,6 +465,16 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-reelcard:hover { border-color: #6366f1; }
 .ce-reelcard.is-broken { opacity: .6; }
+.ce-reelcard.is-unfinished { border-color: rgba(251, 191, 36, .55); }
+.ce-reelcard.is-unfinished .ce-reelcard__art { color: #fbbf24; }
+.ce-reelcard__del {
+  position: absolute; top: 4px; inset-inline-end: 4px; width: 22px; height: 22px;
+  display: grid; place-items: center; border-radius: 7px; cursor: pointer;
+  background: rgba(2, 6, 23, .78); border: 1px solid rgba(248, 113, 113, .5);
+  color: #fca5a5; opacity: 0; transition: opacity .15s ease;
+}
+.ce-reelcard:hover .ce-reelcard__del { opacity: 1; }
+.ce-reelcard__del:hover { background: rgba(239, 68, 68, .3); color: #fff; }
 .ce-reelcard__art {
   position: relative; height: 66px; border-radius: 10px; display: grid; place-items: center;
   background: linear-gradient(150deg, #1e293b, #0f172a); color: #94a3b8;
@@ -846,6 +872,32 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ant-modal-content .ant-btn-default:hover { border-color: #6366f1; color: #c7d2fe; }
 .ant-modal-close { color: var(--muted); }
+/*
+ * Toasts, tooltips and popovers.
+ *
+ * These are rendered by static antd functions outside the theme provider, which
+ * is why they used to appear as blank white shapes on a dark app — a message the
+ * user could not read is the same as no message at all.
+ */
 .ant-message-notice-content {
-  background: #111c31; color: var(--text); border: 1px solid var(--border);
+  background: #111c31 !important; color: var(--text) !important;
+  border: 1px solid var(--border); box-shadow: 0 18px 40px -22px #000;
+  border-radius: 12px; padding: 9px 14px; font-size: 13px;
 }
+.ant-message-notice-content .ant-message-custom-content { display: flex; align-items: center; gap: 8px; }
+.ant-message-success .anticon { color: #34d399 !important; }
+.ant-message-error .anticon { color: #f87171 !important; }
+.ant-message-warning .anticon { color: #fbbf24 !important; }
+.ant-message-info .anticon, .ant-message-loading .anticon { color: #818cf8 !important; }
+
+.ant-tooltip-inner {
+  background: #111c31 !important; color: var(--text) !important;
+  border: 1px solid var(--border); border-radius: 10px; font-size: 12px;
+}
+.ant-tooltip-arrow::before { background: #111c31 !important; }
+.ant-notification-notice, .ant-popover-inner, .ant-dropdown-menu {
+  background: #111c31 !important; border: 1px solid var(--border);
+  color: var(--text) !important;
+}
+.ant-notification-notice-message, .ant-dropdown-menu-item { color: var(--text) !important; }
+.ant-dropdown-menu-item:hover { background: rgba(99, 102, 241, .18) !important; }
