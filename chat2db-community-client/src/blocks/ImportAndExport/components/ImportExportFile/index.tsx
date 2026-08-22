@@ -13,6 +13,7 @@ import jcefApi from '@/jcef';
 interface IProps {
   className?: string;
   setIsReady?: (p: boolean) => void;
+  onImportFileChange?: (filePath: string) => void;
 }
 
 export interface ImportExportFileRef {
@@ -82,7 +83,11 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   }, [exportLocation, formValue]);
 
   const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+    const paths = _fileUrlList.map((item) => item.filePath);
+    setFileUrlList(paths);
+    if (isImport && paths[0] && props.onImportFileChange) {
+      props.onImportFileChange(paths[0]);
+    }
   };
 
   useImperativeHandle(ref, () => ({
