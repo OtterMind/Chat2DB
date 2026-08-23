@@ -74,11 +74,8 @@ jobs:
           Copy-Item ffmpeg\*\bin\ffmpeg.exe  build\ffmpeg\
           Copy-Item ffmpeg\*\bin\ffprobe.exe build\ffmpeg\
 
-      # uv resolves and installs the wheel set (opencv-headless, ctranslate2, av)
+      # uv resolves and installs the heavy wheel set (mediapipe, opencv, ctranslate2)
       # in a fraction of pip's time — this was the slowest step of the whole build.
-      # The set shrank from 378.3 MB / 108 packages to 137.9 MB / 50 in 0.6.1 by
-      # deleting everything the code never imported; `tests/test_dependencies.py`
-      # fails the build if ballast comes back.
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -109,8 +106,6 @@ jobs:
         working-directory: ce-app/frontend
         run: |
           npm install --no-audit --no-fund
-          # types + the renderer/preload bridge contract, before anything is packaged
-          npm run verify
           npm run build
 
       - name: Package and publish

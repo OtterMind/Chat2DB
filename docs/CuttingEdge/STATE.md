@@ -400,6 +400,19 @@ gate that stops a broken installer from being published.
    user's own language, and applies only on **Apply** — with Cancel changing
    nothing at all. Guarded by three checks in `playback-test.mjs`.
 
+48. **`git reset --soft` can carry a stale workflow into your commit.** The
+   sandbox loses remote refs between turns, so the recovery pattern is
+   `git fetch -f origin <branch>` then `git reset --soft FETCH_HEAD`. That leaves
+   **everything** from the discarded commit staged — including
+   `.github/workflows/ce.yml`, which our token may push but may not *change*.
+   In 0.7.0 an old copy of it went out and replaced the whole build with
+   `on: workflow_dispatch`, so the release never built and the token could not
+   put it back (403, `workflows` permission). Always run
+   `git restore --staged --worktree .github/` **before** committing after a soft
+   reset, and check `git show --stat HEAD | grep workflow` after it.
+   The good copy lives in `ce-app/ci/ce-workflow.yml`; only the repository owner
+   can paste it back into `.github/workflows/ce.yml`.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
