@@ -16,7 +16,7 @@ echo "→ backend virtualenv at $VENV"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
 # Light set: enough to run the API, the compositor and the test-suite.
-"$VENV/bin/pip" install -q fastapi "uvicorn[standard]" sqlalchemy pydantic-settings \
+"$VENV/bin/pip" install -q fastapi "uvicorn[standard]" pydantic-settings \
     psutil python-multipart scenedetect pytest imageio-ffmpeg
 
 if command -v ffmpeg >/dev/null 2>&1; then

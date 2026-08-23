@@ -20,7 +20,7 @@ HB=/tmp/hb
 
 echo "→ backend virtualenv"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
-"$VENV/bin/pip" install -q fastapi "uvicorn[standard]" sqlalchemy pydantic-settings psutil \
+"$VENV/bin/pip" install -q fastapi "uvicorn[standard]" pydantic-settings psutil \
     python-multipart pytest pytest-xdist httpx scenedetect imageio-ffmpeg
 # scenedetect pulls plain `opencv-python`, which cannot import here (libGL is
 # missing) — and a cv2 that will not load silently disables the log-polar zoom

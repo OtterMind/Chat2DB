@@ -247,7 +247,12 @@ module.exports = async function beforePack(context) {
 
 function canImport(exe, cwd) {
   try {
-    execFileSync(exe, ['-c', 'import fastapi, uvicorn, sqlalchemy, pydantic_settings'], {
+    // Import the app itself rather than a hand-written list of packages. The
+    // list went stale the moment `sqlalchemy` was dropped (the database is
+    // standard-library sqlite3) and aborted the whole build with
+    // "portable backend runtime is still incomplete". The application is the
+    // only honest answer to "can this runtime start?".
+    execFileSync(exe, ['-c', 'import app.main'], {
       cwd,
       stdio: 'pipe',
     })

@@ -50,7 +50,8 @@ so the hook repairs three things:
    and moves the CI-installed `site-packages` into it.
 2. **Missing dependencies.** The CI step ignores `pip` failures (its last command is
    a `copy`, so a red `pip` still shows a green step). If the runtime cannot
-   `import fastapi, uvicorn, sqlalchemy, pydantic_settings`, the hook bootstraps
+   `import app.main` (the application itself, not a list of packages that goes
+   stale), the hook bootstraps
    `pip` inside the embeddable runtime, installs `requirements.txt` (minus test
    tooling), and **fails the build loudly** if it is still incomplete.
 3. **`ffprobe.exe`.** The workflow only copies `ffmpeg.exe`, but
