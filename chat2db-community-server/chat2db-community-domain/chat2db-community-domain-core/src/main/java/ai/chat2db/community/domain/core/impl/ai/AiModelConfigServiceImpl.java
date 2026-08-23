@@ -56,6 +56,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
     private static final String DEFAULT_GEMINI_LOCATION = "us-central1";
     private static final String DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
     private static final String DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1";
+    // LiteLLM is self-hosted; default to the proxy's conventional local address.
+    private static final String DEFAULT_LITELLM_BASE_URL = "http://localhost:4000/v1";
     private static final int TEST_ERROR_BODY_MAX_LENGTH = 2000;
     private static final String CONFIG_VALUE_PREFIX = "config:";
     private static final String PRESET_VALUE_PREFIX = "preset:";
@@ -224,6 +226,9 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
             }
             return testOpenAiCompatibleConfig(request, DEFAULT_MINIMAX_BASE_URL);
         }
+        if (provider == AiProviderEnum.LITELLM) {
+            return testOpenAiCompatibleConfig(request, DEFAULT_LITELLM_BASE_URL);
+        }
         return ModelConfigTestResponse.failure(null, null,
                 "Connection test currently supports OpenAI-compatible models only.");
     }
@@ -298,7 +303,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
      */
     private void normalizeRuntimeBaseUrl(AiRuntimeModel runtimeModel) {
         AiProviderEnum provider = AiProviderEnum.from(runtimeModel.getProvider());
-        if (provider != AiProviderEnum.OPENAI && provider != AiProviderEnum.CLAUDE && provider != AiProviderEnum.MINIMAX) {
+        if (provider != AiProviderEnum.OPENAI && provider != AiProviderEnum.CLAUDE
+                && provider != AiProviderEnum.MINIMAX && provider != AiProviderEnum.LITELLM) {
             return;
         }
         runtimeModel.setBaseUrl(stripTrailingV1(runtimeModel.getBaseUrl()));
@@ -346,6 +352,12 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
             runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), trimToNull(System.getenv("ANTHROPIC_BASE_URL"))));
             return;
         }
+        if (provider == AiProviderEnum.LITELLM) {
+            runtimeModel.setApiKey(defaultValue(trimToNull(runtimeModel.getApiKey()), trimToNull(System.getenv("LITELLM_API_KEY"))));
+            runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), trimToNull(System.getenv("LITELLM_BASE_URL"))));
+            runtimeModel.setBaseUrl(defaultValue(trimToNull(runtimeModel.getBaseUrl()), DEFAULT_LITELLM_BASE_URL));
+            return;
+        }
         if (provider == AiProviderEnum.GEMINI) {
             runtimeModel.setProjectId(defaultValue(trimToNull(runtimeModel.getProjectId()), trimToNull(System.getenv("GOOGLE_CLOUD_PROJECT"))));
             runtimeModel.setLocation(defaultValue(trimToNull(runtimeModel.getLocation()), trimToNull(System.getenv("GOOGLE_CLOUD_LOCATION"))));
@@ -364,7 +376,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         if (provider == null) {
             throw new IllegalArgumentException("Unsupported provider: " + runtimeModel.getProvider());
         }
-        if (provider == AiProviderEnum.OPENAI || provider == AiProviderEnum.CLAUDE) {
+        if (provider == AiProviderEnum.OPENAI || provider == AiProviderEnum.CLAUDE
+                || provider == AiProviderEnum.LITELLM) {
             return;
         }
         if (provider == AiProviderEnum.GEMINI) {

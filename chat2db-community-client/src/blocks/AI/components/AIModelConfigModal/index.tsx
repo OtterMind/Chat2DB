@@ -27,6 +27,7 @@ const providerOptions = [
   { label: 'Claude', value: 'CLAUDE' },
   { label: 'Gemini', value: 'GEMINI' },
   { label: 'MiniMax', value: 'MINIMAX' },
+  { label: 'LiteLLM', value: 'LITELLM' },
 ];
 
 const emptyFormValues: IAIModelConfigSaveRequest = {
@@ -307,7 +308,8 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
                   required:
                     (currentProvider === 'OPENAI' ||
                       currentProvider === 'CLAUDE' ||
-                      currentProvider === 'MINIMAX') &&
+                      currentProvider === 'MINIMAX' ||
+                      currentProvider === 'LITELLM') &&
                     !currentConfig?.hasApiKey,
                   message: i18n('setting.modelConfig.validation.apiKey'),
                 },
