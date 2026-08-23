@@ -263,6 +263,17 @@ service rather than local, and celery/better-sqlite3/dnd-kit/i18next are the wro
 for a single-process desktop app. Adopted from it: bezierjs, colour-science,
 freesound-python, apscheduler.
 
+## 5d. Style templates from a reference video
+
+`docs/CuttingEdge/STYLE_TEMPLATES.md` — the feasibility study for the "Roll"-style
+feature the user asked about (send a video, get a template). Verdict: the *editing
+grammar* is measurable and transferable (shot rhythm, cut-on-beat ratio, camera motion,
+colour look, caption style and rhythm, hook shape, ducking depth) and steps 1–3 need no
+new dependency. What is impossible is stated there too, so nobody promises "one click,
+same video". Licence notes: OCR (PaddleOCR/EasyOCR/Tesseract) and OpenCV and MediaPipe
+are Apache-2.0, TransNetV2 is MIT; **ultralytics is AGPL and ImageBind is CC-BY-NC** —
+both unusable here.
+
 ## 6. Next, in order
 
 1. Slim the installer: fetch the Python runtime and models on first launch
