@@ -136,7 +136,17 @@ gate that stops a broken installer from being published.
 14. **Frames come in strips, not one process each.** `sample_strip()` decodes N
    frames in one FFmpeg call; the per-frame version spent more time spawning
    processes than decoding.
-15. **A sidechain that runs out kills the signal.** Automatic ducking uses
+15. **Ducking is computed, not side-chained.** `sidechaincompress` looks like the
+   right filter and is a trap in a large graph: when its key input reaches EOF a
+   moment before the main — which happens **under load, never on an idle
+   machine** — it emits silence for the rest of the render, so the music vanished
+   from the last spoken word onward. Three graph shapes were tried (asplit,
+   padded key, a dedicated second decode) and all three failed in parallel runs.
+   The voice envelope is now measured in `audio.voice_envelope()` and applied as
+   a volume automation curve on the bed: one stream, one expression, identical on
+   every render, and readable as numbers. Depth 0.25 measures ≈ 6 dB in the
+   finished file, verified in a 220 Hz band so the voice cannot flatter it.
+16. **The old sidechain note, kept for the record:** Automatic ducking uses
    `sidechaincompress`, and the graph is load-bearing: the key is **its own second
    decode of the voice file**, padded past the end of the timeline. `asplit` was
    tried first and starves the compressor under load — with four renders running
@@ -316,6 +326,10 @@ preview and undo instead of a fake score.
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.5.1: Style Match became fully automatic (captions and a ducked music bed
+placed without a prompt, with an honest list of what was and was not done), and
+ducking moved from a sidechain to a computed envelope after parallel test runs
+proved the sidechain fragile.
 Done in 0.5.0: **Style Match** — a tile on the home screen that measures a
 reference video into a `.cetemplate` and rebuilds the user's footage in its shape,
 shown shot by shot before it opens in the editor. Ducking's sidechain moved to a

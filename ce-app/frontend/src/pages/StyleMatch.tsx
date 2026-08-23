@@ -68,6 +68,71 @@ export default function StyleMatch() {
     }
   }
 
+  /**
+   * The automatic door.
+   *
+   * The editor works by prompt; this screen works by itself. One button: the
+   * reference, your footage, an optional music bed — then it measures, cuts,
+   * grades, animates, captions where it can, ducks the music and opens the
+   * result. No parameters to choose, and whatever it could not do is listed.
+   */
+  const runEverything = async () => {
+    const referencePath = await choose()
+    if (!referencePath) return
+    setBusy('analyse')
+    try {
+      const found = await styleApi.analyse(referencePath)
+      setTemplate(found)
+      refresh()
+
+      const ownPath = await choose()
+      if (!ownPath) return
+      const musicPath = await askForMusic()
+
+      setBusy('apply')
+      const built = await styleApi.apply(
+        ownPath,
+        found.name,
+        t('Styled edit', 'تدوین بر اساس الگو'),
+        musicPath
+      )
+      setResult(built)
+
+      const editor = useEditor.getState()
+      editor.loadSnapshot(built.timeline as never, built.name)
+      editor.setAspect((built.aspect as never) ?? 'auto')
+      message.success(
+        t(`Ready — ${built.summary.shots} shots`, `آماده شد — ${built.summary.shots} نما`)
+      )
+      navigate('/studio')
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Optional: a music bed of the user's own, ducked under the voice. */
+  const askForMusic = (): Promise<string | null> =>
+    new Promise((resolve) => {
+      Modal.confirm({
+        title: t('Add a music bed?', 'موسیقی هم اضافه شود؟'),
+        icon: null,
+        content: (
+          <p className="ce-hint">
+            {t(
+              'Optional. Your own track — the template only carries the tempo and how far the music sits under the voice.',
+              'اختیاری است. آهنگ خودت — قالب فقط تمپو و میزان پایین رفتن موسیقی زیر صدا را نگه می‌دارد.'
+            )}
+          </p>
+        ),
+        okText: t('Choose a track', 'انتخاب آهنگ'),
+        cancelText: t('No music', 'بدون موسیقی'),
+        onOk: async () => resolve(await choose()),
+        onCancel: () => resolve(null),
+      })
+    })
+
   const applyTo = async () => {
     if (!template) return
     const path = await choose()
@@ -112,11 +177,20 @@ export default function StyleMatch() {
           )}
         </p>
         <div className="ce-actions" style={{ marginTop: 12 }}>
-          <button className="ce-btn ce-btn--sm" disabled={busy !== null} onClick={() => void analyse()}>
-            {busy === 'analyse' ? <Loader2 size={15} className="ce-spin" /> : <FileVideo size={15} />}
-            {t('Analyse a video', 'تحلیل یک ویدیو')}
+          <button className="ce-btn ce-btn--sm ce-btn--auto" disabled={busy !== null} onClick={() => void runEverything()}>
+            {busy ? <Loader2 size={15} className="ce-spin" /> : <Wand2 size={15} />}
+            {t('Do everything automatically', 'همه‌کار را خودکار انجام بده')}
+          </button>
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void analyse()}>
+            <FileVideo size={15} /> {t('Only analyse a reference', 'فقط الگو را تحلیل کن')}
           </button>
         </div>
+        <p className="ce-hint" style={{ marginTop: 8 }}>
+          {t(
+            'Automatic means: no prompt and no settings — reference in, your footage in, finished timeline out.',
+            'خودکار یعنی: نه پرامپتی، نه تنظیماتی — الگو بده، فیلم خودت را بده، تایم‌لاین آماده تحویل بگیر.'
+          )}
+        </p>
 
         {templates.length > 0 && (
           <div className="ce-reel" style={{ marginTop: 14 }}>
@@ -205,7 +279,21 @@ export default function StyleMatch() {
             <span className="ce-badge">
               {t('from', 'از')} {result.summary.fromHighlights} {t('highlights', 'هایلایت')}
             </span>
+            {result.summary.captions > 0 && (
+              <span className="ce-badge">{result.summary.captions} {t('captions', 'زیرنویس')}</span>
+            )}
           </div>
+
+          <div className="ce-kv" style={{ marginTop: 8 }}>
+            <span>{t('Done for you', 'انجام شد')}</span>
+            <strong>{result.summary.applied.join(' · ')}</strong>
+          </div>
+          {result.summary.skipped.length > 0 && (
+            <div className="ce-kv">
+              <span>{t('Not done', 'انجام نشد')}</span>
+              <strong style={{ color: '#fbbf24' }}>{result.summary.skipped.join(' · ')}</strong>
+            </div>
+          )}
 
           <ol className="ce-shotlist">
             {result.summary.motion.map((motion, index) => {

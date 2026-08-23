@@ -445,6 +445,30 @@ def keyframe_expression(keyframes: list[dict], channel: str, default: float) -> 
     return expression
 
 
+def _piecewise_expression(points: list[tuple[float, float]]) -> str:
+    """A piecewise-linear FFmpeg expression through (time, value) points.
+
+    Same shape as `keyframe_expression`, built from a curve instead of keyframes,
+    and with the same rule about commas: every one escaped, or the filter ends
+    early and takes the rest of the graph with it.
+    """
+    if not points:
+        return "1"
+    if len(points) == 1:
+        return f"{points[0][1]:.4f}"
+    expression = f"{points[-1][1]:.4f}"
+    for i in range(len(points) - 2, -1, -1):
+        t0, v0 = points[i]
+        t1, v1 = points[i + 1]
+        span = max(1e-6, t1 - t0)
+        slope = (v1 - v0) / span
+        segment = f"({v0:.4f}+({slope:.4f})*(t-{t0:.4f}))"
+        if i == 0:
+            segment = f"if(lt(t\\,{t0:.4f})\\,{v0:.4f}\\,{segment})"
+        expression = f"if(lt(t\\,{t1:.4f})\\,{segment}\\,{expression})"
+    return expression
+
+
 def _atempo_chain(speed: float) -> list[float]:
     """atempo only accepts 0.5–2.0, so extreme speeds need to be chained."""
     factors: list[float] = []
@@ -557,29 +581,6 @@ def build_command(
             ]
 
     index_of = {clip.id: i + 1 for i, clip in enumerate(playable)}
-
-    # ---- sidechain inputs ------------------------------------------------
-    #
-    # Ducking needs the voice twice: once for the mix, once as the compressor's
-    # key. Splitting one decoded stream with `asplit` looks tidier and is a trap:
-    # the two branches are consumed at very different rates, and under load the
-    # key starves — the bed then goes silent for the rest of the render. Decoding
-    # the file a second time costs a few milliseconds of audio decode and cannot
-    # deadlock, so each key gets its own input.
-    duck_input_of: dict[str, int] = {}
-    if any(c.props.duck for c in audio_clips) and any(not c.props.duck for c in audio_clips):
-        for clip in audio_clips:
-            if clip.props.duck:
-                continue
-            duck_input_of[clip.id] = len(index_of) + len(duck_input_of) + 1
-            if clip.props.reversed:
-                args += ["-i", clip.src]  # type: ignore[arg-type]
-            else:
-                args += [
-                    "-ss", f"{clip.offset:.3f}",
-                    "-t", f"{clip.source_window:.3f}",
-                    "-i", clip.src,  # type: ignore[arg-type]
-                ]
 
     steps: list[str] = []
 
@@ -749,8 +750,27 @@ def build_command(
     # ---- audio ---------------------------------------------------------
     # Ducking only makes sense when there is both a bed to lower and a voice to
     # lower it under; otherwise every clip takes the plain path.
-    ducking_active = bool(duck_input_of)
-    duck_keys: list[str] = []
+    # Ducking is computed, not side-chained.
+    #
+    # `sidechaincompress` was tried first and is a trap in a big graph: when its
+    # key input reaches EOF a moment before the main — which happens under load,
+    # not on an idle machine — the filter emits silence for the rest of the
+    # render, so the music simply disappeared from the last word onward. Instead
+    # the voice envelope is measured here and applied as a volume automation
+    # curve: one stream, deterministic, and inspectable as numbers.
+    ducked_clips = [c for c in audio_clips if c.props.duck]
+    voice_clips = [c for c in audio_clips if not c.props.duck]
+    duck_curve: str | None = None
+    if ducked_clips and voice_clips:
+        from core.engine import audio as audio_engine
+
+        activity = audio_engine.voice_envelope(
+            [(c.src, c.start, c.offset, c.duration) for c in voice_clips if c.src],  # type: ignore[misc]
+            total,
+        )
+        points = audio_engine.ducking_points(activity)
+        if points:
+            duck_curve = _piecewise_expression(points)
     audio_labels: list[str] = []
     for n, clip in enumerate(audio_clips):
         idx = index_of[clip.id]
@@ -773,11 +793,17 @@ def build_command(
                 "acompressor=threshold=-18dB:ratio=3:attack=15:release=180",
                 "loudnorm=I=-16:TP=-1.5:LRA=11",
             ])
-        volume_expr = keyframe_expression(clip.props.keyframes, "volume", clip.props.volume)
+        if clip.props.duck and duck_curve:
+            # The bed's own volume, times the ducking curve. `eval=frame` is what
+            # makes it follow time at all.
+            parts.append(f"volume=volume='({clip.props.volume:.3f})*({duck_curve})':eval=frame")
+        volume_expr = None if clip.props.duck and duck_curve else keyframe_expression(
+            clip.props.keyframes, "volume", clip.props.volume
+        )
         if volume_expr is not None:
             # eval=frame is what makes the expression time-varying at all.
             parts.append(f"volume=volume='{volume_expr}':eval=frame")
-        elif clip.props.volume != 1.0:
+        elif clip.props.volume != 1.0 and not (clip.props.duck and duck_curve):
             parts.append(f"volume={clip.props.volume:.3f}")
         if clip.props.fade_in > 0:
             parts.append(f"afade=t=in:st=0:d={clip.props.fade_in:.3f}")
@@ -791,48 +817,7 @@ def build_command(
         parts.append(f"apad=whole_dur={total:.3f}")
         steps.append(f"[{idx}:a]" + ",".join(parts) + label)
 
-        if clip.id in duck_input_of:
-            # The same processing, from a second decode of the same file, padded
-            # past the end of the timeline so the compressor can never run dry.
-            key_label = f"[a{n}key]"
-            key_parts = list(parts[:-1]) + [f"apad=whole_dur={total + 5.0:.3f}"]
-            steps.append(f"[{duck_input_of[clip.id]}:a]" + ",".join(key_parts) + key_label)
-            duck_keys.append(key_label)
-
         audio_labels.append(label)
-
-    # ---- ducking --------------------------------------------------------
-    #
-    # A music bed marked "duck" steps aside for everything else that speaks.
-    # `sidechaincompress` follows the voice envelope, so the bed dips on every
-    # word and comes back in the gaps — not a blunt cut across the whole clip.
-    if ducking_active and duck_keys:
-        if len(duck_keys) == 1:
-            key_bus = duck_keys[0]
-        else:
-            key_bus = "[duckkey]"
-            steps.append(
-                "".join(duck_keys)
-                + f"amix=inputs={len(duck_keys)}:duration=longest:dropout_transition=0{key_bus}"
-            )
-
-        beds = [label for label, clip in zip(audio_labels, audio_clips) if clip.props.duck]
-        if len(beds) > 1:
-            copies = [f"[dk{i}]" for i in range(len(beds))]
-            steps.append(f"{key_bus}asplit={len(beds)}" + "".join(copies))
-        else:
-            copies = [key_bus]
-
-        compressed: dict[str, str] = {}
-        for n, (label, key) in enumerate(zip(beds, copies)):
-            out = f"[duck{n}]"
-            steps.append(
-                f"{label}{key}sidechaincompress=threshold=0.03:ratio=12:attack=25"
-                f":release=300:makeup=1:level_sc=1{out}"
-            )
-            compressed[label] = out
-
-        audio_labels = [compressed.get(label, label) for label in audio_labels]
 
     if audio_labels:
         if len(audio_labels) == 1:

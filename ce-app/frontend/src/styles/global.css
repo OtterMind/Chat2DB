@@ -149,6 +149,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-searchbar input:focus { outline: none; border-color: var(--brand); }
 
+/* style match: the automatic button is the loud one */
+.ce-btn--auto { background: linear-gradient(135deg, #f43f5e, #7c3aed); border: none; }
+
 /* style match: the shot list of the produced edit */
 .ce-shotlist { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; counter-reset: shot; }
 .ce-shotlist li {
@@ -462,7 +465,10 @@ button { font-family: inherit; cursor: pointer; }
   .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
-  /* style match: the shot list of the produced edit */
+  /* style match: the automatic button is the loud one */
+.ce-btn--auto { background: linear-gradient(135deg, #f43f5e, #7c3aed); border: none; }
+
+/* style match: the shot list of the produced edit */
 .ce-shotlist { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; counter-reset: shot; }
 .ce-shotlist li {
   display: grid; grid-template-columns: 70px 1fr 70px; gap: 8px; align-items: center;

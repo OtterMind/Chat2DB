@@ -212,9 +212,12 @@ def test_the_music_steps_aside_for_the_voice(tmp_path):
         compose.Timeline.from_dict(_duck_timeline(music, voice, duck=True)), tmp_path / "ducked.mp4"
     )
 
-    # Listen to the music band only, in the same window of both renders.
-    plain_speech = _mean_db(plain, 1.2, 1.9, band=220)
-    ducked_speech = _mean_db(ducked, 1.2, 1.9, band=220)
+    # Listen to the music band only, in the same window of both renders. The
+    # window sits inside the plateau of the duck, not across its ramp: attack and
+    # release are real and measuring through them would test the slope, not the
+    # depth.
+    plain_speech = _mean_db(plain, 1.4, 1.9, band=220)
+    ducked_speech = _mean_db(ducked, 1.4, 1.9, band=220)
     assert plain_speech - ducked_speech > 6.0, (
         f"only {plain_speech - ducked_speech:.1f} dB of ducking during speech"
     )

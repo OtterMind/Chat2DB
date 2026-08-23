@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -204,3 +205,84 @@ def beats(path: str, minimum_bpm: float = 60.0, maximum_bpm: float = 200.0) -> B
         encoding="utf-8",
     )
     return result
+
+
+# ------------------------------------------------------------------ ducking
+
+
+def voice_envelope(
+    sources: list[tuple[str, float, float, float]],
+    total: float,
+    *,
+    step: float = 0.05,
+    threshold: float = 0.02,
+) -> np.ndarray:
+    """How loud the voice is across the whole timeline, in `step` buckets.
+
+    `sources` is (path, timeline_start, source_offset, duration) per speaking
+    clip. The result is a 0/1-ish activity curve, not a level: what ducking needs
+    to know is *when* someone is speaking.
+    """
+    buckets = max(1, int(math.ceil(total / step)))
+    activity = np.zeros(buckets, dtype=np.float32)
+
+    for path, start, offset, duration in sources:
+        try:
+            samples = decode_mono(path)
+        except (ValueError, subprocess.CalledProcessError, FileNotFoundError):
+            continue
+        begin = int(max(0.0, offset) * SAMPLE_RATE)
+        end = min(len(samples), begin + int(max(0.0, duration) * SAMPLE_RATE))
+        window = samples[begin:end]
+        if window.size == 0:
+            continue
+        per_bucket = max(1, int(step * SAMPLE_RATE))
+        usable = (window.size // per_bucket) * per_bucket
+        if usable == 0:
+            continue
+        levels = np.abs(window[:usable].reshape(-1, per_bucket)).mean(axis=1)
+        loud = (levels > threshold).astype(np.float32)
+        first = int(round(start / step))
+        last = min(buckets, first + loud.size)
+        if last > first:
+            activity[first:last] = np.maximum(activity[first:last], loud[: last - first])
+
+    return activity
+
+
+def ducking_points(
+    activity: np.ndarray,
+    *,
+    step: float = 0.05,
+    depth: float = 0.25,
+    attack: float = 0.15,
+    release: float = 0.45,
+) -> list[tuple[float, float]]:
+    """Turn the activity curve into (time, gain) points for the music bed.
+
+    Attack and release are applied here, in Python, so the result is a plain
+    automation curve: identical on every render, visible as numbers, and free of
+    the failure mode that made `sidechaincompress` go silent when its sidechain
+    input ran dry under load.
+    """
+    gain = np.ones_like(activity, dtype=np.float32)
+    attack_steps = max(1, int(attack / step))
+    release_steps = max(1, int(release / step))
+
+    current = 1.0
+    for i, speaking in enumerate(activity):
+        target = depth if speaking > 0.5 else 1.0
+        if target < current:
+            current = max(target, current - (1.0 - depth) / attack_steps)
+        else:
+            current = min(target, current + (1.0 - depth) / release_steps)
+        gain[i] = current
+
+    # Keep only the points where the curve changes direction or value enough to
+    # matter: a thousand identical points would make the filter string enormous.
+    points: list[tuple[float, float]] = [(0.0, float(gain[0]))]
+    for i in range(1, len(gain)):
+        if abs(float(gain[i]) - points[-1][1]) >= 0.02:
+            points.append((round(i * step, 3), float(gain[i])))
+    points.append((round(len(gain) * step, 3), float(gain[-1])))
+    return points

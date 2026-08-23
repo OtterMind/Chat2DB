@@ -450,12 +450,24 @@ def _highlights(path: str, wanted: int, minimum: float) -> list[dict]:
     return picks[: max(wanted, 1)]
 
 
-def build_timeline(template: Template | dict, source: str, name: str = "Styled edit") -> dict:
+def build_timeline(
+    template: Template | dict,
+    source: str,
+    name: str = "Styled edit",
+    music: str | None = None,
+    captions: list[dict] | None = None,
+) -> dict:
     """Cut the user's footage into the shape of the template.
 
     Returns an editor document (tracks, clips, transitions) — the same structure
     the timeline saves and the compositor renders, so what the user sees in the
     editor is exactly what will be exported.
+
+    This is the *automatic* door of the app: no prompt, no parameters. Whatever
+    the template implies is carried out here — the cut rhythm, the colour, the
+    camera moves, and, when they are available, the captions and a ducked music
+    bed. Anything that could not be done is reported in `summary.skipped` rather
+    than quietly dropped.
     """
     data = template.as_dict() if isinstance(template, Template) else dict(template)
     shots = data.get("shots") or []
@@ -527,6 +539,61 @@ def build_timeline(template: Template | dict, source: str, name: str = "Styled e
 
         cursor += length
 
+    applied = ["cut to the template rhythm", "colour", "camera moves", "aspect"]
+    skipped: list[str] = []
+    if transitions:
+        applied.append(f"{len(transitions)} × {transition_kind}")
+
+    # ---- captions -------------------------------------------------------
+    caption_style = data.get("captions") or {}
+    if captions:
+        for index, cue in enumerate(captions):
+            start = max(0.0, float(cue.get("start", 0.0)))
+            end = max(start + 0.3, float(cue.get("end", start + 1.0)))
+            if start >= cursor:
+                break
+            clips.append({
+                "id": f"c{index}",
+                "trackId": "t1",
+                "start": round(start, 3),
+                "duration": round(min(end, cursor) - start, 3),
+                "offset": 0,
+                "sourceDuration": round(end - start, 3),
+                "src": None,
+                "text": str(cue.get("text", "")).strip(),
+                "words": cue.get("words") or [],
+                "label": str(cue.get("text", ""))[:24],
+                "color": "#0EA5E9",
+                "props": {
+                    "position": caption_style.get("position", "bottom"),
+                    "textStyle": caption_style.get("style", "outline"),
+                    "animateWords": bool(caption_style.get("animateWords", True)),
+                },
+            })
+        applied.append(f"{len(captions)} captions")
+    elif caption_style.get("wanted"):
+        skipped.append("captions (speech recognition is not installed)")
+
+    # ---- music ----------------------------------------------------------
+    if music:
+        under = float((data.get("audio") or {}).get("musicUnderVoice", 0.0))
+        clips.append({
+            "id": "music",
+            "trackId": "a1",
+            "start": 0.0,
+            "duration": round(cursor, 3),
+            "offset": 0.0,
+            "sourceDuration": round(float(probe_media(music).get("duration") or cursor), 3),
+            "src": music,
+            "label": Path(music).stem[:24],
+            "color": "#10B981",
+            # A bed under speech ducks; without speech it just plays.
+            "props": {"duck": under < 0, "volume": 0.9},
+        })
+        applied.append("music bed" + (" with ducking" if under < 0 else ""))
+    elif (data.get("audio") or {}).get("musicUnderVoice", 0.0) < 0:
+        skipped.append("music (the template has one, you did not give me a track)")
+
     return {
         "name": name,
         "aspect": data.get("aspect", "9:16"),
@@ -541,12 +608,14 @@ def build_timeline(template: Template | dict, source: str, name: str = "Styled e
             "transitions": transitions,
         },
         "summary": {
-            "shots": len(clips),
+            "shots": len([c for c in clips if c["trackId"] == "v1"]),
             "duration": round(cursor, 3),
             "fromHighlights": len(picks),
-            "motion": [c["label"].split("· ")[-1] for c in clips],
-            "captions": (data.get("captions") or {}).get("wanted", False),
+            "motion": [c["label"].split("· ")[-1] for c in clips if c["trackId"] == "v1"],
+            "captions": len([c for c in clips if c["trackId"] == "t1"]),
             "bpm": data.get("bpm", 0.0),
+            "applied": applied,
+            "skipped": skipped,
         },
     }
 

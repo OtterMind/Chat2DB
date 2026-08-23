@@ -26,6 +26,8 @@ class ApplyRequest(BaseModel):
     template: str | None = Field(default=None, description="Saved template name")
     inline: dict | None = Field(default=None, description="A template document, instead of a saved one")
     name: str = "Styled edit"
+    music: str | None = Field(default=None, description="Optional music bed of your own")
+    captions: bool = Field(default=True, description="Transcribe and lay captions automatically")
 
 
 @router.post("/analyze")
@@ -74,10 +76,24 @@ async def apply(payload: ApplyRequest) -> dict:
         except FileNotFoundError as error:
             raise HTTPException(status_code=404, detail=f"No template called {payload.template}") from error
 
+    # Captions are part of "automatic": transcribe unless the model is missing,
+    # in which case the edit is still produced and the omission is reported.
+    cues: list[dict] | None = None
     loop = asyncio.get_running_loop()
+    wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
+    if wants_captions:
+        try:
+            from core.engine.transcribe import transcribe_to_cues
+
+            result = await loop.run_in_executor(None, transcribe_to_cues, payload.path)
+            cues = result.get("cues") or []
+        except Exception:  # noqa: BLE001 - unavailable model, or a file with no speech
+            cues = None
+
     try:
         return await loop.run_in_executor(
-            None, style.build_timeline, document, payload.path, payload.name
+            None, style.build_timeline, document, payload.path, payload.name,
+            payload.music, cues,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error

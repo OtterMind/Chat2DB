@@ -47,8 +47,10 @@ export interface StyledEdit {
     duration: number
     fromHighlights: number
     motion: string[]
-    captions: boolean
+    captions: number
     bpm: number
+    applied: string[]
+    skipped: string[]
   }
 }
 
@@ -59,6 +61,10 @@ export const styleApi = {
   remove: async (name: string): Promise<void> => {
     await api.delete(`/style/templates/${encodeURIComponent(name)}`)
   },
-  apply: async (path: string, template: string, name = 'Styled edit'): Promise<StyledEdit> =>
-    (await api.post('/style/apply', { path, template, name })).data,
+  apply: async (
+    path: string,
+    template: string,
+    name = 'Styled edit',
+    music?: string | null
+  ): Promise<StyledEdit> => (await api.post('/style/apply', { path, template, name, music })).data,
 }

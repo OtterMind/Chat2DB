@@ -945,6 +945,33 @@ if ((args.reference ?? process.env.CE_TEST_REFERENCE) && (args.vertical ?? proce
   else bad('the look was not applied', JSON.stringify(styled))
   if (styled.unknown >= 2) ok('the template states what it cannot know')
   else bad('the template makes no honesty statement', JSON.stringify(styled))
+
+  // The automatic door: footage + a music bed, no prompt and no settings.
+  const auto = await page.evaluate((mine, bed) => (window.__pending = (async () => {
+    const built = await fetch('http://127.0.0.1:8742/api/style/apply', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: mine, template: 'ui-test', music: bed, name: 'Auto' }),
+    }).then((r) => r.json())
+    const store = window.__ceEditor
+    store.getState().loadSnapshot(built.timeline, built.name)
+    await new Promise((r) => setTimeout(r, 700))
+    const state = store.getState()
+    return {
+      applied: built.summary.applied,
+      skipped: built.summary.skipped,
+      music: state.clips.filter((c) => c.trackId === 'a1').length,
+      ducked: state.clips.some((c) => c.trackId === 'a1' && c.props?.duck),
+      video: state.clips.filter((c) => c.trackId === 'v1').length,
+    }
+  })()), ownFootage, args.beat ?? process.env.CE_TEST_BEAT)
+
+  if (auto.music === 1 && auto.ducked) ok('the music bed is placed and ducked automatically')
+  else bad('the automatic music bed is missing', JSON.stringify(auto))
+  if (auto.applied.length >= 4) ok(`the automatic run reports what it did (${auto.applied.length} things)`)
+  else bad('the automatic run says nothing about what it did', JSON.stringify(auto))
+  if (Array.isArray(auto.skipped)) ok(`…and what it could not do (${auto.skipped.length})`)
+  else bad('no honesty list in the summary', JSON.stringify(auto))
 }
 
 /* 12 — the home screen starts a video --------------------------------------- */

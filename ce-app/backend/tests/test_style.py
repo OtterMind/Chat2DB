@@ -187,3 +187,68 @@ def test_the_plan_is_rendered_by_the_normal_compositor(reference, moves, tmp_pat
     info = compose.probe_media(str(output))
     assert (info["width"], info["height"]) == (180, 320)
     assert info["duration"] > 1.0
+
+
+# ------------------------------------------------------- fully automatic mode
+
+
+@requires_ffmpeg
+def test_captions_and_music_are_placed_automatically(reference, moves, tmp_path):
+    """The second door does everything itself: no prompt, no settings."""
+    template = style.analyse(str(reference), name="auto")
+
+    music = tmp_path / "bed.wav"
+    _run(["-f", "lavfi", "-i", "sine=frequency=220:duration=12", str(music)])
+
+    cues = [
+        {"start": 0.2, "end": 1.4, "text": "first line", "words": []},
+        {"start": 1.6, "end": 2.9, "text": "second line", "words": []},
+    ]
+    built = style.build_timeline(
+        template, str(moves["pan"]), name="Auto", music=str(music), captions=cues
+    )
+
+    clips = built["timeline"]["clips"]
+    text = [c for c in clips if c["trackId"] == "t1"]
+    audio = [c for c in clips if c["trackId"] == "a1"]
+
+    assert len(text) == 2 and text[0]["text"] == "first line"
+    assert text[0]["props"]["position"] == template.captions["position"]
+
+    assert len(audio) == 1
+    assert audio[0]["src"] == str(music)
+    # The template says the music sits under the voice, so the bed must duck.
+    assert audio[0]["props"]["duck"] is True
+
+    assert "music bed with ducking" in built["summary"]["applied"]
+    assert built["summary"]["captions"] == 2
+    assert built["summary"]["skipped"] == []
+
+
+@requires_ffmpeg
+def test_what_could_not_be_done_is_reported(reference, moves):
+    """No speech model and no music: the edit still happens, the gaps are named."""
+    template = style.analyse(str(reference), name="honest")
+    built = style.build_timeline(template, str(moves["pan"]))
+
+    skipped = " ".join(built["summary"]["skipped"])
+    assert "captions" in skipped
+    assert "music" in skipped
+    # …and the parts that *were* done are listed too, not assumed.
+    assert "cut to the template rhythm" in built["summary"]["applied"]
+
+
+@requires_ffmpeg
+def test_the_automatic_result_still_renders(reference, moves, tmp_path):
+    template = style.analyse(str(reference), name="auto-render")
+    music = tmp_path / "bed.wav"
+    _run(["-f", "lavfi", "-i", "sine=frequency=220:duration=12", str(music)])
+    built = style.build_timeline(
+        template, str(moves["static"]), music=str(music),
+        captions=[{"start": 0.5, "end": 1.5, "text": "hello", "words": []}],
+    )
+    timeline = compose.Timeline.from_dict({**built["timeline"], "width": 180, "height": 320, "fps": 12})
+    output = compose.render(timeline, tmp_path / "auto.mp4")
+    assert output.exists()
+    info = compose.probe_media(str(output))
+    assert info["has_video"] and info["has_audio"]
