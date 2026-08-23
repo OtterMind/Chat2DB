@@ -4,7 +4,10 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.4.4` · Last released: `v0.4.3`
+Branch: `arena/01a0214a-chat2db` · App version: `0.5.3` · Last released: `v0.5.3`
+
+**The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
+here to 1.0, each with the number that has to move. Read it after this file.
 
 ---
 
@@ -265,6 +268,25 @@ gate that stops a broken installer from being published.
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 
+34. **A dependency's weight is a measurement, not a feeling.** The installer's
+   Python side is ≈ 339 MB of Windows wheels, and it was never checked which of
+   them are imported. `ctranslate2` alone is **174.9 MB** (the whole speech stack
+   ≈ 211 MB) and is carried by users who never make a caption; `mediapipe`
+   (50.8 MB), `google-api-python-client` (12.1 MB), `Pillow`, `edge-tts`,
+   `pexels-api` and the `openai` / `anthropic` / `google-generativeai` / `ollama`
+   SDKs are shipped and **never imported** — every cloud provider is called with
+   plain `requests`. Before adding a package: query PyPI for the Windows wheel
+   size *and* its closure. Before defending one: grep for the import. The numbers
+   are in `ROADMAP_1.0.md` §1.1.
+35. **An outside review is a hypothesis, not a patch.** `REVIEW_AUDIT_0.5.3.md`
+   checks ten suggestions from an external code review against this repository
+   and against the registries: three were right, three were wrong on the facts
+   (`ThresholdDetector` finds fades to black, not dissolves; `cuts_on_beat` never
+   reads `transitions`; the proposed SSE code cannot work because `EventSource`
+   is GET-only), and one — `librosa` — was right about the licence and silent
+   about the ≈ 94 MB it drags in. The same review found a real bug in passing:
+   the 30 s client timeout still applies to `POST /api/style/analyze`.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
@@ -338,16 +360,29 @@ preview and undo instead of a fake score.
 
 ## 6. Next, in order
 
-1. The brain (`BRAIN_DESIGN.md`): Ollama planner + rule planner racing on a score,
-   and the same engine behind the Assistant button.
-2. Slim the installer: fetch the Python runtime and models on first launch
-   (~479 MB → ~120 MB). Delta updates are verified working (< 50 MB per update on
-   the user's machine), so this is measurable — re-check that number right after.
-3. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
-4. YouTube publishing (google-api-python-client, Apache-2.0).
-5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
+The full plan, with the measurement each step has to pass, is in
+`docs/CuttingEdge/ROADMAP_1.0.md`. The short form:
 
-Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+1. **0.6.0 — nothing waits in silence.** Style Match becomes a job with stage
+   progress over `/ws` and a Cancel button, and every long endpoint gets a
+   timeout budget that matches what it really does. The 30 s client budget still
+   applies to `POST /api/style/analyze`, which is the 0.5.3 failure waiting to
+   happen again.
+2. **0.6.1 — slim the installer with measured numbers.** Drop the ≈ 70 MB that is
+   never imported, move the ≈ 211 MB speech stack behind the AI runtime card
+   (≈ 480 MB → ≈ 150 MB), then re-check the differential update size with the
+   user — it must stay under 50 MB.
+3. **0.6.2 — Style Match measured, not adjusted.** `AdaptiveDetector`, affine
+   push/pull, and colour transfer as a curve; each scored on the known-answer
+   fixtures, winners only, scoreboard published.
+4. **0.7.0 / 0.7.1 — the brain.** Objective score, rule planner and Ollama planner
+   raced, Assistant dry-run preview; then highlights chosen from what was said.
+5. **0.8.0 — real face tracking** with MediaPipe as an on-demand engine, with a
+   stated pixel error before the `BETA` badge comes off.
+6. **0.8.1 → 1.0 —** template gallery and title/sound packs, YouTube publishing,
+   optional DeepFilterNet, then stabilisation: tour, manual, attribution screen,
+   and a clean install filmed doing a whole edit.
+
 Done in 0.5.3: the three failures reported from the installed app — the 30 s
 timeout, the Ollama model mismatch, and the CUDA-less Whisper.
 Done in 0.5.2: the AI runtime card in Settings — installed / running / models /
@@ -376,4 +411,4 @@ export, with markers on the clip and a panel that keys at the playhead.
 Done in 0.3.9: immersive sections (the chrome fades, the section fills the window,
 Escape or the top edge brings it back), route transitions with `framer-motion`
 (MIT), mute/hide split on lanes, pressed-state toggles.
-3. Slim the installer: fetch runtime and models on first launch (~479 MB → ~120 MB).
+Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
