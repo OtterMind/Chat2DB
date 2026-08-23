@@ -99,20 +99,31 @@ their own client budgets (20 min for transcription, 10 min for scans).
 Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
 `playback-test.mjs` — 120 backend tests and 100 browser checks all green.
 
-### 0.6.1 — The installer stops carrying what it never uses
-*Target: ≈ 480 MB → ≈ 260 MB, then → ≈ 150 MB.*
+### 0.6.1 — The installer stops carrying what it never uses  ✅ **part one shipped**
+*Measured: 378.3 MB → 137.9 MB of wheels, 108 → 50 packages.*
 
-* Delete the ≈ 70 MB of never-imported packages listed above. `mediapipe` comes
-  back in 0.8.0 as an on-demand engine, not as ballast.
-* `opencv-python` → `opencv-python-headless` (same size, but no `libGL` trap;
-  headless is what our own dev environment already uses).
-* Move the speech stack (≈ 211 MB) behind the AI runtime card that already exists:
-  captions ask once, download once into `~/CuttingEdge/runtime`, and every screen
-  that needs speech reports "not installed" honestly instead of failing.
-* **Proof:** the size of the published `.exe` before and after, in the release
-  notes; then the user reports the next in-app update size — the differential
-  channel must still deliver < 50 MB (a packaging change is the classic way to
-  break it).
+* **Done.** Deleted every never-imported package. The closure was re-measured
+  with `uv pip compile --python-platform windows` before and after: `mediapipe`
+  alone took `jaxlib` (61.2 MB), `opencv-contrib-python` (46.2 MB), `scipy`
+  (36.6 MB) and `matplotlib` (9.3 MB) with it; `sqlalchemy` turned out to be
+  dead too (the database is standard-library `sqlite3`). `mediapipe` returns in
+  0.8.0 as an on-demand engine, not as ballast. `tests/test_dependencies.py`
+  fails if any of it comes back.
+* **Done.** `opencv-python` → `opencv-python-headless`: same size, no `libGL`
+  trap. This one was hiding a false test failure — without an importable `cv2`
+  the log-polar zoom measurement silently disappears and
+  `test_camera_motion_is_recognised[pull]` fails for an environment reason.
+* **Still to do (0.6.2).** Move the speech stack — `ctranslate2`, `av`,
+  `onnxruntime`, `tokenizers`, `faster-whisper` ≈ 62 MB of the remaining
+  137.9 MB — behind the AI runtime card that already exists: captions ask once,
+  download once into `~/CuttingEdge/runtime`, and every screen that needs speech
+  reports "not installed" honestly instead of failing.
+* **Proof:** the wheel closure was measured before and after (378.3 → 137.9 MB);
+  the whole backend suite (122 tests) then ran against a **fresh virtualenv built
+  from the pruned `requirements.txt` alone**, and the UI audit and the 100
+  browser checks ran against a backend started from that same virtualenv. What
+  is still unmeasured is the published `.exe`: the user reports its size and the
+  size of the next in-app update, which must stay < 50 MB.
 
 ### 0.6.2 — Style Match gets measured, not adjusted
 *Three experiments, a scoreboard, and only the winners ship.*

@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.6.0` · Last released: `v0.5.3`
+Branch: `arena/01a0214a-chat2db` · App version: `0.6.1` · Last released: `v0.5.3`
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -310,6 +310,26 @@ gate that stops a broken installer from being published.
    `async def` + `run_in_executor`, and the long ones carry their own client
    budget (transcribe 20 min, scans 10 min) instead of the global 30 s.
 
+38. **Nothing ships that nothing imports.** The Windows dependency closure was
+   measured with `uv pip compile --python-platform windows`: **378.3 MB across
+   108 packages**. `mediapipe` was pinned, shipped to every user and imported
+   **nowhere** — and it dragged in `jaxlib` (61.2 MB), `opencv-contrib-python`
+   (46.2 MB), `scipy` (36.6 MB) and `matplotlib` (9.3 MB) behind it. The four
+   cloud AI SDKs (`openai`, `anthropic`, `google-generativeai`, `ollama`) were
+   dead as well: every provider is called with plain `requests`. So were
+   `Pillow`, `edge-tts`, `pexels-api`, `google-api-python-client` and
+   `sqlalchemy` — the database is standard-library `sqlite3`. After the cut:
+   **137.9 MB across 50 packages**, with every remaining line imported by the
+   code. `tests/test_dependencies.py` is the ratchet: a new pin must be imported
+   somewhere or be named in `INDIRECT` with its reason, and the ten heavy ones
+   are banned by name. A feature that needs a big engine fetches it on demand
+   (that is how Whisper models already work) instead of taxing every user.
+39. **A test that assumes an engine is missing only passes where it is missing.**
+   `test_ai.py` hard-coded `whisper.installed is False`; it passed in the
+   sandbox and would have failed on the machine we actually build, because
+   `faster-whisper` ships. The suite now asks (`importlib.util.find_spec`) and
+   asserts the honest answer in both directions.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
@@ -389,10 +409,12 @@ The full plan, with the measurement each step has to pass, is in
 1. ~~0.6.0 — nothing waits in silence.~~ **Shipped.** Measured: start 1–4 ms,
    7–8 stages reported, Stop honoured in 0.2 s, a ten-minute reference analysed
    in 35.5 s without a timeout.
-2. **0.6.1 — slim the installer with measured numbers.** Drop the ≈ 70 MB that is
-   never imported, move the ≈ 211 MB speech stack behind the AI runtime card
-   (≈ 480 MB → ≈ 150 MB), then re-check the differential update size with the
-   user — it must stay under 50 MB.
+2. **0.6.1 — slim the installer, part one: shipped.** The never-imported
+   packages are gone: **378.3 MB → 137.9 MB** of wheels, 108 → 50 packages,
+   measured with `uv pip compile --python-platform windows`. Part two is the
+   speech stack (`ctranslate2` + `av` + `onnxruntime` + `tokenizers` ≈ 62 MB
+   here) fetched on demand through the AI runtime card. The user should report
+   the installer size and the next differential update — it must stay < 50 MB.
 3. **0.6.2 — Style Match measured, not adjusted.** `AdaptiveDetector`, affine
    push/pull, and colour transfer as a curve; each scored on the known-answer
    fixtures, winners only, scoreboard published.

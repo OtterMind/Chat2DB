@@ -1,28 +1,27 @@
 # Cutting Edge (CE) — Backend Dependencies
 # Python 3.11
+#
+# Every line here ships to every user, so every line has to be imported by the
+# code. Measured before this list was cut: the Windows closure was 378.3 MB
+# across 108 packages, and `mediapipe` alone — with zero imports in the app —
+# dragged in jaxlib (61.2 MB), opencv-contrib-python (46.2 MB), scipy (36.6 MB)
+# and matplotlib (9.3 MB). The cloud AI SDKs were dead weight too: every
+# provider is called with plain `requests`. After: 137.9 MB across 50 packages.
+# `tests/test_dependencies.py` fails if ballast comes back.
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 websockets==12.0
-sqlalchemy==2.0.32
 pydantic==2.8.2
 pydantic-settings==2.4.0
 psutil==6.0.0
 faster-whisper==1.0.3
-google-generativeai==0.7.2
-anthropic==0.34.2
-openai==1.40.3
-ollama==0.3.3
-opencv-python==4.10.0.84
-mediapipe==0.10.14
+# Headless: the GUI build needs libGL, which nothing we ship provides — and a
+# cv2 that cannot import silently disables the log-polar zoom measurement.
+opencv-python-headless==4.10.0.84
 numpy==1.26.4
-Pillow==10.4.0
 scenedetect==0.6.4
 yt-dlp==2024.8.6
-edge-tts==6.1.12
-pexels-api==1.0.1
 requests==2.32.3
-google-api-python-client==2.139.0
-google-auth-oauthlib==1.2.1
 pytest==8.3.2
 pytest-asyncio==0.23.8

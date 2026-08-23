@@ -21,7 +21,13 @@ HB=/tmp/hb
 echo "→ backend virtualenv"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q fastapi "uvicorn[standard]" sqlalchemy pydantic-settings psutil \
-    python-multipart pytest httpx scenedetect imageio-ffmpeg
+    python-multipart pytest pytest-xdist httpx scenedetect imageio-ffmpeg
+# scenedetect pulls plain `opencv-python`, which cannot import here (libGL is
+# missing) — and a cv2 that will not load silently disables the log-polar zoom
+# measurement, so test_camera_motion_is_recognised[pull] fails for an
+# environment reason that looks exactly like a code regression.
+"$VENV/bin/pip" uninstall -y -q opencv-python >/dev/null 2>&1 || true
+"$VENV/bin/pip" install -q opencv-python-headless
 
 echo "→ ffmpeg"
 mkdir -p "$FFDIR"

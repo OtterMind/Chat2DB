@@ -1,16 +1,24 @@
-"""The AI runtime panel must tell the truth about a machine it knows nothing about.
+"""The AI runtime panel must tell the truth about the machine it is on.
 
-Every assertion here runs on a box with neither Ollama nor faster-whisper, which
-is the interesting case: the answer has to be a clear "not installed", never a
-crash and never an optimistic tick.
+The interesting case is a box with neither Ollama nor faster-whisper: the answer
+has to be a clear "not installed", never a crash and never an optimistic tick.
+But the *shipped* configuration has faster-whisper present, and two assertions
+here used to hard-code its absence — so the suite passed in the sandbox and
+would have failed on the machine we actually build. Anything that depends on an
+engine being there now asks first.
 """
 from __future__ import annotations
 
+import importlib.util
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
+
+WHISPER_PRESENT = importlib.util.find_spec("faster_whisper") is not None
 
 
 def test_status_reports_both_engines():
@@ -21,20 +29,21 @@ def test_status_reports_both_engines():
         assert isinstance(engine["installed"], bool)
 
 
-def test_status_is_honest_when_nothing_is_installed():
+def test_status_is_honest_about_what_is_installed():
     body = client.get("/api/ai/status").json()
-    # Nothing is installed in the test environment, and the payload says so
-    # instead of guessing from a config flag.
+    # Measured, not guessed from a config flag — in either direction.
     assert body["ollama"]["running"] is False
     assert body["ollama"]["download"].startswith("https://")
-    assert body["whisper"]["installed"] is False
+    assert body["whisper"]["installed"] is WHISPER_PRESENT
 
 
 def test_the_self_test_never_crashes_without_the_engines():
     """Regression: a missing `requests` module took the whole endpoint down."""
     body = client.post("/api/ai/test").json()
     assert body["ollama"]["ok"] is False and body["ollama"]["detail"]
-    assert body["whisper"]["ok"] is False and body["whisper"]["detail"]
+    # Whisper may be installed but have no model on disk: either way it answers
+    # with a reason, and never with a bare exception.
+    assert isinstance(body["whisper"]["ok"], bool) and body["whisper"]["detail"]
 
 
 def test_pulling_a_model_without_ollama_explains_itself():
@@ -43,6 +52,7 @@ def test_pulling_a_model_without_ollama_explains_itself():
     assert "ollama" in response.json()["detail"].lower() or "http client" in response.json()["detail"].lower()
 
 
+@pytest.mark.skipif(WHISPER_PRESENT, reason="faster-whisper is installed here; this is the missing-engine case")
 def test_downloading_whisper_without_the_package_explains_itself():
     response = client.post("/api/ai/whisper/download", json={"size": "base"})
     assert response.status_code == 409
