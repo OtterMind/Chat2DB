@@ -206,6 +206,7 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
 
 ### 0.6.2 — Ideal, not small  ✅ **shipped**
 *A pass over every place where size was traded against quality.*
+*Installer 305 MB → **323 MB**: the 18 MB is the bytecode, bought back on purpose.*
 
 * **Bytecode is shipped again.** It had been deleted from the payload so that
   differential patches stayed small. Measured cost: **1.16 s** to start the

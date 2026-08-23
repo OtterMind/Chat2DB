@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.6.1` · Last released: `v0.6.1` (installer **305 MB**, down from 458 MB)
+Branch: `arena/01a0214a-chat2db` · App version: `0.6.2` · Last released: `v0.6.2` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
