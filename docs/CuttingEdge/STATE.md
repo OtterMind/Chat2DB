@@ -409,7 +409,8 @@ The full plan, with the measurement each step has to pass, is in
 1. ~~0.6.0 — nothing waits in silence.~~ **Shipped.** Measured: start 1–4 ms,
    7–8 stages reported, Stop honoured in 0.2 s, a ten-minute reference analysed
    in 35.5 s without a timeout.
-2. **0.6.1 — slim the installer, part one: shipped.** The never-imported
+2. **0.6.1 — slim the installer, part one: shipped.** The published installer
+   went **458 MB → 305 MB**. The never-imported
    packages are gone: **378.3 MB → 137.9 MB** of wheels, 108 → 50 packages,
    measured with `uv pip compile --python-platform windows`. Part two is the
    speech stack (`ctranslate2` + `av` + `onnxruntime` + `tokenizers` ≈ 62 MB

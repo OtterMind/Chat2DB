@@ -100,7 +100,8 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
 `playback-test.mjs` — 120 backend tests and 100 browser checks all green.
 
 ### 0.6.1 — The installer stops carrying what it never uses  ✅ **part one shipped**
-*Measured: 378.3 MB → 137.9 MB of wheels, 108 → 50 packages.*
+*Measured on the published installer: **458 MB → 305 MB** (−153 MB, −33 %).*
+*Dependency closure: 378.3 MB → 137.9 MB of wheels, 108 → 50 packages.*
 
 * **Done.** Deleted every never-imported package. The closure was re-measured
   with `uv pip compile --python-platform windows` before and after: `mediapipe`
