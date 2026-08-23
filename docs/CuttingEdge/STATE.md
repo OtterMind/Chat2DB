@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.6.1` · Last released: `v0.5.3`
+Branch: `arena/01a0214a-chat2db` · App version: `0.6.1` · Last released: `v0.6.1` (installer **305 MB**, down from 458 MB)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -329,6 +329,17 @@ gate that stops a broken installer from being published.
    sandbox and would have failed on the machine we actually build, because
    `faster-whisper` ships. The suite now asks (`importlib.util.find_spec`) and
    asserts the honest answer in both directions.
+
+40. **The build's own health check must not be a hand-written package list.**
+   `before-pack.js` verified the embeddable runtime with
+   `import fastapi, uvicorn, sqlalchemy, pydantic_settings`; dropping
+   `sqlalchemy` made it abort every build with *"portable backend runtime is
+   still incomplete"* and no cause. It now imports `app.main` — the application
+   is the only honest answer to "can this runtime start?" — and prints the
+   interpreter's traceback when it cannot. One more trap on the way: in an
+   embeddable runtime the `.` entry of `python311._pth` is the folder holding
+   `python.exe`, **not** the process's working directory, so the probe has to
+   put the backend folder on `sys.path` itself. `smoke-test.ps1` does the same.
 
 ## 5. Release procedure
 
