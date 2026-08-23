@@ -227,12 +227,17 @@ module.exports = async function beforePack(context) {
   // runtime may be missing dependencies. Detect that and install them here —
   // the installer must never ship a backend that cannot start.
   if (!canImport(exe, backendDir)) {
-    log('dependencies missing from the CI runtime — installing them now')
+    log(`the runtime cannot start the app yet:\n${lastImportError}`)
+    log('installing the dependencies now')
     installRequirements(exe, backendDir, frontendDir)
   }
 
   if (!canImport(exe, backendDir)) {
-    throw new Error('portable backend runtime is still incomplete — aborting build')
+    // Say *why*. The first version threw a sentence with no cause in it, and the
+    // build log gave the next person nothing to work with.
+    throw new Error(
+      `portable backend runtime is still incomplete — aborting build\n${lastImportError}`
+    )
   }
   log('portable backend runtime ready')
 
@@ -245,19 +250,29 @@ module.exports = async function beforePack(context) {
   )
 }
 
+let lastImportError = ''
+
 function canImport(exe, cwd) {
+  // Import the app itself rather than a hand-written list of packages: that
+  // list went stale the moment `sqlalchemy` was dropped (the database is
+  // standard-library sqlite3) and aborted the whole build. The application is
+  // the only honest answer to "can this runtime start?".
+  //
+  // The backend directory has to be named explicitly: in an embeddable runtime
+  // the `.` entry of `python311._pth` resolves to the folder holding
+  // python.exe, *not* to the process's working directory, so `import app.main`
+  // alone cannot find the app.
+  const probe = `import sys; sys.path.insert(0, r"${cwd}"); import app.main`
   try {
-    // Import the app itself rather than a hand-written list of packages. The
-    // list went stale the moment `sqlalchemy` was dropped (the database is
-    // standard-library sqlite3) and aborted the whole build with
-    // "portable backend runtime is still incomplete". The application is the
-    // only honest answer to "can this runtime start?".
-    execFileSync(exe, ['-c', 'import app.main'], {
-      cwd,
-      stdio: 'pipe',
-    })
+    execFileSync(exe, ['-c', probe], { cwd, stdio: 'pipe' })
+    lastImportError = ''
     return true
   } catch (e) {
+    lastImportError = String(e.stderr || e.stdout || e.message)
+      .trim()
+      .split('\n')
+      .slice(-8)
+      .join('\n')
     return false
   }
 }

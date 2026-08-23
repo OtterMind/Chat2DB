@@ -62,7 +62,8 @@ Check 'python runtime is portable' {
 Check 'backend imports and answers /api/health' {
     $py = Join-Path $resources 'backend\python\python.exe'
     $backend = Join-Path $resources 'backend'
-    & $py -c "import app.main" 2>&1 | Out-Null
+    # `.` in the embeddable runtime's _pth is the python folder, not the cwd.
+    & $py -c "import sys; sys.path.insert(0, r'$backend'); import app.main" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'backend dependencies are missing from the packaged runtime' }
 
     $proc = Start-Process -FilePath $py -ArgumentList 'run_backend.py' -WorkingDirectory $backend -PassThru -WindowStyle Hidden
