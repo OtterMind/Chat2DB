@@ -124,7 +124,16 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **Style Match measures, it never copies.** `core/engine/style.py` turns a
+13. **Optional engines must be checked, not assumed.** Settings has an AI runtime
+   card: is Ollama installed, is it *running*, which models are pulled, is
+   faster-whisper importable and is a model on disk — plus a self-test that
+   reports **seconds**, because "the import worked" is not the question. It never
+   installs Ollama silently (that is a several-hundred-megabyte application from
+   another project); it offers the download link and can pull a model into an
+   Ollama the user already runs. `tests/test_ai.py` runs on a machine with
+   neither engine, which is the case that must not crash — and did, once, on a
+   missing `requests`.
+14. **Style Match measures, it never copies.** `core/engine/style.py` turns a
    reference video into a template (shot rhythm, tempo, cuts-on-beat ratio,
    camera move per shot, colour, speech ratio, hook, transition kind) and
    `build_timeline()` cuts the user's own footage into that shape — one clip per
@@ -133,10 +142,10 @@ gate that stops a broken installer from being published.
    order matters: **cancel translation, then measure scale in log-polar space,
    with the sign verified against clips built to zoom by a known amount.** The
    tests build every fixture to a recipe, so each has a right answer.
-14. **Frames come in strips, not one process each.** `sample_strip()` decodes N
+15. **Frames come in strips, not one process each.** `sample_strip()` decodes N
    frames in one FFmpeg call; the per-frame version spent more time spawning
    processes than decoding.
-15. **Ducking is computed, not side-chained.** `sidechaincompress` looks like the
+16. **Ducking is computed, not side-chained.** `sidechaincompress` looks like the
    right filter and is a trap in a large graph: when its key input reaches EOF a
    moment before the main — which happens **under load, never on an idle
    machine** — it emits silence for the rest of the render, so the music vanished
@@ -146,7 +155,7 @@ gate that stops a broken installer from being published.
    a volume automation curve on the bed: one stream, one expression, identical on
    every render, and readable as numbers. Depth 0.25 measures ≈ 6 dB in the
    finished file, verified in a 220 Hz band so the voice cannot flatter it.
-16. **The old sidechain note, kept for the record:** Automatic ducking uses
+17. **The old sidechain note, kept for the record:** Automatic ducking uses
    `sidechaincompress`, and the graph is load-bearing: the key is **its own second
    decode of the voice file**, padded past the end of the timeline. `asplit` was
    tried first and starves the compressor under load — with four renders running
@@ -155,17 +164,17 @@ gate that stops a broken installer from being published.
    music simply vanished at 4.2 s). Output length still follows the main input.
    Measured in `tests/test_audio.py` with a 220 Hz bed and a 300 Hz voice, using
    a bandpass so the bed can be judged inside the finished mix.
-16. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
+18. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
    deleted the only path to Settings — and the update button lives there, so the
    user could not update the app at all. The updater is now a card on the home
    screen (version, check, progress, install) with a gear and a stethoscope next
    to it, there is a Settings tile in the grid, and `playback-test.mjs` asserts
    every one of those is present and actually navigates. **Before removing a
    route from the interface, list what is only reachable through it.**
-17. **A saved project must appear immediately.** The home query cached for five
+19. **A saved project must appear immediately.** The home query cached for five
    seconds, so coming back from the editor after saving showed nothing — which
    looks exactly like a failed save. It now refetches on mount and on focus.
-18. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
+20. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
    decodes with FFmpeg and does the maths in NumPy: a bucketed min/max envelope
    for the timeline (cached, clamped to 4000 points) and beat detection by
    spectral flux + autocorrelation. librosa would have added numba/scipy for
@@ -326,6 +335,9 @@ preview and undo instead of a fake score.
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.5.2: the AI runtime card in Settings — installed / running / models /
+measured latency for Ollama and Whisper, with an honest refusal to install other
+people's software silently.
 Done in 0.5.1: Style Match became fully automatic (captions and a ducked music bed
 placed without a prompt, with an honest list of what was and was not done), and
 ducking moved from a sidechain to a computed envelope after parallel test runs

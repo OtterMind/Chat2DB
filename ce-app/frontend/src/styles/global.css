@@ -149,6 +149,19 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ce-searchbar input:focus { outline: none; border-color: var(--brand); }
 
+/* local AI engines in Settings */
+.ce-engines { display: flex; flex-direction: column; gap: 10px; }
+.ce-engine {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(148, 163, 184, .07); border: 1px solid var(--border);
+}
+.ce-engine__icon {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: rgba(99, 102, 241, .18); color: #c7d2fe; flex: none;
+}
+.ce-engine__body { flex: 1; min-width: 0; }
+.ce-engine__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* style match: the automatic button is the loud one */
 .ce-btn--auto { background: linear-gradient(135deg, #f43f5e, #7c3aed); border: none; }
 
@@ -465,7 +478,20 @@ button { font-family: inherit; cursor: pointer; }
   .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
-  /* style match: the automatic button is the loud one */
+  /* local AI engines in Settings */
+.ce-engines { display: flex; flex-direction: column; gap: 10px; }
+.ce-engine {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(148, 163, 184, .07); border: 1px solid var(--border);
+}
+.ce-engine__icon {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: rgba(99, 102, 241, .18); color: #c7d2fe; flex: none;
+}
+.ce-engine__body { flex: 1; min-width: 0; }
+.ce-engine__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* style match: the automatic button is the loud one */
 .ce-btn--auto { background: linear-gradient(135deg, #f43f5e, #7c3aed); border: none; }
 
 /* style match: the shot list of the produced edit */

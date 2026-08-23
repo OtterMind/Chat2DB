@@ -3,6 +3,7 @@ import { Form, Input, message } from 'antd'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
+import AiRuntimeCard from '../components/AiRuntimeCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
 import { useI18n, type Lang } from '../i18n'
 
@@ -81,6 +82,10 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </Card>
+
+      <Card title={t('Local AI engines', 'موتورهای هوش مصنوعی محلی')}>
+        <AiRuntimeCard />
       </Card>
 
       <Card title={t('Application update', 'به‌روزرسانی برنامه')}>

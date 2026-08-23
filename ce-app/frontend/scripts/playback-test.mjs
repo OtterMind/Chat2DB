@@ -974,6 +974,31 @@ if ((args.reference ?? process.env.CE_TEST_REFERENCE) && (args.vertical ?? proce
   else bad('no honesty list in the summary', JSON.stringify(auto))
 }
 
+/* 11k — the local AI panel in Settings -------------------------------------- */
+const engines = await page.evaluate(() => (window.__pending = (async () => {
+  location.hash = '#/settings'
+  await new Promise((r) => setTimeout(r, 1500))
+  const rows = [...document.querySelectorAll('.ce-engine')]
+  const check = [...document.querySelectorAll('.ce-btn')].find((b) =>
+    /Check and time|بررسی و زمان/.test(b.textContent ?? '')
+  )
+  check?.click()
+  await new Promise((r) => setTimeout(r, 2500))
+  return {
+    rows: rows.length,
+    names: rows.map((r) => r.querySelector('strong')?.textContent ?? ''),
+    // With no engines installed, every row must say so rather than show a tick.
+    honest: rows.every((r) => /not installed|نصب نیست|installed, not running|ready|آماده/.test(r.textContent ?? '')),
+    reported: [...document.querySelectorAll('.ce-engine .ce-hint')].length,
+  }
+})()))
+if (engines.rows === 2 && engines.names.join(',').includes('Ollama')) ok('Settings lists both AI engines')
+else bad('the AI engine panel is missing', JSON.stringify(engines))
+if (engines.honest) ok('each engine states whether it is installed and running')
+else bad('an engine row says nothing useful', JSON.stringify(engines))
+if (engines.reported === 2) ok('the self-test reports a result for both engines')
+else bad('the self-test reported nothing', JSON.stringify(engines))
+
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 900))
