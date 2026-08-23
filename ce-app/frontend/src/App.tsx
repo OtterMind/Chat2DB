@@ -13,6 +13,7 @@ import ClipReview from './pages/ClipReview'
 import Settings from './pages/Settings'
 import Uploads from './pages/Uploads'
 import Doctor from './pages/Doctor'
+import StyleMatch from './pages/StyleMatch'
 import { useI18n } from './i18n'
 
 const queryClient = new QueryClient({
@@ -69,6 +70,7 @@ function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/uploads" element={<Uploads />} />
               <Route path="/doctor" element={<Doctor />} />
+              <Route path="/style" element={<StyleMatch />} />
             </Route>
           </Routes>
         </HashRouter>

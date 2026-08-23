@@ -1,0 +1,232 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { message, Modal, Input } from 'antd'
+import {
+  Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info,
+} from 'lucide-react'
+import Page, { Card } from '../components/Page'
+import { styleApi, type StyleTemplate, type TemplateSummary, type StyledEdit } from '../api/style'
+import { pickMedia } from '../api/render'
+import { useEditor, formatTimecode } from '../editor/model'
+import { useI18n } from '../i18n'
+
+/**
+ * Style Match.
+ *
+ * Two files and one idea: measure a video you like, then rebuild *your* footage
+ * with the same editing grammar — shot rhythm, camera moves, colour, aspect,
+ * transitions. Nothing of the reference is copied; the template is numbers.
+ */
+export default function StyleMatch() {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const [templates, setTemplates] = useState<TemplateSummary[]>([])
+  const [template, setTemplate] = useState<StyleTemplate | null>(null)
+  const [busy, setBusy] = useState<'analyse' | 'apply' | null>(null)
+  const [result, setResult] = useState<StyledEdit | null>(null)
+
+  const refresh = () => styleApi.templates().then((r) => setTemplates(r.templates)).catch(() => undefined)
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  const choose = async (): Promise<string | null> => {
+    const picker = pickMedia()
+    if (picker) {
+      const paths = await picker
+      return paths[0] ?? null
+    }
+    return new Promise((resolve) => {
+      let value = ''
+      Modal.confirm({
+        title: t('Path to the video', 'مسیر فایل ویدیو'),
+        icon: null,
+        content: <Input autoFocus placeholder="/path/to/video.mp4" onChange={(e) => (value = e.target.value)} />,
+        okText: t('Use this file', 'همین فایل'),
+        cancelText: t('Cancel', 'انصراف'),
+        onOk: () => resolve(value.trim() || null),
+        onCancel: () => resolve(null),
+      })
+    })
+  }
+
+  const analyse = async () => {
+    const path = await choose()
+    if (!path) return
+    setBusy('analyse')
+    try {
+      const found = await styleApi.analyse(path)
+      setTemplate(found)
+      refresh()
+      message.success(
+        t(`Template ready — ${found.shots.length} shots`, `قالب آماده شد — ${found.shots.length} نما`)
+      )
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const applyTo = async () => {
+    if (!template) return
+    const path = await choose()
+    if (!path) return
+    setBusy('apply')
+    try {
+      const built = await styleApi.apply(path, template.name, t('Styled edit', 'تدوین بر اساس الگو'))
+      setResult(built)
+      message.success(t('Your edit is ready', 'تدوین تو آماده است'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const openInEditor = () => {
+    if (!result) return
+    const editor = useEditor.getState()
+    editor.loadSnapshot(result.timeline as never, result.name)
+    editor.setAspect((result.aspect as never) ?? 'auto')
+    navigate('/studio')
+  }
+
+  const percent = (value: number) => `${Math.round(value * 100)}%`
+
+  return (
+    <Page
+      title={t('Style Match', 'ساخت شبیه الگو')}
+      subtitle={t(
+        'Measure a video you like, then cut your own footage the same way',
+        'یک ویدیوی الگو را اندازه بگیر، بعد فیلم خودت را همان‌طور تدوین کن'
+      )}
+      width="md"
+      back
+    >
+      <Card title={t('1 · The reference', '۱ · ویدیوی الگو')}>
+        <p className="ce-hint">
+          {t(
+            'Nothing of the reference is copied — the template holds numbers: shot lengths, tempo, camera moves, colour, aspect.',
+            'هیچ‌چیزی از ویدیوی الگو کپی نمی‌شود — قالب فقط عدد نگه می‌دارد: طول نماها، تمپو، حرکت دوربین، رنگ و نسبت تصویر.'
+          )}
+        </p>
+        <div className="ce-actions" style={{ marginTop: 12 }}>
+          <button className="ce-btn ce-btn--sm" disabled={busy !== null} onClick={() => void analyse()}>
+            {busy === 'analyse' ? <Loader2 size={15} className="ce-spin" /> : <FileVideo size={15} />}
+            {t('Analyse a video', 'تحلیل یک ویدیو')}
+          </button>
+        </div>
+
+        {templates.length > 0 && (
+          <div className="ce-reel" style={{ marginTop: 14 }}>
+            {templates.map((item) => (
+              <div
+                key={item.name}
+                className={`ce-reelcard ${template?.name === item.name ? 'is-unfinished' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => void styleApi.templates().then(async () => {
+                  const full = await fetch(
+                    `${location.origin.includes('5173') ? 'http://127.0.0.1:8742' : ''}/api/style/templates/${encodeURIComponent(item.name)}`
+                  ).then((r) => r.json())
+                  setTemplate(full)
+                })}
+                onKeyDown={() => undefined}
+              >
+                <span className="ce-reelcard__art">
+                  <Sparkles size={18} />
+                  <span className="ce-reelcard__len" dir="ltr">{formatTimecode(item.duration)}</span>
+                  <button
+                    className="ce-reelcard__del"
+                    title={t('Delete', 'حذف')}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void styleApi.remove(item.name).then(refresh)
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </span>
+                <span className="ce-reelcard__name">{item.name}</span>
+                <span className="ce-reelcard__meta" dir="ltr">
+                  {item.shots} shots · {Math.round(item.bpm)} BPM
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {template && (
+        <Card title={t('2 · What the template says', '۲ · قالب چه می‌گوید')}>
+          <div className="ce-badges">
+            <span className="ce-badge"><Film size={13} /> {template.shots.length} {t('shots', 'نما')}</span>
+            <span className="ce-badge"><Gauge size={13} /> {t('median', 'میانه')} {template.median_shot.toFixed(2)}s</span>
+            <span className="ce-badge"><Music4 size={13} /> {Math.round(template.bpm)} BPM</span>
+            <span className="ce-badge"><CropIcon size={13} /> {template.aspect}</span>
+            <span className="ce-badge">{t('cuts on beat', 'برش روی ضرب')} {percent(template.cuts_on_beat)}</span>
+            <span className="ce-badge">{t('speech', 'گفتار')} {percent(template.speech_ratio)}</span>
+          </div>
+
+          <div className="ce-kv" style={{ marginTop: 10 }}>
+            <span>{t('Camera', 'دوربین')}</span>
+            <strong dir="ltr">
+              {Object.entries(template.motion_mix)
+                .filter(([, share]) => share > 0)
+                .map(([kind, share]) => `${kind} ${percent(share)}`)
+                .join(' · ')}
+            </strong>
+          </div>
+          <div className="ce-kv">
+            <span>{t('Transitions', 'ترنزیشن')}</span>
+            <strong dir="ltr">{String(template.transitions.type)} × {String(template.transitions.count)}</strong>
+          </div>
+
+          <p className="ce-hint" style={{ marginTop: 10 }}>
+            <Info size={14} /> {t('Not measurable from pixels:', 'از روی تصویر قابل اندازه‌گیری نیست:')}{' '}
+            {template.unknown.join(' · ')}
+          </p>
+
+          <div className="ce-actions" style={{ marginTop: 14 }}>
+            <button className="ce-btn ce-btn--sm" disabled={busy !== null} onClick={() => void applyTo()}>
+              {busy === 'apply' ? <Loader2 size={15} className="ce-spin" /> : <Wand2 size={15} />}
+              {t('Use my footage', 'روی فیلم خودم اعمال کن')}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {result && (
+        <Card title={t('3 · Your edit', '۳ · تدوین تو')}>
+          <div className="ce-badges">
+            <span className="ce-badge">{result.summary.shots} {t('shots', 'نما')}</span>
+            <span className="ce-badge" dir="ltr">{formatTimecode(result.summary.duration)}</span>
+            <span className="ce-badge">
+              {t('from', 'از')} {result.summary.fromHighlights} {t('highlights', 'هایلایت')}
+            </span>
+          </div>
+
+          <ol className="ce-shotlist">
+            {result.summary.motion.map((motion, index) => {
+              const clip = (result.timeline.clips as { start: number; duration: number }[])[index]
+              return (
+                <li key={index}>
+                  <span dir="ltr">{formatTimecode(clip.start)}</span>
+                  <strong>{motion}</strong>
+                  <span dir="ltr">{clip.duration.toFixed(2)}s</span>
+                </li>
+              )
+            })}
+          </ol>
+
+          <div className="ce-actions" style={{ marginTop: 12 }}>
+            <button className="ce-btn ce-btn--sm" onClick={openInEditor}>
+              <Sparkles size={15} /> {t('Open it in the editor', 'بازش کن در میز تدوین')}
+            </button>
+          </div>
+        </Card>
+      )}
+    </Page>
+  )
+}

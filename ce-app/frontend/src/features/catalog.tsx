@@ -47,6 +47,16 @@ export const FEATURES: FeatureTile[] = [
     group: 'core',
   },
   {
+    id: 'stylematch',
+    label: ['Style Match', 'ساخت شبیه الگو'],
+    hint: ['Copy the edit of a video you like', 'تدوین یک ویدیوی الگو را بردار'],
+    icon: <Sparkles {...ICON} />,
+    gradient: 'linear-gradient(145deg,#F43F5E,#7C3AED)',
+    route: '/style',
+    badge: 'beta',
+    group: 'core',
+  },
+  {
     id: 'reframe',
     label: ['Reframe', 'قاب عمودی'],
     hint: ['Turn 16:9 into 9:16', 'تبدیل ۱۶:۹ به ۹:۱۶'],

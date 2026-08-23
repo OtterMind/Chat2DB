@@ -32,11 +32,46 @@ from core.engine.compose import ffmpeg_binary, probe_media
 
 #: Frames are analysed at this size — enough for motion, cheap enough for a long file.
 FRAME = 96
+
+try:  # OpenCV arrives with scenedetect; it is optional here on purpose.
+    import cv2  # type: ignore
+except Exception:  # pragma: no cover - a trimmed install, or a machine without libGL
+    cv2 = None  # type: ignore
 #: A cut counts as "on the beat" when it is this close to one.
 BEAT_TOLERANCE = 0.12
 
 
 # --------------------------------------------------------------------- frames
+
+
+def sample_strip(path: str, start: float, duration: float, count: int, size: int = FRAME) -> list[np.ndarray]:
+    """`count` frames spread across a span — in **one** FFmpeg call.
+
+    The first version spawned a process per frame, which cost more in process
+    startup than in decoding: analysing a two-minute video meant a hundred
+    invocations. One call with an fps filter is the same picture, several times
+    faster, and it is why a full style analysis finishes in seconds.
+    """
+    if duration <= 0 or count <= 0:
+        return []
+    rate = max(0.05, count / duration)
+    out = subprocess.run(
+        [
+            ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
+            "-ss", f"{max(0.0, start):.3f}", "-t", f"{duration:.3f}", "-i", str(path),
+            "-vf", f"fps={rate:.4f},scale={size}:{size},format=gray",
+            "-frames:v", str(count), "-f", "rawvideo", "-",
+        ],
+        capture_output=True,
+    )
+    frame_bytes = size * size
+    total = len(out.stdout) // frame_bytes
+    return [
+        np.frombuffer(out.stdout[i * frame_bytes : (i + 1) * frame_bytes], dtype=np.uint8)
+        .reshape(size, size)
+        .astype(np.float32)
+        for i in range(total)
+    ]
 
 
 def sample_gray(path: str, at: float, size: int = FRAME) -> np.ndarray | None:
@@ -56,6 +91,11 @@ def sample_gray(path: str, at: float, size: int = FRAME) -> np.ndarray | None:
 
 def _phase_shift(first: np.ndarray, second: np.ndarray) -> tuple[float, float]:
     """Translation between two frames, by phase correlation. Returns (dx, dy)."""
+    if cv2 is not None:
+        window = cv2.createHanningWindow((first.shape[1], first.shape[0]), cv2.CV_32F)
+        (dx, dy), _ = cv2.phaseCorrelate(first.astype(np.float32), second.astype(np.float32), window)
+        return float(-dx), float(-dy)
+
     window = np.outer(np.hanning(first.shape[0]), np.hanning(first.shape[1]))
     a = np.fft.rfft2(first * window)
     b = np.fft.rfft2(second * window)
@@ -70,6 +110,45 @@ def _phase_shift(first: np.ndarray, second: np.ndarray) -> tuple[float, float]:
     if dx > first.shape[1] // 2:
         dx -= first.shape[1]
     return float(dx), float(dy)
+
+
+def _log_polar_scale(first: np.ndarray, second: np.ndarray) -> float | None:
+    """Zoom factor by phase correlation in log-polar space.
+
+    A zoom about the centre is a *shift* along the log-radius axis, which turns
+    the hardest measurement in this module into the easiest one. Needs OpenCV;
+    without it the brute-force search below is used, which cannot see a pull-out
+    reliably — that gap is stated in the docs rather than hidden.
+    """
+    if cv2 is None:
+        return None
+    size = first.shape[0]
+    centre = (size / 2, size / 2)
+    radius = size / 2
+
+    # Translation first. Log-polar turns a zoom into a shift, but it turns a pan
+    # into one as well, so a pan would read as a zoom unless the movement is
+    # cancelled before the transform. (It did: a sideways pan reported "push".)
+    dx, dy = _phase_shift(first, second)
+    if abs(dx) > 0.5 or abs(dy) > 0.5:
+        matrix = np.float32([[1, 0, dx], [0, 1, dy]])
+        second = cv2.warpAffine(
+            second.astype(np.float32), matrix, (size, size), flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+    flags = cv2.INTER_LINEAR + cv2.WARP_FILL_OUTLIERS + cv2.WARP_POLAR_LOG
+    a = cv2.warpPolar(first.astype(np.float32), (size, size), centre, radius, flags)
+    b = cv2.warpPolar(second.astype(np.float32), (size, size), centre, radius, flags)
+    window = cv2.createHanningWindow((size, size), cv2.CV_32F)
+    (shift_x, _), response = cv2.phaseCorrelate(a, b, window)
+    if response < 0.05:
+        return None
+    # x is log-radius: a shift of `shift_x` pixels is a scale of exp(shift * k).
+    # The sign was verified against clips built to zoom by a known amount — with
+    # it inverted, a push-in reported as a pull-out.
+    k = math.log(radius) / size
+    return float(math.exp(shift_x * k))
 
 
 def _best_scale(first: np.ndarray, second: np.ndarray) -> tuple[float, float]:
@@ -200,14 +279,17 @@ def _colour_of(path: str, times: list[float]) -> dict:
 def _classify_motion(path: str, start: float, duration: float) -> tuple[str, float]:
     """How the camera behaves inside one shot."""
     samples = max(3, min(6, int(duration / 0.4)))
-    times = [start + duration * (i + 0.5) / samples for i in range(samples)]
-    frames = [f for f in (sample_gray(path, t) for t in times) if f is not None]
+    frames = sample_strip(path, start, duration, samples)
     if len(frames) < 2:
         return "static", 0.0
 
     scales, pans, energies = [], [], []
+    measured_in_polar = False
     for a, b in zip(frames, frames[1:]):
-        scale, _ = _best_scale(a, b)
+        polar = _log_polar_scale(a, b)
+        if polar is not None:
+            measured_in_polar = True
+        scale = polar if polar is not None else _best_scale(a, b)[0]
         dx, dy = _phase_shift(a, b)
         scales.append(scale)
         pans.append(math.hypot(dx, dy))
@@ -218,10 +300,12 @@ def _classify_motion(path: str, start: float, duration: float) -> tuple[str, flo
     energy = float(np.mean(energies))
 
     # The order matters: a zoom also produces apparent translation, so the scale
-    # question is asked first.
-    if scale > 1.03:
+    # question is asked first. Log-polar is a fine measure (a pure pan sits within
+    # 0.3 % of 1.0), the brute-force fallback is coarse — hence two thresholds.
+    limit = 0.01 if measured_in_polar else 0.03
+    if scale > 1 + limit:
         return "push", energy
-    if scale < 0.97:
+    if scale < 1 - limit:
         return "pull", energy
     if pan > 1.5:
         return "pan", energy

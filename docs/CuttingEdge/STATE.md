@@ -124,26 +124,38 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **A sidechain that runs out kills the signal.** Automatic ducking uses
-   `sidechaincompress`, and two things about the graph are load-bearing, both
-   found by measurement: the voice must be **split before `apad`** (splitting one
-   already-padded stream starves the compressor), and the key branch is padded
-   **without a limit** (`-t` on the input can end the voice a few samples early,
+13. **Style Match measures, it never copies.** `core/engine/style.py` turns a
+   reference video into a template (shot rhythm, tempo, cuts-on-beat ratio,
+   camera move per shot, colour, speech ratio, hook, transition kind) and
+   `build_timeline()` cuts the user's own footage into that shape — one clip per
+   template shot, gapless, graded, with push/pull/pan becoming keyframes. Three
+   attempts at motion classification failed before the fourth worked, and the
+   order matters: **cancel translation, then measure scale in log-polar space,
+   with the sign verified against clips built to zoom by a known amount.** The
+   tests build every fixture to a recipe, so each has a right answer.
+14. **Frames come in strips, not one process each.** `sample_strip()` decodes N
+   frames in one FFmpeg call; the per-frame version spent more time spawning
+   processes than decoding.
+15. **A sidechain that runs out kills the signal.** Automatic ducking uses
+   `sidechaincompress`, and the graph is load-bearing: the key is **its own second
+   decode of the voice file**, padded past the end of the timeline. `asplit` was
+   tried first and starves the compressor under load — with four renders running
+   in parallel the music went silent from the last word onward. The key branch is padded (`-t` on the input can end the voice a few samples early,
    after which the compressor emits silence for the rest of the timeline — the
    music simply vanished at 4.2 s). Output length still follows the main input.
    Measured in `tests/test_audio.py` with a 220 Hz bed and a 300 Hz voice, using
    a bandpass so the bed can be judged inside the finished mix.
-14. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
+16. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
    deleted the only path to Settings — and the update button lives there, so the
    user could not update the app at all. The updater is now a card on the home
    screen (version, check, progress, install) with a gear and a stethoscope next
    to it, there is a Settings tile in the grid, and `playback-test.mjs` asserts
    every one of those is present and actually navigates. **Before removing a
    route from the interface, list what is only reachable through it.**
-15. **A saved project must appear immediately.** The home query cached for five
+17. **A saved project must appear immediately.** The home query cached for five
    seconds, so coming back from the editor after saving showed nothing — which
    looks exactly like a failed save. It now refetches on mount and on focus.
-16. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
+18. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
    decodes with FFmpeg and does the maths in NumPy: a bucketed min/max envelope
    for the timeline (cached, clamped to 4000 points) and beat detection by
    spectral flux + autocorrelation. librosa would have added numba/scipy for
@@ -152,25 +164,25 @@ gate that stops a broken installer from being published.
    track reads as 75 unless half the winning lag is checked — that correction is
    in the code and in `tests/test_audio.py`, which measures 90/120/150 BPM
    click tracks it synthesises.
-17. **"No audio" and "past the end" are answers, not errors.** A silent video
+19. **"No audio" and "past the end" are answers, not errors.** A silent video
    returns an empty envelope (200) and a thumbnail request beyond the source
    returns the last frame. Both used to 422 and fill the console with failures
    for perfectly normal footage.
-18. **The wordmark is the only chrome.** No Electron menu (`Menu.setApplicationMenu(null)`
+20. **The wordmark is the only chrome.** No Electron menu (`Menu.setApplicationMenu(null)`
    plus `autoHideMenuBar` — that white strip survived fullscreen), no tab bar, no
    heading band, no properties panel, no save bar. The wordmark is a shared
    `layoutId` element: centred on the launcher, docked top-left in a section, and
    it is the way home. Anything that used to live in a bar now lives on the
    launcher.
-19. **Persistence stays even when its UI goes.** `ProjectAutosave` is headless:
+21. **Persistence stays even when its UI goes.** `ProjectAutosave` is headless:
    autosave every 20 s, `Ctrl+S`, and a flush on unload. Unfinished work is
    offered as the first card under "Recent projects" on the home screen — where a
    person looks for it — and every saved project has a delete button.
-20. **A message nobody can read is no message.** Static antd toasts/tooltips render
+22. **A message nobody can read is no message.** Static antd toasts/tooltips render
    outside the theme provider and appeared as blank white shapes; they are styled
    in `global.css` and the browser test asserts the notice's computed background
    is dark.
-21. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
+23. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
    for exactly the five channels FFmpeg can genuinely animate — x, y, scale,
    rotate, volume — built by `keyframe_expression()` in `compose.py` as
    piecewise-linear `if(lt(t,..),..)` chains (commas escaped!). Opacity is
@@ -179,45 +191,45 @@ gate that stops a broken installer from being published.
    to `scale=eval=frame` plus an `overlay` onto a transparent canvas, which is
    the only combination that reproduces "scale about the centre, then translate".
    Static clips keep the old, fast chain — `tests/test_keyframes.py` asserts that.
-22. **Mute silences, hide blanks — never the same switch.** Muting a video lane
+24. **Mute silences, hide blanks — never the same switch.** Muting a video lane
    used to remove it from the monitor (black screen). A lane now has two flags:
    `muted` (audio only, speaker icon) and `hidden` (picture, eye icon), and the
    compositor makes the identical distinction — `tests/test_effects.py` renders
    both cases and measures the frame.
-23. **One React instance.** Adding `framer-motion` to a running dev server
+25. **One React instance.** Adding `framer-motion` to a running dev server
    produced "invalid hook call" from a duplicated React in the optimiser cache
    while `tsc` stayed silent. `vite.config.ts` now sets
    `resolve.dedupe: ['react', 'react-dom']`.
-24. **A toggle must look pressed.** The clip Mute tool worked all along but gave
+26. **A toggle must look pressed.** The clip Mute tool worked all along but gave
    no feedback, so it read as broken. Toggles in the rail now render with an
    active state and confirm with a toast.
-25. **The preview may use a proxy, the export never may.** Import builds a 720p
+27. **The preview may use a proxy, the export never may.** Import builds a 720p
    H.264 copy (keyframe every 15 frames) in a worker thread for anything wider
    than 1280 px; `clip.proxy` is used by `PreviewMonitor` only, and
    `tests/test_proxy.py` asserts the render command still points at the original.
-26. **Centred playhead is a view mode, not a model change.** The marker is pinned
+28. **Centred playhead is a view mode, not a model change.** The marker is pinned
    to the middle and the lane carries half a viewport of padding on both sides, so
    `scrollLeft === playhead * pxPerSecond`. Scroll events set the playhead and the
    playhead sets the scroll — the loop is broken with a `programmatic` flag, not
    with timers. The classic mode is one click away in the timeline corner.
-27. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
+29. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
    film strip from `GET /api/media/thumb?path&t&h` (one JPEG per frame, cached in
    `~/CuttingEdge/data/thumbs`, times quantised to 0.1 s so zooming reuses the
    cache). Scale is by Ctrl+wheel or a two-finger pinch, anchored under the
    pointer — no slider anywhere, like the phone editors we are compared with.
-28. **Home starts sessions, the rail edits clips.** Catalogue entries carry
+30. **Home starts sessions, the rail edits clips.** Catalogue entries carry
    `place: 'editor'`; those tiles are gone from the home screen and appear in the
    editor's global tool rail instead (captions and silence removal run in place,
    the rest open their own screen).
-29. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
+31. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
    a thin strip between black walls; the stage now takes the project ratio
    (`aspect`, default `auto` = the first video clip's real pixel size) and the
    export dialog opens on the matching format. Clips carry `width`/`height` from
    the probe for this.
-30. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+32. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
    while nothing listened for a key; Studio now owns one `keydown` handler and
    skips inputs, textareas and modals.
-31. **Panels the timeline can open.** The tool rail's open panel lives in the store
+33. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 
@@ -294,14 +306,20 @@ preview and undo instead of a fake score.
 
 ## 6. Next, in order
 
-1. Slim the installer: fetch the Python runtime and models on first launch
+1. The brain (`BRAIN_DESIGN.md`): Ollama planner + rule planner racing on a score,
+   and the same engine behind the Assistant button.
+2. Slim the installer: fetch the Python runtime and models on first launch
    (~479 MB → ~120 MB). Delta updates are verified working (< 50 MB per update on
    the user's machine), so this is measurable — re-check that number right after.
-2. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
-3. YouTube publishing (google-api-python-client, Apache-2.0).
+3. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
+4. YouTube publishing (google-api-python-client, Apache-2.0).
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.5.0: **Style Match** — a tile on the home screen that measures a
+reference video into a `.cetemplate` and rebuilds the user's footage in its shape,
+shown shot by shot before it opens in the editor. Ducking's sidechain moved to a
+dedicated input (an `asplit` key starved under parallel load).
 Done in 0.4.4: automatic ducking — mark a music bed and it steps aside for the
 voice on every word (sidechain compression in the export, approximated live).
 Done in 0.4.3: the update card on the home screen (regression fix — 0.4.1 made

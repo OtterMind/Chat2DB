@@ -557,6 +557,30 @@ def build_command(
             ]
 
     index_of = {clip.id: i + 1 for i, clip in enumerate(playable)}
+
+    # ---- sidechain inputs ------------------------------------------------
+    #
+    # Ducking needs the voice twice: once for the mix, once as the compressor's
+    # key. Splitting one decoded stream with `asplit` looks tidier and is a trap:
+    # the two branches are consumed at very different rates, and under load the
+    # key starves — the bed then goes silent for the rest of the render. Decoding
+    # the file a second time costs a few milliseconds of audio decode and cannot
+    # deadlock, so each key gets its own input.
+    duck_input_of: dict[str, int] = {}
+    if any(c.props.duck for c in audio_clips) and any(not c.props.duck for c in audio_clips):
+        for clip in audio_clips:
+            if clip.props.duck:
+                continue
+            duck_input_of[clip.id] = len(index_of) + len(duck_input_of) + 1
+            if clip.props.reversed:
+                args += ["-i", clip.src]  # type: ignore[arg-type]
+            else:
+                args += [
+                    "-ss", f"{clip.offset:.3f}",
+                    "-t", f"{clip.source_window:.3f}",
+                    "-i", clip.src,  # type: ignore[arg-type]
+                ]
+
     steps: list[str] = []
 
     # ---- video ---------------------------------------------------------
@@ -725,9 +749,7 @@ def build_command(
     # ---- audio ---------------------------------------------------------
     # Ducking only makes sense when there is both a bed to lower and a voice to
     # lower it under; otherwise every clip takes the plain path.
-    ducking_active = any(c.props.duck for c in audio_clips) and any(
-        not c.props.duck for c in audio_clips
-    )
+    ducking_active = bool(duck_input_of)
     duck_keys: list[str] = []
     audio_labels: list[str] = []
     for n, clip in enumerate(audio_clips):
@@ -766,28 +788,16 @@ def build_command(
         delay_ms = int(clip.start * 1000)
         parts.append(f"adelay={delay_ms}|{delay_ms}")
 
-        if ducking_active and not clip.props.duck:
-            # Voice that will drive a sidechain.
-            #
-            # The split has to happen *before* the padding, and each branch gets
-            # its own `apad`. Sharing one padded stream and splitting it starves
-            # the compressor: it stops pulling, and the music goes silent for the
-            # rest of the timeline. Measured, not guessed — see tests/test_audio.py.
-            pre, main, key = f"[a{n}pre]", f"[a{n}m]", f"[a{n}k]"
-            steps.append(f"[{idx}:a]" + ",".join(parts) + pre)
-            steps.append(f"{pre}asplit=2{main}{key}")
-            steps.append(f"{main}apad=whole_dur={total:.3f}{label}")
+        parts.append(f"apad=whole_dur={total:.3f}")
+        steps.append(f"[{idx}:a]" + ",".join(parts) + label)
+
+        if clip.id in duck_input_of:
+            # The same processing, from a second decode of the same file, padded
+            # past the end of the timeline so the compressor can never run dry.
             key_label = f"[a{n}key]"
-            # The key is padded *without a limit*: `-t` on the input can make the
-            # voice end a few samples before the bed, and a sidechain that runs
-            # out silences the compressor for the rest of the timeline. The
-            # output length still follows the main input, so an endless key costs
-            # nothing.
-            steps.append(f"{key}apad{key_label}")
+            key_parts = list(parts[:-1]) + [f"apad=whole_dur={total + 5.0:.3f}"]
+            steps.append(f"[{duck_input_of[clip.id]}:a]" + ",".join(key_parts) + key_label)
             duck_keys.append(key_label)
-        else:
-            parts.append(f"apad=whole_dur={total:.3f}")
-            steps.append(f"[{idx}:a]" + ",".join(parts) + label)
 
         audio_labels.append(label)
 

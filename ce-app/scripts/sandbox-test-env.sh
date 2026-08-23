@@ -52,6 +52,22 @@ done
   -f lavfi -i "testsrc=size=2560x1440:rate=25:duration=3" \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$MEDIA/big.mp4"
 
+# a reference video with a known recipe: 8 shots of 1.5 s over a 120 BPM click
+if [ ! -f "$MEDIA/reference.mp4" ]; then
+  rm -f "$MEDIA"/refshot*.mp4 "$MEDIA/reflist.txt"
+  i=0
+  for pattern in testsrc smptebars rgbtestsrc testsrc2 smptehdbars yuvtestsrc testsrc smptebars; do
+    "$FFDIR/ffmpeg" -y -loglevel error -f lavfi -i "$pattern=size=360x640:rate=25:duration=1.5" \
+      -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$MEDIA/refshot$i.mp4"
+    echo "file '$MEDIA/refshot$i.mp4'" >> "$MEDIA/reflist.txt"
+    i=$((i + 1))
+  done
+  "$FFDIR/ffmpeg" -y -loglevel error -f concat -safe 0 -i "$MEDIA/reflist.txt" -c copy "$MEDIA/refsilent.mp4"
+  "$FFDIR/ffmpeg" -y -loglevel error -i "$MEDIA/refsilent.mp4" -f lavfi \
+    -i "aevalsrc='0.9*sin(2*PI*880*t)*exp(-30*mod(t\,0.5))':d=12:s=44100" \
+    -c:v copy -c:a aac -shortest "$MEDIA/reference.mp4"
+fi
+
 echo "→ headless Chromium"
 mkdir -p "$HB"
 ( cd "$HB" && [ -d node_modules/@sparticuz ] || npm i --no-audit --no-fund --silent \
@@ -73,6 +89,7 @@ export CE_TEST_B=$MEDIA/clip2.webm
 export CE_TEST_VERTICAL=$MEDIA/vertical.webm
 export CE_TEST_BIG=$MEDIA/big.mp4
 export CE_TEST_BEAT=$MEDIA/beat120.wav
+export CE_TEST_REFERENCE=$MEDIA/reference.mp4
 export CE_VENV=$VENV
 ENV
 

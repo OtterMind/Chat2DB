@@ -893,6 +893,60 @@ if (toast.visible && toast.luma < 0.35)
   ok(`the notification is dark and readable (${toast.background}, "${toast.text?.trim()}")`)
 else bad('the notification is still unreadable', JSON.stringify(toast))
 
+/* 11j — Style Match: reference in, edited timeline out ----------------------- */
+if ((args.reference ?? process.env.CE_TEST_REFERENCE) && (args.vertical ?? process.env.CE_TEST_VERTICAL)) {
+  const referenceFile = args.reference ?? process.env.CE_TEST_REFERENCE
+  const ownFootage = args.vertical ?? process.env.CE_TEST_VERTICAL
+
+  const styled = await page.evaluate((reference, mine) => (window.__pending = (async () => {
+    const post = (url, body) =>
+      fetch(`http://127.0.0.1:8742${url}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((r) => r.json())
+
+    const template = await post('/api/style/analyze', { path: reference, name: 'ui-test' })
+    const built = await post('/api/style/apply', { path: mine, template: 'ui-test', name: 'Styled' })
+
+    // Load it exactly the way the page does, then read the editor back.
+    const store = window.__ceEditor
+    store.getState().loadSnapshot(built.timeline, built.name)
+    store.getState().setAspect(built.aspect)
+    await new Promise((r) => setTimeout(r, 800))
+    const state = store.getState()
+    return {
+      shots: template.shots.length,
+      bpm: template.bpm,
+      aspect: template.aspect,
+      unknown: template.unknown.length,
+      clips: state.clips.length,
+      duration: Math.max(...state.clips.map((c) => c.start + c.duration)),
+      gaps: state.clips
+        .slice()
+        .sort((a, b) => a.start - b.start)
+        .slice(1)
+        .filter((c, i, all) => {
+          const previous = state.clips.slice().sort((a, b) => a.start - b.start)[i]
+          return Math.abs(c.start - (previous.start + previous.duration)) > 0.02
+        }).length,
+      graded: state.clips.every((c) => c.props?.adjust !== undefined),
+    }
+  })()), referenceFile, ownFootage)
+
+  if (styled.shots >= 5 && Math.abs(styled.bpm - 120) < 3)
+    ok(`the reference was measured (${styled.shots} shots, ${Math.round(styled.bpm)} BPM, ${styled.aspect})`)
+  else bad('the reference analysis is wrong', JSON.stringify(styled))
+  if (styled.clips === styled.shots) ok(`the edit has one clip per template shot (${styled.clips})`)
+  else bad('the produced edit does not follow the template', JSON.stringify(styled))
+  if (styled.gaps === 0) ok('the produced clips tile the timeline with no gaps')
+  else bad('the produced edit has gaps', JSON.stringify(styled))
+  if (styled.graded) ok("the template's colour reached every clip")
+  else bad('the look was not applied', JSON.stringify(styled))
+  if (styled.unknown >= 2) ok('the template states what it cannot know')
+  else bad('the template makes no honesty statement', JSON.stringify(styled))
+}
+
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 900))
@@ -902,6 +956,7 @@ const home = await page.evaluate(() => ({
   editorTileSaysSoon: [...document.querySelectorAll('.ce-tile')].some(
     (tile) => /Editor/.test(tile.textContent ?? '') && /SOON/i.test(tile.textContent ?? '')
   ),
+  styleTile: [...document.querySelectorAll('.ce-tile')].some((tile) => /Style Match|شبیه الگو/.test(tile.textContent ?? '')),
   clipTools: [...document.querySelectorAll('.ce-tile')]
     .map((tile) => tile.textContent ?? '')
     .filter((text) => /Voice Over|Auto B-Roll|Translate|Silence Removal|Smart Captions/.test(text)).length,
@@ -912,6 +967,8 @@ if (home.recents) ok('the recent projects strip is there')
 else bad('no recent projects strip on the home screen')
 if (!home.editorTileSaysSoon) ok('the editor tile no longer claims to be "soon"')
 else bad('the editor tile still says "soon"')
+if (home.styleTile) ok('the Style Match tile is on the home screen')
+else bad('the Style Match tile is missing', JSON.stringify(home))
 if (home.clipTools === 0) ok('clip tools are no longer on the home screen')
 else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
 

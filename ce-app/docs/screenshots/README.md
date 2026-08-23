@@ -73,6 +73,16 @@ The pointer at the top edge, `Escape`, or the small pill: the header returns wit
 
 ---
 
+## Style Match
+
+Measure a video you like — shot rhythm, tempo, cuts on the beat, camera moves, colour,
+aspect — then cut your own footage the same way. The panel also states what cannot be
+measured from pixels, instead of pretending.
+
+![Style Match](14-style-match.png)
+
+---
+
 ## Keyframes
 
 Position, scale, rotation and volume animate over time. Keys are placed at the playhead,
