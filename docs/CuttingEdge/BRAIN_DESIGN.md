@@ -95,3 +95,62 @@ Everything else in this feature is measurement, and measurement is not a languag
 
 So the brain does not need new infrastructure: it needs the score function of §3, an Ollama
 planner that emits the same plan schema, and a race between them.
+
+
+---
+
+## 7. One brain, two doors
+
+The user asked whether this same machinery can also power the **Assistant** button in the
+editor, so any prompt is analysed and carried out. Yes — and it should, because the two
+features are the same pipeline with different inputs:
+
+```
+                     measurements (shots, beats, silence, motion, colour, transcript)
+                                        │
+        prompt ──────────┐              │              ┌────────── template
+                         ▼              ▼              ▼
+                    ┌───────────────────────────────────────┐
+                    │  planners: rules · Ollama · (model 2)  │   → candidate plans
+                    └───────────────────────────────────────┘
+                                        │
+                            validator (whitelist + clamps)
+                                        │
+                    judge ── objective score, when there is a target
+                                        │
+                         one undoable step on the timeline
+```
+
+Shared by both doors:
+
+* the **operation vocabulary** — the 26 whitelisted operations in `core/assistant/planner.py`
+  (`splitAt`, `setFilter`, `addTransition`, `generateCaptions`, …). Style matching adds a few
+  (`useHighlights`, `applyLook`, `setAspect`, `setKeyframes`, `applyTemplate`) and the
+  assistant gets them for free — "make this look like my gym template" becomes one operation.
+* the **validator** — every value clamped, every id checked, unknown operations dropped.
+* **undo** — the whole plan is applied as a single step, so the worst outcome is `Ctrl+Z`.
+* the **measurements** — this is the real upgrade for the assistant: it can now be told
+  "the clip has 12 shots, 118 BPM, speech in 61 % of it", so "cut this on the beat" or
+  "keep only the talking parts" stop being guesses.
+
+Where they differ, and this matters:
+
+| | Style match | Free-form prompt |
+|---|---|---|
+| Goal | defined by the template (length, rhythm, look) | defined by a sentence |
+| Judge | the score of §3 — candidates race, best wins | **there is no objective score.** "Did it do what I meant?" cannot be measured |
+| Safety | score + validation | validation + a preview of the operations before they run |
+
+So for a free prompt the honest design is not a scored race but: *plan → show the user the
+list of operations in their own language → apply on confirmation → undoable*. Pretending a
+number can decide whether a sentence was understood would be theatre.
+
+## 8. What that adds to the assistant, concretely
+
+1. Measurements are attached to the prompt context, so the LLM stops inventing timings.
+2. New operations let one sentence do real work: apply a template, keep the highlights, cut
+   on the beat, duck the music.
+3. A dry-run panel: "I will split at 0:12, drop three silent gaps, add a fade between shots
+   2 and 3, and set the cinematic look — apply?"
+4. The offline rule planner keeps covering the common intents, so the button works with no
+   model installed, exactly as it does today.

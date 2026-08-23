@@ -286,6 +286,12 @@ variety, shot-length match — and the best wins. The rule plan is always a cand
 bad LLM answer can never be worse than offline. Whisper gets a second pass only when its
 own confidence is low.
 
+**One brain, two doors** (§7 of that document): the Assistant button and Style match are
+the same pipeline — same operation whitelist, same validator, same single undoable step —
+with one difference that must not be blurred. Style match has an objective target, so
+candidates can be scored and raced; a free-form prompt has none, so it gets a dry-run
+preview and undo instead of a fake score.
+
 ## 6. Next, in order
 
 1. Slim the installer: fetch the Python runtime and models on first launch
