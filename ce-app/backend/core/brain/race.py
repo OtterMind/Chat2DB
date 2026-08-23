@@ -54,7 +54,14 @@ def race(
     timeout: float = 120.0,
 ) -> Result:
     """Run the planners, score them all, return the winner and the scoreboard."""
-    candidates = [planners.rule_plan(highlights, context)]
+    rules = planners.rule_plan(highlights, context)
+    candidates = [rules]
+
+    # Same moments, cut on the music. It is a candidate rather than a rewrite
+    # because snapping trades length for rhythm and only the score can weigh that.
+    on_the_beat = planners.beat_plan(rules.picks, context)
+    if on_the_beat is not None:
+        candidates.append(on_the_beat)
 
     if use_llm:
         proposed = planners.ollama_plan(highlights, context, transcript, model=model, timeout=timeout)

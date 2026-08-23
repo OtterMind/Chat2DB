@@ -62,13 +62,87 @@ def rule_plan(highlights: list[Pick], context: Context) -> Candidate:
     ordered = sorted(highlights, key=lambda p: p.score, reverse=True)
     shots = context.target_shots or [p.duration for p in ordered]
     picks: list[Pick] = []
+    used: list[tuple[float, float]] = []
+
+    def overlaps(start: float, end: float) -> bool:
+        return any(start < u_end - 0.05 and end > u_start + 0.05 for u_start, u_end in used)
+
     for index, wanted in enumerate(shots):
-        source = ordered[index % len(ordered)]
+        source = None
+        # Strongest moment that is not already on the timeline. The old version
+        # was `ordered[index % len(ordered)]`, which on footage with one long
+        # take put the *same half second* on the timeline twenty times over.
+        for candidate in ordered:
+            length = min(wanted, candidate.duration) if wanted > 0 else candidate.duration
+            if length > 0.05 and not overlaps(candidate.start, candidate.start + length):
+                source = candidate
+                break
+        if source is None:
+            # Genuinely out of fresh material: reuse, in order, rather than fail.
+            source = ordered[index % len(ordered)]
         length = min(wanted, source.duration) if wanted > 0 else source.duration
         if length <= 0.05:
             continue
         picks.append(Pick(start=source.start, end=source.start + length, score=source.score))
+        used.append((source.start, source.start + length))
+
     return Candidate(name="rules", picks=picks, seconds=time.time() - started)
+
+
+def beat_plan(picks: list[Pick], context: Context) -> Candidate | None:
+    """The same moments, cut on the music — as a *candidate*, not a rewrite.
+
+    Snapping is not free: a 0.62 s shot on a 0.5 s beat grid becomes 0.5 s, and
+    an edit of twenty of them ends up a fifth shorter than the template asked
+    for. Musically that is right; against a target length it is wrong. Rather
+    than guess which matters more, both plans enter the race and the objective
+    function decides — `on_beat` is worth 2, `duration_fit` is worth 3, so a
+    small gain in rhythm will not buy a large loss in length.
+    """
+    if not context.beats or len(picks) < 2:
+        return None
+    started = time.time()
+    snapped = snap_to_beats(picks, context)
+    if snapped == picks:
+        return None
+    return Candidate(name="rules+beats", picks=snapped, seconds=time.time() - started,
+                     note="cuts pulled onto the music")
+
+
+def snap_to_beats(picks: list[Pick], context: Context) -> list[Pick]:
+    """Move each cut onto a beat it can actually reach."""
+    if not context.beats or len(picks) < 2:
+        return picks
+    beats = sorted(context.beats)
+    # Half a shot: past that you are not nudging a cut, you are choosing a
+    # different beat. (At 0.35 of a shot, a 0.62 s shot against a 0.5 s beat
+    # could not reach the beat at all and every other cut stayed off it.)
+    typical = context.target_duration / max(1, len(picks))
+    tolerance = max(0.08, min(0.6, typical * 0.5))
+
+    snapped: list[Pick] = []
+    cursor = 0.0
+    ideal = 0.0
+    for pick in picks:
+        # Snap to the beat nearest the *ideal* position, not the current one.
+        # Snapping to the current position always rounded the same way and the
+        # edit crept shorter with every cut — 6 shots of 0.62 s against a 0.5 s
+        # beat lost 0.72 s. Measuring against the ideal keeps the drift bounded.
+        ideal += pick.duration
+        # Only beats this cut can actually reach: long enough to be a shot,
+        # short enough not to stretch past what the source has. Choosing the
+        # nearest beat *first* and clamping afterwards left cuts stranded
+        # between beats, which is worse than not snapping at all.
+        low, high = cursor + 0.2, cursor + min(pick.duration + tolerance, pick.duration * 2)
+        reachable = [b for b in beats if low <= b <= high]
+        if reachable:
+            end_on_timeline = min(reachable, key=lambda b: abs(b - ideal))
+        else:
+            end_on_timeline = cursor + pick.duration
+        length = max(0.2, end_on_timeline - cursor)
+        snapped.append(Pick(start=pick.start, end=pick.start + length, score=pick.score))
+        cursor += length
+    return snapped
 
 
 # ----------------------------------------------------------------- the model

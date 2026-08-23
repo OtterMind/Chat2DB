@@ -445,29 +445,61 @@ def analyse(path: str, name: str | None = None, progress=None) -> Template:
 # ------------------------------------------------------------------ planning
 
 
-def _highlights(path: str, wanted: int, minimum: float) -> list[dict]:
-    """The parts of the user's footage worth keeping, best first.
+def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0) -> list[dict]:
+    """Candidate moments in the user's footage — **many small ones**, best first.
 
-    Speech wins when there is speech — that is where the content is. Otherwise
-    the picture decides: the shots that move the most.
+    This function used to return whole ranges: one uninterrupted minute of
+    talking came back as a single pick, and a twenty-shot template then took
+    twenty clips from the same starting second. The result was the same
+    half-second of footage repeated twenty times, which is exactly how it
+    looked. (Measured on a 60 s clip against a 20-shot template: 20 clips, one
+    unique offset.)
+
+    So a long range is now **sliced into shot-sized windows**, each scored on
+    its own, and the ranking happens between windows. A speech range of a
+    minute becomes forty candidates instead of one.
     """
     info = probe_media(path)
     duration = float(info.get("duration") or 0.0)
-    picks: list[dict] = []
+    span_length = max(0.4, window or minimum)
+    #: Overlap the windows a little so a good moment is not split down the middle.
+    stride = max(0.25, span_length * 0.75)
+
+    ranges: list[tuple[float, float, float]] = []  # (start, end, weight)
 
     if info.get("has_audio"):
         silences = analysis.detect_silence(path)
         for span in analysis.keep_ranges(duration, silences):
-            if span.duration >= minimum:
-                picks.append({"start": span.start, "end": span.end, "score": span.duration})
+            if span.duration >= minimum * 0.6:
+                ranges.append((span.start, span.end, 1.0))
 
-    if not picks:
+    if not ranges:
         cuts = [c for c in analysis.detect_scenes(path) if 0 < c < duration]
         bounds = [0.0, *cuts, duration]
         for start, end in zip(bounds, bounds[1:]):
-            if end - start >= minimum:
+            if end - start >= minimum * 0.6:
                 _, energy = _classify_motion(path, start, end - start)
-                picks.append({"start": start, "end": end, "score": energy})
+                ranges.append((start, end, 0.2 + energy))
+
+    if not ranges:
+        ranges = [(0.0, duration, 1.0)]
+
+    picks: list[dict] = []
+    for start, end, weight in ranges:
+        cursor = start
+        while cursor + span_length * 0.7 <= end:
+            finish = min(end, cursor + span_length)
+            picks.append({
+                "start": round(cursor, 3),
+                "end": round(finish, 3),
+                # Prefer the *middle* of a long take: the first second of a
+                # sentence is usually someone drawing breath.
+                "score": round(weight * (0.85 + 0.15 * min(1.0, (finish - cursor) / span_length)), 4),
+            })
+            cursor += stride
+        if not picks or picks[-1]["end"] < end - 0.05:
+            if end - cursor > 0.2:
+                picks.append({"start": round(cursor, 3), "end": round(end, 3), "score": round(weight * 0.8, 4)})
 
     if not picks:
         picks = [{"start": 0.0, "end": duration, "score": 1.0}]
@@ -557,7 +589,15 @@ def build_timeline(
     source_duration = float(info.get("duration") or 0.0)
     shortest = min(float(s["duration"]) for s in shots)
     say("highlights", 0.2, "Choosing the strongest moments")
-    measured = _highlights(source, wanted=max(len(shots) * 3, 8), minimum=max(0.4, shortest * 0.8))
+    typical = float(np.median([float(s["duration"]) for s in shots]))
+    measured = _highlights(
+        source,
+        # Ask for far more candidates than shots, so the planner has somewhere
+        # else to go instead of using the same moment again.
+        wanted=max(len(shots) * 4, 24),
+        minimum=max(0.4, shortest * 0.8),
+        window=max(0.5, typical),
+    )
 
     # ---- meaning ----------------------------------------------------------
     # Loudness finds energy; the transcript finds the sentence where the point
@@ -595,6 +635,9 @@ def build_timeline(
     look = data.get("look") or {}
     transition_kind = (data.get("transitions") or {}).get("type", "cut")
     transition_length = float((data.get("transitions") or {}).get("duration", 0.4))
+    counted = (data.get("transitions") or {}).get("count") or 0
+    soft_ratio = ((data.get("transitions") or {}).get("soft") or 0) / counted if counted else 0.0
+    soft_every = max(1, round(1 / soft_ratio)) if soft_ratio > 0.05 else 10**6
 
     for index, shot in enumerate(shots):
         want = float(shot["duration"])
@@ -637,13 +680,17 @@ def build_timeline(
         }
         clips.append(clip)
 
-        if index > 0 and transition_kind != "cut":
+        # The reference's *proportion* of soft cuts, not all-or-nothing. A
+        # template with 40 % dissolves used to produce either none of them (the
+        # type came out "cut") or one at every junction.
+        wants_soft = transition_kind != "cut" or (soft_ratio > 0.05 and index % soft_every == 0)
+        if index > 0 and wants_soft:
             transitions.append({
                 "id": f"t{index}",
                 "trackId": "v1",
                 "fromClipId": clips[-2]["id"],
                 "toClipId": clip["id"],
-                "type": transition_kind,
+                "type": transition_kind if transition_kind != "cut" else "fade",
                 "duration": min(transition_length, length / 2, clips[-2]["duration"] / 2),
             })
 

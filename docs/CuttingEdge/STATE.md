@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.8.0` · Last released: `v0.6.3` — **`.github/workflows/ce.yml` is broken and only the owner can fix it (see §4.48); nothing has built since 0.6.3** (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.8.1` · Last released: `v0.8.0` (installer 323 MB; the owner restored the workflow, builds work again) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -438,6 +438,33 @@ gate that stops a broken installer from being published.
    inside the LLM path; on a machine without it every prompt came back as a 500
    instead of falling back to the offline rules — the same shape as the bug that
    once broke the AI self-test. Optional dependencies degrade, they do not fail.
+
+52. **The rebuild was the amateur, not the analysis.** The user's verdict on
+   Style Match 0.8.0 was "it worked like an amateur, as if there were no AI at
+   all". They were right, and it was measurable in one line: on sixty seconds of
+   continuous talking against a twenty-shot template, the result was **20 clips
+   with 1 unique offset** — the same half second, twenty times. Three causes,
+   all fixed:
+   • `_highlights()` returned whole *ranges*: one unbroken minute of speech was
+     a single candidate. It now slices ranges into overlapping shot-sized
+     windows, so a minute yields dozens of candidates (measured: 20 clips from
+     20 different moments, spread over 17 s).
+   • `rule_plan()` did `ordered[index % len(ordered)]` — with one candidate that
+     is the same moment every time. It now takes the strongest moment that does
+     not overlap anything already on the timeline.
+   • `variety` was weight **1 of 14**, so the repeated plan still scored 0.91.
+     It is weight 3 now. A term nobody can outvote is not a check.
+   Also: cutting on the beat is a **candidate** (`rules+beats`), not a rewrite —
+   snapping a 0.62 s shot onto a 0.5 s grid shortens the edit by a fifth, so the
+   score weighs rhythm (2) against length (3) instead of the code guessing. And
+   dissolves are applied in the reference's own *proportion* (a 50 % reference
+   used to produce none at all).
+   Guarded by `tests/test_style_rebuild.py`, which asserts what the old suite
+   never did: that the clips differ from each other.
+53. **Counting is not checking.** Every Style Match test asserted counts — twenty
+   clips, gapless, graded — and all of them passed while the edit was the same
+   half second twenty times. When a feature's whole value is *variation*, assert
+   the variation.
 
 ## 5. Release procedure
 

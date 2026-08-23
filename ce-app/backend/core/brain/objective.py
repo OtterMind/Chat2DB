@@ -41,7 +41,11 @@ WEIGHTS: dict[str, float] = {
     "on_beat": 2.0,
     "silence_avoided": 2.0,
     "highlight_strength": 2.0,
-    "variety": 1.0,
+    # Weight 3, not 1. A plan that used the same half second twenty times still
+    # scored 0.91 under the original weights, because every other term was
+    # happy — and the user's word for the result was "amateur". Repetition is
+    # not a rounding error in an edit; it is the whole impression.
+    "variety": 3.0,
     "shot_length_match": 1.0,
 }
 

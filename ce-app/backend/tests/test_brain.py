@@ -251,13 +251,21 @@ def test_a_better_plan_changes_the_edit_that_is_built(monkeypatch, tmp_path):
         "look": {}, "transitions": {"type": "cut"}, "captions": {}, "audio": {},
     }
 
-    winner = brain_planners.Candidate(
-        name="ollama:test",
-        picks=[Pick(4.0, 6.0, 1.0), Pick(6.0, 8.0, 1.0)],
-        seconds=0.5,
-        note="fake",
-    )
-    monkeypatch.setattr(brain_planners, "ollama_plan", lambda *a, **k: winner)
+    # Patch the race itself: this test is about the *wiring* — that
+    # build_timeline lays out whatever the race chose — not about which planner
+    # wins. (It used to patch a fake Ollama answer and rely on it out-scoring
+    # the rule plan; once the rule planner learned to spread its picks, the fake
+    # lost on merit and the test failed for the right reason in the wrong test.)
+    from core.brain import race as brain_race
+
+    def fixed_race(*_args, **_kwargs):
+        return brain_race.Result(
+            winner="ollama:test",
+            picks=[Pick(4.0, 6.0, 1.0), Pick(6.0, 8.0, 1.0)],
+            scoreboard=[{"name": "rules", "score": 0.5}, {"name": "ollama:test", "score": 0.9}],
+        )
+
+    monkeypatch.setattr(style.brain_race, "race", fixed_race)
 
     built = style.build_timeline(template, str(source), "Test", brain=True)
     clips = [c for c in built["timeline"]["clips"] if c["trackId"] == "v1"]
