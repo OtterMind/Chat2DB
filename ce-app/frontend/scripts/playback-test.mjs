@@ -987,8 +987,14 @@ const engines = await page.evaluate(() => (window.__pending = (async () => {
   return {
     rows: rows.length,
     names: rows.map((r) => r.querySelector('strong')?.textContent ?? ''),
-    // With no engines installed, every row must say so rather than show a tick.
-    honest: rows.every((r) => /not installed|نصب نیست|installed, not running|ready|آماده/.test(r.textContent ?? '')),
+    // Every row must state a status in words — and after a failed self-test it
+    // must NOT claim to be ready.
+    honest: rows.every((r) =>
+      /not installed|نصب نیست|installed, not running|نصب است|working|کار می‌کند|not working yet|هنوز کار نمی‌کند/.test(
+        r.textContent ?? ''
+      )
+    ),
+    states: rows.map((r) => r.getAttribute('data-state')),
     reported: [...document.querySelectorAll('.ce-engine .ce-hint')].length,
   }
 })()))
@@ -996,6 +1002,10 @@ if (engines.rows === 2 && engines.names.join(',').includes('Ollama')) ok('Settin
 else bad('the AI engine panel is missing', JSON.stringify(engines))
 if (engines.honest) ok('each engine states whether it is installed and running')
 else bad('an engine row says nothing useful', JSON.stringify(engines))
+// Neither engine exists on the test machine, so after the self-test both rows
+// must read "failed" — never "working".
+if (engines.states.every((state) => state === 'failed')) ok('a failed engine never claims to work')
+else bad('an engine claims to work while its test failed', JSON.stringify(engines))
 if (engines.reported === 2) ok('the self-test reports a result for both engines')
 else bad('the self-test reported nothing', JSON.stringify(engines))
 

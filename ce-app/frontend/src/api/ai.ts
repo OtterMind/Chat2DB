@@ -21,12 +21,22 @@ export interface EngineTest {
   language?: string
 }
 
+/**
+ * These calls are slow by nature: a 7B model answering on a CPU, or a speech
+ * model being downloaded. The client's 30 s default turned a working machine
+ * into "timeout of 30000ms exceeded", so every AI call carries its own budget.
+ */
+const SLOW = { timeout: 15 * 60 * 1000 }
+
 export const aiApi = {
   status: async (): Promise<{ ollama: EngineState; whisper: EngineState }> =>
-    (await api.get('/ai/status')).data,
-  test: async (): Promise<{ ollama: EngineTest; whisper: EngineTest }> => (await api.post('/ai/test')).data,
+    (await api.get('/ai/status', { timeout: 20_000 })).data,
+  test: async (): Promise<{ ollama: EngineTest; whisper: EngineTest }> =>
+    (await api.post('/ai/test', {}, SLOW)).data,
   pullModel: async (model: string): Promise<{ model: string; seconds: number }> =>
-    (await api.post('/ai/ollama/pull', { model })).data,
+    (await api.post('/ai/ollama/pull', { model }, SLOW)).data,
   downloadWhisper: async (size: string): Promise<{ model: string; seconds: number }> =>
-    (await api.post('/ai/whisper/download', { size })).data,
+    (await api.post('/ai/whisper/download', { size }, SLOW)).data,
+  selectModel: async (model: string): Promise<{ model: string }> =>
+    (await api.post('/ai/ollama/select', { model })).data,
 }

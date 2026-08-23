@@ -36,9 +36,24 @@ def _load(model_size: str = "base"):
         raise TranscriberUnavailable(
             "Speech recognition is not installed in this build (faster-whisper missing)"
         ) from exc
-    _MODEL = WhisperModel(model_size, device="auto", compute_type="int8")
-    _MODEL_NAME = model_size
-    return _MODEL
+    # device="auto" reaches for CUDA when an NVIDIA driver is present, and then
+    # fails at load time on a machine without the CUDA runtime:
+    #   "Library cublas64_12.dll is not found or cannot be loaded"
+    # That is a normal Windows machine with a graphics card, not a broken one, so
+    # the CPU path is a fallback rather than an error. Reported by a user, fixed
+    # here, and pinned down by tests/test_transcribe.py.
+    attempts: list[tuple[str, str]] = [("auto", "int8"), ("cpu", "int8")]
+    last_error: Exception | None = None
+    for device, compute in attempts:
+        try:
+            _MODEL = WhisperModel(model_size, device=device, compute_type=compute)
+            _MODEL_NAME = f"{model_size} ({device})"
+            return _MODEL
+        except Exception as exc:  # noqa: BLE001 - try the next device
+            last_error = exc
+    raise TranscriberUnavailable(
+        f"Speech recognition could not start on this machine: {last_error}"
+    ) from last_error
 
 
 def group_words(words: list[dict], max_chars: int = 42, max_gap: float = 0.8) -> list[dict]:

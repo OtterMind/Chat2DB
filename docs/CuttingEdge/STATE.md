@@ -124,7 +124,20 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **Optional engines must be checked, not assumed.** Settings has an AI runtime
+13. **Three bugs the user's own machine found (0.5.3).**
+   • `timeout of 30000ms exceeded` — the API client's global 30 s budget applied
+     to a 7B model thinking on a CPU. AI calls now carry their own 15-minute
+     budget and say what they are waiting for.
+   • `404 Not Found ... /api/generate` — that is Ollama saying *"no such model"*.
+     The default was `llama3`; the machine had `qwen2.5:7b-instruct-q4_0`. The
+     self-test now picks a model that is actually pulled, there is a model
+     chooser in Settings, and a 404 is rewritten into plain words.
+   • `Library cublas64_12.dll is not found` — faster-whisper reaching for CUDA on
+     a machine with a graphics card but no CUDA runtime. `transcribe._load()`
+     falls back to the CPU; that machine is normal, not broken.
+   Also: a row whose self-test failed no longer wears a green tick, and its state
+   is exposed as `data-state` so the test reads behaviour, not translated words.
+14. **Optional engines must be checked, not assumed.** Settings has an AI runtime
    card: is Ollama installed, is it *running*, which models are pulled, is
    faster-whisper importable and is a model on disk — plus a self-test that
    reports **seconds**, because "the import worked" is not the question. It never
@@ -133,7 +146,7 @@ gate that stops a broken installer from being published.
    Ollama the user already runs. `tests/test_ai.py` runs on a machine with
    neither engine, which is the case that must not crash — and did, once, on a
    missing `requests`.
-14. **Style Match measures, it never copies.** `core/engine/style.py` turns a
+15. **Style Match measures, it never copies.** `core/engine/style.py` turns a
    reference video into a template (shot rhythm, tempo, cuts-on-beat ratio,
    camera move per shot, colour, speech ratio, hook, transition kind) and
    `build_timeline()` cuts the user's own footage into that shape — one clip per
@@ -142,10 +155,10 @@ gate that stops a broken installer from being published.
    order matters: **cancel translation, then measure scale in log-polar space,
    with the sign verified against clips built to zoom by a known amount.** The
    tests build every fixture to a recipe, so each has a right answer.
-15. **Frames come in strips, not one process each.** `sample_strip()` decodes N
+16. **Frames come in strips, not one process each.** `sample_strip()` decodes N
    frames in one FFmpeg call; the per-frame version spent more time spawning
    processes than decoding.
-16. **Ducking is computed, not side-chained.** `sidechaincompress` looks like the
+17. **Ducking is computed, not side-chained.** `sidechaincompress` looks like the
    right filter and is a trap in a large graph: when its key input reaches EOF a
    moment before the main — which happens **under load, never on an idle
    machine** — it emits silence for the rest of the render, so the music vanished
@@ -335,6 +348,8 @@ preview and undo instead of a fake score.
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.5.3: the three failures reported from the installed app — the 30 s
+timeout, the Ollama model mismatch, and the CUDA-less Whisper.
 Done in 0.5.2: the AI runtime card in Settings — installed / running / models /
 measured latency for Ollama and Whisper, with an honest refusal to install other
 people's software silently.

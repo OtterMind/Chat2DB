@@ -152,6 +152,31 @@ async def download_whisper(payload: WhisperRequest) -> dict:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+class SelectRequest(BaseModel):
+    model: str
+
+
+@router.post("/ollama/select")
+def select_model(payload: SelectRequest) -> dict:
+    """Remember which pulled model the assistant should talk to."""
+    settings.ollama_model = payload.model
+    settings.ollama_enabled = True
+    try:
+        import json
+
+        from app.config import CONFIG_PATH
+
+        existing = {}
+        if CONFIG_PATH.exists():
+            existing = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        existing.update({"ollama_model": payload.model, "ollama_enabled": True})
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 - the choice still applies to this session
+        pass
+    return {"model": payload.model}
+
+
 @router.post("/test")
 async def test_engines() -> dict:
     """Measure both engines on this machine: does it answer, and how fast.
@@ -175,7 +200,22 @@ async def test_engines() -> dict:
         state = _ollama_state()
         if not state["running"]:
             return {"ok": False, "detail": "not running"}
-        model = settings.ollama_model or (state["models"][0] if state["models"] else "llama3")
+
+        # Use a model that is actually pulled. The configured default was
+        # "llama3", so on a machine holding qwen2.5 the call came back
+        # "404 Not Found" — which reads like a broken URL and is really
+        # "that model is not here". Prefer the configured one *if* it exists.
+        installed = state["models"]
+        configured = settings.ollama_model
+        if configured and any(m == configured or m.startswith(f"{configured}:") for m in installed):
+            model = configured
+        elif installed:
+            model = installed[0]
+        else:
+            return {
+                "ok": False,
+                "detail": "Ollama is running but has no models. Pull one with the button above.",
+            }
         started = time.monotonic()
         try:
             response = requests.post(
@@ -186,7 +226,10 @@ async def test_engines() -> dict:
             response.raise_for_status()
             answer = (response.json().get("response") or "").strip()
         except Exception as error:  # noqa: BLE001
-            return {"ok": False, "detail": str(error)[:160]}
+            detail = str(error)[:160]
+            if "404" in detail:
+                detail = f"Ollama has no model called '{model}' — pull it, or pick one of: {', '.join(installed[:4])}"
+            return {"ok": False, "detail": detail}
         return {
             "ok": True,
             "model": model,

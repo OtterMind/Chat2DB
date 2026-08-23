@@ -48,13 +48,25 @@ export default function AiRuntimeCard() {
   }
 
   const line = (engine: EngineState, test: EngineTest | undefined, icon: React.ReactNode) => (
-    <div className="ce-engine">
+    // The state is also an attribute: a test that has to read badge wording in
+    // two languages tests the translation, not the behaviour.
+    <div
+      className="ce-engine"
+      data-state={
+        test ? (test.ok ? 'working' : 'failed') : engine.running ? 'installed' : engine.installed ? 'idle' : 'missing'
+      }
+    >
       <span className="ce-engine__icon">{icon}</span>
       <div className="ce-engine__body">
         <div className="ce-engine__head">
           <strong>{engine.name}</strong>
-          {engine.running ? (
-            <span className="ce-badge ce-badge--ok"><CheckCircle2 size={12} /> {t('ready', 'آماده')}</span>
+          {test && !test.ok ? (
+            // A tick next to a failed self-test is a lie: installed is not working.
+            <span className="ce-badge ce-badge--warn"><XCircle size={12} /> {t('not working yet', 'هنوز کار نمی‌کند')}</span>
+          ) : test?.ok ? (
+            <span className="ce-badge ce-badge--ok"><CheckCircle2 size={12} /> {t('working', 'کار می‌کند')}</span>
+          ) : engine.running ? (
+            <span className="ce-badge ce-badge--ok"><CheckCircle2 size={12} /> {t('installed', 'نصب است')}</span>
           ) : engine.installed ? (
             <span className="ce-badge ce-badge--warn">{t('installed, not running', 'نصب است، اجرا نیست')}</span>
           ) : (
@@ -96,6 +108,28 @@ export default function AiRuntimeCard() {
       {state && (
         <div className="ce-engines">
           {line(state.ollama, result?.ollama, <Brain size={18} />)}
+          {state.ollama.models.length > 0 && (
+            <label className="ce-modelpick">
+              <span>{t('Model the assistant talks to', 'مدلی که دستیار با آن حرف می‌زند')}</span>
+              <select
+                value={state.ollama.models.includes(state.ollama.selected) ? state.ollama.selected : state.ollama.models[0]}
+                onChange={async (event) => {
+                  const chosen = event.target.value
+                  try {
+                    await aiApi.selectModel(chosen)
+                    message.success(t(`Using ${chosen}`, `استفاده از ${chosen}`))
+                    void refresh()
+                  } catch (error) {
+                    message.error((error as Error).message)
+                  }
+                }}
+              >
+                {state.ollama.models.map((model) => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {line(state.whisper, result?.whisper, <Mic size={18} />)}
         </div>
       )}
@@ -105,6 +139,14 @@ export default function AiRuntimeCard() {
           {busy === 'test' ? <Loader2 size={15} className="ce-spin" /> : <RefreshCw size={15} />}
           {t('Check and time them', 'بررسی و زمان‌سنجی')}
         </button>
+        {busy === 'test' && (
+          <span className="ce-hint">
+            {t(
+              'A first answer from a 7B model on a CPU can take a minute — this waits for it.',
+              'اولین پاسخ یک مدل ۷ میلیاردی روی پردازنده می‌تواند یک دقیقه طول بکشد — منتظر می‌ماند.'
+            )}
+          </span>
+        )}
 
         {state?.ollama.running && (
           <button

@@ -47,3 +47,57 @@ def test_downloading_whisper_without_the_package_explains_itself():
     response = client.post("/api/ai/whisper/download", json={"size": "base"})
     assert response.status_code == 409
     assert "faster-whisper" in response.json()["detail"]
+
+
+def test_the_self_test_picks_a_model_that_is_actually_pulled(monkeypatch):
+    """Regression: the default was llama3, the machine had qwen2.5 — a 404 that
+    read like a broken URL and really meant 'that model is not here'."""
+    from app.routers import ai
+
+    monkeypatch.setattr(
+        ai,
+        "_ollama_state",
+        lambda: {
+            "name": "Ollama", "installed": True, "running": True,
+            "models": ["qwen2.5:7b-instruct-q4_0"], "path": "/usr/bin/ollama",
+            "download": ai.OLLAMA_SITE, "selected": "llama3", "enabled": True,
+        },
+    )
+
+    asked: dict = {}
+
+    class FakeResponse:
+        ok = True
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"response": "ready"}
+
+    class FakeRequests:
+        @staticmethod
+        def post(url, json=None, timeout=None):
+            asked["model"] = (json or {}).get("model")
+            return FakeResponse()
+
+    import sys
+    import types
+
+    module = types.ModuleType("requests")
+    module.post = FakeRequests.post          # type: ignore[attr-defined]
+    module.get = lambda *a, **k: FakeResponse()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "requests", module)
+
+    body = client.post("/api/ai/test").json()
+    assert asked["model"] == "qwen2.5:7b-instruct-q4_0", "it asked for a model the machine does not have"
+    assert body["ollama"]["ok"] is True
+
+
+def test_choosing_a_model_is_remembered():
+    response = client.post("/api/ai/ollama/select", json={"model": "qwen2.5:7b-instruct-q4_0"})
+    assert response.status_code == 200
+    from app.config import settings
+
+    assert settings.ollama_model == "qwen2.5:7b-instruct-q4_0"
+    assert settings.ollama_enabled is True
