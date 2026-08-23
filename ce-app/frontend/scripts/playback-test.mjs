@@ -1220,6 +1220,64 @@ else bad('the unfinished (autosaved) project is not offered on the home screen',
 if (recents.deletes > 0) ok(`each saved project has a delete button (${recents.deletes})`)
 else bad('saved projects cannot be deleted from the home screen', JSON.stringify(recents))
 
+// ------------------------------------------------------------- auto-reframe
+//
+// The Face Tracking tool must put a real camera path on the clip — keyframes
+// the user can see and drag — and must say so honestly when there is no face.
+// (The fixture clips here have no faces, which is exactly the honest case.)
+await page.evaluate((src) => (window.__pending = (async () => {
+  location.hash = '#/studio'
+  await new Promise((r) => setTimeout(r, 600))
+  const state = window.__ceEditor.getState()
+  const clip = state.clips.find((c) => c.src) ?? state.clips[0]
+  window.__reframe = await fetch('http://127.0.0.1:8742/api/reframe/plan', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path: src, width: 1080, height: 1920 }),
+  }).then((r) => r.json())
+  window.__reframeClip = clip?.id ?? null
+})()), A)
+
+const reframePlan = await page.evaluate(() => window.__reframe)
+if (reframePlan && typeof reframePlan.scale === 'number' && Array.isArray(reframePlan.keyframes)) {
+  ok(`auto-reframe answers with a camera path (scale ${reframePlan.scale}, ${reframePlan.keyframes.length} key(s))`)
+} else {
+  bad('auto-reframe did not answer with a plan', JSON.stringify(reframePlan))
+}
+if (reframePlan?.fallback ? typeof reframePlan.reason === 'string' && reframePlan.reason.length > 0 : true) {
+  ok(`auto-reframe explains itself ("${reframePlan?.reason ?? ''}")`)
+} else {
+  bad('auto-reframe fell back without saying why', JSON.stringify(reframePlan))
+}
+
+// A path with keys must land on the clip as editable keyframes, in one step.
+const applied = await page.evaluate(() => (window.__pending = (async () => {
+  const state = window.__ceEditor.getState()
+  const id = window.__reframeClip
+  if (!id) return { skipped: true }
+  const before = (state.clips.find((c) => c.id === id)?.keyframes ?? []).length
+  state.setClipKeyframes(id, [{ t: 0, x: -0.4 }, { t: 1, x: 0.4 }], 3.16)
+  await new Promise((r) => setTimeout(r, 200))
+  const after = window.__ceEditor.getState()
+  const clip = after.clips.find((c) => c.id === id)
+  const undoable = typeof after.undo === 'function'
+  after.undo()
+  const restored = (window.__ceEditor.getState().clips.find((c) => c.id === id)?.keyframes ?? []).length
+  return {
+    before,
+    keys: (clip?.keyframes ?? []).length,
+    scale: clip?.props?.transform?.scale ?? null,
+    undoable,
+    restored,
+  }
+})()))
+if (applied.skipped) ok('auto-reframe: no clip to apply to (skipped)')
+else if (applied.keys === 2 && Math.abs((applied.scale ?? 0) - 3.16) < 0.01) {
+  ok('the camera path lands on the clip as keyframes with the fill scale')
+} else bad('the camera path did not reach the clip', JSON.stringify(applied))
+if (applied.skipped || applied.restored === applied.before) ok('and Ctrl+Z takes it back in one step')
+else bad('auto-reframe is not undoable in one step', JSON.stringify(applied))
+
 // ---------------------------------------------------------------- the brain
 //
 // A free-form prompt cannot be scored, so the safety is that nothing happens

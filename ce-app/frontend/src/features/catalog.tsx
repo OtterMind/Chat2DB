@@ -67,12 +67,15 @@ export const FEATURES: FeatureTile[] = [
   },
   {
     id: 'facetrack',
+    place: 'editor',
     label: ['Face Tracking', 'فیس‌ترکینگ'],
     hint: ['Keep the speaker in frame', 'قاب روی گوینده قفل می‌شود'],
     icon: <ScanFace {...ICON} />,
     gradient: 'linear-gradient(145deg,#22C55E,#16A34A)',
     route: '/new?preset=facetrack',
-    badge: 'beta',
+    // The badge is gone because the feature is real now: the camera follows a
+    // measured face path (worst error 122 px against 1024 px for the centre
+    // crop it replaces — tests/test_reframe.py).
     group: 'core',
   },
 

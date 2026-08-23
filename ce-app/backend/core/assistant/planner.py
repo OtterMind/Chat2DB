@@ -326,7 +326,13 @@ def _chat(prompt: str, timeline_text: str) -> str | None:
     system = SYSTEM_PROMPT % json.dumps(OPERATIONS, indent=1)
     user = f"Timeline:\n{timeline_text}\n\nRequest: {prompt}"
 
-    import requests  # imported lazily so the editor works without network deps
+    try:
+        # Lazily, and defensively: a missing optional dependency must degrade to
+        # the offline rule planner, never take the endpoint down with a 500.
+        # The same class of bug once broke /api/ai/test (STATE.md §4.14).
+        import requests
+    except Exception:  # noqa: BLE001
+        return None
 
     try:
         if provider == "ollama":

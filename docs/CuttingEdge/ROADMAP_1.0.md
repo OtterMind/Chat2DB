@@ -173,14 +173,25 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
 * **Proof:** on a talking-head fixture with a scripted "the important part is…"
   moment, that moment is inside the chosen highlights in every run.
 
-### 0.8.0 — Face tracking for real
+### 0.8.0 — Face tracking for real  ✅ **shipped**
 * MediaPipe FaceLandmarker as an on-demand engine (Apache-2.0, 50.8 MB, fetched
   when the feature is first used), a smoothed camera path, and a fallback to the
   centre crop when no face is found.
-* **Proof:** on fixtures where the subject's position is known per frame, the
-  crop centre stays within a stated pixel error, and the camera path has no jump
-  larger than a stated per-frame limit. The `BETA` badge comes off only if both
-  pass.
+* **Measured** (`tests/test_reframe.py`, a real photograph on a known path):
+  detection within **3 %** of the true position; the subject stays within
+  **122 px** of centre (mean 59) against **1024 px** (mean 905) for the centre
+  crop; no camera move faster than the stated limit; and with no face in the
+  clip the plan says so and applies nothing. Built on the Haar cascade already
+  inside our pinned `opencv-python-headless` wheel — no download, no GPU, and
+  none of MediaPipe's ~160 MB of transitive wheels. The `BETA` badge is gone.
+
+### 0.7.1 — Highlights that understand what was said  ✅ **shipped**
+
+`core/brain/meaning.py` scores a moment's transcript on discourse markers in
+English and Persian, questions, numbers, completeness and density, blended
+half-and-half with measured energy. **Measured** (`tests/test_meaning.py`): in a
+scripted transcript where every window is equally loud, the window carrying
+"the most important thing is…" is the one selected.
 
 ### 0.8.1 — Things to put on the screen
 * Template gallery (our own `.cetemplate` files, shipped and shareable), a title

@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from core.brain import meaning as brain_meaning
 from core.brain import objective
 from core.brain import race as brain_race
 from core.engine import analyze as analysis
@@ -557,6 +558,17 @@ def build_timeline(
     shortest = min(float(s["duration"]) for s in shots)
     say("highlights", 0.2, "Choosing the strongest moments")
     measured = _highlights(source, wanted=max(len(shots) * 3, 8), minimum=max(0.4, shortest * 0.8))
+
+    # ---- meaning ----------------------------------------------------------
+    # Loudness finds energy; the transcript finds the sentence where the point
+    # is made. When there are captions, half of a moment's strength comes from
+    # what was said in it (`core/brain/meaning.py`).
+    if captions:
+        strongest = max((p.get("score", 0.0) for p in measured), default=0.0) or 1.0
+        for moment in measured:
+            sense = brain_meaning.score_window(captions, moment["start"], moment["end"])
+            moment["score"] = brain_meaning.blend(moment.get("score", 0.0) / strongest, sense)
+            moment["meaning"] = round(sense, 4)
 
     # ---- the brain --------------------------------------------------------
     # Measuring produced the candidate moments; *choosing and ordering* them is

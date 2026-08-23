@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__, __app_name__
 from app.config import settings
 from app.database import db
-from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, projects, style, ai, tasks
+from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, projects, style, ai, reframe, tasks
 from app.websocket.job_events import ws_manager
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(captions.router)
 app.include_router(projects.router)
 app.include_router(style.router)
 app.include_router(ai.router)
+app.include_router(reframe.router)
 app.include_router(tasks.router)
 
 @app.get("/api/health")

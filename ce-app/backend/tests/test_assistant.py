@@ -88,3 +88,30 @@ def test_text_content_is_extracted():
     plan = planner.rule_based_plan('add a title that says Hello World', TIMELINE)
     text_op = next(op for op in plan.ops if op["op"] == "addText")
     assert "hello world" in text_op["text"].lower()
+
+
+def test_a_missing_http_client_falls_back_instead_of_failing(monkeypatch):
+    """Regression: `import requests` inside the LLM path 500'd the endpoint.
+
+    The sandbox had no `requests` and every prompt came back as an Internal
+    Server Error instead of quietly using the offline rules — the same shape as
+    the bug that once broke the AI self-test.
+    """
+    import builtins
+
+    from core.assistant import planner
+
+    real_import = builtins.__import__
+
+    def without_requests(name, *args, **kwargs):
+        if name == "requests":
+            raise ModuleNotFoundError("No module named 'requests'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_requests)
+    monkeypatch.setattr(planner, "_provider_config", lambda: ("ollama", "", "llama3"))
+
+    plan = planner.make_plan("add fade transitions between all clips", {"tracks": [], "clips": []})
+
+    assert plan.source == "rules"
+    assert plan.ops, "the offline planner produced nothing"

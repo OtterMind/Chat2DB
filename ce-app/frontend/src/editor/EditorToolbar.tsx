@@ -7,6 +7,7 @@ import {
   AudioWaveform,
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
+import { reframeApi } from '../api/reframe'
 import { captionsApi } from '../api/captions'
 import {
   useEditor, propsOf, sampleChannel, MIN_CLIP, KEYFRAME_CHANNELS,
@@ -103,6 +104,51 @@ export default function EditorToolbar({
   const props = clip ? propsOf(clip) : null
 
   /** Transcribe the clip under the playhead and lay captions on the text lane. */
+  /**
+   * Auto-reframe: follow the speaker instead of trusting the middle of the frame.
+   *
+   * The result arrives as `x` keyframes and is applied as one undoable step, so
+   * the camera move is visible on the clip and can be dragged, keyed or deleted
+   * like any other. When no face is found the backend says so and nothing is
+   * applied — a silent centre crop pretending to be face tracking is what this
+   * replaces.
+   */
+  const autoReframe = async () => {
+    const state = useEditor.getState()
+    const target =
+      state.clips.find((c) => c.id === state.selectedId && c.src) ??
+      state.clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+    if (!target?.src) {
+      message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
+      return
+    }
+    const canvas = state.canvasSize()
+    const hide = message.loading(t('Looking for the speaker…', 'دنبال گوینده می‌گردم…'), 0)
+    try {
+      const plan = await reframeApi.plan(target.src, canvas.width, canvas.height)
+      if (plan.fallback || plan.keyframes.length < 2) {
+        message.info(
+          t(
+            `No face to follow — ${plan.reason}`,
+            `چهره‌ای برای دنبال کردن نبود — ${plan.reason}`
+          )
+        )
+        return
+      }
+      state.setClipKeyframes(target.id, plan.keyframes, plan.scale)
+      message.success(
+        t(
+          `Following the speaker (${Math.round(plan.coverage * 100)}% of frames, ${plan.keyframes.length} keys)`,
+          `قاب روی گوینده قفل شد (${Math.round(plan.coverage * 100)}٪ فریم‌ها، ${plan.keyframes.length} کی‌فریم)`
+        )
+      )
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      hide()
+    }
+  }
+
   const generateCaptions = async () => {
     const state = useEditor.getState()
     const source =
@@ -172,6 +218,7 @@ export default function EditorToolbar({
       const local: Record<string, (() => void) | undefined> = {
         subtitles: () => void generateCaptions(),
         silence: onRemoveSilence,
+        facetrack: () => void autoReframe(),
       }
       const run = local[feature.id]
       return {

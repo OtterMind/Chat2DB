@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.7.0` · Last released: `v0.6.3` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.8.0` · Last released: `v0.6.3` — **`.github/workflows/ce.yml` is broken and only the owner can fix it (see §4.48); nothing has built since 0.6.3** (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -412,6 +412,32 @@ gate that stops a broken installer from being published.
    reset, and check `git show --stat HEAD | grep workflow` after it.
    The good copy lives in `ce-app/ci/ce-workflow.yml`; only the repository owner
    can paste it back into `.github/workflows/ce.yml`.
+
+49. **Auto-reframe follows a measured face, and the answer is keyframes.**
+   `core/engine/reframe.py` finds the largest face a few times a second with the
+   Haar cascade **already inside the `opencv-python-headless` wheel we pin** (no
+   download, no GPU, no MediaPipe and its ~160 MB of transitive wheels), then
+   turns the path into ordinary `x` keyframes plus the scale that fills the
+   canvas — so the camera move is visible on the timeline, draggable, and
+   reproduced by the normal exporter. Measured on a 1280×720 fixture with a real
+   photograph travelling a known line: the subject stays within **122 px** of
+   centre (mean 59 px) against **1024 px** (mean 905) for the centre crop it
+   replaces. The `BETA` badge is gone.
+   Two traps found while building it: the smoothing must be **zero-phase** (the
+   first, causal, exponential filter lagged the subject by 268 px — we are not
+   live, the file is on disk, so the filter may look forwards), and a "known
+   answer" fixture has to actually be known (the first one overlaid a portrait
+   assuming the face sat in its middle; it sits 10 % right, and the test dutifully
+   measured the fixture's error as the detector's).
+50. **Highlights are read, not just heard.** `core/brain/meaning.py` scores each
+   moment's transcript on discourse markers (English and Persian), questions,
+   numbers, sentence completeness and density, and blends it half-and-half with
+   the measured energy. It is a proxy for understanding, not understanding, and
+   it runs offline on text we already have — no model required.
+51. **A lazy import is still an import.** `planner._chat` did `import requests`
+   inside the LLM path; on a machine without it every prompt came back as a 500
+   instead of falling back to the offline rules — the same shape as the bug that
+   once broke the AI self-test. Optional dependencies degrade, they do not fail.
 
 ## 5. Release procedure
 

@@ -209,6 +209,10 @@ interface EditorState extends Snapshot {
   splitAtBeats: (id: string) => number
   /** Width / height of the canvas as a number, resolving 'auto'. */
   canvasRatio: () => number
+  /** The canvas in pixels, for anything that has to think in real coordinates. */
+  canvasSize: () => { width: number; height: number }
+  /** Replace a clip's camera path in one undoable step (auto-reframe). */
+  setClipKeyframes: (id: string, keyframes: Keyframe[], scale?: number) => void
   /** Furthest point any clip reaches — where playback stops. */
   contentEnd: () => number
 
@@ -429,6 +433,14 @@ export const useEditor = create<EditorState>((set, get) => ({
       .sort((a, b) => a.start - b.start)[0]
     if (first?.width && first?.height) return first.width / first.height
     return 16 / 9
+  },
+  canvasSize: () => {
+    // 1080 on the short edge: the same shape the export dialog offers, so a
+    // camera path computed here lands correctly in the rendered file.
+    const ratio = get().canvasRatio()
+    return ratio < 1
+      ? { width: 1080, height: Math.round(1080 / ratio) }
+      : { width: Math.round(1080 * ratio), height: 1080 }
   },
   contentEnd: () => get().clips.reduce((end, c) => Math.max(end, c.start + c.duration), 0),
 
@@ -767,6 +779,16 @@ export const useEditor = create<EditorState>((set, get) => ({
       clip.keyframes = (clip.keyframes ?? []).filter((k) => Math.abs(k.t - t) >= 0.005)
     }),
 
+  setClipKeyframes: (id, keyframes, scale) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      clip.keyframes = [...keyframes].sort((a, b) => a.t - b.t)
+      if (scale && scale > 0) {
+        const current = { ...DEFAULT_PROPS, ...clip.props }
+        clip.props = { ...current, transform: { ...current.transform, scale } }
+      }
+    }),
   clearKeyframes: (id) =>
     get().commit((s) => {
       const clip = s.clips.find((c) => c.id === id)
