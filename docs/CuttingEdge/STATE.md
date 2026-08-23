@@ -341,6 +341,23 @@ gate that stops a broken installer from being published.
    `python.exe`, **not** the process's working directory, so the probe has to
    put the backend folder on `sys.path` itself. `smoke-test.ps1` does the same.
 
+41. **Never pay for a smaller update with a slower app.** Bytecode was deleted
+   from the payload so that unchanged files stay byte-identical between releases
+   and differential patches stay small. Measured cost: starting the backend took
+   **1.16 s** with no `.pyc` anywhere against **0.72 s** with bytecode present.
+   That was a bad trade and it did not even have to be a trade —
+   `compileall --invalidation-mode unchecked-hash` writes caches that contain
+   the source hash instead of an mtime, so they are identical between builds
+   *and* Python uses them. `before-pack.js` now compiles instead of deleting.
+   The rule: when a size decision costs the user something, measure the cost and
+   look for the option that costs nothing.
+42. **The local build used a weaker FFmpeg than CI.** CI downloads
+   `ffmpeg-release-full`; `before-pack.js` fell back to
+   `ffmpeg-release-essentials`, so an installer built outside CI shipped fewer
+   filters and nobody would notice until one was missing on a user's machine.
+   Both use the full build now (it is 7z-only, so the unpacker learned `7z` and
+   says so plainly if 7-Zip is absent).
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

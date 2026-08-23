@@ -3,8 +3,10 @@
 Text is drawn with **libass** through FFmpeg's `subtitles` filter rather than
 `drawtext`. Three reasons:
 
-* `drawtext` is missing from many FFmpeg builds (including the one we ship),
-  while `libass` is always there;
+* `drawtext` is missing from many FFmpeg builds — including the static Linux
+  binary the headless tests run against — while `libass` is always there. (The
+  Windows build we ship is `ffmpeg-release-full`, which does have `drawtext`;
+  the point stands for portability, not for that build.)
 * Persian and Arabic need bidi handling and glyph shaping, which libass does and
   drawtext does not;
 * karaoke-style word highlighting is a native ASS feature, so animated captions

@@ -114,11 +114,16 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
   trap. This one was hiding a false test failure — without an importable `cv2`
   the log-polar zoom measurement silently disappears and
   `test_camera_motion_is_recognised[pull]` fails for an environment reason.
-* **Still to do (0.6.2).** Move the speech stack — `ctranslate2`, `av`,
-  `onnxruntime`, `tokenizers`, `faster-whisper` ≈ 62 MB of the remaining
-  137.9 MB — behind the AI runtime card that already exists: captions ask once,
-  download once into `~/CuttingEdge/runtime`, and every screen that needs speech
-  reports "not installed" honestly instead of failing.
+* ~~Move the speech stack behind the AI runtime card.~~ **Cancelled — and the
+  reason matters.** The owner's instruction is explicit: download size is not
+  worth a worse product. Making captions depend on a first-use download means a
+  new user's first automatic edit silently comes back without subtitles, or
+  waits on a download they did not ask for. `ctranslate2` + `av` +
+  `onnxruntime` + `tokenizers` + `faster-whisper` stay in the installer (≈ 62 MB
+  of the 137.9 MB) so that transcription works the moment the app is installed,
+  offline. Only *bigger* models remain on demand, which is already how the AI
+  runtime card behaves. The same logic applies to `mediapipe` in 0.8.0: when
+  face tracking is real, ship it.
 * **Proof:** the wheel closure was measured before and after (378.3 → 137.9 MB);
   the whole backend suite (122 tests) then ran against a **fresh virtualenv built
   from the pruned `requirements.txt` alone**, and the UI audit and the 100
@@ -198,6 +203,26 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
   error — filmed, not asserted.
 
 ---
+
+### 0.6.2 — Ideal, not small  ✅ **shipped**
+*A pass over every place where size was traded against quality.*
+
+* **Bytecode is shipped again.** It had been deleted from the payload so that
+  differential patches stayed small. Measured cost: **1.16 s** to start the
+  backend with no `.pyc` anywhere against **0.72 s** with bytecode present.
+  `compileall --invalidation-mode unchecked-hash` gives both — caches that carry
+  the source hash instead of an mtime, so they are byte-identical between builds
+  *and* Python uses them.
+* **The local build now uses the same full FFmpeg as CI.** `before-pack.js` fell
+  back to `ffmpeg-release-essentials`, so an installer built outside CI quietly
+  shipped fewer filters.
+* **Captions stay in the installer** (see above): no first-use download.
+* **Checked and found clean:** export presets (`high` = CRF 18 / `slow`, and the
+  default `balanced` = CRF 21), the 720p preview proxy (preview only — the
+  export is asserted to use the original in `tests/test_proxy.py`), thumbnail
+  and waveform caches, and `compression: "normal"` in electron-builder — that
+  last one is a size-versus-patch balance with no effect on what the app does,
+  and it stays because this project ships a release most days.
 
 ## 3. What is deliberately not on this road
 
