@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.6.2` · Last released: `v0.6.2` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.6.3` · Last released: `v0.6.2` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -357,6 +357,24 @@ gate that stops a broken installer from being published.
    filters and nobody would notice until one was missing on a user's machine.
    Both use the full build now (it is 7z-only, so the unpacker learned `7z` and
    says so plainly if 7-Zip is absent).
+
+43. **The preview is a product, not a placeholder.** The editing proxy was
+   720p, CRF 26, `fast_bilinear` — chosen to be small and quick, and it is what
+   the monitor actually shows, so every 4K clip was previewed soft. Measured on
+   a 2-minute 1440p clip: **33.4 dB PSNR**. It is now 1080p, CRF 21,
+   `bicubic`, `superfast` — **49.8 dB**, and *faster* to build than 1080p at
+   `veryfast` (68 s vs 80 s). It costs disk in `~/CuttingEdge/work/proxies`,
+   which is the one resource a scratch file is allowed to spend.
+   `tests/test_proxy.py` no longer asserts "smaller than the source" (the wrong
+   goal); it measures PSNR and requires > 40 dB. Film-strip thumbnails moved
+   from `-q:v 6` with the default scaler to `-q:v 3` with `bicubic`.
+44. **Use the best engine the machine already has.** Transcription hard-coded
+   the `base` model and `int8`, so a user with `small` downloaded still got the
+   weakest model, and a working CUDA runtime still got integer maths. Now
+   `transcribe.best_local_model()` picks the most accurate model **already on
+   disk** (nothing is downloaded), the device ladder is
+   `cuda/float16 → auto/int8 → cpu/int8`, and the Settings card reports the
+   model that will really be loaded instead of the string "base".
 
 ## 5. Release procedure
 

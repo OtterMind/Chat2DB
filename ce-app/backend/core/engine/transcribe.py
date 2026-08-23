@@ -13,6 +13,37 @@ from typing import Any
 _MODEL: Any = None
 _MODEL_NAME = ""
 
+#: Best first. Whisper accuracy climbs steeply from `base` to `small`, and the
+#: default used to be `base` for no reason other than that it is the smallest.
+#: We never download one here — we use the best model the machine already has.
+MODEL_PREFERENCE = ("large-v3", "large-v2", "medium", "small", "base", "tiny")
+
+
+def local_models() -> list[str]:
+    """Whisper models already on this machine, from the Hugging Face cache."""
+    from pathlib import Path as _Path
+
+    cache = _Path.home() / ".cache" / "huggingface" / "hub"
+    if not cache.exists():
+        return []
+    return sorted(
+        folder.name.replace("models--Systran--faster-whisper-", "")
+        for folder in cache.glob("models--Systran--faster-whisper-*")
+    )
+
+
+def best_local_model(default: str = "base") -> str:
+    """The most accurate model already downloaded, or the default.
+
+    Nothing is fetched: if the user has `base` and `small`, captions are
+    transcribed with `small`, because it is there and it is better.
+    """
+    present = set(local_models())
+    for name in MODEL_PREFERENCE:
+        if name in present:
+            return name
+    return default
+
 
 class TranscriberUnavailable(RuntimeError):
     """Raised when speech recognition cannot run on this installation."""
@@ -26,10 +57,11 @@ def availability() -> dict:
     return {"available": True, "model": _MODEL_NAME or "not loaded"}
 
 
-def _load(model_size: str = "base"):
+def _load(model_size: str | None = None):
     global _MODEL, _MODEL_NAME
     if _MODEL is not None:
         return _MODEL
+    model_size = model_size or best_local_model()
     try:
         from faster_whisper import WhisperModel
     except Exception as exc:  # noqa: BLE001
@@ -42,7 +74,14 @@ def _load(model_size: str = "base"):
     # That is a normal Windows machine with a graphics card, not a broken one, so
     # the CPU path is a fallback rather than an error. Reported by a user, fixed
     # here, and pinned down by tests/test_transcribe.py.
-    attempts: list[tuple[str, str]] = [("auto", "int8"), ("cpu", "int8")]
+    # float16 on a real CUDA runtime is both faster *and* more accurate than
+    # int8; int8 is the fallback, not the goal. Each rung is tried in order and
+    # a machine without CUDA simply lands on the last one.
+    attempts: list[tuple[str, str]] = [
+        ("cuda", "float16"),
+        ("auto", "int8"),
+        ("cpu", "int8"),
+    ]
     last_error: Exception | None = None
     for device, compute in attempts:
         try:

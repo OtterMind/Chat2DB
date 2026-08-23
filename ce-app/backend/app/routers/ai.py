@@ -58,22 +58,24 @@ def _ollama_state() -> dict:
 
 
 def _whisper_state() -> dict:
-    """Is faster-whisper importable, and is a model already on disk?"""
+    """Is faster-whisper importable, and which model will actually be used?
+
+    `selected` used to be the string "base" whatever the machine had. It is now
+    the model transcription will really load — the most accurate one already
+    downloaded — so the card cannot claim one thing while the engine does
+    another.
+    """
     available = importlib.util.find_spec("faster_whisper") is not None
-    cache = Path.home() / ".cache" / "huggingface" / "hub"
-    models: list[str] = []
-    if cache.exists():
-        models = sorted(
-            folder.name.replace("models--Systran--faster-whisper-", "")
-            for folder in cache.glob("models--Systran--faster-whisper-*")
-        )
+    from core.engine import transcribe
+
+    models = transcribe.local_models()
     return {
         "name": "Whisper",
         "installed": available,
         "running": available,
         "models": models,
         "download": None if available else "pip install faster-whisper",
-        "selected": "base",
+        "selected": transcribe.best_local_model(),
         "enabled": available,
     }
 

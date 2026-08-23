@@ -225,6 +225,23 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
   last one is a size-versus-patch balance with no effect on what the app does,
   and it stays because this project ships a release most days.
 
+### 0.6.3 — The second sweep: everywhere else quality was traded  ✅ **shipped**
+
+The first sweep (0.6.2) looked at what the *installer* traded. This one looks at
+what the *app* traded, and the numbers are bigger.
+
+| What | Was | Now | Measured |
+|---|---|---|---|
+| Preview proxy | 720p, CRF 26, `fast_bilinear` | 1080p, CRF 21, `bicubic`, `superfast` | **33.4 dB → 49.8 dB** PSNR on a 2-minute 1440p clip; build 40 s → 68 s; disk 19 MB → 162 MB |
+| Film-strip thumbnails | `-q:v 6`, default scaler | `-q:v 3`, `bicubic` | cache-only cost |
+| Whisper model | hard-coded `base` | the best model already downloaded | a machine with `base` + `small` now transcribes with `small` |
+| Whisper compute | `auto/int8` then `cpu/int8` | `cuda/float16` first | float16 on a real CUDA runtime is faster *and* more accurate |
+| Settings card | always said `base` | says the model that will actually load | the card can no longer contradict the engine |
+
+Checked again and left alone: export presets (`high` = CRF 18/`slow`,
+`balanced` = CRF 21), the render path (the export never reads a proxy — asserted),
+waveform resolution, and `compression: "normal"` in electron-builder.
+
 ## 3. What is deliberately not on this road
 
 * `librosa` — see §1.2. Revisit only if our detector is shown to fail on real

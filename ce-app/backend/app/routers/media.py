@@ -92,7 +92,10 @@ def _extract(source: Path, at: float, height: int, target: Path) -> None:
     material ends here"; a row of broken images reads as "this app is broken".
     """
     common = [ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y"]
-    tail = ["-frames:v", "1", "-vf", f"scale=-2:{height}", "-q:v", "6", str(target)]
+    # q:v 3 rather than 6, and a proper scaler: these thumbnails are the film
+    # strip the whole timeline is read from, they are cached once per frame, and
+    # the difference between them is a few kilobytes on disk.
+    tail = ["-frames:v", "1", "-vf", f"scale=-2:{height}:flags=bicubic", "-q:v", "3", str(target)]
     try:
         subprocess.run(
             [*common, "-ss", f"{max(0.0, at):.3f}", "-i", str(source), *tail],
