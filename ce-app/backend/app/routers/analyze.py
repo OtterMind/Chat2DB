@@ -27,12 +27,15 @@ def _require_file(path: str) -> str:
 
 
 @router.post("/silence")
-def silence(payload: AnalyzeRequest) -> dict:
+async def silence(payload: AnalyzeRequest) -> dict:
+    # Sync `def` here meant FFmpeg ran *on the event loop*: the WebSocket that
+    # carries task progress went quiet for the whole scan (STATE.md §4.7).
     _require_file(payload.path)
+    loop = asyncio.get_running_loop()
     try:
-        ranges = analyze.detect_silence(
+        ranges = await loop.run_in_executor(None, lambda: analyze.detect_silence(
             payload.path, noise_db=payload.noise_db, min_silence=payload.min_silence
-        )
+        ))
         info = analyze.probe_media(payload.path)
         duration = float(info.get("duration") or 0.0)
         return {
@@ -45,19 +48,21 @@ def silence(payload: AnalyzeRequest) -> dict:
 
 
 @router.post("/scenes")
-def scenes(payload: AnalyzeRequest) -> dict:
+async def scenes(payload: AnalyzeRequest) -> dict:
     _require_file(payload.path)
+    loop = asyncio.get_running_loop()
     try:
-        return {"scenes": analyze.detect_scenes(payload.path)}
+        return {"scenes": await loop.run_in_executor(None, analyze.detect_scenes, payload.path)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("")
-def full(payload: AnalyzeRequest) -> dict:
+async def full(payload: AnalyzeRequest) -> dict:
     _require_file(payload.path)
+    loop = asyncio.get_running_loop()
     try:
-        return analyze.analyse(payload.path)
+        return await loop.run_in_executor(None, analyze.analyse, payload.path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

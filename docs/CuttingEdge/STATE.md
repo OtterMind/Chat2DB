@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.5.3` · Last released: `v0.5.3`
+Branch: `arena/01a0214a-chat2db` · App version: `0.6.0` · Last released: `v0.5.3`
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -287,6 +287,29 @@ gate that stops a broken installer from being published.
    about the ≈ 94 MB it drags in. The same review found a real bug in passing:
    the 30 s client timeout still applies to `POST /api/style/analyze`.
 
+36. **Work longer than a request must be a task.** Style analysis was one
+   synchronous POST against a client with a 30 s budget. Measured on the test
+   machine: a **ten-minute reference takes 35.5 s**, so the user's own long file
+   was guaranteed to reproduce `timeout of 30000ms exceeded` — the same failure
+   as 0.5.3, in a different feature. Now `POST /api/style/analyze/start` returns
+   in **1–4 ms** with a task id, stages stream over the existing `/ws` socket
+   (`task:progress|done|failed|cancelled`), `GET /api/tasks/{id}` is the fallback
+   for a dropped socket and carries the result, and `POST /api/tasks/{id}/cancel`
+   stops it. The synchronous endpoints stay for scripts and tests.
+37. **A cancel that does not reach the child is a lie.** `core/engine/cancellation.py`
+   binds a cancel flag to the worker thread and every FFmpeg call goes through
+   `cancellation.run()`, which kills the child within ~0.2 s. The longest stage
+   is *not* FFmpeg though — shot detection runs inside PySceneDetect — so
+   `detect_scenes` starts a watcher thread that calls `SceneManager.stop()`.
+   Without it, Stop was honoured only when the 10 s stage ended, and the browser
+   test failed exactly that way before the fix. Measured after: **0.2 s**.
+38. **Heavy sync endpoints strangle the socket.** `/api/captions/transcribe`,
+   `/api/analyze/silence`, `/api/analyze/scenes` and `/api/analyze` were plain
+   `def`, so FFmpeg and Whisper ran *on the event loop* — which is also the loop
+   that delivers task progress and answers `/api/health`. All four are now
+   `async def` + `run_in_executor`, and the long ones carry their own client
+   budget (transcribe 20 min, scans 10 min) instead of the global 30 s.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
@@ -363,11 +386,9 @@ preview and undo instead of a fake score.
 The full plan, with the measurement each step has to pass, is in
 `docs/CuttingEdge/ROADMAP_1.0.md`. The short form:
 
-1. **0.6.0 — nothing waits in silence.** Style Match becomes a job with stage
-   progress over `/ws` and a Cancel button, and every long endpoint gets a
-   timeout budget that matches what it really does. The 30 s client budget still
-   applies to `POST /api/style/analyze`, which is the 0.5.3 failure waiting to
-   happen again.
+1. ~~0.6.0 — nothing waits in silence.~~ **Shipped.** Measured: start 1–4 ms,
+   7–8 stages reported, Stop honoured in 0.2 s, a ten-minute reference analysed
+   in 35.5 s without a timeout.
 2. **0.6.1 — slim the installer with measured numbers.** Drop the ≈ 70 MB that is
    never imported, move the ≈ 211 MB speech stack behind the AI runtime card
    (≈ 480 MB → ≈ 150 MB), then re-check the differential update size with the

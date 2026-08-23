@@ -1,6 +1,8 @@
 """Transcription and caption generation."""
 from __future__ import annotations
 
+import asyncio
+from functools import partial
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -18,14 +20,22 @@ class TranscribeRequest(BaseModel):
 
 
 @router.post("/transcribe")
-def transcribe(payload: TranscribeRequest) -> dict:
+async def transcribe(payload: TranscribeRequest) -> dict:
+    """Whisper on a worker thread.
+
+    Minutes of work on a CPU-only machine: as a sync `def` it held the event loop
+    for the whole transcription, so the health poll, the WebSocket and every task
+    progress event stopped with it (STATE.md §4.7).
+    """
     media = Path(payload.path)
     if not media.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
+    loop = asyncio.get_running_loop()
     try:
-        return engine.transcribe_to_cues(
-            str(media), language=payload.language, max_chars=payload.max_chars
-        )
+        return await loop.run_in_executor(None, partial(
+            engine.transcribe_to_cues,
+            str(media), language=payload.language, max_chars=payload.max_chars,
+        ))
     except engine.TranscriberUnavailable as exc:
         # A missing model must say so plainly instead of looking like a crash.
         raise HTTPException(status_code=503, detail=str(exc)) from exc

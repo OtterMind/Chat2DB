@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { message, Modal, Input } from 'antd'
 import {
-  Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info,
+  Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
 import { styleApi, type StyleTemplate, type TemplateSummary, type StyledEdit } from '../api/style'
+import type { TaskState } from '../api/tasks'
 import { pickMedia } from '../api/render'
 import { useEditor, formatTimecode } from '../editor/model'
 import { useI18n } from '../i18n'
@@ -24,6 +25,33 @@ export default function StyleMatch() {
   const [template, setTemplate] = useState<StyleTemplate | null>(null)
   const [busy, setBusy] = useState<'analyse' | 'apply' | null>(null)
   const [result, setResult] = useState<StyledEdit | null>(null)
+  /** What the work is doing right now — the screen used to be able to say only "busy". */
+  const [progress, setProgress] = useState<TaskState | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const stopRef = useRef<(() => void) | null>(null)
+
+  /** A second counter of our own: the socket reports stages, not ticks. */
+  useEffect(() => {
+    if (!busy) return undefined
+    const began = Date.now()
+    setElapsed(0)
+    const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - began) / 1000)), 500)
+    return () => window.clearInterval(timer)
+  }, [busy])
+
+  /** Everything a long call needs to stay honest on screen. */
+  const watcher = {
+    onProgress: (state: TaskState) => setProgress(state),
+    onStart: (cancel: () => void) => { stopRef.current = cancel },
+  }
+
+  const clearWork = () => {
+    stopRef.current = null
+    setProgress(null)
+    setBusy(null)
+  }
+
+  const wasCancelled = (error: unknown) => Boolean((error as { cancelled?: boolean })?.cancelled)
 
   const refresh = () => styleApi.templates().then((r) => setTemplates(r.templates)).catch(() => undefined)
   useEffect(() => {
@@ -55,16 +83,17 @@ export default function StyleMatch() {
     if (!path) return
     setBusy('analyse')
     try {
-      const found = await styleApi.analyse(path)
+      const found = await styleApi.analyse(path, undefined, watcher)
       setTemplate(found)
       refresh()
       message.success(
         t(`Template ready — ${found.shots.length} shots`, `قالب آماده شد — ${found.shots.length} نما`)
       )
     } catch (err) {
-      message.error((err as Error).message)
+      if (wasCancelled(err)) message.info(t('Stopped', 'متوقف شد'))
+      else message.error((err as Error).message)
     } finally {
-      setBusy(null)
+      clearWork()
     }
   }
 
@@ -81,7 +110,7 @@ export default function StyleMatch() {
     if (!referencePath) return
     setBusy('analyse')
     try {
-      const found = await styleApi.analyse(referencePath)
+      const found = await styleApi.analyse(referencePath, undefined, watcher)
       setTemplate(found)
       refresh()
 
@@ -94,7 +123,8 @@ export default function StyleMatch() {
         ownPath,
         found.name,
         t('Styled edit', 'تدوین بر اساس الگو'),
-        musicPath
+        musicPath,
+        watcher
       )
       setResult(built)
 
@@ -106,9 +136,10 @@ export default function StyleMatch() {
       )
       navigate('/studio')
     } catch (err) {
-      message.error((err as Error).message)
+      if (wasCancelled(err)) message.info(t('Stopped', 'متوقف شد'))
+      else message.error((err as Error).message)
     } finally {
-      setBusy(null)
+      clearWork()
     }
   }
 
@@ -139,13 +170,16 @@ export default function StyleMatch() {
     if (!path) return
     setBusy('apply')
     try {
-      const built = await styleApi.apply(path, template.name, t('Styled edit', 'تدوین بر اساس الگو'))
+      const built = await styleApi.apply(
+        path, template.name, t('Styled edit', 'تدوین بر اساس الگو'), null, watcher
+      )
       setResult(built)
       message.success(t('Your edit is ready', 'تدوین تو آماده است'))
     } catch (err) {
-      message.error((err as Error).message)
+      if (wasCancelled(err)) message.info(t('Stopped', 'متوقف شد'))
+      else message.error((err as Error).message)
     } finally {
-      setBusy(null)
+      clearWork()
     }
   }
 
@@ -185,6 +219,40 @@ export default function StyleMatch() {
             <FileVideo size={15} /> {t('Only analyse a reference', 'فقط الگو را تحلیل کن')}
           </button>
         </div>
+        {busy && (
+          <div className="ce-work" data-testid="style-progress" data-stage={progress?.stage ?? 'starting'}>
+            <div className="ce-work__head">
+              <Loader2 size={15} className="ce-spin" />
+              <strong data-testid="style-progress-label">
+                {progress?.label || t('Starting…', 'در حال شروع…')}
+              </strong>
+              <span className="ce-work__time" dir="ltr" data-testid="style-progress-elapsed">
+                {elapsed}s
+              </span>
+              <button
+                className="ce-btn ce-btn--ghost ce-btn--sm"
+                data-testid="style-cancel"
+                onClick={() => stopRef.current?.()}
+              >
+                <XCircle size={14} /> {t('Stop', 'توقف')}
+              </button>
+            </div>
+            <div className="ce-work__track">
+              <div
+                className="ce-work__fill"
+                data-testid="style-progress-fill"
+                style={{ width: `${Math.round((progress?.progress ?? 0) * 100)}%` }}
+              />
+            </div>
+            <p className="ce-hint" style={{ marginTop: 6 }}>
+              {t(
+                'It keeps working if you look away — a long reference takes a while, and nothing here is waiting on a 30-second budget any more.',
+                'اگر صفحه را رها کنی هم ادامه می‌دهد — یک الگوی طولانی زمان می‌برد، و دیگر هیچ‌چیز به بودجهٔ سی‌ثانیه‌ای بسته نیست.'
+              )}
+            </p>
+          </div>
+        )}
+
         <p className="ce-hint" style={{ marginTop: 8 }}>
           {t(
             'Automatic means: no prompt and no settings — reference in, your footage in, finished timeline out.',

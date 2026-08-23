@@ -991,3 +991,27 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ant-notification-notice-message, .ant-dropdown-menu-item { color: var(--text) !important; }
 .ant-dropdown-menu-item:hover { background: rgba(99, 102, 241, .18) !important; }
+
+/* Long work with a face: which stage, how long, and a way to stop it.
+   Style Match used to show a spinner and nothing else, while the request behind
+   it died at 30 s (see docs/CuttingEdge/ROADMAP_1.0.md §2, 0.6.0). */
+.ce-work {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(99, 102, 241, .35);
+  border-radius: 12px;
+  background: rgba(30, 41, 82, .35);
+}
+.ce-work__head { display: flex; align-items: center; gap: 10px; }
+.ce-work__head strong { font-size: 13.5px; font-weight: 600; }
+.ce-work__time { margin-inline-start: auto; font-variant-numeric: tabular-nums; opacity: .75; font-size: 12.5px; }
+.ce-work__track {
+  margin-top: 10px; height: 6px; border-radius: 999px;
+  background: #0f1a2e; overflow: hidden;
+}
+.ce-work__fill {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #22d3ee);
+  transition: width .35s ease;
+  min-width: 2%;
+}

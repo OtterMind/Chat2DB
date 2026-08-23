@@ -5,6 +5,19 @@ export type JobEvent =
   | { type: 'job:done'; job_id: string; clips_count: number }
   | { type: 'job:failed'; job_id: string; error: string }
   | { type: 'job:clip_ready'; job_id: string; clip_id: string; preview_url: string }
+  // Long work started by a screen (style analysis, styled rebuild): the same
+  // channel, because there is only ever one socket and every screen has it.
+  | {
+      type: 'task:progress' | 'task:done' | 'task:failed' | 'task:cancelled'
+      task_id: string
+      kind: string
+      status: 'running' | 'done' | 'failed' | 'cancelled'
+      stage: string
+      progress: number
+      label: string
+      elapsed: number
+      error: string | null
+    }
 
 class WebSocketClient {
   private socket: WebSocket | null = null

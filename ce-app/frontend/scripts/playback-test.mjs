@@ -972,7 +972,130 @@ if ((args.reference ?? process.env.CE_TEST_REFERENCE) && (args.vertical ?? proce
   else bad('the automatic run says nothing about what it did', JSON.stringify(auto))
   if (Array.isArray(auto.skipped)) ok(`…and what it could not do (${auto.skipped.length})`)
   else bad('no honesty list in the summary', JSON.stringify(auto))
+
+/* 11k — long work has a face: stages, a clock, and a Stop button ------------- */
+{
+  const longFile = args.long ?? process.env.CE_TEST_LONG ?? referenceFile
+  await page.evaluate(() => { location.hash = '#/style' })
+  await new Promise((r) => setTimeout(r, 700))
+
+  // Start it the way the screen does — through the page's own API layer, so the
+  // task, the socket and the panel are all the real ones.
+  const started = await page.evaluate((file) => (window.__pending = (async () => {
+    const reply = await fetch('http://127.0.0.1:8742/api/style/analyze/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: file, name: 'ui-progress', save: false }),
+    })
+    const began = performance.now()
+    const task = await reply.json()
+    return { ms: performance.now() - began, id: task.id, status: task.status }
+  })()), longFile)
+
+  if (started.ms < 2000 && started.status === 'running')
+    ok(`starting an analysis returns at once (${Math.round(started.ms)} ms, not a held request)`)
+  else bad('the analysis request is still synchronous', JSON.stringify(started))
+
+  // Watch it from the page: stage labels must actually change over time.
+  const watched = await page.evaluate((id) => (window.__pending = (async () => {
+    const stages = []
+    const started = performance.now()
+    let last = ''
+    while (performance.now() - started < 120000) {
+      const state = await fetch(`http://127.0.0.1:8742/api/tasks/${id}`).then((r) => r.json())
+      if (state.stage !== last) { stages.push([state.stage, state.progress, state.label]); last = state.stage }
+      if (state.status !== 'running') return { stages, status: state.status, elapsed: state.elapsed }
+      await new Promise((r) => setTimeout(r, 120))
+    }
+    return { stages, status: 'timeout', elapsed: 0 }
+  })()), started.id)
+
+  if (watched.status === 'done' && watched.stages.length >= 5)
+    ok(`the work reports where it is (${watched.stages.length} stages over ${watched.elapsed.toFixed(1)} s)`)
+  else bad('long work still cannot say what it is doing', JSON.stringify(watched).slice(0, 300))
+  if (watched.stages.every(([, p]) => p >= 0 && p <= 1) && watched.stages.at(-1)[1] === 1)
+    ok('progress runs from 0 to 1 and ends there')
+  else bad('the progress numbers are wrong', JSON.stringify(watched.stages))
+  if (watched.stages.every(([, , label]) => typeof label === 'string' && label.length > 3))
+    ok('every stage carries words a person can read')
+  else bad('a stage arrived without a label', JSON.stringify(watched.stages))
+
+  // The panel itself, in the DOM. Nothing else may be running: two analyses at
+  // once halve the CPU each gets, and a cancel that lands a second later then
+  // reads as a broken button rather than a busy machine.
+  // Drive the real screen: click "Only analyse a reference" and answer the modal.
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('button')].find((b) => /analyse a reference|الگو را تحلیل/i.test(b.textContent || ''))
+    button?.click()
+  })
+  await new Promise((r) => setTimeout(r, 500))
+  await page.evaluate((file) => {
+    const input = document.querySelector('.ant-modal input')
+    if (input) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+      setter.call(input, file)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const okButton = [...document.querySelectorAll('.ant-modal button')].find((b) => /use this file|همین فایل/i.test(b.textContent || ''))
+    okButton?.click()
+  }, longFile)
+  await new Promise((r) => setTimeout(r, 2500))
+
+  const shown = await page.evaluate(() => {
+    const node = document.querySelector('[data-testid="style-progress"]')
+    const fill = document.querySelector('[data-testid="style-progress-fill"]')
+    return node
+      ? {
+          visible: node.getBoundingClientRect().height > 20,
+          stage: node.getAttribute('data-stage'),
+          label: document.querySelector('[data-testid="style-progress-label"]')?.textContent ?? '',
+          elapsed: document.querySelector('[data-testid="style-progress-elapsed"]')?.textContent ?? '',
+          width: fill ? fill.getBoundingClientRect().width : 0,
+          stop: Boolean(document.querySelector('[data-testid="style-cancel"]')),
+        }
+      : null
+  })
+
+  if (shown?.visible && shown.stop) ok(`the screen shows the stage and a Stop button (${shown.stage})`)
+  else bad('Style Match still shows nothing but a spinner', JSON.stringify(shown))
+  if (shown && shown.label.length > 3 && /\d+s/.test(shown.elapsed))
+    ok(`the panel names the stage and counts the seconds (${shown.label.slice(0, 40)} · ${shown.elapsed})`)
+  else bad('the progress panel has no readable stage or clock', JSON.stringify(shown))
+  if (shown && shown.width > 0) ok('the progress bar has actually moved off zero')
+  else bad('the progress bar is empty while work is running', JSON.stringify(shown))
+
+  // Stop must stop: the task ends as cancelled, and the panel goes away. How
+  // long that takes is the measurement — shot detection is a ten-second stage
+  // inside PySceneDetect, so this only passes because the detector is told to
+  // stop, not because the loop happens to reach a checkpoint.
+  const stopBegan = Date.now()
+  await page.evaluate(() => document.querySelector('[data-testid="style-cancel"]')?.click())
+  const afterStop = await page.evaluate(() => (window.__pending = (async () => {
+    const deadline = performance.now() + 15000
+    let state = null
+    while (performance.now() < deadline) {
+      const tasks = await fetch('http://127.0.0.1:8742/api/tasks').then((r) => r.json())
+      const mine = tasks.tasks.filter((t) => t.kind === 'style:analyze')
+      state = {
+        panel: Boolean(document.querySelector('[data-testid="style-progress"]')),
+        cancelled: mine.some((t) => t.status === 'cancelled'),
+        running: mine.filter((t) => t.status === 'running').length,
+      }
+      if (state.cancelled && !state.panel) return state
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    return state
+  })()))
+  const stopMs = Date.now() - stopBegan
+
+  if (afterStop.cancelled && stopMs < 12000)
+    ok(`Stop really cancels the work, not just the spinner (${(stopMs / 1000).toFixed(1)} s)`)
+  else bad('the cancelled task is still running', JSON.stringify({ ...afterStop, stopMs }))
+  if (!afterStop.panel) ok('the progress panel clears when the work ends')
+  else bad('the progress panel stayed on screen after Stop', JSON.stringify(afterStop))
 }
+}
+
 
 /* 11k — the local AI panel in Settings -------------------------------------- */
 const engines = await page.evaluate(() => (window.__pending = (async () => {

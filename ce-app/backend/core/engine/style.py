@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 
 from core.engine import analyze as analysis
+from core.engine import cancellation
 from core.engine import audio as audio_engine
 from core.engine.compose import ffmpeg_binary, probe_media
 
@@ -55,7 +56,7 @@ def sample_strip(path: str, start: float, duration: float, count: int, size: int
     if duration <= 0 or count <= 0:
         return []
     rate = max(0.05, count / duration)
-    out = subprocess.run(
+    out = cancellation.run(
         [
             ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
             "-ss", f"{max(0.0, start):.3f}", "-t", f"{duration:.3f}", "-i", str(path),
@@ -76,7 +77,7 @@ def sample_strip(path: str, start: float, duration: float, count: int, size: int
 
 def sample_gray(path: str, at: float, size: int = FRAME) -> np.ndarray | None:
     """One frame as a square grayscale array, or None past the end of the file."""
-    out = subprocess.run(
+    out = cancellation.run(
         [
             ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
             "-ss", f"{max(0.0, at):.3f}", "-i", str(path), "-frames:v", "1",
@@ -247,7 +248,7 @@ def _colour_of(path: str, times: list[float]) -> dict:
     """Brightness, contrast, saturation and warmth, averaged over sampled frames."""
     values = []
     for at in times:
-        out = subprocess.run(
+        out = cancellation.run(
             [
                 ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
                 "-ss", f"{at:.3f}", "-i", str(path), "-frames:v", "1",
@@ -314,12 +315,24 @@ def _classify_motion(path: str, start: float, duration: float) -> tuple[str, flo
     return "static", energy
 
 
-def analyse(path: str, name: str | None = None) -> Template:
-    """Measure a reference video and describe it as a template."""
+def _silent(stage: str, progress: float, label: str = "") -> None:
+    """The default reporter: analysis works exactly as before when nobody is watching."""
+
+
+def analyse(path: str, name: str | None = None, progress=None) -> Template:
+    """Measure a reference video and describe it as a template.
+
+    `progress(stage, fraction, label)` is called at every boundary so a caller can
+    show what is happening. A ten-minute reference is a minute of work; until
+    0.6.0 the only thing the screen could say was "busy", and the request behind
+    it died at the client's 30 second budget.
+    """
+    say = progress or _silent
     source = Path(path)
     if not source.exists():
         raise FileNotFoundError(path)
 
+    say("probe", 0.02, "Reading the file")
     info = probe_media(str(source))
     duration = float(info.get("duration") or 0.0)
     width, height = int(info.get("width") or 0), int(info.get("height") or 0)
@@ -334,12 +347,17 @@ def analyse(path: str, name: str | None = None) -> Template:
     )
 
     # ---- shots -----------------------------------------------------------
+    say("shots", 0.08, "Finding the shot boundaries")
     cuts = [c for c in analysis.detect_scenes(str(source)) if 0.0 < c < duration]
     bounds = [0.0, *cuts, duration]
-    for start, end in zip(bounds, bounds[1:]):
+    spans = [(s, e) for s, e in zip(bounds, bounds[1:]) if e - s >= 0.2]
+    for index, (start, end) in enumerate(spans):
         length = end - start
-        if length < 0.2:
-            continue
+        say(
+            "motion",
+            0.15 + 0.45 * (index / max(1, len(spans))),
+            f"Camera move, shot {index + 1} of {len(spans)}",
+        )
         motion, energy = _classify_motion(str(source), start, length)
         template.shots.append(Shot(round(start, 3), round(length, 3), motion, round(energy, 4)))
 
@@ -354,6 +372,7 @@ def analyse(path: str, name: str | None = None) -> Template:
 
     # ---- music and whether the cuts follow it ----------------------------
     if info.get("has_audio"):
+        say("beats", 0.62, "Listening for the tempo")
         beats = audio_engine.beats(str(source))
         template.bpm = beats.bpm
         template.beats = beats.beats
@@ -363,6 +382,7 @@ def analyse(path: str, name: str | None = None) -> Template:
             )
             template.cuts_on_beat = round(hits / len(cuts), 3)
 
+        say("speech", 0.72, "Measuring where the speech sits")
         silences = analysis.detect_silence(str(source))
         speech = analysis.keep_ranges(duration, silences)
         template.speech_ratio = round(
@@ -385,11 +405,13 @@ def analyse(path: str, name: str | None = None) -> Template:
         template.hook = {"firstCut": round(cuts[0], 3) if cuts else round(duration, 3), "firstWord": None}
 
     # ---- colour ----------------------------------------------------------
+    say("colour", 0.82, "Measuring the colour")
     template.look = _colour_of(str(source), [duration * f for f in (0.15, 0.4, 0.65, 0.9)])
 
     # ---- transitions -----------------------------------------------------
     # A hard cut changes the frame completely in one step; a dissolve spreads the
     # change over several frames, which is visible as a softer difference profile.
+    say("transitions", 0.9, "Telling cuts from dissolves")
     soft = 0
     for cut in cuts:
         before = sample_gray(str(source), max(0.0, cut - 0.25))
@@ -413,6 +435,7 @@ def analyse(path: str, name: str | None = None) -> Template:
         "the reference's own footage, music and fonts (never copied)",
         "exact caption typography (needs the OCR pass)",
     ]
+    say("done", 1.0, "Template ready")
     return template
 
 
@@ -456,6 +479,7 @@ def build_timeline(
     name: str = "Styled edit",
     music: str | None = None,
     captions: list[dict] | None = None,
+    progress=None,
 ) -> dict:
     """Cut the user's footage into the shape of the template.
 
@@ -469,6 +493,8 @@ def build_timeline(
     bed. Anything that could not be done is reported in `summary.skipped` rather
     than quietly dropped.
     """
+    say = progress or _silent
+    say("plan", 0.05, "Reading the template")
     data = template.as_dict() if isinstance(template, Template) else dict(template)
     shots = data.get("shots") or []
     if not shots:
@@ -477,7 +503,9 @@ def build_timeline(
     info = probe_media(source)
     source_duration = float(info.get("duration") or 0.0)
     shortest = min(float(s["duration"]) for s in shots)
+    say("highlights", 0.2, "Choosing the strongest moments")
     picks = _highlights(source, wanted=len(shots), minimum=max(0.4, shortest * 0.8))
+    say("layout", 0.6, "Laying the clips out to the rhythm")
 
     clips: list[dict] = []
     transitions: list[dict] = []
@@ -594,6 +622,7 @@ def build_timeline(
     elif (data.get("audio") or {}).get("musicUnderVoice", 0.0) < 0:
         skipped.append("music (the template has one, you did not give me a track)")
 
+    say("done", 1.0, "Edit ready")
     return {
         "name": name,
         "aspect": data.get("aspect", "9:16"),

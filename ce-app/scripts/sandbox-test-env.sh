@@ -68,6 +68,15 @@ if [ ! -f "$MEDIA/reference.mp4" ]; then
     -c:v copy -c:a aac -shortest "$MEDIA/reference.mp4"
 fi
 
+# a long reference: analysing this one takes tens of seconds, which is the whole
+# point — it is how the staged progress and the Stop button are tested, and how
+# we measured that a 10-minute file blows past the client's old 30 s budget.
+[ -f "$MEDIA/long.mp4" ] || "$FFDIR/ffmpeg" -y -loglevel error \
+  -f lavfi -i "testsrc2=size=640x360:rate=25:duration=180" \
+  -f lavfi -i "sine=frequency=440:duration=180" \
+  -vf "drawbox=enable='lt(mod(t\,6),0.1)':c=black:t=fill" \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -shortest "$MEDIA/long.mp4"
+
 echo "→ headless Chromium"
 mkdir -p "$HB"
 ( cd "$HB" && [ -d node_modules/@sparticuz ] || npm i --no-audit --no-fund --silent \
@@ -90,6 +99,7 @@ export CE_TEST_VERTICAL=$MEDIA/vertical.webm
 export CE_TEST_BIG=$MEDIA/big.mp4
 export CE_TEST_BEAT=$MEDIA/beat120.wav
 export CE_TEST_REFERENCE=$MEDIA/reference.mp4
+export CE_TEST_LONG=$MEDIA/long.mp4
 export CE_VENV=$VENV
 ENV
 

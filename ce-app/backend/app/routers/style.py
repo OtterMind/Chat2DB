@@ -10,7 +10,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.engine import style
+from core.engine import cancellation, style
+from core.tasks import tasks
 
 router = APIRouter(prefix="/api/style", tags=["style"])
 
@@ -43,6 +44,31 @@ async def analyse(payload: AnalyseRequest) -> dict:
     if payload.save:
         style.save_template(template)
     return template.as_dict()
+
+
+@router.post("/analyze/start")
+async def analyse_start(payload: AnalyseRequest) -> dict:
+    """Begin an analysis and answer immediately with a task to watch.
+
+    The synchronous `/analyze` above still exists — it is what the tests and any
+    script use. What a *screen* must not do is hold a request open for a minute:
+    the client's budget is 30 s, and this is precisely the shape of the failure
+    the user reported in 0.5.3.
+    """
+    def work(reporter) -> dict:
+        cancellation.bind(reporter.cancel_event)
+        try:
+            template = style.analyse(
+                payload.path, payload.name,
+                progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
+            )
+            if payload.save:
+                style.save_template(template)
+            return template.as_dict()
+        finally:
+            cancellation.bind(None)
+
+    return tasks.start("style:analyze", work).as_dict()
 
 
 @router.get("/templates")
@@ -99,3 +125,45 @@ async def apply(payload: ApplyRequest) -> dict:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/apply/start")
+async def apply_start(payload: ApplyRequest) -> dict:
+    """The same rebuild as `/apply`, as a task.
+
+    This one can genuinely take minutes: when the template asks for captions the
+    whole file goes through Whisper first. Transcription is reported as its own
+    stage so the screen can say *why* it is waiting.
+    """
+    def work(reporter) -> dict:
+        cancellation.bind(reporter.cancel_event)
+        try:
+            document = payload.inline
+            if document is None:
+                if not payload.template:
+                    raise ValueError("Give a template name or an inline template")
+                document = style.load_template(payload.template)
+
+            cues: list[dict] | None = None
+            wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
+            if wants_captions:
+                reporter.stage("transcribe", 0.1, "Transcribing the speech")
+                try:
+                    from core.engine.transcribe import transcribe_to_cues
+
+                    cues = (transcribe_to_cues(payload.path) or {}).get("cues") or []
+                except cancellation.Cancelled:
+                    raise
+                except Exception:  # noqa: BLE001 - no model, or a file with no speech
+                    cues = None
+
+            return style.build_timeline(
+                document, payload.path, payload.name, payload.music, cues,
+                progress=lambda stage, fraction, label="": reporter.stage(
+                    stage, 0.3 + 0.7 * fraction if wants_captions else fraction, label
+                ),
+            )
+        finally:
+            cancellation.bind(None)
+
+    return tasks.start("style:apply", work).as_dict()

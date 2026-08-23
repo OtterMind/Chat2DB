@@ -1,2 +1,2 @@
-__version__ = "0.3.3"
+__version__ = "0.6.0"
 __app_name__ = "Cutting Edge"

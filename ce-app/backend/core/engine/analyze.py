@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import re
 import subprocess
+import threading
+
+from core.engine import cancellation
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,7 +59,7 @@ def detect_silence(
         "-af", f"silencedetect=noise={noise_db}dB:d={min_silence}",
         "-f", "null", "-",
     ]
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = cancellation.run(command, capture_output=True, text=True)
     text = result.stderr
 
     duration = 0.0
@@ -89,18 +92,50 @@ def detect_silence(
 
 
 def detect_scenes(path: str, *, threshold: float = 27.0) -> list[float]:
-    """Timestamps where the shot changes, in seconds."""
+    """Timestamps where the shot changes, in seconds.
+
+    Shot detection is the longest single stage of a style analysis — 10.1 s on a
+    ten-minute reference — and it runs inside PySceneDetect, not inside FFmpeg,
+    so killing a child process does nothing for it. `SceneManager.stop()` is the
+    library's own way out and it is safe to call from another thread, so a Stop
+    pressed here is honoured in the same second instead of at the next stage.
+    """
     try:
         from scenedetect import ContentDetector, SceneManager, open_video  # type: ignore
 
         video = open_video(path)
         manager = SceneManager()
         manager.add_detector(ContentDetector(threshold=threshold))
-        manager.detect_scenes(video, show_progress=False)
+
+        event = cancellation.current()
+        watcher: threading.Thread | None = None
+        if event is not None:
+            done = threading.Event()
+
+            def abort() -> None:
+                while not done.wait(0.1):
+                    if event.is_set():
+                        manager.stop()
+                        return
+
+            watcher = threading.Thread(target=abort, daemon=True)
+            watcher.start()
+
+        try:
+            manager.detect_scenes(video, show_progress=False)
+        finally:
+            if watcher is not None:
+                done.set()
+                watcher.join(timeout=1.0)
+
+        cancellation.check()
         scenes = manager.get_scene_list()
         return [round(start.get_seconds(), 3) for start, _ in scenes][1:]
+    except cancellation.Cancelled:
+        raise
     except Exception:
         return _detect_scenes_ffmpeg(path)
+
 
 
 def _detect_scenes_ffmpeg(path: str, *, sensitivity: float = 0.4) -> list[float]:
@@ -110,7 +145,7 @@ def _detect_scenes_ffmpeg(path: str, *, sensitivity: float = 0.4) -> list[float]
         "-filter:v", f"select='gt(scene,{sensitivity})',showinfo",
         "-f", "null", "-",
     ]
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = cancellation.run(command, capture_output=True, text=True)
     times = [float(m) for m in re.findall(r"pts_time:([\d.]+)", result.stderr)]
     return [round(t, 3) for t in times]
 

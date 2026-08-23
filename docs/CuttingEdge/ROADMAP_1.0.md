@@ -70,8 +70,8 @@ typography rather than the reference's.
 Each release states **how we will know it worked** — a measurement, not an
 opinion — because two bugs that reached the user compiled cleanly.
 
-### 0.6.0 — Nothing waits in silence
-*Fixes a failure the user can hit today.*
+### 0.6.0 — Nothing waits in silence ✅ shipped
+*Fixed a failure the user could hit today.*
 
 * `POST /api/style/analyze` becomes a job: stages (`shots`, `beats`, `colour`,
   `motion`, `transitions`) stream over the existing `/ws` channel.
@@ -80,9 +80,24 @@ opinion — because two bugs that reached the user compiled cleanly.
 * Audit every long endpoint against the 30 s client budget — analyse, apply,
   transcribe, render, proxy — and give each an explicit budget that matches what
   it really does. The AI calls got theirs in 0.5.3; the rest never did.
-* **Proof:** a headless test analyses a 10-minute reference and asserts (a) at
-  least five stage events arrive, (b) no request is cut off, (c) cancelling stops
-  the FFmpeg children within two seconds.
+**Measured, not asserted:**
+
+| Question | Before | After |
+|---|---|---|
+| How long does the request stay open? | the whole analysis | **1–4 ms** |
+| A ten-minute reference | 35.5 s — past the 30 s client budget | same work, no timeout |
+| What can the screen say? | "busy" | 7–8 named stages with a progress bar and a clock |
+| Stop | did not exist | task ends **cancelled in 0.2 s**, FFmpeg child killed |
+| Socket drops | progress freezes | `GET /api/tasks/{id}` poll keeps the bar honest |
+
+Also in this release: `/api/captions/transcribe`, `/api/analyze/silence`,
+`/api/analyze/scenes` and `/api/analyze` were synchronous `def` endpoints running
+FFmpeg and Whisper **on the event loop** — the same loop that delivers progress
+and answers `/api/health`. They are `async def` + `run_in_executor` now, with
+their own client budgets (20 min for transcription, 10 min for scans).
+
+Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
+`playback-test.mjs` — 120 backend tests and 100 browser checks all green.
 
 ### 0.6.1 — The installer stops carrying what it never uses
 *Target: ≈ 480 MB → ≈ 260 MB, then → ≈ 150 MB.*
