@@ -1015,3 +1015,18 @@ button { font-family: inherit; cursor: pointer; }
   transition: width .35s ease;
   min-width: 2%;
 }
+
+/* ------------------------------------------------------------- the dry run
+ * The assistant says what it will do before it does it. A free prompt cannot be
+ * scored, so this list — and Cancel — is the safety.
+ */
+.ai-panel__dryrun {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+}
+.ai-panel__dryrun-title { font-size: 12px; color: #c7d2fe; margin: 0 0 6px; }
+.ai-panel__dryrun ol { margin: 0 0 8px; padding-inline-start: 18px; }
+.ai-panel__dryrun li { font-size: 13px; color: #e2e8f0; line-height: 1.7; }

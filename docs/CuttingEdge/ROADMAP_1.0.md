@@ -145,7 +145,7 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
 * **Proof:** `docs/CuttingEdge/STYLE_SCOREBOARD.md` — old number, new number, and
   the decision. Anything that does not win is deleted, and the reason is recorded.
 
-### 0.7.0 — The brain, part one
+### 0.7.0 — The brain, part one  ✅ **shipped**
 *`BRAIN_DESIGN.md` becomes code.*
 
 * One objective function (duration fit ×3, speech integrity ×3, on-beat ×2,
@@ -155,9 +155,16 @@ Tests added: `backend/tests/test_tasks.py` (9) and eight browser checks in
   offline.
 * Assistant gets the dry-run preview: what will change, applied as one undoable
   step. Free prompts get validation + preview + undo, never a fake score.
-* **Proof:** on a fixture with a known best cut list, the raced plan scores at
-  least as high as the rule plan on 20 out of 20 runs, and every plan the LLM
-  returns is either valid or rejected — never partially applied.
+* **Measured:** `tests/test_brain.py` (16 tests) builds plans with known right
+  answers — a perfect plan scores 1.00; a plan of the wrong length loses the
+  duration term; a cut through a word loses speech integrity; reused footage
+  loses variety; a silent, beatless clip **drops** those terms instead of
+  inventing them. For the race: a deliberately bad model answer never wins and
+  the timeline that gets built is byte-identical to the offline one; a better
+  answer wins and the built timeline follows it; a tie keeps the rules. In the
+  browser, three new checks assert the Assistant shows its dry run before
+  touching anything and that Cancel leaves the timeline untouched.
+  140 backend tests, 103 browser checks, UI audit and `verify` all green.
 
 ### 0.7.1 — Highlights that understand what was said
 * The transcript enters the score: discourse markers, speech rate, and the shape

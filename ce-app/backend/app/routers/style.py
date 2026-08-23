@@ -29,6 +29,8 @@ class ApplyRequest(BaseModel):
     name: str = "Styled edit"
     music: str | None = Field(default=None, description="Optional music bed of your own")
     captions: bool = Field(default=True, description="Transcribe and lay captions automatically")
+    brain: bool = Field(default=True, description="Let a local model race the rule planner")
+    model: str | None = Field(default=None, description="Ollama model to race with, when installed")
 
 
 @router.post("/analyze")
@@ -119,7 +121,7 @@ async def apply(payload: ApplyRequest) -> dict:
     try:
         return await loop.run_in_executor(
             None, style.build_timeline, document, payload.path, payload.name,
-            payload.music, cues,
+            payload.music, cues, None, payload.brain, payload.model,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
@@ -162,6 +164,8 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 progress=lambda stage, fraction, label="": reporter.stage(
                     stage, 0.3 + 0.7 * fraction if wants_captions else fraction, label
                 ),
+                brain=payload.brain,
+                model=payload.model,
             )
         finally:
             cancellation.bind(None)

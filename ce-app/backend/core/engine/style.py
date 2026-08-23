@@ -26,6 +26,8 @@ from pathlib import Path
 
 import numpy as np
 
+from core.brain import objective
+from core.brain import race as brain_race
 from core.engine import analyze as analysis
 from core.engine import cancellation
 from core.engine import audio as audio_engine
@@ -473,6 +475,54 @@ def _highlights(path: str, wanted: int, minimum: float) -> list[dict]:
     return picks[: max(wanted, 1)]
 
 
+def _brain_context(
+    data: dict,
+    shots: list[dict],
+    source: str,
+    info: dict,
+    measured: list[dict],
+    captions: list[dict] | None,
+    music: str | None,
+) -> objective.Context:
+    """Everything the judge is allowed to know, all of it measured here.
+
+    Beats come from the track the edit will actually play against — the music
+    bed if there is one, the footage's own audio otherwise. Borrowing the
+    reference's beat grid would score the cuts against music that is not in the
+    edit.
+    """
+    beats: list[float] = []
+    beat_source = music or (source if info.get("has_audio") else None)
+    if beat_source:
+        try:
+            beats = audio_engine.beats(str(beat_source)).beats
+        except Exception:  # noqa: BLE001 — no tempo is a normal answer
+            beats = []
+
+    speech: list[tuple[float, float]] = []
+    duration = float(info.get("duration") or 0.0)
+    if info.get("has_audio"):
+        try:
+            silences = analysis.detect_silence(source)
+            speech = [(r.start, r.end) for r in analysis.keep_ranges(duration, silences)]
+        except Exception:  # noqa: BLE001
+            speech = []
+
+    words: list[dict] = []
+    for cue in captions or []:
+        words.extend(cue.get("words") or [])
+
+    return objective.Context(
+        duration=duration,
+        target_shots=[float(s["duration"]) for s in shots],
+        beats=beats,
+        reference_cuts_on_beat=data.get("cuts_on_beat"),
+        speech=speech,
+        words=words,
+        best_highlight=max((p.get("score", 0.0) for p in measured), default=0.0),
+    )
+
+
 def build_timeline(
     template: Template | dict,
     source: str,
@@ -480,6 +530,8 @@ def build_timeline(
     music: str | None = None,
     captions: list[dict] | None = None,
     progress=None,
+    brain: bool = True,
+    model: str | None = None,
 ) -> dict:
     """Cut the user's footage into the shape of the template.
 
@@ -504,7 +556,25 @@ def build_timeline(
     source_duration = float(info.get("duration") or 0.0)
     shortest = min(float(s["duration"]) for s in shots)
     say("highlights", 0.2, "Choosing the strongest moments")
-    picks = _highlights(source, wanted=len(shots), minimum=max(0.4, shortest * 0.8))
+    measured = _highlights(source, wanted=max(len(shots) * 3, 8), minimum=max(0.4, shortest * 0.8))
+
+    # ---- the brain --------------------------------------------------------
+    # Measuring produced the candidate moments; *choosing and ordering* them is
+    # a judgement, so it is raced: the deterministic rule planner against a
+    # local Ollama model, both scored by the same objective function. The rule
+    # plan is always a candidate, so the model can only win by being better.
+    say("plan", 0.45, "Choosing an order")
+    brain_context = _brain_context(data, shots, source, info, measured, captions, music)
+    decision = brain_race.race(
+        [objective.Pick(p["start"], p["end"], p.get("score", 0.0)) for p in measured],
+        brain_context,
+        transcript=captions,
+        use_llm=brain,
+        model=model,
+    )
+    picks = [{"start": p.start, "end": p.end, "score": p.score} for p in decision.picks]
+    if not picks:  # a planner that produced nothing must not empty the timeline
+        picks = measured
     say("layout", 0.6, "Laying the clips out to the rhythm")
 
     clips: list[dict] = []
@@ -516,7 +586,7 @@ def build_timeline(
 
     for index, shot in enumerate(shots):
         want = float(shot["duration"])
-        pick = picks[index % len(picks)]
+        pick = picks[index % len(picks)]  # the brain returns one per shot; this is the net
         available = max(0.2, pick["end"] - pick["start"])
         length = min(want, available, max(0.2, source_duration - pick["start"]))
         if length < 0.2:
@@ -645,6 +715,10 @@ def build_timeline(
             "bpm": data.get("bpm", 0.0),
             "applied": applied,
             "skipped": skipped,
+            # The race, in the open: who planned, what each scored, who won.
+            # "rules 0.71 · ollama:qwen2.5 0.83 → used ollama:qwen2.5" is the
+            # only honest answer to "did the AI help?" — and sometimes it is no.
+            "brain": decision.as_dict_without_picks(),
         },
     }
 

@@ -5,6 +5,8 @@ export interface AssistantPlan {
   explanation: string
   source: string
   warnings: string[]
+  /** The dry run: what will happen, in both languages, before anything happens. */
+  preview: { op: string; en: string; fa: string }[]
 }
 
 export const assistantApi = {

@@ -1220,6 +1220,57 @@ else bad('the unfinished (autosaved) project is not offered on the home screen',
 if (recents.deletes > 0) ok(`each saved project has a delete button (${recents.deletes})`)
 else bad('saved projects cannot be deleted from the home screen', JSON.stringify(recents))
 
+// ---------------------------------------------------------------- the brain
+//
+// A free-form prompt cannot be scored, so the safety is that nothing happens
+// until the user has read what will happen and pressed Apply. These checks are
+// the difference between "the assistant works" and "the assistant did something
+// nobody agreed to".
+await page.evaluate(() => (window.__pending = (async () => {
+  location.hash = '#/studio'
+  await new Promise((r) => setTimeout(r, 800))
+  const state = window.__ceEditor.getState()
+  if (!state.clips.length) {
+    state.addClip({ src: '', label: 'brain', start: 0, duration: 4, offset: 0, sourceDuration: 4 })
+  }
+  document.querySelector('.ai-fab')?.click()
+  await new Promise((r) => setTimeout(r, 300))
+  const input = document.querySelector('.ai-panel__input input')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+  setter.call(input, 'add fade transitions between all clips')
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await new Promise((r) => setTimeout(r, 2500))
+})()))
+
+const dryRun = await page.evaluate(() => {
+  const panel = document.querySelector('[data-testid="assistant-dryrun"]')
+  return {
+    shown: Boolean(panel),
+    steps: panel ? panel.querySelectorAll('li').length : 0,
+    text: panel ? (panel.querySelector('li')?.textContent ?? '') : '',
+    apply: Boolean(document.querySelector('[data-testid="assistant-apply"]')),
+    cancel: Boolean(document.querySelector('[data-testid="assistant-cancel"]')),
+  }
+})
+if (dryRun.shown && dryRun.steps > 0) ok(`the assistant shows a dry run first (${dryRun.steps} step(s): "${dryRun.text}")`)
+else bad('the assistant applied without showing what it would do', JSON.stringify(dryRun))
+if (dryRun.apply && dryRun.cancel) ok('the dry run offers Apply and Cancel')
+else bad('the dry run has no Apply/Cancel', JSON.stringify(dryRun))
+
+// Cancel must change nothing at all.
+const cancelled = await page.evaluate(() => (window.__pending = (async () => {
+  const before = JSON.stringify(window.__ceEditor.getState().transitions)
+  document.querySelector('[data-testid="assistant-cancel"]')?.click()
+  await new Promise((r) => setTimeout(r, 300))
+  return {
+    gone: !document.querySelector('[data-testid="assistant-dryrun"]'),
+    unchanged: before === JSON.stringify(window.__ceEditor.getState().transitions),
+  }
+})()))
+if (cancelled.gone && cancelled.unchanged) ok('Cancel leaves the timeline untouched')
+else bad('Cancel did not leave the timeline untouched', JSON.stringify(cancelled))
+
 const hard = errors.filter(
   // antd's static-function advisory is a warning about theming, handled in CSS.
   (e) => !/favicon|ResizeObserver|DevTools|antd: Modal|Static function can not consume context/i.test(e)

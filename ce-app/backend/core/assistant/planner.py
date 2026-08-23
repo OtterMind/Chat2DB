@@ -444,3 +444,76 @@ def make_plan(prompt: str, timeline: dict, *, prefer_llm: bool = True) -> Plan:
             "2x speed, add fade transitions, mute, trim to 30 seconds, export 9:16."
         )
     return plan
+
+
+# --------------------------------------------------------------------------- #
+# The dry run: say what will happen, before it happens.
+# --------------------------------------------------------------------------- #
+#
+# A free-form prompt has no objective score — "did it understand me?" cannot be
+# measured, and pretending a number could decide that would be theatre
+# (`docs/CuttingEdge/BRAIN_DESIGN.md` §7). What can be done instead is honest:
+# show the operations in the user's own language, apply only on confirmation,
+# and keep the whole thing one undoable step.
+
+def _seconds(value: object, fallback: float = 0.0) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+
+
+def describe_op(op: dict) -> tuple[str, str]:
+    """One operation as a sentence, in English and Persian."""
+    name = op.get("op", "")
+    where = op.get("clipId")
+    on_en = f" on {where}" if where else ""
+    on_fa = f" روی {where}" if where else ""
+
+    table: dict[str, tuple[str, str]] = {
+        "removeSilence": ("Cut the silent gaps", "سکوت‌ها را حذف کن"),
+        "splitScenes": ("Split at every shot change", "سر هر تغییر نما برش بزن"),
+        "splitAt": (f"Split at {_seconds(op.get('at')):.2f}s", f"برش در ثانیهٔ {_seconds(op.get('at')):.2f}"),
+        "setSpeed": (f"Set speed to {_seconds(op.get('speed'), 1):.2f}x", f"سرعت را {_seconds(op.get('speed'), 1):.2f} برابر کن"),
+        "setVolume": (f"Set volume to {_seconds(op.get('volume'), 1):.2f}", f"صدا را روی {_seconds(op.get('volume'), 1):.2f} بگذار"),
+        "mute": ("Mute" if op.get("muted", True) else "Unmute", "بی‌صدا کن" if op.get("muted", True) else "صدا را برگردان"),
+        "setOpacity": (f"Set opacity to {_seconds(op.get('opacity'), 1):.2f}", f"شفافیت را {_seconds(op.get('opacity'), 1):.2f} کن"),
+        "fade": (
+            f"Fade in {_seconds(op.get('fadeIn')):.2f}s / out {_seconds(op.get('fadeOut')):.2f}s",
+            f"محو ورود {_seconds(op.get('fadeIn')):.2f} و خروج {_seconds(op.get('fadeOut')):.2f} ثانیه",
+        ),
+        "reverse": ("Play backwards", "برعکس پخش کن"),
+        "crop": ("Crop the edges", "لبه‌ها را برش بزن"),
+        "transform": ("Move, scale or rotate", "جابه‌جایی، مقیاس یا چرخش"),
+        "addTransition": (
+            f"Add a {op.get('type', 'fade')} transition", f"ترنزیشن {op.get('type', 'fade')} بگذار"
+        ),
+        "addTransitionsEverywhere": (
+            f"Add {op.get('type', 'fade')} between every clip",
+            f"بین همهٔ کلیپ‌ها {op.get('type', 'fade')} بگذار",
+        ),
+        "removeTransition": ("Remove the transition", "ترنزیشن را بردار"),
+        "trimTo": (f"Trim the timeline to {_seconds(op.get('seconds')):.0f}s", f"تایم‌لاین را به {_seconds(op.get('seconds')):.0f} ثانیه برسان"),
+        "deleteClip": ("Delete the clip", "کلیپ را حذف کن"),
+        "duplicateClip": ("Duplicate the clip", "کلیپ را تکثیر کن"),
+        "setExport": ("Change the export format", "قالب خروجی را عوض کن"),
+        "setFilter": (f"Apply the {op.get('filter', 'none')} look", f"لوک {op.get('filter', 'none')} را اعمال کن"),
+        "setAdjust": ("Grade the picture", "تنظیم رنگ تصویر"),
+        "setAnimation": ("Animate in/out", "انیمیشن ورود و خروج"),
+        "denoise": ("Reduce background noise", "نویز پس‌زمینه را کم کن"),
+        "enhanceVoice": ("Clean up the voice", "صدای گوینده را تمیز کن"),
+        "addText": (f"Add the text “{str(op.get('text', ''))[:24]}”", f"متن «{str(op.get('text', ''))[:24]}» را اضافه کن"),
+        "generateCaptions": ("Transcribe and add captions", "گفتار را بنویس و زیرنویس بگذار"),
+        "styleCaptions": ("Restyle the captions", "سبک زیرنویس را عوض کن"),
+    }
+    english, persian = table.get(name, (name, name))
+    return english + on_en, persian + on_fa
+
+
+def describe_ops(ops: list[dict]) -> list[dict]:
+    """The dry run, one line per operation, in both languages."""
+    preview = []
+    for op in ops:
+        english, persian = describe_op(op)
+        preview.append({"op": op.get("op", ""), "en": english, "fa": persian})
+    return preview

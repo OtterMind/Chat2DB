@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, X, CornerDownLeft, Undo2, Loader2 } from 'lucide-react'
+import { Sparkles, X, CornerDownLeft, Undo2, Loader2, Check } from 'lucide-react'
 import { message } from 'antd'
-import { assistantApi } from '../api/assistant'
+import { assistantApi, type AssistantPlan } from '../api/assistant'
 import { applyPlan } from './applyPlan'
 import { useEditor } from './model'
 import { useI18n } from '../i18n'
@@ -21,6 +21,11 @@ const SUGGESTIONS: [en: string, fa: string][] = [
  * It never edits directly: the backend turns a sentence into operations from a
  * fixed whitelist, and `applyPlan` validates and applies them as ordinary
  * undoable steps — so anything it does can be reverted with one click.
+ *
+ * And it asks first. A free-form prompt has no objective score — "did it
+ * understand me?" is not measurable, and a number pretending to answer that
+ * would be theatre (`docs/CuttingEdge/BRAIN_DESIGN.md` §7). So the plan is shown
+ * as a list of sentences in the user's own language and runs only on Apply.
  */
 export default function AssistantButton() {
   const { t, lang } = useI18n()
@@ -29,6 +34,8 @@ export default function AssistantButton() {
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<{ text: string; ok: boolean }[]>([])
+  /** The planned-but-not-yet-applied edit. Nothing happens while this is set. */
+  const [pending, setPending] = useState<AssistantPlan | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -59,7 +66,20 @@ export default function AssistantButton() {
         return
       }
 
-      const outcome = await applyPlan(plan.ops, selectedId)
+      // Planned, not applied: the user reads it first.
+      setPending(plan)
+    } catch (err) {
+      setLog((l) => [{ text: (err as Error).message, ok: false }, ...l])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const applyPending = async () => {
+    if (!pending) return
+    setBusy(true)
+    try {
+      const outcome = await applyPlan(pending.ops, selectedId)
       const summary = [
         outcome.applied.length ? `✓ ${outcome.applied.join(', ')}` : '',
         outcome.skipped.length ? `• ${t('skipped', 'رد شد')}: ${outcome.skipped.join(', ')}` : '',
@@ -67,9 +87,10 @@ export default function AssistantButton() {
         .filter(Boolean)
         .join('  ')
 
-      setLog((l) => [{ text: summary || plan.explanation, ok: outcome.applied.length > 0 }, ...l])
+      setLog((l) => [{ text: summary || pending.explanation, ok: outcome.applied.length > 0 }, ...l])
       if (outcome.applied.length) message.success(t('Applied', 'اعمال شد'))
       setPrompt('')
+      setPending(null)
     } catch (err) {
       setLog((l) => [{ text: (err as Error).message, ok: false }, ...l])
     } finally {
@@ -118,6 +139,38 @@ export default function AssistantButton() {
               </button>
             ))}
           </div>
+
+          {pending && (
+            <div className="ai-panel__dryrun" data-testid="assistant-dryrun">
+              <p className="ai-panel__dryrun-title">
+                {t('This is what I will do:', 'این کارها را انجام می‌دهم:')}
+              </p>
+              <ol>
+                {pending.preview?.map((step, index) => (
+                  <li key={index}>{lang === 'fa' ? step.fa : step.en}</li>
+                ))}
+              </ol>
+              {pending.explanation && <p className="ce-hint">{pending.explanation}</p>}
+              <div className="ce-actions">
+                <button
+                  className="ce-btn ce-btn--sm"
+                  data-testid="assistant-apply"
+                  disabled={busy}
+                  onClick={() => void applyPending()}
+                >
+                  <Check size={15} /> {t('Apply', 'انجام بده')}
+                </button>
+                <button
+                  className="ce-btn ce-btn--ghost ce-btn--sm"
+                  data-testid="assistant-cancel"
+                  disabled={busy}
+                  onClick={() => setPending(null)}
+                >
+                  <X size={15} /> {t('Cancel', 'بی‌خیال')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {log.length > 0 && (
             <div className="ai-panel__log">

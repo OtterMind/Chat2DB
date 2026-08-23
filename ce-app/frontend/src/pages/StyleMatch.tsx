@@ -352,6 +352,15 @@ export default function StyleMatch() {
             )}
           </div>
 
+          {result.summary.brain && result.summary.brain.scoreboard.length > 0 && (
+            <div className="ce-kv" style={{ marginTop: 8 }}>
+              <span>{t('Who planned it', 'چه کسی برنامه‌ریزی کرد')}</span>
+              <strong dir="ltr" data-testid="brain-line">
+                {result.summary.brain.line}
+              </strong>
+            </div>
+          )}
+
           <div className="ce-kv" style={{ marginTop: 8 }}>
             <span>{t('Done for you', 'انجام شد')}</span>
             <strong>{result.summary.applied.join(' · ')}</strong>

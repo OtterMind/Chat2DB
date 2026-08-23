@@ -52,6 +52,12 @@ export interface StyledEdit {
     bpm: number
     applied: string[]
     skipped: string[]
+    /** Who planned the edit, what each planner scored, and who won. */
+    brain?: {
+      winner: string
+      line: string
+      scoreboard: { name: string; score: number; seconds: number; shots: number; note: string }[]
+    }
   }
 }
 

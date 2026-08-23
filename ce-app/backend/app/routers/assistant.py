@@ -22,7 +22,12 @@ def plan(payload: PlanRequest) -> dict:
     # The editor decides what "the selected clip" means; we only pass it through.
     for op in result.ops:
         op.setdefault("clipId", payload.selected_clip_id)
-    return result.as_dict()
+    # A free-form prompt cannot be scored, so it gets the other kind of safety:
+    # the plan is described in the user's own language and applied only after
+    # they say yes (BRAIN_DESIGN.md §7).
+    payload_out = result.as_dict()
+    payload_out["preview"] = planner.describe_ops(result.ops)
+    return payload_out
 
 
 @router.get("/capabilities")

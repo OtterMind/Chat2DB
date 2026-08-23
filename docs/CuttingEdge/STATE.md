@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.6.3` · Last released: `v0.6.2` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.7.0` · Last released: `v0.6.3` (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -375,6 +375,30 @@ gate that stops a broken installer from being published.
    disk** (nothing is downloaded), the device ladder is
    `cuda/float16 → auto/int8 → cpu/int8`, and the Settings card reports the
    model that will really be loaded instead of the string "base".
+
+45. **The brain is a race with a referee, not a chatbot.** `core/brain/` is
+   three small files: `objective.py` scores a candidate edit on seven measured
+   terms (duration fit ×3, speech integrity ×3, on-beat ×2, silence avoided ×2,
+   highlight strength ×2, variety ×1, shot-length match ×1); `planners.py` has
+   the deterministic rule planner and an Ollama planner; `race.py` runs them and
+   picks the winner. Three properties are load-bearing and tested:
+   • the rule plan is **always** a candidate, so a model can only win by scoring
+     higher — it can never make the edit worse than offline;
+   • a **tie goes to the rules**, because determinism beats novelty;
+   • the model returns **indices into the measured moments**, never timings of
+     its own, so it cannot invent a moment that does not exist.
+   The scoreboard is shown to the user — `rules 0.71 · ollama:qwen2.5 0.83 →
+   used ollama:qwen2.5` — because that line is the only honest answer to "did
+   the AI help?", and sometimes it is "no".
+46. **A term that cannot be measured is dropped, not guessed.** The first
+   version of `speech_integrity` fell back to coarse speech *ranges* when there
+   were no word timings, and scored a flawless plan 0.82 — every cut inside a
+   twenty-second range of talking counted as cutting through a word. Without a
+   transcript the term is now skipped and the remaining weights renormalise.
+47. **A free prompt gets a dry run, not a score.** "Did it understand me?" is
+   not measurable, so the Assistant now plans, prints what it will do in the
+   user's own language, and applies only on **Apply** — with Cancel changing
+   nothing at all. Guarded by three checks in `playback-test.mjs`.
 
 ## 5. Release procedure
 

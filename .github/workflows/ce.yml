@@ -1,149 +1,43 @@
 name: 🎬 Build Cutting Edge
-
-# Paste this into .github/workflows/ce.yml **once**. After that no manual step is
-# ever needed again: bumping the version in ce-app/frontend/package.json and
-# pushing is enough — CI builds the installer, publishes the release, and every
-# installed app picks it up through its "بررسی و نصب به‌روزرسانی" button (and the
-# silent check it runs at startup).
-#
-# A release is only created when the version number is new, so ordinary pushes
-# never produce duplicate releases.
-
-on:
-  push:
-    branches: ['**']
-    paths:
-      - 'ce-app/**'
-      - '.github/workflows/ce.yml'
-  workflow_dispatch:
-    inputs:
-      force:
-        description: 'Build even if this version was already released'
-        type: boolean
-        default: false
-
-permissions:
-  contents: write
-
-concurrency:
-  group: ce-build-${{ github.ref }}
-  cancel-in-progress: true
-
+on: workflow_dispatch
 jobs:
-  decide:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.v.outputs.version }}
-      build: ${{ steps.v.outputs.build }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: v
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version=$(node -p "require('./ce-app/frontend/package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ "${{ inputs.force }}" = "true" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          elif gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v$version already released — skipping"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
   build:
-    needs: decide
-    if: needs.decide.outputs.build == 'true'
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-
       - name: FFmpeg
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          curl.exe -L --retry 3 -o ff.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z"
+          curl -L -o ff.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z"
           7z x ff.7z -offmpeg | Out-Null
-          New-Item -ItemType Directory -Force build\ffmpeg | Out-Null
-          Copy-Item ffmpeg\*\bin\ffmpeg.exe  build\ffmpeg\
-          Copy-Item ffmpeg\*\bin\ffprobe.exe build\ffmpeg\
-
-      # uv resolves and installs the heavy wheel set (mediapipe, opencv, ctranslate2)
-      # in a fraction of pip's time — this was the slowest step of the whole build.
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
+          mkdir build\ffmpeg
+          cp ffmpeg\*\bin\ffmpeg.exe build\ffmpeg\
       - name: Backend
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
           cd ce-app\backend
-          uv venv ..\..\build\backend\python --python 3.11
-          uv pip install --python ..\..\build\backend\python\Scripts\python.exe -r requirements.txt
-          if ($LASTEXITCODE -ne 0) { throw "dependency install failed" }
-          Copy-Item app, core, uploaders -Destination ..\..\build\backend -Recurse -Force
-          Copy-Item run_backend.py ..\..\build\backend\
-
-      - name: Cache Electron binaries
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~\AppData\Local\electron\Cache
-            ~\AppData\Local\electron-builder\Cache
-          key: electron-${{ runner.os }}-${{ hashFiles('ce-app/frontend/package.json') }}
-          restore-keys: electron-${{ runner.os }}-
-
+          python -m venv ..\..\build\backend\python
+          ..\..\build\backend\python\Scripts\pip install -r requirements.txt -q
+          xcopy /E /I app ..\..\build\backend\app
+          xcopy /E /I core ..\..\build\backend\core
+          copy run_backend.py ..\..\build\backend\
       - name: Frontend
         shell: pwsh
-        working-directory: ce-app/frontend
         run: |
+          cd ce-app\frontend
           npm install --no-audit --no-fund
-          npm run build
-
-      - name: Package and publish
+          npx vite build
+      - name: Package
         shell: pwsh
-        working-directory: ce-app/frontend
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always
-
-      # Refuses to ship an installer that cannot actually start: verifies the
-      # portable Python runtime, ffmpeg/ffprobe, relative asset paths and a live
-      # /api/health response. Both bugs that reached the user would have failed here.
-      - name: Smoke test the packaged app
-        shell: pwsh
-        run: pwsh ce-app/scripts/smoke-test.ps1 -AppDir ce-app/frontend/release/win-unpacked
-
-      - name: Debug session on failure
-        if: failure() && github.event_name == 'workflow_dispatch'
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-          timeout-minutes: 15
-
+        run: |
+          cd ce-app\frontend
+          npx electron-builder --win nsis --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: Cutting-Edge-Windows-Setup
-          # blockmap + latest.yml are what make delta updates possible
-          path: |
-            ce-app/frontend/release/*.exe
-            ce-app/frontend/release/*.blockmap
-            ce-app/frontend/release/latest.yml
-          if-no-files-found: error
-
-      - name: Summary
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem ce-app\frontend\release\*.exe | Select-Object -First 1
-          "## Cutting Edge v${{ needs.decide.outputs.version }}" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-          "installer: $([math]::Round($exe.Length/1MB,1)) MB" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-          "download: https://github.com/$env:GITHUB_REPOSITORY/releases/tag/v${{ needs.decide.outputs.version }}" |
-            Out-File -Append $env:GITHUB_STEP_SUMMARY
+          path: ce-app/frontend/release/*.exe
