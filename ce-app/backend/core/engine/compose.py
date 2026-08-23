@@ -49,6 +49,8 @@ class ClipProps:
     anim_duration: float = 0.6
     denoise: float = 0.0
     enhance_voice: bool = False
+    #: Music that steps aside for the voice (sidechain compression at render).
+    duck: bool = False
     #: Animation over time: [{"t": seconds, "x": .., "y": .., "scale": ..,
     #: "rotate": .., "opacity": .., "volume": ..}, ...] — sorted, clip-local.
     keyframes: list[dict] = field(default_factory=list)
@@ -89,6 +91,7 @@ class ClipProps:
             anim_duration=max(0.1, float(data.get("animDuration", 0.6) or 0.6)),
             denoise=min(1.0, max(0.0, float(data.get("denoise", 0.0) or 0.0))),
             enhance_voice=bool(data.get("enhanceVoice", False)),
+            duck=bool(data.get("duck", False)),
             keyframes=sorted(
                 [k for k in (data.get("keyframes") or []) if isinstance(k, dict)],
                 key=lambda k: float(k.get("t", 0.0)),
@@ -720,6 +723,12 @@ def build_command(
             steps.append("[vtext]null[voutfinal]")
 
     # ---- audio ---------------------------------------------------------
+    # Ducking only makes sense when there is both a bed to lower and a voice to
+    # lower it under; otherwise every clip takes the plain path.
+    ducking_active = any(c.props.duck for c in audio_clips) and any(
+        not c.props.duck for c in audio_clips
+    )
+    duck_keys: list[str] = []
     audio_labels: list[str] = []
     for n, clip in enumerate(audio_clips):
         idx = index_of[clip.id]
@@ -756,16 +765,76 @@ def build_command(
             )
         delay_ms = int(clip.start * 1000)
         parts.append(f"adelay={delay_ms}|{delay_ms}")
-        parts.append(f"apad=whole_dur={total:.3f}")
-        steps.append(f"[{idx}:a]" + ",".join(parts) + label)
+
+        if ducking_active and not clip.props.duck:
+            # Voice that will drive a sidechain.
+            #
+            # The split has to happen *before* the padding, and each branch gets
+            # its own `apad`. Sharing one padded stream and splitting it starves
+            # the compressor: it stops pulling, and the music goes silent for the
+            # rest of the timeline. Measured, not guessed — see tests/test_audio.py.
+            pre, main, key = f"[a{n}pre]", f"[a{n}m]", f"[a{n}k]"
+            steps.append(f"[{idx}:a]" + ",".join(parts) + pre)
+            steps.append(f"{pre}asplit=2{main}{key}")
+            steps.append(f"{main}apad=whole_dur={total:.3f}{label}")
+            key_label = f"[a{n}key]"
+            # The key is padded *without a limit*: `-t` on the input can make the
+            # voice end a few samples before the bed, and a sidechain that runs
+            # out silences the compressor for the rest of the timeline. The
+            # output length still follows the main input, so an endless key costs
+            # nothing.
+            steps.append(f"{key}apad{key_label}")
+            duck_keys.append(key_label)
+        else:
+            parts.append(f"apad=whole_dur={total:.3f}")
+            steps.append(f"[{idx}:a]" + ",".join(parts) + label)
+
         audio_labels.append(label)
 
+    # ---- ducking --------------------------------------------------------
+    #
+    # A music bed marked "duck" steps aside for everything else that speaks.
+    # `sidechaincompress` follows the voice envelope, so the bed dips on every
+    # word and comes back in the gaps — not a blunt cut across the whole clip.
+    if ducking_active and duck_keys:
+        if len(duck_keys) == 1:
+            key_bus = duck_keys[0]
+        else:
+            key_bus = "[duckkey]"
+            steps.append(
+                "".join(duck_keys)
+                + f"amix=inputs={len(duck_keys)}:duration=longest:dropout_transition=0{key_bus}"
+            )
+
+        beds = [label for label, clip in zip(audio_labels, audio_clips) if clip.props.duck]
+        if len(beds) > 1:
+            copies = [f"[dk{i}]" for i in range(len(beds))]
+            steps.append(f"{key_bus}asplit={len(beds)}" + "".join(copies))
+        else:
+            copies = [key_bus]
+
+        compressed: dict[str, str] = {}
+        for n, (label, key) in enumerate(zip(beds, copies)):
+            out = f"[duck{n}]"
+            steps.append(
+                f"{label}{key}sidechaincompress=threshold=0.03:ratio=12:attack=25"
+                f":release=300:makeup=1:level_sc=1{out}"
+            )
+            compressed[label] = out
+
+        audio_labels = [compressed.get(label, label) for label in audio_labels]
+
     if audio_labels:
-        steps.append(
-            "".join(audio_labels)
-            + f"amix=inputs={len(audio_labels)}:duration=longest:dropout_transition=0,"
-            f"atrim=0:{total:.3f},alimiter=limit=0.95[aout]"
-        )
+        if len(audio_labels) == 1:
+            steps.append(
+                audio_labels[0] + f"atrim=0:{total:.3f},alimiter=limit=0.95[aout]"
+            )
+        else:
+            steps.append(
+                "".join(audio_labels)
+                + f"amix=inputs={len(audio_labels)}:duration=longest:dropout_transition=0,"
+                f"atrim=0:{total:.3f},alimiter=limit=0.95[aout]"
+            )
 
     args += ["-filter_complex", ";".join(steps)]
     args += ["-map", "[voutfinal]" if any("[voutfinal]" in step for step in steps) else "[vout]"]

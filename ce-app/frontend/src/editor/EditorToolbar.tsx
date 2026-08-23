@@ -325,6 +325,7 @@ export default function EditorToolbar({
               <PanelAudio
                 denoise={props.denoise}
                 enhanceVoice={props.enhanceVoice}
+                duck={props.duck}
                 onChange={(patch) => setProps(clip.id, patch)}
               />
             )}
@@ -830,11 +831,12 @@ function PanelAnimate({
 }
 
 function PanelAudio({
-  denoise, enhanceVoice, onChange,
+  denoise, enhanceVoice, duck, onChange,
 }: {
   denoise: number
   enhanceVoice: boolean
-  onChange: (patch: { denoise?: number; enhanceVoice?: boolean }) => void
+  duck: boolean
+  onChange: (patch: { denoise?: number; enhanceVoice?: boolean; duck?: boolean }) => void
 }) {
   const { t } = useI18n()
   return (
@@ -854,6 +856,21 @@ function PanelAudio({
         {t(
           'Voice enhance applies a high-pass, presence boost, compression and -16 LUFS normalisation.',
           'بهبود صدا شامل حذف بم‌های مزاحم، تقویت وضوح، فشرده‌سازی و نرمال‌سازی روی -۱۶ است.'
+        )}
+      </p>
+
+      <Segmented
+        value={duck ? 'on' : 'off'}
+        onChange={(v) => onChange({ duck: v === 'on' })}
+        options={[
+          { value: 'off', label: t('Ducking off', 'داکینگ خاموش') },
+          { value: 'on', label: t('Duck under voice', 'کم شدن زیر صدا') },
+        ]}
+      />
+      <p className="ce-hint">
+        {t(
+          'Mark the music this way and it drops on every word of the voice and comes back in the gaps — the export uses a sidechain compressor, the monitor approximates it.',
+          'موسیقی را این‌طور علامت بزن تا روی هر کلمه‌ی گوینده پایین بیاید و در سکوت‌ها برگردد — خروجی از فشرده‌ساز زنجیره‌ای استفاده می‌کند و مانیتور تقریب آن را نشان می‌دهد.'
         )}
       </p>
     </div>

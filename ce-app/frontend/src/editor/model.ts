@@ -41,6 +41,8 @@ export interface ClipProps {
   /** Spectral noise reduction, 0–1. */
   denoise: number
   enhanceVoice: boolean
+  /** Music that steps aside for the voice (sidechain compression at export). */
+  duck: boolean
   /** Text-clip styling. */
   fontSize: number
   color: string
@@ -67,6 +69,7 @@ export const DEFAULT_PROPS: ClipProps = {
   animDuration: 0.6,
   denoise: 0,
   enhanceVoice: false,
+  duck: false,
   fontSize: 54,
   color: '#FFFFFF',
   highlight: '#6366F1',

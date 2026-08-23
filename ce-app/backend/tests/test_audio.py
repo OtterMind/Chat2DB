@@ -128,3 +128,121 @@ def test_silence_produces_no_beat_grid(tmp_path):
     result = audio.beats(str(quiet))
     # No onsets means no honest tempo: an empty grid, not an invented one.
     assert result.confidence < 0.3 or result.bpm == 0.0
+
+
+# ------------------------------------------------------------------ ducking
+
+
+def _voice_bursts(tmp_path):
+    """Quiet speech-like bursts: loud between 1–2 s and 3–4 s, silent elsewhere."""
+    target = tmp_path / "voice.wav"
+    subprocess.run(
+        [
+            compose.ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi",
+            "-i", "aevalsrc='0.25*sin(2*PI*300*t)*(between(t\\,1\\,2)+between(t\\,3\\,4))':d=5:s=48000",
+            str(target),
+        ],
+        check=True,
+    )
+    return target
+
+
+def _steady_music(tmp_path):
+    target = tmp_path / "music.wav"
+    subprocess.run(
+        [
+            compose.ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "sine=frequency=220:duration=5:sample_rate=48000",
+            str(target),
+        ],
+        check=True,
+    )
+    return target
+
+
+def _mean_db(path, start: float, end: float, band: float | None = None) -> float:
+    """Mean level of a window, optionally of one narrow frequency band.
+
+    The band matters for ducking: during speech the mix is dominated by the
+    voice, so measuring everything would hide what the music is doing. The bed is
+    a 220 Hz tone and the voice is 300 Hz, so a narrow filter isolates the bed
+    inside the finished file — no separate stem, no trust required.
+    """
+    chain = "volumedetect" if band is None else f"bandpass=f={band}:width_type=h:width=30,volumedetect"
+    out = subprocess.run(
+        [
+            compose.ffmpeg_binary(), "-hide_banner", "-nostats", "-y",
+            "-ss", f"{start}", "-t", f"{end - start}", "-i", str(path),
+            "-af", chain, "-f", "null", "-",
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    for line in out.stderr.splitlines():
+        if "mean_volume" in line:
+            return float(line.split(":")[-1].replace("dB", "").strip())
+    raise AssertionError("no mean_volume")
+
+
+def _duck_timeline(music, voice, duck: bool) -> dict:
+    return {
+        "width": 320, "height": 240, "fps": 15,
+        "tracks": [
+            {"id": "v1", "kind": "video"},
+            {"id": "a1", "kind": "audio"},
+            {"id": "a2", "kind": "audio"},
+        ],
+        "clips": [
+            {"id": "m", "trackId": "a1", "start": 0, "duration": 5, "offset": 0,
+             "src": str(music), "props": {"duck": duck}},
+            {"id": "v", "trackId": "a2", "start": 0, "duration": 5, "offset": 0,
+             "src": str(voice)},
+        ],
+    }
+
+
+@requires_ffmpeg
+def test_the_music_steps_aside_for_the_voice(tmp_path):
+    music, voice = _steady_music(tmp_path), _voice_bursts(tmp_path)
+
+    plain = compose.render(
+        compose.Timeline.from_dict(_duck_timeline(music, voice, duck=False)), tmp_path / "plain.mp4"
+    )
+    ducked = compose.render(
+        compose.Timeline.from_dict(_duck_timeline(music, voice, duck=True)), tmp_path / "ducked.mp4"
+    )
+
+    # Listen to the music band only, in the same window of both renders.
+    plain_speech = _mean_db(plain, 1.2, 1.9, band=220)
+    ducked_speech = _mean_db(ducked, 1.2, 1.9, band=220)
+    assert plain_speech - ducked_speech > 6.0, (
+        f"only {plain_speech - ducked_speech:.1f} dB of ducking during speech"
+    )
+
+    # Between the words the bed must be back where it was, not left down. The
+    # window starts 600 ms after the speech, which is past the 350 ms release —
+    # measuring during the release would test the test, not the product.
+    plain_gap = _mean_db(plain, 4.6, 4.95, band=220)
+    ducked_gap = _mean_db(ducked, 4.6, 4.95, band=220)
+    assert abs(plain_gap - ducked_gap) < 2.0, (
+        f"the bed did not recover: {plain_gap:.1f} dB vs {ducked_gap:.1f} dB"
+    )
+
+    # …and the voice itself is untouched: ducking lowers music, not speech.
+    plain_voice = _mean_db(plain, 1.2, 1.9, band=300)
+    ducked_voice = _mean_db(ducked, 1.2, 1.9, band=300)
+    assert abs(plain_voice - ducked_voice) < 2.0
+
+
+@requires_ffmpeg
+def test_ducking_needs_something_to_duck_under(tmp_path):
+    """A ducked bed with no voice in the project must render unchanged, not silent."""
+    music = _steady_music(tmp_path)
+    timeline = {
+        "width": 320, "height": 240, "fps": 15,
+        "tracks": [{"id": "a1", "kind": "audio"}],
+        "clips": [{"id": "m", "trackId": "a1", "start": 0, "duration": 3, "offset": 0,
+                   "src": str(music), "props": {"duck": True}}],
+    }
+    output = compose.render(compose.Timeline.from_dict(timeline), tmp_path / "alone.mp4")
+    assert _mean_db(output, 0.5, 2.5) > -30.0

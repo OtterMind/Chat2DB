@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2.2`
+Branch: `arena/01a0214a-chat2db` · App version: `0.4.4` · Last released: `v0.4.3`
 
 ---
 
@@ -16,11 +16,13 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Render engine** | `core/engine/compose.py` — the edit model becomes one FFmpeg `filter_complex`; NVENC when present, libx264 otherwise; progress streamed over the WebSocket |
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
-| **Preview** | Real video **with sound** in the program monitor (video lane plus the audio lane under it, per-clip volume/mute honoured, master volume on the monitor), streamed through `/api/media/file` with Range support so scrubbing works from a `file://` page |
+| **Preview** | Real video **with sound**, shaped to the project canvas (Auto follows the footage), every effect applied live as CSS, transitions cross-faded between two layers, text drawn on top, 720p proxies for heavy footage. A `requestAnimationFrame` transport drives the playhead |
 | **Export** | Format (9:16 / 1:1 / 4:5 / 16:9 / 4K), quality preset, frame rate, and a native save dialog |
-| **Editor** | Multi-track timeline: drag between lanes, trim, split (S), duplicate, snap, zoom, undo/redo, import, export, remove silence, split scenes |
+| **Editor** | Multi-track timeline with **film strips** and **audio waveforms**, playhead pinned to the centre while the timeline scrolls, Ctrl+wheel / pinch zoom, drag between lanes, trim, split, ripple/roll/slip, duplicate, snap, undo/redo, keyboard shortcuts |
 | **Projects** | Save/open `.ceproj` documents in `~/CuttingEdge/projects` (a few KB — media is referenced, never copied), Ctrl+S, unsaved-changes indicator, autosave every 20 s with a restore prompt at launch, and a clear report when media has moved |
-| **Timeline** | Starts empty; clips can never overlap on a lane (a drop lands in the nearest free gap, trims stop at neighbours); dedicated scale bar with zoom out/in and Fit |
+| **Keyframes** | x, y, scale, rotate and volume animate over time; linear between keys in the monitor **and** in the export, markers on the clip |
+| **Beats** | Tempo and beat grid from our own spectral-flux + autocorrelation detector (no new dependency), drawn on the ruler; cut-on-beat splits a clip on the music |
+| **Timeline** | Starts empty; clips can never overlap on a lane; the scale control lives in the timeline's own corner |
 | **Tool rail** | Undo/Redo always visible, then the context-sensitive toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
@@ -28,8 +30,9 @@ Branch: `arena/01a0214a-chat2db` · App version: `0.2.3` · Last released: `v0.2
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
-| Window | Fullscreen via the header button, **F11** to toggle and **Escape** to leave; works in the browser preview too |
-| **Languages** | English default + Persian, switch in Settings, flips LTR/RTL instantly, persisted |
+| **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
+| **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
+| **Languages** | English default + Persian, flips LTR/RTL instantly, persisted |
 | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
 | Auto-update | One button: check → differential download → install; silent check at startup |
 | Diagnostics | electron-log to `%APPDATA%\Cutting Edge\logs`, "open log folder" in the app |
@@ -72,12 +75,12 @@ No Windows machine is needed for anything except packaging.
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` — which measures the exported pixels to prove looks, opacity, grade, transform, rotate, crop, animations, freeze, speed and xfade really land — 61 tests |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — 86 tests |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
 | the same test also guards the layout the user asked for: no scale bar above the timeline, no magnifiers in the transport, the scale control inside the timeline, Ctrl+wheel zoom, the canvas shape, and the home screen's starting cards |
-| the same test also checks the film strip renders decoded frames, the moved tools are in the rail, and no clip tools remain on the home screen |
+| the same test also checks the film strip, the waveform, the beat grid, cut-on-beat, keyframe interpolation, mute vs hide, the docked wordmark, readable toasts, and that the update card / Settings / Diagnostics are reachable from the home screen — 71 checks |
 | `bash ce-app/scripts/sandbox-test-env.sh` | rebuilds the whole headless test environment (venv, ffmpeg, Chromium, test clips) after the sandbox wipes `/tmp` |
 | `ce-app/scripts/smoke-test.ps1` | the **packaged** app: asar entry, relative asset paths, ffmpeg+ffprobe, embeddable Python, live `/api/health` |
 
@@ -121,17 +124,26 @@ gate that stops a broken installer from being published.
    freeze and transitions all looked broken. `editor/preview.ts` is the CSS twin
    of `compose.py` and `PreviewMonitor` stacks two layers so an xfade can be
    cross-faded. Anything CSS cannot do (unsharp, reverse) is named in a badge.
-13. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
+13. **A sidechain that runs out kills the signal.** Automatic ducking uses
+   `sidechaincompress`, and two things about the graph are load-bearing, both
+   found by measurement: the voice must be **split before `apad`** (splitting one
+   already-padded stream starves the compressor), and the key branch is padded
+   **without a limit** (`-t` on the input can end the voice a few samples early,
+   after which the compressor emits silence for the rest of the timeline — the
+   music simply vanished at 4.2 s). Output length still follows the main input.
+   Measured in `tests/test_audio.py` with a 220 Hz bed and a 300 Hz voice, using
+   a bandpass so the bed can be judged inside the finished mix.
+14. **Removing navigation removes features.** Deleting the tab bar in 0.4.1 also
    deleted the only path to Settings — and the update button lives there, so the
    user could not update the app at all. The updater is now a card on the home
    screen (version, check, progress, install) with a gear and a stethoscope next
    to it, there is a Settings tile in the grid, and `playback-test.mjs` asserts
    every one of those is present and actually navigates. **Before removing a
    route from the interface, list what is only reachable through it.**
-14. **A saved project must appear immediately.** The home query cached for five
+15. **A saved project must appear immediately.** The home query cached for five
    seconds, so coming back from the editor after saving showed nothing — which
    looks exactly like a failed save. It now refetches on mount and on focus.
-15. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
+16. **Waveforms and beats are ours, not a dependency's.** `core/engine/audio.py`
    decodes with FFmpeg and does the maths in NumPy: a bucketed min/max envelope
    for the timeline (cached, clamped to 4000 points) and beat detection by
    spectral flux + autocorrelation. librosa would have added numba/scipy for
@@ -140,25 +152,25 @@ gate that stops a broken installer from being published.
    track reads as 75 unless half the winning lag is checked — that correction is
    in the code and in `tests/test_audio.py`, which measures 90/120/150 BPM
    click tracks it synthesises.
-16. **"No audio" and "past the end" are answers, not errors.** A silent video
+17. **"No audio" and "past the end" are answers, not errors.** A silent video
    returns an empty envelope (200) and a thumbnail request beyond the source
    returns the last frame. Both used to 422 and fill the console with failures
    for perfectly normal footage.
-17. **The wordmark is the only chrome.** No Electron menu (`Menu.setApplicationMenu(null)`
+18. **The wordmark is the only chrome.** No Electron menu (`Menu.setApplicationMenu(null)`
    plus `autoHideMenuBar` — that white strip survived fullscreen), no tab bar, no
    heading band, no properties panel, no save bar. The wordmark is a shared
    `layoutId` element: centred on the launcher, docked top-left in a section, and
    it is the way home. Anything that used to live in a bar now lives on the
    launcher.
-18. **Persistence stays even when its UI goes.** `ProjectAutosave` is headless:
+19. **Persistence stays even when its UI goes.** `ProjectAutosave` is headless:
    autosave every 20 s, `Ctrl+S`, and a flush on unload. Unfinished work is
    offered as the first card under "Recent projects" on the home screen — where a
    person looks for it — and every saved project has a delete button.
-19. **A message nobody can read is no message.** Static antd toasts/tooltips render
+20. **A message nobody can read is no message.** Static antd toasts/tooltips render
    outside the theme provider and appeared as blank white shapes; they are styled
    in `global.css` and the browser test asserts the notice's computed background
    is dark.
-20. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
+21. **A keyframe the export cannot reproduce is a lie told twice.** Keyframes exist
    for exactly the five channels FFmpeg can genuinely animate — x, y, scale,
    rotate, volume — built by `keyframe_expression()` in `compose.py` as
    piecewise-linear `if(lt(t,..),..)` chains (commas escaped!). Opacity is
@@ -167,45 +179,45 @@ gate that stops a broken installer from being published.
    to `scale=eval=frame` plus an `overlay` onto a transparent canvas, which is
    the only combination that reproduces "scale about the centre, then translate".
    Static clips keep the old, fast chain — `tests/test_keyframes.py` asserts that.
-21. **Mute silences, hide blanks — never the same switch.** Muting a video lane
+22. **Mute silences, hide blanks — never the same switch.** Muting a video lane
    used to remove it from the monitor (black screen). A lane now has two flags:
    `muted` (audio only, speaker icon) and `hidden` (picture, eye icon), and the
    compositor makes the identical distinction — `tests/test_effects.py` renders
    both cases and measures the frame.
-22. **One React instance.** Adding `framer-motion` to a running dev server
+23. **One React instance.** Adding `framer-motion` to a running dev server
    produced "invalid hook call" from a duplicated React in the optimiser cache
    while `tsc` stayed silent. `vite.config.ts` now sets
    `resolve.dedupe: ['react', 'react-dom']`.
-23. **A toggle must look pressed.** The clip Mute tool worked all along but gave
+24. **A toggle must look pressed.** The clip Mute tool worked all along but gave
    no feedback, so it read as broken. Toggles in the rail now render with an
    active state and confirm with a toast.
-24. **The preview may use a proxy, the export never may.** Import builds a 720p
+25. **The preview may use a proxy, the export never may.** Import builds a 720p
    H.264 copy (keyframe every 15 frames) in a worker thread for anything wider
    than 1280 px; `clip.proxy` is used by `PreviewMonitor` only, and
    `tests/test_proxy.py` asserts the render command still points at the original.
-25. **Centred playhead is a view mode, not a model change.** The marker is pinned
+26. **Centred playhead is a view mode, not a model change.** The marker is pinned
    to the middle and the lane carries half a viewport of padding on both sides, so
    `scrollLeft === playhead * pxPerSecond`. Scroll events set the playhead and the
    playhead sets the scroll — the loop is broken with a `programmatic` flag, not
    with timers. The classic mode is one click away in the timeline corner.
-26. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
+27. **A timeline needs frames.** Clips were flat colour rectangles; they now draw a
    film strip from `GET /api/media/thumb?path&t&h` (one JPEG per frame, cached in
    `~/CuttingEdge/data/thumbs`, times quantised to 0.1 s so zooming reuses the
    cache). Scale is by Ctrl+wheel or a two-finger pinch, anchored under the
    pointer — no slider anywhere, like the phone editors we are compared with.
-27. **Home starts sessions, the rail edits clips.** Catalogue entries carry
+28. **Home starts sessions, the rail edits clips.** Catalogue entries carry
    `place: 'editor'`; those tiles are gone from the home screen and appear in the
    editor's global tool rail instead (captions and silence removal run in place,
    the rest open their own screen).
-28. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
+29. **The monitor is the canvas, not a 16:9 box.** A phone video used to appear as
    a thin strip between black walls; the stage now takes the project ratio
    (`aspect`, default `auto` = the first video clip's real pixel size) and the
    export dialog opens on the matching format. Clips carry `width`/`height` from
    the probe for this.
-29. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
+30. **Advertised shortcuts must exist.** The buttons said "Delete", "S", "Ctrl+Z"
    while nothing listened for a key; Studio now owns one `keydown` handler and
    skips inputs, textareas and modals.
-30. **Panels the timeline can open.** The tool rail's open panel lives in the store
+31. **Panels the timeline can open.** The tool rail's open panel lives in the store
    (`panel` / `setPanel`), because the junction diamond between two clips must open
    the transition chooser. Local `useState` inside the toolbar made that impossible.
 
@@ -257,12 +269,12 @@ freesound-python, apscheduler.
    (~479 MB → ~120 MB). Delta updates are verified working (< 50 MB per update on
    the user's machine), so this is measurable — re-check that number right after.
 2. Real MediaPipe face tracking for auto-reframe (currently centre-crop).
-3. Automatic ducking (Demucs stems + sidechaincompress) — the other half of the
-   music workflow now that beats exist.
-4. YouTube publishing (google-api-python-client, Apache-2.0).
+3. YouTube publishing (google-api-python-client, Apache-2.0).
 5. Template gallery, title animation pack, sound-effect pack (freesound, MIT client).
 
 Done in 0.3.8: centred playhead, 720p editing proxies, ripple/roll/slip trims.
+Done in 0.4.4: automatic ducking — mark a music bed and it steps aside for the
+voice on every word (sidechain compression in the export, approximated live).
 Done in 0.4.3: the update card on the home screen (regression fix — 0.4.1 made
 updating unreachable), Settings and Diagnostics reachable again, projects list
 refreshes on arrival.

@@ -123,6 +123,24 @@ export default function PreviewMonitor() {
     // Lane mute and clip mute are both honoured here, and only here: silence is
     // an audio decision, never a reason to stop drawing the frame.
     if (props.muted || tracks.find((track) => track.id === clip.trackId)?.muted) return 0
+
+    // Ducking, approximated: while any non-ducked clip with sound is playing,
+    // a ducked bed steps back. The export does this properly with a sidechain
+    // compressor; the monitor only has to be honest about the direction.
+    if (props.duck) {
+      const voicePlaying = clips.some(
+        (other) =>
+          other.id !== clip.id &&
+          other.src &&
+          !propsOf(other).duck &&
+          !propsOf(other).muted &&
+          !tracks.find((track) => track.id === other.trackId)?.muted &&
+          tracks.find((track) => track.id === other.trackId)?.kind !== 'text' &&
+          playhead >= other.start &&
+          playhead < other.start + other.duration
+      )
+      if (voicePlaying) return props.volume * 0.3
+    }
     // Honour the clip's own audio fades, like the export does.
     const local = playhead - clip.start
     let gain = sampleChannel(clip, 'volume', local) ?? props.volume

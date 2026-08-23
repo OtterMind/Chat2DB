@@ -741,6 +741,44 @@ if (args.beat ?? process.env.CE_TEST_BEAT) {
   else bad('cutting on the beat left a gap', JSON.stringify(cut))
 }
 
+/* 11f4 — ducking in the monitor --------------------------------------------- */
+if (args.beat ?? process.env.CE_TEST_BEAT) {
+  const duck = await page.evaluate(() => (window.__pending = (async () => {
+    const S = () => window.__ceEditor.getState()
+    const music = S().clips.find((c) => c.label === 'music')
+    const voice = S().clips.find((c) => c.trackId === 'v1')
+    if (!music || !voice) return { skipped: true }
+
+    const settle = () => new Promise((r) => setTimeout(r, 450))
+    const level = () => document.querySelector('audio')?.volume ?? -1
+
+    // Playhead where both the bed and the picture's sound are running.
+    S().setPlayhead(1)
+    await settle()
+    const before = level()
+
+    S().setProps(music.id, { duck: true })
+    await settle()
+    const ducked = level()
+
+    // …and past the end of *all* the picture clips (cut-on-beat split it into
+    // many pieces earlier) the bed comes back.
+    const lastVoiceEnd = Math.max(
+      ...S().clips.filter((c) => c.trackId === 'v1').map((c) => c.start + c.duration)
+    )
+    S().setPlayhead(lastVoiceEnd + 0.5)
+    await settle()
+    const recovered = level()
+    S().setProps(music.id, { duck: false })
+    return { before, ducked, recovered }
+  })()))
+  if (duck.skipped) bad('the ducking check could not find its clips')
+  else if (duck.ducked < duck.before * 0.6) ok(`the bed steps back in the monitor (${duck.before.toFixed(2)} → ${duck.ducked.toFixed(2)})`)
+  else bad('ducking does nothing in the monitor', JSON.stringify(duck))
+  if (!duck.skipped && duck.recovered > duck.ducked * 1.5) ok('the bed returns when the voice stops')
+  else if (!duck.skipped) bad('the bed stayed down after the voice', JSON.stringify(duck))
+}
+
 /* 11g — mute is sound, hide is picture -------------------------------------- */
 const mute = await page.evaluate(() => (window.__pending = (async () => {
   const store = window.__ceEditor
