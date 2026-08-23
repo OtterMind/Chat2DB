@@ -274,6 +274,18 @@ same video". Licence notes: OCR (PaddleOCR/EasyOCR/Tesseract) and OpenCV and Med
 are Apache-2.0, TransNetV2 is MIT; **ultralytics is AGPL and ImageBind is CC-BY-NC** —
 both unusable here.
 
+## 5e. The brain: Whisper + Ollama
+
+`docs/CuttingEdge/BRAIN_DESIGN.md`. The division of labour that must not be blurred:
+**signal processing measures, Whisper transcribes, the LLM judges, arithmetic decides.**
+An LLM cannot see the video, so it is never asked how many shots or what tempo — it is
+asked which moments tell a story and what the caption should say. Candidate plans (rule
+planner, Ollama planner, optionally a second model) are scored by one objective function
+— duration fit, speech integrity, on-beat cuts, silence avoided, highlight strength,
+variety, shot-length match — and the best wins. The rule plan is always a candidate, so a
+bad LLM answer can never be worse than offline. Whisper gets a second pass only when its
+own confidence is low.
+
 ## 6. Next, in order
 
 1. Slim the installer: fetch the Python runtime and models on first launch
