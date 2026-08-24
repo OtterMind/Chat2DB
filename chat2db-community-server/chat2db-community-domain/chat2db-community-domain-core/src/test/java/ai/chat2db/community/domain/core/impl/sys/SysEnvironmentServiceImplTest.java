@@ -15,7 +15,7 @@ class SysEnvironmentServiceImplTest {
 
         assertEquals(List.of("TEST", "DEV", "RELEASE"),
                 environments.stream().map(Environment::getName).toList());
-        assertEquals(List.of(2L, 3L, 1L),
+        assertEquals(List.of(1L, 3L, 2L),
                 environments.stream().map(Environment::getId).toList());
     }
 }

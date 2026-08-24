@@ -10,14 +10,14 @@ import java.util.List;
 public class SysEnvironmentServiceImpl implements ISysEnvironmentService {
 
     private static final Environment TEST = Environment.builder()
-            .id(2L)
+            .id(1L)
             .name("TEST")
             .shortName("Test Environment")
             .color("GREEN")
             .build();
 
     private static final Environment RELEASE = Environment.builder()
-            .id(1L)
+            .id(2L)
             .name("RELEASE")
             .shortName("Release Environment")
             .color("RED")
