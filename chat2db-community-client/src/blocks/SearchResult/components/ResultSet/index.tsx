@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStyles } from './style';
-import ResultSetToolbar, { ResultSetToolbarRef, ToolbarOperationType } from '../ResultSetToolbar';
+import ResultSetToolbar, { ToolbarOperationType } from '../ResultSetToolbar';
+import { resolveResultPaging, ResultPaging } from './pagination';
 import ScreeningResult, { IScreeningResultRef } from '../ScreeningResult';
 import FESearch, { FESearchRef } from '../FESearch';
 import ResultSetTable, { IResultSetSelection, ResultSetTableRef } from '../ResultSetTable';
@@ -74,7 +75,7 @@ export default memo<IProps>(
     const { styles, cx } = useStyles();
     const { executeSQL, stopExecuteSQL, executing, canExecuteSQL } = useSqlExecutor();
     const [resultData, setResultData] = useState<IManageResultData>(props.resultData);
-    const resultSetToolbarRef = useRef<ResultSetToolbarRef>(null);
+    const executeRequestSequenceRef = useRef(0);
     const screenResultRef = useRef<IScreeningResultRef>(null);
     const resultSetTableRef = useRef<ResultSetTableRef>(null);
     const [hasOperationRecord, setHasOperationRecord] = useState(false);
@@ -227,26 +228,24 @@ export default memo<IProps>(
 
     // Only resultData changes here. Database metadata is stable, and the toolbar controls pagination.
     const handleExecuteSQL = useCallback(
-      ({ pageNo: _pageNo }: { pageNo?: number } = {}) => {
+      (pagingOverride?: Partial<ResultPaging>) => {
         if (!canExecuteSQL()) return;
         // Clear operation records
         resultSetTableRef.current?.operationRecordUtils?.clearOperationRecord?.();
-        // Do not execute before the result toolbar is mounted.
-        if (!resultSetToolbarRef.current) return;
         // If there is no executeSqlParams, the execution information is not known, and no execution is performed.
         if (!resultData.executeSqlParams) return;
-        // Get the current paging
-        const { pageNo, pageSize } = resultSetToolbarRef.current.getPagingParams();
+        const paging = resolveResultPaging(resultData.executeSqlParams, pagingOverride);
         const executeSqlParams = {
           ...resultData.executeSqlParams,
-          pageSize,
-          pageNo: _pageNo || pageNo,
+          ...paging,
         };
         // Filter conditions when viewing tables
         if (viewTable) {
           executeSqlParams.sql = screenResultRef.current?.getJointSQL() || '';
         }
+        const requestSequence = ++executeRequestSequenceRef.current;
         executeSQL(executeSqlParams).then((data) => {
+          if (requestSequence !== executeRequestSequenceRef.current) return;
           setExecuteErrorMessage(null);
           if (data.length) {
             const curResult = data.filter((item) => item.resultSetId === executeSqlParams.resultSetId)?.[0];
@@ -254,7 +253,7 @@ export default memo<IProps>(
               setResultData({
                 ...curResult,
                 executeSqlParams: {
-                  ...resultData.executeSqlParams,
+                  ...executeSqlParams,
                   sql: curResult.originalSql,
                 },
               });
@@ -382,11 +381,11 @@ export default memo<IProps>(
       });
     };
 
-    const handleToolbarOperation = (type: ToolbarOperationType) => {
+    const handleToolbarOperation = (type: ToolbarOperationType, paging?: ResultPaging) => {
       switch (type) {
         // execute SQL
         case ToolbarOperationType.EXECUTE_SQL:
-          handleExecuteSQL();
+          handleExecuteSQL(paging);
           break;
         // Add blank line
         case ToolbarOperationType.ADD_BLANK_ROW:
@@ -807,7 +806,6 @@ export default memo<IProps>(
           )}
           <>
             <ResultSetToolbar
-              ref={resultSetToolbarRef}
               handleToolbarOperation={handleToolbarOperation}
               hasOperationRecord={hasOperationRecord}
               resultData={resultData}
