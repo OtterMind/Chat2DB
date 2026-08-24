@@ -104,6 +104,37 @@ class GitHubReleaseDesktopUpdaterTest {
         assertTrue(result.checkFailed());
     }
 
+    @Test
+    void recordsCheckDownloadArmAndHandoffInOneOperationLog() throws Exception {
+        Path auditRoot = tempDirectory.resolve("audit");
+        UpdateAuditLog auditLog = new UpdateAuditLog(auditRoot, path -> true);
+        FakeRuntime runtime = new FakeRuntime(tempDirectory, Optional.of(release("5.3.5")));
+        GitHubReleaseDesktopUpdater updater = new GitHubReleaseDesktopUpdater(
+                runtime,
+                (progress, status, result) -> {
+                },
+                true,
+                auditLog
+        );
+
+        assertTrue(updater.appCheckUpdate().needsUpdate());
+        assertTrue(updater.triggerDownload(new ConsoleResult()));
+        assertTrue(updater.triggerInstallation());
+        assertTrue(updater.prepareRestart());
+
+        Path operationLog;
+        try (var directories = Files.list(auditRoot)) {
+            operationLog = directories.filter(Files::isDirectory).findFirst().orElseThrow().resolve("update.log");
+        }
+        String log = Files.readString(operationLog);
+        assertTrue(log.contains("stage=CHECK"));
+        assertTrue(log.contains("stage=RELEASE"));
+        assertTrue(log.contains("stage=DOWNLOAD"));
+        assertTrue(log.contains("stage=INSTALL_ARM"));
+        assertTrue(log.contains("stage=HANDOFF"));
+        assertTrue(log.contains("5.3.4 -> 5.3.5"));
+    }
+
     private static ReleaseInstaller release(String version) {
         String name = "Chat2DB-Community-" + version + ".msi";
         return new ReleaseInstaller(

@@ -3,6 +3,7 @@ package ai.chat2db.community.jcef.update;
 import ai.chat2db.community.jcef.update.GitHubReleaseDesktopUpdater.InstallerKind;
 import ai.chat2db.community.jcef.update.GitHubReleaseDesktopUpdater.ReleaseInstaller;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -176,8 +177,17 @@ class GitHubReleaseUpdateRuntimeTest {
         assertTrue(powerShell.contains("Wait-Process -Id 42"));
         assertTrue(powerShell.contains("msiexec.exe"));
         assertTrue(powerShell.contains("System32\\msiexec.exe"));
+        assertTrue(powerShell.contains("/L*v"));
+        assertTrue(powerShell.contains("native-installer.log"));
+        assertTrue(powerShell.contains("Write-Audit"));
+        assertTrue(powerShell.contains("Write-Result"));
         assertTrue(powerShell.contains("/passive /norestart"));
-        assertTrue(powerShell.contains("catch{exit 1}"));
+        assertTrue(powerShell.contains("stage='INSTALL_MSI'"));
+        assertTrue(powerShell.indexOf("try{$msiexec=") < powerShell.indexOf("System MSI installer is unavailable"));
+        assertEquals(
+                powerShell.chars().filter(character -> character == '{').count(),
+                powerShell.chars().filter(character -> character == '}').count()
+        );
 
         Path macApp = Path.of(System.getProperty("user.home"), "Applications", "Chat2DB Community.app", "Contents", "app");
         ReleaseInstaller macRelease = release(InstallerKind.MAC_DMG, "Chat2DB-Community-5.3.5-arm64.dmg");
@@ -190,6 +200,8 @@ class GitHubReleaseUpdateRuntimeTest {
         );
         assertTrue(mac.get(2).contains("hdiutil attach"));
         assertTrue(mac.get(2).contains("administrator privileges"));
+        assertTrue(mac.get(2).contains("stage=\"VERIFY_SIGNATURE\""));
+        assertTrue(mac.get(2).contains("write_result \"FAILED\""));
         assertFalse(mac.get(2).contains("recover"));
         assertFalse(mac.get(2).contains("backup"));
         assertEquals("43", mac.get(4));
@@ -204,8 +216,160 @@ class GitHubReleaseUpdateRuntimeTest {
                 Map.of("APPIMAGE", tempDirectory.resolve("current.AppImage").toString())
         );
         assertTrue(appImage.get(2).contains("chmod 0755"));
+        assertTrue(appImage.get(2).contains("stage=\"STAGE_COPY\""));
+        assertTrue(appImage.get(2).contains("write_result \"FAILED\""));
         assertFalse(appImage.get(2).contains("recover"));
         assertEquals("44", appImage.get(4));
+    }
+
+    @Test
+    void nativePosixInstallerScriptsPassShellSyntaxValidation() throws Exception {
+        Path macApp = Path.of(
+                System.getProperty("user.home"),
+                "Applications",
+                "Chat2DB Community.app",
+                "Contents",
+                "app"
+        );
+        List<List<String>> commands = List.of(
+                GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                        release(InstallerKind.MAC_DMG, "Chat2DB-Community-5.3.5-arm64.dmg"),
+                        tempDirectory.resolve("installer.dmg"),
+                        100L,
+                        macApp,
+                        Map.of()
+                ),
+                GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                        release(InstallerKind.LINUX_APPIMAGE, "Chat2DB-Community-5.3.5-x86_64.AppImage"),
+                        tempDirectory.resolve("installer.AppImage"),
+                        101L,
+                        tempDirectory,
+                        Map.of("APPIMAGE", tempDirectory.resolve("current.AppImage").toString())
+                ),
+                GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                        release(InstallerKind.LINUX_DEB, "Chat2DB-Community-5.3.5-amd64.deb"),
+                        tempDirectory.resolve("installer.deb"),
+                        102L,
+                        tempDirectory,
+                        Map.of()
+                )
+        );
+
+        for (int index = 0; index < commands.size(); index++) {
+            Path script = tempDirectory.resolve("installer-" + index + ".sh");
+            Files.writeString(script, commands.get(index).get(2));
+            Process process = new ProcessBuilder("/bin/sh", "-n", script.toString()).start();
+            assertEquals(0, process.waitFor(), "invalid shell syntax in " + script);
+        }
+    }
+
+    @Test
+    void appImageScriptPersistsSuccessfulNativeResult() throws Exception {
+        Path operationDirectory = tempDirectory.resolve("appimage-success");
+        Files.createDirectories(operationDirectory);
+        Path installer = operationDirectory.resolve("new.AppImage");
+        Path destination = operationDirectory.resolve("current.AppImage");
+        Path logFile = operationDirectory.resolve("update.log");
+        Path resultFile = operationDirectory.resolve("latest-result.properties");
+        Files.writeString(installer, "#!/bin/sh\nexit 0\n");
+        UpdateAuditLog.NativeContext context = nativeContext(operationDirectory, logFile, resultFile);
+        List<String> command = GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                release(InstallerKind.LINUX_APPIMAGE, "Chat2DB-Community-5.3.5-x86_64.AppImage"),
+                installer,
+                999_999L,
+                operationDirectory,
+                Map.of("APPIMAGE", destination.toString()),
+                context
+        );
+
+        Process process = new ProcessBuilder(command)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .redirectError(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .start();
+
+        assertEquals(0, process.waitFor());
+        String result = Files.readString(resultFile);
+        assertTrue(result.contains("status=SUCCESS"));
+        assertTrue(result.contains("stage=COMPLETE"));
+        String log = Files.readString(logFile);
+        assertTrue(log.contains("stage=STAGE_COPY"));
+        assertTrue(log.contains("stage=ACTIVATE_NEW_APP"));
+        assertTrue(log.contains("completed successfully"));
+        assertTrue(Files.isExecutable(destination));
+    }
+
+    @Test
+    void appImageScriptPersistsFailureStageAndExitCode() throws Exception {
+        Path operationDirectory = tempDirectory.resolve("appimage-failure");
+        Files.createDirectories(operationDirectory);
+        Path missingInstaller = operationDirectory.resolve("missing.AppImage");
+        Path destination = operationDirectory.resolve("current.AppImage");
+        Path logFile = operationDirectory.resolve("update.log");
+        Path resultFile = operationDirectory.resolve("latest-result.properties");
+        UpdateAuditLog.NativeContext context = nativeContext(operationDirectory, logFile, resultFile);
+        List<String> command = GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                release(InstallerKind.LINUX_APPIMAGE, "Chat2DB-Community-5.3.5-x86_64.AppImage"),
+                missingInstaller,
+                999_998L,
+                operationDirectory,
+                Map.of("APPIMAGE", destination.toString()),
+                context
+        );
+
+        Process process = new ProcessBuilder(command)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .redirectError(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .start();
+
+        assertTrue(process.waitFor() != 0);
+        String result = Files.readString(resultFile);
+        assertTrue(result.contains("status=FAILED"));
+        assertTrue(result.contains("stage=STAGE_COPY"));
+        assertTrue(result.matches("(?s).*exitCode=[1-9][0-9]*.*"));
+        String log = Files.readString(logFile);
+        assertTrue(log.contains("stage=STAGE_COPY"));
+        assertTrue(log.contains("AppImage installation failed"));
+    }
+
+    @Test
+    void macScriptPersistsDmgAttachFailureAndNativeError() throws Exception {
+        Assumptions.assumeTrue(System.getProperty("os.name", "").toLowerCase().contains("mac"));
+        Path operationDirectory = tempDirectory.resolve("mac-failure");
+        Files.createDirectories(operationDirectory);
+        Path missingInstaller = operationDirectory.resolve("missing.dmg");
+        Path logFile = operationDirectory.resolve("update.log");
+        Path resultFile = operationDirectory.resolve("latest-result.properties");
+        UpdateAuditLog.NativeContext context = nativeContext(operationDirectory, logFile, resultFile);
+        Path macApp = Path.of(
+                System.getProperty("user.home"),
+                "Applications",
+                "Chat2DB Community.app",
+                "Contents",
+                "app"
+        );
+        List<String> command = GitHubReleaseUpdateRuntime.buildInstallerCommand(
+                release(InstallerKind.MAC_DMG, "Chat2DB-Community-5.3.5-arm64.dmg"),
+                missingInstaller,
+                999_997L,
+                macApp,
+                Map.of(),
+                context
+        );
+
+        Process process = new ProcessBuilder(command)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .redirectError(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                .start();
+
+        assertTrue(process.waitFor() != 0);
+        String result = Files.readString(resultFile);
+        assertTrue(result.contains("status=FAILED"));
+        assertTrue(result.contains("stage=ATTACH_DMG"));
+        assertTrue(result.matches("(?s).*exitCode=[1-9][0-9]*.*"));
+        String log = Files.readString(logFile);
+        assertTrue(log.contains("stage=ATTACH_DMG"));
+        assertTrue(log.contains("native installation failed"));
+        assertTrue(log.contains("hdiutil:"));
     }
 
     @Test
@@ -219,7 +383,7 @@ class GitHubReleaseUpdateRuntimeTest {
                 appDirectory,
                 new GitHubReleaseUpdateRuntime.Platform(InstallerKind.WINDOWS_MSI, ""),
                 Map.of(),
-                command -> {
+                (command, logFile) -> {
                 },
                 tempDirectory.resolve("downloads")
         );
@@ -247,6 +411,12 @@ class GitHubReleaseUpdateRuntimeTest {
         assertFalse(GitHubReleaseUpdateRuntime.isAllowedDownloadResponse(
                 URI.create("https://github.com/file.msi#fragment")
         ));
+        assertEquals(
+                "https://release-assets.githubusercontent.com/assets/file",
+                GitHubReleaseUpdateRuntime.auditUri(
+                        URI.create("https://release-assets.githubusercontent.com/assets/file?token=secret")
+                )
+        );
     }
 
     @Test
@@ -265,6 +435,21 @@ class GitHubReleaseUpdateRuntimeTest {
                 1L,
                 DIGEST,
                 kind
+        );
+    }
+
+    private static UpdateAuditLog.NativeContext nativeContext(
+            Path operationDirectory,
+            Path logFile,
+            Path resultFile
+    ) {
+        return new UpdateAuditLog.NativeContext(
+                operationDirectory.getFileName().toString(),
+                logFile,
+                operationDirectory.resolve("native-installer.log"),
+                resultFile,
+                "5.3.4",
+                "5.3.5"
         );
     }
 

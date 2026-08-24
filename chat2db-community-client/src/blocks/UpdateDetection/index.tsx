@@ -6,7 +6,7 @@ import jcefApi from '@/jcef';
 import { JavaPushActionType, JcefEventBus } from '@/jcef/eventBus';
 import { useGlobalStore } from '@/store/global';
 import { openWebPage } from '@/utils/url';
-import { Icon, staticMessage } from '@chat2db/ui';
+import { Icon } from '@chat2db/ui';
 import { Button, notification } from 'antd';
 import { useEffect } from 'react';
 import { useStyles } from './style';
@@ -127,7 +127,7 @@ const UpdateDetection = () => {
         openNotificationAuto();
         break;
       case UpdatedStatus.UpdateFailed:
-        staticMessage.error(i18n('common.text.failure'));
+        openUpdateFailedNotification();
         break;
       default:
         break;
@@ -164,6 +164,27 @@ const UpdateDetection = () => {
         </div>
       ),
       description: btn,
+      key,
+    });
+  };
+
+  const openUpdateFailedNotification = () => {
+    const key = 'update-operation-failed';
+    notificationApi.error({
+      className: styles.notification,
+      duration: null,
+      message: i18n('common.text.failure'),
+      description: (
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            jcefApi.openUpdateRecoveryLog().catch(() => undefined);
+          }}
+        >
+          {i18n('setting.button.openUpdateLog')}
+        </Button>
+      ),
       key,
     });
   };

@@ -38,7 +38,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
 
     @FunctionalInterface
     interface ProcessStarter {
-        void start(List<String> command) throws IOException;
+        void start(List<String> command, Path logFile) throws IOException;
     }
 
     record Platform(InstallerKind kind, String assetArchitecture) {
@@ -75,26 +75,89 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             parent_pid="$1"
             installer="$2"
             destination="$3"
+            result_file="$4"
+            from_version="$5"
+            to_version="$6"
+            operation_id="$7"
+            log_file="$8"
             set -e
-            while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
-            mount_point=$(/usr/bin/mktemp -d "/tmp/chat2db-community-update.XXXXXX")
-            cleanup() {
-              /usr/bin/hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
-              /bin/rm -rf "$mount_point"
+            stage="WAIT_PARENT"
+            mount_point=""
+            audit() {
+              /usr/bin/printf '%s level=%s stage=%s operation=%s %s\n' \
+                "$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" "$stage" "$operation_id" "$2"
             }
-            trap cleanup EXIT INT TERM
+            write_result() {
+              result_status="$1"
+              result_exit_code="$2"
+              result_reason="$3"
+              result_temp="${result_file}.tmp-${operation_id}"
+              {
+                /usr/bin/printf 'status=%s\n' "$result_status"
+                /usr/bin/printf 'stage=%s\n' "$stage"
+                /usr/bin/printf 'exitCode=%s\n' "$result_exit_code"
+                /usr/bin/printf 'reason=%s\n' "$result_reason"
+                /usr/bin/printf 'operationId=%s\n' "$operation_id"
+                /usr/bin/printf 'fromVersion=%s\n' "$from_version"
+                /usr/bin/printf 'toVersion=%s\n' "$to_version"
+                /usr/bin/printf 'logPath=%s\n' "$log_file"
+              } > "$result_temp"
+              /bin/mv -f "$result_temp" "$result_file"
+            }
+            cleanup() {
+              if test -n "$mount_point"; then
+                /usr/bin/hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
+                /bin/rm -rf "$mount_point"
+                mount_point=""
+              fi
+            }
+            finish() {
+              exit_code=$?
+              trap - EXIT
+              cleanup
+              if test "$exit_code" -eq 0; then
+                write_result "SUCCESS" "0" ""
+              else
+                audit "ERROR" "native installation failed exitCode=${exit_code}"
+                write_result "FAILED" "$exit_code" "native command failed; see update.log"
+              fi
+              exit "$exit_code"
+            }
+            trap finish EXIT
+            trap 'exit 130' INT TERM
+            audit "INFO" "waiting for application process pid=${parent_pid}"
+            while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
+            audit "INFO" "application process exited"
+            stage="CREATE_MOUNT"
+            audit "INFO" "creating temporary mount directory"
+            mount_point=$(/usr/bin/mktemp -d "/tmp/chat2db-community-update.XXXXXX")
+            stage="ATTACH_DMG"
+            audit "INFO" "attaching installer=${installer} mountPoint=${mount_point}"
             /usr/bin/hdiutil attach "$installer" -readonly -nobrowse -mountpoint "$mount_point" >/dev/null
             source_app="$mount_point/Chat2DB Community.app"
+            stage="LOCATE_SOURCE_APP"
+            audit "INFO" "checking source application path=${source_app}"
             test -d "$source_app"
+            stage="VERIFY_SIGNATURE"
+            audit "INFO" "verifying source application signature"
             /usr/bin/codesign --verify --deep --strict "$source_app"
+            audit "INFO" "source application signature verification passed"
             parent_dir=$(/usr/bin/dirname "$destination")
-            staged="${destination}.update-${parent_pid}"
+            staged="${destination}.update-${operation_id}"
             if test -w "$parent_dir"; then
+              stage="STAGE_COPY"
+              audit "INFO" "copying source application to staging path=${staged}"
               /bin/rm -rf "$staged"
               /usr/bin/ditto "$source_app" "$staged"
+              stage="REMOVE_CURRENT_APP"
+              audit "INFO" "removing current application path=${destination}"
               /bin/rm -rf "$destination"
+              stage="ACTIVATE_NEW_APP"
+              audit "INFO" "activating staged application"
               /bin/mv "$staged" "$destination"
             else
+              stage="ELEVATED_REPLACE"
+              audit "INFO" "requesting administrator privileges for application replacement"
               /usr/bin/osascript \
                 -e 'on run argv' \
                 -e 'set sourcePath to item 1 of argv' \
@@ -104,25 +167,82 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 -e 'end run' \
                 "$source_app" "$destination"
             fi
+            stage="DETACH_DMG"
+            audit "INFO" "detaching installer image"
             cleanup
-            trap - EXIT INT TERM
+            stage="REMOVE_INSTALLER"
+            audit "INFO" "removing downloaded installer"
             /bin/rm -f "$installer"
-            exec /usr/bin/open -n "$destination"
+            stage="LAUNCH_APPLICATION"
+            audit "INFO" "launching updated application path=${destination}"
+            /usr/bin/open -n "$destination"
+            stage="COMPLETE"
+            audit "INFO" "native installation completed successfully"
             """;
 
     private static final String LINUX_APPIMAGE_INSTALL_SCRIPT = """
             parent_pid="$1"
             installer="$2"
             destination="$3"
+            result_file="$4"
+            from_version="$5"
+            to_version="$6"
+            operation_id="$7"
+            log_file="$8"
             set -e
+            stage="WAIT_PARENT"
+            audit() {
+              /usr/bin/printf '%s level=%s stage=%s operation=%s %s\n' \
+                "$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" "$stage" "$operation_id" "$2"
+            }
+            write_result() {
+              result_temp="${result_file}.tmp-${operation_id}"
+              {
+                /usr/bin/printf 'status=%s\n' "$1"
+                /usr/bin/printf 'stage=%s\n' "$stage"
+                /usr/bin/printf 'exitCode=%s\n' "$2"
+                /usr/bin/printf 'reason=%s\n' "$3"
+                /usr/bin/printf 'operationId=%s\n' "$operation_id"
+                /usr/bin/printf 'fromVersion=%s\n' "$from_version"
+                /usr/bin/printf 'toVersion=%s\n' "$to_version"
+                /usr/bin/printf 'logPath=%s\n' "$log_file"
+              } > "$result_temp"
+              /bin/mv -f "$result_temp" "$result_file"
+            }
+            finish() {
+              exit_code=$?
+              trap - EXIT
+              if test "$exit_code" -eq 0; then
+                write_result "SUCCESS" "0" ""
+              else
+                audit "ERROR" "AppImage installation failed exitCode=${exit_code}"
+                write_result "FAILED" "$exit_code" "native command failed; see update.log"
+              fi
+              exit "$exit_code"
+            }
+            trap finish EXIT
+            trap 'exit 130' INT TERM
+            audit "INFO" "waiting for application process pid=${parent_pid}"
             while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
-            staged="${destination}.update-${parent_pid}"
+            audit "INFO" "application process exited"
+            staged="${destination}.update-${operation_id}"
+            stage="STAGE_COPY"
+            audit "INFO" "copying AppImage to staging path=${staged}"
             /bin/cp "$installer" "$staged"
+            stage="MAKE_EXECUTABLE"
+            audit "INFO" "marking staged AppImage executable"
             /bin/chmod 0755 "$staged"
+            stage="ACTIVATE_NEW_APP"
+            audit "INFO" "activating staged AppImage destination=${destination}"
             /bin/mv -f "$staged" "$destination"
+            stage="REMOVE_INSTALLER"
+            audit "INFO" "removing downloaded installer"
             /bin/rm -f "$installer"
-            trap - EXIT INT TERM
-            exec "$destination"
+            stage="LAUNCH_APPLICATION"
+            audit "INFO" "launching updated AppImage"
+            "$destination" >/dev/null 2>&1 &
+            stage="COMPLETE"
+            audit "INFO" "AppImage installation completed successfully"
             """;
 
     private static final String LINUX_PACKAGE_INSTALL_SCRIPT = """
@@ -130,15 +250,68 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             installer="$2"
             package_kind="$3"
             launcher="$4"
+            result_file="$5"
+            from_version="$6"
+            to_version="$7"
+            operation_id="$8"
+            log_file="$9"
             set -e
+            stage="WAIT_PARENT"
+            audit() {
+              /usr/bin/printf '%s level=%s stage=%s operation=%s %s\n' \
+                "$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" "$stage" "$operation_id" "$2"
+            }
+            write_result() {
+              result_temp="${result_file}.tmp-${operation_id}"
+              {
+                /usr/bin/printf 'status=%s\n' "$1"
+                /usr/bin/printf 'stage=%s\n' "$stage"
+                /usr/bin/printf 'exitCode=%s\n' "$2"
+                /usr/bin/printf 'reason=%s\n' "$3"
+                /usr/bin/printf 'operationId=%s\n' "$operation_id"
+                /usr/bin/printf 'fromVersion=%s\n' "$from_version"
+                /usr/bin/printf 'toVersion=%s\n' "$to_version"
+                /usr/bin/printf 'logPath=%s\n' "$log_file"
+              } > "$result_temp"
+              /bin/mv -f "$result_temp" "$result_file"
+            }
+            finish() {
+              exit_code=$?
+              trap - EXIT
+              if test "$exit_code" -eq 0; then
+                write_result "SUCCESS" "0" ""
+              else
+                audit "ERROR" "package installation failed exitCode=${exit_code} packageKind=${package_kind}"
+                write_result "FAILED" "$exit_code" "native package manager failed; see update.log"
+              fi
+              exit "$exit_code"
+            }
+            trap finish EXIT
+            trap 'exit 130' INT TERM
+            audit "INFO" "waiting for application process pid=${parent_pid}"
             while kill -0 "$parent_pid" 2>/dev/null; do sleep 0.1; done
+            audit "INFO" "application process exited"
             if test "$package_kind" = "deb"; then
+              stage="INSTALL_DEB"
+              audit "INFO" "starting privileged dpkg installation installer=${installer}"
               /usr/bin/pkexec /usr/bin/dpkg -i "$installer"
             else
+              stage="INSTALL_RPM"
+              audit "INFO" "starting privileged rpm installation installer=${installer}"
               /usr/bin/pkexec /usr/bin/rpm -U --replacepkgs "$installer"
             fi
+            stage="REMOVE_INSTALLER"
+            audit "INFO" "removing downloaded installer"
             /bin/rm -f "$installer"
-            if test -x "$launcher"; then exec "$launcher"; fi
+            stage="LAUNCH_APPLICATION"
+            if test -x "$launcher"; then
+              audit "INFO" "launching updated application path=${launcher}"
+              "$launcher" >/dev/null 2>&1 &
+            else
+              audit "WARN" "updated application launcher was not found path=${launcher}"
+            fi
+            stage="COMPLETE"
+            audit "INFO" "package installation completed successfully"
             """;
 
     private final HttpClient httpClient;
@@ -148,8 +321,9 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
     private final Map<String, String> environment;
     private final ProcessStarter processStarter;
     private final Path downloadRoot;
+    private final UpdateAuditLog auditLog;
 
-    GitHubReleaseUpdateRuntime() {
+    GitHubReleaseUpdateRuntime(UpdateAuditLog auditLog) {
         this(
                 HttpClient.newBuilder()
                         .followRedirects(HttpClient.Redirect.NEVER)
@@ -164,8 +338,12 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                         Files::exists
                 ),
                 System.getenv(),
-                command -> new ProcessBuilder(command).start(),
-                createDownloadRoot()
+                (command, logFile) -> new ProcessBuilder(command)
+                        .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                        .redirectError(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+                        .start(),
+                createDownloadRoot(),
+                auditLog
         );
     }
 
@@ -178,6 +356,28 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             ProcessStarter processStarter,
             Path downloadRoot
     ) {
+        this(
+                httpClient,
+                objectMapper,
+                appDirectory,
+                platform,
+                environment,
+                processStarter,
+                downloadRoot,
+                UpdateAuditLog.disabled()
+        );
+    }
+
+    GitHubReleaseUpdateRuntime(
+            HttpClient httpClient,
+            ObjectMapper objectMapper,
+            Path appDirectory,
+            Platform platform,
+            Map<String, String> environment,
+            ProcessStarter processStarter,
+            Path downloadRoot,
+            UpdateAuditLog auditLog
+    ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appDirectory = appDirectory.toAbsolutePath().normalize();
@@ -185,6 +385,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         this.environment = Map.copyOf(environment);
         this.processStarter = processStarter;
         this.downloadRoot = downloadRoot.toAbsolutePath().normalize();
+        this.auditLog = auditLog;
     }
 
     @Override
@@ -202,6 +403,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
 
     @Override
     public Optional<ReleaseInstaller> findLatest(String currentVersion) throws Exception {
+        auditLog.info("RELEASE_REQUEST", "GET " + LATEST_RELEASE_API);
         HttpRequest request = HttpRequest.newBuilder(LATEST_RELEASE_API)
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/vnd.github+json")
@@ -210,10 +412,16 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 .build();
         HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         try (InputStream input = response.body()) {
+            auditLog.info(
+                    "RELEASE_RESPONSE",
+                    "status=" + response.statusCode() + " uri=" + response.uri()
+            );
             if (response.statusCode() != 200 || !LATEST_RELEASE_API.equals(response.uri())) {
                 throw new IOException("GitHub latest Release request failed: " + response.statusCode());
             }
-            return parseLatestRelease(readBounded(input, MAX_API_RESPONSE_BYTES), currentVersion, platform, objectMapper);
+            byte[] responseBytes = readBounded(input, MAX_API_RESPONSE_BYTES);
+            auditLog.info("RELEASE_RESPONSE", "bodyBytes=" + responseBytes.length);
+            return parseLatestRelease(responseBytes, currentVersion, platform, objectMapper);
         }
     }
 
@@ -223,7 +431,12 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         Path versionDirectory = downloadRoot.resolve(release.version());
         Files.createDirectories(versionDirectory);
         Path target = versionDirectory.resolve(release.assetName());
+        auditLog.info(
+                "DOWNLOAD_PREPARE",
+                "target=" + target + " expectedBytes=" + release.size() + " expectedSha256=" + release.sha256()
+        );
         if (Files.isRegularFile(target) && verifyFile(target, release.size(), release.sha256())) {
+            auditLog.info("DOWNLOAD_VERIFY", "reused existing verified installer path=" + target);
             progress.update(release.size(), release.size());
             return target;
         }
@@ -236,8 +449,15 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 .header("User-Agent", "Chat2DB-Community-Updater/" + release.version())
                 .GET()
                 .build();
+        auditLog.info("DOWNLOAD_REQUEST", "GET " + release.downloadUri());
         HttpResponse<InputStream> response = sendInstallerRequest(request);
         try (InputStream input = response.body()) {
+            auditLog.info(
+                    "DOWNLOAD_RESPONSE",
+                    "status=" + response.statusCode()
+                            + " finalUri=" + auditUri(response.uri())
+                            + " contentLength=" + response.headers().firstValue("Content-Length").orElse("")
+            );
             if (response.statusCode() != 200 || !isAllowedDownloadResponse(response.uri())) {
                 throw new IOException("GitHub Release installer download failed: " + response.statusCode());
             }
@@ -246,7 +466,14 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 throw new IOException("GitHub Release installer size header does not match");
             }
             streamInstaller(input, partial, release, progress);
+            auditLog.info(
+                    "DOWNLOAD_VERIFY",
+                    "verification passed path=" + partial
+                            + " bytes=" + release.size()
+                            + " sha256=" + release.sha256()
+            );
             moveAtomically(partial, target);
+            auditLog.info("DOWNLOAD_FINALIZE", "installer finalized path=" + target);
             return target;
         } catch (Exception exception) {
             Files.deleteIfExists(partial);
@@ -256,18 +483,36 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
 
     @Override
     public boolean launchInstaller(ReleaseInstaller release, Path installer, long parentPid) throws Exception {
+        auditLog.info(
+                "INSTALL_VERIFY",
+                "revalidating installer path=" + installer
+                        + " expectedBytes=" + release.size()
+                        + " expectedSha256=" + release.sha256()
+        );
         if (!Files.isRegularFile(installer) || !verifyFile(installer, release.size(), release.sha256())) {
             throw new IOException("Downloaded Community installer failed verification");
         }
+        auditLog.info("INSTALL_VERIFY", "installer revalidation passed");
         validateInstallerEnvironment(release);
+        auditLog.info("INSTALL_ENVIRONMENT", "platform installer requirements passed kind=" + release.kind());
+        UpdateAuditLog.NativeContext nativeContext = auditLog.prepareNativeHandoff();
+        if (nativeContext == null) {
+            nativeContext = testNativeContext(installer);
+        }
         List<String> command = buildInstallerCommand(
                 release,
                 installer.toAbsolutePath().normalize(),
                 parentPid,
                 appDirectory,
-                environment
+                environment,
+                nativeContext
         );
-        processStarter.start(command);
+        auditLog.info(
+                "INSTALL_PROCESS",
+                "starting native installer kind=" + release.kind() + " parentPid=" + parentPid
+        );
+        processStarter.start(command, nativeContext.logFile());
+        auditLog.info("INSTALL_PROCESS", "native installer process started");
         return true;
     }
 
@@ -417,12 +662,32 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             Path appDirectory,
             Map<String, String> environment
     ) throws IOException {
+        return buildInstallerCommand(
+                release,
+                installer,
+                parentPid,
+                appDirectory,
+                environment,
+                testNativeContext(installer)
+        );
+    }
+
+    static List<String> buildInstallerCommand(
+            ReleaseInstaller release,
+            Path installer,
+            long parentPid,
+            Path appDirectory,
+            Map<String, String> environment,
+            UpdateAuditLog.NativeContext nativeContext
+    ) throws IOException {
         return switch (release.kind()) {
-            case WINDOWS_MSI -> buildWindowsInstallerCommand(installer, parentPid, appDirectory);
-            case MAC_DMG -> buildMacInstallerCommand(installer, parentPid, appDirectory);
-            case LINUX_APPIMAGE -> buildAppImageInstallerCommand(installer, parentPid, environment);
-            case LINUX_DEB -> buildLinuxPackageInstallerCommand(installer, parentPid, appDirectory, "deb");
-            case LINUX_RPM -> buildLinuxPackageInstallerCommand(installer, parentPid, appDirectory, "rpm");
+            case WINDOWS_MSI -> buildWindowsInstallerCommand(installer, parentPid, appDirectory, nativeContext);
+            case MAC_DMG -> buildMacInstallerCommand(installer, parentPid, appDirectory, nativeContext);
+            case LINUX_APPIMAGE -> buildAppImageInstallerCommand(installer, parentPid, environment, nativeContext);
+            case LINUX_DEB ->
+                    buildLinuxPackageInstallerCommand(installer, parentPid, appDirectory, "deb", nativeContext);
+            case LINUX_RPM ->
+                    buildLinuxPackageInstallerCommand(installer, parentPid, appDirectory, "rpm", nativeContext);
         };
     }
 
@@ -441,28 +706,65 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         return 0;
     }
 
-    private static List<String> buildWindowsInstallerCommand(Path installer, long parentPid, Path appDirectory) {
+    private static List<String> buildWindowsInstallerCommand(
+            Path installer,
+            long parentPid,
+            Path appDirectory,
+            UpdateAuditLog.NativeContext nativeContext
+    ) {
         Path launcher = findAncestorChild(appDirectory, "Chat2DB Community.exe");
-        String arguments = "/i \"" + installer + "\" /passive /norestart";
+        String arguments = "/i \"" + installer + "\" /L*v \"" + nativeContext.nativeInstallerLog()
+                + "\" /passive /norestart";
         StringBuilder script = new StringBuilder("$ErrorActionPreference='Stop';")
+                .append("$updateLog=").append(powerShellLiteral(nativeContext.logFile().toString())).append(";")
+                .append("$resultFile=").append(powerShellLiteral(nativeContext.resultFile().toString())).append(";")
+                .append("$operationId=").append(powerShellLiteral(nativeContext.operationId())).append(";")
+                .append("$fromVersion=").append(powerShellLiteral(nativeContext.fromVersion())).append(";")
+                .append("$toVersion=").append(powerShellLiteral(nativeContext.toVersion())).append(";")
+                .append("$stage='WAIT_PARENT';")
+                .append("function Write-Audit{param([string]$level,[string]$message);")
+                .append("$timestamp=[DateTime]::UtcNow.ToString('o');")
+                .append("Add-Content -LiteralPath $updateLog -Encoding UTF8 -Value ")
+                .append("\"$timestamp level=$level stage=$stage operation=$operationId $message\"};")
+                .append("function Write-Result{param([string]$status,[int]$exitCode,[string]$reason);")
+                .append("$safeReason=$reason.Replace([char]13,' ').Replace([char]10,' ');")
+                .append("$temp=\"$resultFile.tmp-$operationId\";")
+                .append("@(\"status=$status\",\"stage=$stage\",\"exitCode=$exitCode\",")
+                .append("\"reason=$safeReason\",\"operationId=$operationId\",")
+                .append("\"fromVersion=$fromVersion\",\"toVersion=$toVersion\",")
+                .append("\"logPath=$updateLog\") | Set-Content -LiteralPath $temp -Encoding UTF8;")
+                .append("Move-Item -LiteralPath $temp -Destination $resultFile -Force};")
+                .append("Write-Audit 'INFO' 'waiting for application process pid=").append(parentPid).append("';")
                 .append("Wait-Process -Id ").append(parentPid).append(" -ErrorAction SilentlyContinue;")
-                .append("$msiexec=Join-Path $env:WINDIR 'System32\\msiexec.exe';")
+                .append("Write-Audit 'INFO' 'application process exited';")
+                .append("try{$msiexec=Join-Path $env:WINDIR 'System32\\msiexec.exe';")
                 .append("if(!(Test-Path -LiteralPath $msiexec)){throw ")
                 .append(powerShellLiteral("System MSI installer is unavailable")).append("};")
-                .append("try{$process=Start-Process -FilePath $msiexec -ArgumentList ")
+                .append("$stage='INSTALL_MSI';")
+                .append("Write-Audit 'INFO' 'starting elevated MSI installer with verbose native log';")
+                .append("$process=Start-Process -FilePath $msiexec -ArgumentList ")
                 .append(powerShellLiteral(arguments))
                 .append(" -Verb RunAs -Wait -PassThru;")
+                .append("Write-Audit 'INFO' (\"MSI installer exited code=\"+$process.ExitCode);")
                 .append("if(@(0,1641,3010) -notcontains $process.ExitCode){throw ")
                 .append(powerShellLiteral("MSI installation failed")).append("};")
+                .append("$stage='REMOVE_INSTALLER';")
+                .append("Write-Audit 'INFO' 'removing downloaded installer';")
                 .append("Remove-Item -LiteralPath ").append(powerShellLiteral(installer.toString()))
                 .append(" -Force -ErrorAction SilentlyContinue;");
         if (launcher != null) {
-            script.append("if(Test-Path -LiteralPath ").append(powerShellLiteral(launcher.toString()))
-                    .append("){Start-Process -FilePath ").append(powerShellLiteral(launcher.toString())).append("}}")
-                    .append("catch{exit 1};");
+            script.append("$stage='LAUNCH_APPLICATION';")
+                    .append("Write-Audit 'INFO' 'launching updated application';")
+                    .append("if(Test-Path -LiteralPath ").append(powerShellLiteral(launcher.toString()))
+                    .append("){Start-Process -FilePath ").append(powerShellLiteral(launcher.toString())).append("};");
         } else {
-            script.append("}catch{exit 1};");
+            script.append("Write-Audit 'WARN' 'updated application launcher was not found';");
         }
+        script.append("$stage='COMPLETE';")
+                .append("Write-Audit 'INFO' 'MSI installation completed successfully';")
+                .append("Write-Result 'SUCCESS' 0 '';exit 0}")
+                .append("catch{$reason=$_.Exception.ToString();")
+                .append("Write-Audit 'ERROR' $reason;Write-Result 'FAILED' 1 $reason;exit 1};");
         String encoded = Base64.getEncoder().encodeToString(
                 script.toString().getBytes(StandardCharsets.UTF_16LE)
         );
@@ -477,7 +779,12 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         );
     }
 
-    private static List<String> buildMacInstallerCommand(Path installer, long parentPid, Path appDirectory)
+    private static List<String> buildMacInstallerCommand(
+            Path installer,
+            long parentPid,
+            Path appDirectory,
+            UpdateAuditLog.NativeContext nativeContext
+    )
             throws IOException {
         Path bundle = findMacApplicationBundle(appDirectory);
         if (bundle == null || !isTrustedMacDestination(bundle)) {
@@ -490,14 +797,20 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 "chat2db-community-update",
                 Long.toString(parentPid),
                 installer.toString(),
-                bundle.toString()
+                bundle.toString(),
+                nativeContext.resultFile().toString(),
+                nativeContext.fromVersion(),
+                nativeContext.toVersion(),
+                nativeContext.operationId(),
+                nativeContext.logFile().toString()
         );
     }
 
     private static List<String> buildAppImageInstallerCommand(
             Path installer,
             long parentPid,
-            Map<String, String> environment
+            Map<String, String> environment,
+            UpdateAuditLog.NativeContext nativeContext
     ) throws IOException {
         String appImage = environment.get("APPIMAGE");
         if (appImage == null || appImage.isBlank()) {
@@ -511,7 +824,12 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 "chat2db-community-update",
                 Long.toString(parentPid),
                 installer.toString(),
-                destination.toString()
+                destination.toString(),
+                nativeContext.resultFile().toString(),
+                nativeContext.fromVersion(),
+                nativeContext.toVersion(),
+                nativeContext.operationId(),
+                nativeContext.logFile().toString()
         );
     }
 
@@ -519,7 +837,8 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             Path installer,
             long parentPid,
             Path appDirectory,
-            String packageKind
+            String packageKind,
+            UpdateAuditLog.NativeContext nativeContext
     ) {
         Path launcher = findLinuxLauncher(appDirectory);
         return List.of(
@@ -530,7 +849,12 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 Long.toString(parentPid),
                 installer.toString(),
                 packageKind,
-                launcher == null ? "" : launcher.toString()
+                launcher == null ? "" : launcher.toString(),
+                nativeContext.resultFile().toString(),
+                nativeContext.fromVersion(),
+                nativeContext.toVersion(),
+                nativeContext.operationId(),
+                nativeContext.logFile().toString()
         );
     }
 
@@ -581,12 +905,23 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         }
         String actualDigest = HexFormat.of().formatHex(digest.digest());
         if (total != release.size() || !actualDigest.equals(release.sha256())) {
-            throw new IOException("GitHub Release installer verification failed");
+            throw new IOException(
+                    "GitHub Release installer verification failed"
+                            + ": expectedBytes=" + release.size()
+                            + ", actualBytes=" + total
+                            + ", expectedSha256=" + release.sha256()
+                            + ", actualSha256=" + actualDigest
+            );
         }
     }
 
-    private static boolean verifyFile(Path file, long expectedSize, String expectedSha256) throws Exception {
-        if (Files.size(file) != expectedSize) {
+    private boolean verifyFile(Path file, long expectedSize, String expectedSha256) throws Exception {
+        long actualSize = Files.size(file);
+        if (actualSize != expectedSize) {
+            auditLog.warn(
+                    "VERIFY_FILE",
+                    "size mismatch path=" + file + " expectedBytes=" + expectedSize + " actualBytes=" + actualSize
+            );
             return false;
         }
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -597,7 +932,23 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 digest.update(buffer, 0, read);
             }
         }
-        return HexFormat.of().formatHex(digest.digest()).equals(expectedSha256);
+        String actualSha256 = HexFormat.of().formatHex(digest.digest());
+        if (!actualSha256.equals(expectedSha256)) {
+            auditLog.warn(
+                    "VERIFY_FILE",
+                    "SHA-256 mismatch path=" + file
+                            + " expectedSha256=" + expectedSha256
+                            + " actualSha256=" + actualSha256
+            );
+            return false;
+        }
+        auditLog.info(
+                "VERIFY_FILE",
+                "verification passed path=" + file
+                        + " bytes=" + actualSize
+                        + " sha256=" + actualSha256
+        );
+        return true;
     }
 
     private static byte[] readBounded(InputStream input, long maximumBytes) throws IOException {
@@ -663,6 +1014,13 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             if (!isAllowedDownloadResponse(nextUri)) {
                 throw new IOException("GitHub Release installer redirect host is not allowed");
             }
+            auditLog.info(
+                    "DOWNLOAD_REDIRECT",
+                    "hop=" + (redirect + 1)
+                            + " status=" + response.statusCode()
+                            + " from=" + auditUri(currentUri)
+                            + " to=" + auditUri(nextUri)
+            );
             currentUri = nextUri;
         }
         throw new IOException("GitHub Release installer redirect limit exceeded");
@@ -670,6 +1028,33 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
 
     private static boolean isRedirect(int statusCode) {
         return statusCode >= 300 && statusCode < 400;
+    }
+
+    static String auditUri(URI uri) {
+        if (uri == null) {
+            return "";
+        }
+        String authority = uri.getHost() == null ? "" : uri.getHost();
+        if (uri.getPort() >= 0) {
+            authority += ":" + uri.getPort();
+        }
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        return uri.getScheme() + "://" + authority + path;
+    }
+
+    private static UpdateAuditLog.NativeContext testNativeContext(Path installer) {
+        Path directory = installer.toAbsolutePath().normalize().getParent();
+        if (directory == null) {
+            directory = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
+        }
+        return new UpdateAuditLog.NativeContext(
+                "test-operation",
+                directory.resolve("update.log"),
+                directory.resolve("native-installer.log"),
+                directory.resolve("latest-result.properties"),
+                "",
+                ""
+        );
     }
 
     private static Path findAncestorChild(Path start, String childName) {
