@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { message, Modal, Input, InputNumber } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
-  ListChecks, Target, Crosshair, Timer,
+  ListChecks, Target, Crosshair, Timer, Globe, Users,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
 import {
@@ -24,6 +24,8 @@ const GROUPS: { key: keyof IntentAnswers; icon: typeof Target; en: string; fa: s
   { key: 'kind', icon: Film, en: 'What kind of video is this?', fa: 'این ویدیو چه نوعی است؟' },
   { key: 'goal', icon: Target, en: 'What should it do?', fa: 'باید چه کار کند؟' },
   { key: 'focus', icon: Crosshair, en: 'What should the camera stay on?', fa: 'دوربین روی چه چیزی بماند؟' },
+  { key: 'platform', icon: Globe, en: 'Where will it be watched?', fa: 'کجا دیده می‌شود؟' },
+  { key: 'audience', icon: Users, en: 'Who is it for?', fa: 'برای چه کسی است؟' },
   { key: 'energy', icon: Timer, en: 'Rhythm', fa: 'ریتم' },
 ]
 

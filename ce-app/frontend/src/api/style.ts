@@ -51,6 +51,10 @@ export interface IntentAnswers {
   goal?: string
   focus?: string
   energy?: string
+  /** Where it will be watched — Instagram, TikTok, YouTube, LinkedIn, own site. */
+  platform?: string
+  /** Who is watching — customers, students, colleagues, fans, anyone. */
+  audience?: string
   language?: string
   /** Phrases that must survive the cut, comma separated. */
   keep?: string

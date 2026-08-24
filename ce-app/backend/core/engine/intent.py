@@ -81,6 +81,31 @@ ENERGY: dict[str, tuple[float, float]] = {
     "punchy": (0.75, 1.4),
 }
 
+#: Where it will be watched → multipliers on the judge.
+#: A platform is a set of viewing conditions, and those conditions are
+#: measurable proxies: short vertical feeds are watched with the sound off and
+#: the thumb moving, so rhythm and on-beat cuts matter more; a long horizontal
+#: video is watched deliberately, so cutting through a sentence matters more.
+PLATFORMS: dict[str, dict[str, float]] = {
+    "instagram_reels": {"on_beat": 1.4, "variety": 1.2},
+    "tiktok": {"on_beat": 1.5, "variety": 1.3},
+    "youtube_shorts": {"on_beat": 1.4, "variety": 1.2},
+    "youtube_long": {"speech_integrity": 1.3, "shot_length_match": 1.2},
+    "linkedin": {"speech_integrity": 1.3, "silence_avoided": 1.2},
+    "website": {},
+}
+
+#: Who is watching → multipliers on the judge.
+#: An audience is what "the best moment" is *for*. A customer needs the claim,
+#: a student needs the whole sentence, a fan needs the beat.
+AUDIENCES: dict[str, dict[str, float]] = {
+    "customers": {"highlight_strength": 1.4, "duration_fit": 1.1},
+    "students": {"speech_integrity": 1.5, "shot_length_match": 1.2},
+    "colleagues": {"speech_integrity": 1.2, "silence_avoided": 1.2},
+    "fans": {"on_beat": 1.3, "variety": 1.3},
+    "everyone": {},
+}
+
 #: The choices, with both labels, so the screen can render them without hard-coding.
 OPTIONS: dict[str, list[dict]] = {
     "kind": [
@@ -125,6 +150,25 @@ OPTIONS: dict[str, list[dict]] = {
             ("punchy", "Punchy, fast cuts", "تند و کوبنده"),
         )
     ],
+    "platform": [
+        {"id": k, "en": en, "fa": fa} for k, en, fa in (
+            ("instagram_reels", "Instagram Reels", "ریلز اینستاگرام"),
+            ("tiktok", "TikTok", "تیک‌تاک"),
+            ("youtube_shorts", "YouTube Shorts", "یوتیوب شورتس"),
+            ("youtube_long", "YouTube (long)", "یوتیوب (ویدیوی بلند)"),
+            ("linkedin", "LinkedIn", "لینکدین"),
+            ("website", "My own site", "سایت خودم"),
+        )
+    ],
+    "audience": [
+        {"id": k, "en": en, "fa": fa} for k, en, fa in (
+            ("customers", "Customers", "مشتری‌ها"),
+            ("students", "Students / learners", "دانش‌آموز / یادگیرنده"),
+            ("colleagues", "Colleagues", "همکاران"),
+            ("fans", "Fans / followers", "طرفدارها / دنبال‌کننده‌ها"),
+            ("everyone", "Anyone", "همه"),
+        )
+    ],
     "language": [
         {"id": k, "en": en, "fa": fa} for k, en, fa in (
             ("fa", "Persian", "فارسی"),
@@ -143,6 +187,8 @@ class Intent:
     goal: str = ""
     focus: str = ""
     energy: str = ""
+    platform: str = ""
+    audience: str = ""
     language: str = ""
     #: Words or phrases that must survive the cut, if they were said.
     keep: list[str] = field(default_factory=list)
@@ -186,6 +232,8 @@ class Intent:
             goal=one(raw.get("goal"), GOALS),
             focus=one(raw.get("focus"), FOCUS),
             energy=one(raw.get("energy"), ENERGY),
+            platform=one(raw.get("platform"), PLATFORMS),
+            audience=one(raw.get("audience"), AUDIENCES),
             language=one(raw.get("language"), {o["id"]: o for o in OPTIONS["language"]}),
             keep=words(raw.get("keep")),
             avoid=words(raw.get("avoid")),
@@ -202,7 +250,7 @@ class Intent:
     def empty(self) -> bool:
         """No answer at all: behave exactly as before this existed."""
         return not any((self.kind, self.goal, self.focus, self.energy,
-                        self.keep, self.avoid, self.seconds))
+                        self.platform, self.audience, self.keep, self.avoid, self.seconds))
 
     # --------------------------------------------------------------- effects
 
@@ -225,8 +273,13 @@ class Intent:
     def weight_multipliers(self) -> dict[str, float]:
         """Multipliers over `objective.WEIGHTS` — the judge, not the measurement."""
         multipliers: dict[str, float] = {}
-        for term, factor in (GOALS.get(self.goal) or {}).items():
-            multipliers[term] = factor
+        # Goal, platform and audience are three views of the same question — what
+        # this edit has to achieve — so they multiply rather than overwrite. A
+        # lesson for students on TikTok is genuinely different from any one of
+        # the three on its own.
+        for source in (GOALS.get(self.goal), PLATFORMS.get(self.platform), AUDIENCES.get(self.audience)):
+            for term, factor in (source or {}).items():
+                multipliers[term] = round(multipliers.get(term, 1.0) * factor, 4)
         if self.energy:
             _, on_beat = ENERGY[self.energy]
             multipliers["on_beat"] = round(multipliers.get("on_beat", 1.0) * on_beat, 4)
@@ -280,6 +333,12 @@ class Intent:
         if self.focus:
             label = next(o for o in OPTIONS["focus"] if o["id"] == self.focus)
             lines.append(said(f"focus: {label['en']}", f"تمرکز: {label['fa']}"))
+        if self.platform:
+            label = next(o for o in OPTIONS["platform"] if o["id"] == self.platform)
+            lines.append(said(f"for: {label['en']}", f"برای: {label['fa']}"))
+        if self.audience:
+            label = next(o for o in OPTIONS["audience"] if o["id"] == self.audience)
+            lines.append(said(f"audience: {label['en']}", f"مخاطب: {label['fa']}"))
         if self.energy:
             label = next(o for o in OPTIONS["energy"] if o["id"] == self.energy)
             lines.append(said(f"rhythm: {label['en']}", f"ریتم: {label['fa']}"))

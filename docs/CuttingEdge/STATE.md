@@ -38,7 +38,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
-| **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
+| **Assistant** | A **conversation**, not a one-shot command: history in, one reply out, with the steps it took and the milliseconds, and the provider named on every answer (`ollama:qwen2.5` or `offline` — never hidden). An editing request still comes back as a whitelisted dry run applied only on Apply and undoable in one step. Floating panel or full screen, RTL, animated. The model is the user's choice (`auto`/`off`/ollama/openai/gemini/anthropic, remembered); with none connected it answers from what was measured and says so |
 | **Style Match** | A reference video becomes a `.cetemplate` of numbers, and your footage is rebuilt in its shape. The intake card asks what the video *is* — kind, goal, focus, rhythm, phrases to keep or drop, and a target length — because a frame cannot say any of it. Measured effect: the edit drew from **14.4 %** of a 120 s file before, and **97.9 %** with a length asked for; candidate moments that used to span **0.002** on a 0..1 scale now span the full range. *Built on the branch, version not bumped yet — bumping publishes a release* |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
@@ -99,7 +99,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **212 collected: 209 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **230 collected: 227 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -737,6 +737,17 @@ gate that stops a broken installer from being published.
     measurement now, and it only ever **extends** an opening — the form it
     replaced assigned the value outright inside a 6 s window, free to chop an
     opening to a fraction of a second and blind to a held intro longer than that.
+
+74. **A substring is not a word.** The assistant's rule planner matched the hiss
+    people ask to remove with the three-letter fragment `"خش"` — which is also
+    inside **«بخش»**. So «کدام **بخش** قوی‌تر است؟» (*which part is the
+    strongest?*) came back as a noise-reduction plan, and the same trap was
+    waiting in `"نما"` inside «نمایش». Found by asking a question in Persian over
+    HTTP and reading the answer, not by reading the code. `wants()` now requires
+    a word boundary for any token of three letters or fewer, and
+    `tests/test_chat.py` pins both directions: the questions that must stay
+    questions, and the requests that must still be edits — a boundary fix that
+    deafened the assistant would be the same bug wearing a different hat.
 
 ## 5. Release procedure
 
