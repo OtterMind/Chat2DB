@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     #: default and what every release so far used) or `silero` (the on-demand
     #: model). Opt-in until it has been measured on real speech — see core/engine/vad.py.
     speech_engine: str = "energy"
+    #: Let a vision model (in the user's own Ollama) add one vote to the highlight
+    #: scorer. Off by default: a boost that is absent is not a regression, and the
+    #: judgement on whether it helps belongs to the user's own footage (§4.57).
+    vision_enabled: bool = False
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""

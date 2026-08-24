@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from app.config import settings
 from core.brain import meaning as brain_meaning
 from core.brain import objective
 from core.brain import race as brain_race
@@ -581,24 +582,46 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
         _, energy = _classify_motion(path, candidate["start"], candidate["end"] - candidate["start"])
         candidate["signals"]["motion"] = float(energy)
 
+    # ---- vision: one vote from a model that has seen the frame ------------
+    # Strictly optional and off by default. When a vision model the user runs is
+    # present, it scores the shortlist's frames and joins the normalisation as one
+    # more signal — a vote, never a veto (§4.45). When absent, nothing changes.
+    from core.engine import vision as vision_engine
+
+    has_vision = False
+    if settings.vision_enabled and vision_engine.available():
+        scores = vision_engine.score_moments(
+            path, [c["start"] + (c["end"] - c["start"]) / 2 for c in finalists]
+        )
+        if scores:
+            for candidate in finalists:
+                at = min(scores, key=lambda t: abs(t - (candidate["start"] + (candidate["end"] - candidate["start"]) / 2)))
+                candidate["signals"]["vision"] = float(scores[at])
+            has_vision = True
+
     # ---- normalise across the finalists, then weigh ---------------------
     # Relative on purpose: "the strongest moment in this file" is a comparison
     # between moments, and an absolute threshold would rank a quiet recording
-    # as having no highlights at all.
-    active = [key for key in ("speech", "motion", "onset", "edge") if weights.get(key, 0.0) > 0]
+    # as having no highlights.
+    _w = dict(weights)
+    if has_vision:
+        _w["vision"] = vision_engine.MAX_WEIGHT
+
+    active = [key for key in ("speech", "motion", "onset", "edge", "vision")
+              if _w.get(key, 0.0) > 0.0 and any(key in c["signals"] for c in finalists)]
     ranges: dict[str, tuple[float, float]] = {}
     for key in active:
         values = [c["signals"].get(key, 0.0) for c in finalists]
         low, high = min(values), max(values)
         ranges[key] = (low, max(1e-9, high - low))
-    total_weight = sum(weights[key] for key in active) or 1.0
+    total_weight = sum(_w.get(key, 0.0) for key in active) or 1.0
 
     for candidate in finalists:
         score = 0.0
         for key in active:
             low, spread = ranges[key]
             value = (candidate["signals"].get(key, 0.0) - low) / spread
-            score += weights[key] * max(0.0, min(1.0, value))
+            score += _w.get(key, 0.0) * max(0.0, min(1.0, value))
         candidate["score"] = round(score / total_weight, 4)
 
     # ---- meaning: what was said, not how loud it was ---------------------

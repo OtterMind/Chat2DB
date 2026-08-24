@@ -7,6 +7,7 @@ import AiRuntimeCard from '../components/AiRuntimeCard'
 import { assistantApi, type ProviderState } from '../api/assistant'
 import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
 import { ocrApi, type OcrStatus } from '../api/ocr'
+import { visionApi, type VisionStatus } from '../api/vision'
 import { pickMedia } from '../api/render'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
@@ -286,6 +287,95 @@ function OcrCard() {
   )
 }
 
+/**
+ * A model that has seen frames.
+ *
+ * The models live in the user's own Ollama — a 4 GB laptop is never promised an
+ * 11 B model, because the catalogue already says what fits (§4.62). The engine is
+ * off by default: a boost that is absent is not a regression, and whether the
+ * model's "interesting" agrees with a human is decided by the user's own footage
+ * through the preview, not by a claim.
+ */
+function VisionCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<VisionStatus | null>(null)
+  const [preview, setPreview] = useState<{ time: string; score: number }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    visionApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const toggle = async (enabled: boolean) => {
+    try {
+      await visionApi.enable(enabled)
+      setStatus(await visionApi.status())
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const measure = async () => {
+    const picker = pickMedia()
+    const paths = picker ? await picker : null
+    if (!paths?.[0]) return
+    setBusy(true)
+    try {
+      const r = await visionApi.preview(paths[0])
+      setPreview(
+        r.scores
+          ? Object.entries(r.scores).map(([time, score]) => ({ time, score }))
+          : null
+      )
+      if (!r.scores) message.warning(t('No vision model answered', 'مدل بینایی جوابی نداد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title={t('A model that sees', 'مدلی که می‌بیند')}>
+      <p className="ce-hint">
+        {t(
+          'One vote in the highlight scorer from a model that has actually looked at the frames. It runs in your own Ollama; nothing is installed. Off by default, and the preview shows the scores in the open.',
+          'یک رأی در امتیازدهنده‌ی هایلایت از مدلی که واقعاً به فریم‌ها نگاه کرده. روی Ollama خودت اجرا می‌شود؛ هیچ‌چیز نصب نمی‌شود. به‌صورت پیش‌فرض خاموش، و پیش‌نمایش نمره‌ها را آشکار نشان می‌دهد.'
+        )}
+      </p>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">
+          {t('Ollama', 'الاما')}: {status?.running ? t('running', 'روشن') : t('not running', 'خاموش')}
+        </span>
+        <span className="ce-badge">
+          {t('vision model', 'مدل بینایی')}: <Num>{status?.visionPulled ?? t('none pulled', 'گرفته نشده')}</Num>
+        </span>
+      </div>
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        <button
+          className={`ce-btn ce-btn--sm ${status?.enabled ? 'ce-btn--auto' : ''}`}
+          disabled={!status?.ready && !status?.enabled}
+          onClick={() => void toggle(!status?.enabled)}
+        >
+          {status?.enabled ? t('Turn off', 'خاموش کن') : t('Let the model vote', 'بگذار مدل رأی بدهد')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy || !status?.ready} onClick={() => void measure()}>
+          <Sparkles size={14} /> {t('Preview on a file', 'پیش‌نمایش روی یک فایل')}
+        </button>
+      </div>
+      {preview && (
+        <div className="ce-kv" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+          {preview.map((row) => (
+            <span key={row.time} dir="ltr">
+              {Number(row.time).toFixed(1)}s — {row.score.toFixed(2)}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
 
@@ -496,6 +586,8 @@ export default function Settings() {
       <SpeechEngineCard />
 
       <OcrCard />
+
+      <VisionCard />
     </Page>
   )
 }
