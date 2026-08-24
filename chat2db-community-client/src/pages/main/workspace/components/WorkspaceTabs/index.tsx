@@ -47,6 +47,7 @@ import TerminalTab from './TerminalTab';
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
 import { useGlobalStore } from '@/store/global';
+import { getPersistableActiveConsoleId } from '@/store/workspace/utils/workspaceTabPersistence';
 import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import { isConsoleTabNameCustomized } from '@/store/workspace/utils/consoleTabName';
 import { useTreeStore } from '@/store/tree';
@@ -754,7 +755,6 @@ const WorkspaceTabs = memo(() => {
     editorList,
     getOpenConsoleList,
     setActiveConsoleId,
-    setWorkspaceTabList,
     createConsole,
   } = useWorkspaceStore((state) => {
     return {
@@ -766,7 +766,6 @@ const WorkspaceTabs = memo(() => {
       editorList: state.editorList,
       getOpenConsoleList: state.getOpenConsoleList,
       setActiveConsoleId: state.setActiveConsoleId,
-      setWorkspaceTabList: state.setWorkspaceTabList,
       createConsole: state.createConsole,
     };
   });
@@ -827,12 +826,18 @@ const WorkspaceTabs = memo(() => {
     const orderedTabs = orderPinnedWorkspaceTabsFirst(tabs);
     const orderedLayout = orderSplitLayoutPaneIdsByPinned(layout || null, orderedTabs);
     const normalizedLayout = normalizeWorkspaceTabSplitLayout(orderedLayout, orderedTabs, nextActiveConsoleId);
-    setWorkspaceTabList(orderedTabs);
-    if (!areWorkspaceTabSplitLayoutsEqual(useWorkspaceStore.getState().workspaceTabSplitLayout, normalizedLayout)) {
-      useWorkspaceStore.setState({
-        workspaceTabSplitLayout: normalizedLayout,
-      });
+    const currentState = useWorkspaceStore.getState();
+    const nextState: Partial<typeof currentState> = {
+      workspaceTabList: orderedTabs,
+      activeConsoleId: getPersistableActiveConsoleId({
+        activeConsoleId: nextActiveConsoleId,
+        workspaceTabList: orderedTabs,
+      }),
+    };
+    if (!areWorkspaceTabSplitLayoutsEqual(currentState.workspaceTabSplitLayout, normalizedLayout)) {
+      nextState.workspaceTabSplitLayout = normalizedLayout;
     }
+    useWorkspaceStore.setState(nextState);
   };
 
   const updateWorkspaceTabSplitLayout = (layout: IWorkspaceTabSplitLayout | null | undefined) => {
@@ -1606,7 +1611,6 @@ const WorkspaceTabs = memo(() => {
     } as IWorkspaceTabSplitLayout;
 
     setWorkspaceTabsState(nextWorkspaceTabList, nextLayout, nextTabId);
-    setActiveConsoleId(nextTabId);
   };
 
   // Render the SQL executor.
@@ -1987,6 +1991,7 @@ const WorkspaceTabs = memo(() => {
           onEdit={(action, data) => handelTabsEdit(action, data || [], paneId)}
           beforeRemove={confirmWorkspaceTabItemsClose}
           activeKey={activeKey}
+          activeTabScrollKey={activeKey}
           editableNameOnBlur={editableNameOnBlur}
           items={items}
           contextActions={commonWorkspaceTabContextActions}

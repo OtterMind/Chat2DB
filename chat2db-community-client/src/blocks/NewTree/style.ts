@@ -6,12 +6,15 @@ export const useStyles = createStyles(({ css, token }) => {
       display: flex;
       flex-direction: column;
       font-size: 14px;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       /* position: relative; */
 
       .ant-tree {
         background-color: transparent;
+        width: max-content;
+        min-width: 100%;
       }
 
       .ant-tree-switcher {
@@ -19,14 +22,14 @@ export const useStyles = createStyles(({ css, token }) => {
       }
 
       .ant-tree-list {
-        width: fit-content;
+        width: max-content;
         min-width: 100%;
         position: inherit !important;
       }
 
       .ant-tree-list-holder {
-        min-width: fit-content;
-        width: 100%;
+        width: max-content;
+        min-width: 100%;
         & > div {
           position: inherit !important;
           overflow: visible !important;
@@ -34,12 +37,13 @@ export const useStyles = createStyles(({ css, token }) => {
       }
 
       .ant-tree-list-holder-inner {
-        width: 100%;
+        width: max-content;
+        min-width: 100%;
         position: inherit !important;
       }
 
       .ant-tree-treenode {
-        /* width: max-content; */
+        width: max-content;
         min-width: 100%;
       }
 

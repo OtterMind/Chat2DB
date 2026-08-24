@@ -4,17 +4,21 @@ export const useStyles = createStyles(({ css, token }) => {
   return {
     treeBox: css`
       flex: 1;
+      min-width: 0;
+      min-height: 0;
       padding-left: 6px;
     `,
     panelPane: css`
       display: none;
       min-height: 0;
+      min-width: 0;
       flex: 1;
       flex-direction: column;
     `,
     panelPaneActive: css`
       display: flex;
       min-height: 0;
+      min-width: 0;
       flex: 1;
       flex-direction: column;
     `,

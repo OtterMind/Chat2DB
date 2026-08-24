@@ -54,7 +54,6 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
-import { emitSavedConsoleUpdated } from '@/utils/savedConsoleEvents';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
 import type { ResourceOperation, ResourceOperationCapabilities } from '@/client-extension/types';
@@ -989,8 +988,13 @@ export const useCreateRightClickMenu = () => {
         text: i18n('workspace.menu.removeConsole'),
         icon: 'icon-trash',
         handle: () => {
-          removeSavedConsole(treeNodeData.id!).then(() => {
-            emitSavedConsoleUpdated(extraParams);
+          openUnifiedConfirmationModal({
+            title: i18n('common.text.deleteConfirmTitle'),
+            content: i18n('common.text.deleteConfirmTip', treeNodeData.originalTitle),
+            onOk: async () => {
+              await removeSavedConsole(treeNodeData.id!);
+              await refreshAfterDelete();
+            },
           });
         },
       },
