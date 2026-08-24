@@ -103,39 +103,6 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
         settingItem('personal.email', 'setting.nav.resetEmail', ['email', 'mailbox', 'account']),
         settingItem('personal.password', 'setting.nav.resetPassword', ['password', 'credential', 'security']),
       ];
-    case 'invite':
-      return [
-        settingItem('invite.code', 'invite.setting.inviteCode', [
-          'invitation code',
-          'invite friends',
-          'share',
-          'rules',
-        ]),
-        settingItem('invite.balance', 'invite.setting.totalAssets', [
-          'withdraw',
-          'withdrawal',
-          'reward',
-          'balance',
-        ]),
-        settingItem('invite.list', 'invite.setting.inviteList', ['invited user', 'invitation history', 'reward status']),
-      ];
-    case 'purchase':
-      return [
-        settingItem('purchase.orders', 'setting.purchaseDetails.title', [
-          'order',
-          'subscription',
-          'product',
-          'activation code',
-          'invoice',
-        ]),
-      ];
-    case 'deviceCer':
-      return [
-        settingItem('deviceCer.license', 'license.selectOrder', ['license', 'order', 'permanent version']),
-        settingItem('deviceCer.name', 'license.deviceNameLabel', ['device name', 'computer name']),
-        settingItem('deviceCer.os', 'license.osLabel', ['operating system', 'windows', 'linux', 'macos']),
-        settingItem('deviceCer.id', 'license.deviceId', ['device id', 'machine id', 'offline activation']),
-      ];
     default:
       return [];
   }

@@ -3,6 +3,7 @@ import CreateDatabase from '@/components/CreateDatabase';
 import { SAVED_CONSOLE_UPDATED_EVENT, TreeNodeType, type SavedConsoleUpdatedEventDetail } from '@/constants';
 import i18n from '@/i18n';
 import MainSecondaryPanel from '@/pages/main/components/MainSecondaryPanel';
+import { useGlobalStore } from '@/store/global';
 import { getTreeStoreLifecycleVersion, useTreeStore } from '@/store/tree';
 import { useWorkspaceStore } from '@/store/workspace';
 import type { TreeNodeData } from '@/typings';
@@ -147,6 +148,7 @@ const WorkspaceLeft = memo(() => {
   const [explorerSearchKeyword, setExplorerSearchKeyword] = useState('');
   const { styles } = useStyles();
   const showExplorerPanel = canProbeDesktopBridge && desktopBridgeReady;
+  const isEmbedIframe = useGlobalStore((state) => state.isEmbedIframe);
   const { activeConsoleId, workspaceTabList } = useWorkspaceStore((state) => ({
     activeConsoleId: state.activeConsoleId,
     workspaceTabList: state.workspaceTabList,
@@ -195,7 +197,8 @@ const WorkspaceLeft = memo(() => {
       ),
     };
   });
-  const showResourceSwitcher = showExplorerPanel || isCommunityEnv;
+  const showWebResourceHeader = isWebEnv && !isEmbedIframe;
+  const showResourceSwitcher = showExplorerPanel || isCommunityEnv || showWebResourceHeader;
   const locateDisabled = !activeTabLocateTarget;
 
   useEffect(() => {
@@ -391,21 +394,25 @@ const WorkspaceLeft = memo(() => {
       <MainSecondaryPanel tabIndex={-1} id="tree-search-area">
         {showResourceSwitcher && (
           <div className={styles.resourceSwitcher}>
-            <Dropdown
-              menu={{
-                items: panelMenuItems,
-                selectable: true,
-                selectedKeys: [currentPanel],
-                onClick: ({ key }) => handlePanelSelection(key as WorkspaceLeftPanel),
-              }}
-              placement="bottomLeft"
-              trigger={['click']}
-            >
-              <button type="button" className={styles.resourceSelector} aria-label={currentPanelOption.label}>
-                <span className={styles.resourceSelectorLabel}>{currentPanelOption.label}</span>
-                <ChevronDown aria-hidden size={14} strokeWidth={1.8} />
-              </button>
-            </Dropdown>
+            {showWebResourceHeader ? (
+              <span className={styles.resourceSelectorStatic}>{currentPanelOption.label}</span>
+            ) : (
+              <Dropdown
+                menu={{
+                  items: panelMenuItems,
+                  selectable: true,
+                  selectedKeys: [currentPanel],
+                  onClick: ({ key }) => handlePanelSelection(key as WorkspaceLeftPanel),
+                }}
+                placement="bottomLeft"
+                trigger={['click']}
+              >
+                <button type="button" className={styles.resourceSelector} aria-label={currentPanelOption.label}>
+                  <span className={styles.resourceSelectorLabel}>{currentPanelOption.label}</span>
+                  <ChevronDown aria-hidden size={14} strokeWidth={1.8} />
+                </button>
+              </Dropdown>
+            )}
             <div className={styles.resourceHeaderActions}>
               {currentPanel === 'database' && <WorkspaceTreeSearch />}
               {currentPanel === 'explorer' && (

@@ -363,7 +363,7 @@ export const useCreateRightClickMenu = () => {
 
       // applies for permission
       [OperationColumn.ApplyPermission]: {
-        text: i18n('team.permission.modal.OkText'),
+        text: i18n('common.button.confirm'),
         icon: 'icon-key1',
         handle: () => {
           const props = {

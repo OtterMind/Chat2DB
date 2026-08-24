@@ -102,7 +102,10 @@ interface CascadeOptionsState {
 const generateOptions = (treeDataList: TreeNodeData[] | null, allowEmpty, styles) => {
   if (!treeDataList?.length) return [];
   const options: any = treeDataList.map((item) => {
-    const environmentName = item.extraParams.environment?.shortName || item.extraParams.environment?.name;
+    const environmentName =
+      item.treeNodeType === TreeNodeType.DATA_SOURCE
+        ? item.extraParams.environment?.shortName || item.extraParams.environment?.name
+        : undefined;
     return {
       label: (
         <span>

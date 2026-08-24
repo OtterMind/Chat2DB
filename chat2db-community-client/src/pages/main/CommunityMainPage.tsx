@@ -402,13 +402,22 @@ function CommunityMainPage() {
       isEmbedIframe !== IframeType.ZOER &&
       mainPageActiveTab === 'workspace' &&
       settingPageActiveTab === false;
+    const shouldShowTitleBarActions =
+      !showLeftContainer &&
+      isEmbedIframe !== IframeType.ZOER &&
+      (Boolean(clientExtension.mainPage.slots?.titleBarActions) || shouldShowWorkspaceTitleBarActions);
 
-    if (!shouldShowWorkspaceTitleBarActions) {
+    if (!shouldShowTitleBarActions) {
       setAppTitleBarRightComponent(false);
       return;
     }
 
-    setAppTitleBarRightComponent(<CommunityTitleBarActions />);
+    setAppTitleBarRightComponent(
+      <CommunityTitleBarActions
+        extras={clientExtension.mainPage.slots?.titleBarActions}
+        showWorkspaceActions={shouldShowWorkspaceTitleBarActions}
+      />,
+    );
   }, [
     isEmbedIframe,
     mainPageActiveTab,
@@ -435,8 +444,10 @@ function CommunityMainPage() {
           navItems={navConfig}
           activePage={mainPageActiveTab}
           settingsActive={settingPageActiveTab !== false}
-          hideSettings={Boolean(isEmbedIframe)}
-          extras={clientExtension.mainPage.actionBarExtras}
+          hideSettings={
+            Boolean(isEmbedIframe) || clientExtension.mainPage.hiddenCoreActions?.includes('settings') === true
+          }
+          extras={clientExtension.mainPage.slots?.actionBarFooter}
           onNavigate={handleNavItemClick}
           onOpenSettings={handleOpenSettings}
         />

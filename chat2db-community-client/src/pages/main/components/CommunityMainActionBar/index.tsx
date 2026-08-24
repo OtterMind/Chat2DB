@@ -38,6 +38,7 @@ const CommunityMainActionBar = ({
       onNavigate(workspaceItem);
     }
   };
+  const showBottomActions = Boolean(extras) || isDesktop || !hideSettings;
 
   return (
     <aside className={styles.actionBar}>
@@ -56,7 +57,7 @@ const CommunityMainActionBar = ({
         ))}
       </nav>
 
-      {(isDesktop || !hideSettings) && (
+      {showBottomActions && (
         <div className={styles.bottomActions}>
           {extras}
           {isDesktop && (

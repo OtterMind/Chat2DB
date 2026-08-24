@@ -172,6 +172,7 @@ export const useSaveEditorData = (props: IProps) => {
           name: initialName,
           nameCustomized: initialName ? nameCustomized : undefined,
         });
+        editorRef.current?.resetContentDiffBaseline(value ?? '');
         if (mode === 'automatic') {
           return;
         }

@@ -11,18 +11,13 @@ import editTable from './editTable';
 import editTableData from './editTableData';
 import sqlEditor from './sqlEditor';
 import spaceSetting from './spaceSetting';
-import price from './price';
 import monaco from './monaco';
 import ai from './ai';
 import stream from './stream';
-import userGuide from './userGuide';
 import feedback from './feedback';
 import notification from './notification';
 import redis from './redis';
-import invite from './invite';
-import team from './team';
 import plugin from './plugin';
-import license from './license';
 
 export default {
   lang: LangType.EN_US,
@@ -38,16 +33,11 @@ export default {
   ...editTableData,
   ...sqlEditor,
   ...spaceSetting,
-  ...price,
   ...monaco,
   ...ai,
   ...stream,
-  ...userGuide,
   ...feedback,
   ...notification,
   ...redis,
-  ...invite,
-  ...team,
   ...plugin,
-  ...license,
 };

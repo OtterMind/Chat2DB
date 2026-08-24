@@ -343,7 +343,7 @@ const OperationLine = ({
       </div>
 
       {showSelectDBInfoComponent && !zoerBoundInfo && active && (
-        <SelectBoundInfo boundInfo={dbInfo} onChangeDBInfo={handleChangeDBInfo} allowEmpty />
+        <SelectBoundInfo boundInfo={dbInfo} onChangeDBInfo={handleChangeDBInfo} />
       )}
     </div>
   );
