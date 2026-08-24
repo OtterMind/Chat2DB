@@ -1,4 +1,5 @@
 import api from './client'
+import { backendOrigin } from './runtime'
 
 export interface AssistantPlan {
   ops: { op: string; [key: string]: unknown }[]
@@ -29,6 +30,24 @@ export interface ChatTurn {
   provider: string
   steps: AssistantStep[]
   seconds: number
+}
+
+/** One event in the streamed turn. The screen never has to guess which it is. */
+export interface StreamEvent {
+  kind: 'step' | 'delta' | 'done' | 'error'
+  /** `step`: what happened, in both languages, and how long it took. */
+  en?: string
+  fa?: string
+  ms?: number
+  /** `delta`: more of the answer. */
+  text?: string
+  /** `done`: the finished turn. */
+  reply?: string
+  plan?: AssistantPlan | null
+  provider?: string
+  seconds?: number
+  /** `error`: the stream ended badly, and this is why. */
+  message?: string
 }
 
 export interface ProviderState {
@@ -69,4 +88,55 @@ export const assistantApi = {
     ).data,
   providers: async (): Promise<{ choices: string[]; available: Record<string, ProviderState> }> =>
     (await api.get('/assistant/providers')).data,
+  /**
+   * The same turn, delivered as it happens.
+   *
+   * Raw `fetch` rather than the axios client, which carries a 30 s budget — the
+   * exact number that produced `timeout of 30000ms exceeded` on a machine where a
+   * model was thinking (STATE.md §4.13). A stream has no deadline; it ends.
+   *
+   * NDJSON, one event per line. A line that will not parse is skipped: half a
+   * chunk is not worth losing the rest of a sentence.
+   */
+  chatStream: async (
+    messages: ChatMessage[],
+    timeline: unknown,
+    selectedClipId: string | null,
+    language: 'en' | 'fa',
+    provider: string,
+    onEvent: (event: StreamEvent) => void
+  ): Promise<void> => {
+    const response = await fetch(`${backendOrigin}/api/assistant/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages,
+        timeline,
+        selected_clip_id: selectedClipId,
+        language,
+        provider,
+      }),
+    })
+    if (!response.ok || !response.body) {
+      throw new Error(`the assistant did not answer (${response.status})`)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          onEvent(JSON.parse(line) as StreamEvent)
+        } catch {
+          /* a torn line: skip it, keep reading */
+        }
+      }
+    }
+  },
 }

@@ -1192,3 +1192,13 @@ button { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .ai-fab, .ai-chat, .ai-msg, .ai-dot, .ai-plan { animation: none; }
 }
+
+/* The caret is the only part of the streaming reply that is theatre, and it is
+   honest theatre: it means "more is coming", and it disappears when it is not. */
+.ai-caret {
+  display: inline-block; width: 7px; height: 14px; margin-inline-start: 3px;
+  vertical-align: -2px; background: #818cf8; border-radius: 2px;
+  animation: ai-blink 1s steps(2, start) infinite;
+}
+@keyframes ai-blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .ai-caret { animation: none; } }

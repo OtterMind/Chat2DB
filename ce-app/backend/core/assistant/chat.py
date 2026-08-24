@@ -196,3 +196,124 @@ def reply(
         "steps": steps,
         "seconds": round(time.perf_counter() - began, 2),
     }
+
+
+def _event_step(en: str, fa: str, seconds: float) -> dict:
+    return {"kind": "step", "en": en, "fa": fa, "ms": round(seconds * 1000)}
+
+
+def reply_stream(
+    messages: list[dict],
+    timeline: dict,
+    selected_clip_id: str | None = None,
+    language: str = "en",
+    provider: str = "auto",
+):
+    """The same turn as `reply()`, as a sequence of events.
+
+    Three event kinds, so the screen never has to guess what it is looking at:
+
+    * `step` — something happened, with how long it took. Shown as it happens,
+      which is the whole point: a bouncing dot is not evidence of work.
+    * `delta` — more of the answer. Only a model produces these; our own offline
+      answer arrives in one piece, because slowing down an instant answer to look
+      thoughtful would be theatre.
+    * `done` — the final reply, the plan if there is one, the provider, the total.
+
+    The guarantees are the same as the non-streaming turn: nothing is applied,
+    and the source is always named.
+    """
+    began = time.perf_counter()
+    history = [m for m in (messages or []) if isinstance(m, dict) and m.get("content")]
+    asked = str(history[-1]["content"]).strip() if history else ""
+    facts = _timeline_facts(timeline)
+
+    yield _event_step(
+        f"Read the timeline: {facts['clips']} clips, {facts['duration']} s",
+        f"تایم‌لاین را خواندم: {facts['clips']} کلیپ، {facts['duration']} ثانیه",
+        time.perf_counter() - began,
+    )
+
+    mark = time.perf_counter()
+    plan = planner.make_plan(asked, timeline or {}, prefer_llm=provider != "off")
+    for op in plan.ops:
+        op.setdefault("clipId", selected_clip_id)
+
+    if plan.ops:
+        yield _event_step(
+            f"It is an editing request: {len(plan.ops)} operations from the whitelist",
+            f"درخواست تدوین است: {len(plan.ops)} عملیات از فهرست مجاز",
+            time.perf_counter() - mark,
+        )
+        payload = plan.as_dict()
+        payload["preview"] = planner.describe_ops(plan.ops)
+        source = "offline" if plan.source == "rules" else plan.source
+        yield {
+            "kind": "done",
+            "reply": _plan_reply(plan, language),
+            "plan": payload,
+            "provider": source,
+            "seconds": round(time.perf_counter() - began, 2),
+        }
+        return
+
+    yield _event_step(
+        "It is a question, not an edit",
+        "سؤال است، نه درخواست تدوین",
+        time.perf_counter() - mark,
+    )
+
+    mark = time.perf_counter()
+    system = SYSTEM.format(
+        language_name="Persian (فارسی)" if language == "fa" else "English",
+        timeline=planner.describe_timeline(timeline or {}),
+        operations="\n".join(f"- {name}: {what}" for name, what in planner.OPERATIONS.items()),
+    )
+    turns = [{"role": "system", "content": system}]
+    turns.extend({"role": m["role"], "content": str(m["content"])} for m in history[-8:])
+
+    stream = providers.chat_stream(turns, choice=provider, timeout=180.0)
+    if stream is not None:
+        config = providers.configured(provider)
+        label = f"{config[0]}:{config[2]}" if config else "model"
+        text = ""
+        for piece in stream:
+            text += piece
+            yield {"kind": "delta", "text": piece}
+        if text.strip():
+            yield _event_step(
+                f"Asked {label} and it answered as it wrote",
+                f"از {label} پرسیدم و هم‌زمان که می‌نوشت جواب داد",
+                time.perf_counter() - mark,
+            )
+            yield {
+                "kind": "done",
+                "reply": text,
+                "plan": None,
+                "provider": label,
+                "seconds": round(time.perf_counter() - began, 2),
+            }
+            return
+        # A stream that opened and said nothing is still worth reporting: the
+        # fallback is an answer, and the user is told why it happened.
+        yield _event_step(
+            f"{label} answered nothing, so I fell back to the measurements",
+            f"{label} هیچ جوابی نداد، پس به اندازه‌گیری‌ها برگشتم",
+            time.perf_counter() - mark,
+        )
+    else:
+        yield _event_step(
+            "No model is connected, so I answered from the measurements",
+            "مدلی وصل نیست، پس از روی اندازه‌گیری‌ها جواب دادم",
+            time.perf_counter() - mark,
+        )
+
+    offline = _offline_reply(facts, language, asked)
+    yield {"kind": "delta", "text": offline}
+    yield {
+        "kind": "done",
+        "reply": offline,
+        "plan": None,
+        "provider": "offline",
+        "seconds": round(time.perf_counter() - began, 2),
+    }

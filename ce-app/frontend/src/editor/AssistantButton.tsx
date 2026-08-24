@@ -27,6 +27,8 @@ interface Bubble {
   /** Which model answered. Shown always — an answer with no source is a rumour. */
   provider?: string
   steps?: AssistantStep[]
+  /** True while the answer is still arriving, word by word. */
+  streaming?: boolean
 }
 
 /**
@@ -84,11 +86,26 @@ export default function AssistantButton() {
   const push = (bubble: Omit<Bubble, 'id'>) =>
     setBubbles((list) => [...list, { ...bubble, id: nextId.current++ }])
 
+  /**
+   * One turn, read as it arrives.
+   *
+   * The steps appear as they happen and the words land as they are written,
+   * because a bouncing dot is not evidence that anything is happening. The
+   * bubble exists before the answer does, so the conversation never jumps.
+   */
   const send = async (text: string) => {
     const said = text.trim()
     if (!said || busy) return
     setPrompt('')
     push({ role: 'user', text: said })
+
+    const id = nextId.current++
+    const collected: AssistantStep[] = []
+    let written = ''
+    const patch = (changes: Partial<Bubble>) =>
+      setBubbles((list) => list.map((b) => (b.id === id ? { ...b, ...changes } : b)))
+
+    setBubbles((list) => [...list, { id, role: 'assistant', text: '', streaming: true }])
     setBusy(true)
     try {
       const state = useEditor.getState()
@@ -96,17 +113,35 @@ export default function AssistantButton() {
         ...bubbles.map((b) => ({ role: b.role, content: b.text })),
         { role: 'user', content: said },
       ]
-      const turn = await assistantApi.chat(
+      await assistantApi.chatStream(
         history,
         { tracks: state.tracks, clips: state.clips, transitions: state.transitions },
         selectedId,
         lang === 'fa' ? 'fa' : 'en',
-        provider
+        provider,
+        (event) => {
+          if (event.kind === 'step') {
+            collected.push({ en: event.en ?? '', fa: event.fa ?? '', ms: event.ms ?? 0 })
+            patch({ steps: [...collected] })
+          } else if (event.kind === 'delta') {
+            written += event.text ?? ''
+            patch({ text: written })
+          } else if (event.kind === 'done') {
+            patch({
+              text: event.reply || written,
+              provider: event.provider,
+              steps: [...collected],
+              streaming: false,
+            })
+            if (event.plan) setPending(event.plan)
+          } else if (event.kind === 'error') {
+            patch({ text: event.message ?? t('The answer stopped', 'پاسخ نیمه‌کاره ماند'),
+                    provider: 'offline', streaming: false })
+          }
+        }
       )
-      push({ role: 'assistant', text: turn.reply, provider: turn.provider, steps: turn.steps })
-      if (turn.plan) setPending(turn.plan)
     } catch (err) {
-      push({ role: 'assistant', text: (err as Error).message, provider: 'offline' })
+      patch({ text: (err as Error).message, provider: 'offline', streaming: false })
     } finally {
       setBusy(false)
     }
@@ -203,7 +238,10 @@ export default function AssistantButton() {
                 className={`ai-msg ai-msg--${bubble.role}`}
                 data-testid={`assistant-msg-${bubble.role}`}
               >
-                <div className="ai-msg__text">{bubble.text}</div>
+                <div className="ai-msg__text">
+                  {bubble.text}
+                  {bubble.streaming && <span className="ai-caret" aria-hidden="true" />}
+                </div>
                 {bubble.provider && (
                   <footer className="ai-msg__src">
                     <span dir="ltr">{bubble.provider}</span>
@@ -217,7 +255,7 @@ export default function AssistantButton() {
               </article>
             ))}
 
-            {busy && (
+            {bubbles.some((bubble) => bubble.streaming && !bubble.text) && (
               <div className="ai-msg ai-msg--assistant ai-msg--thinking" data-testid="assistant-thinking">
                 <span className="ai-dot" />
                 <span className="ai-dot" />

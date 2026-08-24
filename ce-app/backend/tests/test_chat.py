@@ -139,6 +139,52 @@ def test_the_requests_that_are_edits_still_are(asked, op):
     assert op in [o["op"] for o in turn["plan"]["ops"]]
 
 
+# --------------------------------------------------------------- the stream
+
+
+@pytest.mark.parametrize("asked,wants_plan", [
+    ("remove the silence", True),
+    ("کدام بخش قوی‌تر است؟", False),
+])
+def test_the_stream_shows_its_work_and_ends_once(asked, wants_plan):
+    """Steps as they happen, then one `done`. Not a firehose, not a black box."""
+    events = list(chat.reply_stream(
+        [{"role": "user", "content": asked}], TIMELINE, language="en", provider="off",
+    ))
+
+    kinds = [event["kind"] for event in events]
+    assert kinds.count("done") == 1, f"the stream ended {kinds.count('done')} times: {kinds}"
+    assert "step" in kinds, "a stream that shows no steps is the bouncing-dot problem again"
+
+    done = events[-1]
+    assert done["reply"].strip()
+    assert done["provider"], "an answer with no source is a rumour"
+    assert bool(done["plan"]) is wants_plan
+
+
+def test_the_stream_endpoint_answers_over_http():
+    """NDJSON over the wire: the client reads lines, not a body it must wait for."""
+    with client.stream(
+        "POST",
+        "/api/assistant/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "how long is my timeline?"}],
+            "timeline": TIMELINE,
+            "language": "en",
+            "provider": "off",
+        },
+    ) as response:
+        assert response.status_code == 200
+        lines = [line for line in response.iter_lines() if line.strip()]
+
+    import json as jsonlib
+
+    events = [jsonlib.loads(line) for line in lines]
+    assert events[-1]["kind"] == "done"
+    assert events[-1]["reply"].strip()
+    assert any(event["kind"] == "step" for event in events)
+
+
 # ------------------------------------------------------------------ the API
 
 

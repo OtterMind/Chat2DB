@@ -18,6 +18,7 @@ Two rules this file exists to keep:
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 
@@ -202,3 +203,138 @@ def chat(
         model=model,
         seconds=round(time.perf_counter() - began, 2),
     )
+
+
+def chat_stream(
+    messages: list[dict],
+    *,
+    choice: str = "auto",
+    timeout: float = 180.0,
+):
+    """The same conversation, yielded as it is written.
+
+    Returns a generator of text chunks, or `None` when no provider can answer.
+    Streaming is not decoration here: a 7B model on a CPU takes seconds, and
+    without it the user stares at three bouncing dots with no evidence that
+    anything is happening — which is the same complaint the task stages fixed
+    for renders (STATE.md §4.36).
+
+    Every provider speaks a slightly different dialect of "more text, please":
+    Ollama answers newline-delimited JSON, the other three answer SSE. A line
+    that will not parse is skipped rather than raised, because half a chunk is
+    not worth losing the rest of a sentence.
+    """
+    config = configured(choice)
+    if config is None:
+        return None
+    requests = _requests()
+    if requests is None:
+        return None
+
+    provider, key, model = config
+
+    def chunks():
+        try:
+            if provider == "ollama":
+                response = requests.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={"model": model, "messages": messages, "stream": True},
+                    timeout=timeout, stream=True,
+                )
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except ValueError:
+                        continue
+                    piece = (payload.get("message") or {}).get("content")
+                    if piece:
+                        yield piece
+                    if payload.get("done"):
+                        return
+                return
+
+            if provider == "openai":
+                response = requests.post(
+                    f"{settings.openai_base_url.rstrip('/')}/chat/completions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json={"model": model, "messages": messages, "temperature": 0.2, "stream": True},
+                    timeout=timeout, stream=True,
+                )
+                for line in response.iter_lines():
+                    text = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line or "")
+                    if not text.startswith("data:"):
+                        continue
+                    body = text[5:].strip()
+                    if body == "[DONE]":
+                        return
+                    try:
+                        delta = json.loads(body)["choices"][0].get("delta", {})
+                    except (ValueError, KeyError, IndexError):
+                        continue
+                    if delta.get("content"):
+                        yield delta["content"]
+                return
+
+            if provider == "gemini":
+                system = " ".join(m["content"] for m in messages if m.get("role") == "system")
+                contents = [
+                    {"role": "model" if m["role"] == "assistant" else "user",
+                     "parts": [{"text": m["content"]}]}
+                    for m in messages if m.get("role") != "system"
+                ]
+                response = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
+                    f":streamGenerateContent?alt=sse&key={key}",
+                    json={
+                        **({"systemInstruction": {"parts": [{"text": system}]}} if system else {}),
+                        "contents": contents,
+                        "generationConfig": {"temperature": 0.2},
+                    },
+                    timeout=timeout, stream=True,
+                )
+                for line in response.iter_lines():
+                    text = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line or "")
+                    if not text.startswith("data:"):
+                        continue
+                    try:
+                        parts = json.loads(text[5:].strip())["candidates"][0]["content"]["parts"]
+                    except (ValueError, KeyError, IndexError):
+                        continue
+                    for part in parts:
+                        if part.get("text"):
+                            yield part["text"]
+                return
+
+            system = " ".join(m["content"] for m in messages if m.get("role") == "system")
+            turns = [
+                {"role": "assistant" if m["role"] == "assistant" else "user", "content": m["content"]}
+                for m in messages if m.get("role") != "system"
+            ]
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": model, "max_tokens": 1024, "temperature": 0.2, "stream": True,
+                      **({"system": system} if system else {}), "messages": turns},
+                timeout=timeout, stream=True,
+            )
+            for line in response.iter_lines():
+                text = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line or "")
+                if not text.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(text[5:].strip())
+                except ValueError:
+                    continue
+                if event.get("type") == "content_block_delta":
+                    piece = (event.get("delta") or {}).get("text")
+                    if piece:
+                        yield piece
+                elif event.get("type") in ("message_stop", "error"):
+                    return
+        except Exception:  # noqa: BLE001 — a dropped stream is an answer that ended
+            return
+
+    return chunks()
