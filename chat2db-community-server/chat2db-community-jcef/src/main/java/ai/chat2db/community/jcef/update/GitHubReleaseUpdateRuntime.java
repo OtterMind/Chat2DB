@@ -44,6 +44,53 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
     record Platform(InstallerKind kind, String assetArchitecture) {
     }
 
+    record MacTools(
+            String hdiutil,
+            String codesign,
+            String spctl,
+            String ditto,
+            String plistBuddy,
+            String plutil,
+            String lipo,
+            String osascript,
+            String open
+    ) {
+        static MacTools system() {
+            return new MacTools(
+                    "/usr/bin/hdiutil",
+                    "/usr/bin/codesign",
+                    "/usr/sbin/spctl",
+                    "/usr/bin/ditto",
+                    "/usr/libexec/PlistBuddy",
+                    "/usr/bin/plutil",
+                    "/usr/bin/lipo",
+                    "/usr/bin/osascript",
+                    "/usr/bin/open"
+            );
+        }
+    }
+
+    record MacInstallPolicy(
+            List<Path> trustedRoots,
+            String bundleIdentifier,
+            String teamIdentifier,
+            String architecture,
+            MacTools tools
+    ) {
+        static MacInstallPolicy production(String architecture) {
+            return new MacInstallPolicy(
+                    List.of(
+                            Path.of("/Applications"),
+                            Path.of(System.getProperty("user.home"), "Applications")
+                    ),
+                    "com.chat2db.community",
+                    "AFBZ4KGQGM",
+                    architecture,
+                    MacTools.system()
+            );
+        }
+    }
+
     private record ReleasePayload(
             @JsonProperty("tag_name") String tagName,
             @JsonProperty("html_url") String htmlUrl,
@@ -80,6 +127,18 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             to_version="$6"
             operation_id="$7"
             log_file="$8"
+            expected_architecture="$9"
+            expected_bundle_identifier="${10}"
+            expected_team_identifier="${11}"
+            hdiutil_tool="${12}"
+            codesign_tool="${13}"
+            spctl_tool="${14}"
+            ditto_tool="${15}"
+            plist_buddy_tool="${16}"
+            plutil_tool="${17}"
+            lipo_tool="${18}"
+            osascript_tool="${19}"
+            open_tool="${20}"
             set -e
             stage="WAIT_PARENT"
             mount_point=""
@@ -106,7 +165,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             }
             cleanup() {
               if test -n "$mount_point"; then
-                /usr/bin/hdiutil detach "$mount_point" -quiet >/dev/null 2>&1 || true
+                "$hdiutil_tool" detach "$mount_point" -quiet >/dev/null 2>&1 || true
                 /bin/rm -rf "$mount_point"
                 mount_point=""
               fi
@@ -123,6 +182,31 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
               fi
               exit "$exit_code"
             }
+            verify_app() {
+              candidate="$1"
+              requirement="anchor apple generic and certificate leaf[subject.OU] = \\"${expected_team_identifier}\\" and identifier \\"${expected_bundle_identifier}\\""
+              audit "INFO" "verifying application identity path=${candidate}"
+              test -d "$candidate"
+              "$codesign_tool" --verify --deep --strict -R="$requirement" "$candidate"
+              "$spctl_tool" --assess --type execute --verbose=4 "$candidate"
+              signature_details=$("$codesign_tool" -dv --verbose=4 "$candidate" 2>&1)
+              actual_team_identifier=$(/usr/bin/printf '%s\n' "$signature_details" | /usr/bin/sed -n 's/^TeamIdentifier=//p' | /usr/bin/head -n 1)
+              actual_bundle_identifier=$("$plist_buddy_tool" -c 'Print :CFBundleIdentifier' "$candidate/Contents/Info.plist")
+              actual_short_version=$("$plist_buddy_tool" -c 'Print :CFBundleShortVersionString' "$candidate/Contents/Info.plist")
+              actual_bundle_version=$("$plist_buddy_tool" -c 'Print :CFBundleVersion' "$candidate/Contents/Info.plist")
+              actual_local_version=$("$plutil_tool" -extract version raw -o - "$candidate/Contents/app/local_version.json")
+              actual_architectures=$("$lipo_tool" -archs "$candidate/Contents/MacOS/Chat2DB Community")
+              audit "INFO" "identity bundleId=${actual_bundle_identifier} teamId=${actual_team_identifier} shortVersion=${actual_short_version} bundleVersion=${actual_bundle_version} localVersion=${actual_local_version} architectures=${actual_architectures}"
+              test "$actual_bundle_identifier" = "$expected_bundle_identifier"
+              test "$actual_team_identifier" = "$expected_team_identifier"
+              test "$actual_short_version" = "$to_version"
+              test "$actual_bundle_version" = "$to_version"
+              test "$actual_local_version" = "$to_version"
+              case " $actual_architectures " in
+                *" $expected_architecture "*) ;;
+                *) return 1 ;;
+              esac
+            }
             trap finish EXIT
             trap 'exit 130' INT TERM
             audit "INFO" "waiting for application process pid=${parent_pid}"
@@ -133,22 +217,19 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             mount_point=$(/usr/bin/mktemp -d "/tmp/chat2db-community-update.XXXXXX")
             stage="ATTACH_DMG"
             audit "INFO" "attaching installer=${installer} mountPoint=${mount_point}"
-            /usr/bin/hdiutil attach "$installer" -readonly -nobrowse -mountpoint "$mount_point" >/dev/null
+            "$hdiutil_tool" attach "$installer" -readonly -nobrowse -mountpoint "$mount_point" >/dev/null
             source_app="$mount_point/Chat2DB Community.app"
-            stage="LOCATE_SOURCE_APP"
-            audit "INFO" "checking source application path=${source_app}"
-            test -d "$source_app"
-            stage="VERIFY_SIGNATURE"
-            audit "INFO" "verifying source application signature"
-            /usr/bin/codesign --verify --deep --strict "$source_app"
-            audit "INFO" "source application signature verification passed"
+            stage="VERIFY_SOURCE_APP"
+            verify_app "$source_app"
             parent_dir=$(/usr/bin/dirname "$destination")
             staged="${destination}.update-${operation_id}"
             if test -w "$parent_dir"; then
               stage="STAGE_COPY"
               audit "INFO" "copying source application to staging path=${staged}"
               /bin/rm -rf "$staged"
-              /usr/bin/ditto "$source_app" "$staged"
+              "$ditto_tool" "$source_app" "$staged"
+              stage="VERIFY_STAGED_APP"
+              verify_app "$staged"
               stage="REMOVE_CURRENT_APP"
               audit "INFO" "removing current application path=${destination}"
               /bin/rm -rf "$destination"
@@ -156,16 +237,29 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
               audit "INFO" "activating staged application"
               /bin/mv "$staged" "$destination"
             else
-              stage="ELEVATED_REPLACE"
-              audit "INFO" "requesting administrator privileges for application replacement"
-              /usr/bin/osascript \
+              stage="ELEVATED_STAGE_COPY"
+              audit "INFO" "requesting administrator privileges to create staging application"
+              "$osascript_tool" \
                 -e 'on run argv' \
                 -e 'set sourcePath to item 1 of argv' \
-                -e 'set destinationPath to item 2 of argv' \
-                -e 'set commandText to "/bin/rm -rf " & quoted form of destinationPath & " && /usr/bin/ditto " & quoted form of sourcePath & " " & quoted form of destinationPath' \
+                -e 'set stagedPath to item 2 of argv' \
+                -e 'set dittoPath to item 3 of argv' \
+                -e 'set commandText to "/bin/rm -rf " & quoted form of stagedPath & " && " & quoted form of dittoPath & " " & quoted form of sourcePath & " " & quoted form of stagedPath' \
                 -e 'do shell script commandText with administrator privileges' \
                 -e 'end run' \
-                "$source_app" "$destination"
+                "$source_app" "$staged" "$ditto_tool"
+              stage="VERIFY_STAGED_APP"
+              verify_app "$staged"
+              stage="ELEVATED_ACTIVATE"
+              audit "INFO" "requesting administrator privileges to activate staged application"
+              "$osascript_tool" \
+                -e 'on run argv' \
+                -e 'set stagedPath to item 1 of argv' \
+                -e 'set destinationPath to item 2 of argv' \
+                -e 'set commandText to "/bin/rm -rf " & quoted form of destinationPath & " && /bin/mv " & quoted form of stagedPath & " " & quoted form of destinationPath' \
+                -e 'do shell script commandText with administrator privileges' \
+                -e 'end run' \
+                "$staged" "$destination"
             fi
             stage="DETACH_DMG"
             audit "INFO" "detaching installer image"
@@ -175,7 +269,7 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
             /bin/rm -f "$installer"
             stage="LAUNCH_APPLICATION"
             audit "INFO" "launching updated application path=${destination}"
-            /usr/bin/open -n "$destination"
+            "$open_tool" -n "$destination"
             stage="COMPLETE"
             audit "INFO" "native installation completed successfully"
             """;
@@ -682,7 +776,13 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
     ) throws IOException {
         return switch (release.kind()) {
             case WINDOWS_MSI -> buildWindowsInstallerCommand(installer, parentPid, appDirectory, nativeContext);
-            case MAC_DMG -> buildMacInstallerCommand(installer, parentPid, appDirectory, nativeContext);
+            case MAC_DMG -> buildMacInstallerCommand(
+                    installer,
+                    parentPid,
+                    appDirectory,
+                    nativeContext,
+                    MacInstallPolicy.production(expectedMacArchitecture(release.assetName()))
+            );
             case LINUX_APPIMAGE -> buildAppImageInstallerCommand(installer, parentPid, environment, nativeContext);
             case LINUX_DEB ->
                     buildLinuxPackageInstallerCommand(installer, parentPid, appDirectory, "deb", nativeContext);
@@ -779,17 +879,19 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         );
     }
 
-    private static List<String> buildMacInstallerCommand(
+    static List<String> buildMacInstallerCommand(
             Path installer,
             long parentPid,
             Path appDirectory,
-            UpdateAuditLog.NativeContext nativeContext
+            UpdateAuditLog.NativeContext nativeContext,
+            MacInstallPolicy policy
     )
             throws IOException {
         Path bundle = findMacApplicationBundle(appDirectory);
-        if (bundle == null || !isTrustedMacDestination(bundle)) {
+        if (bundle == null || !isTrustedMacDestination(bundle, policy.trustedRoots())) {
             throw new IOException("Chat2DB Community must be installed in Applications before automatic updates");
         }
+        MacTools tools = policy.tools();
         return List.of(
                 "/bin/sh",
                 "-c",
@@ -802,7 +904,19 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
                 nativeContext.fromVersion(),
                 nativeContext.toVersion(),
                 nativeContext.operationId(),
-                nativeContext.logFile().toString()
+                nativeContext.logFile().toString(),
+                policy.architecture(),
+                policy.bundleIdentifier(),
+                policy.teamIdentifier(),
+                tools.hdiutil(),
+                tools.codesign(),
+                tools.spctl(),
+                tools.ditto(),
+                tools.plistBuddy(),
+                tools.plutil(),
+                tools.lipo(),
+                tools.osascript(),
+                tools.open()
         );
     }
 
@@ -1080,11 +1194,21 @@ final class GitHubReleaseUpdateRuntime implements GitHubReleaseDesktopUpdater.Ru
         return null;
     }
 
-    private static boolean isTrustedMacDestination(Path bundle) {
+    private static boolean isTrustedMacDestination(Path bundle, List<Path> trustedRoots) {
         Path normalized = bundle.toAbsolutePath().normalize();
-        Path systemApplications = Path.of("/Applications").toAbsolutePath().normalize();
-        Path userApplications = Path.of(System.getProperty("user.home"), "Applications").toAbsolutePath().normalize();
-        return normalized.startsWith(systemApplications) || normalized.startsWith(userApplications);
+        return trustedRoots.stream()
+                .map(path -> path.toAbsolutePath().normalize())
+                .anyMatch(normalized::startsWith);
+    }
+
+    private static String expectedMacArchitecture(String assetName) throws IOException {
+        if (assetName != null && assetName.endsWith("-arm64.dmg")) {
+            return "arm64";
+        }
+        if (assetName != null && assetName.endsWith("-x64.dmg")) {
+            return "x86_64";
+        }
+        throw new IOException("Could not resolve the macOS installer architecture from asset " + assetName);
     }
 
     private static Path findLinuxLauncher(Path appDirectory) {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -62,6 +63,7 @@ final class UpdateAuditLog {
     private String toVersion = "";
     private boolean currentFailed;
     private boolean currentTerminal = true;
+    private boolean auditHealthy = true;
 
     static UpdateAuditLog createDefault() {
         Path applicationLog = resolveApplicationLog();
@@ -104,6 +106,7 @@ final class UpdateAuditLog {
             toVersion = "";
             currentFailed = false;
             currentTerminal = false;
+            auditHealthy = true;
             writeResult("CHECKING", "CHECK", "", "");
             append("INFO", "CHECK", "operation started id=" + operationId);
             pruneOldOperations();
@@ -164,8 +167,11 @@ final class UpdateAuditLog {
         if (!enabled || logFile == null || resultFile == null) {
             return null;
         }
+        if (!auditHealthy) {
+            throw new IOException("Update audit log is not writable");
+        }
+        appendRequired("INFO", "HANDOFF", "native installer audit prepared log=" + logFile);
         writeResult("PENDING", "HANDOFF", "", "");
-        append("INFO", "HANDOFF", "native installer audit prepared log=" + logFile);
         return new NativeContext(
                 operationId,
                 logFile,
@@ -217,11 +223,29 @@ final class UpdateAuditLog {
         if (!enabled || logFile == null) {
             return;
         }
-        appendRaw(LOG_TIME.format(Instant.now())
+        appendRaw(formatLine(level, stage, message));
+    }
+
+    private void appendRequired(String level, String stage, String message) throws IOException {
+        if (!enabled || logFile == null) {
+            return;
+        }
+        Files.writeString(
+                logFile,
+                formatLine(level, stage, message),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+        );
+        forceFile(logFile);
+    }
+
+    private static String formatLine(String level, String stage, String message) {
+        return LOG_TIME.format(Instant.now())
                 + " level=" + safe(level)
                 + " stage=" + safe(stage)
                 + " " + safe(message)
-                + System.lineSeparator());
+                + System.lineSeparator();
     }
 
     private void appendRaw(String text) {
@@ -237,7 +261,7 @@ final class UpdateAuditLog {
                     StandardOpenOption.APPEND
             );
         } catch (IOException ignored) {
-            // Audit failures must not make a successful update operation fail.
+            auditHealthy = false;
         }
     }
 
@@ -254,11 +278,13 @@ final class UpdateAuditLog {
                 "logPath=" + safe(logFile == null ? "" : logFile.toString())
         );
         Files.write(temporary, lines, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        forceFile(temporary);
         try {
             Files.move(temporary, resultFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
             Files.move(temporary, resultFile, StandardCopyOption.REPLACE_EXISTING);
         }
+        forceFile(resultFile);
     }
 
     private void pruneOldOperations() {
@@ -347,6 +373,12 @@ final class UpdateAuditLog {
             for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
                 Files.deleteIfExists(path);
             }
+        }
+    }
+
+    private static void forceFile(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+            channel.force(true);
         }
     }
 

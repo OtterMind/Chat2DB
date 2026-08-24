@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UpdateAuditLogTest {
@@ -150,5 +151,26 @@ class UpdateAuditLogTest {
         auditLog.begin();
         UpdateAuditLog.NativeContext next = auditLog.prepareNativeHandoff();
         assertFalse(first.operationId().equals(next.operationId()));
+    }
+
+    @Test
+    void refusesNativeHandoffAfterAuditLogBecomesUnwritable() throws Exception {
+        UpdateAuditLog auditLog = new UpdateAuditLog(tempDirectory, path -> true);
+        auditLog.begin();
+        Path operationDirectory;
+        try (var directories = Files.list(tempDirectory)) {
+            operationDirectory = directories.filter(Files::isDirectory).findFirst().orElseThrow();
+        }
+        Files.delete(operationDirectory.resolve("update.log"));
+        Files.delete(operationDirectory);
+        Files.writeString(operationDirectory, "blocks the former directory path");
+
+        auditLog.info("DOWNLOAD", "this append must fail");
+
+        IOException exception = assertThrows(IOException.class, auditLog::prepareNativeHandoff);
+        assertTrue(exception.getMessage().contains("audit log is not writable"));
+        String result = Files.readString(tempDirectory.resolve("latest-result.properties"));
+        assertTrue(result.contains("status=CHECKING"));
+        assertFalse(result.contains("status=PENDING"));
     }
 }
