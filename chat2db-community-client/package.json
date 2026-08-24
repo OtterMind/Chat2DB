@@ -196,6 +196,9 @@
     "react": "^16.8.0",
     "react-dom": "^16.8.0"
   },
+  "resolutions": {
+    "dompurify": "3.4.14"
+  },
   "engines": {
     "node": ">=18.17.0"
   }

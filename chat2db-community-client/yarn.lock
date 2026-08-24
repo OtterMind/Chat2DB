@@ -6976,17 +6976,10 @@ domparser-win32-x64-msvc@0.0.7:
   resolved "https://registry.npmmirror.com/domparser-win32-x64-msvc/-/domparser-win32-x64-msvc-0.0.7.tgz#2a1f520f77f2da6847b99f9914cedcb789865ff8"
   integrity sha512-69XAew+0MublYlx7Mywe/9qkc/lo6L5QYsBBgwHDK96QPy4MFv5U4WgsXWXbKoeKEbBlRMyLA0iohF0qvU+Veg==
 
-dompurify@3.4.8:
-  version "3.4.8"
-  resolved "https://registry.npmmirror.com/dompurify/-/dompurify-3.4.8.tgz#6c54f8c207160e7f83fcb7f4fd05a82ac36b1cdc"
-  integrity sha512-yb1cEmaOum7wFvOCSQxyfgVlv5D47Rc30iZWoMpbDIWTnJ6grDDQyu2KFJzB2k7u0pMuJcQ1zphH//fFnw2tjQ==
-  optionalDependencies:
-    "@types/trusted-types" "^2.0.7"
-
-dompurify@^3.3.3:
-  version "3.4.12"
-  resolved "https://registry.npmmirror.com/dompurify/-/dompurify-3.4.12.tgz#6fa2265e9bbdce882c4ace4107626051b448ffa8"
-  integrity sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==
+dompurify@3.4.14, dompurify@3.4.8, dompurify@^3.3.3:
+  version "3.4.14"
+  resolved "https://registry.npmmirror.com/dompurify/-/dompurify-3.4.14.tgz#a789edb2c7bcdb69a93713a34edb7e0a5245d8c9"
+  integrity sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==
   optionalDependencies:
     "@types/trusted-types" "^2.0.7"
 
