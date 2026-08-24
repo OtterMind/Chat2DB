@@ -18,7 +18,7 @@
 >
 > | # | Step | State in the code | What it needs |
 > |---|---|---|---|
-> | 1 | **0.8.1 — things to put on the screen** | **title pack shipped** (15 presets, `GET /api/titles`, 9 tests); gallery and sound packs still missing | a `.cetemplate` gallery, sound effects through `freesound-python` (MIT) |
+> | 1 | **0.8.1 — things to put on the screen** | **done**: title pack (0.9.9), gallery with checked import/export + honest starters (0.9.16), and the Freesound shelf (0.9.16, key-required) | — |
 > | 2 | **0.9.1 — audio depth** | **the speech map can now come from silero-vad** (MIT, 2.22 MB, opt-in, with a Measure button); DeepFilterNet and the bed library still missing | DeepFilterNet (MIT/Apache) fetched on demand and *measured in dB against the current chain*, kept only if it wins; a music bed library |
 > | 3 | **Vision — a model that has seen frames** | **bridge built**: `core/engine/vision.py` sends small frames to the user's Ollama and casts one 0.3-weight vote in the highlight scorer; off by default, enable refused without a pulled model, quality verdict pending the user's own model | nothing left to build; the user's Ollama decides |
 > | 4 | **1.0 — stabilise and say what it is** | nothing: no tour, no crash reporting, no manual, no attribution screen | first-run tour, crash reporting, a manual in both languages, an attribution screen listing every shipped package and its licence, and a filmed clean install doing a whole edit with no console error |
