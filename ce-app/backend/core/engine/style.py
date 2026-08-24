@@ -31,6 +31,7 @@ from core.brain import objective
 from core.brain import race as brain_race
 from core.engine import analyze as analysis
 from core.engine import intent as intent_model
+from core.engine import vad as vad_engine
 from core.engine import cancellation
 from core.engine import audio as audio_engine
 from core.engine.compose import ffmpeg_binary, probe_media
@@ -518,7 +519,10 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
     speech: list[tuple[float, float]] = []
     if info.get("has_audio") and weights.get("speech", 0.0) > 0:
         try:
-            silences = analysis.detect_silence(path)
+            # Whichever speech map is chosen — the model, or the energy detector
+            # every earlier release used. Both return silence as ranges, so
+            # nothing downstream knows the difference.
+            silences = vad_engine.silent_ranges_auto(path)
             speech = [(r.start, r.end) for r in analysis.keep_ranges(duration, silences)]
         except Exception:  # noqa: BLE001 — no audio is a normal answer
             speech = []
@@ -651,7 +655,7 @@ def _brain_context(
     duration = float(info.get("duration") or 0.0)
     if info.get("has_audio"):
         try:
-            silences = analysis.detect_silence(source)
+            silences = vad_engine.silent_ranges_auto(source)
             speech = [(r.start, r.end) for r in analysis.keep_ranges(duration, silences)]
         except Exception:  # noqa: BLE001
             speech = []

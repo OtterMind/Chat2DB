@@ -5,6 +5,8 @@ import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
 import AiRuntimeCard from '../components/AiRuntimeCard'
 import { assistantApi, type ProviderState } from '../api/assistant'
+import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
+import { pickMedia } from '../api/render'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
 import { useI18n, type Lang } from '../i18n'
@@ -82,6 +84,142 @@ function AssistantEngineCard() {
           'بدون مدل هم دستیار پاسخ می‌دهد — از روی آنچه در تایم‌لاین اندازه گرفته — و به‌جای حدس زدن، همین را می‌گوید.'
         )}
       </p>
+    </Card>
+  )
+}
+
+/**
+ * The speech map — where the edit thinks someone is talking.
+ *
+ * Everything about the cut starts from this: which moments are candidates, where
+ * a cut may land without breaking a word. For every release so far it came from
+ * FFmpeg's energy detector, which cannot tell a loud tone from a voice. The model
+ * is opt-in, and the reason it is opt-in is on this card: a **Measure** button
+ * that runs both on a file the user chooses and shows the numbers, because
+ * "the model is better" without a measurement is a brochure (§4.57).
+ */
+function SpeechEngineCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<VadStatus | null>(null)
+  const [result, setResult] = useState<VadComparison | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    vadApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const install = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      setStatus(await vadApi.install((state) => setNote(state.label || '')))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+      setNote('')
+    }
+  }
+
+  const measure = async () => {
+    const picker = pickMedia()
+    const paths = picker ? await picker : null
+    const path = paths?.[0]
+    if (!path) return
+    setBusy(true)
+    try {
+      setResult(await vadApi.compare(path))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const choose = async (engine: string) => {
+    try {
+      await vadApi.choose(engine)
+      setStatus(await vadApi.status())
+      message.success(t('The speech map changed', 'نقشه‌ی گفتار عوض شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const percent = (value: number) => `${Math.round(value * 100)}%`
+
+  return (
+    <Card title={t('Where the speech is', 'گفتار کجاست')}>
+      <p className="ce-hint">
+        {t(
+          'Every cut starts from knowing where someone is talking. The energy detector has been used until now; it cannot tell a loud tone from a voice. The model is 2.2 MB, licence MIT, and runs on the runtime that already ships.',
+          'هر برشی از این شروع می‌شود که بدانیم کی دارد حرف می‌زند. تا حالا از تشخیص‌دهنده‌ی انرژی استفاده شده؛ آن نمی‌تواند یک تنِ بلند را از صداِ انسان تشخیص دهد. مدل ۲.۲ مگابایت است، مجوز MIT، و روی همان رانتایمی کار می‌کند که از قبل در برنامه هست.'
+        )}
+      </p>
+
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">
+          {t('engine', 'موتور')}: <Num>{status?.engine ?? '—'}</Num>
+        </span>
+        <span className="ce-badge">
+          {t('model', 'مدل')}: {status?.model ? `${status.modelMb} MB` : t('not fetched', 'گرفته نشده')}
+        </span>
+        <span className="ce-badge">
+          onnxruntime: <Num>{status?.onnxruntime ?? '—'}</Num>
+        </span>
+        <span className="ce-badge">{t('licence', 'مجوز')}: {status?.licence ?? '—'}</span>
+      </div>
+
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        {!status?.model && (
+          <button className="ce-btn ce-btn--sm" disabled={busy} onClick={() => void install()}>
+            <Download size={14} /> {busy && note ? note : t('Fetch the model (2.2 MB)', 'گرفتن مدل (۲.۲ مگابایت)')}
+          </button>
+        )}
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy} onClick={() => void measure()}>
+          <Sparkles size={14} /> {t('Measure it on a file', 'اندازه‌گیری روی یک فایل')}
+        </button>
+        {status?.model && status.engine !== 'silero' && (
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void choose('silero')}>
+            {t('Use the model', 'استفاده از مدل')}
+          </button>
+        )}
+        {status?.engine === 'silero' && (
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void choose('energy')}>
+            {t('Go back to the energy detector', 'برگشت به تشخیص‌دهنده‌ی انرژی')}
+          </button>
+        )}
+      </div>
+
+      {result && (
+        <div className="ce-kv" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+          <strong data-testid="vad-result">
+            {result.file} · {result.duration.toFixed(1)}s
+            {!result.hasAudio && t(' — no audio track', ' — ترک صوتی ندارد')}
+          </strong>
+          {result.silencedetect && (
+            <span>
+              {t('Energy detector', 'تشخیص‌دهنده‌ی انرژی')}: {percent(result.silencedetect.speechRatio)}{' '}
+              {t('speech', 'گفتار')} · {result.silencedetect.regions} {t('regions', 'ناحیه')} ·{' '}
+              {result.silencedetect.seconds}s
+            </span>
+          )}
+          {result.silero && (
+            <span>
+              {t('Model', 'مدل')}: {percent(result.silero.speechRatio)} {t('speech', 'گفتار')} ·{' '}
+              {result.silero.regions} {t('regions', 'ناحیه')} · {result.silero.seconds}s
+            </span>
+          )}
+          {typeof result.disagreementRatio === 'number' && (
+            <span className="ce-hint">
+              {t('They disagree over', 'اختلاف دارند روی')} {percent(result.disagreementRatio)}{' '}
+              {t('of the file. Only your own material can say which one is right.',
+                 'از فایل. فقط material خودت می‌تواند بگوید کدام درست است.')}
+            </span>
+          )}
+        </div>
+      )}
     </Card>
   )
 }
@@ -292,6 +430,8 @@ export default function Settings() {
       </Card>
 
       <AssistantEngineCard />
+
+      <SpeechEngineCard />
     </Page>
   )
 }

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     #: | anthropic. Stored here rather than in the panel so one choice covers the
     #: chat, Settings and any future door to the same brain.
     assistant_provider: str = "auto"
+    #: Which speech map the edit is built on: `energy` (FFmpeg silencedetect, the
+    #: default and what every release so far used) or `silero` (the on-demand
+    #: model). Opt-in until it has been measured on real speech — see core/engine/vad.py.
+    speech_engine: str = "energy"
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""

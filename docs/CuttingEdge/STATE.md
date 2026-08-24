@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.10` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.11` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -24,6 +24,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 |---|---|
 | Backend | FastAPI + SQLite on port **8742**; job pipeline (ingest → prepare → transcribe → select → reframe → subtitle → export) |
 | **Render engine** | `core/engine/compose.py` — the edit model becomes one FFmpeg `filter_complex`; NVENC when present, libx264 otherwise; progress streamed over the WebSocket |
+| **Speech map** | Where someone is talking, which every cut depends on. Two sources, one return shape: FFmpeg's energy detector (the default, unchanged) and **silero-vad** (MIT, a 2.22 MB ONNX model fetched on demand, run by the `onnxruntime` that already ships with faster-whisper). Opt-in behind Settings → *Where the speech is*, which also has a **Measure it** button that runs both on a file you choose and shows the numbers — the verdict on real speech is deliberately left to that measurement, not claimed here |
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
 | **Preview** | Real video **with sound**, shaped to the project canvas (Auto follows the footage), every effect applied live as CSS, transitions cross-faded between two layers, text drawn on top, 720p proxies for heavy footage. A `requestAnimationFrame` transport drives the playhead |
@@ -100,7 +101,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **262 collected: 259 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **270 collected: 266 passed, 4 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`, needs Chromium from `sandbox-test-env.sh`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -778,6 +779,34 @@ gate that stops a broken installer from being published.
     `ingest.py` 0 %, `app/routers/jobs.py` 33 %, `services/pipeline.py`
     untested. Not dead code (the pipeline imports both), just never exercised.
     That is the honest next target for tests, ahead of any new feature.
+
+78. **An engine that is not shipped is not a dependency.** silero-vad's PyPI
+    package declares `torch>=1.12` and `torchaudio`, so `pip install silero-vad`
+    would pull several hundred megabytes to run a **2.22 MB** model that
+    `onnxruntime` — already in the installer, via faster-whisper — runs at
+    **165× realtime on this CPU**. So `vad.fetch()` does `pip download
+    --no-deps` and takes one file out of the wheel. The licence was read from the
+    wheel's own `METADATA` (`Classifier: License :: OSI Approved :: MIT
+    License`), not from a README, because the two have disagreed before.
+    Nothing new enters the installer: 0 MB.
+79. **"The model is better" is a claim, so it stayed a claim.** No real speech
+    exists in this sandbox — no apt, no espeak, GitHub blocked, no bundled sample
+    in any wheel — so the verdict was **not** invented. What was measured on a
+    known-answer fixture (three loud amplitude-modulated tone bursts, nobody
+    talking): the energy detector reports **51.5 % speech in 3 regions**, the
+    model reports **0 % in 0 regions**. That is the specific failure the energy
+    detector has — it cannot tell a loud tone from a voice — and it is why the
+    engine exists. Whether the model is better *on speech* is what
+    `POST /api/vad/compare` answers on the user's own file, from the Settings
+    card. Until that is read, the default is unchanged and choosing the model
+    without fetching it is refused with a 409 rather than silently downgraded.
+80. **The graceful path was found by accident, and kept.** The running server was
+    using a different virtualenv that had no `onnxruntime`, so
+    `/api/vad/status` answered `{"model": true, "ready": false}` and
+    `/api/vad/compare` returned the energy detector's numbers with `silero:
+    null` — no crash, no 500. That is the §4.51 rule holding on the first contact
+    with a real machine that lacks the runtime, and `tests/test_vad.py` now pins
+    it.
 
 ## 5. Release procedure
 
