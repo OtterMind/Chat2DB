@@ -320,6 +320,22 @@ def whisper_status() -> tuple[str, str]:
         return "cpu", text[:160]
 
 
+def _cuda_compute_present() -> bool:
+    """Is a CUDA device visible to CTranslate2 — without loading a model.
+
+    Cheap on purpose: `get_cuda_device_count` asks the runtime, it does not load
+    weights, so it is safe to run inside the quick capabilities call. It lets the
+    card say, on the user's own machine, "your CUDA already works", which is the
+    sentence that disproves "I need the CUDA libraries" for an NVENC problem.
+    """
+    try:
+        import ctranslate2  # type: ignore
+
+        return int(ctranslate2.get_cuda_device_count()) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _nvenc_api_mismatch(reason: str) -> tuple[str, str] | None:
     """`("13.1", "13.0")` when the failure is the driver-vs-FFmpeg ABI mismatch.
 
@@ -383,6 +399,21 @@ def capabilities(deep: bool = False) -> Capabilities:
                     "API version, which is why it did not change this. It was still the right "
                     "thing to set; the driver is the other half."
                 )
+                if _cuda_compute_present():
+                    caps.notes.append(
+                        "You do not need the CUDA libraries for this: a CUDA device is already "
+                        "visible and speech recognition uses it. NVENC is a separate block whose "
+                        "API version comes from the driver, so installing more CUDA would not "
+                        "raise it — only the driver update would."
+                    )
+                else:
+                    caps.notes.append(
+                        "You do not need the CUDA libraries for this. They are what speech "
+                        "recognition uses; NVENC is a separate block on the chip whose API "
+                        "version comes from the driver, so installing cuBLAS/cuDNN would not "
+                        "raise it. The CUDA download is only for machines whose speech "
+                        "recognition cannot see the GPU."
+                    )
             else:
                 # The card is present and the encoder still will not run. On Windows
                 # this is nearly always one of three things, and all three are the
