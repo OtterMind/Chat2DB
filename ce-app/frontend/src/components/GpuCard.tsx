@@ -1,3 +1,4 @@
+import { message } from 'antd'
 import { useEffect, useState } from 'react'
 import { Cpu, Gauge, Loader2, Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Card } from './Page'
@@ -41,12 +42,20 @@ interface CudaStatus {
 
 const SLOW = { timeout: 60 * 60_000 }
 
+interface Preference {
+  supported: boolean
+  allSet?: boolean
+  entries?: Record<string, string | null>
+  reason?: string
+}
+
 export default function GpuCard() {
   const { t } = useI18n()
   const [status, setStatus] = useState<GpuStatus | null>(null)
   const [cuda, setCuda] = useState<CudaStatus | null>(null)
-  const [busy, setBusy] = useState<'check' | 'bench' | 'install' | null>(null)
+  const [busy, setBusy] = useState<'check' | 'bench' | 'install' | 'prefer' | null>(null)
   const [bench, setBench] = useState<{ cpu: number | null; gpu: number | null; speedup?: number } | null>(null)
+  const [preference, setPreference] = useState<Preference | null>(null)
 
   const load = async (deep = false) => {
     const [gpu, cudaState] = await Promise.all([
@@ -55,6 +64,7 @@ export default function GpuCard() {
     ])
     setStatus(gpu)
     setCuda(cudaState)
+    setPreference(await api.get('/gpu/preference').then((r) => r.data).catch(() => null))
   }
 
   useEffect(() => {
@@ -83,6 +93,38 @@ export default function GpuCard() {
   }
 
   const yes = (value: boolean) => (value ? t('yes', 'بله') : t('no', 'خیر'))
+
+  /**
+   * One button instead of five steps through Windows Settings.
+   *
+   * It writes the same per-application graphics preference, under
+   * HKEY_CURRENT_USER — so no administrator prompt — and it covers the two
+   * executables the Settings page cannot reach: our Python backend and FFmpeg,
+   * which is the process that actually opens the encoder.
+   */
+  const askWindowsForTheCard = async () => {
+    setBusy('prefer')
+    try {
+      const result = await api.post('/gpu/preference', {}, { timeout: 60_000 }).then((r) => r.data)
+      if (!result.supported) {
+        message.info(result.reason)
+      } else if (result.changed?.length) {
+        message.success(
+          t(
+            `Windows will use the card for ${result.changed.length} programs. Close the app and open it again.`,
+            `ویندوز از این پس برای ${result.changed.length} برنامه از کارت استفاده می‌کند. برنامه را کامل ببند و دوباره باز کن.`
+          )
+        )
+      } else {
+        message.info(t('Already set — the card is already preferred.', 'از قبل تنظیم بود — کارت انتخاب شده است.'))
+      }
+      await load(true)
+    } catch (error) {
+      message.error((error as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <Card title={t('Graphics card', 'کارت گرافیک')} testId="gpu-card">
@@ -170,6 +212,27 @@ export default function GpuCard() {
               {busy === 'check' ? <Loader2 size={15} className="ce-spin" /> : <CheckCircle2 size={15} />}
               {t('Check everything', 'همه را بررسی کن')}
             </button>
+            {preference?.supported && !status.encode && (
+              <button
+                className="ce-btn ce-btn--sm"
+                data-testid="prefer-card"
+                disabled={busy !== null}
+                onClick={() => void askWindowsForTheCard()}
+              >
+                {busy === 'prefer' ? <Loader2 size={15} className="ce-spin" /> : <Cpu size={15} />}
+                {t('Ask Windows to use the card', 'از ویندوز بخواه از کارت استفاده کند')}
+              </button>
+            )}
+            {preference?.supported && (
+              <a
+                className="ce-btn ce-btn--ghost ce-btn--sm"
+                href="ms-settings:display-advancedgraphics"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('Open Windows graphics settings', 'تنظیمات گرافیک ویندوز')}
+              </a>
+            )}
             <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void measure()}>
               {busy === 'bench' ? <Loader2 size={15} className="ce-spin" /> : <Gauge size={15} />}
               {t('Measure it', 'اندازه بگیر')}

@@ -11,6 +11,8 @@ everything must come back as an honest "no" and nothing may raise.
 """
 from __future__ import annotations
 
+import sys
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -244,3 +246,52 @@ def test_a_card_that_cannot_encode_gets_something_to_try(monkeypatch):
     assert "high performance" in notes, "the Optimus case is the common one and is not mentioned"
     assert "driver" in notes
     assert "cannot damage" in notes, "the user asked whether turning it on is risky"
+
+
+# --------------------------------------------- asking Windows for the card
+
+
+def test_the_preference_covers_the_process_that_actually_encodes(monkeypatch):
+    """Windows' own Settings page can only reach the app. FFmpeg does the work."""
+    import os
+
+    monkeypatch.setenv("CE_APP_EXE", os.__file__)  # any real file will do
+    paths = gpu._executables()
+
+    assert any(p.endswith(("python", "python.exe", "python3", "python3.11")) or "python" in p
+               for p in paths), paths
+    assert len(set(paths)) == len(paths), "the same executable was listed twice"
+    assert all(os.path.isabs(p) for p in paths), "the registry needs full paths"
+
+
+def test_the_preference_value_is_the_one_windows_expects():
+    assert gpu.HIGH_PERFORMANCE == "GpuPreference=2;"
+    assert gpu.GPU_PREFERENCE_KEY.endswith("UserGpuPreferences")
+
+
+def test_it_says_so_politely_on_a_system_that_has_no_such_setting():
+    """The sandbox is Linux; this must answer, not raise."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app as application
+
+    client = TestClient(application)
+    read = client.get("/api/gpu/preference").json()
+    write = client.post("/api/gpu/preference").json()
+
+    if sys.platform != "win32":
+        assert read["supported"] is False and "Windows" in read["reason"]
+        assert write["supported"] is False and write["changed"] == []
+    else:  # pragma: no cover - only on the machines that matter
+        assert "entries" in read
+
+
+def test_setting_the_preference_clears_the_cached_probes():
+    """The probes are cached for the process; after a change they are stale."""
+    import inspect
+
+    from app.routers import gpu as router
+
+    source = inspect.getsource(router.set_preference)
+    for name in ("can_encode", "probe_encoders", "best_decoder"):
+        assert f"{name}.cache_clear()" in source, f"{name} would keep answering with the old result"

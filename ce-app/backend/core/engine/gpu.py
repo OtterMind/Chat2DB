@@ -23,6 +23,7 @@ come back as "no", not as an error.
 """
 from __future__ import annotations
 
+import sys
 import shutil
 import subprocess
 import time
@@ -472,3 +473,108 @@ def benchmark(seconds: int = 5, width: int = 1920, height: int = 1080) -> dict:
     if result.get("cpu") and result.get("gpu"):
         result["speedup"] = round(result["cpu"] / result["gpu"], 2)
     return result
+
+
+# ------------------------------------------------- asking Windows for the card
+
+
+#: Where Windows keeps the per-application graphics preference.
+#:
+#: This is the registry key behind Settings → System → Display → Graphics. It is
+#: under HKEY_CURRENT_USER, so setting it needs **no administrator rights** —
+#: which is worth saying plainly, because the natural assumption is that a
+#: button like this must ask for elevation. It does not: the app is choosing a
+#: preference for itself, not changing the machine.
+GPU_PREFERENCE_KEY = r"Software\Microsoft\DirectX\UserGpuPreferences"
+HIGH_PERFORMANCE = "GpuPreference=2;"
+
+
+def _executables() -> list[str]:
+    """Every program of ours that might want the discrete card.
+
+    The preference is **per executable**, and the process that actually encodes
+    is not the one the user clicked: Electron starts Python, Python starts
+    FFmpeg, and it is FFmpeg that opens NVENC. Setting the preference only for
+    the app — which is what Windows' own Settings page lets you do — leaves the
+    process that matters on the integrated GPU.
+    """
+    import os
+
+    paths = [sys.executable]  # the backend's Python
+    app = os.environ.get("CE_APP_EXE")
+    if app:
+        paths.append(app)
+    ffmpeg = ffmpeg_binary()
+    if ffmpeg and os.path.isabs(ffmpeg):
+        paths.append(ffmpeg)
+        probe = os.path.join(os.path.dirname(ffmpeg), "ffprobe.exe")
+        if os.path.exists(probe):
+            paths.append(probe)
+    # Unique, in order, and only real files.
+    seen: list[str] = []
+    for path in paths:
+        if path and os.path.exists(path) and path not in seen:
+            seen.append(os.path.abspath(path))
+    return seen
+
+
+def gpu_preference() -> dict:
+    """What Windows currently prefers for each of our executables."""
+    if sys.platform != "win32":
+        return {"supported": False, "reason": "This is a Windows setting.", "entries": {}}
+    try:
+        import winreg
+
+        entries: dict[str, str | None] = {}
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, GPU_PREFERENCE_KEY) as key:
+            for path in _executables():
+                try:
+                    entries[path] = winreg.QueryValueEx(key, path)[0]
+                except FileNotFoundError:
+                    entries[path] = None
+        return {"supported": True, "entries": entries,
+                "allSet": all(value == HIGH_PERFORMANCE for value in entries.values())}
+    except FileNotFoundError:
+        return {"supported": True, "entries": {path: None for path in _executables()}, "allSet": False}
+    except Exception as error:  # noqa: BLE001
+        return {"supported": True, "reason": str(error)[:200], "entries": {}, "allSet": False}
+
+
+def prefer_discrete_card() -> dict:
+    """Tell Windows to run our executables on the high-performance GPU.
+
+    One button instead of a five-step walk through Settings — and it covers the
+    executables that page cannot reach (Python and FFmpeg). Needs no elevation;
+    takes effect the next time each program starts.
+    """
+    if sys.platform != "win32":
+        return {"changed": [], "supported": False,
+                "reason": "This is a Windows setting; nothing to do on this system."}
+    import winreg
+
+    changed: list[str] = []
+    failed: dict[str, str] = {}
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, GPU_PREFERENCE_KEY) as key:
+        for path in _executables():
+            try:
+                current = None
+                try:
+                    current = winreg.QueryValueEx(key, path)[0]
+                except FileNotFoundError:
+                    pass
+                if current != HIGH_PERFORMANCE:
+                    winreg.SetValueEx(key, path, 0, winreg.REG_SZ, HIGH_PERFORMANCE)
+                    changed.append(path)
+            except Exception as error:  # noqa: BLE001
+                failed[path] = str(error)[:160]
+
+    return {
+        "supported": True,
+        "changed": changed,
+        "failed": failed,
+        "restartNeeded": bool(changed),
+        "note": (
+            "Windows will use the graphics card for these programs from their next start. "
+            "Close the app completely and open it again."
+        ),
+    }

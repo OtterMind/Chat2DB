@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.5` · Last released: `v0.9.4` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.6` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -642,6 +642,23 @@ gate that stops a broken installer from being published.
    a timer pretending to be one — and where a byte count genuinely is not
    available (the Whisper fallback path) the label says "no progress available"
    instead of inventing a number.
+
+69. **The GPU preference is a setting, not a permission — so it is a button.**
+   The owner asked for a button that requests whatever Windows permissions are
+   needed. The honest answer is that no permission controls NVENC; what controls
+   it on a laptop is Windows' *per-application graphics preference*, and that
+   lives in `HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences`
+   as `GpuPreference=2;`. Writing it needs **no elevation at all** — the app is
+   choosing a preference for itself.
+   The important part: the preference is **per executable**, and the process
+   that opens the encoder is not the one the user clicked. Electron starts
+   Python, Python starts FFmpeg, and FFmpeg is what talks to NVENC. Windows'
+   own Settings page can only reach the app, which is why setting it there can
+   leave the encoder on the integrated GPU. `prefer_discrete_card()` sets it for
+   the app (`CE_APP_EXE`, passed in by `main.ts`), the backend's `python.exe`,
+   `ffmpeg.exe` and `ffprobe.exe`, and then clears the cached probes because
+   they are stale by definition. `POST /api/gpu/preference`; the card also links
+   straight to `ms-settings:display-advancedgraphics`.
 
 ## 5. Release procedure
 

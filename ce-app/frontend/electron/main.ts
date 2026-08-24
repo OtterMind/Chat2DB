@@ -78,7 +78,15 @@ function startBackend() {
   }
   log.info('[CE] Starting backend:', cmd, args.join(' '))
   try {
-    backendProcess = spawn(cmd, args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
+    backendProcess = spawn(cmd, args, {
+      cwd,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // The backend sets Windows' per-application GPU preference, and the
+      // preference is per *executable* — so it has to know which .exe the user
+      // actually launched, not just its own python.exe.
+      env: { ...process.env, CE_APP_EXE: app.getPath('exe') },
+    })
   } catch (error) {
     backendFailure = `spawn failed: ${String(error)}`
     log.error('[CE] Backend spawn threw:', error)
