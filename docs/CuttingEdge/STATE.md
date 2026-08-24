@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.8` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.9` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -36,6 +36,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Tool rail** | Undo/Redo always visible, then the context-sensitive toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
+| **Title pack** | 15 presets in three groups — entrance, hold, caption — served by `GET /api/titles` and applied from the text panel as **one undoable step**. Every one animates only the five channels the exporter reproduces (`x, y, scale, rotate, volume`); `titles.validate()` refuses anything else, and `tests/test_titles.py` runs each preset through the real FFmpeg expression builder. Fades are deliberately absent: opacity needs a per-pixel `geq` pass (§4.23) |
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | A **conversation**, not a one-shot command: history in, one reply out, with the steps it took and the milliseconds, and the provider named on every answer (`ollama:qwen2.5` or `offline` — never hidden). An editing request still comes back as a whitelisted dry run applied only on Apply and undoable in one step. Floating panel or full screen, RTL, animated, and **streamed**: `POST /api/assistant/chat/stream` sends each step as it happens and each word as it is written (NDJSON, so one `fetch` and a line split), because three bouncing dots are not evidence that anything is happening. The model is the user's choice (`auto`/`off`/ollama/openai/gemini/anthropic), stored in `~/CuttingEdge/config.json` and settable from the chat **or** Settings — one setting, two doors, and `auto` means *the stored choice* before it means *whatever is installed*; with none connected it answers from what was measured and says so. And it **knows what the video is for**: the Style Match answers ride along in the project document, so a question about a lesson is answered about a lesson |
@@ -99,7 +100,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **253 collected: 250 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **262 collected: 259 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -748,6 +749,19 @@ gate that stops a broken installer from being published.
     `tests/test_chat.py` pins both directions: the questions that must stay
     questions, and the requests that must still be edits — a boundary fix that
     deafened the assistant would be the same bug wearing a different hat.
+
+75. **A name the renderer does not know is a silent fallback, not an error.**
+    The first draft of the title pack asked for `textStyle: "plain"`, `"box"` and
+    `position: "center"`. The renderer's vocabulary is `clean`, `boxed`, `outline`,
+    `shadow` and `top`, `middle`, `bottom` — so libass would have taken its own
+    default and every one of those titles would have looked different in the file
+    than on the screen, with no error anywhere. Caught by reading
+    `subtitles.STYLE_PRESETS` instead of trusting the names I had written, and
+    then locked: `titles.validate()` checks the vocabulary, and
+    `test_the_pack_speaks_the_renderers_vocabulary` compares it against
+    `subtitles.py` directly, so renaming a style there now fails the suite.
+    **A string that crosses a boundary is an interface, and interfaces get
+    checked.**
 
 ## 5. Release procedure
 

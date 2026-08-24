@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { reframeApi } from '../api/reframe'
+import { titlesApi, type TitlePreset } from '../api/titles'
 import { captionsApi } from '../api/captions'
 import {
   useEditor, propsOf, sampleChannel, MIN_CLIP, KEYFRAME_CHANNELS,
@@ -378,6 +379,7 @@ export default function EditorToolbar({
             )}
             {panel === 'text' && clip && props && (
               <PanelText
+                clipId={clip.id}
                 text={clip.text ?? ''}
                 props={props}
                 onText={(value) => useEditor.getState().setText(clip.id, value)}
@@ -925,8 +927,9 @@ function PanelAudio({
 }
 
 function PanelText({
-  text, props, onText, onProps,
+  clipId, text, props, onText, onProps,
 }: {
+  clipId: string
   text: string
   props: ClipProps
   onText: (value: string) => void
@@ -945,8 +948,66 @@ function PanelText({
     ['middle', ['Middle', 'وسط']],
     ['bottom', ['Bottom', 'پایین']],
   ]
+  /**
+   * The title pack, fetched once per panel.
+   *
+   * It comes from the backend rather than a list here because that is where
+   * `validate()` runs: a preset that animated a channel the exporter cannot
+   * reproduce would be refused there, and a duplicated list would drift.
+   */
+  const [pack, setPack] = useState<TitlePreset[]>([])
+  useEffect(() => {
+    titlesApi.pack().then((r) => setPack(r.presets)).catch(() => setPack([]))
+  }, [])
+  const apply = (preset: TitlePreset) => {
+    onProps({ ...preset.props })
+    // Keyframes live on the clip, not in its props, and go through the store so
+    // the whole preset lands as one undoable step — the same door auto-reframe
+    // uses, which is what makes Ctrl+Z take the title back in one press.
+    if (preset.keyframes.length) {
+      useEditor.getState().setClipKeyframes(clipId, preset.keyframes.map((k) => ({ ...k })))
+    }
+    message.success(lang === 'fa' ? preset.fa : preset.en)
+  }
+
   return (
     <div className="tb__stack">
+      {pack.length > 0 && (
+        <Field label={t('Title pack', 'پک تایتل')}>
+          <div className="tb__presets" data-testid="title-pack">
+            {(['entrance', 'hold', 'caption'] as const).map((category) => (
+              <div key={category} className="tb__presets-row">
+                <span className="tb__presets-label">
+                  {category === 'entrance'
+                    ? t('Entrance', 'ورود')
+                    : category === 'hold'
+                      ? t('While it is on screen', 'تا وقتی روی تصویر است')
+                      : t('Captions', 'زیرنویس')}
+                </span>
+                <div className="tb__presets-chips">
+                  {pack.filter((preset) => preset.category === category).map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="tb__preset"
+                      data-testid={`title-preset-${preset.id}`}
+                      onClick={() => apply(preset)}
+                    >
+                      {lang === 'fa' ? preset.fa : preset.en}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="ce-hint" style={{ marginTop: 6 }}>
+            {t(
+              'Every one of these animates only the channels the export can reproduce — so what you see here is what the file will contain.',
+              'همه‌ی این‌ها فقط کانال‌هایی را متحرک می‌کنند که خروجی می‌تواند بازتولید کند — پس آنچه اینجا می‌بینی همان است که در فایل خواهد بود.'
+            )}
+          </p>
+        </Field>
+      )}
       <Field label={t('Text', 'متن')}>
         <Input.TextArea
           value={text}

@@ -1202,3 +1202,18 @@ button { font-family: inherit; cursor: pointer; }
 }
 @keyframes ai-blink { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .ai-caret { animation: none; } }
+
+/* ------------------------------------------------------- the title pack
+   Chips, grouped by what they do. Deliberately plain: the pack is a list of
+   movements, and a picker that animates its own buttons is showing off in the
+   one place where the promise has to be "this is exactly what you will get". */
+.tb__presets { display: flex; flex-direction: column; gap: 7px; }
+.tb__presets-row { display: flex; flex-direction: column; gap: 4px; }
+.tb__presets-label { font-size: 10.5px; color: #7f93b5; letter-spacing: .02em; }
+.tb__presets-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.tb__preset {
+  border: 1px solid var(--border); background: var(--surface-2); color: #cbd5e1;
+  border-radius: 999px; padding: 4px 10px; font-size: 11.5px; cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, transform .12s ease;
+}
+.tb__preset:hover { border-color: rgba(99, 102, 241, .65); color: #fff; transform: translateY(-1px); }

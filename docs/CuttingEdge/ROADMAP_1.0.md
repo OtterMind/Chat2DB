@@ -18,7 +18,7 @@
 >
 > | # | Step | State in the code | What it needs |
 > |---|---|---|---|
-> | 1 | **0.8.1 — things to put on the screen** | nothing: no gallery screen, no title or sound pack | a `.cetemplate` gallery, a title pack built from the five keyframe channels we can export, sound effects through `freesound-python` (MIT) |
+> | 1 | **0.8.1 — things to put on the screen** | **title pack shipped** (15 presets, `GET /api/titles`, 9 tests); gallery and sound packs still missing | a `.cetemplate` gallery, sound effects through `freesound-python` (MIT) |
 > | 2 | **0.9.1 — audio depth** | nothing: no DeepFilterNet, no bed library | DeepFilterNet (MIT/Apache) fetched on demand and *measured in dB against the current chain*, kept only if it wins; a music bed library |
 > | 3 | **Vision — a model that has seen frames** | the catalogue lists three vision models, but nothing looks at a picture | Ollama vision models on the user's own install (§4.62), then the highlight scorer reads frames instead of guessing from loudness |
 > | 4 | **1.0 — stabilise and say what it is** | nothing: no tour, no crash reporting, no manual, no attribution screen | first-run tour, crash reporting, a manual in both languages, an attribution screen listing every shipped package and its licence, and a filmed clean install doing a whole edit with no console error |
