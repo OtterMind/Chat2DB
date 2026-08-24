@@ -4,7 +4,6 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.db.DbDriverConfigView;
 import ai.chat2db.community.domain.api.service.db.IDbJdbcDriverService;
-import ai.chat2db.community.tools.constant.JdbcDriverConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import ai.chat2db.community.tools.util.JdbcJarUtils;
@@ -194,7 +193,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
                 exists = false;
                 break;
             }
-            File target = new File(JdbcDriverConstants.DRIVER_LIB_PATH + file.getName());
+            File target = driverFile(file.getName());
             FileUtil.copyFile(file, target, StandardCopyOption.REPLACE_EXISTING);
             driverNames.append(file.getName()).append(",");
         }
@@ -256,7 +255,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
             if (StringUtils.isBlank(jar) || isJarReferenced(jar)) {
                 continue;
             }
-            File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH + jar);
+            File file = driverFile(jar);
             if (file.exists()) {
                 try {
                     FileUtil.del(file);
@@ -307,11 +306,19 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
             return false;
         }
         for (String jarPath : driverConfig.getJdbcDriver().split(",")) {
-            File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH + jarPath);
+            File file = driverFile(jarPath);
             if (!file.exists()) {
                 return false;
             }
         }
         return true;
+    }
+
+    private File driverFile(String jarPath) {
+        try {
+            return JdbcJarUtils.driverFile(jarPath);
+        } catch (IOException e) {
+            throw new BusinessException("jdbc.driver.invalidFileName", new Object[]{jarPath}, e);
+        }
     }
 }

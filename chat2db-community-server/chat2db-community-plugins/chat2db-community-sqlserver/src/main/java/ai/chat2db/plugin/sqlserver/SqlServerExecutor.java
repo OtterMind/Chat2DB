@@ -23,8 +23,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static ai.chat2db.plugin.sqlserver.constant.SqlServerExecutorConstants.*;
 public class SqlServerExecutor extends DefaultSQLExecutor {
+
+    private record Range(int start, int end) {
+    }
 
 
 
@@ -46,7 +48,7 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     protected List<SimpleSqlStatement> buildSimpleSqlStatements(SqlExecuteRequest command, DbType dbType,
                                                                  String type, DBConfig dbConfig) {
         List<String> sqlList = splitByGO(command.getScript());
-        if (GO_DELIMITER_PATTERN.matcher(command.getScript()).find()) {
+        if (hasGoDelimiter(command.getScript())) {
             List<SimpleSqlStatement> statements = new ArrayList<>(sqlList.size());
             for (String sql : sqlList) {
                 List<SimpleSqlStatement> parsedStatements = SqlUtils.parseStatements(sql, dbType, type);
@@ -85,7 +87,14 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         if (StringUtils.isBlank(sql)) {
             return null;
         }
-        return GO_DELIMITER_PATTERN.matcher(sql).replaceAll("");
+        StringBuilder cleaned = new StringBuilder(sql.length());
+        int start = 0;
+        for (Range range : findGoDelimiterRanges(sql)) {
+            cleaned.append(sql, start, range.start());
+            start = range.end();
+        }
+        cleaned.append(sql, start, sql.length());
+        return cleaned.toString();
     }
 
     List<String> splitByGO(String sql) {
@@ -94,19 +103,88 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
             return sqlList;
         }
         int start = 0;
-        var matcher = GO_DELIMITER_PATTERN.matcher(sql);
-        while (matcher.find()) {
-            String item = sql.substring(start, matcher.start()).trim();
+        for (Range range : findGoDelimiterRanges(sql)) {
+            String item = sql.substring(start, range.start()).trim();
             if (StringUtils.isNotBlank(item)) {
                 sqlList.add(item);
             }
-            start = matcher.end();
+            start = range.end();
         }
         String item = sql.substring(start).trim();
         if (StringUtils.isNotBlank(item)) {
             sqlList.add(item);
         }
         return sqlList;
+    }
+
+    private boolean hasGoDelimiter(String sql) {
+        return StringUtils.isNotBlank(sql) && !findGoDelimiterRanges(sql).isEmpty();
+    }
+
+    private List<Range> findGoDelimiterRanges(String sql) {
+        List<Range> ranges = new ArrayList<>();
+        int lineStart = 0;
+        while (lineStart < sql.length()) {
+            int lineEnd = lineStart;
+            while (lineEnd < sql.length() && sql.charAt(lineEnd) != '\n' && sql.charAt(lineEnd) != '\r') {
+                lineEnd++;
+            }
+            findGoDelimiterRange(sql, lineStart, lineEnd, ranges);
+            if (lineEnd < sql.length() && sql.charAt(lineEnd) == '\r' && lineEnd + 1 < sql.length()
+                    && sql.charAt(lineEnd + 1) == '\n') {
+                lineStart = lineEnd + 2;
+            } else {
+                lineStart = lineEnd + 1;
+            }
+        }
+        return ranges;
+    }
+
+    private void findGoDelimiterRange(String sql, int lineStart, int lineEnd, List<Range> ranges) {
+        int candidate = skipHorizontalWhitespace(sql, lineStart, lineEnd);
+        if (isGoDelimiter(sql, candidate, lineEnd)) {
+            ranges.add(new Range(candidate, lineEnd));
+            return;
+        }
+        for (int i = lineStart; i < lineEnd; i++) {
+            if (sql.charAt(i) == ';') {
+                candidate = skipHorizontalWhitespace(sql, i + 1, lineEnd);
+                if (isGoDelimiter(sql, candidate, lineEnd)) {
+                    ranges.add(new Range(candidate, lineEnd));
+                    return;
+                }
+            }
+        }
+    }
+
+    private int skipHorizontalWhitespace(String sql, int index, int end) {
+        while (index < end && (sql.charAt(index) == ' ' || sql.charAt(index) == '\t')) {
+            index++;
+        }
+        return index;
+    }
+
+    private boolean isGoDelimiter(String sql, int index, int lineEnd) {
+        if (index + 2 > lineEnd || Character.toLowerCase(sql.charAt(index)) != 'g'
+                || Character.toLowerCase(sql.charAt(index + 1)) != 'o') {
+            return false;
+        }
+        int cursor = index + 2;
+        if (cursor < lineEnd && isIdentifierPart(sql.charAt(cursor))) {
+            return false;
+        }
+        cursor = skipHorizontalWhitespace(sql, cursor, lineEnd);
+        if (cursor < lineEnd && sql.charAt(cursor) == ';') {
+            cursor = skipHorizontalWhitespace(sql, cursor + 1, lineEnd);
+        }
+        if (cursor + 1 < lineEnd && sql.charAt(cursor) == '-' && sql.charAt(cursor + 1) == '-') {
+            return true;
+        }
+        return skipHorizontalWhitespace(sql, cursor, lineEnd) == lineEnd;
+    }
+
+    private boolean isIdentifierPart(char value) {
+        return Character.isLetterOrDigit(value) || value == '_';
     }
 
 
@@ -175,7 +253,7 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(originalSql).success(Boolean.TRUE).build();
         int resultCount = 0;
         for (String sql : sqlList) {
-            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            try (PreparedStatement stmt = prepareClientSql(connection, sql)) {
                 ExecutionContext executionContext = JdbcExecutionContext.capture(connection);
                 long startedAtEpochMs = System.currentTimeMillis();
                 long executeStartedNanos = System.nanoTime();

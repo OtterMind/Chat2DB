@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -28,6 +30,9 @@ import okhttp3.Response;
 @Slf4j
 public class JdbcJarUtils {
 
+    private static final URI DOWNLOAD_HOST = URI.create(JdbcDriverConstants.DOWNLOAD_URL_HOST);
+    private static final Path DRIVER_LIB_DIR = Paths.get(JdbcDriverConstants.DRIVER_LIB_PATH).toAbsolutePath().normalize();
+
     private static final OkHttpClient async_client = new OkHttpClient.Builder()
             .dispatcher(new Dispatcher(Executors.newFixedThreadPool(20)))
             .build();
@@ -35,7 +40,7 @@ public class JdbcJarUtils {
     private static final OkHttpClient client = new OkHttpClient();
 
     static {
-        File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH);
+        File file = DRIVER_LIB_DIR.toFile();
         if (!file.exists()) {
             file.mkdirs();
         }
@@ -56,6 +61,7 @@ public class JdbcJarUtils {
     }
 
     static void asyncDownload(String url, Consumer<IOException> completion) throws IOException {
+        requireAllowedDownloadUrl(url);
         File file = outputFile(url);
         deleteIfExists(file);
         String safeUrl = sanitizeUrl(url);
@@ -101,7 +107,8 @@ public class JdbcJarUtils {
     }
 
     public static void download(String url) throws IOException {
-        File pathfile = new File(JdbcDriverConstants.DRIVER_LIB_PATH);
+        requireAllowedDownloadUrl(url);
+        File pathfile = DRIVER_LIB_DIR.toFile();
         if (!pathfile.exists()) {
             pathfile.mkdirs();
         }
@@ -160,13 +167,53 @@ public class JdbcJarUtils {
             URI uri = new URI(url);
             String path = uri.getRawPath();
             String fileName = path == null ? "" : new File(path).getName();
-            if (fileName.isBlank()) {
-                throw downloadFailure(sanitizeUrl(url), "missing file name");
-            }
-            return new File(JdbcDriverConstants.DRIVER_LIB_PATH, fileName);
+            return driverFile(fileName);
         } catch (URISyntaxException e) {
             throw downloadFailure(sanitizeUrl(url), e.getClass().getSimpleName());
         }
+    }
+
+    public static File driverFile(String jarPath) throws IOException {
+        String artifactName = requireDriverArtifactName(jarPath);
+        Path candidate = DRIVER_LIB_DIR.resolve(artifactName).normalize();
+        if (!candidate.startsWith(DRIVER_LIB_DIR)) {
+            throw new IOException("Invalid JDBC driver artifact name");
+        }
+        return candidate.toFile();
+    }
+
+    public static String requireDriverArtifactName(String jarPath) throws IOException {
+        if (jarPath == null || jarPath.isBlank()) {
+            throw new IOException("Missing JDBC driver artifact name");
+        }
+        if (jarPath.contains("/") || jarPath.contains("\\") || jarPath.contains("..")) {
+            throw new IOException("Invalid JDBC driver artifact name");
+        }
+        if (!jarPath.endsWith(".jar") && !jarPath.endsWith(".zip")) {
+            throw new IOException("Unsupported JDBC driver artifact type");
+        }
+        return jarPath;
+    }
+
+    private static void requireAllowedDownloadUrl(String url) throws IOException {
+        URI uri;
+        try {
+            uri = new URI(url);
+        } catch (URISyntaxException e) {
+            throw downloadFailure(sanitizeUrl(url), e.getClass().getSimpleName());
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getRawUserInfo() != null
+                || uri.getHost() == null || !uri.getHost().equalsIgnoreCase(DOWNLOAD_HOST.getHost())
+                || uri.getPort() != DOWNLOAD_HOST.getPort()) {
+            throw downloadFailure(sanitizeUrl(url), "untrusted download host");
+        }
+        String hostPath = DOWNLOAD_HOST.getRawPath() == null ? "/" : DOWNLOAD_HOST.getRawPath();
+        String rawPath = uri.getRawPath() == null ? "" : uri.getRawPath();
+        if (!rawPath.startsWith(hostPath)) {
+            throw downloadFailure(sanitizeUrl(url), "untrusted download path");
+        }
+        String fileName = new File(rawPath).getName();
+        requireDriverArtifactName(fileName);
     }
 
     private static void writeResponseBody(Response response, File file) throws IOException {
@@ -198,8 +245,7 @@ public class JdbcJarUtils {
     }
 
     public static String getNewFullPath(String jarPath) {
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+        File file = resolveDriverFileUnchecked(jarPath);
         if (file.exists()) {
             file.delete();
         }
@@ -210,8 +256,7 @@ public class JdbcJarUtils {
         if(jarPath.endsWith(".zip")){
             return getFullPathZip(jarPath);
         }
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+        File file = resolveDriverFileUnchecked(jarPath);
         if (!file.exists()) {
             String url = getDownloadUrl(jarPath);
             try {
@@ -224,12 +269,11 @@ public class JdbcJarUtils {
                 }
             }
         }
-        return path;
+        return file.getAbsolutePath();
     }
 
     private static String getFullPathZip(String jarPath) {
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+        File file = resolveDriverFileUnchecked(jarPath);
         File destDir = FileUtil.file(file.getParentFile(), FileUtil.mainName(file));
         if (!file.exists()) {
             String url = getDownloadUrl(jarPath);
@@ -251,6 +295,18 @@ public class JdbcJarUtils {
 
 
     private static String getDownloadUrl(String jarPath) {
-        return JdbcDriverConstants.DOWNLOAD_URL_HOST + jarPath;
+        try {
+            return JdbcDriverConstants.DOWNLOAD_URL_HOST + requireDriverArtifactName(jarPath);
+        } catch (IOException e) {
+            throw new IllegalArgumentException(e.getMessage(), e);
+        }
+    }
+
+    private static File resolveDriverFileUnchecked(String jarPath) {
+        try {
+            return driverFile(jarPath);
+        } catch (IOException e) {
+            throw new IllegalArgumentException(e.getMessage(), e);
+        }
     }
 }

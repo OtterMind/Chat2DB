@@ -6,9 +6,6 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import ai.chat2db.community.tools.constant.JdbcDriverConstants;
 import com.sun.net.httpserver.HttpServer;
@@ -35,28 +32,22 @@ class JdbcJarUtilsTest {
     }
 
     @Test
-    void asyncConnectionFailureIsReportedWithoutLeavingAPartialFile() throws Exception {
+    void asyncUntrustedDownloadHostIsRejectedWithoutLeavingAPartialFile() throws Exception {
         String fileName = uniqueFileName();
         File output = outputFile(fileName);
-        CountDownLatch completion = new CountDownLatch(1);
-        AtomicReference<IOException> failure = new AtomicReference<>();
 
-        JdbcJarUtils.asyncDownload(
+        IOException failure = assertThrows(IOException.class, () -> JdbcJarUtils.asyncDownload(
             "http://user:password@127.0.0.1:1/" + fileName + "?token=secret",
-            error -> {
-                failure.set(error);
-                completion.countDown();
-            });
+            ignored -> { }));
 
-        assertTrue(completion.await(10, TimeUnit.SECONDS));
-        assertNotNull(failure.get());
-        assertFalse(failure.get().getMessage().contains("user:password"));
-        assertFalse(failure.get().getMessage().contains("token=secret"));
+        assertTrue(failure.getMessage().contains("untrusted download host"));
+        assertFalse(failure.getMessage().contains("user:password"));
+        assertFalse(failure.getMessage().contains("token=secret"));
         assertFalse(output.exists());
     }
 
     @Test
-    void asyncHttpFailureIsReportedWithoutLeavingAPartialFile() throws Exception {
+    void asyncUntrustedHttpFailureIsReportedWithoutLeavingAPartialFile() throws Exception {
         String fileName = uniqueFileName();
         File output = outputFile(fileName);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -65,27 +56,20 @@ class JdbcJarUtilsTest {
             exchange.close();
         });
         server.start();
-        CountDownLatch completion = new CountDownLatch(1);
-        AtomicReference<IOException> failure = new AtomicReference<>();
 
-        JdbcJarUtils.asyncDownload(
+        IOException failure = assertThrows(IOException.class, () -> JdbcJarUtils.asyncDownload(
             "http://user:password@127.0.0.1:" + server.getAddress().getPort()
                 + "/" + fileName + "?token=secret",
-            error -> {
-                failure.set(error);
-                completion.countDown();
-            });
+            ignored -> { }));
 
-        assertTrue(completion.await(10, TimeUnit.SECONDS));
-        assertNotNull(failure.get());
-        assertTrue(failure.get().getMessage().contains("HTTP 404"));
-        assertFalse(failure.get().getMessage().contains("user:password"));
-        assertFalse(failure.get().getMessage().contains("token=secret"));
+        assertTrue(failure.getMessage().contains("untrusted download host"));
+        assertFalse(failure.getMessage().contains("user:password"));
+        assertFalse(failure.getMessage().contains("token=secret"));
         assertFalse(output.exists());
     }
 
     @Test
-    void synchronousHttpFailureUsesSanitizedUrl() throws Exception {
+    void synchronousUntrustedDownloadHostUsesSanitizedUrl() throws Exception {
         String fileName = uniqueFileName();
         File output = outputFile(fileName);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -99,7 +83,7 @@ class JdbcJarUtilsTest {
 
         IOException failure = assertThrows(IOException.class, () -> JdbcJarUtils.download(url));
 
-        assertTrue(failure.getMessage().contains("HTTP 404"));
+        assertTrue(failure.getMessage().contains("untrusted download host"));
         assertFalse(failure.getMessage().contains("user:password"));
         assertFalse(failure.getMessage().contains("token=secret"));
         assertFalse(output.exists());
@@ -112,6 +96,20 @@ class JdbcJarUtilsTest {
         assertEquals("https://example.com:8443/path/driver.jar", sanitized);
         assertFalse(sanitized.contains("user:password"));
         assertFalse(sanitized.contains("token=secret"));
+    }
+
+    @Test
+    void driverFileRejectsPathTraversalAndNestedPaths() {
+        assertThrows(IOException.class, () -> JdbcJarUtils.driverFile("../driver.jar"));
+        assertThrows(IOException.class, () -> JdbcJarUtils.driverFile("nested/driver.jar"));
+        assertThrows(IOException.class, () -> JdbcJarUtils.driverFile("nested\\driver.jar"));
+    }
+
+    @Test
+    void driverFileAcceptsOnlyJarAndZipArtifacts() throws IOException {
+        assertThrows(IOException.class, () -> JdbcJarUtils.driverFile("driver.txt"));
+        assertEquals(outputFile("driver.jar").getAbsolutePath(), JdbcJarUtils.driverFile("driver.jar").getAbsolutePath());
+        assertEquals(outputFile("driver.zip").getAbsolutePath(), JdbcJarUtils.driverFile("driver.zip").getAbsolutePath());
     }
 
     private String uniqueFileName() {

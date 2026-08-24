@@ -1,12 +1,11 @@
 package ai.chat2db.community.web.api.adapter.db;
 
 import ai.chat2db.community.domain.api.service.db.IDbJdbcDriverUploadService;
-import ai.chat2db.community.tools.constant.JdbcDriverConstants;
+import ai.chat2db.community.tools.util.JdbcJarUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,8 +18,7 @@ public class MultipartJdbcDriverUploadAdapter implements IDbJdbcDriverUploadServ
         List<String> uploadedFiles = new ArrayList<>();
         for (MultipartFile file : files) {
             String originalFilename = FilenameUtils.getName(file.getOriginalFilename());
-            String location = JdbcDriverConstants.DRIVER_LIB_PATH + originalFilename;
-            file.transferTo(new File(location));
+            file.transferTo(JdbcJarUtils.driverFile(originalFilename));
             uploadedFiles.add(originalFilename);
         }
         return uploadedFiles;
