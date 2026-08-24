@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.2` · Last released: `v0.9.1` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.3` · Last released: `v0.9.2` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -580,6 +580,31 @@ gate that stops a broken installer from being published.
    `open-clip-torch` MIT on PyPI but NOASSERTION on GitHub). Hugging Face is
    **unreachable from the sandbox**, so model-card licences there are marked
    *verify before adopting* rather than guessed.
+
+64. **An update could not delete the previous version — because we only killed
+   the child, not the tree.** `child.kill()` on Windows terminates the direct
+   child; our backend is Python and Python spawns **FFmpeg** (proxies,
+   thumbnails, probes). Those grandchildren kept `resources\ffmpeg\ffmpeg.exe`
+   open, and the NSIS uninstaller that runs during an update could not remove
+   the old folder. `stopBackend()` now runs `taskkill /pid <pid> /T /F`, it is
+   called from `before-quit`, `will-quit`, `window-all-closed`, the
+   `update:install` IPC handler (with a beat for Windows to release the handles)
+   and `before-quit-for-update`, and `npm run verify` fails if any of those
+   wires is cut.
+   The first version of that guard passed on the **comment** above the call
+   (`taskkill /T /F takes the whole tree`) instead of the argument — the same
+   "counting is not checking" mistake, made twice now. It matches `'/T'` with
+   quotes, and it was proved by deleting the flag and watching the check fail.
+65. **Why every update is the same ~16.6 MB, and why that is not a cap.**
+   Differential updates work at the level of the installer's **compressed
+   blocks**, not files. What changes every release is our `app.asar` (the whole
+   1.6 MB bundle is rewritten because its filenames are content-hashed) plus the
+   backend `.py`/`.pyc` — but those live inside NSIS's solid LZMA blocks, so the
+   download is the size of the blocks that contain them, not the size of the
+   diff. Hence a near-constant figure. It is not a limit and nothing is being
+   skipped: `electron-updater` verifies a SHA-512 of the fully reassembled
+   323 MB installer before running it, and falls back to a full download if it
+   does not match.
 
 ## 5. Release procedure
 

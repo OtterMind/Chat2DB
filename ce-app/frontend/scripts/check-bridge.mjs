@@ -74,3 +74,33 @@ if (problems.length) {
   process.exit(1)
 }
 console.log('bridge contract OK')
+
+// ---------------------------------------------------------------- shutdown
+//
+// An update that cannot delete the previous version is the failure this checks
+// for. The uninstaller runs while our Python backend — and any FFmpeg it
+// started — may still hold files inside the installation folder, so every exit
+// path has to take the whole process tree down first.
+{
+  const main = readFileSync(new URL('../electron/main.ts', import.meta.url), 'utf8')
+  const updater = readFileSync(new URL('../electron/updater.ts', import.meta.url), 'utf8')
+  const problems = []
+
+  if (!/taskkill/.test(main)) problems.push('main.ts does not kill the backend process *tree* on Windows')
+  // Match the *argument*, not the word: the first version of this check passed
+  // happily on the comment two lines above the call — the same "counting is not
+  // checking" mistake this project has now made twice.
+  if (!/'\/T'/.test(main)) problems.push('taskkill is missing /T — children such as ffmpeg.exe survive')
+  for (const event of ['before-quit', 'will-quit', 'window-all-closed']) {
+    if (!main.includes(`'${event}'`)) problems.push(`main.ts does not stop the backend on ${event}`)
+  }
+  if (!/__ceStopBackend/.test(main)) problems.push('main.ts does not expose the shutdown to the updater')
+  if (!/__ceStopBackend/.test(updater)) problems.push('updater.ts installs without stopping the backend')
+  if (!/before-quit-for-update/.test(updater)) problems.push('updater.ts ignores before-quit-for-update')
+
+  if (problems.length) {
+    console.error('shutdown contract FAILED:\n  ' + problems.join('\n  '))
+    process.exit(1)
+  }
+  console.log('shutdown contract OK — the backend tree dies before the installer runs')
+}

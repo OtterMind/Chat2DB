@@ -88,7 +88,25 @@ export function initUpdater(mainWindow: BrowserWindow) {
     }
   })
 
-  ipcMain.on('update:install', () => autoUpdater.quitAndInstall(true, true))
+  ipcMain.on('update:install', () => {
+    // Free the files *before* the installer runs. The uninstaller deletes the
+    // old version's folder, and it cannot while Python — or an FFmpeg it
+    // started — still has a handle on `resources\\ffmpeg\\ffmpeg.exe`. That is
+    // the "failed to remove the previous version" reported from the installed
+    // app; the update itself had downloaded and verified fine.
+    try {
+      ;(globalThis as unknown as { __ceStopBackend?: () => void }).__ceStopBackend?.()
+    } catch (error) {
+      console.warn('[CE] could not stop the backend before installing:', error)
+    }
+    // A beat for Windows to release the handles, then hand over.
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 1200)
+  })
+
+  // The updater can also quit the app by itself (auto-install on quit).
+  autoUpdater.on('before-quit-for-update', () => {
+    ;(globalThis as unknown as { __ceStopBackend?: () => void }).__ceStopBackend?.()
+  })
 
   // Silent check shortly after launch so the user sees a badge without asking.
   if (app.isPackaged) {

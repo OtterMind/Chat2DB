@@ -1,6 +1,6 @@
 import { app, Menu, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import path from 'path'
-import { spawn } from 'child_process'
+import { execFileSync, spawn } from 'child_process'
 import { existsSync, createWriteStream, mkdirSync, readFileSync, statSync } from 'fs'
 import log from 'electron-log/main'
 
@@ -19,6 +19,34 @@ log.errorHandler.startCatching({ showDialog: false })
 Object.assign(console, log.functions)
 
 let backendProcess: ReturnType<typeof spawn> | null = null
+
+/**
+ * Stop the backend — and everything it started.
+ *
+ * `child.kill()` on Windows terminates the direct child only. Our backend is
+ * Python, and Python spawns **FFmpeg**: building a proxy, cutting a thumbnail,
+ * probing a file. Those grandchildren keep running, keep `resources\ffmpeg\
+ * ffmpeg.exe` open, and the NSIS uninstaller that runs during an update then
+ * cannot delete the old version — which is exactly the error reported from the
+ * installed app.
+ *
+ * `taskkill /T /F` takes the whole tree. It is synchronous on purpose: the
+ * installer must not start until the files are free.
+ */
+function stopBackend(): void {
+  const child = backendProcess
+  backendProcess = null
+  if (!child?.pid) return
+  try {
+    if (process.platform === 'win32') {
+      execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { timeout: 10000, windowsHide: true })
+    } else {
+      process.kill(-child.pid, 'SIGKILL')
+    }
+  } catch {
+    try { child.kill() } catch { /* already gone */ }
+  }
+}
 /** Why the backend is not available, surfaced to the UI instead of a silent failure. */
 let backendFailure: string | null = null
 
@@ -153,10 +181,7 @@ function registerIpc() {
 
   /** Manual restart from the UI when the backend died. */
   ipcMain.handle('backend:restart', () => {
-    if (backendProcess) {
-      try { backendProcess.kill() } catch { /* already gone */ }
-      backendProcess = null
-    }
+    stopBackend()
     backendFailure = null
     startBackend()
     return { running: backendProcess !== null, failure: backendFailure }
@@ -257,7 +282,19 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    if (backendProcess) { backendProcess.kill(); backendProcess = null }
+    stopBackend()
     app.quit()
   }
 })
+
+// Every path out of the app goes through the same shutdown, including the one
+// the updater takes. Missing this is why an update could fail to remove the
+// previous version: the window was gone, Python and its FFmpeg child were not.
+app.on('before-quit', () => stopBackend())
+app.on('will-quit', () => stopBackend())
+
+// The updater lives in its own bundle; a cross-`require` of the entry point is
+// asking for a second copy of this module. A global is blunt and certain.
+;(globalThis as unknown as { __ceStopBackend?: () => void }).__ceStopBackend = stopBackend
+
+export { stopBackend }
