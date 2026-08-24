@@ -26,12 +26,14 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlServerExecutorTest {
@@ -115,6 +117,25 @@ class SqlServerExecutorTest {
                 "SET SHOWPLAN_XML ON;",
                 "SELECT * FROM uf_wtbhb WHERE lcid=1208045;",
                 "SET SHOWPLAN_XML OFF;"), sqlList);
+    }
+
+    @Test
+    void shouldSplitGoDelimiterWithTrailingComment() {
+        SqlServerExecutor executor = new SqlServerExecutor();
+
+        List<String> sqlList = executor.splitByGO("SELECT 1;\n  GO; -- next batch\nSELECT 2;");
+
+        assertEquals(List.of("SELECT 1;", "SELECT 2;"), sqlList);
+    }
+
+    @Test
+    void shouldScanLongNonDelimiterInputWithoutRegexBacktracking() {
+        SqlServerExecutor executor = new SqlServerExecutor();
+        String sql = "SELECT 'go" + "\t".repeat(20000) + "not a delimiter';";
+
+        assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+            assertEquals(List.of(sql), executor.splitByGO(sql));
+        });
     }
 
     @Test
