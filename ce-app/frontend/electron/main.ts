@@ -85,7 +85,11 @@ function startBackend() {
       // The backend sets Windows' per-application GPU preference, and the
       // preference is per *executable* — so it has to know which .exe the user
       // actually launched, not just its own python.exe.
-      env: { ...process.env, CE_APP_EXE: app.getPath('exe') },
+      // CE_VERSION is the release number the installer was built from. The
+      // backend cannot read the frontend's package.json in a packaged install —
+      // it is inside an asar — so without this it would fall back to a constant
+      // and `/api/health` would report the previous build forever.
+      env: { ...process.env, CE_APP_EXE: app.getPath('exe'), CE_VERSION: app.getVersion() },
     })
   } catch (error) {
     backendFailure = `spawn failed: ${String(error)}`

@@ -22,7 +22,7 @@ from pathlib import Path
 __app_name__ = "Cutting Edge"
 
 #: Only used when neither the frontend nor `CE_VERSION` can be read.
-_FALLBACK = "0.9.7"
+_FALLBACK = "0.9.8"
 
 
 def _read_version() -> str:
