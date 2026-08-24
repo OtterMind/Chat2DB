@@ -55,7 +55,18 @@ def _requests():
 
 
 def configured(choice: str = "auto") -> tuple[str, str, str] | None:
-    """`(provider, key, model)` — an explicit choice, or the first one set up."""
+    """`(provider, key, model)` — an explicit choice, or the first one set up.
+
+    `auto` asks the stored setting first, so the choice made in Settings is the
+    choice the chat uses; only when that is also `auto` does it fall back to
+    "whichever provider happens to be configured".
+    """
+    if choice == "off":
+        return None
+    if choice == "auto":
+        choice = (settings.assistant_provider or "auto").strip().lower()
+        if choice not in CHOICES:
+            choice = "auto"
     if choice == "off":
         return None
     order = ("ollama", "openai", "gemini", "anthropic") if choice == "auto" else (choice,)

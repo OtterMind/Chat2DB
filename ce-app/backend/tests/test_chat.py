@@ -16,8 +16,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
-from core.assistant import chat
+from core.assistant import chat, providers
 
 client = TestClient(app)
 
@@ -231,3 +232,77 @@ def test_the_endpoint_follows_the_language(language):
         assert "Your timeline:" not in reply
     else:
         assert "Your timeline:" in reply
+
+
+# ------------------------------------------------- the stored model choice
+
+
+def test_the_choice_is_remembered_where_the_machine_keeps_settings(tmp_path, monkeypatch):
+    """A setting that vanishes on restart is a setting the user will not trust."""
+    import json
+
+    import app.config as config
+
+    stored = tmp_path / "config.json"
+    monkeypatch.setattr(config, "CONFIG_PATH", stored)
+
+    answer = client.post("/api/assistant/provider", json={"provider": "ollama"})
+    assert answer.status_code == 200
+    assert json.loads(stored.read_text(encoding="utf-8"))["assistant_provider"] == "ollama"
+    assert client.get("/api/assistant/providers").json()["selected"] == "ollama"
+
+
+def test_an_unknown_provider_is_refused_not_stored(tmp_path, monkeypatch):
+    """A typo in a select box must not quietly switch the assistant off."""
+    import app.config as config
+
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.json")
+
+    assert client.post("/api/assistant/provider", json={"provider": "gpt-9000"}).status_code == 422
+    assert not (tmp_path / "config.json").exists()
+
+
+def test_auto_means_the_stored_choice(monkeypatch):
+    """`auto` is not "whatever is installed"; it is "whatever you chose"."""
+    monkeypatch.setattr(settings, "assistant_provider", "off")
+    monkeypatch.setattr(settings, "ollama_enabled", True)
+
+    assert providers.configured("auto") is None
+
+    monkeypatch.setattr(settings, "assistant_provider", "auto")
+    chosen = providers.configured("auto")
+    assert chosen is not None and chosen[0] == "ollama"
+
+
+# ------------------------------------------------------- knowing the video
+
+
+INTENT = {"kind": "tutorial", "goal": "teach", "audience": "students", "platform": "tiktok"}
+
+
+def test_the_assistant_is_told_what_the_video_is_for():
+    """A question about a lesson should not be answered about a generic video."""
+    with_intent = chat.reply(
+        [{"role": "user", "content": "which part is the strongest?"}],
+        TIMELINE, language="en", provider="off", intent=INTENT,
+    )
+    without = chat.reply(
+        [{"role": "user", "content": "which part is the strongest?"}],
+        TIMELINE, language="en", provider="off",
+    )
+
+    assert any("what this video is for" in step["en"] for step in with_intent["steps"])
+    assert "Tutorial" in with_intent["reply"]
+    assert not any("what this video is for" in step["en"] for step in without["steps"])
+
+
+def test_the_video_it_knows_about_is_described_in_the_user_language():
+    """Persian labels in a Persian answer — English ones are the bug read twice."""
+    turn = chat.reply(
+        [{"role": "user", "content": "کدام بخش قوی‌تر است؟"}],
+        TIMELINE, language="fa", provider="off", intent=INTENT,
+    )
+
+    step = next(step for step in turn["steps"] if "می‌دانم" in step["fa"])
+    assert "آموزشی" in step["fa"]
+    assert "Tutorial" not in step["fa"], "the Persian answer carried English labels"

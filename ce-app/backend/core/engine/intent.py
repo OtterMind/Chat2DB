@@ -316,13 +316,15 @@ class Intent:
                 score -= 1.0
         return max(-1.0, min(1.0, score / max(1, len(self.keep) + len(self.avoid))))
 
-    def describe(self, translate=None) -> list[str]:
+    def describe(self, translate=None, language: str = "en") -> list[str]:
         """What these answers changed, in words the user can read.
 
         An answer whose effect is invisible is an answer the user will not trust
-        twice, so the rebuild reports each one it actually used.
+        twice, so the rebuild reports each one it actually used. `language` picks
+        the labels; a Persian answer carrying English labels is the bug the user
+        reads twice.
         """
-        said = translate or (lambda en, fa: en)
+        said = translate or (lambda en, fa: fa if language == "fa" else en)
         lines: list[str] = []
         if self.kind:
             label = next(o for o in OPTIONS["kind"] if o["id"] == self.kind)

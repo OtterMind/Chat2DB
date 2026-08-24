@@ -261,6 +261,11 @@ export default function StyleMatch() {
       const editor = useEditor.getState()
       editor.loadSnapshot(built.timeline as never, built.name)
       editor.setAspect((built.aspect as never) ?? 'auto')
+      // The answers travel with the edit, so the assistant in the editor can
+      // answer "which part is the strongest?" about a lesson when it is a lesson.
+      // Cast at the boundary: the edit model carries the answers as an opaque bag
+      // so it stays free of the API's types, and the backend validates them anyway.
+      editor.setIntent((built.summary.intent ?? answers) as Record<string, unknown>)
       message.success(
         t(`Ready — ${built.summary.shots} shots`, `آماده شد — ${built.summary.shots} نما`)
       )
@@ -318,6 +323,7 @@ export default function StyleMatch() {
     const editor = useEditor.getState()
     editor.loadSnapshot(result.timeline as never, result.name)
     editor.setAspect((result.aspect as never) ?? 'auto')
+    editor.setIntent((result.summary.intent ?? answers) as Record<string, unknown>)
     navigate('/studio')
   }
 

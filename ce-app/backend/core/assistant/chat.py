@@ -23,6 +23,7 @@ from __future__ import annotations
 import time
 
 from core.assistant import planner, providers
+from core.engine import intent as intent_model
 
 SYSTEM = """You are the editing assistant inside Cutting Edge, a video editor.
 
@@ -30,6 +31,7 @@ You are talking to the person who owns the footage. Answer in {language_name},
 in two or three short sentences, and never invent a number: if the timeline does
 not say it, say that it does not say it.
 
+{about}
 What is on the timeline right now:
 {timeline}
 
@@ -65,6 +67,20 @@ def _timeline_facts(timeline: dict) -> dict:
     }
 
 
+def _about(wanted: intent_model.Intent, language: str = "en") -> str:
+    """What the user already said the video is, for the model's system prompt.
+
+    The answers come from the Style Match card. Handing them to the assistant is
+    the difference between "which part is strongest?" being answered about a
+    generic video and being answered about *this* one — a lesson for students is
+    not judged like a music clip.
+    """
+    if wanted.empty:
+        return ""
+    return "What the owner said this video is: " + "; ".join(
+        wanted.describe(language=language)) + "."
+
+
 def _step(steps: list[dict], en: str, fa: str, ms: float = 0.0) -> None:
     steps.append({"en": en, "fa": fa, "ms": round(ms * 1000)})
 
@@ -87,25 +103,34 @@ def _plan_reply(plan: planner.Plan, language: str) -> str:
     return "\n".join([head, *lines, "", tail])
 
 
-def _offline_reply(facts: dict, language: str, asked: str) -> str:
+def _offline_reply(facts: dict, language: str, asked: str,
+                   wanted: intent_model.Intent | None = None) -> str:
     """No model connected: answer from the measurements, and say so."""
+    known_fa = "؛ ".join(wanted.describe(language="fa")) if wanted and not wanted.empty else ""
+    known_en = "; ".join(wanted.describe()) if wanted and not wanted.empty else ""
     if language == "fa":
-        return "\n".join([
+        lines = [
             f"تایم‌لاین تو: {facts['clips']} کلیپ ({facts['video']} ویدیو) روی {facts['tracks']} ترک، "
             f"{facts['transitions']} ترنزیشن، {facts['duration']} ثانیه.",
             f"می‌توانم {CAPABILITIES[1]} — کافی است در یک جمله بگویی تا قبل از انجام، نقشه‌اش را نشان دهم.",
             "الان هیچ مدل زبانی وصل نیست، پس از روی اندازه‌گیری‌ها جواب می‌دهم نه از روی فهم متن. "
             "در Settings → موتورهای AI می‌توانی Ollama، OpenAI، Gemini یا Claude را وصل کنی.",
             f"(سؤال تو: «{asked[:120]}»)",
-        ])
-    return "\n".join([
+        ]
+        if known_fa:
+            lines.insert(1, f"از کارتِ «این ویدیو چیست؟» می‌دانم: {known_fa}.")
+        return "\n".join(lines)
+    lines = [
         f"Your timeline: {facts['clips']} clips ({facts['video']} video) on {facts['tracks']} tracks, "
         f"{facts['transitions']} transitions, {facts['duration']} s long.",
         f"I can {CAPABILITIES[0]} — say it in one sentence and I will show you the plan before touching anything.",
         "No language model is connected right now, so I am answering from what is measured rather than "
         "from reading your sentence. Settings → AI engines connects Ollama, OpenAI, Gemini or Claude.",
         f"(You asked: “{asked[:120]}”)",
-    ])
+    ]
+    if known_en:
+        lines.insert(1, f"From your Style Match answers I know: {known_en}.")
+    return "\n".join(lines)
 
 
 def reply(
@@ -114,6 +139,7 @@ def reply(
     selected_clip_id: str | None = None,
     language: str = "en",
     provider: str = "auto",
+    intent: dict | intent_model.Intent | None = None,
 ) -> dict:
     """One turn of the conversation.
 
@@ -125,6 +151,13 @@ def reply(
     history = [m for m in (messages or []) if isinstance(m, dict) and m.get("content")]
     asked = str(history[-1]["content"]).strip() if history else ""
     facts = _timeline_facts(timeline)
+    wanted = (intent if isinstance(intent, intent_model.Intent)
+              else intent_model.Intent.from_dict(intent))
+    if not wanted.empty:
+        _step(steps,
+              "I know what this video is for: " + "; ".join(wanted.describe()),
+              "می‌دانم این ویدیو برای چیست: " + "؛ ".join(wanted.describe(language="fa")),
+              0.0)
 
     mark = time.perf_counter()
     _step(steps,
@@ -162,6 +195,7 @@ def reply(
     mark = time.perf_counter()
     system = SYSTEM.format(
         language_name="Persian (فارسی)" if language == "fa" else "English",
+        about=_about(wanted, language),
         timeline=planner.describe_timeline(timeline or {}),
         operations="\n".join(f"- {name}: {what}" for name, what in planner.OPERATIONS.items()),
     )
@@ -190,7 +224,7 @@ def reply(
           "مدلی وصل نیست، پس از روی اندازه‌گیری‌ها جواب دادم",
           time.perf_counter() - mark)
     return {
-        "reply": _offline_reply(facts, language, asked),
+        "reply": _offline_reply(facts, language, asked, wanted),
         "plan": None,
         "provider": "offline",
         "steps": steps,
@@ -208,6 +242,7 @@ def reply_stream(
     selected_clip_id: str | None = None,
     language: str = "en",
     provider: str = "auto",
+    intent: dict | intent_model.Intent | None = None,
 ):
     """The same turn as `reply()`, as a sequence of events.
 
@@ -227,6 +262,14 @@ def reply_stream(
     history = [m for m in (messages or []) if isinstance(m, dict) and m.get("content")]
     asked = str(history[-1]["content"]).strip() if history else ""
     facts = _timeline_facts(timeline)
+    wanted = (intent if isinstance(intent, intent_model.Intent)
+              else intent_model.Intent.from_dict(intent))
+    if not wanted.empty:
+        yield _event_step(
+            "I know what this video is for: " + "; ".join(wanted.describe()),
+            "می‌دانم این ویدیو برای چیست: " + "؛ ".join(wanted.describe(language="fa")),
+            0.0,
+        )
 
     yield _event_step(
         f"Read the timeline: {facts['clips']} clips, {facts['duration']} s",
@@ -266,6 +309,7 @@ def reply_stream(
     mark = time.perf_counter()
     system = SYSTEM.format(
         language_name="Persian (فارسی)" if language == "fa" else "English",
+        about=_about(wanted, language),
         timeline=planner.describe_timeline(timeline or {}),
         operations="\n".join(f"- {name}: {what}" for name, what in planner.OPERATIONS.items()),
     )
@@ -308,7 +352,7 @@ def reply_stream(
             time.perf_counter() - mark,
         )
 
-    offline = _offline_reply(facts, language, asked)
+    offline = _offline_reply(facts, language, asked, wanted)
     yield {"kind": "delta", "text": offline}
     yield {
         "kind": "done",

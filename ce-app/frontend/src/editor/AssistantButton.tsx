@@ -66,14 +66,18 @@ export default function AssistantButton() {
   const listRef = useRef<HTMLDivElement>(null)
   const nextId = useRef(1)
 
-  const { selectedId, undo } = useEditor()
+  const { selectedId, undo, intent } = useEditor()
 
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
     assistantApi
       .providers()
-      .then((r) => setReady(r.available as never))
+      .then((r) => {
+        setReady(r.available as never)
+        // The stored choice wins over the cached one: Settings may have changed it.
+        if (r.selected) setProvider(r.selected)
+      })
       .catch(() => setReady({}))
   }, [open])
 
@@ -119,6 +123,9 @@ export default function AssistantButton() {
         selectedId,
         lang === 'fa' ? 'fa' : 'en',
         provider,
+        // What the video is for travels with the project, so a question about a
+        // lesson is answered about a lesson.
+        intent,
         (event) => {
           if (event.kind === 'step') {
             collected.push({ en: event.en ?? '', fa: event.fa ?? '', ms: event.ms ?? 0 })
@@ -195,6 +202,9 @@ export default function AssistantButton() {
                 onChange={(event) => {
                   setProvider(event.target.value)
                   localStorage.setItem(PROVIDER_KEY, event.target.value)
+                  // Remembered on the machine, not in this panel: an assistant
+                  // setting that vanishes when the window closes is not a setting.
+                  void assistantApi.setProvider(event.target.value).catch(() => undefined)
                 }}
               >
                 {PROVIDERS.map((name) => (

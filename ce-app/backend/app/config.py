@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
+    #: Which model answers the assistant: auto | off | ollama | openai | gemini
+    #: | anthropic. Stored here rather than in the panel so one choice covers the
+    #: chat, Settings and any future door to the same brain.
+    assistant_provider: str = "auto"
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""

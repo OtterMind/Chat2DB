@@ -86,8 +86,20 @@ export const assistantApi = {
         provider,
       })
     ).data,
-  providers: async (): Promise<{ choices: string[]; available: Record<string, ProviderState> }> =>
-    (await api.get('/assistant/providers')).data,
+  providers: async (): Promise<{
+    choices: string[]
+    available: Record<string, ProviderState>
+    /** The stored choice, so the panel and Settings cannot disagree. */
+    selected: string
+  }> => (await api.get('/assistant/providers')).data,
+  /**
+   * Remember which model answers.
+   *
+   * Server-side rather than per-panel, because the same brain is reachable from
+   * Settings and a choice that only one door remembers is two settings.
+   */
+  setProvider: async (provider: string): Promise<{ provider: string }> =>
+    (await api.post('/assistant/provider', { provider })).data,
   /**
    * The same turn, delivered as it happens.
    *
@@ -104,6 +116,7 @@ export const assistantApi = {
     selectedClipId: string | null,
     language: 'en' | 'fa',
     provider: string,
+    intent: Record<string, unknown> | null,
     onEvent: (event: StreamEvent) => void
   ): Promise<void> => {
     const response = await fetch(`${backendOrigin}/api/assistant/chat/stream`, {
@@ -115,6 +128,7 @@ export const assistantApi = {
         selected_clip_id: selectedClipId,
         language,
         provider,
+        intent,
       }),
     })
     if (!response.ok || !response.body) {

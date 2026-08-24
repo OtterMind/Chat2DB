@@ -4,9 +4,87 @@ import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-r
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
 import AiRuntimeCard from '../components/AiRuntimeCard'
+import { assistantApi, type ProviderState } from '../api/assistant'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
 import { useI18n, type Lang } from '../i18n'
+
+/**
+ * Which model answers the assistant.
+ *
+ * It lives here as well as in the chat panel because it is one setting with two
+ * doors, and a choice only one of them remembers is two settings. The state next
+ * to each name is **checked**, not read: Ollama being installed and Ollama being
+ * switched on are different facts, and both have misled a user before.
+ */
+function AssistantEngineCard() {
+  const { t } = useI18n()
+  const [choices, setChoices] = useState<string[]>([])
+  const [available, setAvailable] = useState<Record<string, ProviderState>>({})
+  const [selected, setSelected] = useState('auto')
+
+  useEffect(() => {
+    assistantApi
+      .providers()
+      .then((r) => {
+        setChoices(r.choices)
+        setAvailable(r.available)
+        setSelected(r.selected)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const save = async (value: string) => {
+    setSelected(value)
+    try {
+      await assistantApi.setProvider(value)
+      message.success(t('The assistant will answer with this', 'دستیار با این پاسخ می‌دهد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const label = (name: string) =>
+    name === 'auto'
+      ? t('Automatic — the first one that is set up', 'خودکار — اولین چیزی که وصل است')
+      : name === 'off'
+        ? t('Offline only — never call a model', 'فقط آفلاین — هیچ مدلی صدا نشود')
+        : name
+
+  return (
+    <Card title={t('The assistant\'s brain', 'مغز دستیار')}>
+      <div className="ce-kv">
+        <span>{t('Who answers', 'چه کسی پاسخ می‌دهد')}</span>
+        <select
+          value={selected}
+          data-testid="settings-assistant-provider"
+          style={{ minWidth: 220 }}
+          onChange={(event) => void save(event.target.value)}
+        >
+          {choices.map((name) => (
+            <option key={name} value={name}>{label(name)}</option>
+          ))}
+        </select>
+      </div>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        {Object.entries(available).map(([name, state]) => (
+          <span key={name} className="ce-badge" title={state.model}>
+            {state.ready ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+            {name}
+            {state.installed === false && t(' · not installed', ' · نصب نیست')}
+            {state.installed && !state.enabled && t(' · not enabled', ' · فعال نیست')}
+          </span>
+        ))}
+      </div>
+      <p className="ce-hint" style={{ marginTop: 8 }}>
+        {t(
+          'With no model connected the assistant still answers — from what is measured on your timeline — and says so instead of guessing.',
+          'بدون مدل هم دستیار پاسخ می‌دهد — از روی آنچه در تایم‌لاین اندازه گرفته — و به‌جای حدس زدن، همین را می‌گوید.'
+        )}
+      </p>
+    </Card>
+  )
+}
 
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
@@ -212,6 +290,8 @@ export default function Settings() {
           {t('. Ollama runs fully locally and needs no key.', ' خوانده می‌شوند. Ollama کاملاً محلی و بدون نیاز به کلید کار می‌کند.')}
         </p>
       </Card>
+
+      <AssistantEngineCard />
     </Page>
   )
 }
