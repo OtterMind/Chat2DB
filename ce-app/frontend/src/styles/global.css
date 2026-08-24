@@ -1063,3 +1063,4 @@ button { font-family: inherit; cursor: pointer; }
 .ce-models__name em { color: #818cf8; font-style: normal; font-size: 11px; }
 .ce-models__why { color: #94a3b8; }
 .ce-models__row[data-fits='false'] .ce-models__why { color: #fbbf24; }
+.ce-encoders li em { display: block; color: #64748b; font-style: normal; font-size: 11px; }

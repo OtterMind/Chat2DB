@@ -215,3 +215,32 @@ def test_the_catalogue_offers_a_model_that_can_see():
     vision = [m for m in CATALOGUE if m["job"] == "vision"]
     assert len(vision) >= 3, "the whole point is that a model can look at the frames"
     assert any(m["vramGb"] <= 4 for m in vision), "nothing here fits a 4 GB card"
+
+
+def test_the_probe_does_not_hide_the_encoder_s_own_words():
+    """`-loglevel error` hid the reason and the user saw only the symptom.
+
+    FFmpeg's closing line — "Nothing was written into output file, because at
+    least one of its streams received no packets" — is what happens *after* the
+    encoder refuses. The encoder's own line, which says why, is a warning.
+    """
+    import inspect
+
+    source = inspect.getsource(gpu.probe_encoders)
+
+    assert '"warning"' in source, "the probe still runs at error level and hides the cause"
+    assert "first_stderr" in source, "a rescue attempt's failure would bury the real reason"
+    assert "constqp" in source, "no second attempt is made before giving up"
+
+
+def test_a_card_that_cannot_encode_gets_something_to_try(monkeypatch):
+    """Naming the three usual Windows causes is more use than a shrug."""
+    monkeypatch.setattr(gpu, "nvidia_smi", lambda: {"name": "GeForce", "memory_mb": 4096, "driver": "591"})
+    monkeypatch.setattr(gpu, "best_encoder", lambda: None)
+    monkeypatch.setattr(gpu, "can_decode", lambda: True)
+
+    notes = " ".join(gpu.capabilities().notes).lower()
+
+    assert "high performance" in notes, "the Optimus case is the common one and is not mentioned"
+    assert "driver" in notes
+    assert "cannot damage" in notes, "the user asked whether turning it on is risky"

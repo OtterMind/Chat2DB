@@ -138,11 +138,12 @@ def probe_encoders() -> tuple[dict, ...]:
 
     results: list[dict] = []
     for name, vendor, codec in ENCODERS:
-        entry = {"name": name, "vendor": vendor, "codec": codec, "ok": False, "reason": ""}
+        entry = {"name": name, "vendor": vendor, "codec": codec, "ok": False, "reason": "",
+                 "tried": [], "detail": ""}
         target = os.path.join(tempfile.gettempdir(), f"ce-encprobe-{name}.mp4")
         try:
             out = _run([
-                ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+                ffmpeg_binary(), "-hide_banner", "-loglevel", "warning", "-y",
                 # A second and a half, encoded to the end, into a real file.
                 #
                 # The first version asked for three frames into `-f null -` and
@@ -153,16 +154,58 @@ def probe_encoders() -> tuple[dict, ...]:
                 # stream, so a three-frame probe finishes before the encoder has
                 # produced anything. The probe was wrong, not the card.
                 "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:duration=1.5",
-                "-an", "-c:v", name, target,
+                "-an", "-pix_fmt", "yuv420p", "-c:v", name, target,
             ])
             wrote = os.path.exists(target) and os.path.getsize(target) > 1024
             entry["ok"] = out.returncode == 0 and wrote
+            entry["tried"].append("default")
+            # Keep the *first* failure: the rescue variants can fail for reasons
+            # of their own ("Unrecognized option 'gpu'") and those would bury the
+            # real one.
+            first_stderr = out.stderr or ""
+
             if not entry["ok"]:
-                lines = [line.strip() for line in (out.stderr or "").splitlines() if line.strip()]
-                entry["reason"] = (
-                    lines[-1][:200] if lines
-                    else (f"exit code {out.returncode}" if out.returncode else "wrote an empty file")
-                )
+                # Second and third attempts with the settings that most often
+                # rescue a stubborn encoder — a fixed quantiser instead of
+                # variable bitrate, and an explicit device index. A machine that
+                # answers to one of these is a machine whose card *does* encode,
+                # and the point of a probe is to find that out rather than to be
+                # right the first time.
+                variants: list[tuple[str, list[str]]] = []
+                if name.endswith("_nvenc"):
+                    variants = [
+                        ("constqp", ["-rc", "constqp", "-qp", "23", "-preset", "p4"]),
+                        ("gpu0", ["-gpu", "0", "-preset", "p1"]),
+                    ]
+                elif name.endswith("_qsv"):
+                    variants = [("lowpower", ["-low_power", "1"])]
+                elif name.endswith("_amf"):
+                    variants = [("cqp", ["-rc", "cqp", "-qp_i", "23", "-qp_p", "23"])]
+
+                for label, extra in variants:
+                    retry = _run([
+                        ffmpeg_binary(), "-hide_banner", "-loglevel", "warning", "-y",
+                        "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=1.5",
+                        "-an", "-pix_fmt", "yuv420p", "-c:v", name, *extra, target,
+                    ])
+                    entry["tried"].append(label)
+                    if retry.returncode == 0 and os.path.exists(target) and os.path.getsize(target) > 1024:
+                        entry["ok"] = True
+                        entry["extra"] = extra
+                        break
+                    out = retry
+
+            if not entry["ok"]:
+                lines = [line.strip() for line in first_stderr.splitlines() if line.strip()]
+                # The encoder's *own* lines are the useful ones; FFmpeg's closing
+                # summary ("nothing was written…") is a symptom, not a cause, and
+                # it was all the user ever saw because we ran at `-loglevel error`
+                # and threw the warnings away.
+                own = [line for line in lines
+                       if name.split("_")[-1] in line.lower() or "cuda" in line.lower()
+                       or "device" in line.lower() or "driver" in line.lower()]
+                entry["reason"] = (own or lines or ["no output at all"])[0][:200]
+                entry["detail"] = " | ".join(lines[-3:])[:400]
         except Exception as error:  # noqa: BLE001
             entry["reason"] = f"{type(error).__name__}: {error}"[:200]
         finally:
@@ -307,6 +350,25 @@ def capabilities(deep: bool = False) -> Capabilities:
         failures = [e for e in caps.encoders if e["reason"]]
         if failures:
             caps.notes.append(f"Hardware encoding is off: {failures[0]['reason']}")
+        if card:
+            # The card is present and the encoder still will not run. On Windows
+            # this is nearly always one of three things, and all three are the
+            # user's to fix — so name them instead of shrugging.
+            caps.notes.append(
+                "The card is there. On a laptop this is usually Windows running this app on the "
+                "integrated graphics: Settings → System → Display → Graphics → Cutting Edge → "
+                "High performance, then restart the app."
+            )
+            caps.notes.append(
+                "If that does not do it: install the NVIDIA Studio driver over the current one "
+                "with the clean-install option, and close anything else using the encoder "
+                "(OBS, a browser playing video, Discord streaming)."
+            )
+            caps.notes.append(
+                "Turning it on is safe: NVENC is a separate block on the chip, built to run for "
+                "hours — it uses a few hundred MB of video memory and raises the temperature a "
+                "little. It cannot damage the card."
+            )
         caps.notes.append(
             "Encoding on the processor is not a failure — x264 at `veryfast` keeps up with "
             "1080p comfortably; the card matters most for 4K and long exports."

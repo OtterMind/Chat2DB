@@ -25,7 +25,7 @@ interface GpuStatus {
   encoder: string
   decoder: string
   /** Every hardware encoder that was tried, and FFmpeg's own reason if it failed. */
-  encoders: { name: string; vendor: string; codec: string; ok: boolean; reason: string }[]
+  encoders: { name: string; vendor: string; codec: string; ok: boolean; reason: string; tried?: string[]; detail?: string }[]
   notes: string[]
   used: string[]
 }
@@ -140,7 +140,13 @@ export default function GpuCard() {
                   <li key={entry.name} data-ok={entry.ok}>
                     <code dir="ltr">{entry.name}</code>
                     <span dir="ltr">
-                      {entry.ok ? t('works', 'کار می‌کند') : entry.reason || t('unavailable', 'در دسترس نیست')}
+                      {entry.ok
+                        ? t('works', 'کار می‌کند')
+                        : entry.reason || t('unavailable', 'در دسترس نیست')}
+                      {!entry.ok && entry.tried && entry.tried.length > 1 && (
+                        <em> · {t('tried', 'امتحان شد')}: {entry.tried.join(', ')}</em>
+                      )}
+                      {!entry.ok && entry.detail && <em dir="ltr"> · {entry.detail}</em>}
                     </span>
                   </li>
                 ))}

@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.3` · Last released: `v0.9.2` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.4` · Last released: `v0.9.3` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -605,6 +605,25 @@ gate that stops a broken installer from being published.
    skipped: `electron-updater` verifies a SHA-512 of the fully reassembled
    323 MB installer before running it, and falls back to a full download if it
    does not match.
+
+66. **`-loglevel error` hid the reason for two releases.** After the frame-count
+   bug was fixed the GTX 1650 still said *"Nothing was written into output file,
+   because at least one of its streams received no packets"* — which is the
+   **symptom**: FFmpeg's closing summary when the muxer got nothing. The
+   encoder's own explanation is emitted at *warning* level, and we were
+   filtering it out. The probe runs at `-loglevel warning` now, keeps the
+   encoder's own lines (`nvenc`, `cuda`, `device`, `driver`) as the reason and
+   the last three lines as detail, and tries two rescue variants per encoder
+   (`-rc constqp`, `-gpu 0`; `-low_power` for QSV; `-rc cqp` for AMF) before
+   giving up. The reason reported is always the **first** attempt's, because a
+   rescue attempt can fail for a reason of its own (`Unrecognized option 'gpu'`)
+   and bury the real one.
+   When a card is present and still nothing encodes, the card now names the
+   three causes worth checking on Windows — the app running on the integrated
+   GPU (Settings → Display → Graphics → High performance), an old or dirty
+   driver, and another program holding the encoder — and answers the question
+   the owner actually asked: turning it on is safe, NVENC is a separate block on
+   the chip built to run for hours and cannot damage anything.
 
 ## 5. Release procedure
 
