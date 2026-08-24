@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.8.3` · Last released: `v0.8.2` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.0` · Last released: `v0.8.3` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -502,6 +502,35 @@ gate that stops a broken installer from being published.
    lives in the user's Ollama), then beam search and a two-pass assistant (free
    and offline), then TransNetV2 for real transition detection, OCR for
    on-screen text, CLIP for content matching, Demucs as an on-demand engine.
+
+57. **The graphics card is used, and it is probed — never assumed, never
+   invented.** The owner has a GTX 1650 and asked that the card not be limited
+   anywhere. Three things were wrong:
+   • the compositor decided NVENC was available by **grepping FFmpeg's encoder
+     list**, which lists `h264_nvenc` on machines whose driver refuses it, so
+     the choice was wrong in both directions. `core/engine/gpu.py` now encodes
+     one real frame and caches the answer;
+   • **nothing ever decoded on the card.** Decoding is most of the work in
+     building a proxy or scanning a long file; `-hwaccel cuda` now goes in
+     front of the input in the proxy pipeline (and the flag order matters —
+     after `-i` FFmpeg ignores it, which `tests/test_gpu.py` asserts);
+   • `/api/system/doctor` returned `"cuda": {"available": false}` as a
+     **hard-coded literal**, so a user with a working card was told they had
+     none.
+   Settings has a Graphics card panel: name, memory, driver, what the card is
+   used for, and a **Measure it** button that encodes the same 5 s of 1080p on
+   the processor and on the card and prints both times — a claim about a GPU
+   that was not measured on the machine it runs on is a brochure.
+   `faster-whisper` on CUDA needs cuBLAS and cuDNN (the `cublas64_12.dll` a user
+   hit in 0.5.3); they are 1.3 GB of wheels, so `POST /api/ai/cuda/install`
+   fetches them **on demand and only when an NVIDIA card is present** — it is a
+   409 otherwise, because downloading a gigabyte of CUDA to a machine that
+   cannot use it is not a favour.
+58. **A test's question can go stale even when its assertion is right.** Adding
+   the reference's soundtrack made three browser checks fail — "one clip per
+   shot", "gapless", "graded" — because they counted *every* clip and the edit
+   now legitimately carries a music clip. The numbers were right; the question
+   was wrong. They ask about the video lane now.
 
 ## 5. Release procedure
 

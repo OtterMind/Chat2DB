@@ -8,6 +8,21 @@ from app.schemas.job import SystemInfo
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
+def _graphics() -> dict:
+    """The real answer about the graphics card, cached inside `core.engine.gpu`."""
+    from core.engine import gpu
+
+    caps = gpu.capabilities()
+    return {
+        "available": bool(caps.nvenc or caps.nvdec or caps.name),
+        "name": caps.name,
+        "driver": caps.driver,
+        "memoryMb": caps.memory_mb,
+        "encode": caps.nvenc,
+        "decode": caps.nvdec,
+    }
+
+
 @router.get("/doctor")
 def run_doctor():
     return {
@@ -15,7 +30,9 @@ def run_doctor():
                    "cpu_count": psutil.cpu_count(), "memory_gb": round(psutil.virtual_memory().total/(1024**3),1),
                    "disk_free_gb": round(shutil.disk_usage(Path.home()).free/(1024**3),1)},
         "ffmpeg": {"found": bool(shutil.which("ffmpeg")), "path": shutil.which("ffmpeg")},
-        "cuda": {"available": False, "version": None},
+        # This used to be the literal `False`, so a machine with a working card
+        # was told it had none. It is a probe now (see core/engine/gpu.py).
+        "cuda": _graphics(),
         "warnings": [] if shutil.which("ffmpeg") else ["FFmpeg not found — install ffmpeg to enable video processing"],
         "errors": [], "healthy": True,
     }
@@ -24,7 +41,9 @@ def run_doctor():
 def system_info():
     ff = shutil.which("ffmpeg")
     return SystemInfo(version=__version__, python_version=platform.python_version(), platform=platform.platform(),
-                      ffmpeg_found=bool(ff), ffmpeg_path=ff, cuda_available=False, cuda_version=None,
+                      ffmpeg_found=bool(ff), ffmpeg_path=ff,
+                      cuda_available=bool(_graphics()["available"]),
+                      cuda_version=_graphics().get("driver"),
                       disk_free_gb=round(shutil.disk_usage(Path.home()).free/(1024**3),1),
                       memory_gb=round(psutil.virtual_memory().total/(1024**3),1))
 

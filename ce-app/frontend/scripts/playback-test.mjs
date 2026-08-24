@@ -920,23 +920,30 @@ if ((args.reference ?? process.env.CE_TEST_REFERENCE) && (args.vertical ?? proce
       bpm: template.bpm,
       aspect: template.aspect,
       unknown: template.unknown.length,
-      clips: state.clips.length,
+      // Since 0.8.3 the edit also carries the reference's own soundtrack on the
+      // audio lane, so "one clip per shot", "gapless" and "graded" are claims
+      // about the *video* lane. (Counting every clip made all three fail the
+      // moment the music arrived — the numbers were right, the question was not.)
+      clips: state.clips.filter((c) => c.src && c.trackId?.startsWith('v')).length,
+      music: state.clips.filter((c) => c.trackId?.startsWith('a')).length,
       duration: Math.max(...state.clips.map((c) => c.start + c.duration)),
-      gaps: state.clips
-        .slice()
-        .sort((a, b) => a.start - b.start)
-        .slice(1)
-        .filter((c, i, all) => {
-          const previous = state.clips.slice().sort((a, b) => a.start - b.start)[i]
-          return Math.abs(c.start - (previous.start + previous.duration)) > 0.02
-        }).length,
-      graded: state.clips.every((c) => c.props?.adjust !== undefined),
+      gaps: (() => {
+        const lane = state.clips
+          .filter((c) => c.trackId?.startsWith('v'))
+          .sort((a, b) => a.start - b.start)
+        return lane.slice(1).filter((c, i) => Math.abs(c.start - (lane[i].start + lane[i].duration)) > 0.02).length
+      })(),
+      graded: state.clips
+        .filter((c) => c.trackId?.startsWith('v'))
+        .every((c) => c.props?.adjust !== undefined),
     }
   })()), referenceFile, ownFootage)
 
   if (styled.shots >= 5 && Math.abs(styled.bpm - 120) < 3)
     ok(`the reference was measured (${styled.shots} shots, ${Math.round(styled.bpm)} BPM, ${styled.aspect})`)
   else bad('the reference analysis is wrong', JSON.stringify(styled))
+  if (styled.music > 0) ok(`the reference's own soundtrack came with the template (${styled.music} track)`)
+  else bad('the template carried a soundtrack and the edit came back silent', JSON.stringify(styled))
   if (styled.clips === styled.shots) ok(`the edit has one clip per template shot (${styled.clips})`)
   else bad('the produced edit does not follow the template', JSON.stringify(styled))
   if (styled.gaps === 0) ok('the produced clips tile the timeline with no gaps')
@@ -1219,6 +1226,28 @@ if (recents.draft) ok('the unfinished project appears in Recent projects')
 else bad('the unfinished (autosaved) project is not offered on the home screen', JSON.stringify(recents))
 if (recents.deletes > 0) ok(`each saved project has a delete button (${recents.deletes})`)
 else bad('saved projects cannot be deleted from the home screen', JSON.stringify(recents))
+
+// ------------------------------------------------------------ graphics card
+//
+// The Settings card must report what was *probed*, and on a machine with no
+// card it must say so plainly rather than showing an empty box.
+await page.evaluate(() => (window.__pending = (async () => {
+  location.hash = '#/settings'
+  await new Promise((r) => setTimeout(r, 1500))
+})()))
+const gpuCard = await page.evaluate(() => {
+  const card = document.querySelector('[data-testid="gpu-card"]')
+  return {
+    shown: Boolean(card),
+    name: document.querySelector('[data-testid="gpu-name"]')?.textContent?.trim() ?? '',
+    states: [...document.querySelectorAll('[data-testid="gpu-card"] strong[data-state]')].map((n) => n.dataset.state),
+    text: card?.textContent ?? '',
+  }
+})
+if (gpuCard.shown && gpuCard.name) ok(`the graphics card is reported ("${gpuCard.name}")`)
+else bad('Settings does not report the graphics card', JSON.stringify(gpuCard))
+if (gpuCard.states.length >= 3) ok(`encode/decode/speech each say what they are (${gpuCard.states.join(', ')})`)
+else bad('the card does not say what it is used for', JSON.stringify(gpuCard))
 
 // --------------------------------------------------------- karaoke captions
 //

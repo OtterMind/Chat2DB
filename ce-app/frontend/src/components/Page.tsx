@@ -70,14 +70,17 @@ export function Card({
   extra,
   children,
   tone,
+  testId,
 }: {
   title?: string
   extra?: ReactNode
   children: ReactNode
   tone?: 'default' | 'danger' | 'success'
+  /** Lets a browser test find this card without matching translated text. */
+  testId?: string
 }) {
   return (
-    <section className={`ce-card ${tone ? `ce-card--${tone}` : ''}`}>
+    <section className={`ce-card ${tone ? `ce-card--${tone}` : ''}`} data-testid={testId}>
       {(title || extra) && (
         <div className="ce-card__head">
           {title && <h3>{title}</h3>}

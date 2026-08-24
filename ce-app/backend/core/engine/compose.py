@@ -518,11 +518,15 @@ def _sequence_duration(timeline: "Timeline", sequence: list[Clip]) -> float:
 
 
 def _has_nvenc(ffmpeg: str) -> bool:
-    try:
-        out = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=20)
-        return "h264_nvenc" in out.stdout
-    except Exception:
-        return False
+    """Ask the card to encode a frame, rather than reading a list.
+
+    `ffmpeg -encoders` lists `h264_nvenc` on machines whose driver refuses it at
+    runtime, so this used to be wrong in both directions. `core.engine.gpu`
+    probes for real and caches the answer.
+    """
+    from core.engine import gpu
+
+    return gpu.can_encode()
 
 
 def build_command(

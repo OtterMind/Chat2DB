@@ -14,6 +14,7 @@ import asyncio
 import importlib.util
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -273,3 +274,83 @@ async def test_engines() -> dict:
         loop.run_in_executor(None, _ping_whisper),
     )
     return report
+
+
+# --------------------------------------------------------------------------- #
+# The CUDA libraries faster-whisper needs, fetched only if the card is there.
+# --------------------------------------------------------------------------- #
+#
+# A GTX 1650 has CUDA; `faster-whisper` still needs cuBLAS and cuDNN beside it,
+# and their absence is the `Library cublas64_12.dll is not found` a user
+# reported in 0.5.3. They are 553 MB and 737 MB of Windows wheels — far too much
+# to ship to every user, and exactly the right thing to offer to a user who has
+# an NVIDIA card and wants transcription on it.
+
+
+CUDA_PACKAGES = ("nvidia-cublas-cu12", "nvidia-cudnn-cu12")
+
+
+@router.get("/cuda/status")
+def cuda_status() -> dict:
+    """Is the card usable for speech recognition, and if not, why not?"""
+    from core.engine import gpu
+
+    caps = gpu.capabilities()
+    device, detail = gpu.whisper_status()
+    def _present(module: str) -> bool:
+        # find_spec raises ModuleNotFoundError for a *parent* that is absent,
+        # which is the normal case on a machine that never had CUDA.
+        try:
+            return importlib.util.find_spec(module) is not None
+        except ModuleNotFoundError:
+            return False
+
+    installed = all(_present(name) for name in ("nvidia.cublas", "nvidia.cudnn"))
+    return {
+        "card": caps.name,
+        "memoryMb": caps.memory_mb,
+        "device": device,
+        "detail": detail,
+        "librariesInstalled": installed,
+        "packages": list(CUDA_PACKAGES),
+        "downloadMb": 1290,
+        "canInstall": bool(caps.name) and device != "cuda",
+    }
+
+
+@router.post("/cuda/install")
+async def cuda_install() -> dict:
+    """Fetch cuBLAS and cuDNN into this installation. About 1.3 GB.
+
+    Refused when there is no NVIDIA card: downloading a gigabyte of CUDA to a
+    machine that cannot use it is not a favour.
+    """
+    from core.engine import gpu
+
+    caps = gpu.capabilities()
+    if not caps.name:
+        raise HTTPException(
+            status_code=409,
+            detail="No NVIDIA card was found, so these libraries would do nothing here.",
+        )
+
+    def _install() -> dict:
+        started = time.monotonic()
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--no-warn-script-location", *CUDA_PACKAGES],
+            capture_output=True, text=True, timeout=3600,
+        )
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "")[-400:])
+        device, detail = gpu.whisper_status()
+        return {
+            "installed": True,
+            "seconds": round(time.monotonic() - started, 1),
+            "device": device,
+            "detail": detail,
+        }
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, _install)
+    except Exception as error:  # noqa: BLE001 — the reason is the useful part
+        raise HTTPException(status_code=502, detail=str(error)) from error

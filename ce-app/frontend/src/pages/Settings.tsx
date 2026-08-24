@@ -4,6 +4,7 @@ import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-r
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
 import AiRuntimeCard from '../components/AiRuntimeCard'
+import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
 import { useI18n, type Lang } from '../i18n'
 
@@ -86,6 +87,7 @@ export default function Settings() {
 
       <Card title={t('Local AI engines', 'موتورهای هوش مصنوعی محلی')}>
         <AiRuntimeCard />
+        <GpuCard />
       </Card>
 
       <Card title={t('Application update', 'به‌روزرسانی برنامه')}>

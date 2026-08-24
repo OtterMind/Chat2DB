@@ -49,17 +49,22 @@ def needs_proxy(info: dict) -> bool:
 
 
 def build_command(source: Path, target: Path) -> list[str]:
+    # The graphics card, when there is one: decoding is most of the work here,
+    # and a proxy of a 4K clip is exactly the job it exists for.
+    from core.engine import gpu
+
     return [
         ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+        *gpu.decode_args(),
         "-i", str(source),
         # Keep the long edge at 720 whichever way the phone was held.
         # `bicubic` instead of `fast_bilinear`: the downscale is the only place
         # detail is lost for good, and it costs milliseconds.
         "-vf", f"scale='if(gt(iw,ih),-2,{PROXY_HEIGHT})':'if(gt(iw,ih),{PROXY_HEIGHT},-2)':flags=bicubic",
-        # superfast measured *faster* than veryfast at this resolution (68 s vs
-        # 80 s on a 2-minute 1440p clip) and higher quality; it pays in file
-        # size, which is the one resource a proxy is allowed to spend.
-        "-c:v", "libx264", "-preset", "superfast", "-crf", "21",
+        # On a machine with an NVIDIA card this is NVENC; otherwise x264 at
+        # `superfast`, which measured *faster* than `veryfast` at this
+        # resolution (68 s vs 80 s on a 2-minute 1440p clip) and looked better.
+        *gpu.encode_args({"preset": "superfast", "crf": 21, "nvenc_cq": 23}),
         "-g", "15", "-keyint_min", "15", "-sc_threshold", "0",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-ac", "2",
