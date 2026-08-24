@@ -4,7 +4,14 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.6` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.6` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+
+*Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
+still points at `763a0de` on the remote — the same commit this branch starts
+from, so nothing was lost in the break. What *was* lost is the sandbox's
+throwaway half: `ce-app/.venv`, `ce-app/.ffmpeg` and `ce-app/frontend/node_modules`
+were gone and had to be rebuilt with `bash ce-app/scripts/dev-setup.sh` (§2).
+Code, docs and this file are the durable half, and they were all there.
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -74,11 +81,24 @@ cd ce-app/frontend && npm run dev
 
 No Windows machine is needed for anything except packaging.
 
+**Verified from a cold sandbox on 2026-08-24.** The script builds the venv, the
+static ffmpeg and the frontend dependencies, and the suite then runs green
+(197 passed, 3 skipped). The one step that needs a hand in a network-filtering
+sandbox is the Electron binary: `npm install` dies inside `node install.js` with
+`unable to verify the first certificate`, because that download goes to a host
+the sandbox intercepts. Everything the checks need is TypeScript and the bridge
+contract, neither of which needs the binary, so:
+
+```
+cd ce-app/frontend && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install --no-audit --no-fund
+npm run verify
+```
+
 ## 3. The checks that protect the product
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — 86 tests |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **200 collected: 197 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -659,6 +679,34 @@ gate that stops a broken installer from being published.
    `ffmpeg.exe` and `ffprobe.exe`, and then clears the cached probes because
    they are stale by definition. `POST /api/gpu/preference`; the card also links
    straight to `ms-settings:display-advancedgraphics`.
+
+70. **`ps` truncates at 80 columns, and a test's venv path can be longer than
+    that.** Rebuilding the environment after a wipe, `pytest` reported
+    *the child never started* in `test_cancel_kills_the_child_process` — while the
+    child was running. `_python_sleepers()` greps `ps -eo pid,args` for
+    `time.sleep(60)`, and with no terminal to ask, procps cuts each line at 80
+    columns. From `/tmp/cevenv` (what `sandbox-test-env.sh` builds) the marker
+    survives; from `ce-app/.venv` inside a deep checkout the line ends at
+    `... -c import time; ti`. Measured side by side: `ps -eo` → 80 chars,
+    `ps -eww -o` → all 84. The helper passes `-ww` now, so the test no longer
+    depends on where the virtualenv happens to live. **A test that measures the
+    world through a fixed-width tool is measuring the width, not the world** —
+    the same shape as §61 (the probe was wrong, not the card) and §60.
+71. **The recovery script is code too, and it had rotted against today's PyPI.**
+    `dev-setup.sh` is the documented way back after a wipe (§2) and it produced
+    an environment where the suite could not even collect: starlette's
+    `TestClient` needs `httpx`, which the light set never installed — five test
+    modules failed at import, so `pytest` ran nothing at all. And `scenedetect`
+    pulls the GUI `opencv-python`, which cannot import without `libGL`, so
+    `test_camera_motion_is_recognised[pull]` failed exactly the way §60 warns
+    about. Both are now installed by the script itself (`httpx`, then uninstall
+    the GUI wheel and pin `opencv-python-headless==4.10.0.84`), matching what
+    `sandbox-test-env.sh` already did. After that: **197 passed, 3 skipped** from
+    a cold sandbox. Note one thing the sandbox *cannot* do: `npm install` fails
+    downloading the Electron binary (`unable to verify the first certificate`),
+    so `ELECTRON_SKIP_BINARY_DOWNLOAD=1` is needed to get the frontend's
+    TypeScript and bridge checks running here. Packaging still happens on the
+    Windows runner.
 
 ## 5. Release procedure
 

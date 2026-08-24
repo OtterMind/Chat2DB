@@ -105,7 +105,14 @@ def test_cancel_kills_the_child_process():
 
 
 def _python_sleepers() -> list[int]:
-    out = subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True).stdout
+    # `-ww` is load-bearing, not decoration. Without it procps truncates each line
+    # to 80 columns when it has no terminal to ask, and the interpreter's own path
+    # is part of those 80: from `/tmp/cevenv` the marker survives, from a venv
+    # inside a deep checkout (`ce-app/.venv`, the one dev-setup.sh creates) the
+    # line ends at `... -c import time; ti` and the grep finds nothing — so the
+    # test reported "the child never started" for a child that was running.
+    # Measured both ways: `ps -eo` cut at column 80, `ps -eww -o` printed all 84.
+    out = subprocess.run(["ps", "-eww", "-o", "pid,args"], capture_output=True, text=True).stdout
     return [int(line.split()[0]) for line in out.splitlines() if "time.sleep(60)" in line]
 
 
