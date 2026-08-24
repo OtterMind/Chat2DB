@@ -90,8 +90,13 @@ def detect_silence(
     return trimmed
 
 
-def detect_scenes(path: str, *, threshold: float = 27.0) -> list[float]:
+def detect_scenes(path: str) -> list[float]:
     """Timestamps where the shot changes, in seconds.
+
+    There is no `threshold` parameter any more: it belonged to ContentDetector,
+    and nothing passed it. AdaptiveDetector adapts — that is the whole point of
+    it — so a knob that used to trade false cuts for missed ones is gone rather
+    than left dangling as a setting that does nothing.
 
     Shot detection is the longest single stage of a style analysis — 10.1 s on a
     ten-minute reference — and it runs inside PySceneDetect, not inside FFmpeg,
@@ -100,11 +105,18 @@ def detect_scenes(path: str, *, threshold: float = 27.0) -> list[float]:
     pressed here is honoured in the same second instead of at the next stage.
     """
     try:
-        from scenedetect import ContentDetector, SceneManager, open_video  # type: ignore
+        from scenedetect import AdaptiveDetector, SceneManager, open_video  # type: ignore
 
         video = open_video(path)
         manager = SceneManager()
-        manager.add_detector(ContentDetector(threshold=threshold))
+        # AdaptiveDetector, chosen by measurement rather than by reading a changelog.
+        # On known-answer fixtures (`tests/test_scenes.py`): on plain hard cuts both
+        # detectors are perfect, and on a fast pan with handheld wobble
+        # ContentDetector invented a cut at 2.6 s that is not there — precision
+        # 0.67 against 1.00. Fast camera motion is exactly what a phone video is
+        # full of, and a cut that is not there becomes a clip boundary the user
+        # never asked for. Already shipped, so this costs nothing to install.
+        manager.add_detector(AdaptiveDetector())
 
         event = cancellation.current()
         watcher: threading.Thread | None = None

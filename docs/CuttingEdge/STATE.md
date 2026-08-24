@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.11` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.12` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -101,7 +101,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **270 collected: 266 passed, 4 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **273 collected: 269 passed, 4 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`, needs Chromium from `sandbox-test-env.sh`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -807,6 +807,47 @@ gate that stops a broken installer from being published.
     null` — no crash, no 500. That is the §4.51 rule holding on the first contact
     with a real machine that lacks the runtime, and `tests/test_vad.py` now pins
     it.
+
+81. **The shot detector was chosen by a scoreboard, not by a changelog.**
+    `scenedetect` was already shipping, so both of its detectors were free — and
+    "free" is exactly when a choice gets made by taste. Measured on fixtures built
+    to a recipe (`tests/test_scenes.py`):
+
+    | fixture | known cuts | ContentDetector | AdaptiveDetector |
+    |---|---|---|---|
+    | hard cuts, static shots | 6 | 6 found, precision 1.00 | 6 found, precision 1.00 |
+    | hard cuts, camera push | 6 | 6 found, precision 1.00 | 6 found, precision 1.00 |
+    | **fast pan + handheld wobble** | **2** | **3 found — a cut invented at 2.6 s, precision 0.67** | **2 found, precision 1.00** |
+    | 3 s clip, one cut | 1 | correct | correct |
+    | 1.5 s single shot | 0 | correct | correct |
+
+    A false cut is not cosmetic: it becomes a clip boundary in the rebuild and a
+    shot in the template's rhythm. Fast camera motion is what a phone video is
+    made of. AdaptiveDetector is now the detector, the scoreboard is the test, and
+    the `threshold` parameter — which belonged to ContentDetector and which
+    nothing passed — is gone rather than left as a knob that does nothing.
+82. **Two open-source candidates were checked and not added, and that is the
+    result.** Both were verified from the wheel's own `METADATA`, not a README:
+    • **`transnetv2-pytorch` 1.0.5 — refused.** Licence is genuinely MIT
+      (`License-Expression: MIT`, and the bundled `LICENSE` starts "MIT
+      License"), and it would give real transition detection. But it requires
+      `torch>=1.9.0` plus `ffmpeg-python`, `pandas`, `pillow` and `tqdm` — and
+      `pandas` and `Pillow` are precisely the dead weight removed in §4.38.
+      Several hundred megabytes of torch to replace a detector that now scores
+      1.00 on the fixtures above is not a trade this app makes.
+    • **`deepfilternet` 0.5.6 — deferred.** Licence MIT *or* Apache-2.0 (both
+      files are in `DeepFilterLib`), and — pleasantly — **no torch**: the runtime
+      is a 1.29 MB compiled `libdf` plus numpy, with a Windows wheel
+      (`DeepFilterLib-0.5.6-cp311-none-win_amd64.whl`, 0.49 MB). The whole
+      closure measured **10.5 MB**, of which **9.4 MB is sympy + mpmath** for a
+      denoiser, which is worth questioning before it is accepted. The blocker is
+      the model: `df/enhance.py:270` fetches it from
+      `https://github.com/Rikorose/DeepFilterNet/raw/main/models/*.zip` — GitHub
+      raw only, no PyPI, no mirror. That exact URL was tried here and failed
+      (curl exit 35 after a 302). Shipping a denoiser whose weights come from a
+      source we have just watched fail, with no way to measure it in dB against
+      the current chain, is the brochure §4.57 warns about. Revisit if the model
+      lands on a registry.
 
 ## 5. Release procedure
 
