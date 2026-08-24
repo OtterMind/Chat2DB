@@ -14,7 +14,6 @@ which keeps every change undoable and never touches the source media.
 from __future__ import annotations
 
 import re
-import subprocess
 import threading
 
 from core.engine import cancellation

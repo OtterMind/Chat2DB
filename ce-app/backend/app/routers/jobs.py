@@ -3,7 +3,7 @@ import asyncio, json, uuid
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from app.database import db
-from app.schemas.job import JobCreate, JobListResponse, JobResponse, ClipResponse, ClipUpdate
+from app.schemas.job import JobCreate, JobListResponse, JobResponse, ClipResponse
 from app.services.pipeline import PipelineOrchestrator
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])

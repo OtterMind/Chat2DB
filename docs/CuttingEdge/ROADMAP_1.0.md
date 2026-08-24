@@ -1,5 +1,35 @@
 # Road to 1.0 — the plan as of 0.5.3
 
+> ## Where we are — 2026-08-24, version **0.9.7**
+>
+> Re-measured from the code rather than from memory: each line below was checked
+> with a `grep`/`ls`, not recalled.
+>
+> **Shipped since this plan was written:** 0.6.2–0.6.3 (the size and quality
+> sweeps), 0.7.0–0.7.1 (the brain: objective, planners, race, meaning), 0.8.0
+> (real face tracking, `BETA` badge off), 0.9.0 (YouTube publishing —
+> `app/routers/uploads.py` + the Uploads screen), 0.9.2–0.9.6 (the GPU work:
+> probed encoders across four vendors, decode on the card, the permission button),
+> and — unnumbered until now — the **Style Match intake** (10 questions, the
+> whole-file highlight search, a requested length) and the **assistant as a
+> streaming conversation** that knows what the video is for.
+>
+> ### Four steps to 1.0
+>
+> | # | Step | State in the code | What it needs |
+> |---|---|---|---|
+> | 1 | **0.8.1 — things to put on the screen** | nothing: no gallery screen, no title or sound pack | a `.cetemplate` gallery, a title pack built from the five keyframe channels we can export, sound effects through `freesound-python` (MIT) |
+> | 2 | **0.9.1 — audio depth** | nothing: no DeepFilterNet, no bed library | DeepFilterNet (MIT/Apache) fetched on demand and *measured in dB against the current chain*, kept only if it wins; a music bed library |
+> | 3 | **Vision — a model that has seen frames** | the catalogue lists three vision models, but nothing looks at a picture | Ollama vision models on the user's own install (§4.62), then the highlight scorer reads frames instead of guessing from loudness |
+> | 4 | **1.0 — stabilise and say what it is** | nothing: no tour, no crash reporting, no manual, no attribution screen | first-run tour, crash reporting, a manual in both languages, an attribution screen listing every shipped package and its licence, and a filmed clean install doing a whole edit with no console error |
+>
+> Deliberately **not** on this road: anything GPL/AGPL or unlicensed
+> (`ultralytics`, `RobustVideoMatting`, `openshot-qt`, `pedalboard`, Remotion,
+> Shepherd, GSAS), and any dependency whose Windows closure was measured and
+> rejected (`librosa`, `mediapipe`) — see `OSS_EVALUATION.md` and
+> `OSS_SWEEP_0.9.2.md`.
+
+
 Written after auditing an outside review (`REVIEW_AUDIT_0.5.3.md`) and after
 **measuring** where the installer's weight actually is. Everything with a number
 in it was measured on the day of writing, not estimated.

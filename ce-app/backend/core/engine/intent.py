@@ -106,6 +106,48 @@ AUDIENCES: dict[str, dict[str, float]] = {
     "everyone": {},
 }
 
+#: What the subtitles should be. `captions.wanted` and the style come from the
+#: reference by default; this is the owner overruling them, which is legitimate —
+#: the reference's language is not necessarily the audience's.
+CAPTION_CHOICES: dict[str, dict] = {
+    "fa":        {"language": "fa",   "wanted": True},
+    "en":        {"language": "en",   "wanted": True},
+    "both":      {"language": "both", "wanted": True},
+    "none":      {"language": "",     "wanted": False},
+    "reference": {},   # whatever the reference implied
+}
+
+#: What must not appear.
+#:
+#: Each entry says plainly whether this build can check it, and with what. The
+#: marker lists are deliberately short and visible: a restriction that silently
+#: checks nothing is worse than one that says "not yet", because the user will
+#: believe the tick. Anything that needs a pass which is not built (identity,
+#: OCR) is reported in `cannot_honour()` rather than accepted.
+RESTRICTIONS: dict[str, dict] = {
+    "no_swearing": {
+        "markers": ("fuck", "shit", "bitch", "asshole", "کیر", "کون", "جنده", "خار", "لعنتی"),
+    },
+    "no_politics": {
+        "markers": ("election", "parliament", "sanction", "regime", "انتخابات", "مجلس",
+                    "تحریم", "حکومت", "رئیس‌جمهور", "ریس جمهور"),
+    },
+    "no_brands": {
+        "why": "brand names need an entity pass that is not built; name them "
+               "yourself in the avoid field and they will be screened",
+    },
+    "no_other_people": {"why": "faces are tracked, identities are not"},
+    "no_on_screen_text": {"why": "the OCR pass is not built yet"},
+}
+
+#: What the soundtrack should be. This decides whether the reference's own bed is
+#: used at all — the owner's file, the owner's call (§4.55).
+MUSIC_CHOICES: dict[str, str] = {
+    "reference": "reference",   # use the template's bed when it kept one
+    "mine": "mine",             # only a track the user brings
+    "none": "none",             # no music under the voice at all
+}
+
 #: The choices, with both labels, so the screen can render them without hard-coding.
 OPTIONS: dict[str, list[dict]] = {
     "kind": [
@@ -169,6 +211,31 @@ OPTIONS: dict[str, list[dict]] = {
             ("everyone", "Anyone", "همه"),
         )
     ],
+    "captions": [
+        {"id": k, "en": en, "fa": fa} for k, en, fa in (
+            ("reference", "Whatever the reference had", "هرچه ویدیوی الگو داشت"),
+            ("fa", "Persian", "فارسی"),
+            ("en", "English", "انگلیسی"),
+            ("both", "Both, stacked", "هر دو، روی هم"),
+            ("none", "No captions", "بدون زیرنویس"),
+        )
+    ],
+    "restrictions": [
+        {"id": k, "en": en, "fa": fa} for k, en, fa in (
+            ("no_swearing", "No swearing", "بدون ناسزا"),
+            ("no_politics", "No politics", "بدون سیاست"),
+            ("no_brands", "No brand names", "بدون نام برند"),
+            ("no_other_people", "No other people's faces", "چهرهٔ افراد دیگر نباشد"),
+            ("no_on_screen_text", "No on-screen text", "نوشتهٔ روی تصویر نباشد"),
+        )
+    ],
+    "music": [
+        {"id": k, "en": en, "fa": fa} for k, en, fa in (
+            ("reference", "The reference's own track", "آهنگ خودِ ویدیوی الگو"),
+            ("mine", "Only a track I bring", "فقط آهنگی که خودم می‌دهم"),
+            ("none", "No music", "بدون موسیقی"),
+        )
+    ],
     "language": [
         {"id": k, "en": en, "fa": fa} for k, en, fa in (
             ("fa", "Persian", "فارسی"),
@@ -189,6 +256,9 @@ class Intent:
     energy: str = ""
     platform: str = ""
     audience: str = ""
+    captions: str = ""
+    restrictions: list[str] = field(default_factory=list)
+    music: str = ""
     language: str = ""
     #: Words or phrases that must survive the cut, if they were said.
     keep: list[str] = field(default_factory=list)
@@ -234,6 +304,10 @@ class Intent:
             energy=one(raw.get("energy"), ENERGY),
             platform=one(raw.get("platform"), PLATFORMS),
             audience=one(raw.get("audience"), AUDIENCES),
+            captions=one(raw.get("captions"), CAPTION_CHOICES),
+            restrictions=[str(r).strip().lower() for r in (raw.get("restrictions") or [])
+                          if str(r).strip().lower() in RESTRICTIONS],
+            music=one(raw.get("music"), MUSIC_CHOICES),
             language=one(raw.get("language"), {o["id"]: o for o in OPTIONS["language"]}),
             keep=words(raw.get("keep")),
             avoid=words(raw.get("avoid")),
@@ -249,8 +323,9 @@ class Intent:
     @property
     def empty(self) -> bool:
         """No answer at all: behave exactly as before this existed."""
-        return not any((self.kind, self.goal, self.focus, self.energy,
-                        self.platform, self.audience, self.keep, self.avoid, self.seconds))
+        return not any((self.kind, self.goal, self.focus, self.energy, self.platform,
+                        self.audience, self.captions, self.restrictions, self.music,
+                        self.keep, self.avoid, self.seconds))
 
     # --------------------------------------------------------------- effects
 
@@ -290,6 +365,40 @@ class Intent:
                 multipliers.get("highlight_strength", 1.0) * 1.3, 4
             )
         return multipliers
+
+    def caption_preference(self) -> dict:
+        """The subtitle decision, or `{}` to leave the reference's alone.
+
+        A restriction the owner cannot have is not hidden: it comes back in
+        `cannot_honour` so the screen can say "not yet, and here is why" instead
+        of ticking a box it will not keep.
+        """
+        choice = CAPTION_CHOICES.get(self.captions) or {}
+        return {"wanted": choice["wanted"], "language": choice["language"]} if choice else {}
+
+    def restriction_markers(self) -> list[str]:
+        """The words this build *can* screen the transcript for.
+
+        Used as extra `avoid` phrases, so the mechanism is the one that already
+        exists and is already tested — a restriction is not a second system.
+        """
+        out: list[str] = []
+        for name in self.restrictions:
+            out.extend(RESTRICTIONS.get(name, {}).get("markers", ()))
+        return out
+
+    def cannot_honour(self) -> list[str]:
+        """Restrictions this build cannot check, with the reason.
+
+        Two of the five need a pass that is not built (identity, OCR). Saying so
+        is the difference between a limit and a lie — the same rule §4.46 applies
+        to a term that cannot be measured.
+        """
+        return [
+            f"{name} ({RESTRICTIONS[name]['why']})"
+            for name in self.restrictions
+            if "markers" not in RESTRICTIONS.get(name, {})
+        ]
 
     def shot_length_factor(self) -> float:
         """Calm holds shots longer; punchy cuts faster. 1.0 when unanswered."""
@@ -341,6 +450,18 @@ class Intent:
         if self.audience:
             label = next(o for o in OPTIONS["audience"] if o["id"] == self.audience)
             lines.append(said(f"audience: {label['en']}", f"مخاطب: {label['fa']}"))
+        if self.captions:
+            label = next(o for o in OPTIONS["captions"] if o["id"] == self.captions)
+            lines.append(said(f"captions: {label['en']}", f"زیرنویس: {label['fa']}"))
+        if self.music:
+            label = next(o for o in OPTIONS["music"] if o["id"] == self.music)
+            lines.append(said(f"music: {label['en']}", f"موسیقی: {label['fa']}"))
+        if self.restrictions:
+            labels = [next(o for o in OPTIONS["restrictions"] if o["id"] == r) for r in self.restrictions]
+            lines.append(said(
+                "must not appear: " + ", ".join(o["en"] for o in labels),
+                "نباید دیده شود: " + "، ".join(o["fa"] for o in labels),
+            ))
         if self.energy:
             label = next(o for o in OPTIONS["energy"] if o["id"] == self.energy)
             lines.append(said(f"rhythm: {label['en']}", f"ریتم: {label['fa']}"))

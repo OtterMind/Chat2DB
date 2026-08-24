@@ -795,6 +795,17 @@ def build_timeline(
     # A reference that barely speaks is a montage, so the microphone being open
     # proves nothing — unless the user has just said this video is a lesson, in
     # which case the microphone is the whole point.
+    # A restriction the transcript can screen for is just another phrase the
+    # owner asked to avoid, so it travels through the mechanism that already
+    # exists instead of growing a second one.
+    screened = wanted
+    extra = wanted.restriction_markers()
+    if extra:
+        screened = intent_model.Intent.from_dict({
+            **wanted.as_dict(),
+            "avoid": [*wanted.avoid, *extra],
+        })
+
     hunts_speech = speech_ratio >= 0.2
     if wanted.prefers_speech() is not None:
         hunts_speech = bool(wanted.prefers_speech())
@@ -813,7 +824,7 @@ def build_timeline(
         # Loudness finds energy; the transcript finds the sentence where the
         # point is made; the user's own words outrank both. All three are scored
         # in one place now, so nothing can disagree with itself about the order.
-        intent=wanted,
+        intent=screened,
         captions=captions,
     )
 
@@ -828,11 +839,16 @@ def build_timeline(
     # points are scored against the beats of the track that will really play.
     used_reference_bed = False
     reference_bed = (data.get("audio") or {}).get("bed")
-    if not music and reference_bed and Path(reference_bed).exists():
+    if wanted.music == "none":
+        # "No music" means no music — including the one the template kept.
+        music = None
+    elif wanted.music == "mine":
+        pass  # only a track the user brought; the reference's bed stays out
+    elif not music and reference_bed and Path(reference_bed).exists():
         music = reference_bed
         used_reference_bed = True
 
-    brain_context = _brain_context(data, shots, source, info, measured, captions, music, wanted)
+    brain_context = _brain_context(data, shots, source, info, measured, captions, music, screened)
     decision = brain_race.race(
         [objective.Pick(p["start"], p["end"], p.get("score", 0.0)) for p in measured],
         brain_context,
@@ -937,13 +953,29 @@ def build_timeline(
     skipped: list[str] = []
     if wanted.seconds > 0:
         applied.append(f"length set to {wanted.seconds:g} s")
+    markers = wanted.restriction_markers()
+    if markers:
+        # One line, not the words themselves: a summary that prints a swear list
+        # is a summary the user has to read to believe, and the words are in the
+        # code where they can be checked.
+        applied.append(f"screening the transcript for {len(markers)} banned phrases")
+    for limit in wanted.cannot_honour():
+        skipped.append(f"{limit} — cannot be checked yet")
     if factor != 1.0:
         applied.append(f"rhythm {'slowed' if factor > 1 else 'tightened'} × {factor:.2f}")
     if transitions:
         applied.append(f"{len(transitions)} × {transition_kind}")
 
     # ---- captions -------------------------------------------------------
-    caption_style = data.get("captions") or {}
+    caption_style = dict(data.get("captions") or {})
+    caption_choice = wanted.caption_preference()
+    if caption_choice:
+        caption_style.update(caption_choice)
+        if not caption_choice["wanted"]:
+            # The owner said no subtitles. A transcript that arrived anyway is not
+            # a reason to overrule them — dropping it is reported, not hidden.
+            captions = None
+            skipped.append("captions (you asked for none)")
     if captions:
         for index, cue in enumerate(captions):
             start = max(0.0, float(cue.get("start", 0.0)))
@@ -992,6 +1024,10 @@ def build_timeline(
             "props": {"duck": under < 0, "volume": 0.9},
         })
         applied.append("music bed" + (" with ducking" if under < 0 else ""))
+    elif wanted.music == "none":
+        # The owner asked for silence under the voice; reporting that as
+        # something we failed to do would be arguing with them.
+        applied.append("no music, as asked")
     elif (data.get("audio") or {}).get("musicUnderVoice", 0.0) < 0:
         skipped.append("music (the template has one, you did not give me a track)")
 

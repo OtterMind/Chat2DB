@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { message, Modal, Input, InputNumber } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
-  ListChecks, Target, Crosshair, Timer, Globe, Users,
+  ListChecks, Target, Crosshair, Timer, Globe, Users, Captions, Ban, Music4 as MusicIcon,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
 import {
@@ -26,8 +26,25 @@ const GROUPS: { key: keyof IntentAnswers; icon: typeof Target; en: string; fa: s
   { key: 'focus', icon: Crosshair, en: 'What should the camera stay on?', fa: 'دوربین روی چه چیزی بماند؟' },
   { key: 'platform', icon: Globe, en: 'Where will it be watched?', fa: 'کجا دیده می‌شود؟' },
   { key: 'audience', icon: Users, en: 'Who is it for?', fa: 'برای چه کسی است؟' },
+  { key: 'captions', icon: Captions, en: 'Subtitles', fa: 'زیرنویس' },
+  { key: 'music', icon: MusicIcon, en: 'Soundtrack', fa: 'موسیقی' },
   { key: 'energy', icon: Timer, en: 'Rhythm', fa: 'ریتم' },
 ]
+
+/**
+ * The one multiple-*select* question. Unlike the others it is a list, because
+ * "no swearing" and "no politics" are not alternatives to each other.
+ */
+const MULTI: { key: 'restrictions'; icon: typeof Ban; en: string; fa: string; note: [string, string] } = {
+  key: 'restrictions',
+  icon: Ban,
+  en: 'What must not appear?',
+  fa: 'چه چیزی نباید دیده شود؟',
+  note: [
+    'Swearing and politics are screened in the transcript when there is one. The rest need a pass that is not built yet, and the result says so instead of pretending.',
+    'ناسزا و سیاست در زیرنویس (وقتی باشد) بررسی می‌شوند. بقیه به مرحله‌ای نیاز دارند که هنوز ساخته نشده، و نتیجه به‌جای تظاهر، همین را می‌گوید.',
+  ],
+}
 
 /**
  * What the video is for — the one thing a frame can never say.
@@ -87,6 +104,39 @@ function IntentCard({
           </div>
         </div>
       ))}
+
+      <div style={{ marginTop: 14 }}>
+        <div className="ce-kv">
+          <span><MULTI.icon size={13} /> {t(MULTI.en, MULTI.fa)}</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          {(questions.options[MULTI.key] ?? []).map((option) => {
+            const chosen = (answers[MULTI.key] ?? []).includes(option.id)
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`ce-btn ce-btn--ghost ce-btn--sm ${chosen ? 'is-on' : ''}`}
+                disabled={disabled}
+                data-testid={`intent-${MULTI.key}-${option.id}`}
+                aria-pressed={chosen}
+                onClick={() => {
+                  const current = answers[MULTI.key] ?? []
+                  onChange({
+                    ...answers,
+                    [MULTI.key]: chosen
+                      ? current.filter((id) => id !== option.id)
+                      : [...current, option.id],
+                  })
+                }}
+              >
+                {lang === 'fa' ? option.fa : option.en}
+              </button>
+            )
+          })}
+        </div>
+        <p className="ce-hint" style={{ marginTop: 6 }}>{t(MULTI.note[0], MULTI.note[1])}</p>
+      </div>
 
       <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
         <div className="ce-kv">

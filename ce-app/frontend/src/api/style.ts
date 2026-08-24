@@ -55,6 +55,12 @@ export interface IntentAnswers {
   platform?: string
   /** Who is watching — customers, students, colleagues, fans, anyone. */
   audience?: string
+  /** Subtitle language, or 'none', or whatever the reference had. */
+  captions?: string
+  /** What must not appear. Checked where it can be, named where it cannot. */
+  restrictions?: string[]
+  /** The soundtrack: the reference's own track, only mine, or none. */
+  music?: string
   language?: string
   /** Phrases that must survive the cut, comma separated. */
   keep?: string

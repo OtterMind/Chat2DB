@@ -93,7 +93,7 @@ def _plan_reply(plan: planner.Plan, language: str) -> str:
     head = (
         f"{len(plan.ops)} کار انجام می‌دهم — هنوز هیچ‌چیز تغییر نکرده:"
         if language == "fa"
-        else f"Here is what I would do — nothing has changed yet:"
+        else "Here is what I would do — nothing has changed yet:"
     )
     tail = (
         "«اعمال» را بزن تا یک‌جا و با یک Ctrl+Z قابل برگشت انجام شود."

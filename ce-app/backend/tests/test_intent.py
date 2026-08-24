@@ -155,6 +155,60 @@ def test_the_opening_shot_is_never_shortened(long_take):
     assert _video(held)[0]["duration"] == pytest.approx(7.0, abs=0.05)
 
 
+# ------------------------------------------------------- the three new axes
+
+
+@requires_ffmpeg
+def test_no_music_means_no_music_under_the_voice(long_take):
+    """The reference's bed is the owner's to refuse (§4.55)."""
+    template = _template(shots=6, length=1.5)
+    template["audio"] = {"musicUnderVoice": -9.0, "hasBed": False}
+
+    built = style.build_timeline(
+        template, str(long_take), "Test", brain=False, intent={"music": "none"},
+    )
+    clips = built["timeline"]["clips"]
+
+    assert not [c for c in clips if c["trackId"] == "a1"], "music was placed after being refused"
+    assert "no music, as asked" in built["summary"]["applied"]
+    assert not [line for line in built["summary"]["skipped"] if line.startswith("music")], (
+        "the app argued with the owner about a choice they made"
+    )
+
+
+@requires_ffmpeg
+def test_no_captions_drops_even_a_transcript_that_arrived(long_take):
+    template = _template(shots=4, length=1.5)
+    template["captions"] = {"wanted": True, "position": "bottom", "style": "outline"}
+    cues = [{"start": 0.0, "end": 2.0, "text": "hello there", "words": []}]
+
+    built = style.build_timeline(
+        template, str(long_take), "Test", captions=cues, brain=False,
+        intent={"captions": "none"},
+    )
+
+    assert not [c for c in built["timeline"]["clips"] if c["trackId"] == "t1"]
+    assert any("you asked for none" in line for line in built["summary"]["skipped"])
+
+
+def test_restrictions_say_what_they_can_check_and_what_they_cannot():
+    """A tick that cannot be honoured is a promise the app will break."""
+    from core.engine.intent import Intent
+
+    intent = Intent.from_dict({
+        "restrictions": ["no_swearing", "no_politics", "no_brands",
+                         "no_other_people", "no_on_screen_text"],
+    })
+
+    markers = intent.restriction_markers()
+    assert markers, "the transcript-checkable restrictions screened nothing"
+    assert any("fuck" == m for m in markers)
+
+    limits = " ".join(intent.cannot_honour())
+    for name in ("no_brands", "no_other_people", "no_on_screen_text"):
+        assert name in limits, f"{name} was accepted silently"
+
+
 # -------------------------------------------------------------- the answers
 
 

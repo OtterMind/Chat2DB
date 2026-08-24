@@ -154,7 +154,7 @@ def probe_encoders() -> tuple[dict, ...]:
                 # buffers several frames internally and only flushes at end of
                 # stream, so a three-frame probe finishes before the encoder has
                 # produced anything. The probe was wrong, not the card.
-                "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:duration=1.5",
+                "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=1.5",
                 "-an", "-pix_fmt", "yuv420p", "-c:v", name, target,
             ])
             wrote = os.path.exists(target) and os.path.getsize(target) > 1024

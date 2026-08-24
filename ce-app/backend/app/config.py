@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, json
+import json
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -48,4 +48,4 @@ if CONFIG_PATH.exists():
         with open(CONFIG_PATH) as f: overrides = json.load(f)
         for k, v in overrides.items():
             if hasattr(settings, k): setattr(settings, k, v)
-    except: pass
+    except Exception: pass

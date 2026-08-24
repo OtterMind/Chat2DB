@@ -128,7 +128,13 @@ async def apply(payload: ApplyRequest) -> dict:
     # in which case the edit is still produced and the omission is reported.
     cues: list[dict] | None = None
     loop = asyncio.get_running_loop()
-    wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
+    # The owner's answer outrules the reference's implication: a Persian audience
+    # watching an English reference still wants Persian captions, and "no
+    # captions" means a minute of Whisper is not spent.
+    _choice = intent_model.Intent.from_dict(payload.intent).caption_preference()
+    wants_captions = payload.captions and (
+        _choice["wanted"] if _choice else bool((document.get("captions") or {}).get("wanted"))
+    )
     if wants_captions:
         try:
             from core.engine.transcribe import transcribe_to_cues
@@ -167,7 +173,11 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 document = style.load_template(payload.template)
 
             cues: list[dict] | None = None
-            wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
+            _choice = intent_model.Intent.from_dict(payload.intent).caption_preference()
+            wants_captions = payload.captions and (
+                _choice["wanted"] if _choice
+                else bool((document.get("captions") or {}).get("wanted"))
+            )
             if wants_captions:
                 reporter.stage("transcribe", 0.1, "Transcribing the speech")
                 try:
