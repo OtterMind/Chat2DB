@@ -1209,5 +1209,100 @@ def load_template(name: str) -> dict:
     return json.loads(file.read_text(encoding="utf-8"))
 
 
+MOTIONS = ("static", "push", "pull", "pan", "handheld")
+ASPECTS = ("9:16", "1:1", "4:5", "16:9", "4:3")
+
+
+def validate_template(doc: dict) -> list[str]:
+    """What is wrong with a template document, or [] when it is sound.
+
+    Import is an interface that crosses a boundary (a file someone else made),
+    and interfaces get checked — an unchecked `.cetemplate` is how a number the
+    render cannot honour reaches the compositor (§4.75).
+    """
+    errors: list[str] = []
+    if not isinstance(doc, dict):
+        return ["the template is not a JSON object"]
+    if not str(doc.get("name", "")).strip():
+        errors.append("the template has no name")
+    try:
+        if float(doc.get("duration", -1)) < 0:
+            errors.append("duration is negative")
+    except (TypeError, ValueError):
+        errors.append("duration is not a number")
+    shots = doc.get("shots")
+    if not isinstance(shots, list) or not shots:
+        errors.append("the template has no shots")
+    else:
+        for index, shot in enumerate(shots):
+            if not isinstance(shot, dict):
+                errors.append(f"shot {index} is not an object")
+                continue
+            try:
+                if float(shot.get("duration", 0)) <= 0:
+                    errors.append(f"shot {index} has no length")
+            except (TypeError, ValueError):
+                errors.append(f"shot {index} length is not a number")
+            if shot.get("motion", "static") not in MOTIONS:
+                errors.append(f"shot {index} names an unknown camera move")
+    if doc.get("aspect") and doc["aspect"] not in ASPECTS:
+        errors.append(f"aspect {doc.get('aspect')!r} is not one the canvas knows")
+    return errors
+
+
+def import_template(doc: dict, name: str | None = None) -> Path:
+    """Save a template document that came from outside, after checking it.
+
+    The caller may rename it (an imported file should not clobber an existing
+    gallery entry by accident unless asked). Raises ValueError with the joined
+    problems when the document is not sound.
+    """
+    errors = validate_template(doc)
+    if errors:
+        raise ValueError("; ".join(errors))
+    template = Template.from_dict if hasattr(Template, "from_dict") else None
+    doc = dict(doc)
+    if name:
+        doc["name"] = name
+    template = Template(**{
+        **{k: v for k, v in doc.items() if k != "shots"},
+        "shots": [Shot(
+            start=float(sh.get("start", 0.0)), duration=float(sh["duration"]),
+            motion=str(sh.get("motion", "static")), energy=float(sh.get("energy", 0.0)),
+        ) for sh in doc["shots"]],
+    })
+    return save_template(template)
+
+
+def starters() -> list[dict]:
+    """A few hand-authored rhythms so a fresh gallery is not an empty room.
+
+    These are not analysed from a video; they are editing grammars written down —
+    a fast on-beat cut, a slow held one, a talking-head pace — each labelled as a
+    starter so nobody mistakes one for a measured reference. Saving one copies it
+    into the user's gallery where it can be deleted like anything else.
+    """
+    def make(name, bpm, lengths, motion, aspect):
+        shots, at = [], 0.0
+        for length in lengths:
+            shots.append(Shot(start=round(at, 3), duration=length, motion=motion, energy=0.5))
+            at += length
+        return Template(
+            name=name, source="", duration=round(at, 3), aspect=aspect,
+            width=1080, height=1920 if aspect == "9:16" else 1080,
+            shots=shots, bpm=float(bpm), cuts_on_beat=0.6,
+            mean_shot=round(at / len(lengths), 3), median_shot=float(lengths[len(lengths) // 2]),
+            shortest_shot=float(min(lengths)),
+            motion_mix={motion: 1.0}, transitions={"count": len(lengths) - 1, "soft": 0, "type": "cut", "duration": 0.4},
+            captions={"wanted": False}, audio={"hasBed": False},
+        ).as_dict()
+
+    return [
+        make("starter · fast on-beat", 128, [0.5, 0.75, 0.5, 0.75, 0.5, 1.0, 0.5, 0.75], "static", "9:16"),
+        make("starter · slow held", 80, [3.0, 2.5, 3.5, 3.0], "push", "16:9"),
+        make("starter · talking head", 100, [2.0, 1.5, 2.5, 1.5, 2.0], "static", "9:16"),
+    ]
+
+
 def delete_template(name: str) -> None:
     (templates_dir() / f"{name}.cetemplate").unlink(missing_ok=True)

@@ -131,6 +131,10 @@ export const styleApi = {
     return (await follow.promise).result as StyleTemplate
   },
   templates: async (): Promise<{ templates: TemplateSummary[] }> => (await api.get('/style/templates')).data,
+  /** Hand-authored rhythms for a fresh gallery. */
+  starters: async (): Promise<{ starters: StyleTemplate[] }> => (await api.get('/style/starters')).data,
+  importTemplate: async (template: unknown, name?: string): Promise<{ saved: string }> =>
+    (await api.post('/style/templates/import', { template, name })).data,
   /**
    * The intake questionnaire, from the same module that holds the weights behind
    * it, so a question and its effect cannot drift apart.

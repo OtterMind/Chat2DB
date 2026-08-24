@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""
+    #: Freesound needs a key (free account). Without it the sound pack reports
+    #: "not configured" rather than guessing — a pack that cannot be searched is
+    #: not a pack.
+    freesound_api_key: str = ""
     hf_token: str = ""
     youtube_client_id: str = ""
     youtube_client_secret: str = ""

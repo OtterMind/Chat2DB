@@ -876,6 +876,24 @@ gate that stops a broken installer from being published.
     checkbox that flips from "impossible" to "checked" silently would be the same
     lie in the other direction.
 
+86. **The gallery is an interface, so it is checked.** An exported `.cetemplate`
+    is a file someone else made, and a file someone else made is exactly the kind
+    of boundary this app checks (§4.75). `validate_template()` names what is wrong
+    (no shots, a negative length, an unknown camera move, an aspect the canvas
+    cannot hold) and `import_template()` refuses with a 422 listing the reasons;
+    a sound document round-trips and rebuilds footage. A fresh gallery is seeded
+    with three **starters** — hand-written rhythms that say they are starters,
+    each itself valid — rather than an empty room, and saving one copies it where
+    it can be deleted like anything else.
+87. **The sound pack is an online, key-required shelf, shaped like the other
+    opt-ins.** Freesound results carry licences, so only Creative-Commons-0 /
+    Attribution are offered, previews let the user hear before a byte downloads,
+    and files land in `~/CuttingEdge/sounds`. Without a key `status()` says
+    "not configured" and search is an empty shelf, not an error — nothing about
+    it is in the installer. The real search needs the user's own account, so its
+    verdict is theirs, exactly as the GPU benchmark left its verdict to the
+    user's card (§4.57).
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

@@ -93,6 +93,27 @@ def questions() -> dict:
     return intent_model.options()
 
 
+class ImportRequest(BaseModel):
+    template: dict = Field(description="A template document, e.g. from an exported .cetemplate")
+    name: str | None = Field(default=None, description="Optional rename on import")
+
+
+@router.post("/templates/import")
+def import_template(payload: ImportRequest) -> dict:
+    """Save an outside template after checking it. 422 lists what is wrong."""
+    try:
+        path = style.import_template(payload.template, payload.name)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"saved": path.name, "name": payload.name or payload.template.get("name")}
+
+
+@router.get("/starters")
+def starters() -> dict:
+    """Hand-authored rhythms so a fresh gallery is not empty."""
+    return {"starters": style.starters()}
+
+
 @router.get("/templates")
 def templates() -> dict:
     return {"templates": style.list_templates()}

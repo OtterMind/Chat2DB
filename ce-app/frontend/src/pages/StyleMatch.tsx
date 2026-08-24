@@ -235,13 +235,44 @@ export default function StyleMatch() {
 
   const wasCancelled = (error: unknown) => Boolean((error as { cancelled?: boolean })?.cancelled)
 
+  const [starters, setStarters] = useState<StyleTemplate[]>([])
   const refresh = () => styleApi.templates().then((r) => setTemplates(r.templates)).catch(() => undefined)
   useEffect(() => {
     refresh()
+    styleApi.starters().then((r) => setStarters(r.starters)).catch(() => setStarters([]))
     // The options live with the weights behind them, so the screen cannot drift
     // out of step with what an answer actually does.
     styleApi.questions().then(setQuestions).catch(() => setQuestions(null))
   }, [])
+
+  const importFile = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.cetemplate,.json,application/json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const doc = JSON.parse(await file.text())
+        await styleApi.importTemplate(doc)
+        message.success(t(`Imported “${doc.name ?? file.name}”`, `«${doc.name ?? file.name}» وارد شد`))
+        refresh()
+      } catch (err) {
+        message.error((err as Error).message)
+      }
+    }
+    input.click()
+  }
+
+  const saveStarter = async (starter: StyleTemplate) => {
+    try {
+      await styleApi.importTemplate(starter, starter.name)
+      refresh()
+      message.success(t('Saved to your gallery', 'به گالری تو اضافه شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
 
   const choose = async (): Promise<string | null> => {
     const picker = pickMedia()
@@ -520,6 +551,34 @@ export default function StyleMatch() {
         onChange={setAnswers}
         disabled={busy !== null}
       />
+
+      {starters.length > 0 && (
+        <Card title={t('Starters & sharing', 'شروع‌کننده‌ها و هم‌رسانی')}>
+          <p className="ce-hint">
+            {t(
+              'Starters are hand-written rhythms, not measured references — save one to make it yours. Export and import share a template as a .cetemplate file.',
+              'شروع‌کننده‌ها ریتم‌های دست‌نویس‌اند نه الگوی اندازه‌گیری‌شده — یکی را ذخیره کن تا مال تو شود. با برون‌بری/درون‌بری یک قالب را به‌صورت فایل .cetemplate جا‌به‌جا کن.'
+            )}
+          </p>
+          <div className="ce-reel" style={{ marginTop: 10 }}>
+            {starters.map((starter) => (
+              <div key={starter.name} className="ce-reelcard" role="button" tabIndex={0}
+                   onKeyDown={() => undefined}
+                   onClick={() => void saveStarter(starter)}>
+                <span className="ce-reelcard__art"><Sparkles size={18} />
+                  <span className="ce-reelcard__len" dir="ltr">{starter.shots.length}×{starter.bpm}bpm</span>
+                </span>
+                <span className="ce-reelcard__name">{starter.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="ce-actions" style={{ marginTop: 10 }}>
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void importFile()}>
+              {t('Import .cetemplate', 'درون‌بری .cetemplate')}
+            </button>
+          </div>
+        </Card>
+      )}
 
       {template && (
         <Card title={t('3 · What the template says', '۳ · قالب چه می‌گوید')}>
