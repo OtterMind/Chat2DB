@@ -36,6 +36,7 @@ import {
   getResultFieldAtTableColumn,
 } from './columnState';
 import { resolveResultSelectionActiveCell, ResultSelectionCause } from './selectionState';
+import { RESULT_TABLE_CONTENT_LAYOUT_OPTIONS } from './layoutOptions';
 
 interface IProps {
   className?: string;
@@ -407,6 +408,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
         onPointerDown={handleTablePointerDown}
         customOptions={{ showFrozenColumnDivider: frozenColumnFields.length > 0 }}
         options={{
+          ...RESULT_TABLE_CONTENT_LAYOUT_OPTIONS,
           rowSeriesNumber: {
             title: undefined,
             width: 'auto' as any,
