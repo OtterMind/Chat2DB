@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.12` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.13` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -38,6 +38,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
 | **Title pack** | 15 presets in three groups — entrance, hold, caption — served by `GET /api/titles` and applied from the text panel as **one undoable step**. Every one animates only the five channels the exporter reproduces (`x, y, scale, rotate, volume`); `titles.validate()` refuses anything else, and `tests/test_titles.py` runs each preset through the real FFmpeg expression builder. Fades are deliberately absent: opacity needs a per-pixel `geq` pass (§4.23) |
+| **On-screen text** | **RapidOCR 1.4.4** (Apache-2.0, checked from the wheel), an on-demand engine whose **models travel inside the wheel** (15.4 MB) — so, unlike DeepFilterNet, no runtime download and no dependency on a host that can fail; it runs on the `onnxruntime` that already ships. Installed to `~/CuttingEdge/runtime/py` with `--no-deps` (it hard-imports Pillow and wants pyclipper/Shapely; `opencv-python` is satisfied by the headless build). Unlocks reading the reference's caption typography, seeing hand-made titles, and the `no_on_screen_text` restriction — which, once OCR is fetched, is actually measured: `text_coverage()` samples frames and reports the share carrying type |
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | A **conversation**, not a one-shot command: history in, one reply out, with the steps it took and the milliseconds, and the provider named on every answer (`ollama:qwen2.5` or `offline` — never hidden). An editing request still comes back as a whitelisted dry run applied only on Apply and undoable in one step. Floating panel or full screen, RTL, animated, and **streamed**: `POST /api/assistant/chat/stream` sends each step as it happens and each word as it is written (NDJSON, so one `fetch` and a line split), because three bouncing dots are not evidence that anything is happening. The model is the user's choice (`auto`/`off`/ollama/openai/gemini/anthropic), stored in `~/CuttingEdge/config.json` and settable from the chat **or** Settings — one setting, two doors, and `auto` means *the stored choice* before it means *whatever is installed*; with none connected it answers from what was measured and says so. And it **knows what the video is for**: the Style Match answers ride along in the project document, so a question about a lesson is answered about a lesson |
@@ -101,7 +102,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **273 collected: 269 passed, 4 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **279 collected: 273 passed, 6 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`, needs Chromium from `sandbox-test-env.sh`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -848,6 +849,32 @@ gate that stops a broken installer from being published.
       source we have just watched fail, with no way to measure it in dB against
       the current chain, is the brochure §4.57 warns about. Revisit if the model
       lands on a registry.
+
+83. **The one open-source import that passed every gate, and the gates it passed.**
+    RapidOCR 1.4.4 was verified the same way as everything else, from the wheel
+    rather than the README: licence **Apache-2.0** in the PyPI `License` field
+    (models are Baidu's PaddleOCR, also Apache-2.0); the **three ONNX models are
+    bundled in the wheel** (det 4.5 + rec 10.4 + cls 0.6 MB), so there is no
+    runtime download and it works with the network unplugged; it runs on
+    `onnxruntime` + `numpy`, both already in the installer. The honest costs are
+    on the wheel too: it hard-imports `Pillow` and wants `pyclipper` and
+    `Shapely`, and nominally `opencv-python` — satisfied by the headless build,
+    which is exactly why it is installed `--no-deps` into the user's runtime dir
+    rather than shipped. Measured on the repo's own launcher screenshot it reads
+    "New video", "Recent projects", "Face Tracking" and refuses words that are
+    not there; on a blank video `text_coverage()` is 0, which is an answer, not
+    an error. The newer `rapidocr` 3.x was checked and passed over: no licence
+    field, and its models come from a CDN at runtime. One quirk is named in the
+    module docstring rather than hidden: on tightly-set type the detector drops
+    spaces ("Open the editor" → "Opentheeditor"), so matching goes through
+    `normalise()`.
+84. **A restriction that becomes checkable must stop saying "cannot be checked".**
+    The moment OCR is fetched, the Style Match `no_on_screen_text` restriction is
+    measured: `text_coverage()` samples the footage and, if type covers more than
+    a fifth of frames, the summary says so in the open — OCR can read it and warn,
+    not erase it. Until then it reports "the OCR engine is not fetched". A
+    checkbox that flips from "impossible" to "checked" silently would be the same
+    lie in the other direction.
 
 ## 5. Release procedure
 

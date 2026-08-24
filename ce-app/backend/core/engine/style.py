@@ -963,7 +963,28 @@ def build_timeline(
         # is a summary the user has to read to believe, and the words are in the
         # code where they can be checked.
         applied.append(f"screening the transcript for {len(markers)} banned phrases")
+    # A restriction that is now checkable, is checked — and one that is not, is
+    # still reported honestly rather than silently skipped.
+    from core.engine import ocr as ocr_engine
+
+    ocr_here = ocr_engine.installed()
+    if "no_on_screen_text" in wanted.restrictions:
+        if ocr_here:
+            coverage = ocr_engine.text_coverage(source, every=3.0)
+            if coverage > 0.2:
+                skipped.append(
+                    f"on-screen text on {coverage * 100:.0f}% of sampled frames — "
+                    "OCR can read it and warn, not erase it"
+                )
+            else:
+                applied.append("no on-screen text detected")
+        else:
+            skipped.append("no on-screen text (the OCR engine is not fetched)")
     for limit in wanted.cannot_honour():
+        # `no_on_screen_text` is handled above once the engine exists; the rest
+        # (identity, brand entities) still need a pass that is not built.
+        if limit.startswith("no_on_screen_text") and ocr_here:
+            continue
         skipped.append(f"{limit} — cannot be checked yet")
     if factor != 1.0:
         applied.append(f"rhythm {'slowed' if factor > 1 else 'tightened'} × {factor:.2f}")

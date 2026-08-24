@@ -6,6 +6,7 @@ import { systemApi } from '../api/jobs'
 import AiRuntimeCard from '../components/AiRuntimeCard'
 import { assistantApi, type ProviderState } from '../api/assistant'
 import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
+import { ocrApi, type OcrStatus } from '../api/ocr'
 import { pickMedia } from '../api/render'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
@@ -224,6 +225,67 @@ function SpeechEngineCard() {
   )
 }
 
+/**
+ * On-screen text — what a frame says.
+ *
+ * Apache-2.0, models bundled in the wheel (15.4 MB) so it works with the network
+ * unplugged, and it runs on the onnxruntime that already ships. It is the pass
+ * behind copying the reference's caption style, seeing hand-made titles, and the
+ * "no on-screen text" restriction. On-demand: nothing is in the installer.
+ */
+function OcrCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<OcrStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    ocrApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const install = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      await ocrApi.install((state) => setNote(state.label || ''))
+      setStatus(await ocrApi.status())
+      message.success(t('OCR is ready', 'OCR آماده است'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+      setNote('')
+    }
+  }
+
+  return (
+    <Card title={t('On-screen text', 'متنِ روی تصویر')}>
+      <p className="ce-hint">
+        {t(
+          'Reads what is written on the picture. It is the pass behind copying the reference caption style, seeing hand-made titles, and the "no on-screen text" restriction. Apache-2.0; the models travel inside the package, so once fetched it works offline.',
+          'آنچه روی تصویر نوشته شده را می‌خواند: همان مرحله‌ای که کپی‌کردن سبک زیرنویسِ الگو، دیدن تایتل‌های دستی و محدودیت «متن روی تصویر نباشد» به آن وابسته‌اند. Apache-2.0؛ مدل‌ها داخل خود بسته‌اند، پس بعد از گرفتن، آفلاین کار می‌کند.'
+        )}
+      </p>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">{t('licence', 'مجوز')}: {status?.licence ?? '—'}</span>
+        <span className="ce-badge">
+          {status?.installed ? t('installed', 'نصب است') : t('not fetched', 'گرفته نشده')}
+        </span>
+        <span className="ce-badge">
+          {t('models', 'مدل‌ها')}: {status?.modelsBundled ? t('bundled', 'داخل بسته') : '—'}
+        </span>
+      </div>
+      {!status?.installed && (
+        <div className="ce-actions" style={{ marginTop: 12 }}>
+          <button className="ce-btn ce-btn--sm" disabled={busy} onClick={() => void install()}>
+            <Download size={14} /> {busy && note ? note : t('Fetch OCR (~16 MB)', 'گرفتن OCR (~۱۶ مگابایت)')}
+          </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
 
@@ -432,6 +494,8 @@ export default function Settings() {
       <AssistantEngineCard />
 
       <SpeechEngineCard />
+
+      <OcrCard />
     </Page>
   )
 }
