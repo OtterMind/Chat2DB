@@ -3,6 +3,7 @@ import { message } from 'antd'
 import {
   Brain, Mic, CheckCircle2, XCircle, RefreshCw, Download, ExternalLink, Loader2, Timer,
 } from 'lucide-react'
+import { followTask } from '../api/tasks'
 import { aiApi, type EngineState, type EngineTest } from '../api/ai'
 import { useI18n } from '../i18n'
 
@@ -21,6 +22,35 @@ export default function AiRuntimeCard() {
   const [result, setResult] = useState<{ ollama: EngineTest; whisper: EngineTest } | null>(null)
   const [catalogue, setCatalogue] = useState<Awaited<ReturnType<typeof aiApi.catalogue>>['models']>([])
   const [busy, setBusy] = useState<'status' | 'test' | 'ollama' | 'whisper' | null>(null)
+  /** What a running download is doing, so the bar is the download and not a guess. */
+  const [job, setJob] = useState<{ label: string; percent: number; what: string } | null>(null)
+
+  /**
+   * Run one of the long downloads and paint its progress.
+   *
+   * Every one of these lands outside the installation folder — Ollama keeps its
+   * models in its own store, Whisper in the Hugging Face cache, the CUDA
+   * libraries in `~/CuttingEdge/runtime/py` — so an app update never makes the
+   * user download them again.
+   */
+  const runDownload = async (what: string, start: () => Promise<{ id: string }>) => {
+    setBusy('ollama')
+    setJob({ label: '', percent: 0, what })
+    try {
+      const { id } = await start()
+      const { promise } = followTask(id, (state) => {
+        setJob({ label: state.label || state.stage, percent: Math.round(state.progress), what })
+      })
+      await promise
+      message.success(t(`${what} is ready`, `${what} آماده شد`))
+      void refresh()
+    } catch (error) {
+      message.error((error as Error).message)
+    } finally {
+      setJob(null)
+      setBusy(null)
+    }
+  }
 
   const refresh = async () => {
     setBusy('status')
@@ -174,6 +204,26 @@ export default function AiRuntimeCard() {
           </button>
         )}
 
+        {job && (
+          <div className="ce-jobline" data-testid="ai-download">
+            <div className="ce-jobline__head">
+              <Loader2 size={15} className="ce-spin" />
+              <strong dir="ltr">{job.what}</strong>
+              <span className="ce-jobline__msg" dir="ltr">{job.label}</span>
+              <span className="ce-jobline__time" dir="ltr">{job.percent}%</span>
+            </div>
+            <div className="ce-jobline__bar">
+              <span style={{ width: `${Math.max(2, Math.min(100, job.percent))}%` }} />
+            </div>
+            <p className="ce-hint">
+              {t(
+                'Downloaded once — an app update will not fetch this again.',
+                'یک‌بار دانلود می‌شود — با آپدیت برنامه دوباره دانلود نمی‌شود.'
+              )}
+            </p>
+          </div>
+        )}
+
         {state?.ollama.running && catalogue.length > 0 && (
           <div className="ce-models" data-testid="ollama-catalogue">
             <p className="ce-hint">
@@ -196,18 +246,7 @@ export default function AiRuntimeCard() {
                     className="ce-btn ce-btn--ghost ce-btn--sm"
                     disabled={busy !== null}
                     data-testid={`pull-${model.name}`}
-                    onClick={async () => {
-                      setBusy('ollama')
-                      try {
-                        const done = await aiApi.pullModel(model.name)
-                        message.success(t(`${model.name} ready in ${done.seconds}s`, `${model.name} در ${done.seconds} ثانیه آماده شد`))
-                        void refresh()
-                      } catch (error) {
-                        message.error((error as Error).message)
-                      } finally {
-                        setBusy(null)
-                      }
-                    }}
+                    onClick={() => void runDownload(model.name, () => aiApi.startPull(model.name))}
                   >
                     {busy === 'ollama' ? <Loader2 size={14} className="ce-spin" /> : <Download size={14} />}
                     {model.gb} GB

@@ -33,6 +33,12 @@ export const aiApi = {
     (await api.get('/ai/status', { timeout: 20_000 })).data,
   test: async (): Promise<{ ollama: EngineTest; whisper: EngineTest }> =>
     (await api.post('/ai/test', {}, SLOW)).data,
+  /** Long downloads run as tasks so the screen can show a bar. */
+  startPull: async (model: string): Promise<{ id: string }> =>
+    (await api.post('/ai/ollama/pull/start', { model })).data,
+  startWhisper: async (size: string): Promise<{ id: string }> =>
+    (await api.post('/ai/whisper/download/start', { size })).data,
+  startCuda: async (): Promise<{ id: string }> => (await api.post('/ai/cuda/install', {})).data,
   catalogue: async (): Promise<{
     vramGb: number | null
     models: { name: string; job: string; gb: number; vramGb: number; why: string; installed: boolean; fits: boolean | null; note: string }[]

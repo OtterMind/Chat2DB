@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.4` · Last released: `v0.9.3` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.5` · Last released: `v0.9.4` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -624,6 +624,24 @@ gate that stops a broken installer from being published.
    driver, and another program holding the encoder — and answers the question
    the owner actually asked: turning it on is safe, NVENC is a separate block on
    the chip built to run for hours and cannot damage anything.
+
+67. **A download the user paid for must survive the next update.** `pip
+   install` into the bundled Python lasts exactly until the next release,
+   because the installer replaces the whole application folder — and the CUDA
+   libraries are 1.3 GB. `core/runtime_packages.py` installs on-demand packages
+   into `~/CuttingEdge/runtime/py` and `app.main` puts that on `sys.path` at
+   startup, ahead of the bundled site-packages. The other two downloads were
+   already safe for the same reason and are left alone: Ollama keeps models in
+   its own store, Whisper in the Hugging Face cache. Both also **resume** a
+   partial download instead of restarting it.
+68. **Every long download has a real bar.** All three run as tasks now:
+   `POST /api/ai/ollama/pull/start` streams Ollama's own `completed`/`total`
+   byte counts; `POST /api/ai/whisper/download/start` passes a `tqdm_class` into
+   `huggingface_hub.snapshot_download` and turns its callbacks into stages;
+   `POST /api/ai/cuda/install` parses pip's output. The bar is the download, not
+   a timer pretending to be one — and where a byte count genuinely is not
+   available (the Whisper fallback path) the label says "no progress available"
+   instead of inventing a number.
 
 ## 5. Release procedure
 

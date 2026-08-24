@@ -15,6 +15,11 @@ from app.websocket.job_events import ws_manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.ensure_dirs(); db.initialize()
+    # Anything the user downloaded on demand lives outside the installation
+    # folder, so an update cannot delete it. Make it importable before anything
+    # asks whether CUDA is available.
+    from core import runtime_packages
+    runtime_packages.ensure_on_path()
     print(f"  {__app_name__} v{__version__} starting on 0.0.0.0:{settings.backend_port}")
     yield
     db.close()

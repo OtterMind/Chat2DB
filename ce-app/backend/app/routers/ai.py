@@ -23,6 +23,8 @@ from pydantic import BaseModel
 
 from app.config import settings
 
+from core.tasks import tasks
+
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 OLLAMA_URL = "http://127.0.0.1:11434"
@@ -373,12 +375,15 @@ def cuda_status() -> dict:
 
 
 @router.post("/cuda/install")
-async def cuda_install() -> dict:
-    """Fetch cuBLAS and cuDNN into this installation. About 1.3 GB.
+def cuda_install() -> dict:
+    """Fetch cuBLAS and cuDNN — as a task, with a bar, and only once.
 
-    Refused when there is no NVIDIA card: downloading a gigabyte of CUDA to a
-    machine that cannot use it is not a favour.
+    Two things this gets right that the first version did not: it reports
+    progress instead of blocking for twenty minutes in silence, and it installs
+    into `~/CuttingEdge/runtime/py`, which the installer never replaces — so the
+    1.3 GB is downloaded once and survives every future update.
     """
+    from core import runtime_packages
     from core.engine import gpu
 
     caps = gpu.capabilities()
@@ -388,23 +393,125 @@ async def cuda_install() -> dict:
             detail="No NVIDIA card was found, so these libraries would do nothing here.",
         )
 
-    def _install() -> dict:
-        started = time.monotonic()
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--no-warn-script-location", *CUDA_PACKAGES],
-            capture_output=True, text=True, timeout=3600,
+    def work(reporter) -> dict:
+        result = runtime_packages.install(
+            list(CUDA_PACKAGES),
+            on_progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
         )
-        if result.returncode != 0:
-            raise RuntimeError((result.stderr or result.stdout or "")[-400:])
         device, detail = gpu.whisper_status()
-        return {
-            "installed": True,
-            "seconds": round(time.monotonic() - started, 1),
-            "device": device,
-            "detail": detail,
-        }
+        return {**result, "device": device, "detail": detail}
 
-    try:
-        return await asyncio.get_running_loop().run_in_executor(None, _install)
-    except Exception as error:  # noqa: BLE001 — the reason is the useful part
-        raise HTTPException(status_code=502, detail=str(error)) from error
+    return tasks.start("cuda:install", work).as_dict()
+
+
+@router.post("/ollama/pull/start")
+def ollama_pull_start(payload: PullRequest) -> dict:
+    """Pull a model with a real progress bar.
+
+    Ollama's own `/api/pull` streams `completed`/`total` byte counts, so the bar
+    is the download rather than a guess. The model lands in Ollama's own store,
+    which is not ours and not inside our installation folder — so it also
+    survives every update, and a re-pull resumes the layers it already has.
+    """
+    def work(reporter) -> dict:
+        import json as _json
+
+        import requests
+
+        reporter.stage("connect", 0.02, f"Asking Ollama for {payload.model}")
+        with requests.post(
+            "http://127.0.0.1:11434/api/pull",
+            json={"model": payload.model, "stream": True},
+            stream=True, timeout=(10, 3600),
+        ) as response:
+            if response.status_code != 200:
+                raise RuntimeError(f"Ollama answered {response.status_code}: {response.text[:200]}")
+            last = ""
+            for line in response.iter_lines():
+                reporter.check()
+                if not line:
+                    continue
+                try:
+                    event = _json.loads(line)
+                except ValueError:
+                    continue
+                status = str(event.get("status", ""))
+                total = float(event.get("total") or 0)
+                done = float(event.get("completed") or 0)
+                if total > 0:
+                    fraction = max(0.02, min(0.99, done / total))
+                    label = f"{status} · {done / 1e9:.1f} / {total / 1e9:.1f} GB"
+                else:
+                    fraction, label = 0.02, status or last
+                last = status
+                reporter.stage("download", fraction, label)
+                if status == "success":
+                    break
+        reporter.stage("done", 1.0, f"{payload.model} is ready")
+        return {"model": payload.model}
+
+    return tasks.start("ollama:pull", work).as_dict()
+
+
+@router.post("/whisper/download/start")
+def whisper_download_start(payload: WhisperRequest) -> dict:
+    """Fetch a speech model with a bar, into the Hugging Face cache.
+
+    That cache is in the user's profile, not in our installation folder, so it
+    survives updates and a half-finished download resumes rather than restarting.
+    """
+    def work(reporter) -> dict:
+        started = time.monotonic()
+        repo = f"Systran/faster-whisper-{payload.size}"
+        try:
+            from huggingface_hub import snapshot_download  # ships with faster-whisper
+
+            seen: dict[str, tuple[float, float]] = {}
+
+            class Bar:
+                """A tqdm stand-in: the hub calls it, we turn it into a stage."""
+
+                def __init__(self, *_args, total=0, desc="", **_kwargs):
+                    self.total = float(total or 0)
+                    self.desc = str(desc or "")
+                    self.n = 0.0
+                    seen[self.desc] = (0.0, self.total)
+
+                def update(self, amount=1):
+                    self.n += float(amount or 0)
+                    seen[self.desc] = (self.n, self.total)
+                    done = sum(a for a, _ in seen.values())
+                    total = sum(b for _, b in seen.values()) or 1.0
+                    reporter.stage(
+                        "download",
+                        max(0.02, min(0.99, done / total)),
+                        f"{done / 1e6:.0f} / {total / 1e6:.0f} MB",
+                    )
+
+                def close(self):
+                    return None
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_exc):
+                    return False
+
+                def set_description(self, text=""):
+                    self.desc = str(text)
+
+                def refresh(self):
+                    return None
+
+            reporter.stage("connect", 0.02, f"Fetching {repo}")
+            snapshot_download(repo_id=repo, tqdm_class=Bar)
+        except Exception:  # noqa: BLE001 — fall back to the old way, which works
+            reporter.stage("download", 0.1, "Downloading (no progress available)")
+            from faster_whisper import WhisperModel
+
+            WhisperModel(payload.size, device="auto", compute_type="int8")
+
+        reporter.stage("done", 1.0, f"{payload.size} is ready")
+        return {"model": payload.size, "seconds": round(time.monotonic() - started, 1)}
+
+    return tasks.start("whisper:download", work).as_dict()
