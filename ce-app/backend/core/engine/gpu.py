@@ -320,6 +320,22 @@ def whisper_status() -> tuple[str, str]:
         return "cpu", text[:160]
 
 
+def _nvenc_api_mismatch(reason: str) -> tuple[str, str] | None:
+    """`("13.1", "13.0")` when the failure is the driver-vs-FFmpeg ABI mismatch.
+
+    `h264_nvenc` is compiled against a snapshot of `nv-codec-headers`; the driver
+    must expose at least that NVENC API version. "Required: 13.1 Found: 13.0"
+    means the bundled FFmpeg wants 13.1 and the installed driver offers 13.0 — a
+    driver that is simply a little old. Recognising it matters because its fix is
+    a driver update, and because the one thing that will *not* fix it is the
+    Windows graphics preference.
+    """
+    import re  # noqa: PLC0415
+
+    match = re.search(r"Required:\s*([0-9.]+)\s*Found:\s*([0-9.]+)", reason or "")
+    return (match.group(1), match.group(2)) if match else None
+
+
 def capabilities(deep: bool = False) -> Capabilities:
     """Everything the app knows about this machine's card.
 
@@ -351,15 +367,31 @@ def capabilities(deep: bool = False) -> Capabilities:
         failures = [e for e in caps.encoders if e["reason"]]
         if failures:
             caps.notes.append(f"Hardware encoding is off: {failures[0]['reason']}")
+        mismatch = _nvenc_api_mismatch(failures[0]["reason"]) if failures else None
         if card:
-            # The card is present and the encoder still will not run. On Windows
-            # this is nearly always one of three things, and all three are the
-            # user's to fix — so name them instead of shrugging.
-            caps.notes.append(
-                "The card is there. On a laptop this is usually Windows running this app on the "
-                "integrated graphics: Settings → System → Display → Graphics → Cutting Edge → "
-                "High performance, then restart the app."
-            )
+            if mismatch:
+                required, found = mismatch
+                caps.notes.append(
+                    f"That is a driver story, not a settings story: this FFmpeg was built "
+                    f"against nv-codec-headers that need NVENC API {required}, and the installed "
+                    f"driver exposes {found}. Updating the NVIDIA driver to the latest Studio "
+                    f"release (clean install) raises it to {required} and turns NVENC on."
+                )
+                caps.notes.append(
+                    "And note: the Windows graphics preference you already set — High "
+                    "performance — chooses *which* GPU runs the app. It cannot raise the NVENC "
+                    "API version, which is why it did not change this. It was still the right "
+                    "thing to set; the driver is the other half."
+                )
+            else:
+                # The card is present and the encoder still will not run. On Windows
+                # this is nearly always one of three things, and all three are the
+                # user's to fix — so name them instead of shrugging.
+                caps.notes.append(
+                    "The card is there. On a laptop this is usually Windows running this app on the "
+                    "integrated graphics: Settings → System → Display → Graphics → Cutting Edge → "
+                    "High performance, then restart the app."
+                )
             caps.notes.append(
                 "If that does not do it: install the NVIDIA Studio driver over the current one "
                 "with the clean-install option, and close anything else using the encoder "

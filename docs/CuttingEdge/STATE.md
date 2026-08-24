@@ -894,6 +894,23 @@ gate that stops a broken installer from being published.
     verdict is theirs, exactly as the GPU benchmark left its verdict to the
     user's card (§4.57).
 
+88. **"Encoding stays off even though I set High performance" is two different
+    failures wearing one symptom, and the owner's screenshot showed which.** The
+    probe said `[h264_nvenc] Driver does not support the required nvenc API
+    version. Required: 13.1 Found: 13.0`. That string is a driver story, not a
+    settings story: the bundled FFmpeg is compiled against `nv-codec-headers`
+    needing NVENC API 13.1, and the installed driver exposes 13.0. The Windows
+    graphics preference — which the owner had correctly set to High performance —
+    chooses *which GPU runs the app*; it **cannot** raise the NVENC API version,
+    which is exactly why it changed nothing. Searching the open web confirms the
+    only fixes: update the NVIDIA driver to the latest Studio release, or build
+    FFmpeg against older `nv-codec-headers` (the bundled build cannot). So
+    `capabilities()` now parses `Required: X Found: Y`, says "this is a driver
+    story, not a settings story", names the driver update, and explicitly tells
+    the user their High-performance setting was right but is the other half.
+    No new library fixes it — this is an ABI between two pieces of software the
+    app does not compile, and pretending otherwise would be the brochure.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
