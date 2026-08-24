@@ -52,6 +52,8 @@ import_electron.contextBridge.exposeInMainWorld("cuttingEdge", {
   logPath: () => import_electron.ipcRenderer.invoke("log:path"),
   /** Reveal the log file in Explorer so the user can attach it to a report. */
   openLogFolder: () => import_electron.ipcRenderer.send("log:open"),
+  /** Open an allowlisted https URL (the NVIDIA driver page) in the browser. */
+  openExternal: (url) => import_electron.ipcRenderer.send("shell:open", url),
   /** Check + download in one shot. */
   runUpdate: () => import_electron.ipcRenderer.send("update:run"),
   /** Restart into the freshly downloaded version. */

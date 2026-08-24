@@ -74,6 +74,9 @@ class Capabilities:
     #: Every hardware encoder that was tried, and why it did or did not work.
     encoders: list[dict] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: The NVENC driver-vs-FFmpeg API mismatch, when that is the specific cause.
+    #: The card uses it to show the one-click driver download.
+    nvenc_api: dict | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -88,6 +91,7 @@ class Capabilities:
             "decoder": self.decoder,
             "encoders": self.encoders,
             "notes": self.notes,
+            "nvencApi": self.nvenc_api,
             "used": [
                 *([f"export encoding ({self.encoder})"] if self.nvenc else []),
                 *(["editing proxies"] if self.nvenc else []),
@@ -384,6 +388,8 @@ def capabilities(deep: bool = False) -> Capabilities:
         if failures:
             caps.notes.append(f"Hardware encoding is off: {failures[0]['reason']}")
         mismatch = _nvenc_api_mismatch(failures[0]["reason"]) if failures else None
+        if mismatch:
+            caps.nvenc_api = {"required": mismatch[0], "found": mismatch[1]}
         if card:
             if mismatch:
                 required, found = mismatch

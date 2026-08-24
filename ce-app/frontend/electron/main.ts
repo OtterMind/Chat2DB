@@ -199,6 +199,21 @@ function registerIpc() {
     return { running: backendProcess !== null, failure: backendFailure }
   })
   ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
+
+  // Open an external https URL in the default browser. Only https is allowed and
+  // only a small allowlist of hosts, so a stray string can never navigate the
+  // app or reach an arbitrary origin — this is the NVIDIA driver page and
+  // nothing else.
+  ipcMain.on('shell:open', (_e, url: unknown) => {
+    if (typeof url !== 'string') return
+    try {
+      const parsed = new URL(url)
+      const allowed = ['nvidia.com', 'www.nvidia.com', 'us.download.nvidia.com']
+      if (parsed.protocol === 'https:' && allowed.some((h) => parsed.hostname.endsWith(h))) {
+        void shell.openExternal(url)
+      }
+    } catch { /* not a URL: ignore */ }
+  })
 }
 
 function setFullscreen(value: boolean) {
