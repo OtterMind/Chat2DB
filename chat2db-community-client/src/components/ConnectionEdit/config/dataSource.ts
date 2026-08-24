@@ -214,7 +214,7 @@ export const sshConfig: IConnectionConfig['ssh'] = {
 };
 
 export const envItem = {
-  defaultValue: 1,
+  defaultValue: 2,
   inputType: InputType.SELECT,
   labelName: {
     [LangType.EN_US]: 'Env',
@@ -226,7 +226,7 @@ export const envItem = {
   selects: [
     {
       label: 'TEST',
-      value: 2,
+      value: 1,
     },
     {
       label: 'DEV',
@@ -234,7 +234,7 @@ export const envItem = {
     },
     {
       label: 'RELEASE',
-      value: 1,
+      value: 2,
     },
   ],
   styles: {
