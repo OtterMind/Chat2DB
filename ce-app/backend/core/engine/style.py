@@ -403,7 +403,12 @@ def analyse(path: str, name: str | None = None, progress=None) -> Template:
             "style": "outline",
             "animateWords": True,
         }
-        template.audio = {"musicUnderVoice": -9.0 if template.speech_ratio > 0.25 else 0.0}
+        template.audio = {
+            "musicUnderVoice": -9.0 if template.speech_ratio > 0.25 else 0.0,
+            # Filled in by save_template(): the reference's own track, kept
+            # beside the template so the rebuild can actually use it.
+            "hasBed": False,
+        }
     else:
         template.hook = {"firstCut": round(cuts[0], 3) if cuts else round(duration, 3), "firstWord": None}
 
@@ -435,7 +440,7 @@ def analyse(path: str, name: str | None = None, progress=None) -> Template:
 
     template.unknown = [
         "on-screen graphics and hand-made titles",
-        "the reference's own footage, music and fonts (never copied)",
+        "the reference's own footage and fonts (never copied)",
         "exact caption typography (needs the OCR pass)",
     ]
     say("done", 1.0, "Template ready")
@@ -629,6 +634,15 @@ def build_timeline(
     # local Ollama model, both scored by the same objective function. The rule
     # plan is always a candidate, so the model can only win by being better.
     say("plan", 0.45, "Choosing an order")
+    # Your own track wins; otherwise the reference's own soundtrack, if this
+    # template kept one. Resolved *here*, before the planners run, so the cut
+    # points are scored against the beats of the track that will really play.
+    used_reference_bed = False
+    reference_bed = (data.get("audio") or {}).get("bed")
+    if not music and reference_bed and Path(reference_bed).exists():
+        music = reference_bed
+        used_reference_bed = True
+
     brain_context = _brain_context(data, shots, source, info, measured, captions, music)
     decision = brain_race.race(
         [objective.Pick(p["start"], p["end"], p.get("score", 0.0)) for p in measured],
@@ -778,6 +792,9 @@ def build_timeline(
         skipped.append("captions (speech recognition is not installed)")
 
     # ---- music ----------------------------------------------------------
+    if used_reference_bed:
+        applied.append("the reference's own soundtrack")
+
     if music:
         under = float((data.get("audio") or {}).get("musicUnderVoice", 0.0))
         clips.append({
@@ -840,8 +857,54 @@ def templates_dir():
 
 
 def save_template(template: Template) -> Path:
+    """Write the template, and keep the reference's soundtrack next to it."""
+    bed = extract_bed(template.source, template.name) if template.source else None
+    if bed is not None:
+        audio = dict(template.audio or {})
+        audio["hasBed"] = True
+        audio["bed"] = str(bed)
+        template.audio = audio
+
     target = templates_dir() / f"{template.name}.cetemplate"
     target.write_text(json.dumps(template.as_dict(), indent=2), encoding="utf-8")
+    return target
+
+
+def bed_path(name: str) -> Path:
+    """Where a template keeps the reference's own soundtrack."""
+    return templates_dir() / f"{name}.bed.m4a"
+
+
+def extract_bed(source: str, name: str) -> Path | None:
+    """Keep the reference's audio with the template.
+
+    The template used to carry the *behaviour* of the music (tempo, how far it
+    ducks under a voice) and never the music itself, on copyright grounds. The
+    owner of this project asked for the track as well and takes that decision:
+    the file is theirs, the export is theirs, and refusing to copy an audio
+    stream that FFmpeg can read in one line was us making their decision for
+    them.
+
+    It is stored beside the `.cetemplate` so it survives the reference being
+    moved or deleted, and it is only ever placed on the timeline when the user
+    asks for it.
+    """
+    target = bed_path(name)
+    if target.exists():
+        return target
+    info = probe_media(source)
+    if not info.get("has_audio"):
+        return None
+    result = subprocess.run(
+        [
+            ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(source), "-vn", "-ac", "2", "-ar", "48000",
+            "-c:a", "aac", "-b:a", "192k", str(target),
+        ],
+        capture_output=True,
+    )
+    if result.returncode != 0 or not target.exists():
+        return None
     return target
 
 

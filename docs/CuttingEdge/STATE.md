@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.8.2` · Last released: `v0.8.1` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.8.3` · Last released: `v0.8.2` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -484,6 +484,24 @@ gate that stops a broken installer from being published.
    template carries must be read by the rebuild or named in `DECLARED_UNUSED`
    with the reason. It caught `median_shot` and `speech_ratio` the moment it
    was written.
+
+55. **The reference's soundtrack travels with the template.** We used to keep
+   only the *behaviour* of the music (tempo, ducking depth) on copyright
+   grounds — which was us making the owner's decision for them. It is their
+   file and their export. `save_template()` now extracts the reference's audio
+   once (`<name>.bed.m4a`, beside the `.cetemplate`, so it survives the
+   reference being moved) and the rebuild places it when the user has not
+   brought a track of their own. It is resolved **before** the planners run, so
+   the cuts are scored against the beats of the track that will actually play.
+   `tests/test_reference_bed.py` covers all four cases, including a silent
+   reference keeping no bed and a user's own track still winning.
+56. **The next big step is written down: `docs/CuttingEdge/STRONGER_AI.md`.**
+   The honest diagnosis of why the AI does not feel present — the one model in
+   the loop is text-only and has never seen a frame — and the costed, licence-
+   checked plan: Ollama **vision** models first (no installer cost, the model
+   lives in the user's Ollama), then beam search and a two-pass assistant (free
+   and offline), then TransNetV2 for real transition detection, OCR for
+   on-screen text, CLIP for content matching, Demucs as an on-demand engine.
 
 ## 5. Release procedure
 
