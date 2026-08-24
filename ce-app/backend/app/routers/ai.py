@@ -84,6 +84,60 @@ def _whisper_state() -> dict:
 # ------------------------------------------------------------------- routes
 
 
+#: The models this app can actually make use of, with what each one is for and
+#: what it costs. Curated on purpose: the Ollama library has hundreds of tags and
+#: a list of hundreds is not a recommendation. Sizes are the q4 download.
+#:
+#: `vision` matters here — a model that can see frames is the difference between
+#: an assistant that reasons about numbers and one that has looked at the video.
+CATALOGUE: tuple[dict, ...] = (
+    {"name": "qwen2.5vl:3b", "job": "vision", "gb": 3.2, "vramGb": 4,
+     "why": "Looks at the frames. Fits entirely on a 4 GB card."},
+    {"name": "qwen2.5vl:7b", "job": "vision", "gb": 6.0, "vramGb": 8,
+     "why": "The same, sharper, for an 8 GB card or larger."},
+    {"name": "moondream", "job": "vision", "gb": 1.7, "vramGb": 2,
+     "why": "Tiny vision model — describes a frame on almost anything."},
+    {"name": "llama3.2-vision:11b", "job": "vision", "gb": 7.9, "vramGb": 12,
+     "why": "Strongest local vision here, for a 12 GB card."},
+    {"name": "qwen2.5:3b-instruct", "job": "planning", "gb": 1.9, "vramGb": 4,
+     "why": "Plans edits on a 4 GB card without spilling into system memory."},
+    {"name": "qwen2.5:7b-instruct-q4_0", "job": "planning", "gb": 4.4, "vramGb": 6,
+     "why": "Better planning and better Persian; needs about 4.4 GB."},
+    {"name": "gemma2:9b", "job": "planning", "gb": 5.4, "vramGb": 8,
+     "why": "An alternative planner if you prefer its writing."},
+)
+
+
+@router.get("/models")
+def models() -> dict:
+    """What is worth pulling on *this* machine, and what is already here.
+
+    The recommendation is made against the card's memory rather than a fixed
+    list, so a 4 GB laptop and a 24 GB desktop are told different things.
+    """
+    from core.engine import gpu
+
+    caps = gpu.capabilities()
+    vram = (caps.memory_mb or 0) / 1024
+    installed = {name.split(":")[0]: name for name in (_ollama_state().get("models") or [])}
+    present = set(_ollama_state().get("models") or [])
+
+    out = []
+    for entry in CATALOGUE:
+        fits = vram >= entry["vramGb"] if vram else None
+        out.append({
+            **entry,
+            "installed": entry["name"] in present or entry["name"].split(":")[0] in installed,
+            "fits": fits,
+            "note": (
+                "runs entirely on your card" if fits
+                else "will spill into system memory and run slower" if fits is False
+                else "no card detected — it will run on the processor"
+            ),
+        })
+    return {"vramGb": round(vram, 1) if vram else None, "models": out}
+
+
 @router.get("/status")
 def status() -> dict:
     """What is installed right now — checked, not remembered."""

@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.1` · Last released: `v0.9.0` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.2` · Last released: `v0.9.1` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -553,6 +553,33 @@ gate that stops a broken installer from being published.
    `4.10.0.84`, the version in `requirements.txt`. And `reframe.plan()` now
    distinguishes "this OpenCV build has no detector" from "no frames could be
    read" — the old message sent the reader to inspect the video file.
+
+61. **The probe was wrong, not the card.** A GTX 1650 reported
+   `Nothing was written into output file, because at least one of its streams
+   received no packets` and we told its owner NVENC did not work. It does: the
+   probe asked for **three frames into `-f null -`**, and NVENC buffers several
+   frames internally and only flushes at end of stream, so the run finished
+   before a packet existed. x264 emits packets in those same three frames, which
+   is why the shape was never questioned. The probe now encodes **1.5 seconds to
+   a real file** and requires the file to be non-empty; `tests/test_gpu.py`
+   asserts the shape (no `-frames:v`, a real duration, a size check) so it
+   cannot regress. **When a measurement disagrees with the hardware, suspect the
+   measurement first.**
+62. **The model catalogue is filtered by the machine.** Settings lists the
+   Ollama models this app can use — three vision models included, because a
+   model that can see frames is the difference between reasoning about numbers
+   and having looked at the video — each with its size, what it is for, and a
+   download button. What "fits" means is computed from the card's memory, so a
+   4 GB laptop is told `qwen2.5vl:3b` fits and `llama3.2-vision:11b` does not.
+63. **`docs/CuttingEdge/OSS_SWEEP_0.9.2.md`** is the verified sweep of GitHub and
+   PyPI with a GPU on the table: what we should already have had (TransNetV2 MIT
+   for real transition detection, silero-vad MIT for the speech map every
+   editing decision rests on), what a card unlocks (Demucs, whisperX,
+   Real-ESRGAN, RIFE, CLIP — all verified permissive), and what is refused
+   (`RobustVideoMatting` GPL-3, `Wav2Lip` no licence, `GFPGAN` NOASSERTION,
+   `open-clip-torch` MIT on PyPI but NOASSERTION on GitHub). Hugging Face is
+   **unreachable from the sandbox**, so model-card licences there are marked
+   *verify before adopting* rather than guessed.
 
 ## 5. Release procedure
 

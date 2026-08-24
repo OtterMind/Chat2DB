@@ -173,3 +173,45 @@ def test_a_machine_with_no_hardware_still_gets_a_working_command():
     args = gpu.encode_args({"crf": 20, "preset": "veryfast"})
     assert "-c:v" in args
     assert args[args.index("-c:v") + 1] in {"libx264", *(e["name"] for e in gpu.probe_encoders())}
+
+
+def test_the_encoder_probe_gives_the_encoder_time_to_flush():
+    """The probe that told a GTX 1650 owner their card could not encode.
+
+    It asked for three frames into `-f null -`. NVENC buffers several frames and
+    flushes at end of stream, so the run ended before a single packet came out
+    and FFmpeg said "Nothing was written into output file". x264 emits packets in
+    those same three frames, which is why nobody questioned the shape.
+    """
+    import inspect
+
+    source = inspect.getsource(gpu.probe_encoders)
+
+    assert "-frames:v" not in source, "a frame limit can end the run before the encoder flushes"
+    assert "duration=1.5" in source, "the probe clip is too short to prove anything"
+    assert "getsize" in source, "the probe must check that something was actually written"
+
+
+def test_a_model_is_recommended_against_the_card_in_this_machine(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app as application
+    from app.routers import ai
+
+    monkeypatch.setattr(gpu, "nvidia_smi", lambda: {"name": "T", "memory_mb": 4096, "driver": "1"})
+    monkeypatch.setattr(ai, "_ollama_state", lambda: {"models": [], "running": True})
+    body = TestClient(application).get("/api/ai/models").json()
+
+    assert body["vramGb"] == 4.0
+    fits = {m["name"]: m["fits"] for m in body["models"]}
+    assert fits["qwen2.5vl:3b"] is True, "a 3B vision model fits a 4 GB card"
+    assert fits["llama3.2-vision:11b"] is False, "an 11B model does not"
+    assert all(m["why"] and m["note"] for m in body["models"]), "every row must say why it is there"
+
+
+def test_the_catalogue_offers_a_model_that_can_see():
+    from app.routers.ai import CATALOGUE
+
+    vision = [m for m in CATALOGUE if m["job"] == "vision"]
+    assert len(vision) >= 3, "the whole point is that a model can look at the frames"
+    assert any(m["vramGb"] <= 4 for m in vision), "nothing here fits a 4 GB card"

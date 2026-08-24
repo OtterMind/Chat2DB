@@ -133,21 +133,43 @@ def probe_encoders() -> tuple[dict, ...]:
     frames, and a probe that fails for a reason the real work would never hit is
     worse than no probe.
     """
+    import os
+    import tempfile
+
     results: list[dict] = []
     for name, vendor, codec in ENCODERS:
         entry = {"name": name, "vendor": vendor, "codec": codec, "ok": False, "reason": ""}
+        target = os.path.join(tempfile.gettempdir(), f"ce-encprobe-{name}.mp4")
         try:
             out = _run([
-                ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
-                "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=0.2",
-                "-c:v", name, "-frames:v", "3", "-f", "null", "-",
+                ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+                # A second and a half, encoded to the end, into a real file.
+                #
+                # The first version asked for three frames into `-f null -` and
+                # a GTX 1650 answered "Nothing was written into output file,
+                # because at least one of its streams received no packets" — so
+                # we told its owner their card could not encode. It can: NVENC
+                # buffers several frames internally and only flushes at end of
+                # stream, so a three-frame probe finishes before the encoder has
+                # produced anything. The probe was wrong, not the card.
+                "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:duration=1.5",
+                "-an", "-c:v", name, target,
             ])
-            entry["ok"] = out.returncode == 0
+            wrote = os.path.exists(target) and os.path.getsize(target) > 1024
+            entry["ok"] = out.returncode == 0 and wrote
             if not entry["ok"]:
                 lines = [line.strip() for line in (out.stderr or "").splitlines() if line.strip()]
-                entry["reason"] = lines[-1][:200] if lines else f"exit code {out.returncode}"
+                entry["reason"] = (
+                    lines[-1][:200] if lines
+                    else (f"exit code {out.returncode}" if out.returncode else "wrote an empty file")
+                )
         except Exception as error:  # noqa: BLE001
             entry["reason"] = f"{type(error).__name__}: {error}"[:200]
+        finally:
+            try:
+                os.remove(target)
+            except OSError:
+                pass
         results.append(entry)
     return tuple(results)
 

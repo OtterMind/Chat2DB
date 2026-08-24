@@ -1046,3 +1046,20 @@ button { font-family: inherit; cursor: pointer; }
 .ce-encoders li code { color: #e2e8f0; min-width: 108px; }
 .ce-encoders li[data-ok='true'] span { color: #4ade80; }
 .ce-encoders li[data-ok='false'] span { color: #94a3b8; }
+
+/* The model catalogue: one row, one button, and the reason it is there. */
+.ce-models { width: 100%; margin-top: 10px; }
+.ce-models__row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  font-size: 12px;
+}
+.ce-models__name { display: flex; flex-direction: column; gap: 2px; }
+.ce-models__name code { color: #e2e8f0; }
+.ce-models__name em { color: #818cf8; font-style: normal; font-size: 11px; }
+.ce-models__why { color: #94a3b8; }
+.ce-models__row[data-fits='false'] .ce-models__why { color: #fbbf24; }

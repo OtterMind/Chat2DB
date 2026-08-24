@@ -33,6 +33,10 @@ export const aiApi = {
     (await api.get('/ai/status', { timeout: 20_000 })).data,
   test: async (): Promise<{ ollama: EngineTest; whisper: EngineTest }> =>
     (await api.post('/ai/test', {}, SLOW)).data,
+  catalogue: async (): Promise<{
+    vramGb: number | null
+    models: { name: string; job: string; gb: number; vramGb: number; why: string; installed: boolean; fits: boolean | null; note: string }[]
+  }> => (await api.get('/ai/models', { timeout: 60_000 })).data,
   pullModel: async (model: string): Promise<{ model: string; seconds: number }> =>
     (await api.post('/ai/ollama/pull', { model }, SLOW)).data,
   downloadWhisper: async (size: string): Promise<{ model: string; seconds: number }> =>

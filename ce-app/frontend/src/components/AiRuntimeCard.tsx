@@ -19,12 +19,16 @@ export default function AiRuntimeCard() {
   const { t } = useI18n()
   const [state, setState] = useState<{ ollama: EngineState; whisper: EngineState } | null>(null)
   const [result, setResult] = useState<{ ollama: EngineTest; whisper: EngineTest } | null>(null)
+  const [catalogue, setCatalogue] = useState<Awaited<ReturnType<typeof aiApi.catalogue>>['models']>([])
   const [busy, setBusy] = useState<'status' | 'test' | 'ollama' | 'whisper' | null>(null)
 
   const refresh = async () => {
     setBusy('status')
     try {
       setState(await aiApi.status())
+      // What is worth pulling depends on the card in *this* machine, so the
+      // catalogue is asked for at the same time and refreshed after a pull.
+      setCatalogue((await aiApi.catalogue()).models)
     } catch (error) {
       message.error((error as Error).message)
     } finally {
@@ -168,6 +172,50 @@ export default function AiRuntimeCard() {
             {busy === 'ollama' ? <Loader2 size={15} className="ce-spin" /> : <Download size={15} />}
             {t('Download the model', 'دانلود مدل')}
           </button>
+        )}
+
+        {state?.ollama.running && catalogue.length > 0 && (
+          <div className="ce-models" data-testid="ollama-catalogue">
+            <p className="ce-hint">
+              {t(
+                'Models this app can use. A button each — nothing is pulled unless you press it.',
+                'مدل‌هایی که این برنامه می‌تواند استفاده کند. هرکدام یک دکمه — تا نزنی چیزی دانلود نمی‌شود.'
+              )}
+            </p>
+            {catalogue.map((model) => (
+              <div className="ce-models__row" key={model.name} data-installed={model.installed} data-fits={model.fits}>
+                <span className="ce-models__name" dir="ltr">
+                  <code>{model.name}</code>
+                  <em>{model.job === 'vision' ? t('sees the frames', 'فریم‌ها را می‌بیند') : t('plans the edit', 'تدوین را برنامه‌ریزی می‌کند')}</em>
+                </span>
+                <span className="ce-models__why">{model.why} · {model.note}</span>
+                {model.installed ? (
+                  <span className="ce-badge">{t('installed', 'نصب است')}</span>
+                ) : (
+                  <button
+                    className="ce-btn ce-btn--ghost ce-btn--sm"
+                    disabled={busy !== null}
+                    data-testid={`pull-${model.name}`}
+                    onClick={async () => {
+                      setBusy('ollama')
+                      try {
+                        const done = await aiApi.pullModel(model.name)
+                        message.success(t(`${model.name} ready in ${done.seconds}s`, `${model.name} در ${done.seconds} ثانیه آماده شد`))
+                        void refresh()
+                      } catch (error) {
+                        message.error((error as Error).message)
+                      } finally {
+                        setBusy(null)
+                      }
+                    }}
+                  >
+                    {busy === 'ollama' ? <Loader2 size={14} className="ce-spin" /> : <Download size={14} />}
+                    {model.gb} GB
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         )}
 
         {!state?.ollama.installed && state?.ollama.download && (
