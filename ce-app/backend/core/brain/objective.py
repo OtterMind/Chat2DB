@@ -84,6 +84,10 @@ class Context:
     words: list[dict] = field(default_factory=list)
     #: The measured strength of the strongest moment, for normalisation.
     best_highlight: float = 0.0
+    #: Multipliers over `WEIGHTS`, from what the user said the video is for
+    #: (`core.engine.intent`). They rebalance the terms; they never add one, and
+    #: a term that could not be measured stays skipped however it is weighted.
+    weights: dict[str, float] = field(default_factory=dict)
 
     @property
     def target_duration(self) -> float:
@@ -257,7 +261,21 @@ def score_plan(picks: list[Pick], context: Context) -> Score:
         # rather than pretending the plan is perfect.
         return Score(total=0.0, terms={}, weights={}, skipped=skipped)
 
-    weights = {name: WEIGHTS[name] for name in terms}
+    weights = {name: WEIGHTS[name] * _multiplier(context, name) for name in terms}
     total_weight = sum(weights.values())
     total = sum(terms[name] * weights[name] for name in terms) / total_weight
     return Score(total=total, terms=terms, weights=weights, skipped=skipped)
+
+
+#: How far the user's stated intent may move a term. A multiplier is a rebalance,
+#: not a switch: 0 would let one answer delete a measurement, and 100 would let
+#: it delete all the others.
+MIN_MULTIPLIER, MAX_MULTIPLIER = 0.25, 4.0
+
+
+def _multiplier(context: Context, term: str) -> float:
+    try:
+        value = float(context.weights.get(term, 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return max(MIN_MULTIPLIER, min(MAX_MULTIPLIER, value))

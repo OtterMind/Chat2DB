@@ -1,15 +1,136 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { message, Modal, Input } from 'antd'
+import { message, Modal, Input, InputNumber } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
+  ListChecks, Target, Crosshair, Timer,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
-import { styleApi, type StyleTemplate, type TemplateSummary, type StyledEdit } from '../api/style'
+import {
+  styleApi,
+  type IntentAnswers,
+  type Questions,
+  type StyleTemplate,
+  type TemplateSummary,
+  type StyledEdit,
+} from '../api/style'
 import type { TaskState } from '../api/tasks'
 import { pickMedia } from '../api/render'
 import { useEditor, formatTimecode } from '../editor/model'
 import { useI18n } from '../i18n'
+
+/** The four multiple-choice questions, in the order they are worth asking. */
+const GROUPS: { key: keyof IntentAnswers; icon: typeof Target; en: string; fa: string }[] = [
+  { key: 'kind', icon: Film, en: 'What kind of video is this?', fa: 'این ویدیو چه نوعی است؟' },
+  { key: 'goal', icon: Target, en: 'What should it do?', fa: 'باید چه کار کند؟' },
+  { key: 'focus', icon: Crosshair, en: 'What should the camera stay on?', fa: 'دوربین روی چه چیزی بماند؟' },
+  { key: 'energy', icon: Timer, en: 'Rhythm', fa: 'ریتم' },
+]
+
+/**
+ * What the video is for — the one thing a frame can never say.
+ *
+ * Every answer is optional, and an unanswered question changes nothing at all:
+ * with the card left empty the rebuild is byte-for-byte the rebuild that shipped
+ * before it existed. What an answer does is rebalance measurements that are
+ * already taken — speech ranges, picture motion, audio activity, the footage's
+ * own shot changes — and it is the only way to ask for a length that is not the
+ * reference's. The options come from the backend, because the weights behind
+ * them live there and a question defined in two places drifts out of step.
+ */
+function IntentCard({
+  questions,
+  answers,
+  onChange,
+  disabled,
+}: {
+  questions: Questions | null
+  answers: IntentAnswers
+  onChange: (next: IntentAnswers) => void
+  disabled: boolean
+}) {
+  const { t, lang } = useI18n()
+  if (!questions) return null
+  const pick = (key: keyof IntentAnswers, id: string) =>
+    onChange({ ...answers, [key]: answers[key] === id ? '' : id })
+
+  return (
+    <Card title={t('2 · What is this video?', '۲ · این ویدیو چیست؟')}>
+      <p className="ce-hint">
+        {t(
+          'A frame cannot say whether your footage is a lesson, a product or a wedding, and it cannot say what the best moment in it is. These answers can. All of them are optional — leave them empty and nothing changes.',
+          'یک فریم نمی‌تواند بگوید فیلم تو آموزش است، محصول است یا یک مراسم، و نمی‌تواند بگوید بهترین لحظه‌اش کجاست. این پاسخ‌ها می‌توانند. همه اختیاری‌اند — خالی بگذاری هیچ‌چیز تغییر نمی‌کند.'
+        )}
+      </p>
+
+      {GROUPS.map(({ key, icon: Icon, en, fa }) => (
+        <div key={key} style={{ marginTop: 14 }}>
+          <div className="ce-kv">
+            <span><Icon size={13} /> {t(en, fa)}</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {(questions.options[key as string] ?? []).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`ce-btn ce-btn--ghost ce-btn--sm ${answers[key] === option.id ? 'is-on' : ''}`}
+                disabled={disabled}
+                data-testid={`intent-${key}-${option.id}`}
+                aria-pressed={answers[key] === option.id}
+                onClick={() => pick(key, option.id)}
+              >
+                {lang === 'fa' ? option.fa : option.en}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+        <div className="ce-kv">
+          <span>{t('What must survive the cut?', 'چه چیزی حتماً باید بماند؟')}</span>
+        </div>
+        <Input
+          value={answers.keep ?? ''}
+          disabled={disabled}
+          data-testid="intent-keep"
+          placeholder={t('Comma separated — a phrase, a name, a number', 'با کاما جدا کن — یک عبارت، یک نام، یک عدد')}
+          onChange={(event) => onChange({ ...answers, keep: event.target.value })}
+        />
+        <div className="ce-kv">
+          <span>{t('What should not carry a clip?', 'چه چیزی نباید روی تصویر بیاید؟')}</span>
+        </div>
+        <Input
+          value={answers.avoid ?? ''}
+          disabled={disabled}
+          data-testid="intent-avoid"
+          placeholder={t('Comma separated', 'با کاما جدا کن')}
+          onChange={(event) => onChange({ ...answers, avoid: event.target.value })}
+        />
+        <div className="ce-kv">
+          <span>{t('How long should the result be?', 'نتیجه چقدر باشد؟')}</span>
+        </div>
+        <InputNumber
+          value={answers.seconds ?? null}
+          disabled={disabled}
+          min={1}
+          max={3600}
+          step={5}
+          style={{ width: 140 }}
+          data-testid="intent-seconds"
+          addonAfter={t('seconds', 'ثانیه')}
+          onChange={(value) => onChange({ ...answers, seconds: Number(value) || 0 })}
+        />
+        <p className="ce-hint" style={{ marginTop: 2 }}>
+          {t(
+            'Without it, the edit is exactly as long as the reference — which is why a 12-second reference turned three minutes of your footage into 12 seconds.',
+            'بدون آن، تدوین دقیقاً به اندازهٔ ویدیوی الگو می‌شود — به همین دلیل یک الگوی ۱۲ ثانیه‌ای، سه دقیقه فیلم تو را به ۱۲ ثانیه تبدیل می‌کرد.'
+          )}
+        </p>
+      </div>
+    </Card>
+  )
+}
 
 /**
  * Style Match.
@@ -19,12 +140,15 @@ import { useI18n } from '../i18n'
  * transitions. Nothing of the reference is copied; the template is numbers.
  */
 export default function StyleMatch() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
   const [template, setTemplate] = useState<StyleTemplate | null>(null)
   const [busy, setBusy] = useState<'analyse' | 'apply' | null>(null)
   const [result, setResult] = useState<StyledEdit | null>(null)
+  /** What the video is for — the one thing no frame can say. */
+  const [questions, setQuestions] = useState<Questions | null>(null)
+  const [answers, setAnswers] = useState<IntentAnswers>({})
   /** What the work is doing right now — the screen used to be able to say only "busy". */
   const [progress, setProgress] = useState<TaskState | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -56,6 +180,9 @@ export default function StyleMatch() {
   const refresh = () => styleApi.templates().then((r) => setTemplates(r.templates)).catch(() => undefined)
   useEffect(() => {
     refresh()
+    // The options live with the weights behind them, so the screen cannot drift
+    // out of step with what an answer actually does.
+    styleApi.questions().then(setQuestions).catch(() => setQuestions(null))
   }, [])
 
   const choose = async (): Promise<string | null> => {
@@ -124,7 +251,8 @@ export default function StyleMatch() {
         found.name,
         t('Styled edit', 'تدوین بر اساس الگو'),
         musicPath,
-        watcher
+        watcher,
+        answers
       )
       setResult(built)
 
@@ -171,7 +299,7 @@ export default function StyleMatch() {
     setBusy('apply')
     try {
       const built = await styleApi.apply(
-        path, template.name, t('Styled edit', 'تدوین بر اساس الگو'), null, watcher
+        path, template.name, t('Styled edit', 'تدوین بر اساس الگو'), null, watcher, answers
       )
       setResult(built)
       message.success(t('Your edit is ready', 'تدوین تو آماده است'))
@@ -192,6 +320,28 @@ export default function StyleMatch() {
   }
 
   const percent = (value: number) => `${Math.round(value * 100)}%`
+
+  /**
+   * The answers, in the language on screen.
+   *
+   * The backend also sends `intentSaid` in English, which is the honest fallback
+   * when the options have not loaded — but a Persian interface that answers in
+   * English is a bug the user reads twice.
+   */
+  const saidByMe = (intent: IntentAnswers | undefined): string => {
+    if (!intent || !questions) return (result?.summary.intentSaid ?? []).join(' · ')
+    const label = (key: string, id: string) =>
+      questions.options[key]?.find((option) => option.id === id)?.[lang === 'fa' ? 'fa' : 'en'] ?? id
+    const parts: string[] = []
+    for (const key of ['kind', 'goal', 'focus', 'energy'] as const) {
+      const value = intent[key]
+      if (value) parts.push(label(key, value))
+    }
+    if (intent.keep) parts.push(`${t('keep', 'بماند')}: ${intent.keep}`)
+    if (intent.avoid) parts.push(`${t('avoid', 'نیاید')}: ${intent.avoid}`)
+    if (intent.seconds) parts.push(`${intent.seconds} ${t('seconds', 'ثانیه')}`)
+    return parts.join(' · ')
+  }
 
   return (
     <Page
@@ -300,8 +450,15 @@ export default function StyleMatch() {
         )}
       </Card>
 
+      <IntentCard
+        questions={questions}
+        answers={answers}
+        onChange={setAnswers}
+        disabled={busy !== null}
+      />
+
       {template && (
-        <Card title={t('2 · What the template says', '۲ · قالب چه می‌گوید')}>
+        <Card title={t('3 · What the template says', '۳ · قالب چه می‌گوید')}>
           <div className="ce-badges">
             <span className="ce-badge"><Film size={13} /> {template.shots.length} {t('shots', 'نما')}</span>
             <span className="ce-badge"><Gauge size={13} /> {t('median', 'میانه')} {template.median_shot.toFixed(2)}s</span>
@@ -340,7 +497,7 @@ export default function StyleMatch() {
       )}
 
       {result && (
-        <Card title={t('3 · Your edit', '۳ · تدوین تو')}>
+        <Card title={t('4 · Your edit', '۴ · تدوین تو')}>
           <div className="ce-badges">
             <span className="ce-badge">{result.summary.shots} {t('shots', 'نما')}</span>
             <span className="ce-badge" dir="ltr">{formatTimecode(result.summary.duration)}</span>
@@ -351,6 +508,22 @@ export default function StyleMatch() {
               <span className="ce-badge">{result.summary.captions} {t('captions', 'زیرنویس')}</span>
             )}
           </div>
+
+          {typeof result.summary.sourceSpanUsed === 'number' && (
+            <div className="ce-kv" style={{ marginTop: 8 }}>
+              <span>{t('Taken from your file', 'از فیلم خودت برداشته شد')}</span>
+              <strong dir="ltr" data-testid="span-used">
+                {result.summary.sourceSpanUsed.toFixed(0)}%
+              </strong>
+            </div>
+          )}
+
+          {(result.summary.intentSaid ?? []).length > 0 && (
+            <div className="ce-kv" style={{ marginTop: 8 }}>
+              <span><ListChecks size={13} /> {t('What your answers changed', 'پاسخ‌هایت چه چیزی را عوض کرد')}</span>
+              <strong data-testid="intent-said">{saidByMe(result.summary.intent)}</strong>
+            </div>
+          )}
 
           {result.summary.brain && result.summary.brain.scoreboard.length > 0 && (
             <div className="ce-kv" style={{ marginTop: 8 }}>

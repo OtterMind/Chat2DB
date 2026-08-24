@@ -38,6 +38,39 @@ export interface TemplateSummary {
   updatedAt: number
 }
 
+/**
+ * The one thing a frame cannot say: what the video is *for*.
+ *
+ * Every field is optional, and an unanswered one changes nothing — the rebuild
+ * with no answers is the rebuild that shipped before. What these do is rebalance
+ * measurements that are already taken (speech ranges, motion, audio activity,
+ * the footage's own shot changes) and set a length that is not the reference's.
+ */
+export interface IntentAnswers {
+  kind?: string
+  goal?: string
+  focus?: string
+  energy?: string
+  language?: string
+  /** Phrases that must survive the cut, comma separated. */
+  keep?: string
+  /** Phrases that should not carry a clip. */
+  avoid?: string
+  /** The length the finished edit should have, in seconds. */
+  seconds?: number
+  notes?: string
+}
+
+export interface QuestionOption {
+  id: string
+  en: string
+  fa: string
+}
+
+export interface Questions {
+  options: Record<string, QuestionOption[]>
+}
+
 export interface StyledEdit {
   name: string
   aspect: string
@@ -52,6 +85,11 @@ export interface StyledEdit {
     bpm: number
     applied: string[]
     skipped: string[]
+    /** What the answers changed, in words — an answer with no visible effect is not trusted twice. */
+    intentSaid?: string[]
+    /** How much of the user's own file the edit drew from. It was 14.4 % once. */
+    sourceSpanUsed?: number
+    intent?: IntentAnswers
     /** Who planned the edit, what each planner scored, and who won. */
     brain?: {
       winner: string
@@ -83,6 +121,11 @@ export const styleApi = {
     return (await follow.promise).result as StyleTemplate
   },
   templates: async (): Promise<{ templates: TemplateSummary[] }> => (await api.get('/style/templates')).data,
+  /**
+   * The intake questionnaire, from the same module that holds the weights behind
+   * it, so a question and its effect cannot drift apart.
+   */
+  questions: async (): Promise<Questions> => (await api.get('/style/questions')).data,
   remove: async (name: string): Promise<void> => {
     await api.delete(`/style/templates/${encodeURIComponent(name)}`)
   },
@@ -92,10 +135,11 @@ export const styleApi = {
     template: string,
     name = 'Styled edit',
     music?: string | null,
-    watch?: Watcher
+    watch?: Watcher,
+    intent?: IntentAnswers
   ): Promise<StyledEdit> => {
     const started = (
-      await api.post('/style/apply/start', { path, template, name, music })
+      await api.post('/style/apply/start', { path, template, name, music, intent: intent ?? null })
     ).data as TaskState
     const follow = followTask(started.id, watch?.onProgress ?? (() => undefined))
     watch?.onStart?.(follow.cancel)

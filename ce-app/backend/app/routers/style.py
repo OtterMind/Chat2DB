@@ -10,7 +10,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.engine import cancellation, style
+from core.engine import cancellation, intent as intent_model, style
 from core.tasks import tasks
 
 router = APIRouter(prefix="/api/style", tags=["style"])
@@ -31,6 +31,13 @@ class ApplyRequest(BaseModel):
     captions: bool = Field(default=True, description="Transcribe and lay captions automatically")
     brain: bool = Field(default=True, description="Let a local model race the rule planner")
     model: str | None = Field(default=None, description="Ollama model to race with, when installed")
+    intent: dict | None = Field(
+        default=None,
+        description=(
+            "What the video is for: kind, goal, focus, energy, keep/avoid phrases, "
+            "target seconds. Every field is optional and neutral by default."
+        ),
+    )
 
 
 @router.post("/analyze")
@@ -71,6 +78,19 @@ async def analyse_start(payload: AnalyseRequest) -> dict:
             cancellation.bind(None)
 
     return tasks.start("style:analyze", work).as_dict()
+
+
+@router.get("/questions")
+def questions() -> dict:
+    """The intake questionnaire itself, so the screen renders from one source.
+
+    The answers are what the analysis cannot measure — what the video is, what it
+    is for, what should survive the cut. Options live here rather than in the
+    renderer because the *weights* behind them live in `core.engine.intent`, and
+    a question whose effect is defined somewhere else will drift out of step with
+    it the first time either changes.
+    """
+    return intent_model.options()
 
 
 @router.get("/templates")
@@ -121,7 +141,7 @@ async def apply(payload: ApplyRequest) -> dict:
     try:
         return await loop.run_in_executor(
             None, style.build_timeline, document, payload.path, payload.name,
-            payload.music, cues, None, payload.brain, payload.model,
+            payload.music, cues, None, payload.brain, payload.model, payload.intent,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
@@ -166,6 +186,7 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 ),
                 brain=payload.brain,
                 model=payload.model,
+                intent=payload.intent,
             )
         finally:
             cancellation.bind(None)

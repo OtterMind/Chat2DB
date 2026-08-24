@@ -39,6 +39,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
+| **Style Match** | A reference video becomes a `.cetemplate` of numbers, and your footage is rebuilt in its shape. The intake card asks what the video *is* — kind, goal, focus, rhythm, phrases to keep or drop, and a target length — because a frame cannot say any of it. Measured effect: the edit drew from **14.4 %** of a 120 s file before, and **97.9 %** with a length asked for; candidate moments that used to span **0.002** on a 0..1 scale now span the full range. *Built on the branch, version not bumped yet — bumping publishes a release* |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
 | **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
@@ -98,7 +99,7 @@ npm run verify
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **200 collected: 197 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **212 collected: 209 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
 | `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
@@ -707,6 +708,35 @@ gate that stops a broken installer from being published.
     so `ELECTRON_SKIP_BINARY_DOWNLOAD=1` is needed to get the frontend's
     TypeScript and bridge checks running here. Packaging still happens on the
     Windows runner.
+
+72. **A scorer with no opinion makes "best" mean "earliest".** The user's report
+    was two sentences — "it shortens the first video" and "the highlight
+    detection of the second video is very weak" — and both were one bug, both
+    measured before anything was changed:
+    • the candidate moments were cut **inside the speech ranges**, ranked, and
+      truncated, so on 120 s of footage against a 12 s reference the rebuild
+      touched **17.3 s — 14.4 % of the material** — and produced the *same*
+      offsets it produced for a 30 s file;
+    • every window inside a speech range carried weight 1.0 and the only
+      variation was a 0.85–1.0 term for how full the window was: 26 candidates
+      scored 0.998–1.0, a spread of **0.002**. `list.sort` is stable, so the
+      ranking was decided by nothing and the earliest moments won by default.
+    Windows now cover the file end to end and each signal — speech coverage,
+    picture motion, audio activity, proximity to the footage's own shot changes —
+    is normalised *across the candidates* before it is weighted. `core/engine/intent.py`
+    holds what the answers are worth, because "the best moment in a lesson" and
+    "the best moment in a music clip" are not the same measurement. Measured
+    after: **97.9 %** of a 120 s file reachable, and a requested length lands on
+    the number (60 s asked, 60.00 s built).
+73. **A value resolved after the measurement it should have shaped is a value
+    that never happens.** `hook.firstCut` extended the opening shot *after* the
+    candidate windows had been cut to the old shot length, so the clip was
+    clamped straight back: a 4 s shot with a 7 s hook measured **4.0 s** in the
+    edit. The test that caught it was written expecting 7.0 and failed, which is
+    the point of a fixture with a known answer. The hook is resolved before the
+    measurement now, and it only ever **extends** an opening — the form it
+    replaced assigned the value outright inside a 6 s window, free to chop an
+    opening to a fraction of a second and blind to a held intro longer than that.
 
 ## 5. Release procedure
 
