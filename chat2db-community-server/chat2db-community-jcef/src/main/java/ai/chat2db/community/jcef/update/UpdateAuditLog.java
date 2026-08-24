@@ -31,7 +31,6 @@ final class UpdateAuditLog {
     record NativeContext(
             String operationId,
             Path logFile,
-            Path nativeInstallerLog,
             Path resultFile,
             String fromVersion,
             String toVersion
@@ -57,7 +56,6 @@ final class UpdateAuditLog {
     private String operationId;
     private Path operationDirectory;
     private Path logFile;
-    private Path nativeInstallerLog;
     private Path resultFile;
     private String fromVersion = "";
     private String toVersion = "";
@@ -100,7 +98,6 @@ final class UpdateAuditLog {
             operationDirectory = rootDirectory.resolve(operationId);
             Files.createDirectories(operationDirectory);
             logFile = operationDirectory.resolve("update.log");
-            nativeInstallerLog = operationDirectory.resolve("native-installer.log");
             resultFile = rootDirectory.resolve("latest-result.properties");
             fromVersion = "";
             toVersion = "";
@@ -175,7 +172,6 @@ final class UpdateAuditLog {
         return new NativeContext(
                 operationId,
                 logFile,
-                nativeInstallerLog,
                 resultFile,
                 fromVersion,
                 toVersion

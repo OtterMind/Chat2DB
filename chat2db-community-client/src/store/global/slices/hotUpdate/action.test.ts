@@ -34,7 +34,7 @@ globalObject.__APP_DISPLAY_NAME__ = 'Chat2DB Community';
 globalObject.__APP_PROTOCOL_SCHEME__ = 'chat2db-community';
 globalObject.window = { javaQuery: () => 1 };
 Object.defineProperty(globalThis, 'navigator', {
-  value: { userAgent: 'Mac', app_language: 'en-US', language: 'en-US' },
+  value: { userAgent: 'Mac', app_language: 'en-US', language: 'en-US', os_type: 'Mac' },
   configurable: true,
 });
 Object.defineProperty(globalThis, 'location', {
@@ -51,11 +51,23 @@ function restoreGlobal<T extends keyof typeof globalObject>(key: T, value: (type
 }
 
 async function run() {
-  const [{ createHotUpdateAction }, { default: jcefApi }, { UpdatedStatus }] = await Promise.all([
+  const [
+    { createHotUpdateAction },
+    { default: jcefApi },
+    { UpdatedStatus },
+    { supportsAutomaticUpdates },
+    { Platform },
+  ] = await Promise.all([
     import('./action'),
     import('@/jcef'),
     import('@/constants/settings'),
+    import('@client-runtime'),
+    import('@/constants/os'),
   ]);
+  assert.equal(supportsAutomaticUpdates(true, Platform.Mac), true);
+  assert.equal(supportsAutomaticUpdates(true, Platform.Windows), false);
+  assert.equal(supportsAutomaticUpdates(true, Platform.Linux), false);
+  assert.equal(supportsAutomaticUpdates(false, Platform.Mac), false);
   const originalApi = {
     appCheckUpdate: jcefApi.appCheckUpdate,
     triggerInstallation: jcefApi.triggerInstallation,

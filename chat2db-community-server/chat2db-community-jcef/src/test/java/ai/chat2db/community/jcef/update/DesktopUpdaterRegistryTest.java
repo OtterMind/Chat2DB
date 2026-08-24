@@ -20,11 +20,19 @@ class DesktopUpdaterRegistryTest {
     }
 
     @Test
-    void communityDesktopUsesGitHubReleaseUpdater() {
-        System.setProperty("chat2db.runtime.mode", "community");
-        System.setProperty("chat2db.mode", "DESKTOP");
-
-        assertInstanceOf(GitHubReleaseDesktopUpdater.class, DesktopUpdaterRegistry.get());
+    void onlyMacOsCommunityDesktopUsesGitHubReleaseUpdater() {
+        assertInstanceOf(
+                GitHubReleaseDesktopUpdater.class,
+                DesktopUpdaterRegistry.defaultUpdater(true, true, true, "Mac OS X")
+        );
+        assertInstanceOf(
+                NoOpDesktopUpdater.class,
+                DesktopUpdaterRegistry.defaultUpdater(true, true, true, "Windows 11")
+        );
+        assertInstanceOf(
+                NoOpDesktopUpdater.class,
+                DesktopUpdaterRegistry.defaultUpdater(true, true, true, "Linux")
+        );
     }
 
     @Test

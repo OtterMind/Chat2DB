@@ -76,40 +76,12 @@ class UpdateAuditLogTest {
 
         assertNotNull(context);
         assertTrue(Files.isRegularFile(context.logFile()));
-        assertEquals(context.logFile().getParent().resolve("native-installer.log"), context.nativeInstallerLog());
         String result = Files.readString(context.resultFile());
         assertTrue(result.contains("status=PENDING"));
         assertTrue(result.contains("stage=HANDOFF"));
         assertTrue(result.contains("fromVersion=5.3.4"));
         assertTrue(result.contains("toVersion=5.3.5"));
         assertFalse(auditLog.recoveryStatus().failed());
-    }
-
-    @Test
-    void readsWindowsPowerShellUtf8BomResultFiles() throws Exception {
-        Path operationDirectory = tempDirectory.resolve("windows-operation");
-        Files.createDirectories(operationDirectory);
-        Path logFile = operationDirectory.resolve("update.log");
-        Files.writeString(logFile, "windows failure");
-        Files.writeString(
-                tempDirectory.resolve("latest-result.properties"),
-                "\ufeffstatus=FAILED\nstage=INSTALL_MSI\nexitCode=1603\nreason=MSI failed\n"
-                        + "operationId=windows-operation\nfromVersion=5.3.4\ntoVersion=5.3.5\n"
-                        + "logPath=" + logFile + "\n"
-        );
-        AtomicReference<Path> openedPath = new AtomicReference<>();
-
-        UpdateAuditLog restarted = new UpdateAuditLog(tempDirectory, path -> {
-            openedPath.set(path);
-            return true;
-        });
-
-        DesktopUpdateRecoveryStatus recovery = restarted.recoveryStatus();
-        assertTrue(recovery.failed());
-        assertEquals("5.3.4", recovery.fromVersion());
-        assertEquals("5.3.5", recovery.toVersion());
-        assertTrue(restarted.openRecoveryLog());
-        assertEquals(logFile, openedPath.get());
     }
 
     @Test

@@ -1,6 +1,5 @@
 package ai.chat2db.community.jcef.update;
 
-import ai.chat2db.community.jcef.update.GitHubReleaseDesktopUpdater.InstallerKind;
 import ai.chat2db.community.jcef.update.GitHubReleaseDesktopUpdater.ReleaseInstaller;
 import ai.chat2db.community.tools.console.ConsoleResult;
 import org.junit.jupiter.api.Test;
@@ -136,15 +135,13 @@ class GitHubReleaseDesktopUpdaterTest {
     }
 
     private static ReleaseInstaller release(String version) {
-        String name = "Chat2DB-Community-" + version + ".msi";
+        String name = "Chat2DB-Community-" + version + "-arm64.dmg";
         return new ReleaseInstaller(
                 version,
-                URI.create("https://github.com/OtterMind/Chat2DB/releases/tag/v" + version),
                 name,
                 URI.create("https://github.com/OtterMind/Chat2DB/releases/download/v" + version + "/" + name),
                 4L,
-                "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
-                InstallerKind.WINDOWS_MSI
+                "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"
         );
     }
 

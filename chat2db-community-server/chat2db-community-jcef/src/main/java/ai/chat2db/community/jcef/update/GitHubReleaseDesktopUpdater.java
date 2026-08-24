@@ -8,7 +8,6 @@ import ai.chat2db.community.tools.console.ConsoleResult;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
-import org.cef.OS;
 
 import java.io.IOException;
 import java.net.URI;
@@ -42,22 +41,12 @@ final class GitHubReleaseDesktopUpdater implements IDesktopUpdater {
         void emit(int progress, String status, ConsoleResult result);
     }
 
-    enum InstallerKind {
-        WINDOWS_MSI,
-        MAC_DMG,
-        LINUX_DEB,
-        LINUX_RPM,
-        LINUX_APPIMAGE
-    }
-
     record ReleaseInstaller(
             String version,
-            URI releasePage,
             String assetName,
             URI downloadUri,
             long size,
-            String sha256,
-            InstallerKind kind
+            String sha256
     ) {
     }
 
@@ -129,7 +118,6 @@ final class GitHubReleaseDesktopUpdater implements IDesktopUpdater {
                     "selected asset=" + availableRelease.assetName()
                             + " size=" + availableRelease.size()
                             + " sha256=" + availableRelease.sha256()
-                            + " kind=" + availableRelease.kind()
             );
             if (downloadedRelease != null && !downloadedRelease.version().equals(availableRelease.version())) {
                 discardDownloadedInstaller();
@@ -210,12 +198,8 @@ final class GitHubReleaseDesktopUpdater implements IDesktopUpdater {
             String launcherPath = info.command()
                     .orElseThrow(() -> new IllegalStateException("Cannot find launcher path"));
             String[] appArgs = info.arguments().orElse(new String[0]);
-            List<String> command = RestartCommandFactory.build(
-                    OS.isWindows(),
-                    OS.isMacintosh(),
-                    currentProcess.pid(),
-                    launcherPath,
-                    appArgs
+            List<String> command = RestartCommandFactory.buildMac(
+                    currentProcess.pid(), launcherPath, appArgs
             );
             return restartCoordinator.prepare(() -> new ProcessBuilder(command).start());
         } catch (Exception exception) {

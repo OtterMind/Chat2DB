@@ -19,7 +19,16 @@ public final class DesktopUpdaterRegistry {
         if (updater != null) {
             return updater;
         }
-        if (ConfigUtils.isCommunity() && ConfigUtils.isDesktop() && ConfigUtils.isShowGUI()) {
+        return defaultUpdater(
+                ConfigUtils.isCommunity(),
+                ConfigUtils.isDesktop(),
+                ConfigUtils.isShowGUI(),
+                System.getProperty("os.name", "")
+        );
+    }
+
+    static IDesktopUpdater defaultUpdater(boolean community, boolean desktop, boolean gui, String osName) {
+        if (community && desktop && gui && supportsCommunityUpdater(osName)) {
             return communityUpdater();
         }
         return NO_OP_UPDATER;
@@ -32,6 +41,10 @@ public final class DesktopUpdaterRegistry {
     static void resetForTests() {
         registeredUpdater = null;
         communityUpdater = null;
+    }
+
+    static boolean supportsCommunityUpdater(String osName) {
+        return osName != null && osName.toLowerCase(java.util.Locale.ROOT).contains("mac");
     }
 
     private static IDesktopUpdater communityUpdater() {
