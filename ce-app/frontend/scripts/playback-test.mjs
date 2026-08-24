@@ -1220,6 +1220,43 @@ else bad('the unfinished (autosaved) project is not offered on the home screen',
 if (recents.deletes > 0) ok(`each saved project has a delete button (${recents.deletes})`)
 else bad('saved projects cannot be deleted from the home screen', JSON.stringify(recents))
 
+// --------------------------------------------------------- karaoke captions
+//
+// The exporter has drawn word-by-word captions for a long time; the monitor drew
+// the line flat, so the switch looked broken. What the file will do, the monitor
+// must show.
+const karaoke = await page.evaluate(() => (window.__pending = (async () => {
+  location.hash = '#/studio'
+  await new Promise((r) => setTimeout(r, 500))
+  const state = window.__ceEditor.getState()
+  state.addCaptions(
+    [{ start: 0, end: 2, text: 'one two three', words: [
+      { start: 0.0, end: 0.6, text: 'one' },
+      { start: 0.6, end: 1.2, text: 'two' },
+      { start: 1.2, end: 2.0, text: 'three' },
+    ] }],
+    0
+  )
+  await new Promise((r) => setTimeout(r, 250))
+  const read = () => {
+    const lit = [...document.querySelectorAll('.ed__word.is-now')].map((n) => n.textContent.trim())
+    const all = [...document.querySelectorAll('.ed__word')].length
+    return { lit, all }
+  }
+  window.__ceEditor.getState().setPlayhead(0.3)
+  await new Promise((r) => setTimeout(r, 200))
+  const first = read()
+  window.__ceEditor.getState().setPlayhead(1.5)
+  await new Promise((r) => setTimeout(r, 200))
+  const third = read()
+  return { first, third }
+})()))
+if (karaoke.first.all >= 3) ok(`captions are drawn word by word (${karaoke.first.all} words)`)
+else bad('the monitor still draws the caption as one flat line', JSON.stringify(karaoke))
+if (karaoke.first.lit[0] === 'one' && karaoke.third.lit[0] === 'three') {
+  ok('the lit word follows the playhead')
+} else bad('the highlighted word does not follow the playhead', JSON.stringify(karaoke))
+
 // ------------------------------------------------------------- auto-reframe
 //
 // The Face Tracking tool must put a real camera path on the clip — keyframes

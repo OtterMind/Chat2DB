@@ -445,7 +445,8 @@ def analyse(path: str, name: str | None = None, progress=None) -> Template:
 # ------------------------------------------------------------------ planning
 
 
-def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0) -> list[dict]:
+def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
+                prefer_speech: bool = True) -> list[dict]:
     """Candidate moments in the user's footage — **many small ones**, best first.
 
     This function used to return whole ranges: one uninterrupted minute of
@@ -467,7 +468,11 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0) -> 
 
     ranges: list[tuple[float, float, float]] = []  # (start, end, weight)
 
-    if info.get("has_audio"):
+    # `prefer_speech` comes from the reference's own `speech_ratio`: rebuilding a
+    # montage should not hunt for talking, and rebuilding a talking-head video
+    # should not rank by how much the picture moves. The field was measured from
+    # 0.5.0 and, until now, read by nothing.
+    if info.get("has_audio") and prefer_speech:
         silences = analysis.detect_silence(path)
         for span in analysis.keep_ranges(duration, silences):
             if span.duration >= minimum * 0.6:
@@ -589,7 +594,12 @@ def build_timeline(
     source_duration = float(info.get("duration") or 0.0)
     shortest = min(float(s["duration"]) for s in shots)
     say("highlights", 0.2, "Choosing the strongest moments")
-    typical = float(np.median([float(s["duration"]) for s in shots]))
+    # The reference's own median shot is the natural size for a candidate
+    # window; fall back to the shots we were given when the template is thin.
+    typical = float(data.get("median_shot") or 0.0) or float(
+        np.median([float(s["duration"]) for s in shots])
+    )
+    speech_ratio = float(data.get("speech_ratio") or 0.0)
     measured = _highlights(
         source,
         # Ask for far more candidates than shots, so the planner has somewhere
@@ -597,6 +607,9 @@ def build_timeline(
         wanted=max(len(shots) * 4, 24),
         minimum=max(0.4, shortest * 0.8),
         window=max(0.5, typical),
+        # A reference that barely speaks is a montage: rank by picture, not by
+        # where the microphone happened to be open.
+        prefer_speech=speech_ratio >= 0.2,
     )
 
     # ---- meaning ----------------------------------------------------------
@@ -629,6 +642,18 @@ def build_timeline(
         picks = measured
     say("layout", 0.6, "Laying the clips out to the rhythm")
 
+    # ---- the hook ---------------------------------------------------------
+    # `hook.firstCut` is how long the reference waited before its first cut —
+    # the single most important number in a short video, measured since 0.5.0
+    # and, until now, never used by anything. If the reference opens on a held
+    # shot, the rebuild should too.
+    hook = data.get("hook") or {}
+    first_cut = float(hook.get("firstCut") or 0.0)
+    if shots and 0.2 < first_cut < 6.0:
+        opening = dict(shots[0])
+        opening["duration"] = round(first_cut, 3)
+        shots = [opening, *shots[1:]]
+
     clips: list[dict] = []
     transitions: list[dict] = []
     cursor = 0.0
@@ -641,7 +666,17 @@ def build_timeline(
 
     for index, shot in enumerate(shots):
         want = float(shot["duration"])
-        pick = picks[index % len(picks)]  # the brain returns one per shot; this is the net
+        # The winner normally returns one pick per shot. When it returns fewer,
+        # take the next *unused* measured window rather than cycling — cycling
+        # is what put the same half second on the timeline twenty times.
+        if index < len(picks):
+            pick = picks[index]
+        else:
+            spare = [
+                m for m in measured
+                if all(abs(m["start"] - used["start"]) > 0.2 for used in picks[:index])
+            ]
+            pick = spare[(index - len(picks)) % len(spare)] if spare else picks[index % len(picks)]
         available = max(0.2, pick["end"] - pick["start"])
         length = min(want, available, max(0.2, source_duration - pick["start"]))
         if length < 0.2:
@@ -655,6 +690,17 @@ def build_timeline(
             keyframes = [{"t": 0, "scale": 1.12}, {"t": round(length, 3), "scale": 1.0}]
         elif motion == "pan":
             keyframes = [{"t": 0, "x": -0.06, "scale": 1.1}, {"t": round(length, 3), "x": 0.06, "scale": 1.1}]
+        elif motion == "handheld":
+            # Measured since 0.5.0 and, until now, quietly dropped: a shot the
+            # analyser called handheld came out perfectly still.
+            step = max(0.15, length / 4)
+            keyframes = [
+                {"t": 0, "x": 0.0, "y": 0.0, "scale": 1.06},
+                {"t": round(step, 3), "x": 0.012, "y": -0.010, "scale": 1.06},
+                {"t": round(step * 2, 3), "x": -0.010, "y": 0.012, "scale": 1.06},
+                {"t": round(step * 3, 3), "x": 0.008, "y": 0.008, "scale": 1.06},
+                {"t": round(length, 3), "x": 0.0, "y": 0.0, "scale": 1.06},
+            ]
 
         clip = {
             "id": f"s{index}",

@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.8.1` · Last released: `v0.8.0` (installer 323 MB; the owner restored the workflow, builds work again) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.8.2` · Last released: `v0.8.1` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -465,6 +465,25 @@ gate that stops a broken installer from being published.
    clips, gapless, graded — and all of them passed while the edit was the same
    half second twenty times. When a feature's whole value is *variation*, assert
    the variation.
+
+54. **The sweep for the same bug found three more.** After 0.8.1 the whole app
+   was searched for the same shape — *measured, then never applied* — and for
+   its twin, *applied in the file, invisible in the monitor*:
+   • `hook` (how long the reference waited before its first cut) was measured
+     from 0.5.0 and read by nothing. The rebuild now opens on it.
+   • `handheld` was classified per shot and produced a perfectly still clip;
+     it now gets a small five-key wobble.
+   • `median_shot` and `speech_ratio` were dead too: the first now sizes the
+     candidate windows, the second decides whether the rebuild hunts for speech
+     at all — rebuilding a montage should not look for talking.
+   • **Karaoke captions** were drawn word-by-word by the exporter (libass `\k`)
+     and flat by the monitor, so `animateWords` looked like a switch that did
+     nothing. The monitor now lights the spoken word — the same rule as §4.12,
+     which we had already learned once and let slip.
+   The ratchet is `tests/test_nothing_measured_is_wasted.py`: every field the
+   template carries must be read by the rebuild or named in `DECLARED_UNUSED`
+   with the reason. It caught `median_shot` and `speech_ratio` the moment it
+   was written.
 
 ## 5. Release procedure
 

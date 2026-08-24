@@ -1030,3 +1030,9 @@ button { font-family: inherit; cursor: pointer; }
 .ai-panel__dryrun-title { font-size: 12px; color: #c7d2fe; margin: 0 0 6px; }
 .ai-panel__dryrun ol { margin: 0 0 8px; padding-inline-start: 18px; }
 .ai-panel__dryrun li { font-size: 13px; color: #e2e8f0; line-height: 1.7; }
+
+/* Karaoke captions in the monitor: the word being spoken is lit, exactly as the
+ * exported file draws it with libass. Before this the switch changed nothing
+ * you could see in the preview. */
+.ed__word { transition: color 90ms linear, opacity 90ms linear; opacity: 0.72; }
+.ed__word.is-now { color: var(--ce-text-highlight, #FACC15); opacity: 1; }

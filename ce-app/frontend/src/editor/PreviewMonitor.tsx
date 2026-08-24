@@ -18,6 +18,39 @@ import { useI18n } from '../i18n'
  *
  * A second, hidden element plays the audio lane so a music bed is audible.
  */
+/**
+ * A caption, word by word when it was asked for.
+ *
+ * The exporter has drawn karaoke captions since 0.4.x (libass `\k` timing from
+ * the word timestamps Whisper returns), but the monitor drew the whole line
+ * flat — so switching `animateWords` on changed nothing you could see, and the
+ * only honest conclusion from the user's chair was that the switch did nothing.
+ * Same lesson as every other effect: what the file will do, the monitor shows.
+ */
+function renderCaption(
+  clip: { text?: string; label?: string; words?: { start: number; end: number; text?: string }[]; start: number; offset: number },
+  props: { animateWords?: boolean },
+  playhead: number
+) {
+  const words = clip.words ?? []
+  if (!props.animateWords || words.length === 0) return clip.text || clip.label
+
+  // Word timings are in source time; the clip may sit anywhere on the timeline.
+  const local = playhead - clip.start + clip.offset
+  return (
+    <>
+      {words.map((word, index) => (
+        <span
+          key={index}
+          className={local >= word.start && local < word.end ? 'ed__word is-now' : 'ed__word'}
+        >
+          {word.text ?? ''}{index < words.length - 1 ? ' ' : ''}
+        </span>
+      ))}
+    </>
+  )
+}
+
 export default function PreviewMonitor() {
   const { t } = useI18n()
   const baseRef = useRef<HTMLVideoElement>(null)
@@ -294,7 +327,7 @@ export default function PreviewMonitor() {
                   ['--ce-text-highlight' as string]: props.highlight,
                 }}
               >
-                {clip.text || clip.label}
+                {renderCaption(clip, props, playhead)}
               </span>
             )
           })}
