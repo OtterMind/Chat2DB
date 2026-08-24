@@ -261,6 +261,13 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
         return ReframePlan(scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], fallback=True,
                            reason="OpenCV is not available, so the crop stays centred")
 
+    if _cascade() is None:
+        # A different failure from "no face in this clip", and it used to be
+        # reported as "no frames could be read", which sent the reader looking
+        # at the video file instead of at the OpenCV build.
+        return ReframePlan(scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], fallback=True,
+                           reason="this OpenCV build ships no face detector — the crop stays centred")
+
     detections = detect_faces(path, fps=fps)
     found = [d for d in detections if d.x is not None]
     if not detections:

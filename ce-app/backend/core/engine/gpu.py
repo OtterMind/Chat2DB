@@ -35,6 +35,27 @@ from core.engine.compose import ffmpeg_binary
 PROBE_TIMEOUT = 25
 
 
+#: Every hardware encoder worth trying, best first.
+#:
+#: The order is quality-per-effort on the machines people actually have: NVIDIA
+#: NVENC, then Intel Quick Sync, then AMD AMF, then VAAPI on Linux. Nothing here
+#: is specific to one card — a machine with an Arc, a Radeon or a 4090 takes the
+#: first line that answers, and a machine with none falls through to x264.
+ENCODERS: tuple[tuple[str, str, str], ...] = (
+    ("h264_nvenc", "NVIDIA", "H.264"),
+    ("hevc_nvenc", "NVIDIA", "H.265"),
+    ("av1_nvenc", "NVIDIA", "AV1"),
+    ("h264_qsv", "Intel Quick Sync", "H.264"),
+    ("hevc_qsv", "Intel Quick Sync", "H.265"),
+    ("h264_amf", "AMD", "H.264"),
+    ("hevc_amf", "AMD", "H.265"),
+    ("h264_vaapi", "VAAPI", "H.264"),
+)
+
+#: Decoders, same idea.
+DECODERS: tuple[str, ...] = ("cuda", "qsv", "d3d11va", "dxva2", "vaapi", "videotoolbox")
+
+
 @dataclass
 class Capabilities:
     """What this machine's graphics card can actually do for us."""
@@ -46,6 +67,11 @@ class Capabilities:
     nvdec: bool = False
     whisper_device: str = "cpu"
     whisper_detail: str = ""
+    #: The encoder and decoder actually chosen for work on this machine.
+    encoder: str = "libx264 (processor)"
+    decoder: str = "processor"
+    #: Every hardware encoder that was tried, and why it did or did not work.
+    encoders: list[dict] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -57,11 +83,14 @@ class Capabilities:
             "decode": self.nvdec,
             "whisperDevice": self.whisper_device,
             "whisperDetail": self.whisper_detail,
+            "encoder": self.encoder,
+            "decoder": self.decoder,
+            "encoders": self.encoders,
             "notes": self.notes,
             "used": [
-                *(["export encoding (h264_nvenc)"] if self.nvenc else []),
+                *([f"export encoding ({self.encoder})"] if self.nvenc else []),
                 *(["editing proxies"] if self.nvenc else []),
-                *(["decoding while scanning and building proxies"] if self.nvdec else []),
+                *([f"decoding while scanning and building proxies ({self.decoder})"] if self.nvdec else []),
                 *(["speech recognition"] if self.whisper_device == "cuda" else []),
             ],
         }
@@ -88,21 +117,80 @@ def nvidia_smi() -> dict:
 
 
 @lru_cache(maxsize=1)
-def can_encode() -> bool:
-    """Encode one real frame with NVENC.
+def probe_encoders() -> tuple[dict, ...]:
+    """Try every hardware encoder on real frames, and keep the failure reasons.
 
-    `ffmpeg -encoders | grep nvenc` is not evidence: the encoder is compiled in
-    and listed on machines whose driver refuses it at runtime. One frame is.
+    Two lessons are baked in here. `ffmpeg -encoders | grep nvenc` is not
+    evidence — the encoder is listed on machines whose driver refuses it at
+    runtime. And when the probe fails, **the reason is the useful part**: the
+    first version of this returned a bare `False`, so a user whose card could
+    decode but not encode was told "no" with no way to find out why. FFmpeg's
+    own last line of stderr usually says exactly what is wrong (no NVENC-capable
+    device, driver too old, session limit reached, running on the integrated
+    GPU).
+
+    The clip is 1280×720 rather than a token 256×256: some encoders refuse tiny
+    frames, and a probe that fails for a reason the real work would never hit is
+    worse than no probe.
     """
+    results: list[dict] = []
+    for name, vendor, codec in ENCODERS:
+        entry = {"name": name, "vendor": vendor, "codec": codec, "ok": False, "reason": ""}
+        try:
+            out = _run([
+                ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=0.2",
+                "-c:v", name, "-frames:v", "3", "-f", "null", "-",
+            ])
+            entry["ok"] = out.returncode == 0
+            if not entry["ok"]:
+                lines = [line.strip() for line in (out.stderr or "").splitlines() if line.strip()]
+                entry["reason"] = lines[-1][:200] if lines else f"exit code {out.returncode}"
+        except Exception as error:  # noqa: BLE001
+            entry["reason"] = f"{type(error).__name__}: {error}"[:200]
+        results.append(entry)
+    return tuple(results)
+
+
+def best_encoder() -> dict | None:
+    """The first hardware encoder on this machine that actually works."""
+    for entry in probe_encoders():
+        if entry["ok"]:
+            return entry
+    return None
+
+
+@lru_cache(maxsize=1)
+def can_encode() -> bool:
+    """Is there *any* usable hardware encoder here?"""
+    return best_encoder() is not None
+
+
+@lru_cache(maxsize=1)
+def best_decoder() -> str | None:
+    """The first hardware decoder that survives decoding a real file."""
+    import os
+    import tempfile
+
+    sample = os.path.join(tempfile.gettempdir(), "ce-hwdec-probe.mp4")
     try:
-        out = _run([
-            ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "color=c=black:s=256x256:d=1",
-            "-c:v", "h264_nvenc", "-frames:v", "1", "-f", "null", "-",
+        made = _run([
+            ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", sample,
         ])
-        return out.returncode == 0
+        if made.returncode != 0:
+            return None
+        for name in DECODERS:
+            out = _run([
+                ffmpeg_binary(), "-hide_banner", "-loglevel", "error",
+                "-hwaccel", name, "-i", sample, "-frames:v", "5", "-f", "null", "-",
+            ])
+            if out.returncode == 0:
+                return name
     except Exception:  # noqa: BLE001
-        return False
+        return None
+    return None
 
 
 @lru_cache(maxsize=1)
@@ -174,27 +262,47 @@ def capabilities(deep: bool = False) -> Capabilities:
     asks for the deep one when the user presses "check".
     """
     card = nvidia_smi()
+    chosen = best_encoder()
     caps = Capabilities(
         name=card.get("name"),
         memory_mb=card.get("memory_mb"),
         driver=card.get("driver"),
-        nvenc=can_encode(),
+        nvenc=chosen is not None,
         nvdec=can_decode(),
     )
+    caps.encoder = chosen["name"] if chosen else "libx264 (processor)"
+    caps.decoder = best_decoder() or "processor"
+    caps.encoders = list(probe_encoders())
     if deep:
         caps.whisper_device, caps.whisper_detail = whisper_status()
 
-    if not card:
-        caps.notes.append("No NVIDIA card detected — everything runs on the processor.")
-    if card and not caps.nvenc:
+    if not card and not caps.nvenc and not caps.nvdec:
+        caps.notes.append("No hardware acceleration was usable here — everything runs on the processor.")
+
+    if not caps.nvenc:
+        # Say *why*, with FFmpeg's own words. "no" with no reason is what sent
+        # the owner back to ask what the number meant.
+        failures = [e for e in caps.encoders if e["reason"]]
+        if failures:
+            caps.notes.append(f"Hardware encoding is off: {failures[0]['reason']}")
         caps.notes.append(
-            "The card is there but FFmpeg could not encode with it; the driver may be older "
-            "than this build of FFmpeg expects."
+            "Encoding on the processor is not a failure — x264 at `veryfast` keeps up with "
+            "1080p comfortably; the card matters most for 4K and long exports."
         )
-    if caps.memory_mb and caps.memory_mb < 6000:
+
+    if caps.memory_mb:
+        gigabytes = caps.memory_mb / 1024
+        if gigabytes < 6:
+            fits = "a 3B model"
+        elif gigabytes < 12:
+            fits = "a 7B model at q4"
+        elif gigabytes < 20:
+            fits = "a 13B model at q4"
+        else:
+            fits = "a 30B model at q4"
         caps.notes.append(
-            f"{caps.memory_mb} MB of video memory: a 7B language model at q4 needs about "
-            "4.4 GB and will spill into system memory. A 3B model runs entirely on the card."
+            f"{gigabytes:.0f} GB of video memory: {fits} runs entirely on the card. "
+            "Anything larger spills into system memory and slows down."
         )
     return caps
 
@@ -205,29 +313,43 @@ def capabilities(deep: bool = False) -> Capabilities:
 def decode_args() -> list[str]:
     """FFmpeg arguments that put decoding on the card, when it can take it.
 
-    These go *before* `-i`. Decoding is most of the work in building a proxy or
-    scanning a long file, and it was the largest thing we were leaving on the
-    table.
+    These go *before* `-i` — after the input FFmpeg silently ignores them.
+    Whichever backend answered first is used, so this is not an NVIDIA feature:
+    an Intel laptop gets Quick Sync, an AMD desktop gets D3D11VA.
     """
-    return ["-hwaccel", "cuda"] if can_decode() else []
+    name = best_decoder()
+    return ["-hwaccel", name] if name else []
 
 
 def encode_args(quality: dict | None = None) -> list[str]:
-    """The encoder settings for this machine — NVENC when it is real, x264 otherwise."""
+    """The encoder settings for *this* machine, whatever it happens to be.
+
+    NVIDIA, Intel and AMD each want different flags for "constant quality", so
+    the mapping lives here rather than in every caller. A machine with no usable
+    hardware encoder gets x264, which is not a failure — on the owner's laptop
+    x264 encodes five seconds of 1080p in 0.48 s.
+    """
     quality = quality or {}
-    if can_encode():
+    chosen = best_encoder()
+    if chosen is None:
         return [
-            "-c:v", "h264_nvenc",
-            "-preset", str(quality.get("nvenc_preset", "p5")),
-            "-rc", "vbr",
-            "-cq", str(quality.get("nvenc_cq", 23)),
-            "-b:v", "0",
+            "-c:v", "libx264",
+            "-preset", str(quality.get("preset", "veryfast")),
+            "-crf", str(quality.get("crf", 21)),
         ]
-    return [
-        "-c:v", "libx264",
-        "-preset", str(quality.get("preset", "veryfast")),
-        "-crf", str(quality.get("crf", 21)),
-    ]
+
+    name = chosen["name"]
+    level = int(quality.get("nvenc_cq", 23))
+    if name.endswith("_nvenc"):
+        return ["-c:v", name, "-preset", str(quality.get("nvenc_preset", "p5")),
+                "-rc", "vbr", "-cq", str(level), "-b:v", "0"]
+    if name.endswith("_qsv"):
+        return ["-c:v", name, "-global_quality", str(level), "-look_ahead", "1"]
+    if name.endswith("_amf"):
+        return ["-c:v", name, "-rc", "cqp", "-qp_i", str(level), "-qp_p", str(level)]
+    if name.endswith("_vaapi"):
+        return ["-c:v", name, "-rc_mode", "CQP", "-qp", str(level)]
+    return ["-c:v", name]
 
 
 # ----------------------------------------------------------------- benchmark
@@ -248,14 +370,20 @@ def benchmark(seconds: int = 5, width: int = 1920, height: int = 1080) -> dict:
                 "-f", "null", "-"], timeout=300)
     result["cpu"] = round(time.time() - started, 2) if cpu.returncode == 0 else None
 
-    if can_encode():
+    chosen = best_encoder()
+    if chosen is not None:
         started = time.time()
-        gpu = _run([ffmpeg_binary(), "-hide_banner", "-loglevel", "error", *source,
-                    "-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0",
-                    "-f", "null", "-"], timeout=300)
-        result["gpu"] = round(time.time() - started, 2) if gpu.returncode == 0 else None
+        card = _run([ffmpeg_binary(), "-hide_banner", "-loglevel", "error", *source,
+                     *encode_args({"nvenc_cq": 23}), "-f", "null", "-"], timeout=300)
+        result["gpu"] = round(time.time() - started, 2) if card.returncode == 0 else None
+        result["encoder"] = chosen["name"]
     else:
         result["gpu"] = None
+        result["encoder"] = "libx264 (processor)"
+        # The reason belongs next to the number, or the number raises a question
+        # the user has to come back and ask.
+        failed = [e for e in probe_encoders() if e["reason"]]
+        result["reason"] = failed[0]["reason"] if failed else "no hardware encoder on this machine"
 
     if result.get("cpu") and result.get("gpu"):
         result["speedup"] = round(result["cpu"] / result["gpu"], 2)

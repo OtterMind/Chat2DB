@@ -27,7 +27,10 @@ echo "→ backend virtualenv"
 # measurement, so test_camera_motion_is_recognised[pull] fails for an
 # environment reason that looks exactly like a code regression.
 "$VENV/bin/pip" uninstall -y -q opencv-python >/dev/null 2>&1 || true
-"$VENV/bin/pip" install -q opencv-python-headless
+# The *same version we ship*: OpenCV 5.x dropped the bundled Haar cascades, so a
+# newer wheel here silently disables face detection and the auto-reframe tests
+# fail for an environment reason. The test environment mirrors production.
+"$VENV/bin/pip" install -q "opencv-python-headless==4.10.0.84"
 
 echo "→ ffmpeg"
 mkdir -p "$FFDIR"

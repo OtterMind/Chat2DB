@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.0` · Last released: `v0.8.3` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a0214a-chat2db` · App version: `0.9.1` · Last released: `v0.9.0` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -531,6 +531,28 @@ gate that stops a broken installer from being published.
    shot", "gapless", "graded" — because they counted *every* clip and the edit
    now legitimately carries a music clip. The numbers were right; the question
    was wrong. They ask about the video lane now.
+
+59. **One machine is not the target; every machine is.** The owner's GTX 1650
+   reported *decode yes, encode no* with a guessed excuse about the driver, and
+   the honest answer — FFmpeg's own words — had been thrown away by the probe.
+   `core/engine/gpu.py` now tries **eight** hardware encoders across NVIDIA,
+   Intel Quick Sync, AMD and VAAPI, keeps the last line of stderr for each, and
+   picks the first that works; the same for six decode backends. The Settings
+   card lists every one with its reason, so "no" is never a dead end.
+   The per-vendor flags differ (`-cq` for NVENC, `-global_quality` for QSV,
+   `-qp_i` for AMF, `-qp` for VAAPI) and that mapping lives in one place.
+   The video-memory advice scales with the card instead of being written for a
+   4 GB one: 3B / 7B / 13B / 30B.
+   Measured on the owner's machine: **x264 encodes 5 s of 1080p in 0.48 s**, so
+   the missing encoder is a limitation, not an emergency — and the card is
+   already doing the decoding and running Whisper in float16.
+60. **The test environment must pin what production pins.** The sandbox
+   installed the *latest* `opencv-python-headless`; OpenCV 5 dropped the bundled
+   Haar cascades, so face detection silently disappeared and the auto-reframe
+   test failed for an environment reason. `sandbox-test-env.sh` pins
+   `4.10.0.84`, the version in `requirements.txt`. And `reframe.plan()` now
+   distinguishes "this OpenCV build has no detector" from "no frames could be
+   read" — the old message sent the reader to inspect the video file.
 
 ## 5. Release procedure
 

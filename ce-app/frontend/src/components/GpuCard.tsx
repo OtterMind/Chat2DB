@@ -21,6 +21,11 @@ interface GpuStatus {
   decode: boolean
   whisperDevice: string
   whisperDetail: string
+  /** What was actually chosen for work on this machine. */
+  encoder: string
+  decoder: string
+  /** Every hardware encoder that was tried, and FFmpeg's own reason if it failed. */
+  encoders: { name: string; vendor: string; codec: string; ok: boolean; reason: string }[]
   notes: string[]
   used: string[]
 }
@@ -94,12 +99,16 @@ export default function GpuCard() {
             </strong>
           </div>
           <div className="ce-kv">
-            <span>{t('Encoding on the card', 'انکود روی کارت')}</span>
-            <strong data-state={status.encode ? 'working' : 'missing'}>{yes(status.encode)}</strong>
+            <span>{t('Encoding', 'انکود')}</span>
+            <strong data-state={status.encode ? 'working' : 'missing'} dir="ltr">
+              {status.encoder}
+            </strong>
           </div>
           <div className="ce-kv">
-            <span>{t('Decoding on the card', 'دیکود روی کارت')}</span>
-            <strong data-state={status.decode ? 'working' : 'missing'}>{yes(status.decode)}</strong>
+            <span>{t('Decoding', 'دیکود')}</span>
+            <strong data-state={status.decode ? 'working' : 'missing'} dir="ltr">
+              {status.decoder}
+            </strong>
           </div>
           <div className="ce-kv">
             <span>{t('Speech recognition', 'تشخیص گفتار')}</span>
@@ -118,6 +127,26 @@ export default function GpuCard() {
           {status.notes.map((note, index) => (
             <p key={index} className="ce-hint"><AlertTriangle size={13} /> {note}</p>
           ))}
+
+          {status.encoders?.length > 0 && (
+            <details className="ce-details" data-testid="gpu-encoders">
+              <summary>
+                {t('What each encoder said', 'هر انکودر چه گفت')}
+                {' · '}
+                {status.encoders.filter((e) => e.ok).length}/{status.encoders.length}
+              </summary>
+              <ul className="ce-encoders">
+                {status.encoders.map((entry) => (
+                  <li key={entry.name} data-ok={entry.ok}>
+                    <code dir="ltr">{entry.name}</code>
+                    <span dir="ltr">
+                      {entry.ok ? t('works', 'کار می‌کند') : entry.reason || t('unavailable', 'در دسترس نیست')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {bench && (
             <div className="ce-kv" data-testid="gpu-bench">

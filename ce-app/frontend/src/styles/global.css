@@ -1036,3 +1036,13 @@ button { font-family: inherit; cursor: pointer; }
  * you could see in the preview. */
 .ed__word { transition: color 90ms linear, opacity 90ms linear; opacity: 0.72; }
 .ed__word.is-now { color: var(--ce-text-highlight, #FACC15); opacity: 1; }
+
+/* The per-encoder report. A "no" without a reason is what sends someone back to
+ * ask what the answer meant — FFmpeg's own line is printed here. */
+.ce-details { margin-top: 10px; font-size: 12px; color: #94a3b8; }
+.ce-details summary { cursor: pointer; }
+.ce-encoders { list-style: none; margin: 8px 0 0; padding: 0; }
+.ce-encoders li { display: flex; gap: 10px; padding: 3px 0; align-items: baseline; }
+.ce-encoders li code { color: #e2e8f0; min-width: 108px; }
+.ce-encoders li[data-ok='true'] span { color: #4ade80; }
+.ce-encoders li[data-ok='false'] span { color: #94a3b8; }
