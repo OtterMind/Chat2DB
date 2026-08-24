@@ -2,11 +2,13 @@ import ChartCardBox from '@/blocks/BI/ChartCardBox';
 import { ChartType, LineType, OrderByRule, OrderByType } from '@/blocks/BI/Chart/constants';
 import type { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { TableDataType } from '@/constants/table';
+import { runtimeEditionConfig } from '@/constants/runtimeEdition';
 import i18n from '@/i18n';
 import { listAIModelConfigs } from '@/service/aiModelConfig';
 import aiStreamService from '@/service/aiStream';
 import { setPendingConversationTarget } from '@/utils/conversationNavigation';
 import agentService, {
+  agentEffectiveDataScopes,
   type AgentApproval,
   type AgentArtifactContentMode,
   type AgentArtifactDetail,
@@ -47,6 +49,8 @@ import {
   ArrowLeft,
   Archive,
   Bot,
+  BookOpenText,
+  Cable,
   CalendarClock,
   ChevronRight,
   CircleCheck,
@@ -85,6 +89,7 @@ import {
   currentArtifactVersion,
   extractAgentChartPresentation,
   groupTasks,
+  isTaskBoardVisible,
   taskPriorityLevel,
   TASK_BOARD_COLUMNS,
   TASK_TRANSITIONS,
@@ -98,6 +103,8 @@ import {
 } from './taskNavigation';
 import { useStyles } from './style';
 import AgentManagerPage from './AgentManagerPage';
+import ConnectorSessionsPage from './ConnectorSessionsPage';
+import DataWikiPage from './DataWikiPage';
 import ApprovalModeTag from './ApprovalModeTag';
 import TaskCreatePage from './TaskCreatePage';
 import TaskSchedulePage from './TaskSchedulePage';
@@ -110,6 +117,8 @@ import {
   parseTaskWorkspaceRoute,
   shouldRefreshTaskDetail,
   taskWorkspaceRoutePath,
+  taskWorkspaceRouteForConnectorManagement,
+  taskWorkspaceTabsForConnectorManagement,
   taskWorkspaceTabKey,
   upsertTaskWorkspaceTab,
   type TaskWorkspaceRoute,
@@ -171,6 +180,8 @@ function workspaceTabForRoute(route: TaskWorkspaceRoute, title?: string): TaskWo
     TASK_DETAIL: title || route.entityId || i18n('task.title'),
     TASK_CREATE: i18n('task.create.title'),
     SCHEDULES: title || i18n('task.schedule.title'),
+    DATA_WIKI: i18n('task.dataWiki.title'),
+    CONNECTORS: i18n('task.connector.title'),
     AGENT_MANAGER: i18n('task.agent.manage'),
     AGENT_EDITOR: title || (route.entityId ? i18n('task.agent.edit') : i18n('task.agent.create')),
   }[route.type];
@@ -398,7 +409,16 @@ export default function Tasks() {
   const tasksPageActive = useGlobalStore((state) =>
     state.mainPageActiveTab === 'tasks' && state.settingPageActiveTab === false,
   );
-  const initialWorkspaceRoute = useRef(parseTaskWorkspaceRoute(currentTaskRoutePath())).current;
+  const connectorManagementEnabled = useGlobalStore(
+    (state) => runtimeEditionConfig.settingMenuProfile === 'community'
+      && state.baseSetting.enableDshPluginManagement === true,
+  );
+  const initialWorkspaceRoute = useRef(
+    taskWorkspaceRouteForConnectorManagement(
+      parseTaskWorkspaceRoute(currentTaskRoutePath()),
+      connectorManagementEnabled,
+    ),
+  ).current;
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<AgentTask[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
@@ -464,8 +484,8 @@ export default function Tasks() {
         agentService.listAgents(undefined as void),
         listAIModelConfigs(),
       ]);
-      setTasks(taskItems || []);
-      setArchivedTasks(archivedItems || []);
+      setTasks((taskItems || []).filter(isTaskBoardVisible));
+      setArchivedTasks((archivedItems || []).filter(isTaskBoardVisible));
       setAgents((agentItems || []).filter((agent) => agent.status === 'ACTIVE'));
     } catch {
       setLoadError(true);
@@ -517,7 +537,11 @@ export default function Tasks() {
   useEffect(() => {
     const routePath = currentTaskRoutePath();
     const path = routePath.split('/');
-    const workspaceRoute = parseTaskWorkspaceRoute(routePath);
+    const parsedWorkspaceRoute = parseTaskWorkspaceRoute(routePath);
+    const workspaceRoute = taskWorkspaceRouteForConnectorManagement(
+      parsedWorkspaceRoute,
+      connectorManagementEnabled,
+    );
     const routedTitle = workspaceRoute.type === 'TASK_DETAIL'
       ? tasks.find((task) => task.id === workspaceRoute.entityId)?.title
       : workspaceRoute.type === 'AGENT_EDITOR'
@@ -525,7 +549,13 @@ export default function Tasks() {
         : undefined;
     const routedTab = workspaceTabForRoute(workspaceRoute, routedTitle);
     if (activeWorkspaceTabKey !== routedTab.key) setActiveWorkspaceTabKey(routedTab.key);
-    setWorkspaceTabs((current) => upsertTaskWorkspaceTab(current, routedTab));
+    setWorkspaceTabs((current) => upsertTaskWorkspaceTab(
+      taskWorkspaceTabsForConnectorManagement(current, connectorManagementEnabled),
+      routedTab,
+    ));
+    if (parsedWorkspaceRoute.type === 'CONNECTORS' && workspaceRoute.type === 'BOARD') {
+      pushTaskRoute(taskWorkspaceRoutePath(routedTab));
+    }
     const nextScheduleRoute = parseTaskScheduleRoute(routePath);
     if (nextScheduleRoute.open) {
       if (
@@ -542,7 +572,13 @@ export default function Tasks() {
       }
       return;
     }
-    if (workspaceRoute.type === 'TASK_CREATE' || workspaceRoute.type === 'AGENT_MANAGER' || workspaceRoute.type === 'AGENT_EDITOR') {
+    if (
+      workspaceRoute.type === 'TASK_CREATE'
+      || workspaceRoute.type === 'AGENT_MANAGER'
+      || workspaceRoute.type === 'AGENT_EDITOR'
+      || workspaceRoute.type === 'DATA_WIKI'
+      || workspaceRoute.type === 'CONNECTORS'
+    ) {
       if (scheduleRoute.open) setScheduleRoute(nextScheduleRoute);
       if (archiveView) setArchiveView(false);
       if (selectedTaskId) {
@@ -649,6 +685,21 @@ export default function Tasks() {
     openWorkspaceTab({ type: 'AGENT_MANAGER' });
   }, [openWorkspaceTab]);
 
+  const openDataWiki = useCallback(() => {
+    setScheduleRoute({ open: false, createMode: false });
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    openWorkspaceTab({ type: 'DATA_WIKI' });
+  }, [openWorkspaceTab]);
+
+  const openConnectors = useCallback(() => {
+    if (!connectorManagementEnabled) return;
+    setScheduleRoute({ open: false, createMode: false });
+    setSelectedTaskId(undefined);
+    setDetail(undefined);
+    openWorkspaceTab({ type: 'CONNECTORS' });
+  }, [connectorManagementEnabled, openWorkspaceTab]);
+
   const openAgentEditor = useCallback((agent?: AgentDefinition) => {
     setScheduleRoute({ open: false, createMode: false });
     setSelectedTaskId(undefined);
@@ -677,12 +728,24 @@ export default function Tasks() {
       openAgentManager();
       return;
     }
+    if (tab.type === 'DATA_WIKI') {
+      openDataWiki();
+      return;
+    }
+    if (tab.type === 'CONNECTORS') {
+      if (connectorManagementEnabled) openConnectors();
+      else openArchive(false);
+      return;
+    }
     if (tab.type === 'AGENT_EDITOR') {
       openAgentEditor(agents.find((agent) => agent.id === tab.entityId));
       return;
     }
     openArchive(false);
-  }, [agents, openAgentEditor, openAgentManager, openArchive, openSchedules, openTask, openTaskCreate]);
+  }, [
+    agents, connectorManagementEnabled, openAgentEditor, openAgentManager, openArchive, openConnectors, openDataWiki,
+    openSchedules, openTask, openTaskCreate,
+  ]);
 
   const confirmCloseWorkspaceTabs = useCallback((tabsToClose: Array<{ key: string }>) => {
     if (!tabsToClose.some((item) => workspaceTabs.find((tab) => tab.key === item.key)?.dirty)) {
@@ -794,7 +857,7 @@ export default function Tasks() {
         priority: values.priority || 0,
         assigneeAgentId: values.assigneeAgentId,
         originType: 'BOARD',
-        dataScopeSnapshot: scopeIndexes.map((index) => agent!.dataScopes[index]),
+        dataScopeSnapshot: scopeIndexes.map((index) => agentEffectiveDataScopes(agent)[index]),
       });
       setTasks((current) => [created.task, ...current]);
       setWorkspaceTabDirty('task:new', false);
@@ -983,6 +1046,10 @@ export default function Tasks() {
   const activeRun = Boolean(
     currentRun && ['QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL'].includes(currentRun.status),
   );
+  const connectorAudit = detail?.connectorAudit === true || detail?.task.originType === 'CONNECTOR';
+  const connectorContext = detail?.connectorContext;
+  const connectorExecutionMode = connectorAudit ? 'EXTERNAL_RUNTIME_DELEGATION' as const : undefined;
+  const connectorRuntimeName = connectorContext?.externalRuntimeName || i18n('task.connector.externalRuntime');
   const conversationItems = useMemo(() => {
     if (!detail) return [];
     const items: Array<{
@@ -1032,10 +1099,20 @@ export default function Tasks() {
           occurredAt: run.completedAt || lastEventAt || run.startedAt || detail.task.gmtCreate,
           run,
         });
+      } else if (connectorAudit
+        && runEvents.some((event) => event.type === 'TOOL_CALL' || event.type === 'TOOL_RESULT')) {
+        items.push({
+          id: `connector-${run.id}`,
+          kind: 'agent',
+          content: run.resultSummary || runEvents.find((event) => event.type === 'TOOL_RESULT')?.content
+            || i18n('task.connector.toolInvocation'),
+          occurredAt: run.completedAt || lastEventAt || run.startedAt || detail.task.gmtCreate,
+          run,
+        });
       }
     });
     return items.sort((left, right) => dayjs(left.occurredAt).valueOf() - dayjs(right.occurredAt).valueOf());
-  }, [detail]);
+  }, [connectorAudit, detail]);
 
   const activeRuns = useMemo(
     () => detail?.runs.filter((run) => ['QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL'].includes(run.status)) || [],
@@ -1057,11 +1134,11 @@ export default function Tasks() {
     if (
       !tasksPageActive
       || !selectedTaskId
-      || !shouldRefreshTaskDetail(activeWorkspaceTab, selectedTaskId, activeRun)
+      || !shouldRefreshTaskDetail(activeWorkspaceTab, selectedTaskId, activeRun, connectorAudit)
     ) return undefined;
     const timer = window.setInterval(() => void loadDetail(selectedTaskId, true), 2000);
     return () => window.clearInterval(timer);
-  }, [activeRun, activeWorkspaceTab, loadDetail, selectedTaskId, tasksPageActive]);
+  }, [activeRun, activeWorkspaceTab, connectorAudit, loadDetail, selectedTaskId, tasksPageActive]);
 
   const _detailTabs = detail
     ? [
@@ -1119,7 +1196,7 @@ export default function Tasks() {
                       </Tag>
                     </div>
                     <div className={styles.propertyRow}>
-                      <span>{i18n('task.field.agent')}</span>
+                      <span>{connectorAudit ? i18n('task.connector.authorizationAgent') : i18n('task.field.agent')}</span>
                       <span className={styles.propertyAgent}>
                         <AgentAvatar agent={selectedAgent} size={22} />
                         {selectedAgent?.name || i18n('task.agent.unknown')}
@@ -1127,7 +1204,12 @@ export default function Tasks() {
                     </div>
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.agent.runtime')}</span>
-                      <RuntimeBadge agent={selectedAgent} run={currentRun} />
+                      <RuntimeBadge
+                        agent={selectedAgent}
+                        run={currentRun}
+                        executionMode={connectorExecutionMode}
+                        externalRuntimeName={connectorRuntimeName}
+                      />
                     </div>
                     {currentRun && (
                       <div className={styles.propertyRow}>
@@ -1356,6 +1438,10 @@ export default function Tasks() {
               ? <span className={styles.taskWorkspaceTabIcon}><CalendarClock size={14} /></span>
               : tab.type === 'AGENT_MANAGER' || tab.type === 'AGENT_EDITOR'
                 ? <span className={styles.taskWorkspaceTabIcon}><Bot size={14} /></span>
+                : tab.type === 'DATA_WIKI'
+                  ? <span className={styles.taskWorkspaceTabIcon}><BookOpenText size={14} /></span>
+                  : tab.type === 'CONNECTORS'
+                    ? <span className={styles.taskWorkspaceTabIcon}><Cable size={14} /></span>
                 : <span className={styles.taskWorkspaceTabIcon}><FolderKanban size={14} /></span>,
         }))}
         activeKey={activeWorkspaceTabKey}
@@ -1373,6 +1459,8 @@ export default function Tasks() {
       {activeWorkspaceTab?.type === 'TASK_CREATE'
         || activeWorkspaceTab?.type === 'AGENT_MANAGER'
         || activeWorkspaceTab?.type === 'AGENT_EDITOR'
+        || activeWorkspaceTab?.type === 'DATA_WIKI'
+        || activeWorkspaceTab?.type === 'CONNECTORS'
         || activeWorkspaceTab?.type === 'SCHEDULES' ? null : selectedTaskId ? (
         <>
           <header className={styles.detailPageHeader}>
@@ -1382,8 +1470,13 @@ export default function Tasks() {
             {detail && (
               <div className={styles.detailPageActions}>
                 <Tag color={statusColor[detail.task.status]}>{statusLabel(detail.task.status)}</Tag>
-                <RuntimeBadge agent={selectedAgent} run={currentRun} />
-                {TASK_TRANSITIONS[detail.task.status].length > 0 && (
+                <RuntimeBadge
+                  agent={selectedAgent}
+                  run={currentRun}
+                  executionMode={connectorExecutionMode}
+                  externalRuntimeName={connectorRuntimeName}
+                />
+                {!connectorAudit && TASK_TRANSITIONS[detail.task.status].length > 0 && (
                   <Select
                     size="small"
                     placeholder={i18n('task.transition.action')}
@@ -1397,7 +1490,7 @@ export default function Tasks() {
                     }))}
                   />
                 )}
-                {!detail.task.archivedAt && !activeRun && (
+                {!connectorAudit && !detail.task.archivedAt && !activeRun && (
                   <Button size="small" icon={<Archive size={14} />} onClick={() => void archiveTask()}>
                     {i18n('task.archive.action')}
                   </Button>
@@ -1414,6 +1507,19 @@ export default function Tasks() {
                   <div className={styles.taskDocument}>
                     <div className={styles.detailBreadcrumb}>TASK-{detail.task.id.slice(0, 8).toUpperCase()}</div>
                     <h1 className={styles.detailPageTitle}>{detail.task.title}</h1>
+                    {connectorAudit && (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message={i18n('task.connector.delegationTitle')}
+                        description={i18n(
+                          'task.connector.delegationDescription',
+                          connectorRuntimeName,
+                          connectorContext?.authorizationAgentName || selectedAgent?.name || i18n('task.agent.unknown'),
+                        )}
+                        style={{ marginBottom: 22 }}
+                      />
+                    )}
                     <section className={styles.taskBrief}>
                       <h3>{i18n('task.field.description')}</h3>
                       <div>{detail.task.description || i18n('task.detail.noDescription')}</div>
@@ -1560,7 +1666,7 @@ export default function Tasks() {
                     </section>
                   </div>
 
-                  <div className={styles.messageDock}>
+                  {!connectorAudit && <div className={styles.messageDock}>
                     <div className={styles.messageComposer}>
                       <Mentions
                         autoSize={{ minRows: 2, maxRows: 8 }}
@@ -1631,7 +1737,7 @@ export default function Tasks() {
                         </Button>
                       </div>
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
                 <aside className={styles.taskInspector}>
@@ -1644,7 +1750,7 @@ export default function Tasks() {
                       </Tag>
                     </div>
                     <div className={styles.propertyRow}>
-                      <span>{i18n('task.field.agent')}</span>
+                      <span>{connectorAudit ? i18n('task.connector.authorizationAgent') : i18n('task.field.agent')}</span>
                       <span className={styles.propertyAgent}>
                         <AgentAvatar agent={selectedAgent} size={20} />
                         {selectedAgent?.name || i18n('task.agent.unknown')}
@@ -1652,7 +1758,12 @@ export default function Tasks() {
                     </div>
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.agent.runtime')}</span>
-                      <RuntimeBadge agent={selectedAgent} run={currentRun} />
+                      <RuntimeBadge
+                        agent={selectedAgent}
+                        run={currentRun}
+                        executionMode={connectorExecutionMode}
+                        externalRuntimeName={connectorRuntimeName}
+                      />
                     </div>
                     <div className={styles.propertyRow}>
                       <span>{i18n('task.field.priority')}</span>
@@ -1693,7 +1804,8 @@ export default function Tasks() {
                         <div><Play size={12} /><strong>{i18n('task.run.round', run.attempt)}</strong></div>
                         <RunStatusMark status={run.status} />
                         <time>{formatTime(run.startedAt || detail.task.gmtCreate)}</time>
-                        {['QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL'].includes(run.status) && (
+                        {!connectorAudit
+                          && ['QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_APPROVAL'].includes(run.status) && (
                           <Button size="small" type="text" danger onClick={() => void cancelRun(run)}>{i18n('task.run.cancel')}</Button>
                         )}
                       </div>
@@ -1756,16 +1868,16 @@ export default function Tasks() {
                             </div>
                           </div>
                         ))}
-                        <Button size="small" loading={submitting} onClick={() => void syncTaskScopes()}>
+                        {!connectorAudit && <Button size="small" loading={submitting} onClick={() => void syncTaskScopes()}>
                           {detail.task.dataScopeSyncedAt
                             ? i18n('task.scope.syncAgain')
                             : i18n('task.scope.syncFromAgent')}
-                        </Button>
+                        </Button>}
                       </>
                     ) : (
                       <div className={styles.emptyScopeAction}>
                         <span className={styles.mutedText}>{i18n('task.scope.empty')}</span>
-                        {selectedAgent?.dataScopes?.length ? (
+                        {!connectorAudit && agentEffectiveDataScopes(selectedAgent).length ? (
                           <Button size="small" loading={submitting} onClick={() => void syncTaskScopes()}>
                             {i18n('task.scope.syncFromAgent')}
                           </Button>
@@ -1846,6 +1958,20 @@ export default function Tasks() {
               onClick={openAgentManager}
             />
           </Tooltip>
+          <Tooltip title={i18n('task.dataWiki.title')}>
+            <Button
+              icon={<BookOpenText size={15} />}
+              aria-label={i18n('task.dataWiki.title')}
+              onClick={openDataWiki}
+            />
+          </Tooltip>
+          {connectorManagementEnabled && <Tooltip title={i18n('task.connector.title')}>
+            <Button
+              icon={<Cable size={15} />}
+              aria-label={i18n('task.connector.title')}
+              onClick={openConnectors}
+            />
+          </Tooltip>}
           <Tooltip title={i18n('task.create.action')}>
             <Button
               type="primary"
@@ -2064,6 +2190,23 @@ export default function Tasks() {
                   : [agent, ...current];
               });
             }}
+          />
+        </div>
+      ))}
+      {workspaceTabs.filter((tab) => tab.type === 'DATA_WIKI').map((tab) => (
+        <div key={tab.key} className={styles.taskWorkspacePane} hidden={activeWorkspaceTabKey !== tab.key}>
+          <DataWikiPage
+            active={tasksPageActive && activeWorkspaceTabKey === tab.key}
+            dataSources={dataSources}
+            onDirtyChange={(dirty) => setWorkspaceTabDirty(tab.key, dirty)}
+          />
+        </div>
+      ))}
+      {connectorManagementEnabled && workspaceTabs.filter((tab) => tab.type === 'CONNECTORS').map((tab) => (
+        <div key={tab.key} className={styles.taskWorkspacePane} hidden={activeWorkspaceTabKey !== tab.key}>
+          <ConnectorSessionsPage
+            active={tasksPageActive && activeWorkspaceTabKey === tab.key}
+            onOpenTask={openTask}
           />
         </div>
       ))}

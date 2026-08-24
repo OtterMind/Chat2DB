@@ -32,4 +32,7 @@ public interface IAgentTaskService {
     AgentTaskCreation createRun(String taskId, AgentRunTriggerTypeEnum triggerType);
 
     AgentTaskCreation createRun(String taskId, AgentRunTriggerTypeEnum triggerType, String agentId);
+
+    /** Creates an audit Run without applying the ordinary single-active-Run Task restriction. */
+    AgentTaskCreation createConnectorRun(String taskId, String agentId);
 }

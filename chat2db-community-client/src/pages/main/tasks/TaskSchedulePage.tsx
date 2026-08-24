@@ -1,5 +1,6 @@
 import i18n from '@/i18n';
 import agentService, {
+  agentEffectiveDataScopes,
   type AgentDefinition,
   type AgentTaskSchedule,
   type AgentTaskScheduleDetail,
@@ -150,7 +151,7 @@ export default function TaskSchedulePage({
   const editingAgent = editing ? agentById.get(editing.assigneeAgentId) : undefined;
   const editingApprovalPolicyChanged = Boolean(editing && editingAgent
     && editing.dataScopeSnapshot.some((snapshot) => {
-      const current = editingAgent.dataScopes.find((scope) => sameDataScope(snapshot, scope));
+      const current = agentEffectiveDataScopes(editingAgent).find((scope) => sameDataScope(snapshot, scope));
       return current && normalizeApprovalMode(snapshot.approvalMode) !== normalizeApprovalMode(current.approvalMode);
     }));
 
@@ -223,9 +224,9 @@ export default function TaskSchedulePage({
       acceptanceCriteria: schedule.acceptanceCriteria,
       assigneeAgentId: schedule.assigneeAgentId,
       priority: schedule.priority,
-      scopeIndexes: (agent?.dataScopes || []).map((_, index) => index)
+      scopeIndexes: agentEffectiveDataScopes(agent).map((_, index) => index)
         .filter((index) => schedule.dataScopeSnapshot.some((scope) =>
-          sameDataScope(scope, agent!.dataScopes[index]))),
+          sameDataScope(scope, agentEffectiveDataScopes(agent)[index]))),
       scheduleType: schedule.scheduleType,
       scheduledAt: schedule.scheduledAt ? dayjs(schedule.scheduledAt) : undefined,
       preset: 'CUSTOM',
@@ -258,7 +259,7 @@ export default function TaskSchedulePage({
       assigneeAgentId: values.assigneeAgentId,
       priority: values.priority || 0,
       dataScopeSnapshot: agent
-        ? (values.scopeIndexes || []).map((index) => agent.dataScopes[index]).filter(Boolean)
+        ? (values.scopeIndexes || []).map((index) => agentEffectiveDataScopes(agent)[index]).filter(Boolean)
         : [],
       scheduleType: values.scheduleType,
       scheduledAt: values.scheduleType === 'ONCE' ? values.scheduledAt?.toISOString() : undefined,
@@ -358,7 +359,7 @@ export default function TaskSchedulePage({
               )}
               onChange={(id) => form.setFieldValue(
                 'scopeIndexes',
-                (agentById.get(id)?.dataScopes || []).map((_, index) => index),
+                agentEffectiveDataScopes(agentById.get(id)).map((_, index) => index),
               )}
             />
           </Form.Item>
@@ -374,7 +375,7 @@ export default function TaskSchedulePage({
         <Form.Item name="scopeIndexes" label={i18n('task.scope.select')}>
           <Select
             mode="multiple"
-            options={(agentById.get(watchedAgentId)?.dataScopes || []).map((scope, index) => ({
+            options={agentEffectiveDataScopes(agentById.get(watchedAgentId)).map((scope, index) => ({
               value: index,
               label: `${dataSourceDisplayName(
                 scope.dataSourceId,
@@ -386,7 +387,7 @@ export default function TaskSchedulePage({
             }))}
           />
         </Form.Item>
-        {watchedAgentId && !agentById.get(watchedAgentId)?.dataScopes.length && (
+        {watchedAgentId && !agentEffectiveDataScopes(agentById.get(watchedAgentId)).length && (
           <Alert type="warning" showIcon message={i18n('task.agent.scopeBindingRequired')} />
         )}
         <div className={styles.formGrid}>
@@ -561,7 +562,7 @@ export default function TaskSchedulePage({
             {schedule.dataScopeSnapshot.length ? (
               <Space direction="vertical" size={2}>
                 {schedule.dataScopeSnapshot.map((scope, index) => {
-                  const currentScope = agent?.dataScopes.find((current) => sameDataScope(scope, current));
+                  const currentScope = agentEffectiveDataScopes(agent).find((current) => sameDataScope(scope, current));
                   const snapshotMode = normalizeApprovalMode(scope.approvalMode);
                   const effectiveMode = currentScope
                     ? effectiveApprovalMode(scope.approvalMode, currentScope.approvalMode)

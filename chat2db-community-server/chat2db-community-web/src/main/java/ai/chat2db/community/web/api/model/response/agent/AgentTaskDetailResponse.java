@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentSqlProposal;
 import ai.chat2db.community.domain.api.model.agent.AgentToolAttempt;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactDashboardRef;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
+import ai.chat2db.community.domain.api.model.agent.AgentConnectorAuditContext;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -20,6 +21,10 @@ import java.util.Map;
 public class AgentTaskDetailResponse {
 
     private AgentTask task;
+
+    private boolean connectorAudit;
+
+    private AgentConnectorAuditContext connectorContext;
 
     private List<AgentRun> runs = new ArrayList<>();
 

@@ -58,7 +58,7 @@ final class AgentScopePolicy {
                 .toList();
     }
 
-    private static boolean contains(AgentDataScope grant, AgentDataScope requested) {
+    static boolean contains(AgentDataScope grant, AgentDataScope requested) {
         if (grant == null || !grant.getDataSourceId().equals(requested.getDataSourceId())) {
             return false;
         }

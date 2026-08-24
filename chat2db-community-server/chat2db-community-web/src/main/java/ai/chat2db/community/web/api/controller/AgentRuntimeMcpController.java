@@ -5,8 +5,10 @@ import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.model.result.AiExecuteSqlResult;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+import ai.chat2db.community.domain.api.service.datawiki.IDataWikiService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,13 +45,22 @@ public class AgentRuntimeMcpController {
 
     private final IAgentRuntimeDispatchService dispatchService;
     private final IAiToolService aiToolService;
+    private final IDataWikiService dataWikiService;
     private final ObjectMapper mapper;
 
+    @Autowired
     public AgentRuntimeMcpController(IAgentRuntimeDispatchService dispatchService,
-                                     IAiToolService aiToolService, ObjectMapper mapper) {
+                                     IAiToolService aiToolService, IDataWikiService dataWikiService,
+                                     ObjectMapper mapper) {
         this.dispatchService = dispatchService;
         this.aiToolService = aiToolService;
+        this.dataWikiService = dataWikiService;
         this.mapper = mapper;
+    }
+
+    AgentRuntimeMcpController(IAgentRuntimeDispatchService dispatchService,
+                              IAiToolService aiToolService, ObjectMapper mapper) {
+        this(dispatchService, aiToolService, null, mapper);
     }
 
     @PostMapping(value = "/{runId}", consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -62,9 +74,15 @@ public class AgentRuntimeMcpController {
         try {
             scope = dispatchService.authorizeTaskToken(runId, bearerToken(authorization));
         } catch (SecurityException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(error(id, -32001, "Task-scoped MCP authorization failed"));
+            return authorizationFailure(id);
         }
+
+        return handleAuthorized(scope, message);
+    }
+
+    /** Shared JSON-RPC handling after a transport has established an immutable Agent scope. */
+    ResponseEntity<JsonNode> handleAuthorized(AgentRuntimeTaskScope scope, JsonNode message) {
+        JsonNode id = message == null ? null : message.get("id");
 
         if (message == null || !message.isObject()
                 || !JSON_RPC_VERSION.equals(message.path("jsonrpc").asText())) {
@@ -89,6 +107,19 @@ public class AgentRuntimeMcpController {
             case "tools/call" -> response(id, callTool(scope, params));
             default -> error(id, -32601, "Method not found: " + method);
         });
+    }
+
+    ResponseEntity<JsonNode> replay(JsonNode id, String resultJson) {
+        try {
+            return ResponseEntity.ok(response(id, mapper.readTree(resultJson)));
+        } catch (Exception exception) {
+            return ResponseEntity.ok(error(id, -32603, "Stored Connector result is unavailable"));
+        }
+    }
+
+    ResponseEntity<JsonNode> authorizationFailure(JsonNode id) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(error(id, -32001, "Task-scoped MCP authorization failed"));
     }
 
     private ObjectNode initialize(JsonNode params) {
@@ -137,6 +168,12 @@ public class AgentRuntimeMcpController {
                         property("dataSourceId", "integer", "Authorized datasource id", true),
                         property("databaseName", "string", "Target database name", true),
                         property("schemaName", "string", "Optional target schema name", false))));
+        tools.add(tool("list_bound_data_wikis",
+                "List DataWikis bound to this Agent, including available Markdown documents.", objectSchema()));
+        tools.add(tool("read_data_wiki_document",
+                "Read one Markdown document from a DataWiki bound to this Agent.", objectSchema(
+                        property("dataWikiId", "string", "Bound DataWiki id", true),
+                        property("path", "string", "Document path returned by list_bound_data_wikis", true))));
         return result;
     }
 
@@ -147,6 +184,9 @@ public class AgentRuntimeMcpController {
             return toolError("Tool name and object arguments are required");
         }
         try {
+            if ("execute_sql".equals(name)) {
+                return sqlToolResult(aiToolService.executeSqlResult(executeSqlRequest(scope, arguments)));
+            }
             String content = switch (name) {
                 case "list_all_datasources" -> aiToolService.listAllDataSources(context(scope));
                 case "list_all_databases" -> aiToolService.listAllDatabases(
@@ -158,7 +198,9 @@ public class AgentRuntimeMcpController {
                         listTablesRequest(scope, arguments));
                 case "get_tables_schema" -> aiToolService.getTablesSchema(
                         tablesSchemaRequest(scope, arguments));
-                case "execute_sql" -> aiToolService.executeSql(executeSqlRequest(scope, arguments));
+                case "list_bound_data_wikis" -> listBoundDataWikis(scope);
+                case "read_data_wiki_document" -> readDataWikiDocument(scope,
+                        requiredText(arguments, "dataWikiId"), requiredText(arguments, "path"));
                 default -> null;
             };
             if (content == null) {
@@ -168,6 +210,49 @@ public class AgentRuntimeMcpController {
         } catch (RuntimeException exception) {
             return toolError(StringUtils.defaultIfBlank(exception.getMessage(), "Tool execution failed"));
         }
+    }
+
+    private ObjectNode sqlToolResult(AiExecuteSqlResult value) {
+        ObjectNode structured = mapper.createObjectNode();
+        String kind = value.getDecision() == null ? "completed" : value.getDecision().name().toLowerCase();
+        structured.put("kind", kind);
+        if (StringUtils.isNotBlank(value.getApprovalId())) structured.put("approvalId", value.getApprovalId());
+        if (value.getProposalVersion() != null) structured.put("proposalVersion", value.getProposalVersion());
+        if (value.getRiskLevel() != null) structured.put("riskLevel", value.getRiskLevel().name().toLowerCase());
+        return toolResult(value.getContent(), false, structured);
+    }
+
+    private String listBoundDataWikis(AgentRuntimeTaskScope scope) {
+        ArrayNode result = mapper.createArrayNode();
+        for (String wikiId : scope.getDataWikiIds() == null ? List.<String>of() : scope.getDataWikiIds()) {
+            try {
+                var wiki = dataWikiService.get(wikiId);
+                var bundle = dataWikiService.documents(wikiId);
+                ObjectNode item = result.addObject();
+                item.put("id", wiki.getId());
+                item.put("name", wiki.getName());
+                item.put("description", StringUtils.defaultString(wiki.getDescription()));
+                item.put("revision", wiki.getRevision());
+                item.put("directoryPath", bundle.getRootDirectory());
+                ArrayNode documents = item.putArray("documents");
+                bundle.getDocuments().forEach(document -> documents.addObject()
+                        .put("path", document.getPath())
+                        .put("title", document.getTitle())
+                        .put("kind", document.getKind()));
+            } catch (RuntimeException ignored) {
+                // A deleted or temporarily unavailable wiki contributes no MCP knowledge.
+            }
+        }
+        return result.toString();
+    }
+
+    private String readDataWikiDocument(AgentRuntimeTaskScope scope, String wikiId, String path) {
+        boolean bound = (scope.getDataWikiIds() == null ? List.<String>of() : scope.getDataWikiIds())
+                .stream().anyMatch(wikiId::equals);
+        if (!bound) {
+            throw new SecurityException("DataWiki is not bound to this Agent Run");
+        }
+        return dataWikiService.readDocument(wikiId, path);
     }
 
     private AiListTablesRequest listTablesRequest(AgentRuntimeTaskScope scope, JsonNode arguments) {
@@ -210,6 +295,7 @@ public class AgentRuntimeMcpController {
     private AiToolContextRequest context(AgentRuntimeTaskScope scope) {
         AiToolContextRequest context = new AiToolContextRequest();
         context.setAgentRunId(scope.getRunId());
+        context.setAgentToolCallId(scope.getExternalCallId());
         context.setAgentDataScopes(scope.getDataScopes() == null ? List.of() : List.copyOf(scope.getDataScopes()));
         // External Runtime calls must not keep an HTTP/MCP request open for the
         // whole human approval window. The daemon suspends the current lease
@@ -262,10 +348,18 @@ public class AgentRuntimeMcpController {
     }
 
     private ObjectNode toolResult(String text, boolean error) {
+        ObjectNode structured = mapper.createObjectNode();
+        structured.put("kind", error ? "error" : "text");
+        structured.put("text", StringUtils.defaultString(text));
+        return toolResult(text, error, structured);
+    }
+
+    private ObjectNode toolResult(String text, boolean error, JsonNode structuredContent) {
         ObjectNode result = mapper.createObjectNode();
         result.put("isError", error);
         result.putArray("content").addObject().put("type", "text")
                 .put("text", StringUtils.defaultString(text));
+        result.set("structuredContent", structuredContent);
         return result;
     }
 

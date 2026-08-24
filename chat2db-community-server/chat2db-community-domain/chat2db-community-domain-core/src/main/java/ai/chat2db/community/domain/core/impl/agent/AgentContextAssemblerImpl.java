@@ -9,9 +9,11 @@ import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentTask;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
 import ai.chat2db.community.domain.api.service.agent.IAgentContextAssembler;
+import ai.chat2db.community.domain.api.service.datawiki.IDataWikiService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
@@ -23,11 +25,20 @@ public class AgentContextAssemblerImpl implements IAgentContextAssembler {
     private static final int MAX_RUN_ANSWER_LENGTH = 8_000;
     private static final int MAX_TOOL_RESULT_LENGTH = 2_000;
     private static final int MAX_TOOL_EVENTS_PER_RUN = 8;
+    private static final int MAX_DATAWIKI_CONTEXT_LENGTH = 60_000;
 
     private final IAgentControlStorage storage;
+    private final IDataWikiService dataWikiService;
 
-    public AgentContextAssemblerImpl(IAgentControlStorage storage) {
+    @Autowired
+    public AgentContextAssemblerImpl(IAgentControlStorage storage, IDataWikiService dataWikiService) {
         this.storage = storage;
+        this.dataWikiService = dataWikiService;
+    }
+
+    AgentContextAssemblerImpl(IAgentControlStorage storage) {
+        this.storage = storage;
+        this.dataWikiService = null;
     }
 
     @Override
@@ -37,9 +48,43 @@ public class AgentContextAssemblerImpl implements IAgentContextAssembler {
         context.append("Agent: ").append(agent.getName()).append('\n');
         appendTaskDefinition(context, task);
         appendScopes(context, task.getDataScopeSnapshot());
+        appendDataWikis(context, agent);
         appendTaskContext(context, storage.listTaskContexts(task.getId()));
         appendRunHistory(context, runHistory, task.getCurrentRunId());
         return context.toString().trim();
+    }
+
+    private void appendDataWikis(StringBuilder context, AgentDefinition agent) {
+        if (dataWikiService == null || agent.getDataWikiIds() == null || agent.getDataWikiIds().isEmpty()) {
+            return;
+        }
+        context.append("\n### Bound DataWikis\n");
+        context.append("Use these business definitions to understand fields and generate SQL. ")
+                .append("Database access is still limited by the Data Scope Snapshot above.\n");
+        int appendedContent = 0;
+        for (String wikiId : agent.getDataWikiIds()) {
+            if (appendedContent >= MAX_DATAWIKI_CONTEXT_LENGTH) {
+                context.append("\n[additional DataWiki content omitted]\n");
+                break;
+            }
+            try {
+                var wiki = dataWikiService.get(wikiId);
+                var documents = dataWikiService.documents(wikiId);
+                context.append("\n#### ").append(wiki.getName()).append("\n");
+                if (StringUtils.isNotBlank(documents.getRootDirectory())) {
+                    context.append("Local directory: ").append(documents.getRootDirectory()).append('\n');
+                }
+                String readme = dataWikiService.readDocument(wikiId, "README.md");
+                if (StringUtils.isNotBlank(readme)) {
+                    int remaining = MAX_DATAWIKI_CONTEXT_LENGTH - appendedContent;
+                    String included = truncate(readme, remaining);
+                    context.append(included).append('\n');
+                    appendedContent += included.length();
+                }
+            } catch (RuntimeException exception) {
+                context.append("- DataWiki unavailable: ").append(wikiId).append('\n');
+            }
+        }
     }
 
     private void appendTaskDefinition(StringBuilder context, AgentTask task) {

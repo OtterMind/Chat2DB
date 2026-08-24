@@ -13,6 +13,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
@@ -200,7 +201,15 @@ public class AgentToolGatewayImpl implements IAgentToolGateway {
         AgentApproval persisted = storage.updateApproval(updated, current.getRevision());
 
         AgentRun run = runService.get(current.getRunId());
-        if (request.getDecision() == AgentApprovalDecisionEnum.APPROVE) {
+        AgentTask approvalTask = taskService.get(run.getTaskId());
+        if (approvalTask.getOriginType() == AgentTaskOriginTypeEnum.CONNECTOR) {
+            if (run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL) {
+                transitionRun(run, request.getDecision() == AgentApprovalDecisionEnum.APPROVE
+                        ? AgentRunStatusEnum.RUNNING : AgentRunStatusEnum.FAILED,
+                        request.getDecision() == AgentApprovalDecisionEnum.APPROVE
+                                ? null : "SQL proposal was rejected");
+            }
+        } else if (request.getDecision() == AgentApprovalDecisionEnum.APPROVE) {
             if (run.getStatus() == AgentRunStatusEnum.WAITING_APPROVAL) {
                 if (run.getRuntimeType() == AgentRuntimeTypeEnum.EXTERNAL_AGENT
                         && hasReleasedExternalLease(run.getId())) {
@@ -429,8 +438,10 @@ public class AgentToolGatewayImpl implements IAgentToolGateway {
     private void moveRunToWaitingApproval(AgentRun run) {
         if (run.getStatus() == AgentRunStatusEnum.RUNNING) {
             transitionRun(run, AgentRunStatusEnum.WAITING_APPROVAL, null);
-            moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.IN_PROGRESS,
-                    AgentTaskStatusEnum.WAITING_APPROVAL);
+            if (taskService.get(run.getTaskId()).getOriginType() != AgentTaskOriginTypeEnum.CONNECTOR) {
+                moveTaskTo(run.getTaskId(), AgentTaskStatusEnum.IN_PROGRESS,
+                        AgentTaskStatusEnum.WAITING_APPROVAL);
+            }
         }
     }
 

@@ -5,5 +5,6 @@ public enum AgentTaskOriginTypeEnum {
     BOARD,
     CONSOLE,
     API,
-    SCHEDULE
+    SCHEDULE,
+    CONNECTOR
 }

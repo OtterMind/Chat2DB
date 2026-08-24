@@ -1,11 +1,12 @@
 import editionUiExtension from '@/edition-ui';
 import { appendEditionSettingMenuItems } from '@/edition-ui/settingMenus';
 import i18n from '@/i18n';
-import { Bot, ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
+import { Bot, Cable, ClipboardPen, Info, Keyboard, SlidersHorizontal, Terminal } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import About from './About';
 import BaseSetting from './BaseSetting';
 import EditorSetting from './EditorSetting';
+import DshPluginSetting from './DshPluginSetting';
 import McpSetting from './McpSetting';
 import NetworkProxySetting from './NetworkProxySetting';
 import ModelConfigSetting from './ModelConfigSetting';
@@ -70,6 +71,18 @@ function Setting() {
               iconCode: 'icon-mcp',
               body: <McpSetting />,
               code: 'mcp',
+            },
+          ]
+        : []),
+      ...(runtimeEditionConfig.settingMenuProfile === 'community'
+        ? [
+            {
+              title: i18n('setting.nav.dshPlugin'),
+              describe: i18n('setting.nav.dshPluginDescribe'),
+              group: 'services' as const,
+              icon: Cable,
+              body: <DshPluginSetting />,
+              code: 'dshPlugin',
             },
           ]
         : []),

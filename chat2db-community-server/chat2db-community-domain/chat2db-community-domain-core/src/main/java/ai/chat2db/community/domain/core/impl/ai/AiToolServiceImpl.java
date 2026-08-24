@@ -42,6 +42,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.domain.api.model.result.AiExecuteSqlResult;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
 import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.result.Header;
@@ -225,6 +226,11 @@ public class AiToolServiceImpl implements IAiToolService {
         }
     }
     public String executeSql(AiExecuteSqlRequest aiExecuteSqlRequest) {
+        return executeSqlResult(aiExecuteSqlRequest).getContent();
+    }
+
+    @Override
+    public AiExecuteSqlResult executeSqlResult(AiExecuteSqlRequest aiExecuteSqlRequest) {
         String sql = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getSql();
         Integer pageSize = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getPageSize();
         Long dataSourceId = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getDataSourceId();
@@ -233,7 +239,7 @@ public class AiToolServiceImpl implements IAiToolService {
         AiToolContextRequest toolContext = aiExecuteSqlRequest == null ? null : aiExecuteSqlRequest.getAiToolContextRequest();
 
         if (StringUtils.isBlank(sql)) {
-            return emitToolResult(toolContext, "execute_sql", "sql is empty.");
+            return sqlResult(emitToolResult(toolContext, "execute_sql", "sql is empty."), null);
         }
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
         AgentDataScope agentScope = agentScope(toolContext, profile);
@@ -243,23 +249,28 @@ public class AiToolServiceImpl implements IAiToolService {
         AgentSqlExecutionPermit permit = prepareAgentSql(toolContext, trimmedSql, profile);
         permit = waitForAgentSqlApproval(toolContext, trimmedSql, profile, permit);
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.APPROVAL_REQUIRED) {
-            return emitToolResult(toolContext, "execute_sql", "SQL approval required. approvalId="
+            String content = emitToolResult(toolContext, "execute_sql", "SQL approval required. approvalId="
                     + permit.getApproval().getId() + "; proposalVersion="
                     + permit.getProposal().getProposalVersion() + "; risk="
                     + permit.getProposal().getRiskLevel()
                     + ". Do not retry before the user decides. This Runtime turn may finish; "
                     + "Chat2DB will resume the same Run after approval.");
+            AiExecuteSqlResult result = sqlResult(content, permit.getDecision());
+            result.setApprovalId(permit.getApproval().getId());
+            result.setProposalVersion(permit.getProposal().getProposalVersion());
+            result.setRiskLevel(permit.getProposal().getRiskLevel());
+            return result;
         }
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.DENIED) {
-            return emitToolResult(toolContext, "execute_sql", permit.getMessage());
+            return sqlResult(emitToolResult(toolContext, "execute_sql", permit.getMessage()), permit.getDecision());
         }
         if (permit != null && permit.getDecision() == AgentSqlPermitDecisionEnum.REPLAY_RESULT) {
-            return emitToolResult(toolContext, "execute_sql", permit.getReplayResult());
+            return sqlResult(emitToolResult(toolContext, "execute_sql", permit.getReplayResult()), permit.getDecision());
         }
         if (permit == null) {
             String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
             if (StringUtils.isNotBlank(unsafeSqlMessage)) {
-                return emitToolResult(toolContext, "execute_sql", unsafeSqlMessage);
+                return sqlResult(emitToolResult(toolContext, "execute_sql", unsafeSqlMessage), null);
             }
         }
 
@@ -286,14 +297,16 @@ public class AiToolServiceImpl implements IAiToolService {
                     operationLogged = true;
                 }
                 markAgentSqlFailed(permit, error, false);
-                return emitToolResult(toolContext, "execute_sql", "SQL execution failed: " + error);
+                return sqlResult(emitToolResult(toolContext, "execute_sql", "SQL execution failed: " + error),
+                        permit == null ? null : permit.getDecision());
             }
             recordSqlResult(trimmedSql, executeResult);
             operationLogged = true;
             if (CollectionUtils.isEmpty(executeResult.getData())) {
                 String result = "SQL executed successfully with no result.";
                 markAgentSqlSucceeded(permit, result);
-                return emitToolResult(toolContext, "execute_sql", result);
+                return sqlResult(emitToolResult(toolContext, "execute_sql", result),
+                        permit == null ? null : permit.getDecision());
             }
 
             StringBuilder output = new StringBuilder(2048);
@@ -304,7 +317,8 @@ public class AiToolServiceImpl implements IAiToolService {
             }
             String result = output.toString().trim();
             markAgentSqlSucceeded(permit, result);
-            return emitToolResult(toolContext, "execute_sql", result);
+            return sqlResult(emitToolResult(toolContext, "execute_sql", result),
+                    permit == null ? null : permit.getDecision());
         } catch (RuntimeException e) {
             markAgentSqlFailed(permit, e.getMessage(), permit != null
                     && Boolean.TRUE.equals(permit.getAttempt().getWriteOperation()));
@@ -317,6 +331,13 @@ public class AiToolServiceImpl implements IAiToolService {
         }
     }
 
+    private AiExecuteSqlResult sqlResult(String content, AgentSqlPermitDecisionEnum decision) {
+        AiExecuteSqlResult result = new AiExecuteSqlResult();
+        result.setContent(content);
+        result.setDecision(decision);
+        return result;
+    }
+
     private AgentSqlExecutionPermit prepareAgentSql(AiToolContextRequest toolContext, String sql,
                                                      ConnectionProfile profile) {
         if (toolContext == null || StringUtils.isBlank(toolContext.getAgentRunId())) {
@@ -324,6 +345,7 @@ public class AiToolServiceImpl implements IAiToolService {
         }
         AgentSqlToolRequest request = new AgentSqlToolRequest();
         request.setRunId(toolContext.getAgentRunId());
+        request.setToolCallId(StringUtils.trimToNull(toolContext.getAgentToolCallId()));
         request.setSql(sql);
         request.setDataSourceId(profile.getDataSourceId());
         request.setDatabaseName(profile.getDatabaseName());

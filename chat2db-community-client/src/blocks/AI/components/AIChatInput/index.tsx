@@ -35,7 +35,7 @@ import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
-import agentService, { AgentDataScope, AgentDefinition } from '@/service/agent';
+import agentService, { agentEffectiveDataScopes, AgentDataScope, AgentDefinition } from '@/service/agent';
 import { AgentAvatar } from '@/pages/main/tasks/TaskPrimitives';
 import { resolveMentionTaskScopes } from './agentMentionModel';
 import useRuntimeEditionCapabilities, {
@@ -400,7 +400,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       agentId: selectedAgent?.id,
       agentName: selectedAgent?.name,
       agentDataScopes: selectedAgent
-        ? resolveMentionTaskScopes(selectedAgent.dataScopes || [], taskScopeContext)
+        ? resolveMentionTaskScopes(agentEffectiveDataScopes(selectedAgent), taskScopeContext)
         : undefined,
     };
 

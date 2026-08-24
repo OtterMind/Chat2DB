@@ -84,6 +84,15 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
           keywords: ['mcp token', 'authentication', 'reset token'],
         },
       ];
+    case 'dshPlugin':
+      return [
+        settingItem('dshPlugin.management', 'setting.dshPlugin.enable', [
+          'dsh',
+          'deepseek harness',
+          'connector sessions',
+          'plugin',
+        ]),
+      ];
     case 'networkProxy':
       return [
         {

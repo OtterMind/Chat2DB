@@ -1,7 +1,7 @@
 import i18n from '@/i18n';
 import type { AgentDefinition, AgentRun, AgentRunStatus } from '@/service/agent';
 import { Tag, Tooltip } from 'antd';
-import { CircleCheck, CircleDashed, CircleDot, Cloud, Cpu, PauseCircle, TriangleAlert, XCircle } from 'lucide-react';
+import { Cable, CircleCheck, CircleDashed, CircleDot, Cloud, Cpu, PauseCircle, TriangleAlert, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { agentAvatarSource, avatarRuntimeProvider, RuntimeProviderLogo } from './RuntimeProviderLogo';
@@ -49,18 +49,25 @@ export function RuntimeBadge({
   agent,
   run,
   compact = false,
+  executionMode,
+  externalRuntimeName,
 }: {
   agent?: AgentDefinition;
   run?: AgentRun;
   compact?: boolean;
+  executionMode?: 'EXTERNAL_RUNTIME_DELEGATION';
+  externalRuntimeName?: string;
 }) {
   const { styles } = useStyles();
+  const delegated = executionMode === 'EXTERNAL_RUNTIME_DELEGATION';
   const external = agent?.runtimeType === 'EXTERNAL_AGENT' || run?.runtimeType === 'EXTERNAL_AGENT';
   const status = run?.status;
   const active = !!status && activeRunStatuses.includes(status);
   const failed = status === 'FAILED' || status === 'UNKNOWN';
-  const Icon = external ? Cloud : Cpu;
-  const label = external ? i18n('task.runtime.external') : i18n('task.runtime.embedded');
+  const Icon = delegated ? Cable : external ? Cloud : Cpu;
+  const label = delegated
+    ? i18n('task.runtime.delegatedExternal', externalRuntimeName || i18n('task.connector.externalRuntime'))
+    : external ? i18n('task.runtime.external') : i18n('task.runtime.embedded');
   const stateLabel = status ? i18n(`task.status.${status.toLowerCase()}` as Parameters<typeof i18n>[0]) : label;
   return (
     <Tooltip title={`${label}${status ? ` / ${stateLabel}` : ''}`}>

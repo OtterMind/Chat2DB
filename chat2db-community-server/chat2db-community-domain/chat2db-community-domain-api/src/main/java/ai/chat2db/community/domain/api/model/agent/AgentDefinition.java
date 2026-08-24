@@ -36,6 +36,19 @@ public class AgentDefinition {
 
     private List<AgentDataScope> dataScopes = new ArrayList<>();
 
+    /** DataWikis explicitly bound to this Agent. */
+    private List<String> dataWikiIds = new ArrayList<>();
+
+    /** DataWiki bindings and the execution policy applied to their table scopes. */
+    private List<AgentDataWikiBinding> dataWikiBindings = new ArrayList<>();
+
+    /**
+     * Read-only union of explicit dataScopes and table scopes contributed by
+     * bound DataWikis. This field is derived by the domain service and is not
+     * persisted.
+     */
+    private List<AgentDataScope> effectiveDataScopes = new ArrayList<>();
+
     private String outputContract;
 
     private Long createdBy;

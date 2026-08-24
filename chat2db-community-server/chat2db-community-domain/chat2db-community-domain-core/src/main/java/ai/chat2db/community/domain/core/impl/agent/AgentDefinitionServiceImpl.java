@@ -5,9 +5,11 @@ import ai.chat2db.community.domain.api.enums.agent.AgentStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentDataWikiBinding;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionUpdateRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
+import ai.chat2db.community.domain.api.service.datawiki.IDataWikiService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
@@ -32,16 +34,26 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
 
     private final IAgentControlStorage storage;
     private final IAgentRuntimeControlStorage runtimeStorage;
+    private final IDataWikiService dataWikiService;
 
     @Autowired
-    public AgentDefinitionServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
+    public AgentDefinitionServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage,
+                                      IDataWikiService dataWikiService) {
         this.storage = storage;
         this.runtimeStorage = runtimeStorage;
+        this.dataWikiService = dataWikiService;
     }
 
     AgentDefinitionServiceImpl(IAgentControlStorage storage) {
         this.storage = storage;
         this.runtimeStorage = null;
+        this.dataWikiService = null;
+    }
+
+    AgentDefinitionServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
+        this.storage = storage;
+        this.runtimeStorage = runtimeStorage;
+        this.dataWikiService = null;
     }
 
     @Override
@@ -66,12 +78,16 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
                 ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(request.getCapabilities()));
         agent.setDataScopes(copyAndNormalizeScopes(request.getDataScopes()));
+        List<AgentDataWikiBinding> wikiBindings = normalizeDataWikiBindings(
+                request.getDataWikiBindings(), request.getDataWikiIds(), request.getCreatedBy());
+        agent.setDataWikiBindings(wikiBindings);
+        agent.setDataWikiIds(AgentDataWikiPolicy.ids(wikiBindings));
         agent.setOutputContract(StringUtils.trimToNull(request.getOutputContract()));
         agent.setCreatedBy(request.getCreatedBy());
         agent.setGmtCreate(now);
         agent.setGmtModified(now);
         agent.setRevision(1L);
-        return storage.createAgent(agent);
+        return enrich(storage.createAgent(agent));
     }
 
     @Override
@@ -85,10 +101,11 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
         AgentDefinition updated = copy(current);
         applyDefinition(updated, request.getName(), request.getAvatar(), request.getDescription(), request.getStatus(),
                 request.getRuntimeType(), request.getRuntimeProfileId(), request.getModelConfigId(),
-                request.getSystemPrompt(), request.getCapabilities(), request.getDataScopes(), request.getOutputContract());
+                request.getSystemPrompt(), request.getCapabilities(), request.getDataScopes(), request.getDataWikiIds(),
+                request.getDataWikiBindings(), request.getUpdatedBy(), request.getOutputContract());
         updated.setGmtModified(new Date());
         updated.setRevision(current.getRevision() + 1);
-        return storage.updateAgent(updated, request.getExpectedRevision());
+        return enrich(storage.updateAgent(updated, request.getExpectedRevision()));
     }
 
     @Override
@@ -98,7 +115,7 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
         updated.setStatus(AgentStatusEnum.ARCHIVED);
         updated.setGmtModified(new Date());
         updated.setRevision(current.getRevision() + 1);
-        return storage.updateAgent(updated, expectedRevision);
+        return enrich(storage.updateAgent(updated, expectedRevision));
     }
 
     @Override
@@ -110,12 +127,12 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
         if (agent == null) {
             throw new NoSuchElementException("agent not found: " + id);
         }
-        return agent;
+        return enrich(agent);
     }
 
     @Override
     public List<AgentDefinition> list() {
-        return storage.listAgents();
+        return storage.listAgents().stream().map(this::enrich).toList();
     }
 
     private void validate(AgentDefinitionCreateRequest request) {
@@ -185,7 +202,9 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
                                  AgentStatusEnum status, AgentRuntimeTypeEnum runtimeType, String runtimeProfileId,
                                  String modelConfigId, String systemPrompt,
                                  java.util.Set<ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum> capabilities,
-                                 List<AgentDataScope> dataScopes, String outputContract) {
+                                 List<AgentDataScope> dataScopes, List<String> dataWikiIds,
+                                 List<AgentDataWikiBinding> dataWikiBindings, Long updatedBy,
+                                 String outputContract) {
         agent.setName(name.trim());
         agent.setAvatar(StringUtils.trimToNull(avatar));
         agent.setDescription(StringUtils.trimToNull(description));
@@ -196,6 +215,10 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
         agent.setSystemPrompt(StringUtils.trimToNull(systemPrompt));
         agent.setCapabilities(capabilities == null ? new LinkedHashSet<>() : new LinkedHashSet<>(capabilities));
         agent.setDataScopes(copyAndNormalizeScopes(dataScopes));
+        List<AgentDataWikiBinding> wikiBindings = normalizeDataWikiBindings(
+                dataWikiBindings, dataWikiIds, updatedBy);
+        agent.setDataWikiBindings(wikiBindings);
+        agent.setDataWikiIds(AgentDataWikiPolicy.ids(wikiBindings));
         agent.setOutputContract(StringUtils.trimToNull(outputContract));
     }
 
@@ -212,12 +235,44 @@ public class AgentDefinitionServiceImpl implements IAgentDefinitionService {
         copy.setSystemPrompt(source.getSystemPrompt());
         copy.setCapabilities(new LinkedHashSet<>(source.getCapabilities()));
         copy.setDataScopes(copyAndNormalizeScopes(source.getDataScopes()));
+        copy.setDataWikiIds(source.getDataWikiIds() == null
+                ? new ArrayList<>() : new ArrayList<>(source.getDataWikiIds()));
+        copy.setDataWikiBindings(AgentDataWikiPolicy.copyBindings(source.getDataWikiBindings()));
         copy.setOutputContract(source.getOutputContract());
         copy.setCreatedBy(source.getCreatedBy());
         copy.setGmtCreate(source.getGmtCreate());
         copy.setGmtModified(source.getGmtModified());
         copy.setRevision(source.getRevision());
         return copy;
+    }
+
+    private List<AgentDataWikiBinding> normalizeDataWikiBindings(List<AgentDataWikiBinding> bindings,
+                                                                  List<String> legacyIds,
+                                                                  Long ownerId) {
+        if (dataWikiService == null) {
+            return bindings == null || bindings.isEmpty()
+                    ? AgentDataWikiPolicy.legacyBindings(legacyIds)
+                    : AgentDataWikiPolicy.copyBindings(bindings);
+        }
+        return AgentDataWikiPolicy.normalizeAndValidate(bindings, legacyIds, ownerId, dataWikiService);
+    }
+
+    private AgentDefinition enrich(AgentDefinition agent) {
+        if (agent == null) {
+            return null;
+        }
+        List<AgentDataWikiBinding> bindings = agent.getDataWikiBindings();
+        if ((bindings == null || bindings.isEmpty()) && agent.getDataWikiIds() != null) {
+            bindings = AgentDataWikiPolicy.legacyBindings(agent.getDataWikiIds());
+        }
+        bindings = AgentDataWikiPolicy.copyBindings(bindings);
+        agent.setDataWikiBindings(bindings);
+        agent.setDataWikiIds(AgentDataWikiPolicy.ids(bindings));
+        List<AgentDataScope> effective = dataWikiService == null
+                ? AgentScopePolicy.copyScopes(agent.getDataScopes())
+                : AgentDataWikiPolicy.effectiveScopes(agent.getDataScopes(), bindings, dataWikiService);
+        agent.setEffectiveDataScopes(effective);
+        return agent;
     }
 
     private void validateOutputContract(String outputContract) {

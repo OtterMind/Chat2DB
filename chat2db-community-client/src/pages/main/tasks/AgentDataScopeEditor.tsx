@@ -199,16 +199,7 @@ interface AgentDataScopeEditorProps {
 export default function AgentDataScopeEditor({ form, dataSources }: AgentDataScopeEditorProps) {
   const { styles } = useStyles();
   return (
-    <Form.List
-      name="dataScopes"
-      rules={[
-        {
-          validator: async (_, scopes) => {
-            if (!scopes?.length) throw new Error(i18n('task.agent.scopeRequired'));
-          },
-        },
-      ]}
-    >
+    <Form.List name="dataScopes">
       {(fields, { add, remove }, { errors }) => (
         <div className={styles.scopeStudio}>
           <div className={styles.studioSectionHeader}>

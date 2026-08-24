@@ -36,6 +36,7 @@ export const DEFAULT_BASE_SETTINGS: GlobalBaseSettings = {
   customFontSize: 13,
   defaultPageSize: DEFAULT_RESULT_PAGE_SIZE,
   enableMcp: false,
+  enableDshPluginManagement: false,
 };
 
 export const DEFAULT_APP_CONFIG: GlobalAppConfig = {

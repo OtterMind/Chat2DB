@@ -33,6 +33,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentDeliveryStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentGatewayPlatformEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentDataWikiBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
@@ -119,9 +120,9 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
                 INSERT INTO agent_definition (
                     id, name, avatar, description, status, runtime_type,
                     runtime_profile_id, model_config_id, system_prompt,
-                    capabilities_json, data_scopes_json, output_contract,
+                    capabilities_json, data_scopes_json, data_wiki_ids_json, data_wiki_bindings_json, output_contract,
                     created_by, created_at, updated_at, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -138,7 +139,8 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         String sql = """
                 UPDATE agent_definition SET name = ?, avatar = ?, description = ?, status = ?, runtime_type = ?,
                     runtime_profile_id = ?, model_config_id = ?, system_prompt = ?, capabilities_json = ?,
-                    data_scopes_json = ?, output_contract = ?, updated_at = ?, revision = ?
+                    data_scopes_json = ?, data_wiki_ids_json = ?, data_wiki_bindings_json = ?, output_contract = ?,
+                    updated_at = ?, revision = ?
                 WHERE id = ? AND revision = ?
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -154,6 +156,8 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
             statement.setString(index++, agent.getSystemPrompt());
             statement.setString(index++, JSON.toJSONString(agent.getCapabilities()));
             statement.setString(index++, JSON.toJSONString(agent.getDataScopes()));
+            statement.setString(index++, JSON.toJSONString(agent.getDataWikiIds()));
+            statement.setString(index++, JSON.toJSONString(agent.getDataWikiBindings()));
             statement.setString(index++, agent.getOutputContract());
             statement.setLong(index++, agent.getGmtModified().getTime());
             statement.setLong(index++, agent.getRevision());
@@ -3311,6 +3315,8 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         statement.setString(index++, agent.getSystemPrompt());
         statement.setString(index++, JSON.toJSONString(agent.getCapabilities()));
         statement.setString(index++, JSON.toJSONString(agent.getDataScopes()));
+        statement.setString(index++, JSON.toJSONString(agent.getDataWikiIds()));
+        statement.setString(index++, JSON.toJSONString(agent.getDataWikiBindings()));
         statement.setString(index++, agent.getOutputContract());
         setLong(statement, index++, agent.getCreatedBy());
         statement.setLong(index++, agent.getGmtCreate().getTime());
@@ -3538,6 +3544,12 @@ public class H2AgentControlStorage implements IAgentControlStorage, IAgentRuntim
         agent.setSystemPrompt(resultSet.getString("system_prompt"));
         agent.setCapabilities(readCapabilities(resultSet.getString("capabilities_json")));
         agent.setDataScopes(readScopes(resultSet.getString("data_scopes_json")));
+        List<String> dataWikiIds = JSON.parseArray(resultSet.getString("data_wiki_ids_json"), String.class);
+        agent.setDataWikiIds(dataWikiIds == null ? new ArrayList<>() : new ArrayList<>(dataWikiIds));
+        List<AgentDataWikiBinding> dataWikiBindings = JSON.parseArray(
+                resultSet.getString("data_wiki_bindings_json"), AgentDataWikiBinding.class);
+        agent.setDataWikiBindings(dataWikiBindings == null
+                ? new ArrayList<>() : new ArrayList<>(dataWikiBindings));
         agent.setOutputContract(resultSet.getString("output_contract"));
         agent.setCreatedBy(getLong(resultSet, "created_by"));
         agent.setGmtCreate(new Date(resultSet.getLong("created_at")));

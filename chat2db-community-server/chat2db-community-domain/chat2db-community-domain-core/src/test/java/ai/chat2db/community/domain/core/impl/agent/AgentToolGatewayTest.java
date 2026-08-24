@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlPermitDecisionEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskStatusEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeLeaseStateEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
@@ -163,6 +164,30 @@ class AgentToolGatewayTest {
         gateway.decide(decision);
 
         assertEquals(AgentRunStatusEnum.QUEUED,
+                runService.get(creation.getInitialRun().getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
+                taskService.get(creation.getTask().getId()).getStatus());
+    }
+
+    @Test
+    void connectorApprovalChangesOnlyItsInvocationRun() {
+        taskService.get(creation.getTask().getId()).setOriginType(AgentTaskOriginTypeEnum.CONNECTOR);
+        AgentSqlExecutionPermit pending = gateway.prepareSql(
+                request("connector-write", "update refunds set status = 'REVIEW' where id = 1"));
+
+        assertEquals(AgentRunStatusEnum.WAITING_APPROVAL,
+                runService.get(creation.getInitialRun().getId()).getStatus());
+        assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
+                taskService.get(creation.getTask().getId()).getStatus());
+
+        AgentApprovalDecisionRequest decision = new AgentApprovalDecisionRequest();
+        decision.setApprovalId(pending.getApproval().getId());
+        decision.setExpectedRevision(1L);
+        decision.setDecision(AgentApprovalDecisionEnum.REJECT);
+        decision.setDecidedBy(9L);
+        gateway.decide(decision);
+
+        assertEquals(AgentRunStatusEnum.FAILED,
                 runService.get(creation.getInitialRun().getId()).getStatus());
         assertEquals(AgentTaskStatusEnum.IN_PROGRESS,
                 taskService.get(creation.getTask().getId()).getStatus());

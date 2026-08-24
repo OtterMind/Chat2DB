@@ -20,4 +20,11 @@ public class AgentRuntimeTaskScope {
     private Integer leaseAttempt;
     private Date expiresAt;
     private List<AgentDataScope> dataScopes;
+    private List<String> dataWikiIds;
+    private String connectorSessionId;
+    private String connectorConversationId;
+    private String connectorInvocationId;
+    private String externalSessionId;
+    private String externalCallId;
+    private String connectorReplayResultJson;
 }

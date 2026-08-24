@@ -12,6 +12,7 @@ class DesktopMcpHttpFilterTest {
         assertTrue(DesktopMcpHttpFilter.allowedPath("/mcp"));
         assertTrue(DesktopMcpHttpFilter.allowedPath("/api/agent/runtime/daemon/instances/register"));
         assertTrue(DesktopMcpHttpFilter.allowedPath("/api/agent/runtime/mcp/runs/run-1"));
+        assertTrue(DesktopMcpHttpFilter.allowedPath("/api/agent/connectors/pairings"));
         assertTrue(DesktopMcpHttpFilter.allowedPath("/api/agent/gateway/channels/channel-1/inbound"));
         assertFalse(DesktopMcpHttpFilter.allowedPath("/api/agent/runtime-profiles"));
         assertFalse(DesktopMcpHttpFilter.allowedPath("/api/connection/list"));

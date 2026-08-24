@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
@@ -56,6 +57,19 @@ public class AgentRunServiceImpl implements IAgentRunService {
         updated.setFailureReason(StringUtils.trimToNull(request.getFailureReason()));
         updated.setResultSummary(StringUtils.trimToNull(request.getResultSummary()));
         return storage.updateRun(updated, request.getExpectedRevision());
+    }
+
+    @Override
+    public AgentRunEvent appendEvent(AgentRunEvent event) {
+        if (event == null || StringUtils.isBlank(event.getRunId()) || StringUtils.isBlank(event.getEventId())
+                || event.getType() == null) {
+            throw new IllegalArgumentException("run event id, run id and type are required");
+        }
+        get(event.getRunId());
+        Date now = new Date();
+        if (event.getOccurredAt() == null) event.setOccurredAt(now);
+        if (event.getPersistedAt() == null) event.setPersistedAt(now);
+        return storage.appendRunEvent(event);
     }
 
     private void validate(AgentRunTransitionRequest request) {
