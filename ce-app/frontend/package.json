@@ -1,6 +1,6 @@
 {
   "name": "cutting-edge-frontend",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "description": "Cutting Edge (CE) — AI-powered video clipping studio",
   "private": true,
   "main": "dist-electron/main.js",

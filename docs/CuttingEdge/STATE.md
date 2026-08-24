@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.9` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.10` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -102,7 +102,7 @@ npm run verify
 |---|---|
 | `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **262 collected: 259 passed, 3 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
-| `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
+| `npm run test:ui` (in `ce-app/frontend`, needs Chromium from `sandbox-test-env.sh`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
 | the same test also guards the layout the user asked for: no scale bar above the timeline, no magnifiers in the transport, the scale control inside the timeline, Ctrl+wheel zoom, the canvas shape, and the home screen's starting cards |
 | the same test also checks the film strip, the waveform, the beat grid, cut-on-beat, keyframe interpolation, mute vs hide, the docked wordmark, readable toasts, and that the update card / Settings / Diagnostics are reachable from the home screen — 71 checks |
@@ -762,6 +762,22 @@ gate that stops a broken installer from being published.
     `subtitles.py` directly, so renaming a style there now fails the suite.
     **A string that crosses a boundary is an interface, and interfaces get
     checked.**
+
+76. **A deprecation warning is a failed check, not a warning.** The Style Match
+    intake card used antd's `addonAfter` on the seconds field. antd logs
+    `[antd: InputNumber] addonAfter is deprecated`, and `npm run test:playback`
+    asserts the console is clean — because the 1.0 criterion is a clean install
+    with **no console error**, and "it is only a warning" is how a real error
+    arrives six months later riding along with fifty others. The whole browser
+    suite was green apart from that one line, which is the argument for running
+    it: 71 backend tests could not see it, and the user would have.
+77. **Coverage says where the tests are not.** Measured with `coverage run
+    --source=core,app`: **73 %** overall. The engine the editor uses is well
+    covered (`compose` 87 %, `style` 88 %, `subtitles` 98 %, `tasks` 98 %), and
+    the gap is one place: the **job pipeline** — `core/engine/export.py` 0 %,
+    `ingest.py` 0 %, `app/routers/jobs.py` 33 %, `services/pipeline.py`
+    untested. Not dead code (the pipeline imports both), just never exercised.
+    That is the honest next target for tests, ahead of any new feature.
 
 ## 5. Release procedure
 

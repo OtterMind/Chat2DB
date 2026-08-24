@@ -15,3 +15,4 @@ build/
 .DS_Store
 build-assets/icon-src.png
 package-lock.json
+.coverage

@@ -162,17 +162,23 @@ function IntentCard({
         <div className="ce-kv">
           <span>{t('How long should the result be?', 'نتیجه چقدر باشد؟')}</span>
         </div>
-        <InputNumber
-          value={answers.seconds ?? null}
-          disabled={disabled}
-          min={1}
-          max={3600}
-          step={5}
-          style={{ width: 140 }}
-          data-testid="intent-seconds"
-          addonAfter={t('seconds', 'ثانیه')}
-          onChange={(value) => onChange({ ...answers, seconds: Number(value) || 0 })}
-        />
+        {/* Not `addonAfter`: antd has deprecated it and logs a warning, and a
+            console that is not clean is a failed check — the 1.0 criterion is a
+            clean install with no console error, and `npm run test:playback`
+            asserts exactly that. The unit is a label beside the field instead. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <InputNumber
+            value={answers.seconds ?? null}
+            disabled={disabled}
+            min={1}
+            max={3600}
+            step={5}
+            style={{ width: 140 }}
+            data-testid="intent-seconds"
+            onChange={(value) => onChange({ ...answers, seconds: Number(value) || 0 })}
+          />
+          <span className="ce-hint">{t('seconds', 'ثانیه')}</span>
+        </div>
         <p className="ce-hint" style={{ marginTop: 2 }}>
           {t(
             'Without it, the edit is exactly as long as the reference — which is why a 12-second reference turned three minutes of your footage into 12 seconds.',
