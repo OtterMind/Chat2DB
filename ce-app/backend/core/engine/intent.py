@@ -36,20 +36,25 @@ from dataclasses import asdict, dataclass, field
 # that changes nothing is worse than no answer at all.
 
 KINDS: dict[str, dict[str, float]] = {
-    "talking_head": {"speech": 1.00, "motion": 0.25, "onset": 0.60, "edge": 0.20},
-    "interview":    {"speech": 1.00, "motion": 0.20, "onset": 0.50, "edge": 0.25},
-    "tutorial":     {"speech": 0.80, "motion": 0.55, "onset": 0.50, "edge": 0.40},
-    "vlog":         {"speech": 0.60, "motion": 0.70, "onset": 0.50, "edge": 0.55},
-    "product":      {"speech": 0.50, "motion": 0.80, "onset": 0.40, "edge": 0.50},
-    "gaming":       {"speech": 0.40, "motion": 0.90, "onset": 0.80, "edge": 0.60},
-    "montage":      {"speech": 0.10, "motion": 1.00, "onset": 0.80, "edge": 0.80},
-    "travel":       {"speech": 0.10, "motion": 0.90, "onset": 0.40, "edge": 0.70},
-    "sport":        {"speech": 0.20, "motion": 0.90, "onset": 0.80, "edge": 0.70},
-    "event":        {"speech": 0.60, "motion": 0.60, "onset": 0.60, "edge": 0.50},
+    # `action` = how burst-like the movement is (a spike, a jump, a rep) rather
+    # than how much the frame changes overall (a pan also changes a lot).
+    # `presence` = the share of the window where a subject is actually moving in
+    # frame, so an empty court or a rest between sets ranks low.
+    "talking_head": {"speech": 1.00, "motion": 0.25, "onset": 0.60, "edge": 0.20, "action": 0.10, "presence": 0.30},
+    "interview":    {"speech": 1.00, "motion": 0.20, "onset": 0.50, "edge": 0.25, "action": 0.10, "presence": 0.30},
+    "tutorial":     {"speech": 0.80, "motion": 0.55, "onset": 0.50, "edge": 0.40, "action": 0.30, "presence": 0.50},
+    "vlog":         {"speech": 0.60, "motion": 0.70, "onset": 0.50, "edge": 0.55, "action": 0.40, "presence": 0.50},
+    "product":      {"speech": 0.50, "motion": 0.80, "onset": 0.40, "edge": 0.50, "action": 0.40, "presence": 0.50},
+    "gaming":       {"speech": 0.40, "motion": 0.90, "onset": 0.80, "edge": 0.60, "action": 0.80, "presence": 0.60},
+    "montage":      {"speech": 0.10, "motion": 1.00, "onset": 0.80, "edge": 0.80, "action": 0.80, "presence": 0.50},
+    "travel":       {"speech": 0.10, "motion": 0.90, "onset": 0.40, "edge": 0.70, "action": 0.40, "presence": 0.40},
+    "sport":        {"speech": 0.20, "motion": 0.90, "onset": 0.80, "edge": 0.70, "action": 1.00, "presence": 0.90},
+    "event":        {"speech": 0.60, "motion": 0.60, "onset": 0.60, "edge": 0.50, "action": 0.40, "presence": 0.50},
 }
 
 #: Neutral, for an unanswered question — no signal is favoured.
-NEUTRAL: dict[str, float] = {"speech": 0.50, "motion": 0.50, "onset": 0.50, "edge": 0.40}
+NEUTRAL: dict[str, float] = {"speech": 0.50, "motion": 0.50, "onset": 0.50, "edge": 0.40,
+                           "action": 0.30, "presence": 0.30}
 
 #: What the user is *trying to do* → multipliers on `core.brain.objective.WEIGHTS`.
 #: These change the judge, not the measurements: a lesson that cuts mid-sentence
@@ -266,6 +271,8 @@ class Intent:
     avoid: list[str] = field(default_factory=list)
     #: The length the finished edit should have, in seconds. 0 = the reference's.
     seconds: float = 0.0
+    #: Slow the single best moment to half speed, as a highlight beat.
+    slowmo: bool = False
     #: Anything else, in the user's own words.
     notes: str = ""
 
@@ -314,6 +321,7 @@ class Intent:
             # A target length below one second, or longer than an hour, is a
             # typo rather than a wish — ignore it instead of building to it.
             seconds=round(seconds, 3) if 1.0 <= seconds <= 3600.0 else 0.0,
+            slowmo=bool(raw.get("slowmo")),
             notes=str(raw.get("notes") or "").strip()[:500],
         )
 
@@ -325,7 +333,7 @@ class Intent:
         """No answer at all: behave exactly as before this existed."""
         return not any((self.kind, self.goal, self.focus, self.energy, self.platform,
                         self.audience, self.captions, self.restrictions, self.music,
-                        self.keep, self.avoid, self.seconds))
+                        self.keep, self.avoid, self.seconds, self.slowmo))
 
     # --------------------------------------------------------------- effects
 

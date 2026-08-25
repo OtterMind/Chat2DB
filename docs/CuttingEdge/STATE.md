@@ -935,6 +935,26 @@ gate that stops a broken installer from being published.
     crop" test was rebuilt on a *still* fixture — its testsrc2 fixture moves, and
     a moving faceless frame is now (correctly) followed, not centred.
 
+91. **A sports highlight lands on the burst, and the best one lingers.** Three
+    additions for the footage the owner actually shoots (volleyball, gym, jump
+    rope), each measured on a recipe-built fixture (`tests/test_sports.py`):
+    `action` = the largest frame-to-frame change in a window (a spike is one
+    violent frame; a pan is a steady moderate one — the max, not the mean,
+    separates them), `presence` = the share of frame pairs with change above a
+    floor (an empty court or a rest between sets ranks low), and `slowmo` = the
+    single best clip plays at half speed as a highlight beat while the rest keeps
+    the reference rhythm (the source window consumed is unchanged, so nothing is
+    invented). The sport kind weights action 1.0 / presence 0.9. Both new signals
+    come from the grayscale strip one FFmpeg call already decodes.
+92. **The blueprint lives in `docs/CuttingEdge/ARCHITECTURE.md`.** Written for a
+    reader who has never seen the program: the process topology, the edit model
+    (five keyframe channels, opacity deliberately absent), the render engine and
+    its CSS-twin preview, the analysis pipeline, Style Match and the intent
+    weights, the brain's "a model may only win by scoring higher" rule, the
+    on-demand/licence discipline, packaging and the differential update, the
+    known-answer testing philosophy, a directory map, and a rebuild-from-zero
+    checklist. It is the contract a new developer must not break.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

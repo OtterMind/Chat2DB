@@ -321,6 +321,31 @@ def _classify_motion(path: str, start: float, duration: float) -> tuple[str, flo
     return "static", energy
 
 
+
+
+def _action_profile(path: str, start: float, duration: float) -> tuple[float, float]:
+    """How *burst-like* and how *occupied* a window is, from sampled frames.
+
+    Two numbers a sport needs that mean energy does not capture:
+
+    * **peak** — the largest frame-to-frame change inside the window. A pan is a
+      steady moderate change; a spike or a jump is one violent frame. The max,
+      not the mean, is what separates them.
+    * **presence** — the share of consecutive frame pairs with change above a
+      floor. An empty court or a rest between sets is near zero; a rally is near
+      one. This is the "is the subject even in this moment" vote.
+
+    Both come from the same grayscale strip `sample_strip` already decodes in one
+    FFmpeg call, so the cost is a handful of array diffs.
+    """
+    frames = sample_strip(path, start, duration, 6)
+    if len(frames) < 2:
+        return 0.0, 0.0
+    diffs = [float(np.abs(a - b).mean() / 255.0) for a, b in zip(frames, frames[1:])]
+    peak = max(diffs)
+    active = sum(1 for d in diffs if d > 0.02) / len(diffs)
+    return peak, active
+
 def _silent(stage: str, progress: float, label: str = "") -> None:
     """The default reporter: analysis works exactly as before when nobody is watching."""
 
@@ -581,6 +606,9 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
     for candidate in finalists:
         _, energy = _classify_motion(path, candidate["start"], candidate["end"] - candidate["start"])
         candidate["signals"]["motion"] = float(energy)
+        peak, presence = _action_profile(path, candidate["start"], candidate["end"] - candidate["start"])
+        candidate["signals"]["action"] = float(peak)
+        candidate["signals"]["presence"] = float(presence)
 
     # ---- vision: one vote from a model that has seen the frame ------------
     # Strictly optional and off by default. When a vision model the user runs is
@@ -607,7 +635,7 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
     if has_vision:
         _w["vision"] = vision_engine.MAX_WEIGHT
 
-    active = [key for key in ("speech", "motion", "onset", "edge", "vision")
+    active = [key for key in ("speech", "motion", "onset", "edge", "vision", "action", "presence")
               if _w.get(key, 0.0) > 0.0 and any(key in c["signals"] for c in finalists)]
     ranges: dict[str, tuple[float, float]] = {}
     for key in active:
@@ -898,6 +926,12 @@ def build_timeline(
     soft_ratio = ((data.get("transitions") or {}).get("soft") or 0) / counted if counted else 0.0
     soft_every = max(1, round(1 / soft_ratio)) if soft_ratio > 0.05 else 10**6
 
+    # The single best moment, for the slow-mo beat when the user asked for one.
+    best_index = (
+        max(range(len(picks)), key=lambda i: picks[i].get("score", 0.0))
+        if (wanted.slowmo and picks) else -1
+    )
+
     for index, shot in enumerate(shots):
         want = float(shot["duration"])
         # The winner normally returns one pick per shot. When it returns fewer,
@@ -915,6 +949,14 @@ def build_timeline(
         length = min(want, available, max(0.2, source_duration - pick["start"]))
         if length < 0.2:
             continue
+
+        # Slow-mo: the same source window at half speed, twice the screen time.
+        # The source consumed is length*speed = the original window, so nothing is
+        # invented; the highlight simply lingers.
+        speed = 1.0
+        if index == best_index:
+            speed = 0.5
+            length = length * 2
 
         motion = shot.get("motion", "static")
         keyframes: list[dict] = []
@@ -956,6 +998,7 @@ def build_timeline(
                     "vignette": 0.0,
                 },
                 **({"keyframes": keyframes} if keyframes else {}),
+                **({"speed": speed} if speed != 1.0 else {}),
             },
         }
         clips.append(clip)
@@ -980,6 +1023,8 @@ def build_timeline(
     skipped: list[str] = []
     if wanted.seconds > 0:
         applied.append(f"length set to {wanted.seconds:g} s")
+    if wanted.slowmo and best_index >= 0:
+        applied.append("half-speed slow-mo on the best moment")
     markers = wanted.restriction_markers()
     if markers:
         # One line, not the words themselves: a summary that prints a swear list

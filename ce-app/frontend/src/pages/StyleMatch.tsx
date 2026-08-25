@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { message, Modal, Input, InputNumber } from 'antd'
+import { message, Modal, Input, InputNumber, Segmented } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
   ListChecks, Target, Crosshair, Timer, Globe, Users, Captions, Ban, Music4 as MusicIcon,
@@ -183,6 +183,20 @@ function IntentCard({
           {t(
             'Without it, the edit is exactly as long as the reference — which is why a 12-second reference turned three minutes of your footage into 12 seconds.',
             'بدون آن، تدوین دقیقاً به اندازهٔ ویدیوی الگو می‌شود — به همین دلیل یک الگوی ۱۲ ثانیه‌ای، سه دقیقه فیلم تو را به ۱۲ ثانیه تبدیل می‌کرد.'
+          )}
+        </p>
+        <Segmented
+          value={answers.slowmo ? 'on' : 'off'}
+          onChange={(v) => onChange({ ...answers, slowmo: v === 'on' })}
+          options={[
+            { value: 'off', label: t('Normal speed', 'سرعت عادی') },
+            { value: 'on', label: t('Slow-mo the best moment', 'اسلوموی بهترین لحظه') },
+          ]}
+        />
+        <p className="ce-hint" style={{ marginTop: 2 }}>
+          {t(
+            'For sports: the single strongest moment plays at half speed as a highlight beat; the rest keeps the reference rhythm.',
+            'برای ورزش: قوی‌ترین لحظه با نصف سرعت به‌عنوان ضربِ هایلایت پخش می‌شود؛ بقیه ریتم الگو را نگه می‌دارند.'
           )}
         </p>
       </div>

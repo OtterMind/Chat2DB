@@ -68,6 +68,8 @@ export interface IntentAnswers {
   avoid?: string
   /** The length the finished edit should have, in seconds. */
   seconds?: number
+  /** Slow the single best moment to half speed. */
+  slowmo?: boolean
   notes?: string
 }
 
