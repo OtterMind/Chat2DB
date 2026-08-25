@@ -662,6 +662,20 @@ export default function StyleMatch() {
             </div>
           )}
 
+
+          {(result as unknown as { brain?: { fa: string; en: string; reasonFa: string; reasonEn: string; use: boolean }[] }).brain && (
+            <div className="ce-kv" style={{ marginTop: 8, flexDirection: 'column', alignItems: 'stretch' }}>
+              <span>{t("The editor's plan", 'نقشه‌ی ادیتور')}</span>
+              {(result as unknown as { brain: { fa: string; en: string; reasonFa: string; reasonEn: string; use: boolean }[] }).brain
+                .filter((a) => a.use)
+                .map((a) => (
+                  <strong key={a.en} style={{ fontWeight: 500 }}>
+                    • {lang === 'fa' ? `${a.fa} — ${a.reasonFa}` : `${a.en} — ${a.reasonEn}`}
+                  </strong>
+                ))}
+            </div>
+          )}
+
           {result.summary.brain && result.summary.brain.scoreboard.length > 0 && (
             <div className="ce-kv" style={{ marginTop: 8 }}>
               <span>{t('Who planned it', 'چه کسی برنامه‌ریزی کرد')}</span>

@@ -307,6 +307,28 @@ work, highest value first:
 Deliberately not in-process: GPL/AGPL/no-licence (aubio, peaks.js, mlt, YOLO,
 video-timeline-editor) and DeepFilterNet until its NOASSERTION licence is cleared.
 
+
+
+## 2c. The professional-editor brain (the "living editor")
+
+The headline ask: Style Match must not apply effects blindly; its brain must first
+*know every tool the app owns* (a fixed inventory) and then, for the reference and
+the footage, consider each tool **separately** and say *why* — like a seasoned
+editor, not an effect-sprinkler.
+
+* `core/brain/editor_brain.py` holds the tool inventory (beat-cuts, slow-mo,
+  captions, karaoke, ducking, reframe, grade, transitions, hook-first, denoise)
+  and `assess()` returns one use/skip decision per tool with a human reason, keyed
+  only off measured signals. `notes()` renders the chosen tools as the editor's
+  notes (fa/en), shown on the Style Match result card.
+* `build_timeline` attaches the assessment to the result (`brain`), so the plan is
+  visible and honest.
+
+Optimised remaining path (order by value): 1) whisperX+Hazm+python-ass (Persian
+karaoke) on owner's go-ahead · 2) TransNetV2 · 3) Demucs · 4) MediaPipe pose ·
+5) 1.0 hardening (crash reporting, Playwright-on-packaged, perf-regression, manual).
+Deliberately not in-process: GPL/AGPL/no-licence and HF-token-gated weights.
+
 ## 3. What is deliberately not on this road
 
 * `librosa` — see §1.2. Revisit only if our detector is shown to fail on real

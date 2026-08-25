@@ -30,6 +30,7 @@ from app.config import settings
 from core.brain import meaning as brain_meaning
 from core.brain import objective
 from core.brain import race as brain_race
+from core.brain import editor_brain
 from core.engine import analyze as analysis
 from core.engine import intent as intent_model
 from core.engine import fillers as fillers_engine
@@ -322,6 +323,24 @@ def _classify_motion(path: str, start: float, duration: float) -> tuple[str, flo
     return "static", energy
 
 
+
+
+def _coarse_action(path: str, duration: float) -> tuple[float, float]:
+    """Average action-peak and presence over a few windows, for the brain.
+
+    Coarse on purpose: the brain only needs "is there a sharp peak / a moving
+    subject", not a per-window map; a handful of samples is enough and cheap.
+    """
+    if duration <= 0:
+        return 0.0, 0.0
+    n = 6
+    acts, pres = [], []
+    for i in range(n):
+        start = duration * i / n
+        peak, presence = _action_profile(path, start, max(0.5, duration / n))
+        acts.append(peak)
+        pres.append(presence)
+    return (sum(acts) / n, sum(pres) / n)
 
 
 def _action_profile(path: str, start: float, duration: float) -> tuple[float, float]:
@@ -1143,6 +1162,13 @@ def build_timeline(
             "clips": clips,
             "transitions": transitions,
         },
+        "brain": editor_brain.assess(
+            data,
+            {"speech_ratio": speech_ratio,
+             "action": _coarse_action(source, source_duration)[0],
+             "presence": _coarse_action(source, source_duration)[1]},
+            intent=wanted.as_dict(),
+        ),
         "summary": {
             "shots": len([c for c in clips if c["trackId"] == "v1"]),
             "duration": round(cursor, 3),
