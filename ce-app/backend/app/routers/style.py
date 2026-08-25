@@ -223,3 +223,14 @@ async def apply_start(payload: ApplyRequest) -> dict:
             cancellation.bind(None)
 
     return tasks.start("style:apply", work).as_dict()
+
+
+class AiTransitionsRequest(BaseModel):
+    timeline: dict
+    bpm: float = 120.0
+
+
+@router.post("/ai-transitions")
+def ai_transitions(payload: AiTransitionsRequest) -> dict:
+    """One music-sized transition per video junction; the editor applies them."""
+    return {"transitions": style.suggest_transitions(payload.timeline, payload.bpm)}

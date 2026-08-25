@@ -1356,3 +1356,35 @@ def starters() -> list[dict]:
 
 def delete_template(name: str) -> None:
     (templates_dir() / f"{name}.cetemplate").unlink(missing_ok=True)
+
+
+def suggest_transitions(timeline: dict, bpm: float = 120.0) -> list[dict]:
+    """An "AI transitions" pass: one transition per video junction, sized to the
+    music and varied by position, instead of a single type everywhere.
+
+    The duration is half a beat (a cut that lands on the music reads as
+    intentional), clamped so a very fast or very slow tempo cannot produce a
+    subliminal flash or a dissolve longer than the clip. The type alternates
+    between a soft and a directional move so a montage does not read as one
+    repeated dissolve. It only *suggests*; the caller applies.
+    """
+    clips = [c for c in timeline.get("clips", []) if c.get("trackId") == "v1"]
+    clips.sort(key=lambda c: float(c.get("start", 0)))
+    half_beat = (60.0 / max(40.0, bpm)) / 2.0
+    duration = round(max(0.2, min(0.8, half_beat)), 3)
+    soft = ["fade", "smoothleft", "circleopen"]
+    hard = ["slideleft", "wipeleft", "distance"]
+
+    out = []
+    for index in range(len(clips) - 1):
+        a, b = clips[index], clips[index + 1]
+        # Contiguous junction only; a gap means the user left a deliberate break.
+        if abs((float(a["start"]) + float(a["duration"])) - float(b["start"])) > 0.05:
+            continue
+        family = soft if index % 2 == 0 else hard
+        out.append({
+            "fromClipId": a["id"], "toClipId": b["id"],
+            "type": family[(index // 2) % len(family)],
+            "duration": duration,
+        })
+    return out

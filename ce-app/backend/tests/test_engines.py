@@ -70,3 +70,18 @@ def test_rife_degrades_when_not_fetched():
         pytest.skip("RIFE fetched on this machine")
     with pytest.raises(rife.RifeNotInstalled):
         rife.interpolate(b"", b"", 64, 64)
+
+
+def test_ai_transitions_one_per_contiguous_junction_sized_to_music():
+    from core.engine import style
+
+    timeline = {"clips": [
+        {"id": "a", "trackId": "v1", "start": 0, "duration": 2.0},
+        {"id": "b", "trackId": "v1", "start": 2.0, "duration": 2.0},
+        {"id": "c", "trackId": "v1", "start": 5.0, "duration": 2.0},  # gap before c: no junction
+    ]}
+    out = style.suggest_transitions(timeline, bpm=120.0)
+
+    assert len(out) == 1, "only the contiguous a→b junction gets a transition"
+    assert out[0]["fromClipId"] == "a" and out[0]["toClipId"] == "b"
+    assert 0.2 <= out[0]["duration"] <= 0.8, "duration must be a half-beat, clamped"

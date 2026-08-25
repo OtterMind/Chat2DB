@@ -16,6 +16,7 @@ import {
 } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
+import { backendOrigin } from '../api/runtime'
 import { FEATURES } from '../features/catalog'
 
 type PanelId =
@@ -99,10 +100,34 @@ export default function EditorToolbar({
       run: redo,
       disabled: future.length === 0,
     },
+    {
+      id: 'aitransitions',
+      icon: <Wand2 {...ICON} />,
+      label: ['AI Transitions', 'ترنزیشن هوشمند'],
+      run: () => void applyAiTransitions(),
+    },
   ]
 
   const clip = clips.find((c) => c.id === selectedId) ?? null
   const props = clip ? propsOf(clip) : null
+
+  /** One music-sized transition per junction, suggested by the backend. */
+  const applyAiTransitions = async () => {
+    const state = useEditor.getState()
+    const bpm = state.bpm || 120
+    try {
+      const res = await fetch(`${backendOrigin}/api/style/ai-transitions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeline: { clips: state.clips }, bpm }),
+      })
+      const data = await res.json()
+      for (const t of data.transitions ?? []) addTransition(t.fromClipId, t.type, t.duration)
+      message.success(t('AI transitions applied to every junction', 'ترنزیشن هوشمند روی همه‌ی اتصال‌ها نشست'))
+    } catch {
+      message.error(t('Could not reach the backend', 'بک‌اند در دسترس نیست'))
+    }
+  }
 
   /** Transcribe the clip under the playhead and lay captions on the text lane. */
   /**

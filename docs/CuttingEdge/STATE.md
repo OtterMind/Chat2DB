@@ -1018,6 +1018,14 @@ gate that stops a broken installer from being published.
     overlay): drop → auto-clip 30s vertical → captions → export; shown once via
     localStorage.
 
+101. **AI Transitions button** in the editor rail: one music-sized transition per
+    contiguous junction (half a beat, clamped 0.2–0.8s), alternating soft and
+    directional types, suggested by `/api/style/ai-transitions` and applied via the
+    existing `addTransition` — a first, music-aware pass, not one repeated dissolve.
+102. **Transcript/caption engines registered on-demand** (not shipped): Hazm,
+    Virastar, whisperX, DadmaTools, Hezar, pyannote, python-ass join the registry
+    with verified licences; actual integration awaits the owner's go-ahead.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
