@@ -39,6 +39,9 @@ public class AiToolContextRequest {
 
     private String agentRunId;
 
+    /** Stable caller-provided idempotency key for one Agent tool invocation. */
+    private String agentToolCallId;
+
     /**
      * Keep an Agent SQL tool call open while its approval is pending. External
      * Runtime MCP calls enable this so the provider receives the approved SQL

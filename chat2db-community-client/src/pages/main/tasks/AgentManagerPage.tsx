@@ -1,14 +1,25 @@
 import i18n from '@/i18n';
 import { type IAIModelConfigItem, listAIModelConfigs } from '@/service/aiModelConfig';
-import agentService, { type AgentDefinition, type AgentRuntimeOption } from '@/service/agent';
+import agentService, {
+  type AgentDataWikiBinding,
+  type AgentDefinition,
+  type AgentRuntimeOption,
+} from '@/service/agent';
 import connectionService from '@/service/connection';
+import dataWikiService, { type DataWikiDefinition } from '@/service/dataWiki';
+import {
+  listConnectorSessions,
+  revokeConnectorSession,
+  type AgentConnectorSession,
+} from '@/service/agentConnector';
 import type { IConnectionDetails } from '@/typings';
 import feedback from '@/utils/feedback';
-import { Alert, Button, Checkbox, Form, Input, Popconfirm, Select, Space, Tag, Upload } from 'antd';
-import { Bot, ChevronRight, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, UploadCloud } from 'lucide-react';
+import { Alert, Button, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Upload } from 'antd';
+import { Bot, BookOpenText, Cable, ChevronRight, Pencil, Plus, Search, ShieldCheck, Sparkles, Trash2, UploadCloud } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AgentDataScopeEditor from './AgentDataScopeEditor';
+import AgentDataWikiBindingEditor from './AgentDataWikiBindingEditor';
 import ApprovalModeTag from './ApprovalModeTag';
 import AgentOutputContractEditor from './AgentOutputContractEditor';
 import AgentRuntimePicker from './AgentRuntimePicker';
@@ -21,6 +32,7 @@ import {
 import { AgentAvatar, CapabilityChips, RuntimeBadge } from './TaskPrimitives';
 import { useStyles } from './style';
 import { readAgentAvatar } from './agentAvatar';
+import { agentDataWikiBindings, dataWikiBindingIds } from './agentDataWikiBinding';
 import { parseAgentOutputContract, serializeAgentOutputContract } from './agentOutputContract';
 import { dataSourceDisplayName } from './taskDataSource';
 
@@ -37,6 +49,9 @@ interface Props {
 }
 
 const capabilities = ['METADATA_READ', 'DATA_READ', 'DATA_WRITE', 'DDL', 'EXPORT', 'IMPORT'];
+
+const approvalModeLabel = (mode: AgentDataWikiBinding['approvalMode']) =>
+  i18n(`task.agent.approvalMode.${mode.toLowerCase()}` as Parameters<typeof i18n>[0]);
 
 export default function AgentManagerPage({
   agents,
@@ -55,10 +70,14 @@ export default function AgentManagerPage({
   const [selectedAgentId, setSelectedAgentId] = useState<string>();
   const [dataSources, setDataSources] = useState<IConnectionDetails[]>([]);
   const [modelConfigs, setModelConfigs] = useState<IAIModelConfigItem[]>([]);
+  const [dataWikis, setDataWikis] = useState<DataWikiDefinition[]>([]);
   const [runtimeOptions, setRuntimeOptions] = useState<AgentRuntimeOption[]>([]);
   const [runtimeOptionsLoading, setRuntimeOptionsLoading] = useState(false);
   const [runtimeOptionsError, setRuntimeOptionsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [connectorSessionsOpen, setConnectorSessionsOpen] = useState(false);
+  const [connectorSessions, setConnectorSessions] = useState<AgentConnectorSession[]>([]);
+  const [connectorSessionsLoading, setConnectorSessionsLoading] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentDefinition>();
   const [avatarCustomized, setAvatarCustomized] = useState(false);
   const [outputContractExtras, setOutputContractExtras] = useState<Record<string, unknown>>({});
@@ -108,18 +127,25 @@ export default function AgentManagerPage({
   }, [agents, query]);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) || filteredAgents[0];
   const selectedRuntime = runtimeOptions.find((option) => option.profileId === selectedAgent?.runtimeProfileId);
+  const selectedEffectiveScopes = selectedAgent?.effectiveDataScopes || selectedAgent?.dataScopes || [];
 
   useEffect(() => {
     if (!active) return;
     void refreshRuntimeOptions();
-    void Promise.all([connectionService.getList({ pageNo: 1, pageSize: 500 }), listAIModelConfigs()])
-      .then(([connectionResult, models]) => {
+    void Promise.all([
+      connectionService.getList({ pageNo: 1, pageSize: 500 }),
+      listAIModelConfigs(),
+      dataWikiService.list(),
+    ])
+      .then(([connectionResult, models, wikis]) => {
         setDataSources(connectionResult.data || []);
         setModelConfigs((models || []).filter((model) => model.enabled !== false));
+        setDataWikis(wikis || []);
       })
       .catch(() => {
         setDataSources([]);
         setModelConfigs([]);
+        setDataWikis([]);
       });
   }, [active, refreshRuntimeOptions]);
 
@@ -146,7 +172,15 @@ export default function AgentManagerPage({
         modelConfigId: values.modelConfigId,
         systemPrompt: values.systemPrompt,
         capabilities: values.capabilities,
-        dataScopes: values.dataScopes.map((scope) => ({
+        dataWikiBindings: (values.dataWikiBindings || []).map((binding) => ({
+          dataWikiId: binding.dataWikiId,
+          maxRows: binding.maxRows,
+          timeoutSeconds: binding.timeoutSeconds,
+          approvalMode: binding.approvalMode,
+          allowProduction: !!binding.allowProduction,
+        })),
+        dataWikiIds: dataWikiBindingIds(values.dataWikiBindings),
+        dataScopes: (values.dataScopes || []).map((scope) => ({
           dataSourceId: scope.dataSourceId,
           databaseName: scope.databaseName,
           schemaName: scope.schemaName,
@@ -189,13 +223,15 @@ export default function AgentManagerPage({
     setOutputContractExtras(outputContract.extras);
     form.setFieldsValue(agent ? {
       ...agent,
+      dataWikiBindings: agentDataWikiBindings(agent),
       dataScopes: agent.dataScopes.map((scope) => ({ ...scope, accessLevel: scope.tableNames.length ? 'TABLES' : 'NAMESPACE' })),
       outputRequirements: outputContract.outputRequirements,
       outputRequiredSections: outputContract.outputRequiredSections,
     } : {
       avatar: CHAT2DB_AGENT_AVATAR,
       runtimeType: 'EMBEDDED_SPRING_AI', capabilities: ['METADATA_READ', 'DATA_READ'],
-      dataScopes: [{ accessLevel: 'NAMESPACE', maxRows: 200, timeoutSeconds: 60, approvalMode: 'RISK_BASED' }],
+      dataWikiBindings: [],
+      dataScopes: [],
       outputRequirements: outputContract.outputRequirements,
       outputRequiredSections: outputContract.outputRequiredSections,
     });
@@ -226,6 +262,13 @@ export default function AgentManagerPage({
     } finally { setSubmitting(false); }
   };
 
+  const openConnectorSessions = async () => {
+    setConnectorSessionsOpen(true);
+    setConnectorSessionsLoading(true);
+    try { setConnectorSessions(await listConnectorSessions()); }
+    finally { setConnectorSessionsLoading(false); }
+  };
+
   return (
     <div className={styles.agentManagerPage}>
       <header className={styles.managerHeader}>
@@ -238,6 +281,11 @@ export default function AgentManagerPage({
           <p>{i18n('task.agent.manageHint')}</p>
         </div>
         <Space>
+          {!editorMode && (
+            <Button icon={<Cable size={15} />} onClick={() => void openConnectorSessions()}>
+              Connector Sessions
+            </Button>
+          )}
           {!editorMode && (
             <Button type="primary" icon={<Plus size={15} />} onClick={() => onOpenEditor()}>
               {i18n('task.agent.create')}
@@ -313,16 +361,47 @@ export default function AgentManagerPage({
                     <CapabilityChips values={selectedAgent.capabilities} limit={8} />
                   </div>
                 </div>
-                {!selectedAgent.dataScopes.length && (
+                {!selectedEffectiveScopes.length && (
                   <Alert type="warning" showIcon message={i18n('task.agent.scopeBindingRequired')} />
                 )}
+                <div className={styles.inspectorSection}>
+                  <h4>
+                    <BookOpenText size={14} />
+                    {i18n('task.agent.dataWikiBinding')}
+                  </h4>
+                  {agentDataWikiBindings(selectedAgent).length ? (
+                    <div className={styles.inspectorScopes}>
+                      {agentDataWikiBindings(selectedAgent).map((binding) => (
+                        <div key={binding.dataWikiId}>
+                          <strong>
+                            {dataWikis.find((wiki) => wiki.id === binding.dataWikiId)?.name
+                              || i18n('task.agent.dataWikiUnavailable')}
+                          </strong>
+                          <span>
+                            {i18n('task.agent.dataWikiPolicySummary',
+                              binding.maxRows,
+                              binding.timeoutSeconds,
+                              approvalModeLabel(binding.approvalMode))}
+                          </span>
+                          <Tag bordered={false} color={binding.allowProduction ? 'warning' : 'default'}>
+                            {i18n(binding.allowProduction
+                              ? 'task.agent.productionAllowed'
+                              : 'task.agent.productionDenied')}
+                          </Tag>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span>{i18n('task.agent.dataWikiEmpty')}</span>
+                  )}
+                </div>
                 <div className={styles.inspectorSection}>
                   <h4>
                     <ShieldCheck size={14} />
                     {i18n('task.scope.title')}
                   </h4>
                   <div className={styles.inspectorScopes}>
-                    {selectedAgent.dataScopes.map((scope, index) => {
+                    {selectedEffectiveScopes.map((scope, index) => {
                       return (
                         <div key={`${scope.dataSourceId}-${index}`}>
                           <strong>
@@ -468,6 +547,7 @@ export default function AgentManagerPage({
                 </Form.Item>
               </section>
               <AgentDataScopeEditor form={form} dataSources={dataSources} />
+              <AgentDataWikiBindingEditor form={form} dataWikis={dataWikis} />
             </div>
             <aside className={styles.agentStudioAside}>
               <section className={styles.studioSection}>
@@ -513,6 +593,47 @@ export default function AgentManagerPage({
           </footer>
         </Form>
       )}
+      <Modal
+        open={connectorSessionsOpen}
+        title="Agent Connector Sessions"
+        width={760}
+        footer={null}
+        onCancel={() => setConnectorSessionsOpen(false)}
+      >
+        <Alert
+          showIcon
+          type="info"
+          message="外部工具只能使用 Session 固定绑定 Agent 的有效权限；撤销后 Access Token 与 Refresh Token 会立即失效。"
+          style={{ marginBottom: 12 }}
+        />
+        <Table
+          rowKey="sessionId"
+          size="small"
+          pagination={false}
+          loading={connectorSessionsLoading}
+          dataSource={connectorSessions}
+          columns={[
+            { title: '客户端', dataIndex: 'clientName' },
+            { title: 'Agent', dataIndex: 'agentName' },
+            { title: '状态', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+            { title: '创建时间', dataIndex: 'createdAt', render: (value) => new Date(value).toLocaleString() },
+            {
+              title: '操作',
+              render: (_, session) => session.status === 'active' && (
+                <Popconfirm
+                  title="确定撤销这个 Connector Session？"
+                  onConfirm={async () => {
+                    await revokeConnectorSession(session.sessionId);
+                    setConnectorSessions(await listConnectorSessions());
+                  }}
+                >
+                  <Button danger type="link">撤销</Button>
+                </Popconfirm>
+              ),
+            },
+          ]}
+        />
+      </Modal>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import i18n from '@/i18n';
-import type { AgentDefinition } from '@/service/agent';
+import { agentEffectiveDataScopes, type AgentDefinition } from '@/service/agent';
 import { Alert, Button, Form, Input, Select, type FormInstance } from 'antd';
 import { ArrowLeft, Plus } from 'lucide-react';
 import type { IConnectionDetails } from '@/typings';
@@ -74,7 +74,7 @@ export default function TaskCreatePage({
                 )}
                 onChange={(agentId) => {
                   const nextAgent = agentById.get(agentId);
-                  form.setFieldValue('scopeIndexes', (nextAgent?.dataScopes || []).map((_, index) => index));
+                  form.setFieldValue('scopeIndexes', agentEffectiveDataScopes(nextAgent).map((_, index) => index));
                 }}
                 placeholder={i18n('task.agent.select')}
               />
@@ -97,7 +97,7 @@ export default function TaskCreatePage({
                   <Form.Item name="scopeIndexes" label={i18n('task.scope.select')}>
                     <Select
                       mode="multiple"
-                      options={(formAgent?.dataScopes || []).map((scope, index) => ({
+                      options={agentEffectiveDataScopes(formAgent).map((scope, index) => ({
                         value: index,
                         label: `${dataSourceDisplayName(
                           scope.dataSourceId,
@@ -111,7 +111,7 @@ export default function TaskCreatePage({
                       placeholder={i18n('task.scope.selectPlaceholder')}
                     />
                   </Form.Item>
-                  {formAgent && !formAgent.dataScopes.length && (
+                  {formAgent && !agentEffectiveDataScopes(formAgent).length && (
                     <Alert type="warning" showIcon message={i18n('task.agent.scopeBindingRequired')} />
                   )}
                 </>

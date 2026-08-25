@@ -235,6 +235,8 @@ public class AgentRuntimeDispatchServiceImpl implements IAgentRuntimeDispatchSer
         scope.setLeaseAttempt(lease.getLeaseAttempt());
         scope.setExpiresAt(lease.getLeaseExpiresAt());
         scope.setDataScopes(List.copyOf(task.getDataScopeSnapshot()));
+        AgentDefinition agent = agentService.get(run.getAgentId());
+        scope.setDataWikiIds(agent.getDataWikiIds() == null ? List.of() : List.copyOf(agent.getDataWikiIds()));
         return scope;
     }
 

@@ -1,5 +1,5 @@
 import type { AgentTask } from '@/service/agent';
-import { TASK_BOARD_COLUMNS, type TaskBoardColumnKey } from './taskModel';
+import { isTaskBoardVisible, TASK_BOARD_COLUMNS, type TaskBoardColumnKey } from './taskModel';
 
 export interface TaskFilters {
   title?: string;
@@ -17,6 +17,7 @@ export function filterTasks(tasks: AgentTask[], filters: TaskFilters): AgentTask
       .flatMap((column) => column.statuses),
   );
   return tasks.filter((task) => {
+    if (!isTaskBoardVisible(task)) return false;
     if (title && !task.title.toLocaleLowerCase().includes(title)) return false;
     if (agentIds.size && !agentIds.has(task.assigneeAgentId)) return false;
     return !boardColumns.size || statuses.has(task.status);

@@ -11,6 +11,8 @@ export interface GlobalBaseSettings {
   customFontSize?: number;
   defaultPageSize: number;
   enableMcp?: boolean;
+  /** Show the DeepSeek Harness plugin management surface in Tasks. */
+  enableDshPluginManagement?: boolean;
 }
 
 // Server configuration

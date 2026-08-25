@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentArtifactStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentArtifactTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecisionEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalModeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeApprovalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentDeliveryStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentGatewayPlatformEnum;
@@ -24,6 +25,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentSqlOperationClassEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentSqlProposalStatusEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolAttemptStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentDataWikiBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
@@ -98,6 +100,7 @@ class H2AgentControlStorageTest {
                     AgentCapabilityEnum.METADATA_READ,
                     AgentCapabilityEnum.DATA_READ)), defaultAgent.getCapabilities());
             assertEquals(List.of(), defaultAgent.getDataScopes());
+            assertEquals(List.of(), defaultAgent.getDataWikiIds());
             assertNull(defaultAgent.getCreatedBy());
         } finally {
             thread.setContextClassLoader(originalClassLoader);
@@ -536,6 +539,37 @@ class H2AgentControlStorageTest {
         assertThrows(IllegalStateException.class, () -> storage.createAgent(duplicate));
         assertNotNull(storage.getAgent("agent-1"));
         assertNull(storage.getAgent("agent-2"));
+    }
+
+    @Test
+    void persistsAgentDataWikiBindingsAcrossUpdateAndReopen() {
+        Path database = tempDir.resolve("agent-datawiki-store");
+        H2AgentControlStorage storage = new H2AgentControlStorage(database);
+        AgentDefinition agent = agent("agent-datawiki-1");
+        agent.setDataWikiIds(List.of("wiki-1", "wiki-2"));
+        AgentDataWikiBinding binding = new AgentDataWikiBinding();
+        binding.setDataWikiId("wiki-1");
+        binding.setMaxRows(88);
+        binding.setTimeoutSeconds(19);
+        binding.setApprovalMode(AgentApprovalModeEnum.ALWAYS);
+        binding.setAllowProduction(true);
+        agent.setDataWikiBindings(List.of(binding));
+
+        AgentDefinition created = storage.createAgent(agent);
+        assertEquals(List.of("wiki-1", "wiki-2"), created.getDataWikiIds());
+        assertEquals(88, created.getDataWikiBindings().get(0).getMaxRows());
+
+        created.setDataWikiIds(List.of("wiki-2"));
+        binding.setDataWikiId("wiki-2");
+        binding.setMaxRows(42);
+        created.setDataWikiBindings(List.of(binding));
+        created.setRevision(2L);
+        created.setGmtModified(new Date(1_700_000_000_500L));
+        storage.updateAgent(created, 1L);
+
+        H2AgentControlStorage reopened = new H2AgentControlStorage(database);
+        assertEquals(List.of("wiki-2"), reopened.getAgent(agent.getId()).getDataWikiIds());
+        assertEquals(42, reopened.getAgent(agent.getId()).getDataWikiBindings().get(0).getMaxRows());
     }
 
     @Test

@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeProviderEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTransportEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentDataWikiBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunEvent;
@@ -30,6 +31,9 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentDefinitionUpdate
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunTransitionRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
+import ai.chat2db.community.domain.api.model.datawiki.DataWikiDefinition;
+import ai.chat2db.community.domain.api.model.datawiki.DataWikiResource;
+import ai.chat2db.community.domain.api.service.datawiki.IDataWikiService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import com.alibaba.fastjson2.JSON;
@@ -86,6 +90,59 @@ class AgentControlServiceTest {
         assertEquals(200, created.getDataScopes().get(0).getMaxRows());
         assertEquals(60, created.getDataScopes().get(0).getTimeoutSeconds());
         assertEquals(1L, created.getRevision());
+    }
+
+    @Test
+    void persistsDataWikiPolicyAndAppliesItToTaskScope() {
+        DataWikiResource resource = new DataWikiResource();
+        resource.setDataSourceId(7L);
+        resource.setDatabaseName("sales");
+        resource.setSchemaName("public");
+        resource.setTableName("orders");
+        DataWikiDefinition wiki = new DataWikiDefinition();
+        wiki.setId("wiki-1");
+        wiki.setCreatedBy(1L);
+        wiki.setResources(List.of(resource));
+        IDataWikiService dataWikiService = (IDataWikiService) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{IDataWikiService.class},
+                (proxy, method, args) -> {
+                    if ("get".equals(method.getName())) return wiki;
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        AgentDefinitionServiceImpl wikiAgentService = new AgentDefinitionServiceImpl(
+                storage, null, dataWikiService);
+        AgentDataWikiBinding binding = new AgentDataWikiBinding();
+        binding.setDataWikiId(wiki.getId());
+        binding.setMaxRows(81);
+        binding.setTimeoutSeconds(17);
+        binding.setApprovalMode(AgentApprovalModeEnum.ALWAYS);
+
+        AgentDefinitionCreateRequest agentRequest = new AgentDefinitionCreateRequest();
+        agentRequest.setName("Wiki analyst");
+        agentRequest.setCreatedBy(1L);
+        agentRequest.setDataWikiBindings(List.of(binding));
+        AgentDefinition created = wikiAgentService.create(agentRequest);
+
+        assertEquals(List.of("wiki-1"), created.getDataWikiIds());
+        assertEquals(81, created.getDataWikiBindings().get(0).getMaxRows());
+        assertEquals(List.of("orders"), created.getEffectiveDataScopes().get(0).getTableNames());
+
+        AgentTaskServiceImpl wikiTaskService = new AgentTaskServiceImpl(storage, null, wikiAgentService);
+        AgentDataScope requested = scope(7L, "sales", "public", List.of("orders"));
+        requested.setMaxRows(500);
+        requested.setTimeoutSeconds(60);
+        requested.setApprovalMode(AgentApprovalModeEnum.NEVER);
+        requested.setAllowProduction(true);
+        AgentTaskCreateRequest taskRequest = new AgentTaskCreateRequest();
+        taskRequest.setTitle("Read Wiki table");
+        taskRequest.setAssigneeAgentId(created.getId());
+        taskRequest.setDataScopeSnapshot(List.of(requested));
+
+        AgentTask task = wikiTaskService.create(taskRequest).getTask();
+        assertEquals(81, task.getDataScopeSnapshot().get(0).getMaxRows());
+        assertEquals(17, task.getDataScopeSnapshot().get(0).getTimeoutSeconds());
+        assertEquals(AgentApprovalModeEnum.ALWAYS, task.getDataScopeSnapshot().get(0).getApprovalMode());
+        assertEquals(false, task.getDataScopeSnapshot().get(0).getAllowProduction());
     }
 
     @Test

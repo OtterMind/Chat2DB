@@ -29,6 +29,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentTaskContextCreat
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskMessageRequest;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentTaskContextTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentTaskContext;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactService;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
@@ -37,6 +38,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
+import ai.chat2db.community.domain.api.service.agent.IAgentConnectorService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
 import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
@@ -56,6 +58,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/agent")
@@ -72,6 +76,7 @@ public class AgentControlController {
     private final IAgentChatTaskService chatTaskService;
     private final IIdentityService identityService;
     private final IAgentRuntimeDispatchService runtimeDispatchService;
+    private final IAgentConnectorService connectorService;
 
     public AgentControlController(IAgentDefinitionService agentService, IAgentTaskService taskService,
                                   IAgentRunService runService, IAgentRunCoordinator runCoordinator,
@@ -80,7 +85,8 @@ public class AgentControlController {
                                   IAgentTaskContextService contextService,
                                   IAgentChatTaskService chatTaskService,
                                   IIdentityService identityService,
-                                  IAgentRuntimeDispatchService runtimeDispatchService) {
+                                  IAgentRuntimeDispatchService runtimeDispatchService,
+                                  IAgentConnectorService connectorService) {
         this.agentService = agentService;
         this.taskService = taskService;
         this.runService = runService;
@@ -92,6 +98,7 @@ public class AgentControlController {
         this.chatTaskService = chatTaskService;
         this.identityService = identityService;
         this.runtimeDispatchService = runtimeDispatchService;
+        this.connectorService = connectorService;
     }
 
     @PostMapping("/definitions")
@@ -125,6 +132,7 @@ public class AgentControlController {
         AgentDefinition current = agentService.get(agentId);
         requireOwnerOrSystem(current.getCreatedBy());
         request.setAgentId(agentId);
+        request.setUpdatedBy(identityService.currentUserId());
         return DataResult.of(agentService.update(request));
     }
 
@@ -170,16 +178,22 @@ public class AgentControlController {
     @GetMapping("/tasks")
     public ListResult<AgentTask> listTasks() {
         Long currentUserId = identityService.currentUserId();
+        Set<String> connectorTaskIds = connectorTaskIds(currentUserId);
         return ListResult.of(taskService.list().stream()
                 .filter(task -> Objects.equals(task.getCreatedBy(), currentUserId))
+                .filter(task -> task.getOriginType() != AgentTaskOriginTypeEnum.CONNECTOR)
+                .filter(task -> !connectorTaskIds.contains(task.getId()))
                 .toList());
     }
 
     @GetMapping("/tasks/archived")
     public ListResult<AgentTask> listArchivedTasks() {
         Long currentUserId = identityService.currentUserId();
+        Set<String> connectorTaskIds = connectorTaskIds(currentUserId);
         return ListResult.of(taskService.listArchived().stream()
                 .filter(task -> Objects.equals(task.getCreatedBy(), currentUserId))
+                .filter(task -> task.getOriginType() != AgentTaskOriginTypeEnum.CONNECTOR)
+                .filter(task -> !connectorTaskIds.contains(task.getId()))
                 .toList());
     }
 
@@ -192,7 +206,7 @@ public class AgentControlController {
     @PostMapping("/tasks/{taskId}/archive")
     public DataResult<AgentTask> archiveTask(@PathVariable String taskId,
                                              @RequestBody AgentTaskLifecycleRequest request) {
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         requireExpectedRevision(request);
         return DataResult.of(taskService.archive(taskId, request.getExpectedRevision()));
     }
@@ -200,7 +214,7 @@ public class AgentControlController {
     @PostMapping("/tasks/{taskId}/delete")
     public DataResult<Void> deleteArchivedTask(@PathVariable String taskId,
                                                 @RequestBody AgentTaskLifecycleRequest request) {
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         requireExpectedRevision(request);
         taskService.deleteArchived(taskId, request.getExpectedRevision());
         return DataResult.empty();
@@ -209,7 +223,7 @@ public class AgentControlController {
     @PostMapping("/tasks/{taskId}/transition")
     public DataResult<AgentTask> transitionTask(@PathVariable String taskId,
                                                 @RequestBody AgentTaskTransitionRequest request) {
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         request.setTaskId(taskId);
         return DataResult.of(taskService.transition(request));
     }
@@ -217,7 +231,7 @@ public class AgentControlController {
     @PostMapping("/tasks/{taskId}/scopes/sync")
     public DataResult<AgentTask> syncTaskScopes(@PathVariable String taskId,
                                                 @RequestBody AgentTaskScopeSyncRequest request) {
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         if (request == null || request.getExpectedRevision() == null) {
             throw new IllegalArgumentException("task expected revision is required");
         }
@@ -230,7 +244,7 @@ public class AgentControlController {
         if (request == null) {
             throw new IllegalArgumentException("task context request is required");
         }
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         request.setTaskId(taskId);
         request.setCreatedBy(identityService.currentUserId());
         return DataResult.of(contextService.append(request));
@@ -242,7 +256,7 @@ public class AgentControlController {
         if (request == null || org.apache.commons.lang3.StringUtils.isBlank(request.getContent())) {
             throw new IllegalArgumentException("task message content is required");
         }
-        requireTaskOwner(taskService.get(taskId));
+        requireMutableTask(taskService.get(taskId));
         AgentTaskContextCreateRequest contextRequest = new AgentTaskContextCreateRequest();
         contextRequest.setTaskId(taskId);
         contextRequest.setType(AgentTaskContextTypeEnum.COMMENT);
@@ -275,8 +289,20 @@ public class AgentControlController {
     @PostMapping("/runs/{runId}/cancel")
     public DataResult<AgentRun> cancelRun(@PathVariable String runId) {
         AgentRun run = runService.get(runId);
-        requireTaskOwner(taskService.get(run.getTaskId()));
+        AgentTask task = taskService.get(run.getTaskId());
+        requireTaskOwner(task);
+        if (task.getOriginType() == AgentTaskOriginTypeEnum.CONNECTOR
+                || connectorService.isConnectorTask(task.getId())) {
+            throw new IllegalStateException("Connector audit runs must be stopped by revoking the Connector Session");
+        }
         return DataResult.of(runCoordinator.cancel(runId));
+    }
+
+    private Set<String> connectorTaskIds(Long ownerId) {
+        return connectorService.listSessions(ownerId).stream()
+                .map(ai.chat2db.community.domain.api.model.agent.AgentConnectorSession::getTaskId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     @GetMapping("/runs/{runId}/approvals")
@@ -378,6 +404,11 @@ public class AgentControlController {
             attempts.addAll(toolGateway.listAttempts(run.getId()));
         }
         response.setTask(task);
+        response.setConnectorAudit(task.getOriginType() == AgentTaskOriginTypeEnum.CONNECTOR
+                || connectorService.isConnectorTask(taskId));
+        if (response.isConnectorAudit()) {
+            response.setConnectorContext(connectorService.auditContext(taskId));
+        }
         response.setRuns(runs);
         response.setEventsByRunId(events);
         response.setArtifacts(artifactService.listByTask(taskId).stream()
@@ -394,6 +425,14 @@ public class AgentControlController {
     private void requireTaskOwner(AgentTask task) {
         if (!Objects.equals(task.getCreatedBy(), identityService.currentUserId())) {
             throw new IllegalArgumentException("agent task is not accessible to the current user");
+        }
+    }
+
+    private void requireMutableTask(AgentTask task) {
+        requireTaskOwner(task);
+        if (task.getOriginType() == AgentTaskOriginTypeEnum.CONNECTOR
+                || connectorService.isConnectorTask(task.getId())) {
+            throw new IllegalStateException("Connector audit Tasks are read-only; revoke the Connector Session to stop them");
         }
     }
 

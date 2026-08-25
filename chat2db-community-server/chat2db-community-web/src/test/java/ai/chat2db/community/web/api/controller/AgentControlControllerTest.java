@@ -20,6 +20,7 @@ import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
 import ai.chat2db.community.domain.api.model.ai.AiChatSession;
 import ai.chat2db.community.domain.api.model.request.agent.AgentChatTaskCreateRequest;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunTriggerTypeEnum;
+import ai.chat2db.community.domain.api.enums.agent.AgentTaskOriginTypeEnum;
 import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunCoordinator;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
@@ -27,6 +28,7 @@ import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactService;
 import ai.chat2db.community.domain.api.service.agent.IAgentToolGateway;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeDispatchService;
+import ai.chat2db.community.domain.api.service.agent.IAgentConnectorService;
 import ai.chat2db.community.domain.api.service.agent.IAgentArtifactPublicationService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskContextService;
 import ai.chat2db.community.domain.api.service.agent.IAgentChatTaskService;
@@ -95,6 +97,60 @@ class AgentControlControllerTest {
         AgentControlController controller = controller(agentService, taskService);
 
         assertThrows(IllegalArgumentException.class, () -> controller.getTask("other-task"));
+    }
+
+    @Test
+    void rejectsGenericCancellationForConnectorAuditRun() {
+        AgentRun run = new AgentRun();
+        run.setId("run-1");
+        run.setTaskId("connector-task");
+        IAgentDefinitionService agentService = proxy(IAgentDefinitionService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        AgentTask connectorTask = task("connector-task", 7L);
+        connectorTask.setOriginType(AgentTaskOriginTypeEnum.CONNECTOR);
+        IAgentTaskService taskService = proxy(IAgentTaskService.class, (proxy, method, args) -> {
+            if ("get".equals(method.getName())) return connectorTask;
+            throw new UnsupportedOperationException(method.getName());
+        });
+        IAgentRunService runService = proxy(IAgentRunService.class, (proxy, method, args) -> {
+            if ("get".equals(method.getName())) return run;
+            throw new UnsupportedOperationException(method.getName());
+        });
+        IAgentRunCoordinator coordinator = proxy(IAgentRunCoordinator.class,
+                (proxy, method, args) -> { throw new AssertionError("generic cancel must not be called"); });
+        IAgentToolGateway toolGateway = proxy(IAgentToolGateway.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentArtifactService artifactService = proxy(IAgentArtifactService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentArtifactPublicationService publicationService = proxy(IAgentArtifactPublicationService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentTaskContextService contextService = proxy(IAgentTaskContextService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        AgentControlController controller = new AgentControlController(agentService, taskService, runService, coordinator,
+                artifactService, toolGateway, publicationService, contextService, unsupportedChatTaskService(),
+                () -> 7L, unsupportedRuntimeDispatchService(), connectorService(false));
+
+        assertThrows(IllegalStateException.class, () -> controller.cancelRun("run-1"));
+    }
+
+    @Test
+    void rejectsOrdinaryMutationsForConnectorAuditTask() {
+        AgentTask connectorTask = task("connector-task", 7L);
+        connectorTask.setOriginType(AgentTaskOriginTypeEnum.CONNECTOR);
+        IAgentDefinitionService agentService = proxy(IAgentDefinitionService.class,
+                (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+        IAgentTaskService taskService = proxy(IAgentTaskService.class, (proxy, method, args) -> {
+            if ("get".equals(method.getName())) return connectorTask;
+            throw new AssertionError("Connector audit mutation must not reach " + method.getName());
+        });
+        AgentControlController controller = controller(agentService, taskService);
+        AgentTaskLifecycleRequest request = new AgentTaskLifecycleRequest();
+        request.setExpectedRevision(1L);
+
+        assertThrows(IllegalStateException.class, () -> controller.archiveTask("connector-task", request));
+        AgentTaskMessageRequest message = new AgentTaskMessageRequest();
+        message.setContent("continue");
+        assertThrows(IllegalStateException.class, () -> controller.continueTask("connector-task", message));
     }
 
     @Test
@@ -239,7 +295,7 @@ class AgentControlControllerTest {
                 proxy(IAgentToolGateway.class, (proxy, method, args) -> null),
                 proxy(IAgentArtifactPublicationService.class, (proxy, method, args) -> null),
                 proxy(IAgentTaskContextService.class, (proxy, method, args) -> null),
-                unsupportedChatTaskService(), () -> 7L, runtimeDispatch);
+                unsupportedChatTaskService(), () -> 7L, runtimeDispatch, connectorService(false));
         AgentRuntimeApprovalDecisionRequest request = new AgentRuntimeApprovalDecisionRequest();
         request.setApprovalId("untrusted-id");
         request.setExpectedRevision(1L);
@@ -301,7 +357,7 @@ class AgentControlControllerTest {
         });
         AgentControlController controller = new AgentControlController(agentService, taskService, runService,
                 coordinator, artifactService, toolGateway, publicationService, contextService,
-                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService());
+                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService(), connectorService(false));
         AgentTaskMessageRequest request = new AgentTaskMessageRequest();
         request.setContent("Compare the result with last month.");
 
@@ -352,7 +408,7 @@ class AgentControlControllerTest {
                 (proxy, method, args) -> List.of());
         AgentControlController controller = new AgentControlController(agentService, taskService, runService,
                 coordinator, artifactService, toolGateway, publicationService, contextService,
-                chatTaskService, () -> 7L, unsupportedRuntimeDispatchService());
+                chatTaskService, () -> 7L, unsupportedRuntimeDispatchService(), connectorService(false));
         AgentChatTaskCreateRequest request = new AgentChatTaskCreateRequest();
         request.setCreatedBy(999L);
 
@@ -390,7 +446,7 @@ class AgentControlControllerTest {
                 (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
         return new AgentControlController(agentService, taskService, runService, coordinator,
                 artifactService, toolGateway, publicationService, contextService,
-                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService());
+                unsupportedChatTaskService(), () -> 7L, unsupportedRuntimeDispatchService(), connectorService(false));
     }
 
     private IAgentChatTaskService unsupportedChatTaskService() {
@@ -401,6 +457,14 @@ class AgentControlControllerTest {
     private IAgentRuntimeDispatchService unsupportedRuntimeDispatchService() {
         return proxy(IAgentRuntimeDispatchService.class,
                 (proxy, method, args) -> { throw new UnsupportedOperationException(method.getName()); });
+    }
+
+    private IAgentConnectorService connectorService(boolean connectorTask) {
+        return proxy(IAgentConnectorService.class, (proxy, method, args) -> switch (method.getName()) {
+            case "isConnectorTask" -> connectorTask;
+            case "listSessions" -> List.of();
+            default -> throw new UnsupportedOperationException(method.getName());
+        });
     }
 
     private AgentDefinition agent(String id, Long createdBy) {

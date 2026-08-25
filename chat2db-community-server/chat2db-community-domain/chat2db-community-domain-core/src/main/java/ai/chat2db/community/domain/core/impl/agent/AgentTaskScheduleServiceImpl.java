@@ -28,6 +28,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentTaskScheduleExecution;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskScheduleCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskScheduleUpdateRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunCoordinator;
+import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRunService;
 import ai.chat2db.community.domain.api.service.agent.IAgentRuntimeControlService;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskScheduleDispatcher;
@@ -62,6 +63,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
     private final IAgentRuntimeControlService runtimeControlService;
     private final IAgentRunService runService;
     private final IAgentRunCoordinator runCoordinator;
+    private IAgentDefinitionService agentService;
     private final Clock clock;
 
     @Autowired
@@ -70,9 +72,11 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
                                         IAgentRuntimeControlStorage runtimeStorage,
                                         IAgentRuntimeControlService runtimeControlService,
                                         IAgentRunService runService,
-                                        IAgentRunCoordinator runCoordinator) {
+                                        IAgentRunCoordinator runCoordinator,
+                                        IAgentDefinitionService agentService) {
         this(scheduleStorage, agentStorage, runtimeStorage, runtimeControlService,
                 runService, runCoordinator, Clock.systemUTC());
+        this.agentService = agentService;
     }
 
     AgentTaskScheduleServiceImpl(IAgentTaskScheduleStorage scheduleStorage,
@@ -89,6 +93,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
         this.runService = runService;
         this.runCoordinator = runCoordinator;
         this.clock = clock;
+        this.agentService = null;
     }
 
     @Override
@@ -104,7 +109,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
         schedule.setId(UUID.randomUUID().toString());
         applyTemplate(schedule, request.getName(), request.getTaskTitle(), request.getTaskDescription(),
                 request.getAcceptanceCriteria(), request.getAssigneeAgentId(), request.getPriority(),
-                AgentScopePolicy.requireAuthorizedScopes(request.getDataScopeSnapshot(), agent.getDataScopes()),
+                AgentScopePolicy.requireAuthorizedScopes(request.getDataScopeSnapshot(), effectiveScopes(agent)),
                 request.getScheduleType(), request.getScheduledAt(), request.getCronExpression(),
                 request.getTimezone(), now);
         schedule.setStatus(AgentTaskScheduleStatusEnum.ACTIVE);
@@ -134,7 +139,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
         AgentTaskSchedule updated = copy(current);
         applyTemplate(updated, request.getName(), request.getTaskTitle(), request.getTaskDescription(),
                 request.getAcceptanceCriteria(), request.getAssigneeAgentId(), request.getPriority(),
-                AgentScopePolicy.requireAuthorizedScopes(request.getDataScopeSnapshot(), agent.getDataScopes()),
+                AgentScopePolicy.requireAuthorizedScopes(request.getDataScopeSnapshot(), effectiveScopes(agent)),
                 request.getScheduleType(), request.getScheduledAt(), request.getCronExpression(),
                 request.getTimezone(), now());
         if (current.getStatus() != AgentTaskScheduleStatusEnum.ACTIVE) {
@@ -289,7 +294,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
         List<ai.chat2db.community.domain.api.model.agent.AgentDataScope> scopes;
         try {
             scopes = AgentScopePolicy.requireAuthorizedScopes(
-                    schedule.getDataScopeSnapshot(), agent.getDataScopes());
+                    schedule.getDataScopeSnapshot(), effectiveScopes(agent));
         } catch (RuntimeException exception) {
             return finishWithoutTask(scheduleForCommit, execution, nextRunAt,
                     AgentTaskScheduleReasonCodeEnum.DATA_SCOPE_REVOKED, exception.getMessage());
@@ -459,7 +464,7 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
     }
 
     private AgentDefinition requireAgent(String id, Long ownerId) {
-        AgentDefinition agent = agentStorage.getAgent(id);
+        AgentDefinition agent = agentService == null ? agentStorage.getAgent(id) : agentService.get(id);
         if (agent == null || agent.getStatus() != AgentStatusEnum.ACTIVE) {
             throw new IllegalStateException("scheduled task agent is unavailable");
         }
@@ -467,6 +472,11 @@ public class AgentTaskScheduleServiceImpl implements IAgentTaskScheduleService, 
             throw new IllegalArgumentException("scheduled task agent is not accessible to its owner");
         }
         return agent;
+    }
+
+    private List<ai.chat2db.community.domain.api.model.agent.AgentDataScope> effectiveScopes(AgentDefinition agent) {
+        return agent.getEffectiveDataScopes() == null || agent.getEffectiveDataScopes().isEmpty()
+                ? agent.getDataScopes() : agent.getEffectiveDataScopes();
     }
 
     private void validateTemplate(String name, String title, String agentId,

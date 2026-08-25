@@ -4,6 +4,8 @@ export type TaskWorkspaceTabType =
   | 'TASK_DETAIL'
   | 'TASK_CREATE'
   | 'SCHEDULES'
+  | 'DATA_WIKI'
+  | 'CONNECTORS'
   | 'AGENT_MANAGER'
   | 'AGENT_EDITOR';
 
@@ -23,6 +25,21 @@ export interface TaskWorkspaceRoute {
 
 export const TASK_BOARD_TAB_KEY = 'board';
 
+export function taskWorkspaceRouteForConnectorManagement(
+  route: TaskWorkspaceRoute,
+  connectorManagementEnabled: boolean,
+): TaskWorkspaceRoute {
+  return !connectorManagementEnabled && route.type === 'CONNECTORS' ? { type: 'BOARD' } : route;
+}
+
+export function taskWorkspaceTabsForConnectorManagement(
+  tabs: TaskWorkspaceTab[],
+  connectorManagementEnabled: boolean,
+): TaskWorkspaceTab[] {
+  if (connectorManagementEnabled || !tabs.some((tab) => tab.type === 'CONNECTORS')) return tabs;
+  return tabs.filter((tab) => tab.type !== 'CONNECTORS');
+}
+
 export function parseTaskWorkspaceRoute(routePath: string): TaskWorkspaceRoute {
   const normalized = routePath.replace(/^#/, '').split('?')[0].replace(/\/$/, '') || '/tasks';
   const parts = normalized.split('/').filter(Boolean);
@@ -33,6 +50,8 @@ export function parseTaskWorkspaceRoute(routePath: string): TaskWorkspaceRoute {
   if (parts[1] === 'schedules') {
     return { type: 'SCHEDULES', entityId: parts[2] && parts[2] !== 'new' ? decodeURIComponent(parts[2]) : undefined };
   }
+  if (parts[1] === 'data-wikis') return { type: 'DATA_WIKI' };
+  if (parts[1] === 'connectors') return { type: 'CONNECTORS' };
   if (parts[1] === 'agents') {
     if (!parts[2]) return { type: 'AGENT_MANAGER' };
     if (parts[2] === 'new') return { type: 'AGENT_EDITOR' };
@@ -48,6 +67,8 @@ export function taskWorkspaceTabKey(route: TaskWorkspaceRoute) {
     case 'TASK_CREATE': return 'task:new';
     case 'TASK_DETAIL': return `task:${route.entityId}`;
     case 'SCHEDULES': return route.entityId ? `schedule:${route.entityId}` : 'schedules';
+    case 'DATA_WIKI': return 'data-wikis';
+    case 'CONNECTORS': return 'connectors';
     case 'AGENT_MANAGER': return 'agents';
     case 'AGENT_EDITOR': return route.entityId ? `agent:${route.entityId}` : 'agent:new';
     default: return TASK_BOARD_TAB_KEY;
@@ -63,6 +84,8 @@ export function taskWorkspaceRoutePath(tab: Pick<TaskWorkspaceTab, 'type' | 'ent
     case 'SCHEDULES': return tab.entityId
       ? `/tasks/schedules/${encodeURIComponent(tab.entityId)}`
       : '/tasks/schedules/new';
+    case 'DATA_WIKI': return '/tasks/data-wikis';
+    case 'CONNECTORS': return '/tasks/connectors';
     case 'AGENT_MANAGER': return '/tasks/agents';
     case 'AGENT_EDITOR': return tab.entityId
       ? `/tasks/agents/${encodeURIComponent(tab.entityId)}/edit`
@@ -94,6 +117,12 @@ export function nextTaskWorkspaceTabKey(tabs: TaskWorkspaceTab[], removedKey: st
   return tabs[index + 1]?.key || tabs[index - 1]?.key || TASK_BOARD_TAB_KEY;
 }
 
-export function shouldRefreshTaskDetail(activeTab: TaskWorkspaceTab | undefined, taskId?: string, activeRun = false) {
-  return Boolean(activeRun && taskId && activeTab?.type === 'TASK_DETAIL' && activeTab.entityId === taskId);
+export function shouldRefreshTaskDetail(
+  activeTab: TaskWorkspaceTab | undefined,
+  taskId?: string,
+  activeRun = false,
+  connectorAudit = false,
+) {
+  return Boolean((activeRun || connectorAudit)
+    && taskId && activeTab?.type === 'TASK_DETAIL' && activeTab.entityId === taskId);
 }

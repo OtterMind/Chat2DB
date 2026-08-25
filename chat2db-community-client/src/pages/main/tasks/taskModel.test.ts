@@ -14,6 +14,7 @@ import {
   currentArtifactVersion,
   extractAgentChartPresentation,
   groupTasks,
+  isTaskBoardVisible,
   taskPriorityLevel,
   TASK_TRANSITIONS,
   upsertTask,
@@ -74,6 +75,23 @@ assert.equal(
   upsertTask([task('same', 'TODO')], task('same', 'DONE'))[0].status,
   'DONE',
   'existing delegated tasks should be refreshed in place',
+);
+const connectorTask = { ...task('connector', 'IN_PROGRESS'), originType: 'CONNECTOR' as const };
+assert.equal(isTaskBoardVisible(connectorTask), false, 'Connector audit tasks must not belong to the ordinary board');
+assert.deepEqual(
+  upsertTask([task('old', 'TODO')], connectorTask).map((item) => item.id),
+  ['old'],
+  'loading a Connector audit detail must not insert it into the board state',
+);
+assert.deepEqual(
+  upsertTask([connectorTask, task('old', 'TODO')], connectorTask).map((item) => item.id),
+  ['old'],
+  'refreshing a Connector audit detail must remove a stale board copy',
+);
+assert.deepEqual(
+  groupTasks([connectorTask]).flatMap((group) => group.tasks),
+  [],
+  'Connector audit tasks must remain hidden even if stale state reaches board grouping',
 );
 setPendingConversationTarget({ sessionId: 'source-session', messageId: 'delegation-message' });
 assert.equal(

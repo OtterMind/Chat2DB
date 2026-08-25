@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentTaskCreation;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskCreateRequest;
 import ai.chat2db.community.domain.api.model.request.agent.AgentTaskTransitionRequest;
 import ai.chat2db.community.domain.api.service.agent.IAgentTaskService;
+import ai.chat2db.community.domain.api.service.agent.IAgentDefinitionService;
 import ai.chat2db.community.domain.api.service.storage.IAgentControlStorage;
 import ai.chat2db.community.domain.api.service.storage.IAgentRuntimeControlStorage;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
@@ -30,22 +31,32 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
 
     private final IAgentControlStorage storage;
     private final IAgentRuntimeControlStorage runtimeStorage;
+    private final IAgentDefinitionService agentService;
 
     @Autowired
-    public AgentTaskServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
+    public AgentTaskServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage,
+                                IAgentDefinitionService agentService) {
         this.storage = storage;
         this.runtimeStorage = runtimeStorage;
+        this.agentService = agentService;
     }
 
     AgentTaskServiceImpl(IAgentControlStorage storage) {
         this.storage = storage;
         this.runtimeStorage = null;
+        this.agentService = null;
+    }
+
+    AgentTaskServiceImpl(IAgentControlStorage storage, IAgentRuntimeControlStorage runtimeStorage) {
+        this.storage = storage;
+        this.runtimeStorage = runtimeStorage;
+        this.agentService = null;
     }
 
     @Override
     public AgentTaskCreation create(AgentTaskCreateRequest request) {
         validate(request);
-        AgentDefinition agent = storage.getAgent(request.getAssigneeAgentId());
+        AgentDefinition agent = getAgent(request.getAssigneeAgentId());
         if (agent == null) {
             throw new NoSuchElementException("agent not found: " + request.getAssigneeAgentId());
         }
@@ -67,7 +78,7 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         task.setOriginSessionId(StringUtils.trimToNull(request.getOriginSessionId()));
         task.setOriginMessageId(StringUtils.trimToNull(request.getOriginMessageId()));
         task.setDataScopeSnapshot(AgentScopePolicy.requireAuthorizedScopes(
-                request.getDataScopeSnapshot(), agent.getDataScopes()));
+                request.getDataScopeSnapshot(), effectiveScopes(agent)));
         task.setGmtCreate(now);
         task.setGmtModified(now);
         task.setRevision(1L);
@@ -167,12 +178,12 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         if (activeRun) {
             throw new IllegalStateException("task data scopes cannot change while a run is active");
         }
-        AgentDefinition agent = storage.getAgent(current.getAssigneeAgentId());
+        AgentDefinition agent = getAgent(current.getAssigneeAgentId());
         if (agent == null || agent.getStatus() != AgentStatusEnum.ACTIVE) {
             throw new IllegalStateException("task agent is not active");
         }
         List<ai.chat2db.community.domain.api.model.agent.AgentDataScope> scopes =
-                AgentScopePolicy.copyScopes(agent.getDataScopes());
+                AgentScopePolicy.copyScopes(effectiveScopes(agent));
         if (scopes.isEmpty()) {
             throw new IllegalStateException("assigned agent has no database data scopes");
         }
@@ -184,6 +195,15 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         updated.setGmtModified(now);
         updated.setRevision(current.getRevision() + 1);
         return storage.updateTask(updated, expectedRevision);
+    }
+
+    private AgentDefinition getAgent(String id) {
+        return agentService == null ? storage.getAgent(id) : agentService.get(id);
+    }
+
+    private List<ai.chat2db.community.domain.api.model.agent.AgentDataScope> effectiveScopes(AgentDefinition agent) {
+        return agent.getEffectiveDataScopes() == null || agent.getEffectiveDataScopes().isEmpty()
+                ? agent.getDataScopes() : agent.getEffectiveDataScopes();
     }
 
     @Override
@@ -222,6 +242,42 @@ public class AgentTaskServiceImpl implements IAgentTaskService {
         run.setStatus(AgentRunStatusEnum.QUEUED);
         run.setAttempt(previousRuns.size() + 1);
         run.setParentRunId(current.getCurrentRunId());
+        run.setGmtCreate(now);
+        run.setGmtModified(now);
+        run.setRevision(1L);
+
+        AgentTask updated = copy(current);
+        updated.setCurrentRunId(run.getId());
+        updated.setStatus(AgentTaskStatusEnum.IN_PROGRESS);
+        updated.setCompletedAt(null);
+        updated.setGmtModified(now);
+        updated.setRevision(current.getRevision() + 1);
+        return storage.appendTaskRun(updated, run, current.getRevision());
+    }
+
+    @Override
+    public AgentTaskCreation createConnectorRun(String taskId, String agentId) {
+        AgentTask current = get(taskId);
+        requireNotArchived(current);
+        if (current.getOriginType() != AgentTaskOriginTypeEnum.CONNECTOR) {
+            throw new IllegalStateException("concurrent audit Runs are limited to Connector Tasks");
+        }
+        AgentDefinition agent = getAgent(StringUtils.defaultIfBlank(agentId, current.getAssigneeAgentId()));
+        if (agent == null || agent.getStatus() != AgentStatusEnum.ACTIVE) {
+            throw new IllegalStateException("task agent is not active");
+        }
+        List<AgentRun> previousRuns = listRuns(taskId);
+        Date now = new Date();
+        AgentRun run = new AgentRun();
+        run.setId(UUID.randomUUID().toString());
+        run.setTaskId(current.getId());
+        run.setAgentId(agent.getId());
+        run.setRuntimeType(agent.getRuntimeType());
+        applyRuntimeProfile(run, agent);
+        run.setTriggerType(AgentRunTriggerTypeEnum.USER_MESSAGE);
+        run.setStatus(AgentRunStatusEnum.QUEUED);
+        run.setAttempt(previousRuns.size() + 1);
+        run.setParentRunId(null);
         run.setGmtCreate(now);
         run.setGmtModified(now);
         run.setRevision(1L);

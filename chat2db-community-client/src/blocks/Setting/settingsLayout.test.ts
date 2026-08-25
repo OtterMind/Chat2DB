@@ -9,6 +9,7 @@ const baseSettingSource = readFileSync('src/blocks/Setting/BaseSetting/index.tsx
 const editorSettingSource = readFileSync('src/blocks/Setting/EditorSetting/index.tsx', 'utf8');
 const terminalSettingSource = readFileSync('src/blocks/Setting/TerminalSetting/index.tsx', 'utf8');
 const mcpSettingSource = readFileSync('src/blocks/Setting/McpSetting/index.tsx', 'utf8');
+const dshPluginSettingSource = readFileSync('src/blocks/Setting/DshPluginSetting/index.tsx', 'utf8');
 const networkProxySettingSource = readFileSync('src/blocks/Setting/NetworkProxySetting/index.tsx', 'utf8');
 const shortcutSettingSource = readFileSync('src/blocks/Setting/ShortcutSetting/index.tsx', 'utf8');
 const personalSettingSource = readFileSync('src/blocks/Setting/Personal/index.tsx', 'utf8');
@@ -76,6 +77,7 @@ const settingSearchTargetIds = [
   'shortcut.resultSet',
   'shortcut.table',
   'mcp.token',
+  'dshPlugin.management',
   'networkProxy.mode',
   'networkProxy.test',
   'personal.profile',
@@ -95,6 +97,7 @@ const searchableSettingSources = [
   editorSettingSource,
   terminalSettingSource,
   mcpSettingSource,
+  dshPluginSettingSource,
   networkProxySettingSource,
   shortcutSettingSource,
   personalSettingSource,
@@ -152,6 +155,13 @@ assert.match(
 );
 assert.match(settingLayoutSource, /<IconfontSvg\b/, 'settings navigation supports retained product icons');
 assert.match(settingSource, /iconCode: 'icon-mcp'/, 'all editions retain the MCP product icon');
+assert.match(settingSource, /body: <DshPluginSetting \/>/, 'settings expose DSH plugin management explicitly');
+assert.match(dshPluginSettingSource, /dshWhaleLogo/, 'DSH settings show the official whale logo');
+assert.match(
+  dshPluginSettingSource,
+  /className=\{dshStyles\.switch\}/,
+  'the DSH switch keeps its intrinsic width instead of stretching across the page',
+);
 assert.match(settingSource, /iconCode: 'icon-wangluo'/, 'all editions retain the proxy product icon');
 assert.match(settingSource, /icon: ClipboardPen/, 'all editions use ClipboardPen for editor settings');
 assert.match(settingSource, /body: <TerminalSetting \/>/, 'desktop editions inherit the shared terminal settings page');

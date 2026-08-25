@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentCapabilityEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentRuntimeTypeEnum;
 import ai.chat2db.community.domain.api.enums.agent.AgentStatusEnum;
 import ai.chat2db.community.domain.api.model.agent.AgentDataScope;
+import ai.chat2db.community.domain.api.model.agent.AgentDataWikiBinding;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -25,6 +26,9 @@ public class AgentDefinitionUpdateRequest {
     private String systemPrompt;
     private Set<AgentCapabilityEnum> capabilities = new LinkedHashSet<>();
     private List<AgentDataScope> dataScopes = new ArrayList<>();
+    private List<String> dataWikiIds = new ArrayList<>();
+    private List<AgentDataWikiBinding> dataWikiBindings = new ArrayList<>();
     private String outputContract;
     private Long expectedRevision;
+    private Long updatedBy;
 }

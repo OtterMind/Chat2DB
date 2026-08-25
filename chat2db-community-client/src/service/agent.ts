@@ -29,6 +29,14 @@ export interface AgentDataScope {
   allowProduction?: boolean;
 }
 
+export interface AgentDataWikiBinding {
+  dataWikiId: string;
+  maxRows: number;
+  timeoutSeconds: number;
+  approvalMode: 'NEVER' | 'RISK_BASED' | 'ALWAYS';
+  allowProduction: boolean;
+}
+
 export interface AgentDefinition {
   id: string;
   name: string;
@@ -41,8 +49,15 @@ export interface AgentDefinition {
   systemPrompt?: string;
   capabilities: string[];
   dataScopes: AgentDataScope[];
+  dataWikiIds: string[];
+  dataWikiBindings: AgentDataWikiBinding[];
+  effectiveDataScopes: AgentDataScope[];
   outputContract?: string;
   revision: number;
+}
+
+export function agentEffectiveDataScopes(agent?: AgentDefinition): AgentDataScope[] {
+  return agent?.effectiveDataScopes || agent?.dataScopes || [];
 }
 
 export type AgentRuntimeProvider = 'CLAUDE_CODE' | 'CODEX' | 'OPENCODE' | 'PI' | 'HERMES' | 'DSH';
@@ -70,7 +85,7 @@ export interface AgentTask {
   status: AgentTaskStatus;
   priority: number;
   assigneeAgentId: string;
-  originType: 'CHAT' | 'BOARD' | 'CONSOLE' | 'API' | 'SCHEDULE';
+  originType: 'CHAT' | 'BOARD' | 'CONSOLE' | 'API' | 'SCHEDULE' | 'CONNECTOR';
   originSessionId?: string;
   originMessageId?: string;
   originScheduleId?: string;
@@ -277,6 +292,13 @@ export interface AgentTaskContext {
 }
 
 export interface AgentTaskDetail {
+  connectorAudit?: boolean;
+  connectorContext?: {
+    executionMode: 'EXTERNAL_RUNTIME_DELEGATION';
+    externalRuntimeName: string;
+    authorizationAgentId: string;
+    authorizationAgentName: string;
+  };
   task: AgentTask;
   runs: AgentRun[];
   eventsByRunId: Record<string, AgentRunEvent[]>;
@@ -294,7 +316,7 @@ export interface CreateAgentTaskRequest {
   acceptanceCriteria?: string;
   priority?: number;
   assigneeAgentId: string;
-  originType: 'BOARD' | 'CHAT' | 'CONSOLE' | 'API';
+  originType: 'BOARD' | 'CHAT' | 'CONSOLE' | 'API' | 'CONNECTOR';
   originSessionId?: string;
   originMessageId?: string;
   dataScopeSnapshot: AgentDataScope[];
@@ -326,6 +348,8 @@ export interface CreateAgentDefinitionRequest {
   systemPrompt?: string;
   capabilities: string[];
   dataScopes: AgentDataScope[];
+  dataWikiIds: string[];
+  dataWikiBindings: AgentDataWikiBinding[];
   outputContract?: string;
 }
 

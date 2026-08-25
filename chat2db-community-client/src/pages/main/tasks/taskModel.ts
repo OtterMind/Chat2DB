@@ -271,14 +271,20 @@ export function taskPriorityLevel(priority?: number): 0 | 10 | 20 | 30 {
   return 30;
 }
 
+/** Connector Tasks are read-only audit records managed from Connector Sessions. */
+export function isTaskBoardVisible(task: AgentTask): boolean {
+  return task.originType !== 'CONNECTOR';
+}
+
 export function groupTasks(tasks: AgentTask[]) {
   return TASK_BOARD_COLUMNS.map((column) => ({
     ...column,
-    tasks: tasks.filter((task) => column.statuses.includes(task.status)),
+    tasks: tasks.filter((task) => isTaskBoardVisible(task) && column.statuses.includes(task.status)),
   }));
 }
 
 export function upsertTask(tasks: AgentTask[], task: AgentTask): AgentTask[] {
+  if (!isTaskBoardVisible(task)) return tasks.filter((item) => item.id !== task.id);
   const index = tasks.findIndex((item) => item.id === task.id);
   if (index < 0) return [task, ...tasks];
   return tasks.map((item) => (item.id === task.id ? task : item));

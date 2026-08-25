@@ -53,6 +53,7 @@ public class DesktopMcpHttpFilter extends OncePerRequestFilter {
         return path != null && (path.equals("/mcp") || path.startsWith("/mcp/")
                 || path.startsWith("/api/agent/runtime/daemon/")
                 || path.startsWith("/api/agent/runtime/mcp/runs/")
+                || path.startsWith("/api/agent/connectors/")
                 || path.startsWith("/api/agent/gateway/channels/"));
     }
 }

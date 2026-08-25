@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiToolContextRequest;
+import ai.chat2db.community.domain.api.model.result.AiExecuteSqlResult;
 
 /**
  * Provides AI tool operations over datasource metadata and SQL execution.
@@ -52,6 +53,14 @@ public interface IAiToolService {
      * @return SQL execution context text.
      */
     String executeSql(AiExecuteSqlRequest aiExecuteSqlRequest);
+
+    /**
+     * Executes SQL and preserves structured approval metadata for Connector transports.
+     *
+     * @param aiExecuteSqlRequest AI SQL execution parameters.
+     * @return SQL execution text and any approval decision metadata.
+     */
+    AiExecuteSqlResult executeSqlResult(AiExecuteSqlRequest aiExecuteSqlRequest);
 
     /**
      * Returns table schema context text for AI tools.
