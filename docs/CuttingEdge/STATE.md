@@ -1034,6 +1034,22 @@ gate that stops a broken installer from being published.
     `meaning.score_text` (so discourse scoring sees canonical tokens). Word
     timings are left untouched so karaoke stays in sync.
 
+104. **Every tool the app owns is in the editor's brain — automatically.** The
+    owner's standing directive: *anything built from now on is added to the
+    editor brain and Style Match without being asked.* Made real in
+    `core/brain/editor_brain.py`, whose `TOOLS` inventory is the app's toolbelt —
+    now **14 tools**: beat-cuts, slow-mo, captions, **Persian-caption
+    normalisation**, karaoke, **filler removal**, ducking, reframe, grade,
+    transitions, **RIFE motion-transitions**, hook-first, denoise, **OTIO
+    interchange** (the four bolded are capabilities built this session that had
+    shipped *without* being in the brain — now folded in). Each has one `assess()`
+    decision keyed off a measured signal, so a new tool is *considered*, never
+    sprinkled. The convention is written into the module docstring and
+    `ROADMAP_1.0.md` §2c, and `tests/test_editor_brain.py` enforces one decision
+    per tool plus the four new signals (Persian → normalise, unscripted talk →
+    trim fillers, high motion at junctions → RIFE dissolves, handoff asked →
+    export OTIO). Suite: **336 passed, 0 failed, 10 skipped** (was 335).
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

@@ -15,7 +15,9 @@ def test_the_brain_knows_every_tool():
     ids = {t["id"] for t in editor_brain.TOOLS}
 
     assert {"beat_cuts", "slowmo", "captions", "karaoke", "ducking", "reframe",
-            "grade", "transitions", "hook_first", "denoise"} <= ids
+            "grade", "transitions", "hook_first", "denoise",
+            # newly-built capabilities must be in the toolbelt too (standing convention)
+            "fillers", "persian_norm", "motion_transition", "interchange"} <= ids
 
 
 def test_each_tool_gets_its_own_decision_with_a_reason():
@@ -26,6 +28,31 @@ def test_each_tool_gets_its_own_decision_with_a_reason():
     for decision in assessment:
         assert isinstance(decision["use"], bool)
         assert decision["reasonFa"] and decision["reasonEn"]
+
+
+def test_newly_built_tools_decide_on_their_measured_signals():
+    def use(a, tool):
+        return next(x for x in a if x["tool"] == tool)["use"]
+
+    # Persian talking-head with a handoff and high motion at junctions
+    rich = editor_brain.assess(
+        _template(),
+        {"speech_ratio": 0.6, "action": 0.2, "presence": 0.2, "motion": 0.7},
+        {"kind": "talking_head", "language": "fa", "finish_elsewhere": True})
+    assert use(rich, "persian_norm")      # Persian captions -> normalise
+    assert use(rich, "fillers")           # unscripted talk -> trim fillers
+    assert use(rich, "motion_transition") # high motion at junctions -> RIFE dissolves
+    assert use(rich, "interchange")       # handoff asked -> export OTIO
+
+    # A sport with no speech, no handoff, calm junctions
+    lean = editor_brain.assess(
+        _template(),
+        {"speech_ratio": 0.05, "action": 0.8, "presence": 0.6, "motion": 0.1},
+        {"kind": "sport", "language": "en"})
+    assert not use(lean, "persian_norm")
+    assert not use(lean, "fillers")
+    assert not use(lean, "motion_transition")
+    assert not use(lean, "interchange")
 
 
 def test_a_sport_with_peaks_gets_slowmo_and_hook_but_a_talk_does_not():

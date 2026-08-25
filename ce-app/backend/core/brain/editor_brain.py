@@ -13,11 +13,19 @@ that was actually measured (speech ratio, tempo, motion mix, action peaks,
 presence, aspect, length). Nothing is guessed; a tool whose signal is absent is
 skipped with the honest reason. The result is shown to the user as the editor's
 notes, so the "brain" reads like a professional explaining their cut.
+
+CONVENTION (standing, no prompt needed): this inventory is the app's toolbelt, so
+**every new capability gets added here the moment it is built** — a TOOLS entry
+plus its `assess()` decision — and therefore surfaces in Style Match
+automatically. If a feature is not in TOOLS, it does not exist as far as the
+editor is concerned. Keep this list in sync with `core/engine/` and the editor
+toolbar; the test suite enforces one decision per tool.
 """
 from __future__ import annotations
 
 #: The tool inventory. `when` is the human rule; `signal` names the measured
-#: quantity that decides it. This is the "I know my tools" part.
+#: quantity that decides it. This is the "I know my tools" part. Add a row here
+#: (and a matching decision in `assess`) for every new feature — see convention.
 TOOLS: list[dict] = [
     {"id": "beat_cuts", "en": "cut on the beat", "fa": "برش روی ضرب",
      "when": "there is music with a clear tempo", "signal": "bpm"},
@@ -25,8 +33,12 @@ TOOLS: list[dict] = [
      "when": "there is a sharp action peak (sport)", "signal": "action"},
     {"id": "captions", "en": "burn captions", "fa": "زیرنویس",
      "when": "someone talks", "signal": "speech"},
+    {"id": "persian_norm", "en": "clean up the Persian subtitles", "fa": "مرتب‌سازی زیرنویس فارسی",
+     "when": "captions are Persian", "signal": "persian"},
     {"id": "karaoke", "en": "word-by-word highlight", "fa": "هایلایت کلمه‌به‌کلمه",
      "when": "captions plus music, short-form", "signal": "speech"},
+    {"id": "fillers", "en": "drop the uhs and ums", "fa": "حذف تپق‌ها",
+     "when": "unscripted talking with filler words", "signal": "speech"},
     {"id": "ducking", "en": "duck music under the voice", "fa": "پایین آوردن موسیقی زیر صدا",
      "when": "voice and music together", "signal": "speech"},
     {"id": "reframe", "en": "follow the subject", "fa": "دنبال‌کردن سوژه",
@@ -35,11 +47,16 @@ TOOLS: list[dict] = [
      "when": "always — colour is free", "signal": "always"},
     {"id": "transitions", "en": "transitions at junctions", "fa": "ترنزیشن سرِ اتصال‌ها",
      "when": "more than one shot", "signal": "shots"},
+    {"id": "motion_transition", "en": "interpolated (RIFE) transitions", "fa": "ترنزیشن حرکتی (ریف)",
+     "when": "high-motion junctions, RIFE present", "signal": "motion"},
     {"id": "hook_first", "en": "put the strongest moment first", "fa": "قوی‌ترین لحظه اول",
      "when": "short-form; you have seconds to hook", "signal": "action"},
     {"id": "denoise", "en": "clean the audio", "fa": "تمیزکردن صدا",
      "when": "the noise floor is high", "signal": "noise"},
+    {"id": "interchange", "en": "hand off to Premiere/Resolve (OTIO)", "fa": "تحویل به پریمیر/داونچی (OTIO)",
+     "when": "you want to finish in a pro NLE", "signal": "handoff"},
 ]
+
 
 
 def assess(template: dict, footage: dict, intent: dict | None = None) -> list[dict]:
@@ -54,6 +71,10 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
     shots = len(template.get("shots", []) or [])
     action = float(footage.get("action", 0) or 0)
     presence = float(footage.get("presence", 0) or 0)
+    motion = float(footage.get("motion", 0) or 0)  # peak optical-flow magnitude (RIFE worth it?)
+    lang = (intent.get("language") or template.get("language") or "").lower()
+    persian = lang.startswith("fa") or lang.startswith("per")
+    handoff = bool(intent.get("finish_elsewhere") or intent.get("handoff"))
     kind = intent.get("kind", "")
     sport = kind in ("sport", "gaming") or action > 0.5
 
@@ -72,9 +93,17 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
         d("captions", speech > 0.2,
           f"{speech:.0%} of the footage is speech" if speech > 0.2 else "little speech",
           f"{speech:.0%} از فوتیج گفتار است" if speech > 0.2 else "گفتار کم است"),
+        d("persian_norm", speech > 0.2 and persian,
+          "Persian captions need ZWNJ + Yeh/Kaf clean-up" if speech > 0.2 and persian
+          else "not Persian captions (or no speech)",
+          "زیرنویس فارسی نیم‌فاصله و یکسان‌سازی ی/ک می‌خواهد" if speech > 0.2 and persian
+          else "زیرنویس فارسی نیست (یا گفتاری نیست)"),
         d("karaoke", speech > 0.2 and bpm >= 60,
           "captions plus a beat suits word-by-word" if speech > 0.2 and bpm >= 60 else "needs captions plus a beat",
-          "زیرنویس به‌همراه ضرب برای کارائوکه لازم است" ),
+          "زیرنویس به‌همراه ضرب برای کارائوکه لازم است"),
+        d("fillers", speech > 0.3 and kind in ("talking_head", "vlog", "tutorial", "podcast"),
+          "unscripted talk is full of uhs/ums to trim" if speech > 0.3 else "not unscripted talk",
+          "گفتار بداهه پر از «اِم/اِه» است که باید چیده شود" if speech > 0.3 else "گفتار بداهه نیست"),
         d("ducking", speech > 0.2,
           "voice over music needs room" if speech > 0.2 else "no voice to protect",
           "صدا روی موسیقی جا می‌خواهد" if speech > 0.2 else "صدایی برای محافظت نیست"),
@@ -85,10 +114,18 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
         d("transitions", shots > 1,
           f"{shots} shots to join" if shots > 1 else "a single shot needs no joins",
           f"{shots} نما برای پیوند" if shots > 1 else "تک‌نما پیوند نمی‌خواهد"),
+        d("motion_transition", shots > 1 and motion > 0.3,
+          f"motion {motion:.2f} at junctions — interpolated dissolves read as one move"
+          if shots > 1 and motion > 0.3 else "junctions too calm for interpolated transitions",
+          f"حرکت {motion:.2f} سرِ اتصال‌ها — دیزالوِ اینترپوله یک حرکت پیوسته می‌شود"
+          if shots > 1 and motion > 0.3 else "اتصال‌ها آرام‌تر از ترنزیشن اینترپوله‌اند"),
         d("hook_first", sport or kind in ("vlog", "product"),
           "short-form lives or dies in the first seconds" if sport else "not short-form",
           "فرم کوتاه در ثانیه‌های اول جان می‌گیرد" if sport else "فرم کوتاه نیست"),
         d("denoise", False, "noise floor not measured yet", "کف نویز هنوز سنجیده نشده"),
+        d("interchange", handoff,
+          "handing off to a pro NLE — export OTIO" if handoff else "finishing here; no handoff asked",
+          "تحویل به ان‌ال‌ای حرفه‌ای — خروجی OTIO" if handoff else "همین‌جا تمام می‌شود؛ تحویلی خواسته نشده"),
     ]
     return out
 
