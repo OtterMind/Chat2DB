@@ -61,3 +61,12 @@ def test_otio_without_the_engine_is_a_clean_409():
     timeline = {"clips": []}
     assert client.post("/api/engines/otio/export",
                        json={"timeline": timeline, "path": "/tmp/x.otio"}).status_code == 409
+
+
+def test_rife_degrades_when_not_fetched():
+    from core.engine import rife
+
+    if rife.available():
+        pytest.skip("RIFE fetched on this machine")
+    with pytest.raises(rife.RifeNotInstalled):
+        rife.interpolate(b"", b"", 64, 64)

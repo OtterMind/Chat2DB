@@ -1233,3 +1233,9 @@ button { font-family: inherit; cursor: pointer; }
 .tl__ctx button:hover { background: rgba(99,102,241,.18); color: #fff; }
 .tl__ctx button.is-danger { color: #fca5a5; }
 .tl__ctx button.is-danger:hover { background: rgba(239,68,68,.15); }
+
+/* --------------------------------------------------------- first-run tour */
+.ce-tour { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; margin: 10px 0; border: 1px solid rgba(99,102,241,.4);
+  border-radius: 12px; background: rgba(99,102,241,.08); }
+.ce-tour__steps { flex: 1; color: #c7d2fe; font-size: 12.5px; }

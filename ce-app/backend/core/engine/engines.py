@@ -20,7 +20,7 @@ import importlib.util
 ENGINES: list[dict] = [
     {"id": "rife", "name": "RIFE", "repo": "hzwer/Practical-RIFE", "licence": "MIT",
      "role": "optical-flow slow-mo & smooth transitions for sports",
-     "module": "rife", "deps": ["practical-rife"], "heavy": "torch"},
+     "module": "rife_ncnn_vulkan_python", "deps": ["rife-ncnn-vulkan-python"], "heavy": "ncnn"},
     {"id": "whisperx", "name": "whisperX", "repo": "m-bain/whisperX", "licence": "BSD-3",
      "role": "word-level timestamps for karaoke + speech integrity",
      "module": "whisperx", "deps": ["whisperx"], "heavy": "torch"},

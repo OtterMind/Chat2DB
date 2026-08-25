@@ -1008,6 +1008,16 @@ gate that stops a broken installer from being published.
     transitions/keyframes are dropped on export rather than faked. Tested with a
     round-trip.
 
+99. **RIFE arrives as a thin, on-demand, experimental bridge.** Real slow-mo
+    needs optical-flow interpolation; `setpts` only holds frames. `core/engine/rife.py`
+    bridges the ncnn/vulkan RIFE bindings (`rife-ncnn-vulkan-python`, no torch) and
+    is only exercised when fetched; otherwise `available()` is False and the caller
+    keeps the `setpts` slow-mo. Any upstream API mismatch raises a clear error
+    rather than a wrong frame — experimental means labelled, not unguarded.
+100. **First-run tour** as an inline dismissible banner (never a trapping
+    overlay): drop → auto-clip 30s vertical → captions → export; shown once via
+    localStorage.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
