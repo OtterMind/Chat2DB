@@ -968,6 +968,12 @@ gate that stops a broken installer from being published.
     suggestions (typed-ffmpeg, YOLO, librosa, Playwright-as-replacement, macOS
     packaging, TransNetV2's torch) were deferred with reasons, not shipped.
 
+94. **Right-click context menu on clips** (the pro affordance both reviews asked
+    for): Split at playhead / Duplicate / Delete, rendered through a portal so it
+    never clips inside the scroll pane, closed by outside-click / Escape / wheel.
+    Mute/Hide were left out of the menu because those flags live on the *track*,
+    not the clip — putting them on a clip menu would have lied about the model.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

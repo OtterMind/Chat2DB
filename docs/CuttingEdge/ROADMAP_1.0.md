@@ -290,6 +290,23 @@ Checked again and left alone: export presets (`high` = CRF 18/`slow`,
 `balanced` = CRF 21), the render path (the export never reads a proxy — asserted),
 waveform resolution, and `compression: "normal"` in electron-builder.
 
+## 2b. Action list, ranked by the advisors' value (post-review)
+
+The two external reviews were merged, de-duplicated and ranked; the full table is
+in `docs/CuttingEdge/DEFENSE.md` (appendix). The build order for the remaining
+work, highest value first:
+
+1. **Port discovery** (reliability, P0) — free-port bind + hand the port to the
+   renderer; prevents the silent crash on a busy 8742.
+2. **Crash reporting** (1.0) — electron crash dialog + report id linked to logs.
+3. **OTIO export/import** (pro interchange, Apache-2.0).
+4. **Practical-RIFE** slow-mo for sports (on-demand, MIT).
+5. **First-run tour** + **Playwright-on-packaged** + **performance-regression** tests.
+6. TransNetV2 / CLIP / whisperX / demucs / Real-ESRGAN / rembg — all on-demand,
+   licence-checked, measured before kept.
+Deliberately not in-process: GPL/AGPL/no-licence (aubio, peaks.js, mlt, YOLO,
+video-timeline-editor) and DeepFilterNet until its NOASSERTION licence is cleared.
+
 ## 3. What is deliberately not on this road
 
 * `librosa` — see §1.2. Revisit only if our detector is shown to fail on real

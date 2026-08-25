@@ -1223,3 +1223,13 @@ button { font-family: inherit; cursor: pointer; }
   border-bottom: 1px dashed rgba(148,163,184,.12); }
 .attr-row strong { flex: 1; font-size: 13px; }
 .attr-row .ce-hint { flex: 1; }
+
+/* --------------------------------------------------- clip context menu */
+.tl__ctx { position: fixed; z-index: 90; width: 180px; display: flex; flex-direction: column;
+  gap: 2px; padding: 6px; background: rgba(15,23,42,.98); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 18px 40px -18px #000; }
+.tl__ctx button { text-align: start; background: transparent; border: none; color: #cbd5e1;
+  border-radius: 7px; padding: 7px 10px; font-size: 12.5px; cursor: pointer; }
+.tl__ctx button:hover { background: rgba(99,102,241,.18); color: #fff; }
+.tl__ctx button.is-danger { color: #fca5a5; }
+.tl__ctx button.is-danger:hover { background: rgba(239,68,68,.15); }
