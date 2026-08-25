@@ -44,3 +44,19 @@ def test_stems_without_demucs_is_an_honest_409():
         return
     assert client.post("/api/audio/stems/start",
                        json={"path": "/nonexistent/x.mp4"}).status_code in (404, 409)
+
+
+def test_voice_source_prefers_a_cached_vocals_stem(monkeypatch, tmp_path):
+    """Ducking measures the cleanest voice it has: the Demucs vocals stem when
+    the user split stems for this file, the raw file otherwise."""
+    from core.engine import audio, audio_extract
+
+    monkeypatch.setattr(audio_extract, "exports_dir", lambda: tmp_path)
+    src = tmp_path / "clip.mp4"
+
+    assert audio.voice_source(str(src)) == str(src)          # no stem yet
+
+    (tmp_path / "clip.stems").mkdir()
+    (tmp_path / "clip.stems" / "vocals.wav").write_bytes(b"x")
+
+    assert audio.voice_source(str(src)) == str(tmp_path / "clip.stems" / "vocals.wav")

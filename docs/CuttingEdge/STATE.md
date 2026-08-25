@@ -1161,6 +1161,18 @@ gate that stops a broken installer from being published.
     documented here as considered, not skipped. Suite: **371 passed, 0 failed,
     10 skipped**.
 
+109. **Ducking listens to the vocals stem when Demucs has cached one.** The
+    duck envelope used to be measured on the voice clip's raw mix; if that mix
+    carries music, the activity curve hears the band as well as the words. Now
+    `audio.voice_source()` checks `~/CuttingEdge/exports/<name>.stems/vocals.wav`
+    — exactly where the Audio panel's Split-stems button writes — and the
+    compositor measures the envelope on that clean stem when present, on the
+    raw file otherwise (no stem → byte-identical behaviour, which the unchanged
+    ducking-depth test re-proves). A render **never** separates by itself:
+    torch is minutes of CPU and must stay a button the user presses, so the
+    refinement is a cache hit, not a hidden download. `tests/test_audio_extract.py`
+    pins the resolution both ways. Suite: **372 passed, 0 failed, 10 skipped**.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
