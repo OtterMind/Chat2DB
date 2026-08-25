@@ -1026,6 +1026,14 @@ gate that stops a broken installer from being published.
     Virastar, whisperX, DadmaTools, Hezar, pyannote, python-ass join the registry
     with verified licences; actual integration awaits the owner's go-ahead.
 
+103. **Persian captions are typeset, not dumped.** `core/engine/persian.py`
+    cleans ASR output deterministically (Arabic→Persian letters, diacritics
+    stripped, half-space for می/نمی and های/ام, Persian digits when the run is
+    Persian, spaces collapsed) and runs Hazm first when fetched. It feeds both
+    `subtitles.cues_from_clips` (so libass renders like a typesetter set it) and
+    `meaning.score_text` (so discourse scoring sees canonical tokens). Word
+    timings are left untouched so karaoke stays in sync.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import re
 
+from core.engine import persian
+
 MARKERS: dict[str, tuple[str, ...]] = {
     "en": (
         "but ", "however", "the most important", "most important", "the point is",
@@ -41,6 +43,7 @@ QUESTIONS = ("?", "؟", "چرا", "چطور", "چگونه", "چیست", "how ", 
 
 
 def score_text(text: str) -> float:
+    text = persian.normalize(text or '')
     """A 0..1 score for one caption's worth of speech."""
     words = [w for w in re.split(r"\s+", text.strip()) if w]
     if not words:
