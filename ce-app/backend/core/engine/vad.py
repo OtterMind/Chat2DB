@@ -106,21 +106,14 @@ def fetch(progress=None) -> Path:
     model_dir().mkdir(parents=True, exist_ok=True)
     say("download", 0.1, "Downloading the speech model (2.2 MB)")
     with tempfile.TemporaryDirectory(prefix="ce-vad-") as tmp:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "download", _PACKAGE, "--no-deps", "--no-cache-dir",
-             "-d", tmp],
-            capture_output=True, text=True, timeout=600,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"could not download {_PACKAGE}: {(result.stderr or result.stdout)[-400:]}"
-            )
-        wheels = sorted(Path(tmp).glob("*.whl")) or sorted(Path(tmp).glob("*.tar.gz"))
-        if not wheels:
-            raise RuntimeError(f"{_PACKAGE} downloaded nothing")
+        # The packaged embeddable Python has no pip, so fetch the wheel straight
+        # from PyPI with the stdlib (a wheel is just a zip).
+        from core.engine import _pypi  # noqa: PLC0415
+
+        wheel = _pypi.download_wheel(_PACKAGE, Path(tmp))
 
         say("extract", 0.8, "Taking the model out of the package")
-        found = _extract_model(wheels[0])
+        found = _extract_model(wheel)
         if found is None:
             raise RuntimeError(f"{wheels[0].name} does not contain {_MODEL_NAME}")
         shutil.copyfile(found, model_path())

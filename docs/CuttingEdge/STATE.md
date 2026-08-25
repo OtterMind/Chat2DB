@@ -984,6 +984,17 @@ gate that stops a broken installer from being published.
     so a field bug report is a file, not a guess. Both are the P0/1.0 reliability
     items from the advisors' ranked list.
 
+96. **On-demand installs must not need pip.** The packaged backend runs on an
+    embeddable CPython that ships **without pip**, so every on-demand fetch that
+    shelled out to `python -m pip` died on the user's machine with "No module
+    named pip" (reported from the field on the Fetch-model / Fetch-OCR buttons).
+    A wheel is just a zip and PyPI's JSON API gives the URL, so
+    `core/engine/_pypi.py` fetches and unpacks wheels with the stdlib alone —
+    pure `py3-none-any` wheels, or a `win_amd64` wheel matching the interpreter —
+    and `runtime_packages.install` falls back to it whenever pip is absent.
+    `vad.fetch` uses it too. Measured: the silero model downloads and unpacks
+    pip-free, and a pure wheel installed this way imports from the runtime dir.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
