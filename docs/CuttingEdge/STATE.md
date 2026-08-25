@@ -995,6 +995,19 @@ gate that stops a broken installer from being published.
     `vad.fetch` uses it too. Measured: the silero model downloads and unpacks
     pip-free, and a pure wheel installed this way imports from the runtime dir.
 
+97. **Every accepted AI engine is now a declared on-demand engine; the rejected
+    stay rejected, visibly.** `core/engine/engines.py` is a registry: RIFE,
+    whisperX, TransNetV2, Demucs, MediaPipe-pose, CLIP/SigLIP, Real-ESRGAN,
+    pyannote, FILM and OpenTimelineIO, each with its verified licence, role and
+    explicit fetch list; `/api/engines/status` reports installed/licence and the
+    rejected set (YOLO/AGPL, madmom/CC-BY-NC, gl-transitions, Remotion,
+    DeepFilterNet-NOASSERTION, librosa) with reasons. Nothing ships; each degrades
+    gracefully. A Settings card shows the shelf and the gate.
+98. **OTIO interchange is real and round-trips.** `core/engine/interchange.py`
+    exports the video lane to `.otio` and reads one back (Apache-2.0, on-demand);
+    transitions/keyframes are dropped on export rather than faked. Tested with a
+    round-trip.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

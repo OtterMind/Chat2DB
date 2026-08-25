@@ -3,6 +3,7 @@ import { Form, Input, message } from 'antd'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
+import api from '../api/client'
 import AiRuntimeCard from '../components/AiRuntimeCard'
 import { assistantApi, type ProviderState } from '../api/assistant'
 import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
@@ -376,6 +377,63 @@ function VisionCard() {
   )
 }
 
+
+interface EngineInfo {
+  id: string; name: string; repo: string; licence: string; role: string;
+  installed: boolean; heavy?: string | null;
+}
+
+/**
+ * The on-demand engine shelf. Every accepted AI engine is listed with its
+ * verified licence and whether it is fetched on this machine; fetching goes
+ * through the same licence-gated, pip-free installer. The rejected set is shown
+ * with its reason so the gate is visible, not hidden.
+ */
+function EnginesCard() {
+  const { t } = useI18n()
+  const [engines, setEngines] = useState<EngineInfo[]>([])
+  const [rejected, setRejected] = useState<{ name: string; licence: string; why: string }[]>([])
+
+  useEffect(() => {
+    api.get('/engines/status').then((r) => {
+      setEngines(r.data.engines ?? [])
+      setRejected(r.data.rejected ?? [])
+    }).catch(() => undefined)
+  }, [])
+
+  return (
+    <Card title={t('On-demand AI engines', 'موتورهای هوش مصنوعی اختیاری')}>
+      <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        {engines.map((e) => (
+          <div key={e.id} className="attr-row">
+            <strong dir="ltr">{e.name}</strong>
+            <span className="ce-hint">{e.role}</span>
+            <span dir="ltr" className="ce-badge">{e.licence}</span>
+            <span className="ce-badge">{e.installed ? t('ready', 'آماده') : t('not fetched', 'گرفته نشده')}</span>
+          </div>
+        ))}
+      </div>
+      <p className="ce-hint" style={{ marginTop: 10 }}>
+        {t(
+          'None of these ship in the installer; each is fetched when you ask and degrades gracefully when absent. Rejected engines stay listed with their reason.',
+          'هیچ‌کدام در نصب‌کننده نیستند؛ هرکدام وقتی بخواهی گرفته می‌شود و در غیابش برنامه بی‌صدا کار می‌کند. موتورهای ردشده با دلیلشان فهرست می‌مانند.'
+        )}
+      </p>
+      {rejected.length > 0 && (
+        <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch', marginTop: 8 }}>
+          {rejected.map((r) => (
+            <div key={r.name} className="attr-row">
+              <strong dir="ltr">{r.name}</strong>
+              <span className="ce-hint">{r.why}</span>
+              <span dir="ltr" className="ce-badge">{r.licence}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
 
@@ -586,6 +644,8 @@ export default function Settings() {
       <SpeechEngineCard />
 
       <OcrCard />
+
+      <EnginesCard />
 
       <VisionCard />
     </Page>
