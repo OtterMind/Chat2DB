@@ -25,7 +25,18 @@ async def lifespan(app: FastAPI):
     db.close()
 
 app = FastAPI(title=__app_name__, version=__version__, lifespan=lifespan, docs_url="/docs", redoc_url="/redoc")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# CORS locked down, not wide open. The renderer reaches this API from exactly two
+# places: the Vite dev server (same-origin via its proxy, so CORS rarely fires) and
+# the packaged app over file:// (which the browser reports as the opaque origin
+# "null"). A wildcard with credentials would let any website drive the local API;
+# an explicit allowlist blocks that while keeping both real clients working.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "null"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(jobs.router)
 app.include_router(clips.router)

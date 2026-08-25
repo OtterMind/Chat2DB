@@ -955,6 +955,19 @@ gate that stops a broken installer from being published.
     known-answer testing philosophy, a directory map, and a rebuild-from-zero
     checklist. It is the contract a new developer must not break.
 
+93. **Two external reviews were triaged against the code, not accepted on
+    authority.** Items the reviewers flagged that were already true (waveforms on
+    the timeline, Ctrl+wheel zoom, an existing shortcut set, an Ollama timeout with
+    a rule fallback) were verified and left; the genuinely-missing, safe ones were
+    built: J/K/L transport + `,`/`.` frame-stepping; CORS locked from a wildcard
+    with credentials to an allowlist (dev origins + the packaged opaque origin,
+    no credentials) with a test that a foreign origin gets no allowance; a
+    path-injection guard on the media endpoint (null byte / relative → 400); and
+    filler-word removal (EN+FA) that strips time-buying tokens from captions as
+    whole tokens only, behind `intent.clean_fillers`. Heavy or licence-risky
+    suggestions (typed-ffmpeg, YOLO, librosa, Playwright-as-replacement, macOS
+    packaging, TransNetV2's torch) were deferred with reasons, not shipped.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

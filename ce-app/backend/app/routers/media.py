@@ -30,6 +30,12 @@ _RANGE = re.compile(r"bytes=(\d*)-(\d*)")
 
 @router.get("/file")
 def stream(path: str, request: Request):
+    # Defence in depth on top of the locked-down CORS: the only thing this
+    # endpoint should ever refuse is a path that is not a real, absolute file on
+    # this machine. A null byte or a relative path is not something the file
+    # picker produces, so it is an injected value and gets a 400, not a 404.
+    if "\0" in path or not Path(path).is_absolute():
+        raise HTTPException(status_code=400, detail="Invalid path")
     media = Path(path)
     if not media.exists() or not media.is_file():
         raise HTTPException(status_code=404, detail="File not found")

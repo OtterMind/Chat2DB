@@ -273,6 +273,8 @@ class Intent:
     seconds: float = 0.0
     #: Slow the single best moment to half speed, as a highlight beat.
     slowmo: bool = False
+    #: Remove filler words (um / یعنی …) from generated captions.
+    clean_fillers: bool = False
     #: Anything else, in the user's own words.
     notes: str = ""
 
@@ -322,6 +324,7 @@ class Intent:
             # typo rather than a wish — ignore it instead of building to it.
             seconds=round(seconds, 3) if 1.0 <= seconds <= 3600.0 else 0.0,
             slowmo=bool(raw.get("slowmo")),
+            clean_fillers=bool(raw.get("clean_fillers")),
             notes=str(raw.get("notes") or "").strip()[:500],
         )
 
@@ -333,7 +336,8 @@ class Intent:
         """No answer at all: behave exactly as before this existed."""
         return not any((self.kind, self.goal, self.focus, self.energy, self.platform,
                         self.audience, self.captions, self.restrictions, self.music,
-                        self.keep, self.avoid, self.seconds, self.slowmo))
+                        self.keep, self.avoid, self.seconds, self.slowmo,
+                        self.clean_fillers))
 
     # --------------------------------------------------------------- effects
 

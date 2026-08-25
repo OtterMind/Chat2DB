@@ -32,6 +32,7 @@ from core.brain import objective
 from core.brain import race as brain_race
 from core.engine import analyze as analysis
 from core.engine import intent as intent_model
+from core.engine import fillers as fillers_engine
 from core.engine import vad as vad_engine
 from core.engine import cancellation
 from core.engine import audio as audio_engine
@@ -1060,6 +1061,10 @@ def build_timeline(
         applied.append(f"{len(transitions)} × {transition_kind}")
 
     # ---- captions -------------------------------------------------------
+    if captions and wanted.clean_fillers:
+        # Filler words make captions longer than the shot and light up words
+        # nobody should read; remove them before the cues touch the timeline.
+        captions = fillers_engine.clean_cues(captions)
     caption_style = dict(data.get("captions") or {})
     caption_choice = wanted.caption_preference()
     if caption_choice:

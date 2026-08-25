@@ -132,6 +132,23 @@ export default function Studio() {
       if (key === ' ') {
         event.preventDefault()
         togglePlay()
+      } else if (key.toLowerCase() === 'k') {
+        // The J/K/L transport: K pauses; J/L shuttle back/forward. A video editor
+        // is driven from the keyboard, and these three are its alphabet.
+        event.preventDefault()
+        useEditor.getState().togglePlay(false)
+      } else if (key.toLowerCase() === 'l') {
+        event.preventDefault()
+        if (!useEditor.getState().playing) useEditor.getState().togglePlay(true)
+        else setPlayhead(useEditor.getState().playhead + 1)
+      } else if (key.toLowerCase() === 'j') {
+        event.preventDefault()
+        useEditor.getState().togglePlay(false)
+        setPlayhead(useEditor.getState().playhead - 1)
+      } else if (key === ',' || key === '.') {
+        // One frame at a time, the way colourists scrub.
+        event.preventDefault()
+        setPlayhead(useEditor.getState().playhead + (key === '.' ? 1 : -1) / 30)
       } else if (key === 'Delete' || key === 'Backspace') {
         if (!useEditor.getState().selectedId) return
         event.preventDefault()
