@@ -974,6 +974,16 @@ gate that stops a broken installer from being published.
     Mute/Hide were left out of the menu because those flags live on the *track*,
     not the clip — putting them on a clip menu would have lied about the model.
 
+95. **A busy port degrades, never kills; a crash leaves a quotable id.** Port
+    discovery: in the packaged app Electron picks the first free port from 8742
+    and hands it to the backend (`CE_PORT`) and the renderer
+    (`--ce-backend-port` via preload), so a port conflict means "use another
+    port", not a silent death; dev keeps 8742 so the Vite proxy lines up. Crash
+    reporting: renderer-gone, uncaughtException and unhandledRejection each write
+    a small JSON `crash-<id>.json` beside the logs (nothing leaves the machine),
+    so a field bug report is a file, not a guess. Both are the P0/1.0 reliability
+    items from the advisors' ranked list.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

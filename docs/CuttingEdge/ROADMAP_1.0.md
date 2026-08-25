@@ -296,9 +296,9 @@ The two external reviews were merged, de-duplicated and ranked; the full table i
 in `docs/CuttingEdge/DEFENSE.md` (appendix). The build order for the remaining
 work, highest value first:
 
-1. **Port discovery** (reliability, P0) — free-port bind + hand the port to the
-   renderer; prevents the silent crash on a busy 8742.
-2. **Crash reporting** (1.0) — electron crash dialog + report id linked to logs.
+1. **Port discovery** — **done (0.9.22+)**: free-port bind + hand the port to the
+   renderer; a busy 8742 now degrades instead of killing.
+2. **Crash reporting** — **done (0.9.22+)**: crash-<id>.json beside the logs.
 3. **OTIO export/import** (pro interchange, Apache-2.0).
 4. **Practical-RIFE** slow-mo for sports (on-demand, MIT).
 5. **First-run tour** + **Playwright-on-packaged** + **performance-regression** tests.

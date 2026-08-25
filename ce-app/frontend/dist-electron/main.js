@@ -2271,6 +2271,8 @@ var import_electron2 = require("electron");
 var import_path = __toESM(require("path"));
 var import_child_process = require("child_process");
 var import_fs = require("fs");
+var import_net = require("net");
+var import_crypto = require("crypto");
 var import_main = __toESM(require_main2());
 import_main.default.initialize();
 import_main.default.transports.file.level = "info";
@@ -2300,6 +2302,36 @@ function backendLogPath() {
   return import_path.default.join(import_electron2.app.getPath("userData"), "logs", "backend.log");
 }
 var mainWindow = null;
+var backendPort = 8742;
+function freePort(start, span = 20) {
+  return new Promise((resolve) => {
+    const tryPort = (p) => {
+      if (p >= start + span) return resolve(start);
+      const srv = (0, import_net.createServer)();
+      srv.once("error", () => tryPort(p + 1));
+      srv.listen(p, "127.0.0.1", () => srv.close(() => resolve(p)));
+    };
+    tryPort(start);
+  });
+}
+function writeCrashReport(where, detail) {
+  const id = (0, import_crypto.randomUUID)().slice(0, 8);
+  try {
+    const dir = import_path.default.dirname(import_main.default.transports.file.getFile().path);
+    const file = import_path.default.join(dir, `crash-${id}.json`);
+    writeFileSync(file, JSON.stringify({
+      id,
+      at: (/* @__PURE__ */ new Date()).toISOString(),
+      where,
+      detail,
+      version: import_electron2.app.getVersion(),
+      platform: process.platform
+    }, null, 2));
+    import_main.default.error(`[CE] crash report ${id} written to ${file}`);
+  } catch {
+  }
+  return id;
+}
 function startBackend() {
   if (process.env.CE_MANUAL_BACKEND === "1") return;
   if (backendProcess) return;
@@ -2340,7 +2372,7 @@ function startBackend() {
       // backend cannot read the frontend's package.json in a packaged install —
       // it is inside an asar — so without this it would fall back to a constant
       // and `/api/health` would report the previous build forever.
-      env: { ...process.env, CE_APP_EXE: import_electron2.app.getPath("exe"), CE_VERSION: import_electron2.app.getVersion() }
+      env: { ...process.env, CE_APP_EXE: import_electron2.app.getPath("exe"), CE_VERSION: import_electron2.app.getVersion(), CE_PORT: String(backendPort) }
     });
   } catch (error) {
     backendFailure = `spawn failed: ${String(error)}`;
@@ -2473,7 +2505,7 @@ function createWindow() {
     // survived even in fullscreen. The app has no use for it: every action lives
     // in the interface, so the whole bar goes.
     autoHideMenuBar: true,
-    webPreferences: { preload: import_path.default.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false }
+    webPreferences: { preload: import_path.default.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, additionalArguments: [`--ce-backend-port=${backendPort}`] }
   });
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else {
@@ -2508,14 +2540,24 @@ ${validatedURL}`);
   });
   mainWindow.webContents.on("render-process-gone", (_e, details) => {
     import_main.default.error("[CE] Renderer process gone:", details.reason);
+    writeCrashReport("renderer", String(details.reason));
   });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     import_electron2.shell.openExternal(url);
     return { action: "deny" };
   });
 }
-import_electron2.app.whenReady().then(() => {
+process.on("uncaughtException", (error) => {
+  import_main.default.error("[CE] uncaughtException:", error);
+  writeCrashReport("main", String(error?.stack ?? error));
+});
+process.on("unhandledRejection", (reason) => {
+  import_main.default.error("[CE] unhandledRejection:", reason);
+  writeCrashReport("main", String(reason));
+});
+import_electron2.app.whenReady().then(async () => {
   registerIpc();
+  backendPort = import_electron2.app.isPackaged ? await freePort(8742) : 8742;
   import_main.default.info(`[CE] Cutting Edge ${import_electron2.app.getVersion()} starting \u2014 logs at ${import_main.default.transports.file.getFile().path}`);
   startBackend();
   createWindow();
