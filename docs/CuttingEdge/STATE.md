@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.27` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.28` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1075,6 +1075,53 @@ gate that stops a broken installer from being published.
     still returns the originals, a successful pass reports the Persian aligner,
     the fetch list excludes torch, whisperX stays a registered engine, and the
     endpoint reports honestly. Suite: **344 passed, 0 failed, 10 skipped**.
+
+106. **The engine shelf stopped being a brochure: every row now says whether it
+    can be downloaded on *this* machine, and the button only exists when it can
+    win.** The owner photographed Settings with ten "not fetched" rows and asked
+    that they actually be downloadable. The audit found six separate lies of
+    omission, all fixed:
+    • the card had **no fetch button at all** — it now has one per engine, wired
+      to `/api/engines/install/start` with a polled task bar;
+    • `transnet` was registered under a module name the wheel does not contain
+      (the PyPI wheel's top level is `transnetv2_pytorch`, verified by unpacking
+      it) — `available()` would have said "not fetched" forever after a
+      successful download;
+    • `virastar` is **not on PyPI** under any of five names (all 404) — now
+      honestly repo-only, its role covered by the built-in `persian.py` + Hazm;
+    • `mediapipe` 1.x ships no win_amd64 cp311 wheel — pinned to **0.10.21**, the
+      newest release that does (verified against PyPI's release list);
+    • heavy engines never fetched their heavy part — `install/start` now takes
+      `heavy=true` and adds the torch wheels (~120 MB CPU, opt-in behind a modal
+      that states the size);
+    • RIFE has no wheel at all: its sdist is 1081 C++ files and the upstream
+      GitHub zips stop at Python 3.10 — on a pip-less runtime the row now says
+      *why* instead of dying mid-download; where pip exists it remains a source
+      build.
+    The pip-free installer grew a real sdist path: a pure-Python sdist is
+    unpacked by `extract_sdist` (`.py` only, tests/docs skipped) and refused
+    outright when it carries compiled code — the check lives in the extractor
+    too, because silently dropping binaries would make a package that imports
+    and then dies. `engines.probe()` verifies each row against PyPI once per
+    process and the card renders `fetchable`/`why`. Proof, not promise:
+    `test_python_ass_downloads_end_to_end_through_the_real_endpoint` runs the
+    button's exact path (POST start → task poll → `is_installed("ass")`) and
+    passed in CI-sandbox.
+107. **Roadmap step 1 closes and step 2 opens.** `core/engine/assfile.py` round-
+    trips karaoke ASS: a file edited in Aegisub comes back as cues with the word
+    timings **reconstructed from the `\\kf` tags** (built-in parser as the tested
+    floor, python-ass as the fetched reader), and our cues write out through the
+    same `build_ass` the compositor burns — endpoints `/api/captions/ass/import|
+    export`. `core/engine/transnet.py` is the TransNetV2 bridge (boundaries when
+    fetched, degrade-safe) **plus junction typing that needs no engine at all**:
+    cut = one violent frame, dissolve = a ramp, fade = a dip towards black,
+    measured with the OpenCV we already ship; `/api/engines/transnet/detect`
+    serves both, naming which detector ran. Per the §104 convention both were
+    considered for the brain and deliberately filed as refinements, not new
+    tools: ASS is another door of the existing `interchange` tool, and junction
+    typing sharpens the measurement behind `transitions` — the reasoning is
+    written here so the convention was applied, not skipped. Suite: **363
+    passed, 0 failed, 10 skipped**.
 
 ## 5. Release procedure
 

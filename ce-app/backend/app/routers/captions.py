@@ -51,6 +51,35 @@ def status() -> dict:
     return engine.availability()
 
 
+class AssImportRequest(BaseModel):
+    path: str
+
+
+class AssExportRequest(BaseModel):
+    path: str
+    cues: list[dict]
+    width: int = 1080
+    height: int = 1920
+
+
+@router.post("/ass/import")
+def ass_import(payload: AssImportRequest) -> dict:
+    """A `.ass` edited in Aegisub comes back as cues, word timings from `\\kf`."""
+    from core.engine import assfile
+
+    try:
+        return assfile.import_cues(payload.path)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
+
+
+@router.post("/ass/export")
+def ass_export(payload: AssExportRequest) -> dict:
+    from core.engine import assfile
+
+    return assfile.export(payload.cues, payload.path, payload.width, payload.height)
+
+
 @router.get("/align-status")
 def align_status() -> dict:
     """Is word-level forced alignment available? Honest, so the button can say."""

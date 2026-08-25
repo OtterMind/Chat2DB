@@ -15,21 +15,38 @@ from __future__ import annotations
 
 import importlib.util
 
+#: What `heavy` actually means at install time: the extra pip packages the user
+#: opts into. torch from PyPI is the CPU build (~120 MB wheel); CUDA builds live
+#: on the PyTorch index and stay out of the pip-free installer.
+HEAVY_DEPS: dict[str, list[str]] = {
+    "torch": ["torch", "torchaudio"],
+    "torch+HF-token": ["torch", "torchaudio"],
+    "ncnn": [],
+    "own": [],
+    "tensorflow": [],
+}
+
 #: Accepted on-demand engines. `module` is what we import to use it; `deps` is the
-#: explicit fetch list (no transitive resolution).
+#: explicit fetch list (no transitive resolution). `sdist: "build"` marks a dep
+#: whose PyPI artefact is source that must be compiled (no wheel for us).
 ENGINES: list[dict] = [
     {"id": "rife", "name": "RIFE", "repo": "hzwer/Practical-RIFE", "licence": "MIT",
      "role": "optical-flow slow-mo & smooth transitions for sports",
-     "module": "rife_ncnn_vulkan_python", "deps": ["rife-ncnn-vulkan-python"], "heavy": "ncnn"},
+     "module": "rife_ncnn_vulkan_python", "deps": ["rife-ncnn-vulkan-python"],
+     "heavy": "ncnn", "sdist": "build"},
     {"id": "transnet", "name": "TransNetV2", "repo": "soCzech/TransNetV2", "licence": "MIT",
-     "role": "cut/dissolve/fade typing for accurate Style Match templates",
-     "module": "transnet", "deps": ["transnetv2-pytorch"], "heavy": "torch"},
+     "role": "shot boundaries + cut/dissolve/fade typing for Style Match templates",
+     # the PyPI wheel's top-level package is transnetv2_pytorch (verified by
+     # unpacking the wheel); `transnet` would make available() lie forever.
+     "module": "transnetv2_pytorch", "deps": ["transnetv2-pytorch"], "heavy": "torch"},
     {"id": "demucs", "name": "Demucs", "repo": "facebookresearch/demucs", "licence": "MIT",
      "role": "drums/vocals separation for beat-accurate ducking",
      "module": "demucs", "deps": ["demucs"], "heavy": "torch"},
     {"id": "mediapipe", "name": "MediaPipe Pose", "repo": "google-ai-edge/mediapipe", "licence": "Apache-2.0",
      "role": "33-point pose landmarks for sports reframe",
-     "module": "mediapipe", "deps": ["mediapipe"], "heavy": "own"},
+     # 1.x publishes no win_amd64 cp311 wheel (verified against PyPI); 0.10.21
+     # is the newest release that does.
+     "module": "mediapipe", "deps": ["mediapipe==0.10.21"], "heavy": "own"},
     {"id": "clip", "name": "CLIP / SigLIP", "repo": "openai/CLIP", "licence": "MIT / Apache-2.0",
      "role": "visual-semantic signal for highlight scoring",
      "module": "clip", "deps": ["ftfy", "regex"], "heavy": "torch"},
@@ -44,7 +61,10 @@ ENGINES: list[dict] = [
      "module": "hazm", "deps": ["hazm"], "heavy": None},
     {"id": "virastar", "name": "Virastar", "repo": "mannaedu/virastar", "licence": "MIT",
      "role": "Persian text cleaning before subtitle burn-in",
-     "module": "virastar", "deps": ["virastar"], "heavy": None},
+     # verified 2026-08: no PyPI project under virastar / python-virastar /
+     # virastar-py / persian-virastar (all 404) — repo-only. The built-in
+     # persian.py cleaner plus optional Hazm already cover the role in-process.
+     "module": "virastar", "deps": [], "heavy": None},
     {"id": "whisperx", "name": "whisperX", "repo": "m-bain/whisperX", "licence": "BSD-3",
      "role": "word-level timestamps for karaoke captions",
      "module": "whisperx", "deps": ["whisperx"], "heavy": "torch"},
@@ -77,8 +97,52 @@ REJECTED: list[dict] = [
 ]
 
 
+def _pip_available() -> bool:
+    from core import runtime_packages  # noqa: PLC0415
+
+    return runtime_packages._pip_available()
+
+
+_PROBE_CACHE: dict[str, dict] = {}
+
+
+def probe(engine: dict) -> dict:
+    """Can this engine actually be downloaded *on this machine*, and why (not)?
+
+    Verified against PyPI rather than assumed; cached per process so the
+    Settings card pays for the lookups once. A dead registry must show a reason,
+    never a button that dies.
+    """
+    if engine["id"] in _PROBE_CACHE:
+        return _PROBE_CACHE[engine["id"]]
+    from core.engine import _pypi  # noqa: PLC0415
+
+    if not engine["deps"]:
+        out = {"fetchable": False,
+               "why": "repo-only: no pip package published (see the repository)"}
+    elif engine.get("sdist") == "build" and not _pip_available():
+        out = {"fetchable": False,
+               "why": "source-only on PyPI (needs a C++ toolchain); no prebuilt "
+                      "wheel for this Python — the packaged runtime cannot build it"}
+    else:
+        kinds = {_pypi.classify(_pypi.parse_name(spec)) for spec in engine["deps"]}
+        if "none" in kinds:
+            out = {"fetchable": False, "why": "a dependency is missing from PyPI"}
+        elif "sdist" in kinds and engine.get("sdist") != "build":
+            out = {"fetchable": True,
+                   "why": "source-only on PyPI; installed by the pip-free extractor "
+                          "when pure Python"}
+        else:
+            out = {"fetchable": True, "why": ""}
+    if engine.get("heavy") in ("torch", "torch+HF-token"):
+        out["heavy_note"] = ("needs torch (~120 MB CPU wheels from PyPI, opt-in)")
+    _PROBE_CACHE[engine["id"]] = out
+    return out
+
+
 def status() -> dict:
-    """Which engines are present on this machine, and their licence."""
+    """Which engines are present on this machine, their licence, and whether they
+    can be fetched here — the download button is only offered when it can win."""
     out = []
     for engine in ENGINES:
         try:
@@ -87,5 +151,5 @@ def status() -> dict:
             # A dotted module whose parent is absent raises instead of returning
             # None; absent is absent.
             installed = False
-        out.append({**engine, "installed": installed})
+        out.append({**engine, "installed": installed, **probe(engine)})
     return {"engines": out, "rejected": REJECTED}

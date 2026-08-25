@@ -85,3 +85,60 @@ def test_ai_transitions_one_per_contiguous_junction_sized_to_music():
     assert len(out) == 1, "only the contiguous a→b junction gets a transition"
     assert out[0]["fromClipId"] == "a" and out[0]["toClipId"] == "b"
     assert 0.2 <= out[0]["duration"] <= 0.8, "duration must be a half-beat, clamped"
+
+
+def test_probe_says_repo_only_where_no_pip_package_exists():
+    from core.engine import engines
+
+    film = next(e for e in engines.ENGINES if e["id"] == "film")
+    virastar = next(e for e in engines.ENGINES if e["id"] == "virastar")
+
+    assert engines.probe(film)["fetchable"] is False
+    assert engines.probe(virastar)["fetchable"] is False
+    assert "repo-only" in engines.probe(film)["why"]
+
+
+def test_status_carries_fetchability_for_the_download_button():
+    body = client.get("/api/engines/status").json()
+
+    for engine in body["engines"]:
+        assert "fetchable" in engine and "why" in engine
+
+
+def test_a_heavy_engine_refuses_without_explicit_opt_in():
+    from core.engine import engines as reg
+
+    if reg.status()["engines"] and next(
+            e for e in reg.ENGINES if e["id"] == "whisperx")["module"]:
+        import importlib.util
+        if importlib.util.find_spec("whisperx") is not None:
+            pytest.skip("whisperX fetched on this machine")
+
+    response = client.post("/api/engines/install/start", json={"engine": "whisperx"})
+
+    assert response.status_code == 409
+    assert "torch" in response.json()["detail"]
+
+
+def test_python_ass_downloads_end_to_end_through_the_real_endpoint():
+    """The download the Settings button starts must actually win: run it for a
+    small pure wheel through the real install endpoint and task poller."""
+    import time as _time
+
+    from core import runtime_packages
+
+    response = client.post("/api/engines/install/start",
+                           json={"engine": "python-ass", "heavy": False})
+    assert response.status_code == 200, response.text
+    task_id = response.json()["id"]
+
+    deadline = _time.time() + 120
+    body = {}
+    while _time.time() < deadline:
+        body = client.get(f"/api/tasks/{task_id}").json()
+        if body["status"] != "running":
+            break
+        _time.sleep(1.0)
+
+    assert body["status"] == "done", body.get("error")
+    assert runtime_packages.is_installed("ass")

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Form, Input, message } from 'antd'
+import { Form, Input, message, Modal } from 'antd'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
@@ -381,37 +381,114 @@ function VisionCard() {
 interface EngineInfo {
   id: string; name: string; repo: string; licence: string; role: string;
   installed: boolean; heavy?: string | null;
+  fetchable?: boolean; why?: string; heavy_note?: string;
+}
+
+interface EngineTask {
+  id: string; status: string; stage: string; progress: number; label: string; error?: string | null;
 }
 
 /**
  * The on-demand engine shelf. Every accepted AI engine is listed with its
- * verified licence and whether it is fetched on this machine; fetching goes
- * through the same licence-gated, pip-free installer. The rejected set is shown
+ * verified licence and whether it is fetched on this machine — and, new, a
+ * download button that only appears when the download can actually win: the
+ * backend probes PyPI for a loadable artefact per engine and reports the reason
+ * when it cannot (repo-only, source-only, missing interpreter wheel), so this
+ * card never shows a button that dies. Fetching goes through the same
+ * licence-gated, pip-free installer; heavy engines (torch) ask first, because
+ * that is ~120 MB the user opts into. The rejected set is shown
  * with its reason so the gate is visible, not hidden.
  */
 function EnginesCard() {
   const { t } = useI18n()
   const [engines, setEngines] = useState<EngineInfo[]>([])
   const [rejected, setRejected] = useState<{ name: string; licence: string; why: string }[]>([])
+  const [busy, setBusy] = useState<Record<string, EngineTask>>({})
 
-  useEffect(() => {
+  const load = () =>
     api.get('/engines/status').then((r) => {
       setEngines(r.data.engines ?? [])
       setRejected(r.data.rejected ?? [])
     }).catch(() => undefined)
+
+  useEffect(() => {
+    load()
   }, [])
+
+  const startFetch = (engine: EngineInfo, heavy: boolean) => {
+    api
+      .post('/engines/install/start', { engine: engine.id, heavy })
+      .then((r) => {
+        const task = r.data as EngineTask
+        setBusy((b) => ({ ...b, [engine.id]: task }))
+        const poll = window.setInterval(() => {
+          api.get(`/tasks/${task.id}`).then((p) => {
+            const now = p.data as EngineTask
+            setBusy((b) => ({ ...b, [engine.id]: now }))
+            if (now.status !== 'running') {
+              window.clearInterval(poll)
+              setBusy(({ [engine.id]: _drop, ...rest }) => rest)
+              if (now.status === 'done') {
+                message.success(t(`${engine.name} fetched — it is live now`, `${engine.name} گرفته شد و فعال است`))
+                load()
+              } else {
+                message.error(now.error || t('fetch failed', 'گرفتن ناموفق بود'))
+              }
+            }
+          }).catch(() => window.clearInterval(poll))
+        }, 1500)
+      })
+      .catch((err) => {
+        const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        message.error(detail ?? (err as Error).message)
+      })
+  }
+
+  const fetchClicked = (engine: EngineInfo) => {
+    const needsTorch = engine.heavy === 'torch' || engine.heavy === 'torch+HF-token'
+    if (needsTorch) {
+      Modal.confirm({
+        title: t(`Fetch ${engine.name} plus torch?`, `${engine.name} به‌همراه torch گرفته شود؟`),
+        content: t(
+          'This engine needs torch to run: about 120 MB of CPU wheels from PyPI, downloaded once to your runtime folder (updates never delete it).',
+          'این موتور برای اجرا به torch نیاز دارد: حدود ۱۲۰ مگابایت wheel پردازنده از PyPI، یک‌بار در پوشه‌ی runtime شما (به‌روزرسانی‌ها هرگز آن را پاک نمی‌کنند).'
+        ),
+        okText: t('Fetch engine + torch', 'گرفتن موتور + torch'),
+        cancelText: t('Cancel', 'انصراف'),
+        onOk: () => startFetch(engine, true),
+      })
+    } else {
+      startFetch(engine, false)
+    }
+  }
 
   return (
     <Card title={t('On-demand AI engines', 'موتورهای هوش مصنوعی اختیاری')}>
       <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-        {engines.map((e) => (
-          <div key={e.id} className="attr-row">
-            <strong dir="ltr">{e.name}</strong>
-            <span className="ce-hint">{e.role}</span>
-            <span dir="ltr" className="ce-badge">{e.licence}</span>
-            <span className="ce-badge">{e.installed ? t('ready', 'آماده') : t('not fetched', 'گرفته نشده')}</span>
-          </div>
-        ))}
+        {engines.map((e) => {
+          const task = busy[e.id]
+          const needsTorch = e.heavy === 'torch' || e.heavy === 'torch+HF-token'
+          return (
+            <div key={e.id} className="attr-row">
+              <strong dir="ltr">{e.name}</strong>
+              <span className="ce-hint">
+                {task
+                  ? `${task.stage} ${Math.round((task.progress ?? 0) * 100)}%`
+                  : e.role + (e.why && !e.installed && !e.fetchable ? ` — ${e.why}` : '')}
+              </span>
+              <span dir="ltr" className="ce-badge">{e.licence}</span>
+              {e.installed ? (
+                <span className="ce-badge">{t('ready', 'آماده')}</span>
+              ) : e.fetchable ? (
+                <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => fetchClicked(e)}>
+                  {t(needsTorch ? 'Fetch + torch' : 'Fetch', needsTorch ? 'گرفتن + torch' : 'گرفتن')}
+                </button>
+              ) : (
+                <span className="ce-badge" title={e.why}>{t('unavailable', 'در دسترس نیست')}</span>
+              )}
+            </div>
+          )
+        })}
       </div>
       <p className="ce-hint" style={{ marginTop: 10 }}>
         {t(

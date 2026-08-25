@@ -22,6 +22,8 @@ def status() -> dict:
 
 class InstallRequest(BaseModel):
     engine: str = Field(description="an engine id from /api/engines/status")
+    heavy: bool = Field(default=False,
+                        description="also fetch the heavy runtime (torch) when the engine needs it")
 
 
 @router.post("/install/start")
@@ -34,13 +36,47 @@ def install_start(payload: InstallRequest) -> dict:
     if not engine["deps"]:
         raise HTTPException(status_code=409, detail=f"{engine['name']} has no pip package; see its repo")
 
+    probe = engines.probe(engine)
+    if not probe["fetchable"]:
+        raise HTTPException(status_code=409, detail=probe["why"])
+
+    deps = list(engine["deps"])
+    if engine.get("heavy") in ("torch", "torch+HF-token"):
+        if not payload.heavy:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{engine['name']} needs torch to run. Re-send with heavy=true "
+                       "to fetch it too (~120 MB CPU wheels).")
+        deps += engines.HEAVY_DEPS[engine["heavy"]]
+
     def work(reporter) -> dict:
         return runtime_packages.install(
-            engine["deps"],
+            deps,
             on_progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
         )
 
     return tasks.start(f"engine:{engine['id']}", work).as_dict()
+
+
+# ------------------------------------------------------- TransNetV2 / junctions
+
+
+class TransnetDetectRequest(BaseModel):
+    path: str
+
+
+@router.post("/transnet/detect")
+async def transnet_detect(payload: TransnetDetectRequest) -> dict:
+    """Shot segments (TransNetV2 when fetched) + cut/dissolve/fade typing of each
+    junction — the typing is our own pixel measurement and works without it."""
+    from pathlib import Path as _Path
+
+    from core.engine import transnet
+
+    if not _Path(payload.path).exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, transnet.detect, payload.path)
 
 
 # ---------------------------------------------------------------- OTIO
