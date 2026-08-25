@@ -93,6 +93,38 @@ def questions() -> dict:
     return intent_model.options()
 
 
+class BrainRequest(BaseModel):
+    template: dict | None = Field(default=None, description="A measured reference template")
+    footage: str | None = Field(default=None, description="The user's footage path, to measure")
+
+
+@router.post("/brain")
+async def brain(payload: BrainRequest) -> dict:
+    """The brain interrogates itself, on screen.
+
+    Reference in: every intake question the reference can answer, answered with
+    the number behind it. Footage in: the same for the footage, plus a menu of
+    genuinely different ways to start the edit. Decoding footage is seconds of
+    FFmpeg, so it runs off the event loop.
+    """
+    from core.brain import intake  # noqa: PLC0415
+
+    if payload.template is None and not payload.footage:
+        raise HTTPException(status_code=422, detail="give the brain a template or footage")
+    template = payload.template or {}
+
+    def work() -> dict:
+        ref_qa = intake.answer_reference(template) if template else []
+        sig = intake.measure_footage(payload.footage) if payload.footage else None
+        foot_qa = intake.answer_footage(template, sig) if sig else []
+        options = intake.edit_options(template, sig) if template else []
+        return {"reference_qa": ref_qa, "footage_qa": foot_qa,
+                "footage_signals": sig, "options": options}
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, work)
+
+
 class ImportRequest(BaseModel):
     template: dict = Field(description="A template document, e.g. from an exported .cetemplate")
     name: str | None = Field(default=None, description="Optional rename on import")

@@ -9,6 +9,8 @@ import Page, { Card } from '../components/Page'
 import {
   styleApi,
   type IntentAnswers,
+  type BrainQA,
+  type BrainOption,
   type Questions,
   type StyleTemplate,
   type TemplateSummary,
@@ -18,191 +20,6 @@ import type { TaskState } from '../api/tasks'
 import { pickMedia } from '../api/render'
 import { useEditor, formatTimecode } from '../editor/model'
 import { useI18n } from '../i18n'
-
-/** The four multiple-choice questions, in the order they are worth asking. */
-const GROUPS: { key: keyof IntentAnswers; icon: typeof Target; en: string; fa: string }[] = [
-  { key: 'kind', icon: Film, en: 'What kind of video is this?', fa: 'این ویدیو چه نوعی است؟' },
-  { key: 'goal', icon: Target, en: 'What should it do?', fa: 'باید چه کار کند؟' },
-  { key: 'focus', icon: Crosshair, en: 'What should the camera stay on?', fa: 'دوربین روی چه چیزی بماند؟' },
-  { key: 'platform', icon: Globe, en: 'Where will it be watched?', fa: 'کجا دیده می‌شود؟' },
-  { key: 'audience', icon: Users, en: 'Who is it for?', fa: 'برای چه کسی است؟' },
-  { key: 'captions', icon: Captions, en: 'Subtitles', fa: 'زیرنویس' },
-  { key: 'music', icon: MusicIcon, en: 'Soundtrack', fa: 'موسیقی' },
-  { key: 'energy', icon: Timer, en: 'Rhythm', fa: 'ریتم' },
-]
-
-/**
- * The one multiple-*select* question. Unlike the others it is a list, because
- * "no swearing" and "no politics" are not alternatives to each other.
- */
-const MULTI: { key: 'restrictions'; icon: typeof Ban; en: string; fa: string; note: [string, string] } = {
-  key: 'restrictions',
-  icon: Ban,
-  en: 'What must not appear?',
-  fa: 'چه چیزی نباید دیده شود؟',
-  note: [
-    'Swearing and politics are screened in the transcript when there is one. The rest need a pass that is not built yet, and the result says so instead of pretending.',
-    'ناسزا و سیاست در زیرنویس (وقتی باشد) بررسی می‌شوند. بقیه به مرحله‌ای نیاز دارند که هنوز ساخته نشده، و نتیجه به‌جای تظاهر، همین را می‌گوید.',
-  ],
-}
-
-/**
- * What the video is for — the one thing a frame can never say.
- *
- * Every answer is optional, and an unanswered question changes nothing at all:
- * with the card left empty the rebuild is byte-for-byte the rebuild that shipped
- * before it existed. What an answer does is rebalance measurements that are
- * already taken — speech ranges, picture motion, audio activity, the footage's
- * own shot changes — and it is the only way to ask for a length that is not the
- * reference's. The options come from the backend, because the weights behind
- * them live there and a question defined in two places drifts out of step.
- */
-function IntentCard({
-  questions,
-  answers,
-  onChange,
-  disabled,
-}: {
-  questions: Questions | null
-  answers: IntentAnswers
-  onChange: (next: IntentAnswers) => void
-  disabled: boolean
-}) {
-  const { t, lang } = useI18n()
-  if (!questions) return null
-  const pick = (key: keyof IntentAnswers, id: string) =>
-    onChange({ ...answers, [key]: answers[key] === id ? '' : id })
-
-  return (
-    <Card title={t('2 · What is this video?', '۲ · این ویدیو چیست؟')}>
-      <p className="ce-hint">
-        {t(
-          'A frame cannot say whether your footage is a lesson, a product or a wedding, and it cannot say what the best moment in it is. These answers can. All of them are optional — leave them empty and nothing changes.',
-          'یک فریم نمی‌تواند بگوید فیلم تو آموزش است، محصول است یا یک مراسم، و نمی‌تواند بگوید بهترین لحظه‌اش کجاست. این پاسخ‌ها می‌توانند. همه اختیاری‌اند — خالی بگذاری هیچ‌چیز تغییر نمی‌کند.'
-        )}
-      </p>
-
-      {GROUPS.map(({ key, icon: Icon, en, fa }) => (
-        <div key={key} style={{ marginTop: 14 }}>
-          <div className="ce-kv">
-            <span><Icon size={13} /> {t(en, fa)}</span>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-            {(questions.options[key as string] ?? []).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`ce-btn ce-btn--ghost ce-btn--sm ${answers[key] === option.id ? 'is-on' : ''}`}
-                disabled={disabled}
-                data-testid={`intent-${key}-${option.id}`}
-                aria-pressed={answers[key] === option.id}
-                onClick={() => pick(key, option.id)}
-              >
-                {lang === 'fa' ? option.fa : option.en}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      <div style={{ marginTop: 14 }}>
-        <div className="ce-kv">
-          <span><MULTI.icon size={13} /> {t(MULTI.en, MULTI.fa)}</span>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-          {(questions.options[MULTI.key] ?? []).map((option) => {
-            const chosen = (answers[MULTI.key] ?? []).includes(option.id)
-            return (
-              <button
-                key={option.id}
-                type="button"
-                className={`ce-btn ce-btn--ghost ce-btn--sm ${chosen ? 'is-on' : ''}`}
-                disabled={disabled}
-                data-testid={`intent-${MULTI.key}-${option.id}`}
-                aria-pressed={chosen}
-                onClick={() => {
-                  const current = answers[MULTI.key] ?? []
-                  onChange({
-                    ...answers,
-                    [MULTI.key]: chosen
-                      ? current.filter((id) => id !== option.id)
-                      : [...current, option.id],
-                  })
-                }}
-              >
-                {lang === 'fa' ? option.fa : option.en}
-              </button>
-            )
-          })}
-        </div>
-        <p className="ce-hint" style={{ marginTop: 6 }}>{t(MULTI.note[0], MULTI.note[1])}</p>
-      </div>
-
-      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-        <div className="ce-kv">
-          <span>{t('What must survive the cut?', 'چه چیزی حتماً باید بماند؟')}</span>
-        </div>
-        <Input
-          value={answers.keep ?? ''}
-          disabled={disabled}
-          data-testid="intent-keep"
-          placeholder={t('Comma separated — a phrase, a name, a number', 'با کاما جدا کن — یک عبارت، یک نام، یک عدد')}
-          onChange={(event) => onChange({ ...answers, keep: event.target.value })}
-        />
-        <div className="ce-kv">
-          <span>{t('What should not carry a clip?', 'چه چیزی نباید روی تصویر بیاید؟')}</span>
-        </div>
-        <Input
-          value={answers.avoid ?? ''}
-          disabled={disabled}
-          data-testid="intent-avoid"
-          placeholder={t('Comma separated', 'با کاما جدا کن')}
-          onChange={(event) => onChange({ ...answers, avoid: event.target.value })}
-        />
-        <div className="ce-kv">
-          <span>{t('How long should the result be?', 'نتیجه چقدر باشد؟')}</span>
-        </div>
-        {/* Not `addonAfter`: antd has deprecated it and logs a warning, and a
-            console that is not clean is a failed check — the 1.0 criterion is a
-            clean install with no console error, and `npm run test:playback`
-            asserts exactly that. The unit is a label beside the field instead. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <InputNumber
-            value={answers.seconds ?? null}
-            disabled={disabled}
-            min={1}
-            max={3600}
-            step={5}
-            style={{ width: 140 }}
-            data-testid="intent-seconds"
-            onChange={(value) => onChange({ ...answers, seconds: Number(value) || 0 })}
-          />
-          <span className="ce-hint">{t('seconds', 'ثانیه')}</span>
-        </div>
-        <p className="ce-hint" style={{ marginTop: 2 }}>
-          {t(
-            'Without it, the edit is exactly as long as the reference — which is why a 12-second reference turned three minutes of your footage into 12 seconds.',
-            'بدون آن، تدوین دقیقاً به اندازهٔ ویدیوی الگو می‌شود — به همین دلیل یک الگوی ۱۲ ثانیه‌ای، سه دقیقه فیلم تو را به ۱۲ ثانیه تبدیل می‌کرد.'
-          )}
-        </p>
-        <Segmented
-          value={answers.slowmo ? 'on' : 'off'}
-          onChange={(v) => onChange({ ...answers, slowmo: v === 'on' })}
-          options={[
-            { value: 'off', label: t('Normal speed', 'سرعت عادی') },
-            { value: 'on', label: t('Slow-mo the best moment', 'اسلوموی بهترین لحظه') },
-          ]}
-        />
-        <p className="ce-hint" style={{ marginTop: 2 }}>
-          {t(
-            'For sports: the single strongest moment plays at half speed as a highlight beat; the rest keeps the reference rhythm.',
-            'برای ورزش: قوی‌ترین لحظه با نصف سرعت به‌عنوان ضربِ هایلایت پخش می‌شود؛ بقیه ریتم الگو را نگه می‌دارند.'
-          )}
-        </p>
-      </div>
-    </Card>
-  )
-}
 
 /**
  * Style Match.
@@ -218,9 +35,15 @@ export default function StyleMatch() {
   const [template, setTemplate] = useState<StyleTemplate | null>(null)
   const [busy, setBusy] = useState<'analyse' | 'apply' | null>(null)
   const [result, setResult] = useState<StyledEdit | null>(null)
-  /** What the video is for — the one thing no frame can say. */
-  const [questions, setQuestions] = useState<Questions | null>(null)
-  const [answers, setAnswers] = useState<IntentAnswers>({})
+  /** The brain's self-interrogation replaces the questionnaire the screen used
+   *  to ask the user: once per reference, once per footage, on screen, with the
+   *  number behind every answer — and then a menu of different ways to start. */
+  const [brainRef, setBrainRef] = useState<BrainQA[]>([])
+  const [brainFoot, setBrainFoot] = useState<BrainQA[]>([])
+  const [options, setOptions] = useState<BrainOption[]>([])
+  const [pending, setPending] = useState<{ footage: string; music: string | null } | null>(null)
+  const [thinking, setThinking] = useState<'ref' | 'foot' | null>(null)
+  const [chosen, setChosen] = useState<BrainOption | null>(null)
   /** What the work is doing right now — the screen used to be able to say only "busy". */
   const [progress, setProgress] = useState<TaskState | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -254,10 +77,27 @@ export default function StyleMatch() {
   useEffect(() => {
     refresh()
     styleApi.starters().then((r) => setStarters(r.starters)).catch(() => setStarters([]))
-    // The options live with the weights behind them, so the screen cannot drift
-    // out of step with what an answer actually does.
-    styleApi.questions().then(setQuestions).catch(() => setQuestions(null))
   }, [])
+
+  /** The brain interrogates itself about a template (and optionally footage). */
+  const askBrain = async (tpl: Record<string, unknown>, footage?: string) => {
+    setThinking(footage ? 'foot' : 'ref')
+    try {
+      const report = await styleApi.brain(tpl, footage ?? null)
+      if (footage) {
+        setBrainFoot(report.footage_qa)
+        setOptions(report.options)
+      } else {
+        setBrainRef(report.reference_qa)
+        if (report.options.length) setOptions(report.options)
+      }
+      return report
+    } catch {
+      return null
+    } finally {
+      setThinking(null)
+    }
+  }
 
   const importFile = async () => {
     const input = document.createElement('input')
@@ -335,6 +175,15 @@ export default function StyleMatch() {
    * grades, animates, captions where it can, ducks the music and opens the
    * result. No parameters to choose, and whatever it could not do is listed.
    */
+  /**
+   * The automatic door — now the brain thinks out loud.
+   *
+   * One button: the reference, then your footage, an optional music bed. After
+   * each arrives the brain interrogates *itself* — every intake question,
+   * answered from what it measured, shown on screen — and only then offers a
+   * menu of genuinely different ways to start. Choosing one applies it; the
+   * screen never asks the user a question a measurement can answer.
+   */
   const runEverything = async () => {
     const referencePath = await choose()
     if (!referencePath) return
@@ -343,30 +192,48 @@ export default function StyleMatch() {
       const found = await styleApi.analyse(referencePath, undefined, watcher)
       setTemplate(found)
       refresh()
+      // The brain reads its own reference measurement, on screen.
+      void askBrain(found as unknown as Record<string, unknown>)
 
       const ownPath = await choose()
       if (!ownPath) return
       const musicPath = await askForMusic()
 
       setBusy('apply')
+      // The brain reads the footage too, then offers the menu.
+      await askBrain(found as unknown as Record<string, unknown>, ownPath)
+      setPending({ footage: ownPath, music: musicPath })
+      clearWork()
+    } catch (err) {
+      if (wasCancelled(err)) message.info(t('Stopped', 'متوقف شد'))
+      else message.error((err as Error).message)
+      clearWork()
+    }
+  }
+
+  /** Apply the edit the user picked from the brain's menu. */
+  const applyWith = async (option: BrainOption) => {
+    if (!template || !pending) return
+    setChosen(option)
+    setBusy('apply')
+    try {
       const built = await styleApi.apply(
-        ownPath,
-        found.name,
+        pending.footage,
+        template.name,
         t('Styled edit', 'تدوین بر اساس الگو'),
-        musicPath,
+        pending.music,
         watcher,
-        answers
+        option.intent
       )
       setResult(built)
 
       const editor = useEditor.getState()
       editor.loadSnapshot(built.timeline as never, built.name)
       editor.setAspect((built.aspect as never) ?? 'auto')
-      // The answers travel with the edit, so the assistant in the editor can
-      // answer "which part is the strongest?" about a lesson when it is a lesson.
-      // Cast at the boundary: the edit model carries the answers as an opaque bag
-      // so it stays free of the API's types, and the backend validates them anyway.
-      editor.setIntent((built.summary.intent ?? answers) as Record<string, unknown>)
+      // The chosen plan travels with the edit, so the assistant in the editor
+      // answers "which part is the strongest?" about a lesson when it is a
+      // lesson — from data the brain measured, not a guess.
+      editor.setIntent((built.summary.intent ?? option.intent) as Record<string, unknown>)
       message.success(
         t(`Ready — ${built.summary.shots} shots`, `آماده شد — ${built.summary.shots} نما`)
       )
@@ -400,20 +267,17 @@ export default function StyleMatch() {
       })
     })
 
+  /** "Use my footage": measure the footage, let the brain answer, offer menu. */
   const applyTo = async () => {
     if (!template) return
     const path = await choose()
     if (!path) return
     setBusy('apply')
     try {
-      const built = await styleApi.apply(
-        path, template.name, t('Styled edit', 'تدوین بر اساس الگو'), null, watcher, answers
-      )
-      setResult(built)
-      message.success(t('Your edit is ready', 'تدوین تو آماده است'))
+      await askBrain(template as unknown as Record<string, unknown>, path)
+      setPending({ footage: path, music: null })
     } catch (err) {
-      if (wasCancelled(err)) message.info(t('Stopped', 'متوقف شد'))
-      else message.error((err as Error).message)
+      message.error((err as Error).message)
     } finally {
       clearWork()
     }
@@ -424,7 +288,7 @@ export default function StyleMatch() {
     const editor = useEditor.getState()
     editor.loadSnapshot(result.timeline as never, result.name)
     editor.setAspect((result.aspect as never) ?? 'auto')
-    editor.setIntent((result.summary.intent ?? answers) as Record<string, unknown>)
+    editor.setIntent((result.summary.intent ?? chosen?.intent ?? null) as Record<string, unknown>)
     navigate('/studio')
   }
 
@@ -437,19 +301,12 @@ export default function StyleMatch() {
    * when the options have not loaded — but a Persian interface that answers in
    * English is a bug the user reads twice.
    */
+  /** The plan that started this edit, in the language on screen. */
   const saidByMe = (intent: IntentAnswers | undefined): string => {
-    if (!intent || !questions) return (result?.summary.intentSaid ?? []).join(' · ')
-    const label = (key: string, id: string) =>
-      questions.options[key]?.find((option) => option.id === id)?.[lang === 'fa' ? 'fa' : 'en'] ?? id
-    const parts: string[] = []
-    for (const key of ['kind', 'goal', 'focus', 'energy'] as const) {
-      const value = intent[key]
-      if (value) parts.push(label(key, value))
-    }
-    if (intent.keep) parts.push(`${t('keep', 'بماند')}: ${intent.keep}`)
-    if (intent.avoid) parts.push(`${t('avoid', 'نیاید')}: ${intent.avoid}`)
-    if (intent.seconds) parts.push(`${intent.seconds} ${t('seconds', 'ثانیه')}`)
-    return parts.join(' · ')
+    const L = lang === 'fa' ? 'fa' : 'en'
+    if (chosen) return [chosen.title[L], ...chosen.traits[L]].join(' · ')
+    if (!intent) return (result?.summary.intentSaid ?? []).join(' · ')
+    return (result?.summary.intentSaid ?? []).join(' · ')
   }
 
   return (
@@ -559,12 +416,65 @@ export default function StyleMatch() {
         )}
       </Card>
 
-      <IntentCard
-        questions={questions}
-        answers={answers}
-        onChange={setAnswers}
-        disabled={busy !== null}
-      />
+      {(brainRef.length > 0 || thinking === 'ref') && (
+        <Card title={t('2 · The brain reads the reference', '۲ · مغز ویدیوی الگو را می‌خواند')}>
+          <p className="ce-hint">
+            {t(
+              'The brain asks itself the intake questions and answers from what it measured — you watch it think.',
+              'مغز خودش سوال‌ها را می‌پرسد و از آنچه اندازه گرفته جواب می‌دهد — فکر کردنش را می‌بینی.'
+            )}
+          </p>
+          {thinking === 'ref' ? (
+            <p className="ce-hint"><Loader2 size={14} className="ce-spin" /> {t('analysing…', 'در حال تحلیل…')}</p>
+          ) : (
+            <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch', marginTop: 8 }}>
+              {brainRef.map((q) => <BrainLine key={q.id} q={q} />)}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {(brainFoot.length > 0 || thinking === 'foot') && (
+        <Card title={t('3 · The brain reads your footage', '۳ · مغز فوتیج شما را می‌خواند')}>
+          {thinking === 'foot' ? (
+            <p className="ce-hint"><Loader2 size={14} className="ce-spin" /> {t('measuring your footage…', 'در حال سنجش فوتیج…')}</p>
+          ) : (
+            <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              {brainFoot.map((q) => <BrainLine key={q.id} q={q} />)}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {pending && options.length > 0 && (
+        <Card title={t('4 · Choose how to start', '۴ · انتخاب کن چطور شروع کنیم')}>
+          <p className="ce-hint">
+            {t(
+              'Each option is a different edit over the same measurements — pick one and the brain builds it.',
+              'هر گزینه یک تدوین متفاوت روی همان اندازه‌گیری‌هاست — یکی را انتخاب کن تا مغز بسازدش.'
+            )}
+          </p>
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', marginTop: 10 }}>
+            {options.map((o) => (
+              <button
+                key={o.id}
+                className="ce-btn ce-btn--ghost"
+                style={{ flexDirection: 'column', alignItems: 'stretch', textAlign: 'start', gap: 6, padding: '10px 12px', height: 'auto' }}
+                disabled={busy !== null}
+                onClick={() => void applyWith(o)}
+              >
+                <strong>{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
+                <span className="ce-hint">{o.why[lang === 'fa' ? 'fa' : 'en']}</span>
+                <span className="ce-hint" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {o.traits[lang === 'fa' ? 'fa' : 'en'].map((trait) => (
+                    <span key={trait} className="ce-badge">{trait}</span>
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {starters.length > 0 && (
         <Card title={t('Starters & sharing', 'شروع‌کننده‌ها و هم‌رسانی')}>
@@ -717,5 +627,21 @@ export default function StyleMatch() {
         </Card>
       )}
     </Page>
+  )
+}
+
+/** One line of the brain's visible self-interrogation: question, its answer,
+ *  the measured number, and why — in the language on screen. */
+function BrainLine({ q }: { q: { q: { fa: string; en: string }; a: { fa: string; en: string }; value: string; why: { fa: string; en: string } } }) {
+  const { lang } = useI18n()
+  const L = lang === 'fa' ? 'fa' : 'en'
+  return (
+    <div className="ce-kv">
+      <span>{q.q[L]}</span>
+      <strong>
+        {q.a[L]} <span className="ce-badge" dir="ltr">{q.value}</span>
+        <span className="ce-hint" style={{ display: 'block', fontWeight: 400 }}>{q.why[L]}</span>
+      </strong>
+    </div>
   )
 }

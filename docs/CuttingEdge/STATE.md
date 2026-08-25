@@ -1123,6 +1123,44 @@ gate that stops a broken installer from being published.
     written here so the convention was applied, not skipped. Suite: **363
     passed, 0 failed, 10 skipped**.
 
+108. **The brain thinks out loud, the Audio panel extracts, and the home screen
+    stops spacing its icons.** Three owner asks, one release-worth of work:
+    • **Style Match no longer asks the user anything a measurement can answer.**
+      The ten-question intake card is gone. `core/brain/intake.py` makes the
+      brain interrogate *itself* — once when the reference arrives
+      (`answer_reference`: energy, platform, captions, beat, hook, junction
+      softness, length — each with the number behind it), once when the footage
+      arrives (`measure_footage` + `answer_footage`: kind, focus, goal, audience,
+      speech %, action burstiness, aspect, and an honest "noise not measured
+      yet"). Both interrogations render on screen as they run, so the owner
+      *watches* the brain think in Style Match — and the Assistant rides the
+      chosen plan because it travels with the edit. Then `edit_options` offers
+      four genuinely different starts (faithful / short-&-punchy / speech-first
+      or motion-montage / calm-cinematic), each carrying the intent payload the
+      rebuild already understands; picking one applies it. Guarded by
+      `tests/test_intake.py` (answers change with the measurements, options are
+      pairwise different, the endpoint answers for both videos).
+    • **Audio extraction** in the clip Audio panel: one button lifts the clip's
+      audio onto the audio lane, aligned under its picture — pure bundled
+      FFmpeg (AAC 192 k), probed so the clip length is exact, written to
+      `~/CuttingEdge/exports`; a second button splits stems
+      (vocals/drums/bass/other) with **Demucs** (facebookresearch/demucs, MIT —
+      the open-source GitHub engine the owner asked for), on-demand and an
+      honest 409 until fetched, run as a polled task because torch is minutes.
+      `core/engine/audio_extract.py` + `app/routers/audio.py`, guarded by
+      `tests/test_audio_extract.py` (a muxed video+audio clip lifts to an
+      audio-only file).
+    • **Home tiles left-aligned and packed**: `.ce-grid` used
+      `repeat(auto-fit, minmax(104px, 1fr))`, which stretched icons across the
+      window with big gaps — the owner said the spaced look is ugly. Columns are
+      now fixed-size with `justify-content: start` (and the grid stays LTR so
+      "left" holds in the Persian RTL UI too).
+    Per the §104 convention the two new builds were considered for the tool
+    belt: audio extraction is a utility door (the interchange family), and stem
+    separation is a refinement *inside* `ducking`'s future beat-accuracy — both
+    documented here as considered, not skipped. Suite: **371 passed, 0 failed,
+    10 skipped**.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

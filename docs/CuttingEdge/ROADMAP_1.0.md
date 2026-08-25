@@ -334,9 +334,12 @@ Optimised remaining path (order by value): 1) ~~whisperX+Hazm+python-ass (Persia
 karaoke)~~ — **complete**: Hazm normalisation (§4.103), whisperX word-alignment
 (§4.105) and the ASS round-trip with `\kf` timing reconstruction (§4.107), all
 on-demand and degrade-safe · 2) ~~TransNetV2~~ bridge in (§4.107): boundaries
-when fetched, cut/dissolve/fade junction typing without it · 3) Demucs ·
-4) MediaPipe pose · 5) 1.0 hardening (crash reporting, Playwright-on-packaged,
-perf-regression, manual).
+when fetched, cut/dissolve/fade junction typing without it · 3) ~~Demucs~~
+bridge in (§4.108): stem separation on-demand behind the Audio panel's
+extraction button, beat-accurate ducking still to wire · 4) MediaPipe pose ·
+5) 1.0 hardening (crash reporting, Playwright-on-packaged, perf-regression,
+manual). Also in 0.9.28-dev: the brain interrogates itself on screen for both
+videos and offers a menu of different starts (§4.108) — the intake card is gone.
 Deliberately not in-process: GPL/AGPL/no-licence and HF-token-gated weights.
 
 ## 3. What is deliberately not on this road

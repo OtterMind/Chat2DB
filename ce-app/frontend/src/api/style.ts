@@ -68,6 +68,31 @@ export interface IntentAnswers {
   avoid?: string
   /** The length the finished edit should have, in seconds. */
   seconds?: number
+}
+
+/** One question the brain asked itself, answered with the number behind it. */
+export interface BrainQA {
+  id: string
+  q: { fa: string; en: string }
+  a: { fa: string; en: string }
+  value: string
+  why: { fa: string; en: string }
+}
+
+/** One way to start the edit, carrying the intent payload the rebuild knows. */
+export interface BrainOption {
+  id: string
+  title: { fa: string; en: string }
+  intent: IntentAnswers
+  traits: { fa: string[]; en: string[] }
+  why: { fa: string; en: string }
+}
+
+export interface BrainReport {
+  reference_qa: BrainQA[]
+  footage_qa: BrainQA[]
+  footage_signals: Record<string, number | string | boolean> | null
+  options: BrainOption[]
   /** Slow the single best moment to half speed. */
   slowmo?: boolean
   notes?: string
@@ -142,6 +167,10 @@ export const styleApi = {
    * it, so a question and its effect cannot drift apart.
    */
   questions: async (): Promise<Questions> => (await api.get('/style/questions')).data,
+  /** The brain interrogates itself: Q&A for reference and footage, plus a menu
+   *  of genuinely different ways to start the edit. */
+  brain: async (template: Record<string, unknown> | null, footage?: string | null): Promise<BrainReport> =>
+    (await api.post('/style/brain', { template, footage: footage ?? null }, { timeout: 10 * 60_000 })).data,
   remove: async (name: string): Promise<void> => {
     await api.delete(`/style/templates/${encodeURIComponent(name)}`)
   },

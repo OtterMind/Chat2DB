@@ -409,6 +409,7 @@ export default function EditorToolbar({
             )}
             {panel === 'audio' && clip && props && (
               <PanelAudio
+                clip={clip}
                 denoise={props.denoise}
                 enhanceVoice={props.enhanceVoice}
                 duck={props.duck}
@@ -918,16 +919,108 @@ function PanelAnimate({
 }
 
 function PanelAudio({
-  denoise, enhanceVoice, duck, onChange,
+  clip, denoise, enhanceVoice, duck, onChange,
 }: {
+  clip: Clip
   denoise: number
   enhanceVoice: boolean
   duck: boolean
   onChange: (patch: { denoise?: number; enhanceVoice?: boolean; duck?: boolean }) => void
 }) {
   const { t } = useI18n()
+
+  /**
+   * Audio extraction — lift this clip's audio onto the audio lane, aligned
+   * under the picture it came from, the way a desktop NLE does it. Pure FFmpeg
+   * on the backend, so it always works; the lifted file lands in the user's
+   * exports folder and the timeline clip points at it.
+   */
+  const extractAudio = async () => {
+    if (!clip.src) {
+      message.warning(t('Only clips with a media file have audio to extract.', 'فقط کلیپی که فایل رسانه دارد صدا برای استخراج دارد.'))
+      return
+    }
+    const hide = message.loading(t('Extracting audio…', 'در حال استخراج صدا…'), 0)
+    try {
+      const res = await fetch(`${backendOrigin}/api/audio/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: clip.src }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? res.statusText)
+      const state = useEditor.getState()
+      let lane = state.tracks.find((x) => x.kind === 'audio')
+      if (!lane) {
+        state.addTrack('audio')
+        lane = useEditor.getState().tracks.find((x) => x.kind === 'audio')
+      }
+      state.addClip({
+        trackId: lane?.id ?? 'a1',
+        start: clip.start,
+        duration: Math.max(0.5, data.duration),
+        offset: 0,
+        sourceDuration: Math.max(0.5, data.duration),
+        src: data.path,
+        label: t('extracted audio', 'صدای استخراج‌شده'),
+        color: '#10B981',
+      })
+      message.success(t('Audio extracted onto the audio lane', 'صدا استخراج شد و روی خط صوتی نشست'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      hide()
+    }
+  }
+
+  /**
+   * Stem separation with Demucs (MIT, on-demand): vocals / drums / bass / other
+   * into the exports folder. Absent engine is an honest 409 pointing at Settings.
+   */
+  const splitStems = async () => {
+    if (!clip.src) return
+    try {
+      const res = await fetch(`${backendOrigin}/api/audio/stems/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: clip.src }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? res.statusText)
+      const hide = message.loading(t('Demucs is splitting the mix…', 'Demucs در حال جداسازی اجزاست…'), 0)
+      const poll = window.setInterval(async () => {
+        const p = await fetch(`${backendOrigin}/api/tasks/${data.id}`).then((r) => r.json())
+        if (p.status === 'running') return
+        window.clearInterval(poll)
+        hide()
+        if (p.status === 'done') {
+          const stems = Object.keys(p.result?.stems ?? {}).join('، ')
+          message.success(t(`Stems ready: ${stems}`, `اجزا آماده شد: ${stems}`))
+        } else {
+          message.error(p.error || t('stem separation failed', 'جداسازی ناموفق بود'))
+        }
+      }, 2000)
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
   return (
     <div className="tb__stack">
+      <div className="tb__row">
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void extractAudio()}>
+          <AudioLines size={13} /> {t('Audio extraction', 'استخراج صدا')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void splitStems()}>
+          <Layers size={13} /> {t('Split stems (Demucs)', 'جداسازی اجزا (Demucs)')}
+        </button>
+      </div>
+      <p className="ce-hint">
+        {t(
+          'Extraction lifts this clip\'s audio onto the audio lane (FFmpeg, always). Stems split the mix into vocals/drums/bass/other with Demucs — fetch it in Settings.',
+          'استخراج، صدای این کلیپ را روی خط صوتی می‌برد (FFmpeg، همیشه). جداسازی اجزا میکس را به صدا/درام/بیس/دیگر تقسیم می‌کند با Demucs — از تنظیمات بگیرش.'
+        )}
+      </p>
       <Field label={t('Noise reduction', 'نویزگیری')} value={`${Math.round(denoise * 100)}%`}>
         <Slider min={0} max={1} step={0.05} value={denoise} onChange={(v) => onChange({ denoise: v })} />
       </Field>

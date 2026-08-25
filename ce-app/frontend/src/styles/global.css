@@ -269,7 +269,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* -------------------------------------------------------------- tiles ---- */
-.ce-grid { display: grid; gap: 16px 10px; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+/* Left-aligned, packed: the owner found the old space-between spread ugly, so
+   columns are fixed-size and the grid hugs the start edge instead of
+   stretching icons across the whole window. */
+.ce-grid { display: grid; gap: 14px 10px; grid-template-columns: repeat(auto-fill, minmax(96px, 116px)); justify-content: start; direction: ltr; }
 .ce-tile {
   border: none; background: transparent; display: flex; flex-direction: column;
   align-items: center; gap: 8px; padding: 4px 2px;
@@ -480,7 +483,7 @@ button { font-family: inherit; cursor: pointer; }
 .ant-input, .ant-input-number, .ant-select-selector { border-radius: 10px !important; }
 
 @media (max-width: 520px) {
-  .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
+  .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, minmax(72px, 92px)); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
   /* local AI engines in Settings */
