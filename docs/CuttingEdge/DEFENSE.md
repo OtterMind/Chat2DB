@@ -97,3 +97,56 @@
 ۳. **«چرا typed-ffmpeg نه؟»** → compose تست‌شده است و typed-ffmpeg مجوز اعلام‌نشده + وابستگی جدید دارد.
 ۴. **«DeepFilterNet چرا نه؟»** → روی GitHub **NOASSERTION** است؛ تا شفاف‌سازی مجوز وارد نمی‌شود (دقیقاً انضباط مجوز ما).
 ۵. **«پورت هاردکد؟»** → پذیرفته؛ port-discovery موکول، ولی خرابی بک‌اند همیشه به کاربر اعلام می‌شود.
+
+---
+
+## پیوست: کل دریافتی‌ها از هر دو استاد، مرتب‌شده بر اساس ارزش
+
+> وضعیت: ✅ انجام شد · ⚪ از قبل داشتیم · ⏸ موکول · 🔴 رد.
+> ترتیب از بیشترین ارزش به کمترین است؛ موارد تکراریِ دو لیست یکی شده‌اند.
+
+### رده‌ی ۱ — ارزش بحرانی (امنیت/اعتمادپذیری/هسته‌ی UX)
+1. ✅ CORS lockdown — wildcard+credentials → allowlist + تست.
+2. ✅ path-injection guard — null-byte/نسبی → 400.
+3. ✅ میان‌برهای کیبورد J/K/L + `,`/`.` (پایه از قبل).
+4. ⏸ Port discovery به‌جای 8742 هاردکد — جلوگیری از crash خاموش.
+5. ⏸ Crash reporting / sentry-electron — ستون ۱.۰.
+6. ⚪ Ollama timeout + fallback به قوانین (از قبل).
+7. ⚪ Waveform + film-strip روی timeline (از قبل؛ استاد۱ ندیده بود).
+8. ✅ حذف کلمات پرکننده EN+FA.
+
+### رده‌ی ۲ — ارزش بالا (UX حرفه‌ای / کیفیت)
+9. ⏸ Right-click context menu روی کلیپ.
+10. ⏸ تست رگرسیون performance (با سقف سخیف).
+11. ⏸ OTIO export/import — تبادل حرفه‌ای (Apache).
+12. ⏸ First-run tour — آنبوردینگ ۱.۰.
+13. ⏸ Playwright E2E کنار سوئیت puppeteer فعلی.
+14. ⏸ Color scopes (waveform/vectorscope) برای grading.
+15. ⏸ TransNetV2 — تشخیص ترنزیشن واقعی (torch، on-demand).
+16. ⏸ Practical-RIFE — اسلوموی واقعی برای ورزش.
+
+### رده‌ی ۳ — ارزش متوسط (نگهداری/توسعه)
+17. ⏸ typed-ffmpeg — فقط اگر compose از تست خارج شد (الان نه).
+18. ⏸ whisperX — word-alignment کارائوکه (torch).
+19. ⏸ CLIP — تطبیق معنایی نما برای Style Match.
+20. ⏸ demucs — stems و بِد تمیز.
+21. ⏸ Real-ESRGAN / rembg — upscale و حذف پس‌زمینه (on-demand).
+22. ⏸ ffsubsync — سینک زیرنویس خارجی.
+23. ⏸ undo diff-based / شکستن model.ts / randomUUID — بهداشت کد.
+24. ⏸ LUT3D + تخمین زمان رندر + media-hash/find-missing.
+25. ⏸ MCP read-only برای دستیار — ایده‌ی آینده.
+26. ⏸ a11y + design tokens + empty states.
+27. ⏸ macOS/Linux packaging — استراتژیک.
+
+### رده‌ی ۴ — مطالعه/الهام (نه import)
+28. ⚪ OpenCut / FableCut / nugget / openreel / movielite — مطالعه‌ی UX/الگو.
+29. ⚪ wavesurfer.js / peaks.js — ایده‌ی waveform غنی‌تر.
+30. ⚪ shadcn/Radix/Zustand/Immer — Zustand داریم؛ بقیه اختیاری.
+31. ⚪ PyInstaller — مسیر mac/Linux آتی، نه جایگزین الان.
+
+### رده‌ی ۵ — رد (مجوز/تضاد با انضباط)
+32. 🔴 aubio (GPL) · peaks.js درون‌فرآیند (LGPL) · mlt درون‌فرآیند (LGPL).
+33. 🔴 video-timeline-editor (بدون مجوز).
+34. 🔴 DeepFilterNet تا شفاف‌سازی (NOASSERTION).
+35. 🔴 YOLO/ByteTrack (AGPL).
+36. 🔴 librosa — closure ~94MB؛ beat detection خودمان داریم.
