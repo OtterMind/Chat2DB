@@ -922,6 +922,19 @@ gate that stops a broken installer from being published.
     page is reachable from Diagnostics. It is the 1.0 criterion "every shipped
     package listed with its licence" as a screen a person can read.
 
+90. **A rally has no face; the moving region is the subject.** The reframe used
+    only the Haar face cascade, which needs a ≥24 px face looking at the camera —
+    a volleyball player mid-rally, a back turned on a pull-up bar, a jumper
+    mid-rope have none of that. So when the face cascade gives up, `reframe`
+    now follows the **centroid of motion** (the frame-to-frame difference above
+    a floor), OpenCV-only and shipped already. `plan()` reports which signal it
+    followed (`tracker`: face / motion / none), so a followed rally and a centred
+    still are both honest. Measured on a white block sweeping a black frame:
+    `tracker: motion`, followed 15/16 frames, the camera actually pans; on a
+    still frame with no face it stays centred. The old "no face means centre
+    crop" test was rebuilt on a *still* fixture — its testsrc2 fixture moves, and
+    a moving faceless frame is now (correctly) followed, not centred.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
