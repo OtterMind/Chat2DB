@@ -74,6 +74,12 @@ export default function EditorToolbar({
   const navigate = useNavigate()
   const i = lang === 'fa' ? 1 : 0
   const [soonLabel, setSoonLabel] = useState('')
+  // Word-level alignment (whisperX) is an on-demand refinement, like Hazm for
+  // text: used automatically when fetched, never a button the user must press.
+  const [alignAvailable, setAlignAvailable] = useState(false)
+  useEffect(() => {
+    captionsApi.alignStatus().then((s) => setAlignAvailable(s.available)).catch(() => setAlignAvailable(false))
+  }, [])
 
   const {
     clips, selectedId, playhead, transitions, panel: openPanel, setPanel: setStorePanel,
@@ -186,10 +192,17 @@ export default function EditorToolbar({
     }
     const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
     try {
-      const result = await captionsApi.transcribe(source.src)
+      const result = await captionsApi.transcribe(source.src, undefined, alignAvailable)
       const count = state.addCaptions(result.cues, source.start - source.offset)
+      // Report honestly whether word alignment actually ran (it can't unless the
+      // engine is fetched), so the karaoke timing claim is never overstated.
+      const aligned = result.alignment === 'aligned'
       message.success(
-        t(`${count} captions added (${result.language})`, `${count} زیرنویس اضافه شد (${result.language})`)
+        aligned
+          ? t(`${count} captions added, word-aligned (${result.language})`,
+              `${count} زیرنویس اضافه شد، کلمه‌تراز (${result.language})`)
+          : t(`${count} captions added (${result.language})`,
+              `${count} زیرنویس اضافه شد (${result.language})`)
       )
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string }; status?: number } }).response

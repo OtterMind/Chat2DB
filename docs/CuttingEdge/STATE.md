@@ -4,7 +4,9 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.13` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.27` (the number that
+publishes is `ce-app/frontend/package.json`; the backend reads it, with
+`CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
 *Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
 still points at `763a0de` on the remote — the same commit this branch starts
@@ -1049,6 +1051,30 @@ gate that stops a broken installer from being published.
     per tool plus the four new signals (Persian → normalise, unscripted talk →
     trim fillers, high motion at junctions → RIFE dissolves, handoff asked →
     export OTIO). Suite: **336 passed, 0 failed, 10 skipped** (was 335).
+
+105. **Word-level forced alignment for tighter Persian karaoke — on-demand,
+    degrade-safe.** faster-whisper already gives word timings and `subtitles.build_ass`
+    already lights them word by word (`{\kf}`); the gap was that those edges
+    drift, so a highlight can fire a frame off the word. `core/engine/whisperx_align.py`
+    bridges **whisperX** (BSD-3) + the Apache-2.0 Persian wav2vec2 aligner
+    (`jonatasgrosman/wav2vec2-large-xlsr-53-persian`) to snap word edges to the
+    audio. Like `rife.py` it is a thin defensive bridge, but unlike RIFE it
+    **never raises into the caller** — alignment is a *refinement* of timings we
+    already have, so on any machine without the engine (or on any upstream
+    failure) `align()` returns the input words with `status: no-engine|error` and
+    the karaoke keeps working. `transcribe_to_cues(align=True)` uses it and
+    reports `alignment`; `/api/captions/align-status` tells the UI honestly
+    whether it is fetched. The editor auto-uses it when present (like Hazm for
+    text — no separate button) and the toast says "word-aligned" only when it
+    actually ran. Deliberately **not** a `TOOLS` entry: it is not a tool the
+    editor chooses on/off, it is a quality refinement *inside* the captions/
+    karaoke decision — noted here so the §104 convention was considered, not
+    skipped. Nothing ships; `torch` stays `heavy` and on-demand.
+    `tests/test_whisperx_align.py` (8 tests): no-engine returns words unchanged,
+    row conversion (incl. dropping rows missing a time/text), a mid-run failure
+    still returns the originals, a successful pass reports the Persian aligner,
+    the fetch list excludes torch, whisperX stays a registered engine, and the
+    endpoint reports honestly. Suite: **344 passed, 0 failed, 10 skipped**.
 
 ## 5. Release procedure
 

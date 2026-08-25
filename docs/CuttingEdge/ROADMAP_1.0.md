@@ -330,9 +330,11 @@ editor, not an effect-sprinkler.
   not in `TOOLS` does not exist as far as the editor is concerned;
   `tests/test_editor_brain.py` enforces one decision per tool.
 
-Optimised remaining path (order by value): 1) whisperX+Hazm+python-ass (Persian
-karaoke) on owner's go-ahead · 2) TransNetV2 · 3) Demucs · 4) MediaPipe pose ·
-5) 1.0 hardening (crash reporting, Playwright-on-packaged, perf-regression, manual).
+Optimised remaining path (order by value): 1) ~~whisperX+Hazm+python-ass (Persian
+karaoke)~~ — **Hazm normalisation and whisperX word-alignment are in** (§4.103,
+§4.105), on-demand and degrade-safe; python-ass round-trip still open · 2) TransNetV2 ·
+3) Demucs · 4) MediaPipe pose · 5) 1.0 hardening (crash reporting,
+Playwright-on-packaged, perf-regression, manual).
 Deliberately not in-process: GPL/AGPL/no-licence and HF-token-gated weights.
 
 ## 3. What is deliberately not on this road
