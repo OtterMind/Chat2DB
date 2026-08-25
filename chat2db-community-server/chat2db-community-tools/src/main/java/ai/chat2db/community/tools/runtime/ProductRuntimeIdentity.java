@@ -25,6 +25,10 @@ public interface ProductRuntimeIdentity {
 
     String clientIdFileName();
 
+    default String localStateNamespace() {
+        return "community";
+    }
+
     String displayName();
 
     String protocolScheme();
