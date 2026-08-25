@@ -1217,3 +1217,9 @@ button { font-family: inherit; cursor: pointer; }
   transition: border-color .15s ease, color .15s ease, transform .12s ease;
 }
 .tb__preset:hover { border-color: rgba(99, 102, 241, .65); color: #fff; transform: translateY(-1px); }
+
+/* ------------------------------------------------------- attribution rows */
+.attr-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px;
+  border-bottom: 1px dashed rgba(148,163,184,.12); }
+.attr-row strong { flex: 1; font-size: 13px; }
+.attr-row .ce-hint { flex: 1; }

@@ -911,6 +911,17 @@ gate that stops a broken installer from being published.
     No new library fixes it — this is an ABI between two pieces of software the
     app does not compile, and pretending otherwise would be the brochure.
 
+89. **The credit screen is generated, not written.** A hand-typed licence list
+    drifts the day a dependency changes; so `/api/system/attribution` reads each
+    pinned backend package's *installed* metadata — name, version, licence,
+    preferring `License-Expression` over a wall of classifiers — and the test only
+    requires a licence for packages that are actually present, so the light dev
+    venv passes while the packaged runtime (every pin installed) is fully
+    covered. Bundled non-Python pieces (FFmpeg, Electron, embeddable CPython) and
+    the on-demand engines are named beside them, marked "yours, not shipped". The
+    page is reachable from Diagnostics. It is the 1.0 criterion "every shipped
+    package listed with its licence" as a screen a person can read.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

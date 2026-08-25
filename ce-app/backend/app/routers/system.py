@@ -56,3 +56,10 @@ def update_settings(data: dict):
     for key, value in data.items():
         SettingsModel.set(key, json.dumps(value) if isinstance(value,(dict,list)) else str(value))
     return {"status":"saved"}
+
+@router.get("/attribution")
+def attribution() -> dict:
+    """Every shipped library with its licence, for the credit screen."""
+    from core.engine import attribution as attr
+
+    return attr.full()
