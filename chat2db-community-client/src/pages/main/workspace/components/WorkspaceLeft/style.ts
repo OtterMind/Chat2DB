@@ -29,7 +29,7 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-shrink: 0;
       height: 42px;
       box-sizing: border-box;
-      padding: 0 8px 0 12px;
+      padding: 0 8px 0 6px;
       border-bottom: 1px solid ${token.colorBorderLayout};
     `,
     resourceSelector: css`
