@@ -1,34 +1,39 @@
-# Road to 1.0 — the plan as of 0.5.3
+# Road to 1.0 — living plan (updated 2026-08-27, v0.9.34)
 
-> ## Where we are — 2026-08-24, version **0.9.7**
+> ## Where we are — 2026-08-27, version **0.9.34** (professors' edition)
 >
-> Re-measured from the code rather than from memory: each line below was checked
-> with a `grep`/`ls`, not recalled.
+> Everything below the line is the historical plan; this box is the live truth,
+> re-measured from the code and the release list, not from memory.
 >
-> **Shipped since this plan was written:** 0.6.2–0.6.3 (the size and quality
-> sweeps), 0.7.0–0.7.1 (the brain: objective, planners, race, meaning), 0.8.0
-> (real face tracking, `BETA` badge off), 0.9.0 (YouTube publishing —
-> `app/routers/uploads.py` + the Uploads screen), 0.9.2–0.9.6 (the GPU work:
-> probed encoders across four vendors, decode on the card, the permission button),
-> and — unnumbered until now — the **Style Match intake** (10 questions, the
-> whole-file highlight search, a requested length) and the **assistant as a
-> streaming conversation** that knows what the video is for.
+> ### Shipped 0.9.8 → 0.9.34 (since the last snapshot)
 >
-> ### Four steps to 1.0
+> | Release | What landed | Evidence |
+> |---|---|---|
+> | 0.9.9–0.9.20 | title pack, template gallery with checked .cetemplate import/export, Freesound shelf, attribution screen | `tests/test_titles.py`, STATE §4 |
+> | 0.9.21–0.9.26 | on-demand engine shelf with licence gate, OTIO interchange, RIFE bridge, **professional-editor brain** (tool inventory + per-tool decisions), AI Transitions, Persian caption normalisation | `core/brain/editor_brain.py`, `BRAIN_UPGRADE.md` |
+> | 0.9.27 | word-level forced alignment (whisperX bridge), debug round: double-Import impossible, no blue text selection, official suites run on the production bundle | STATE §115 |
+> | 0.9.28–0.9.30 | filmed clean-install checklist; **the sixteen** — aurora glass, DaVinci-style timeline (64px lanes, glowing snap, playhead bubble), cinematic monitor + live luma scope, BrainBar, recharts signal charts, embla reel, 4-accent theme | STATE §116–117 |
+> | 0.9.31 | brain interrogates itself (no on-screen questionnaire), quality ladder + multilingual spelling floor + guarded LLM proof-read + SRT + confidence-tinted words | STATE §118 |
+> | 0.9.32 | screen/webcam recorder, brand kit (watermark + animated progress bar), multi-platform export queue | STATE §119 |
+> | 0.9.33→0.9.34 | field fixes (torch wording, MB-accurate progress, `umx` name) + chapters, hook title, one-click recipes | STATE §120 |
 >
-> | # | Step | State in the code | What it needs |
-> |---|---|---|---|
-> | 1 | **0.8.1 — things to put on the screen** | **done**: title pack (0.9.9), gallery with checked import/export + honest starters (0.9.16), and the Freesound shelf (0.9.16, key-required) | — |
-> | 2 | **0.9.1 — audio depth** | **the speech map can now come from silero-vad** (MIT, 2.22 MB, opt-in, with a Measure button); DeepFilterNet and the bed library still missing | DeepFilterNet (MIT/Apache) fetched on demand and *measured in dB against the current chain*, kept only if it wins; a music bed library |
-> | 3 | **Vision — a model that has seen frames** | **bridge built**: `core/engine/vision.py` sends small frames to the user's Ollama and casts one 0.3-weight vote in the highlight scorer; off by default, enable refused without a pulled model, quality verdict pending the user's own model | nothing left to build; the user's Ollama decides |
-> | 4 | **1.0 — stabilise and say what it is** | **attribution screen done** (0.9.20, generated from installed metadata); tour, crash reporting, manual, filmed install remain | first-run tour, crash reporting, a manual in both languages, a filmed clean install |
+> ### Gates still open on the way to 1.0
 >
-> Deliberately **not** on this road: anything GPL/AGPL or unlicensed
-> (`ultralytics`, `RobustVideoMatting`, `openshot-qt`, `pedalboard`, Remotion,
-> Shepherd, GSAS), and any dependency whose Windows closure was measured and
-> rejected (`librosa`, `mediapipe`) — see `OSS_EVALUATION.md` and
-> `OSS_SWEEP_0.9.2.md`.
-
+> | Gate | Who | State |
+> |---|---|---|
+> | Filmed clean install on a real Windows machine | owner | scripted in `CLEAN_INSTALL_CHECKLIST.md`, awaiting the film |
+> | Packaged-artifact UI audit step on the Windows runner | repo owner | script ready (`scripts/packaged-ui-audit.mjs`); needs the canonical workflow pasted once into `.github/workflows/ce.yml` |
+> | Optional growth packs (stock via user key, TTS plugin channel) | either | deferred by choice, licences pre-checked |
+>
+> Supporting documents for review: `STATE.md` (verified log), `BRAIN_UPGRADE.md`
+> (the two professors' blueprints, triaged item by item with accept/reject
+> reasons), `MANUAL.md`, `CLEAN_INSTALL_CHECKLIST.md`, `ARCHITECTURE.md`,
+> `OSS_SURVEY_0.3.8.md` / `OSS_SWEEP_0.9.2.md` (licence gates).
+>
+> Test posture at 0.9.34: **424 backend tests, 0 failures**; `npm run verify`
+> (tsc + bridge + shutdown contracts); `test:ui` and the 71-check
+> `playback-test` run against the **production bundle**; every release is
+> exercised in CI before publishing.
 
 Written after auditing an outside review (`REVIEW_AUDIT_0.5.3.md`) and after
 **measuring** where the installer's weight actually is. Everything with a number
