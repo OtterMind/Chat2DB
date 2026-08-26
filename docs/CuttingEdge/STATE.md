@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.28` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.29` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1172,6 +1172,24 @@ gate that stops a broken installer from being published.
     torch is minutes of CPU and must stay a button the user presses, so the
     refinement is a cache hit, not a hidden download. `tests/test_audio_extract.py`
     pins the resolution both ways. Suite: **372 passed, 0 failed, 10 skipped**.
+
+110. **When no face looks at the camera, a person still has a body: MediaPipe
+    pose enters the reframe ladder.** The ladder was face → motion-centroid →
+    centred; the centroid follows *anything* that moves, including a waving
+    crowd. `core/engine/pose.py` bridges **MediaPipe Pose** (google-ai-edge/
+    mediapipe, Apache-2.0, pinned `0.10.21` — the newest release with a
+    win_amd64 cp311 wheel, §106) and, when fetched, sits between the two: a
+    frame with no face asks the 33-point model for the visible torso (mid of
+    shoulders+hips, joints under 0.5 visibility do not vote, one visible joint
+    is not a person) and the camera follows *the person*; `tracker` reports
+    `pose` and the plan's noun says so. Absent engine or upstream mismatch,
+    `track_frame` returns None per frame and the centroid takes over exactly as
+    before — the bridge degrades, never crashes, nothing ships. The geometry
+    (`centre_from_landmarks`) is tested without MediaPipe; the no-engine path
+    is tested; the fetched path runs on the owner's machine where the button
+    can win. Per the §104 convention this was considered for the tool belt and
+    filed as a refinement inside `reframe`'s measurement — documented, not
+    skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
 ## 5. Release procedure
 

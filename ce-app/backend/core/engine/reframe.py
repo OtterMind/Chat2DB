@@ -111,6 +111,10 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
     if classifier is None:
         return []
 
+    from core.engine import pose as pose_engine  # noqa: PLC0415
+
+    with_pose = pose_engine.available()
+
     info = probe_media(path)
     source_w = int(info.get("width") or 0)
     source_h = int(info.get("height") or 0)
@@ -138,8 +142,17 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
                                             minSize=(max(24, width // 20), max(24, width // 20)))
         moment = index / fps
         if len(faces) == 0:
-            # No face — but a sport rarely shows one. Follow the moving region
-            # instead, so a rally or a rep still has a subject.
+            # No face — but a sport rarely shows one. A person still has a body:
+            # MediaPipe's torso landmarks (when fetched) name the subject; only
+            # when neither a face nor a person is found do we follow the moving
+            # region, so a rally or a rep still has a subject.
+            person = pose_engine.track_frame(frame) if with_pose else None
+            if person is not None:
+                detections.append(
+                    Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
+                )
+                prev = frame
+                continue
             centre = _motion_centre(prev, frame, width)
             if centre is not None:
                 detections.append(
@@ -308,7 +321,9 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
     detections = detect_faces(path, fps=fps)
     found = [d for d in detections if d.x is not None]
     kinds = {d.kind for d in found}
-    tracker = "face" if "face" in kinds else ("motion" if "motion" in kinds else "none")
+    tracker = ("face" if "face" in kinds
+               else "pose" if "pose" in kinds
+               else "motion" if "motion" in kinds else "none")
     if not detections:
         return ReframePlan(scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], fallback=True,
                            reason="no frames could be read")
@@ -324,7 +339,9 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
         for moment, fx in smooth(detections, fps=fps)
     ]
     keyframes = _thin(keyframes)
-    noun = "face" if tracker == "face" else "the moving subject"
+    noun = ("face" if tracker == "face"
+            else "the person" if tracker == "pose"
+            else "the moving subject")
     return ReframePlan(
         scale=scale, keyframes=keyframes, faces_found=len(found), samples=len(detections),
         fallback=False, tracker=tracker,
