@@ -467,6 +467,8 @@ export default function Timeline() {
             className={`tl__playhead ${centred ? 'is-centred' : ''}`}
             style={{ left: playhead * pxPerSecond }}
           >
+            {/* the timecode rides the playhead — no eye travel to the transport */}
+            <span className="tl__ph-bubble" dir="ltr">{formatTimecode(playhead, true)}</span>
             <span
               className="tl__playhead-grip"
               onPointerDown={(e) => {

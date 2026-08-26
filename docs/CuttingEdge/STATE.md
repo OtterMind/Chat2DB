@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.32` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.33` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,24 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+117. **The sixteen — the visual wave that turns 2/20 into ≥12/20, all executed,
+    tested on the production bundle, published as 0.9.33.** (1) aurora ambient
+    light + depth-layered glass; (2) DaVinci-flavoured timeline: 64px lanes,
+    gradient clip headers, glowing snap guide, playhead time-bubble; (3)
+    cinematic monitor: letterbox/safe-area/vignette toggles + a live luma scope
+    sampled at 64×36 every 400 ms; (4) bold typography + tabular timecodes;
+    (5) living wordmark + one-second launch splash; (6) motion system: staggered
+    rise, hover lift, ripple, skeletons; (7) sonner-style glass toasts; (8)
+    heartbeat empty states; (9)+(13) BrainBar status strip with pulsing brain
+    chip, clips/aspect/GPU/version; (10) recharts bar charts of the brain's
+    measured signals in Style Match; (11) assistant gradient bubbles, typing
+    dots, pill suggestions; (12) collapsible inspector sections; (14) `?`
+    shortcuts sheet; (15) embla-carousel project reel with hover lift; (16)
+    four-accent theme picker, saved per device. Verified on `vite preview`
+    (production bundle): test:ui PASSED, playback all-checks-passed, targeted
+    checks (brainbar, splash, shortcuts, monitor toggles, accent, bubble) all
+    true with zero console errors. Backend suite unchanged at 404/0/10.
 
 116. **0.9.32: the filmed clean-install gate, scripted.** The last 1.0 item a
     sandbox cannot run is watching the app be born on a real Windows machine,

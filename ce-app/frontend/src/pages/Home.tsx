@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import useEmblaCarousel from 'embla-carousel-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { message } from 'antd'
@@ -58,6 +59,7 @@ function TourBanner({ onDone }: { onDone: () => void }) {
 
 export default function Home() {
   const navigate = useNavigate()
+  const [emblaRef] = useEmblaCarousel({ align: 'start' })
   const { t, lang } = useI18n()
   const i = lang === 'fa' ? 1 : 0
   const [query, setQuery] = useState('')
@@ -195,6 +197,7 @@ export default function Home() {
             {t('No saved projects yet — “New video” starts one.', 'هنوز پروژه‌ای ذخیره نشده — با «ویدیوی جدید» شروع کن.')}
           </div>
         ) : (
+          <div className="ce-reelwrap" ref={emblaRef}>
           <div className="ce-reel">
             {/* Unfinished work first: it is the thing most likely to be wanted. */}
             {hasAutosave && (
@@ -235,6 +238,7 @@ export default function Home() {
                 </span>
               </div>
             ))}
+          </div>
           </div>
         )}
       </section>

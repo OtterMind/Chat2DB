@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts'
 import { message, Modal, Input, InputNumber, Segmented } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
@@ -41,6 +42,7 @@ export default function StyleMatch() {
    *  number behind every answer — and then a menu of different ways to start. */
   const [brainRef, setBrainRef] = useState<BrainQA[]>([])
   const [brainFoot, setBrainFoot] = useState<BrainQA[]>([])
+  const [footSig, setFootSig] = useState<Record<string, number> | null>(null)
   const [options, setOptions] = useState<BrainOption[]>([])
   const [pending, setPending] = useState<{ footage: string; music: string | null } | null>(null)
   const [thinking, setThinking] = useState<'ref' | 'foot' | null>(null)
@@ -88,6 +90,7 @@ export default function StyleMatch() {
       const report = await styleApi.brain(tpl, footage ?? null)
       if (footage) {
         setBrainFoot(report.footage_qa)
+        setFootSig((report.footage_signals as Record<string, number> | null) ?? null)
         setOptions(report.options)
       } else {
         setBrainRef(report.reference_qa)
@@ -468,6 +471,17 @@ export default function StyleMatch() {
               {brainRef.map((q) => <BrainLine key={q.id} q={q} />)}
             </div>
           )}
+          {template && thinking !== 'ref' && (
+            <SigBars
+              title={t('the reference, as numbers', 'الگو، به عدد')}
+              data={[
+                { k: 'BPM', v: Math.min(1, (template.bpm ?? 0) / 140) },
+                { k: t('speech', 'گفتار'), v: template.speech_ratio ?? 0 },
+                { k: t('on-beat', 'روی ضرب'), v: template.cuts_on_beat ?? 0 },
+                { k: t('shots', 'نما'), v: Math.min(1, (template.shots?.length ?? 0) / 20) },
+              ]}
+            />
+          )}
         </Card>
       )}
 
@@ -479,6 +493,16 @@ export default function StyleMatch() {
             <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               {brainFoot.map((q) => <BrainLine key={q.id} q={q} />)}
             </div>
+          )}
+          {footSig && thinking !== 'foot' && (
+            <SigBars
+              title={t('your footage, as numbers', 'فوتیج تو، به عدد')}
+              data={[
+                { k: t('speech', 'گفتار'), v: Number(footSig.speech_ratio ?? 0) },
+                { k: t('action', 'اوج حرکت'), v: Number(footSig.action ?? 0) },
+                { k: t('presence', 'حضور سوژه'), v: Number(footSig.presence ?? 0) },
+              ]}
+            />
           )}
         </Card>
       )}
@@ -688,6 +712,25 @@ function BrainLine({ q }: { q: { q: { fa: string; en: string }; a: { fa: string;
         {q.a[L]} <span className="ce-badge" dir="ltr">{q.value}</span>
         <span className="ce-hint" style={{ display: 'block', fontWeight: 400 }}>{q.why[L]}</span>
       </strong>
+    </div>
+  )
+}
+
+/** The brain's measurements as a live bar chart — the advisors' recharts ask:
+ *  the analysis is not only told, it is shown. */
+function SigBars({ title, data }: { title: string; data: { k: string; v: number }[] }) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <p className="ce-hint" style={{ marginBottom: 4 }}>{title}</p>
+      <div style={{ height: 92 }} dir="ltr">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <XAxis dataKey="k" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis hide domain={[0, 1]} />
+            <Bar dataKey="v" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

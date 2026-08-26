@@ -1,6 +1,6 @@
 {
   "name": "cutting-edge-frontend",
-  "version": "0.9.32",
+  "version": "0.9.33",
   "description": "Cutting Edge (CE) — AI-powered video clipping studio",
   "private": true,
   "main": "dist-electron/main.js",
@@ -28,12 +28,14 @@
     "cmdk": "^1.1.1",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "embla-carousel-react": "^8.6.0",
     "framer-motion": "^13.1.1",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-resizable-panels": "^4.12.3",
     "react-router-dom": "^6.26.0",
+    "recharts": "^3.10.1",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

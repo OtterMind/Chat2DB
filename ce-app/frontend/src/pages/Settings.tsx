@@ -565,6 +565,31 @@ export default function Settings() {
       subtitle={t('Application configuration and updates', 'پیکربندی برنامه و به‌روزرسانی')}
       width="sm"
     >
+      <Card title={t('Appearance', 'ظاهر')}>
+        <p className="ce-hint" style={{ marginBottom: 10 }}>
+          {t('One accent, whole app — saved on this device.', 'یک رنگ اکسانت برای کل برنامه — روی همین دستگاه ذخیره می‌شود.')}
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {([
+            ['cyan', '#06b6d4'], ['violet', '#8b5cf6'], ['amber', '#f59e0b'], ['rose', '#f43f5e'],
+          ] as [string, string][]).map(([name, color]) => (
+            <button
+              key={name}
+              aria-label={name}
+              onClick={() => {
+                document.documentElement.dataset.accent = name
+                localStorage.setItem('ce-accent', name)
+              }}
+              style={{
+                width: 34, height: 34, borderRadius: 10, border: '2px solid var(--border)',
+                background: `linear-gradient(135deg, ${color}, #8b5cf6)`, cursor: 'pointer',
+                outline: document.documentElement.dataset.accent === name ? `2px solid ${color}` : 'none',
+                outlineOffset: 2,
+              }}
+            />
+          ))}
+        </div>
+      </Card>
       <Card title={t('Language', 'زبان')}>
         <p className="ce-hint" style={{ marginBottom: 12 }}>
           <Languages size={16} />

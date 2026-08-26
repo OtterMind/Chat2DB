@@ -14,6 +14,7 @@ import AssistantButton from '../editor/AssistantButton'
 import ProjectAutosave from '../editor/ProjectAutosave'
 import MediaBin from '../editor/MediaBin'
 import CommandPalette, { PALETTE_ICONS, type PaletteAction } from '../editor/CommandPalette'
+import BrainBar from '../editor/BrainBar'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, proxyApi, renderApi, saveDialog, type Quality } from '../api/render'
@@ -48,15 +49,18 @@ export default function Studio() {
   const [analysing, setAnalysing] = useState<'silence' | 'scenes' | 'beats' | null>(null)
   const [cmdOpen, setCmdOpen] = useState(false)
   const [binOpen, setBinOpen] = useState(true)
+  const [scOpen, setScOpen] = useState(false)
 
-  /** Ctrl+K opens the command palette — the keyboard-first door to every tool. */
+  /** Ctrl+K opens the command palette — the keyboard-first door to every tool.
+   *  "?" opens the shortcuts cheat-sheet. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setCmdOpen((v) => !v)
       }
-      if (e.key === 'Escape') setCmdOpen(false)
+      if (e.key === '?' ) setScOpen((v) => !v)
+      if (e.key === 'Escape') { setCmdOpen(false); setScOpen(false) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -515,6 +519,7 @@ export default function Studio() {
           <div className="ed__group">
             <button className={`ed__btn ${binOpen ? 'is-on' : ''}`} onClick={() => setBinOpen((v) => !v)} title={t('Library', 'کتابخانه')}><FolderOpen size={16} /></button>
             <button className="ed__btn" onClick={() => setCmdOpen(true)} title={`${t('Command palette', 'منوی فرمان')} (Ctrl+K)`}><Search size={16} /></button>
+            <button className="ed__btn" onClick={() => setScOpen(true)} title={`${t('Shortcuts', 'میان‌برها')} (?)`}><Info size={16} /></button>
           </div>
 
           <div className="ed__group">
@@ -602,6 +607,28 @@ export default function Studio() {
               )}
           </span>
         </div>
+
+        <BrainBar />
+
+        <Modal open={scOpen} onCancel={() => setScOpen(false)} footer={null} width={560}
+          title={t('Keyboard shortcuts', 'میان‌برهای صفحه‌کلید')}>
+          <div className="sc-grid" dir="ltr">
+            {([
+              ['Space', t('Play / pause', 'پخش / مکث')],
+              ['S', t('Split at playhead', 'برش در محل پلی‌هد')],
+              ['J / K / L', t('Shuttle / prev / next', 'عقب / قبلی / بعدی')],
+              [', / .', t('Step one frame', 'یک فریم جلو/عقب')],
+              ['Ctrl+Z', t('Undo', 'واگرد')],
+              ['Ctrl+D', t('Duplicate clip', 'تکثیر کلیپ')],
+              ['Delete', t('Delete clip', 'حذف کلیپ')],
+              ['Ctrl+K', t('Command palette', 'پالت فرمان')],
+              ['F11', t('Fullscreen', 'تمام‌صفحه')],
+              ['?', t('This sheet', 'همین برگه')],
+            ] as [string, string][]).map(([k, v]) => (
+              <div className="sc-row" key={k}><span className="kbd">{k}</span><span>{v}</span></div>
+            ))}
+          </div>
+        </Modal>
       </div>
     </Page>
   )

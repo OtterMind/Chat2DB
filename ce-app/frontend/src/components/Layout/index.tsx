@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import BrandMark from '../BrandMark'
@@ -28,6 +28,16 @@ export default function AppLayout() {
 
   const isLauncher = location.pathname === '/'
 
+  /** The saved accent repaints before first paint of content; the splash is a
+   *  one-second brand breath on cold start (skipped for reduced motion). */
+  const [splash, setSplash] = useState(true)
+  useEffect(() => {
+    const acc = localStorage.getItem('ce-accent')
+    if (acc) document.documentElement.dataset.accent = acc
+    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 950)
+    return () => clearTimeout(timer)
+  }, [reduceMotion])
+
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 })
   }, [location.pathname, location.search])
@@ -38,6 +48,14 @@ export default function AppLayout() {
 
   return (
     <div className={`ce-shell ${isLauncher ? 'is-launcher' : 'is-immersive'}`}>
+      {splash && (
+        <div className="ce-splash" aria-hidden>
+          <motion.div initial={{ scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 22 }}>
+            <BrandMark size="lg" />
+          </motion.div>
+        </div>
+      )}
       {/* One shared element: centred on the launcher, docked in a section. */}
       <motion.button
         layoutId="ce-wordmark"

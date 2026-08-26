@@ -918,6 +918,19 @@ function PanelAnimate({
   )
 }
 
+/** A collapsible inspector section (0.9.33): grouped, iconed, calm. */
+function Sec({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="insp-sec">
+      <button onClick={() => setOpen((v) => !v)}>
+        {icon} {title} <ChevronLeft size={14} style={{ marginInlineStart: 'auto', transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s' }} />
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  )
+}
+
 function PanelAudio({
   clip, denoise, enhanceVoice, duck, onChange,
 }: {
@@ -1007,6 +1020,7 @@ function PanelAudio({
 
   return (
     <div className="tb__stack">
+      <Sec icon={<AudioLines size={14} />} title={t('Extract & stems', 'استخراج و اجزا')}>
       <div className="tb__row">
         <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void extractAudio()}>
           <AudioLines size={13} /> {t('Audio extraction', 'استخراج صدا')}
@@ -1021,6 +1035,8 @@ function PanelAudio({
           'استخراج، صدای این کلیپ را روی خط صوتی می‌برد (FFmpeg، همیشه). جداسازی اجزا میکس را به صدا/درام/بیس/دیگر تقسیم می‌کند با Demucs — از تنظیمات بگیرش.'
         )}
       </p>
+      </Sec>
+      <Sec icon={<Volume2 size={14} />} title={t('Clean & duck', 'پاک‌سازی و داکینگ')}>
       <Field label={t('Noise reduction', 'نویزگیری')} value={`${Math.round(denoise * 100)}%`}>
         <Slider min={0} max={1} step={0.05} value={denoise} onChange={(v) => onChange({ denoise: v })} />
       </Field>
@@ -1053,6 +1069,7 @@ function PanelAudio({
           'موسیقی را این‌طور علامت بزن تا روی هر کلمه‌ی گوینده پایین بیاید و در سکوت‌ها برگردد — خروجی از فشرده‌ساز زنجیره‌ای استفاده می‌کند و مانیتور تقریب آن را نشان می‌دهد.'
         )}
       </p>
+      </Sec>
     </div>
   )
 }

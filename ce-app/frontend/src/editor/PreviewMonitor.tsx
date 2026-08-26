@@ -59,6 +59,44 @@ export default function PreviewMonitor() {
   const [failed, setFailed] = useState<string | null>(null)
   const [master, setMaster] = useState(1)
   const [muted, setMuted] = useState(false)
+  /* 0.9.33 cinematic chrome: letterbox / safezone / vignette / a light scope */
+  const [letterbox, setLetterbox] = useState(false)
+  const [safezone, setSafezone] = useState(false)
+  const [vignette, setVignette] = useState(false)
+  const [scope, setScope] = useState(false)
+  const scopeRef = useRef<HTMLCanvasElement>(null)
+
+  /** A light luma histogram, sampled from the live video — a scope that costs
+   *  a 64×36 read every 400 ms, not a GPU. */
+  useEffect(() => {
+    if (!scope) return undefined
+    const off = document.createElement('canvas')
+    off.width = 64; off.height = 36
+    const octx = off.getContext('2d', { willReadFrequently: true })
+    const id = window.setInterval(() => {
+      const v = baseRef.current
+      const c = scopeRef.current
+      if (!v || !c || !octx || v.readyState < 2 || v.videoWidth === 0) return
+      octx.drawImage(v, 0, 0, 64, 36)
+      const px = octx.getImageData(0, 0, 64, 36).data
+      const bins = new Array(24).fill(0) as number[]
+      for (let i = 0; i < px.length; i += 4) {
+        const l = (px[i] + px[i + 1] + px[i + 2]) / 765
+        bins[Math.min(23, Math.floor(l * 24))] += 1
+      }
+      const max = Math.max(1, ...bins)
+      const ctx = c.getContext('2d')
+      if (!ctx) return
+      ctx.clearRect(0, 0, c.width, c.height)
+      const bw = c.width / 24
+      bins.forEach((n, i2) => {
+        const h = (n / max) * (c.height - 6)
+        ctx.fillStyle = `rgba(56, 189, 248, ${0.35 + 0.6 * (n / max)})`
+        ctx.fillRect(i2 * bw + 1, c.height - h, bw - 2, h)
+      })
+    }, 400)
+    return () => window.clearInterval(id)
+  }, [scope])
 
   const { clips, tracks, transitions, playhead, playing, aspect } = useEditor()
 
@@ -267,7 +305,23 @@ export default function PreviewMonitor() {
   const notes = Array.from(new Set([...(baseLayer?.notes ?? []), ...(topLayer?.notes ?? [])]))
 
   return (
-    <div className="ed__preview" style={{ ['--ce-ratio' as string]: `${ratio}` }}>
+    <div
+      className={`ed__preview ${letterbox ? 'is-letterbox' : ''} ${vignette ? 'is-vignette' : ''}`}
+      style={{ ['--ce-ratio' as string]: `${ratio}` }}
+    >
+      {/* 0.9.33 monitor chrome: facts on the left, cinematic toggles right */}
+      <div className="ed__mon-chips" dir="ltr">
+        <span className="badge mono">{Math.round(ratio * 100) / 100}:1</span>
+        <span className="badge mono">{Math.round(master * 100)}%</span>
+      </div>
+      <div className="ed__mon-actions">
+        <button className={`ed__btn ${letterbox ? 'is-on' : ''}`} title={t('Letterbox', 'لترباکس سینمایی')} onClick={() => setLetterbox(v => !v)}>▬</button>
+        <button className={`ed__btn ${safezone ? 'is-on' : ''}`} title={t('Safe area', 'حاشیه امن')} onClick={() => setSafezone(v => !v)}>▣</button>
+        <button className={`ed__btn ${vignette ? 'is-on' : ''}`} title={t('Vignette', 'وینیت')} onClick={() => setVignette(v => !v)}>◐</button>
+        <button className={`ed__btn ${scope ? 'is-on' : ''}`} title={t('Luma scope', 'اسکوپ نور')} onClick={() => setScope(v => !v)}>≡</button>
+      </div>
+      {safezone && <div className="ed__safezone" />}
+      {scope && <canvas ref={scopeRef} width={96} height={54} className="ed__scope" />}
       {baseSrc ? (
         <div className="ed__stagewrap">
           <div className="ed__layer" style={baseLayer?.media}>
