@@ -1191,6 +1191,25 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+113. **1.0 hardening opens: tripwires, a manual, the other half of the taste
+    loop, and eyes on the packaged window.** (a) `tests/test_perf_regression.py`
+    is a ratchet, not a benchmark: caps set from a real clock on 3 s fixtures
+    (motion_curve 0.03 s, silence 0.02 s, beats 0.02 s, scenes 0.20 s, build_ass
+    <1 ms; caps 25–100× above) so a slow runner never flakes but a per-frame
+    FFmpeg loop — the class this project actually shipped once (§16) — trips
+    every wire. (b) `docs/CuttingEdge/MANUAL.md`: the one-page manual, Persian
+    first, true of 0.9.30 — home, editor, the brain's visible interrogation,
+    engines shelf, assistant, diagnostics. (c) The taste loop's missing half:
+    the result card now has **«این را نپسندیدم»** posting `rejected` to
+    `/api/brain/feedback`; the prior stays bounded either way. (d)
+    `scripts/packaged-ui-audit.mjs` attaches to the real packaged Electron
+    window over CDP (`--remote-debugging-port`) and runs the render/no-error/
+    overflow checks at the artefact level; the canonical workflow copy
+    (`ce-app/ci/ce-workflow.yml`, the file the owner pastes into
+    `.github/workflows/ce.yml`) gained the step after the smoke test. That step
+    runs on the Windows runner, not in this sandbox — stated, not pretended.
+    Suite after: **404 passed, 0 failed, 10 skipped**.
+
 112. **The professors' blueprints, triaged line by line — nothing dropped
     silently.** Both upgrade plans (InternVL/LangGraph/ChromaDB list and the
     FeatureBus/critic list) were read in full and triaged in

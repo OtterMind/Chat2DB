@@ -338,8 +338,11 @@ when fetched, cut/dissolve/fade junction typing without it · 3) ~~Demucs~~
 bridge in (§4.108) **and wired** (§4.109): stems on-demand behind the Audio
 panel, and the duck envelope measured on the cached vocals stem when present ·
 4) ~~MediaPipe pose~~ bridge in (§4.110): 33-point torso tracking between the
-face cascade and the motion centroid in the reframe ladder · 5) 1.0 hardening
-(crash reporting, Playwright-on-packaged, perf-regression, manual). Also in 0.9.28-dev: the brain interrogates itself on screen for both
+face cascade and the motion centroid in the reframe ladder · 5) 1.0 hardening —
+**in progress (§4.113)**: perf-regression ratchet in, MANUAL.md in, packaged
+CDP UI-audit script + workflow step in (runs on the Windows runner), crash
+reporting already shipped (§95); remaining: a filmed clean install on a real
+machine and the Playwright suite growing against the packaged artefact. Also in 0.9.28-dev: the brain interrogates itself on screen for both
 videos and offers a menu of different starts (§4.108) — the intake card is gone.
 Deliberately not in-process: GPL/AGPL/no-licence and HF-token-gated weights.
 

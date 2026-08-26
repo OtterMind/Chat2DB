@@ -45,6 +45,7 @@ export default function StyleMatch() {
   const [pending, setPending] = useState<{ footage: string; music: string | null } | null>(null)
   const [thinking, setThinking] = useState<'ref' | 'foot' | null>(null)
   const [chosen, setChosen] = useState<BrainOption | null>(null)
+  const [feedbackGiven, setFeedbackGiven] = useState(false)
   /** What the work is doing right now — the screen used to be able to say only "busy". */
   const [progress, setProgress] = useState<TaskState | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -302,6 +303,20 @@ export default function StyleMatch() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outcome: 'accepted', terms: win?.terms ?? null }),
     }).catch(() => undefined)
+  }
+
+  /** The other half of the taste loop: "I did not like this" is a signal too.
+   *  One click, honest wording, no penalty to the user — the prior stays bounded. */
+  const tellBrainRejected = (built: StyledEdit) => {
+    const summary = built.summary as { brain?: { winner?: string; scoreboard?: { name: string; terms?: Record<string, number> }[] } }
+    const win = summary.brain?.scoreboard?.find((row) => row.name === summary.brain?.winner)
+    fetch(`${backendOrigin}/api/brain/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outcome: 'rejected', terms: win?.terms ?? null }),
+    }).catch(() => undefined)
+    setFeedbackGiven(true)
+    message.info(t('Noted — the brain will weigh this next time.', 'ثبت شد — مغز دفعه‌ی بعد این را در نظر می‌گیرد.'))
   }
 
   const openInEditor = () => {
@@ -644,6 +659,15 @@ export default function StyleMatch() {
           <div className="ce-actions" style={{ marginTop: 12 }}>
             <button className="ce-btn ce-btn--sm" onClick={openInEditor}>
               <Sparkles size={15} /> {t('Open it in the editor', 'بازش کن در میز تدوین')}
+            </button>
+            <button
+              className="ce-btn ce-btn--ghost ce-btn--sm"
+              disabled={feedbackGiven}
+              onClick={() => tellBrainRejected(result)}
+              title={t('Teach the brain what not to repeat', 'به مغز یاد بده چه چیزی را تکرار نکند')}
+            >
+              <XCircle size={15} />{' '}
+              {feedbackGiven ? t('Noted', 'ثبت شد') : t('I did not like this', 'این را نپسندیدم')}
             </button>
           </div>
         </Card>
