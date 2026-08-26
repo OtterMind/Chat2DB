@@ -48,6 +48,13 @@ export function createViewTablePagingState(requestSequence: number, params: IExe
   return { requestSequence, params } satisfies ViewTablePagingState;
 }
 
+export function normalizeViewTablePageResults(
+  results: IManageResultData[],
+  params: IExecuteSqlParams,
+) {
+  return processResultDataList(results, params);
+}
+
 export function reduceViewTablePagingEvent(
   state: ViewTablePagingState,
   event: SqlExecutionEvent,
@@ -57,7 +64,7 @@ export function reduceViewTablePagingEvent(
     return { state };
   }
 
-  const eventResult = processResultDataList([event.message], state.params)[0];
+  const eventResult = normalizeViewTablePageResults([event.message], state.params)[0];
   if (!eventResult) {
     return { state };
   }

@@ -2,7 +2,12 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { createPortal } from 'react-dom';
 import { useStyles } from './style';
 import ResultSetToolbar, { ToolbarOperationType } from '../ResultSetToolbar';
-import { buildResultPageExecuteParams, resolveResultPaging, ResultPaging } from './pagination';
+import {
+  buildResultPageExecuteParams,
+  resolveResultPaging,
+  ResultPaging,
+  runResultPagingRequest,
+} from './pagination';
 import ScreeningResult, { IScreeningResultRef } from '../ScreeningResult';
 import FESearch, { FESearchRef } from '../FESearch';
 import ResultSetTable, { IResultSetSelection, ResultSetTableRef } from '../ResultSetTable';
@@ -245,8 +250,18 @@ export default memo<IProps>(
           paging,
           viewTable ? screenResultRef.current?.getJointSQL() || '' : undefined,
         );
-        if (props.onResultPagingChange) {
-          props.onResultPagingChange(resultData, executeSqlParams);
+        const onResultPagingChange = props.onResultPagingChange;
+        if (onResultPagingChange) {
+          void runResultPagingRequest(
+            () => onResultPagingChange(resultData, executeSqlParams),
+            {
+              onSuccess: () => setExecuteErrorMessage(null),
+              onError: (message) => {
+                setExecuteErrorMessage(message);
+                setResultData((current) => ({ ...current }));
+              },
+            },
+          );
           return;
         }
         const requestSequence = ++executeRequestSequenceRef.current;

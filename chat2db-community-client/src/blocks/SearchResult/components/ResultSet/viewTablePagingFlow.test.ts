@@ -6,6 +6,7 @@ import { processResultDataList } from '@/utils/resultData';
 import { composeResultQuery } from '../ScreeningResult/queryComposer';
 import {
   createViewTablePagingState,
+  normalizeViewTablePageResults,
   reduceViewTablePagingEvent,
   replaceViewTableResult,
   type ViewTablePagingTransition,
@@ -171,6 +172,38 @@ test('table browse SQL normalization follows originalSql, sql, then request SQL'
   assert.equal(processResultDataList([result({ originalSql: 'SELECT 1', sql: 'SELECT 2' })], request)[0].originalSql, 'SELECT 1');
   assert.equal(processResultDataList([result({ originalSql: '', sql: 'SELECT 2' })], request)[0].originalSql, 'SELECT 2');
   assert.equal(processResultDataList([result({ originalSql: '', sql: '' })], request)[0].originalSql, request.sql);
+});
+
+test('web table browse retains execution params across consecutive page requests', () => {
+  const firstRequest = {
+    sql: BASE_SQL,
+    dataSourceId: 42,
+    databaseName: 'app',
+    pageNo: 2,
+    pageSize: 5000,
+    resultSetId: 1,
+  };
+  const [firstPage] = normalizeViewTablePageResults(
+    [result({ originalSql: '', sql: '', pageNo: 2, pageSize: 5000 })],
+    firstRequest,
+  );
+
+  assert.deepEqual(firstPage.executeSqlParams, { ...firstRequest, single: undefined });
+
+  const secondRequest = buildResultPageExecuteParams(
+    firstPage.executeSqlParams!,
+    resolveResultPaging(firstPage.executeSqlParams, { pageNo: 3 }),
+  );
+  const [secondPage] = normalizeViewTablePageResults(
+    [result({ originalSql: '', sql: '', pageNo: 3, pageSize: 5000 })],
+    secondRequest,
+  );
+
+  assert.equal(secondRequest.pageNo, 3);
+  assert.equal(secondPage.executeSqlParams?.sql, BASE_SQL);
+  assert.equal(secondPage.executeSqlParams?.dataSourceId, 42);
+  assert.equal(secondPage.executeSqlParams?.pageNo, 3);
+  assert.equal(secondPage.executeSqlParams?.pageSize, 5000);
 });
 
 test('a cancelled table browse never publishes its buffered partial rows', () => {

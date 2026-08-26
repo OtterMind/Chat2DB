@@ -53,9 +53,12 @@ const SingleFileMonacoEditor = memo<IProps>(
       handelEnter?.(value);
     }, [handelEnter]);
 
+    const handleEnterSearchRef = useRef(handleEnterSearch);
+    handleEnterSearchRef.current = handleEnterSearch;
+
     const shortcutController = useMemo(
-      () => createSingleFileShortcutController(window, handleEnterSearch),
-      [handleEnterSearch],
+      () => createSingleFileShortcutController(window, () => handleEnterSearchRef.current()),
+      [],
     );
 
     // Listen for keydown and prevent Enter's default behavior.

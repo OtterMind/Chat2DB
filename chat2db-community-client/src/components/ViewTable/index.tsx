@@ -51,7 +51,7 @@ const ViewTable = memo<IProps>((props) => {
       if (executeSqlParams.dataSourceId == null || !executeSqlParams.sql) {
         return;
       }
-      void executePage(executeSqlParams);
+      return executePage(executeSqlParams);
     },
     [executePage],
   );

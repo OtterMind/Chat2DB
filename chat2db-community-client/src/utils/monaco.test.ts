@@ -51,6 +51,19 @@ const run = async () => {
   assert.equal(enterCount, 1, 'Enter executes even when Monaco has no suggest controller');
   assert.equal(preventDefaultCount, 1);
 
+  shortcutController.deactivate();
+  let latestCallbackCount = 0;
+  let latestCallback = () => undefined;
+  const latestCallbackController = createSingleFileShortcutController(target, () => latestCallback());
+  latestCallbackController.activate({ getContribution: () => null });
+  latestCallback = () => {
+    latestCallbackCount += 1;
+  };
+  dispatchEnter();
+  assert.equal(latestCallbackCount, 1, 'an active editor uses the latest Enter callback without refocusing');
+  latestCallbackController.dispose();
+  shortcutController.activate({ getContribution: () => null });
+
   const visibleSuggestEditor: SuggestEditor = {
     getContribution: () => ({ _widget: { suggestWidgetVisible: { get: () => true } } }),
   };

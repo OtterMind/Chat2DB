@@ -4,6 +4,7 @@ import type { SqlExecutionEvent } from '@/service/sqlExecutionStream';
 import useSqlExecutor from './useSqlExecutor';
 import {
   createViewTablePagingState,
+  normalizeViewTablePageResults,
   reduceViewTablePagingEvent,
   type ViewTablePagingState,
 } from './viewTablePagingModel';
@@ -42,8 +43,9 @@ export default function useViewTablePaging() {
     (params: IExecuteSqlParams) => {
       paramsRef.current = params;
       return executeSQL(params).then((data) => {
-        if (data.length) {
-          setResultData(data[0]);
+        const normalizedData = normalizeViewTablePageResults(data, params);
+        if (normalizedData.length) {
+          setResultData(normalizedData[0]);
         }
         return data;
       });

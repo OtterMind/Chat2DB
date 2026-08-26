@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MAX_RESULT_PAGE_SIZE } from '@/constants/pagination';
-import { buildResultPageExecuteParams, resolveResultPaging } from './pagination';
+import { SqlExecutionBusyError } from '@/service/sqlExecutionRequestTracker';
+import {
+  buildResultPageExecuteParams,
+  resolveResultPaging,
+  runResultPagingRequest,
+} from './pagination';
 import './viewTablePagingFlow.test';
 
 test('matches the Java Integer transport boundary without restoring the old product cap', () => {
@@ -34,4 +39,29 @@ test('ordinary SQL paging preserves its existing SQL when no table-browser overr
     ),
     { sql: 'SELECT 1', dataSourceId: 42, pageNo: 2, pageSize: 5000 },
   );
+});
+
+test('a rejected paging request is handled and restores the confirmed pagination state', async () => {
+  const confirmedPaging = { pageNo: 2, pageSize: 1000 };
+  let visiblePaging = { pageNo: 1, pageSize: 50_000 };
+  let errorMessage = '';
+  const unhandledRejections: unknown[] = [];
+  const rejectionListener = (reason: unknown) => unhandledRejections.push(reason);
+  process.on('unhandledRejection', rejectionListener);
+
+  void runResultPagingRequest(
+    () => Promise.reject(new SqlExecutionBusyError()),
+    {
+      onError: (message) => {
+        errorMessage = message;
+        visiblePaging = { ...confirmedPaging };
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  process.off('unhandledRejection', rejectionListener);
+
+  assert.equal(errorMessage, 'SQL execution is already in progress');
+  assert.deepEqual(visiblePaging, confirmedPaging);
+  assert.deepEqual(unhandledRejections, []);
 });
