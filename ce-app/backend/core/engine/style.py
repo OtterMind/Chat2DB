@@ -735,6 +735,18 @@ def _brain_context(
     for cue in captions or []:
         words.extend(cue.get("words") or [])
 
+    # The transcript's story shape, measured by markers (meaning 2.0). With no
+    # captions the field stays None and the term is skipped, not faked.
+    narrative = None
+    if captions:
+        from core.brain import meaning as meaning_engine  # noqa: PLC0415
+
+        narrative = meaning_engine.narrative_arc(captions)
+
+    # Taste as a prior: what the user approved or rejected before nudges the
+    # weights, bounded — a rebalance, never a replacement for a measurement.
+    from core.brain import memory as taste  # noqa: PLC0415
+
     return objective.Context(
         duration=duration,
         target_shots=[float(s["duration"]) for s in shots],
@@ -747,6 +759,9 @@ def _brain_context(
         # mid-sentence loses to one that does not. Terms that could not be
         # measured stay skipped — a weight is not a measurement.
         weights=intent.weight_multipliers() if intent is not None else {},
+        narrative=narrative,
+        platform=getattr(intent, "platform", None) if intent is not None else None,
+        prior=taste.prior(),
     )
 
 
@@ -924,8 +939,17 @@ def build_timeline(
         used_reference_bed = True
 
     brain_context = _brain_context(data, shots, source, info, measured, captions, music, screened)
+
+    def _feat(p: dict) -> tuple | None:
+        s = p.get("signals") or {}
+        if not s:
+            return None
+        return (float(s.get("speech", 0.0)), float(s.get("motion", 0.0)),
+                float(s.get("action", 0.0)), float(s.get("presence", 0.0)))
+
     decision = brain_race.race(
-        [objective.Pick(p["start"], p["end"], p.get("score", 0.0)) for p in measured],
+        [objective.Pick(p["start"], p["end"], p.get("score", 0.0), features=_feat(p))
+         for p in measured],
         brain_context,
         transcript=captions,
         use_llm=brain,

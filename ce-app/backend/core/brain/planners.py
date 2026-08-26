@@ -263,3 +263,100 @@ def _picks_from_indices(raw: object, highlights: list[Pick], context: Context) -
         if shots and len(picks) >= len(shots):
             break
     return picks
+
+
+# ------------------------------------------------- the 0.9.30 planners
+#
+# Three more strategies join the race. Like the older two, each emits ONLY
+# timings that exist in the measured highlight list — a planner that invents a
+# moment would be a fiction wearing a measurement's clothes, and the judge
+# would not catch it.
+
+
+def _ordered(picks: list[Pick]) -> list[Pick]:
+    return sorted(picks, key=lambda p: p.start)
+
+
+def _fill(remaining: list[Pick], chosen: list[Pick], want: int) -> list[Pick]:
+    out = list(chosen)
+    used = [(c.start, c.end) for c in out]
+
+    def overlaps(p: Pick) -> bool:
+        return any(p.start < e - 0.05 and p.end > s + 0.05 for s, e in used)
+
+    for pick in sorted(remaining, key=lambda p: -p.score):
+        if len(out) >= want:
+            break
+        if not overlaps(pick):
+            out.append(pick)
+            used.append((pick.start, pick.end))
+    return out
+
+
+def narrative_plan(highlights: list[Pick], context: Context) -> Candidate | None:
+    """Hook early, payoff late, development between — when the transcript has them."""
+    started = time.time()
+    nar = context.narrative or {}
+    if not highlights or not nar.get("arc"):
+        return None
+    want = max(2, len(context.target_shots) or 4)
+    chosen: list[Pick] = []
+    for stamp in (nar.get("hook"), nar.get("payoff")):
+        if stamp is None:
+            continue
+        near = min(highlights, key=lambda p: abs((p.start + p.end) / 2 - stamp))
+        if near not in chosen:
+            chosen.append(near)
+    picks = _fill(highlights, chosen, want)
+    if not picks:
+        return None
+    return Candidate(name="narrative", picks=_ordered(picks),
+                     seconds=time.time() - started,
+                     note="hook→payoff from the transcript's arc")
+
+
+def retention_plan(highlights: list[Pick], context: Context) -> Candidate | None:
+    """Front-load a peak into every bucket — the short-form retention pattern."""
+    started = time.time()
+    if not highlights or not context.platform:
+        return None
+    want = max(2, len(context.target_shots) or 4)
+    span = max(p.end for p in highlights)
+    if span <= 0:
+        return None
+    chosen: list[Pick] = []
+    for index in range(want):
+        lo, hi = span * index / want, span * (index + 1) / want
+        bucket = [p for p in highlights if p.start < hi and p.end > lo and p not in chosen]
+        if bucket:
+            chosen.append(max(bucket, key=lambda p: p.score))
+    picks = _fill(highlights, chosen, want)
+    if not picks:
+        return None
+    return Candidate(name="retention", picks=_ordered(picks),
+                     seconds=time.time() - started,
+                     note="a peak every bucket, for the scrolling thumb")
+
+
+def variety_plan(highlights: list[Pick], context: Context) -> Candidate | None:
+    """Successive shots as different from each other as the material allows."""
+    started = time.time()
+    if len(highlights) < 2:
+        return None
+    want = max(2, len(context.target_shots) or 4)
+
+    def dist(a: Pick, b: Pick) -> float:
+        if a.features and b.features:
+            return sum(abs(x - y) for x, y in zip(a.features, b.features)) / len(a.features)
+        return abs(a.score - b.score) + abs((a.start - b.start)) / 60.0
+
+    first = max(highlights, key=lambda p: p.score)
+    chosen = [first]
+    while len(chosen) < min(want, len(highlights)):
+        last = chosen[-1]
+        candidates = [p for p in highlights if p not in chosen]
+        nxt = max(candidates, key=lambda p: dist(p, last) + 0.25 * p.score)
+        chosen.append(nxt)
+    return Candidate(name="variety", picks=_ordered(chosen),
+                     seconds=time.time() - started,
+                     note="maximally different neighbours")

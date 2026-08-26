@@ -18,6 +18,7 @@ import {
 } from '../api/style'
 import type { TaskState } from '../api/tasks'
 import { pickMedia } from '../api/render'
+import { backendOrigin } from '../api/runtime'
 import { useEditor, formatTimecode } from '../editor/model'
 import { useI18n } from '../i18n'
 
@@ -229,6 +230,7 @@ export default function StyleMatch() {
         option.intent
       )
       setResult(built)
+      tellBrainAccepted(built)
 
       const editor = useEditor.getState()
       editor.loadSnapshot(built.timeline as never, built.name)
@@ -286,8 +288,25 @@ export default function StyleMatch() {
     }
   }
 
+  /**
+   * The taste loop: opening an edit in the editor is the user accepting it, so
+   * the brain's memory hears about it (bounded prior, never evidence). The
+   * explicit reject door arrives with a thumbs UI; until then silence is not
+   * recorded as dislike.
+   */
+  const tellBrainAccepted = (built: StyledEdit) => {
+    const summary = built.summary as { brain?: { winner?: string; scoreboard?: { name: string; terms?: Record<string, number> }[] } }
+    const win = summary.brain?.scoreboard?.find((row) => row.name === summary.brain?.winner)
+    fetch(`${backendOrigin}/api/brain/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outcome: 'accepted', terms: win?.terms ?? null }),
+    }).catch(() => undefined)
+  }
+
   const openInEditor = () => {
     if (!result) return
+    tellBrainAccepted(result)
     const editor = useEditor.getState()
     editor.loadSnapshot(result.timeline as never, result.name)
     editor.setAspect((result.aspect as never) ?? 'auto')

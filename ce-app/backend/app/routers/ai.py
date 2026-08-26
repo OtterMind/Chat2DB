@@ -99,6 +99,9 @@ CATALOGUE: tuple[dict, ...] = (
      "why": "Tiny vision model — describes a frame on almost anything."},
     {"name": "llama3.2-vision:11b", "job": "vision", "gb": 7.9, "vramGb": 12,
      "why": "Strongest local vision here, for a 12 GB card."},
+    {"name": "glm-4v:9b", "job": "vision", "gb": 5.6, "vramGb": 8,
+     "why": "The GLM-4V thinking family (Apache-2.0): explains *why* it picks a "
+            "moment, and the reason rides the scoreboard — transparency, not vibes."},
     {"name": "qwen2.5:3b-instruct", "job": "planning", "gb": 1.9, "vramGb": 4,
      "why": "Plans edits on a 4 GB card without spilling into system memory."},
     {"name": "qwen2.5:7b-instruct-q4_0", "job": "planning", "gb": 4.4, "vramGb": 6,

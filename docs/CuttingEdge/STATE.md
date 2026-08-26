@@ -1191,6 +1191,30 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+112. **The professors' blueprints, triaged line by line — nothing dropped
+    silently.** Both upgrade plans (InternVL/LangGraph/ChromaDB list and the
+    FeatureBus/critic list) were read in full and triaged in
+    `docs/CuttingEdge/BRAIN_UPGRADE.md`: built this release — the FeatureBus
+    (`core/engine/features.py`, honest `unknown` list), the auto-editor-inspired
+    motion curve + `keep = speech OR motion` (Public Domain), meaning 2.0
+    (`narrative_arc`: hook/payoff/Q→A from markers, feeding a new objective
+    term), three new planners (narrative/retention/variety) that only emit
+    measured times, the bounded **critic** (≤2 revisions, bottom-quantile picks
+    swapped for unused highlights, rule plan as floor, `…+critic` on the
+    scoreboard), taste memory as a stdlib JSON prior clamped 0.75–1.33 with
+    `/api/brain/feedback` and the frontend reporting accepted edits, the
+    contact-sheet vision upgrade (4 frames/window, blend still ≤ 0.3),
+    `clip_embed.py` (open_clip on-demand, absent → renormalise, never fake),
+    glm-4v:9b in the Ollama catalogue for reasoning-on-scoreboard. Registered
+    on-demand: sentence-transformers, librosa (moved OUT of REJECTED — the
+    objection was shipping it to everyone), open-unmix, DOVER. Rejected with
+    reasons: Essentia (AGPL binds even on-demand), LangGraph/ChromaDB as
+    dependencies (architecture adopted natively, packages are tax),
+    InternVL/VideoLLaMA/Molmo (HF-gated multi-GB; roles covered by catalogued
+    Ollama vision + MediaPipe + CLIP), RTMPose (mmcv closure), YOLO-World
+    (weight licences unverified), pyAudioAnalysis (deferred: scipy closure for
+    signals we already measure). Suite: **399 passed, 0 failed, 10 skipped**.
+
 111. **The brain fires from every door.** The owner re-sent the same three asks
     (Audio extraction, brain-asks-itself Style Match, left-aligned home) after
     they had shipped in 0.9.29 — so every claim was re-verified live instead of

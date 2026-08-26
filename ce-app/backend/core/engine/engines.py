@@ -83,6 +83,22 @@ ENGINES: list[dict] = [
     {"id": "otio", "name": "OpenTimelineIO", "repo": "AcademySoftwareFoundation/OpenTimelineIO",
      "licence": "Apache-2.0", "role": "professional .otio interchange (Resolve et al.)",
      "module": "opentimelineio", "deps": ["OpenTimelineIO"], "heavy": None},
+    {"id": "sentence-transformers", "name": "SentenceTransformers",
+     "repo": "UKPLab/sentence-transformers", "licence": "Apache-2.0",
+     "role": "multilingual transcript embeddings — narrative-arc sharpening",
+     "module": "sentence_transformers", "deps": ["sentence-transformers"], "heavy": "torch"},
+    {"id": "librosa", "name": "librosa", "repo": "librosa/librosa", "licence": "ISC",
+     # Was REJECTED for its ~94 MB closure while shipped to everyone. On demand
+     # the weight objection dissolves: only the user who wants chroma/onset
+     # intelligence pays, and our spectral-flux detector stays the default.
+     "role": "onset peaks + chroma tension for music-aware cutting",
+     "module": "librosa", "deps": ["librosa"], "heavy": "numba/scipy"},
+    {"id": "open-unmix", "name": "open-unmix", "repo": "sigsep/open-unmix-pytorch",
+     "licence": "MIT", "role": "light vocals/music split (Demucs alternative)",
+     "module": "umx", "deps": ["open-unmix"], "heavy": "torch"},
+    {"id": "dover", "name": "DOVER", "repo": "VQAssessment/DOVER", "licence": "MIT",
+     "role": "post-export technical/aesthetic quality score for the taste loop",
+     "module": "dover", "deps": ["dover"], "heavy": "torch+HF"},
 ]
 
 #: Rejected, with the reason — the licence gate as a readable list.
@@ -92,7 +108,11 @@ REJECTED: list[dict] = [
     {"name": "gl-transitions", "licence": "NOASSERTION", "why": "no single licence; needs a custom FFmpeg build"},
     {"name": "Remotion", "licence": "NOASSERTION", "why": "commercial licensing for companies"},
     {"name": "DeepFilterNet", "licence": "NOASSERTION", "why": "licence unclear until upstream clarifies"},
-    {"name": "librosa", "licence": "ISC", "why": "~94 MB closure; our beat detection already works"},
+    # librosa left this list in 0.9.30: on-demand it ships to nobody by default,
+    # so the closure-weight objection no longer applies (see ENGINES).
+    {"name": "Essentia", "licence": "AGPL-3.0",
+     "why": "AGPL binds even an on-demand in-process link — key/BPM/mood stay "
+            "with our FFmpeg measurements instead"},
     {"name": "CineTrans / ffmpeg-gl-transition", "licence": "NO-LICENSE", "why": "no licence"},
 ]
 

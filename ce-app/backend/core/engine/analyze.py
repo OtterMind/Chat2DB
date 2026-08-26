@@ -189,4 +189,76 @@ def analyse(path: str) -> dict:
     }
 
 
-__all__ = ["Range", "detect_silence", "detect_scenes", "keep_ranges", "analyse", "probe_media"]
+def motion_curve(path: str, fps: float = 4.0, width: int = 96) -> list[float]:
+    """Motion activity, 0..1 over time — the auto-editor idea, measured.
+
+    auto-editor (Public Domain) keeps a clip when `audio OR motion` crosses a
+    threshold; its motion signal is the frame-to-frame difference. Ours is the
+    same measurement on a tiny gray strip: one FFmpeg decode for the whole file,
+    mean absolute difference between consecutive frames, normalised across the
+    file so a quiet interview and a rally both span 0..1.
+    """
+    import subprocess  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    info = probe_media(path)
+    source_h = int(info.get("height") or 0)
+    source_w = int(info.get("width") or 0)
+    if source_w <= 0 or source_h <= 0:
+        return []
+    height = max(2, int(round(width * source_h / source_w / 2)) * 2)
+    run = subprocess.run(
+        [ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-i", str(path),
+         "-vf", f"fps={fps:.3f},scale={width}:{height},format=gray",
+         "-f", "rawvideo", "-"],
+        capture_output=True,
+    )
+    frame_bytes = width * height
+    total = len(run.stdout) // frame_bytes
+    if total < 2:
+        return []
+    diffs: list[float] = []
+    prev = None
+    for index in range(total):
+        frame = np.frombuffer(
+            run.stdout[index * frame_bytes:(index + 1) * frame_bytes], dtype=np.uint8
+        ).reshape(height, width)
+        if prev is not None:
+            diffs.append(float(np.abs(frame.astype(np.int16) - prev.astype(np.int16)).mean()))
+        prev = frame
+    top = max(diffs) if diffs else 0.0
+    return [round(d / top, 3) for d in diffs] if top > 0 else [0.0] * len(diffs)
+
+
+def motion_keep_ranges(curve: list[float], duration: float, fps: float = 4.0,
+                       threshold: float = 0.35, minimum: float = 0.5) -> list[Range]:
+    """Windows where the picture moves hard — OR-ed with speech by the caller.
+
+    The auto-editor spirit: `keep = speech OR high_motion`. A burst (a spike, a
+    jump) ranks high on the normalised curve even inside a mostly-still file,
+    which is exactly the volleyball moment the energy-only pipeline used to miss.
+    """
+    if not curve or duration <= 0:
+        return []
+    step = duration / len(curve)
+    ranges: list[Range] = []
+    start: float | None = None
+    for index, value in enumerate(curve):
+        hot = value >= threshold
+        if hot and start is None:
+            start = index * step
+        if (not hot or index == len(curve) - 1) and start is not None:
+            end = (index + 1) * step
+            if end - start >= minimum:
+                ranges.append(_rr(start, end))
+            start = None
+    return ranges
+
+
+def _rr(start: float, end: float) -> Range:
+    return Range(start=round(start, 3), end=round(end, 3))
+
+
+__all__ = ["Range", "detect_silence", "detect_scenes", "keep_ranges", "analyse",
+           "probe_media", "motion_curve", "motion_keep_ranges"]

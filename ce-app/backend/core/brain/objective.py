@@ -47,6 +47,11 @@ WEIGHTS: dict[str, float] = {
     # not a rounding error in an edit; it is the whole impression.
     "variety": 3.0,
     "shot_length_match": 1.0,
+    # The three measured-in-0.9.30 terms start light: they are new senses, and a
+    # new sense gets a seat at the table, not the chairman's vote.
+    "narrative_arc": 1.0,
+    "platform_pacing": 1.0,
+    "visual_variety": 1.0,
 }
 
 
@@ -57,6 +62,9 @@ class Pick:
     start: float
     end: float
     score: float = 0.0
+    #: Optional per-window feature vector (motion class, luma, semantics when an
+    #: engine is fetched) — what `visual_variety` and the variety planner read.
+    features: tuple | None = None
 
     @property
     def duration(self) -> float:
@@ -88,6 +96,14 @@ class Context:
     #: (`core.engine.intent`). They rebalance the terms; they never add one, and
     #: a term that could not be measured stays skipped however it is weighted.
     weights: dict[str, float] = field(default_factory=dict)
+    #: The transcript's measured story shape (`core.brain.meaning.narrative_arc`):
+    #: {"hook": t|None, "payoff": t|None, "arc": 0..1}. None when there is no text.
+    narrative: dict | None = None
+    #: Where the edit will be watched; `platform_pacing` reads it. None skips.
+    platform: str | None = None
+    #: Taste as a *prior* over weights (approve/reject memory), bounded tightly —
+    #: a rebalance learned from the user, never a replacement for a measurement.
+    prior: dict = field(default_factory=dict)
 
     @property
     def target_duration(self) -> float:
@@ -234,6 +250,63 @@ def shot_length_match(picks: list[Pick], context: Context) -> float | None:
     return _clamp01(1.0 - error / len(pairs))
 
 
+def narrative_arc(picks: list[Pick], context: Context) -> float | None:
+    """Did the plan keep the story's hook and its payoff?
+
+    Read from `context.narrative`, which `meaning.narrative_arc` measured off the
+    transcript. Only the timestamps that were found are asked for — a transcript
+    with a hook but no payoff is scored on its hook alone, never punished for
+    what it never had.
+    """
+    nar = context.narrative
+    if not nar or not picks:
+        return None
+    asked, kept = 0.0, 0.0
+    for stamp in (nar.get("hook"), nar.get("payoff")):
+        if stamp is None:
+            continue
+        asked += 1.0
+        if any(p.start - 0.5 <= stamp <= p.end + 0.5 for p in picks):
+            kept += 1.0
+    if asked == 0:
+        return None
+    return kept / asked
+
+
+#: Average shot length (seconds) a platform's viewing conditions tolerate.
+_PLATFORM_SHOT = {"tiktok": 1.8, "instagram_reels": 2.0, "youtube_shorts": 2.0,
+                  "youtube_long": 4.0, "linkedin": 3.0, "website": 3.0}
+
+
+def platform_pacing(picks: list[Pick], context: Context) -> float | None:
+    """Cut rate against the platform's pace — a measured proxy, not a taste."""
+    if not context.platform or len(picks) < 2:
+        return None
+    norm = _PLATFORM_SHOT.get(context.platform)
+    if not norm:
+        return None
+    actual = sum(p.duration for p in picks) / len(picks)
+    return _clamp01(1.0 - min(1.0, abs(actual - norm) / norm))
+
+
+def visual_variety(picks: list[Pick], context: Context) -> float | None:
+    """Successive shots should differ in more than their timestamp.
+
+    Uses each pick's feature vector (motion/luma/semantics) when the sensors
+    provided one; without vectors the term is skipped — the overlap-based
+    `variety` term still guards against reusing footage.
+    """
+    feats = [p.features for p in picks if p.features]
+    if len(feats) < 2:
+        return None
+    distances = []
+    for index, one in enumerate(feats):
+        for other in feats[index + 1:]:
+            distances.append(
+                sum(abs(a - b) for a, b in zip(one, other)) / max(1, len(one)))
+    return _clamp01(sum(distances) / len(distances) * 2.0)
+
+
 TERMS = {
     "duration_fit": duration_fit,
     "speech_integrity": speech_integrity,
@@ -242,6 +315,9 @@ TERMS = {
     "highlight_strength": highlight_strength,
     "variety": variety,
     "shot_length_match": shot_length_match,
+    "narrative_arc": narrative_arc,
+    "platform_pacing": platform_pacing,
+    "visual_variety": visual_variety,
 }
 
 
@@ -271,11 +347,17 @@ def score_plan(picks: list[Pick], context: Context) -> Score:
 #: not a switch: 0 would let one answer delete a measurement, and 100 would let
 #: it delete all the others.
 MIN_MULTIPLIER, MAX_MULTIPLIER = 0.25, 4.0
+#: Taste memory may nudge a term, not steer it: tighter than intent on purpose.
+MIN_PRIOR, MAX_PRIOR = 0.75, 1.33
 
 
 def _multiplier(context: Context, term: str) -> float:
     try:
         value = float(context.weights.get(term, 1.0))
     except (TypeError, ValueError):
-        return 1.0
+        value = 1.0
+    try:
+        value *= max(MIN_PRIOR, min(MAX_PRIOR, float(context.prior.get(term, 1.0))))
+    except (TypeError, ValueError):
+        pass
     return max(MIN_MULTIPLIER, min(MAX_MULTIPLIER, value))

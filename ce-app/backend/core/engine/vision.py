@@ -218,3 +218,27 @@ def preview(path: str, *, count: int = 6) -> dict:
         "model": chosen_model(),
         "scores": score_moments(path, times) if available() else None,
     }
+
+
+def contact_sheet_times(start: float, end: float, n: int = 4) -> list[float]:
+    """`n` frames spread inside one window — a contact sheet, not a still.
+
+    One still can miss the action; four frames across the window cannot. The
+    advisor pattern (3-5 frames per candidate) with the project's clamp: the
+    resulting number still blends at most `MAX_WEIGHT` into the measured score.
+    """
+    if end <= start or n < 1:
+        return []
+    return [start + (end - start) * (i + 0.5) / n for i in range(n)]
+
+
+def score_contact_sheet(path: str, start: float, end: float,
+                        model: str | None = None) -> float | None:
+    """The most interesting frame inside one window, or None without a model."""
+    times = contact_sheet_times(start, end)
+    if not times:
+        return None
+    scores = score_moments(path, times, model=model)
+    if not scores:
+        return None
+    return max(scores.values())
