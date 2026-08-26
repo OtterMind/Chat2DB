@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.31` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.32` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,15 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+116. **0.9.32: the filmed clean-install gate, scripted.** The last 1.0 item a
+    sandbox cannot run is watching the app be born on a real Windows machine,
+    so `docs/CuttingEdge/CLEAN_INSTALL_CHECKLIST.md` now scripts that film, fa
+    + en: uninstall → install → first launch with zero errors → differential
+    update under 50 MB on camera → exactly one file picker → no blue selection
+    → Ctrl+K captions → Style Match brain Q&A → export → autosave restore. A
+    stumble at any step is the gate. Released as 0.9.32 on the owner's word so
+    installed clients also get a fresh nudge.
 
 115. **The 0.9.31 debug round: everything re-tested by running it, on the
     PRODUCTION bundle, then published.** (a) The "Import fires twice on entry"
