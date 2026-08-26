@@ -13,7 +13,6 @@ import ClipReview from './pages/ClipReview'
 import Settings from './pages/Settings'
 import Uploads from './pages/Uploads'
 import Doctor from './pages/Doctor'
-import Attribution from './pages/Attribution'
 import StyleMatch from './pages/StyleMatch'
 import { useI18n } from './i18n'
 
@@ -71,7 +70,6 @@ function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/uploads" element={<Uploads />} />
               <Route path="/doctor" element={<Doctor />} />
-              <Route path="/attribution" element={<Attribution />} />
               <Route path="/style" element={<StyleMatch />} />
             </Route>
           </Routes>

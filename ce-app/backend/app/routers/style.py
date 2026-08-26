@@ -10,7 +10,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.engine import cancellation, intent as intent_model, style
+from core.engine import cancellation, style
 from core.tasks import tasks
 
 router = APIRouter(prefix="/api/style", tags=["style"])
@@ -31,13 +31,6 @@ class ApplyRequest(BaseModel):
     captions: bool = Field(default=True, description="Transcribe and lay captions automatically")
     brain: bool = Field(default=True, description="Let a local model race the rule planner")
     model: str | None = Field(default=None, description="Ollama model to race with, when installed")
-    intent: dict | None = Field(
-        default=None,
-        description=(
-            "What the video is for: kind, goal, focus, energy, keep/avoid phrases, "
-            "target seconds. Every field is optional and neutral by default."
-        ),
-    )
 
 
 @router.post("/analyze")
@@ -80,72 +73,6 @@ async def analyse_start(payload: AnalyseRequest) -> dict:
     return tasks.start("style:analyze", work).as_dict()
 
 
-@router.get("/questions")
-def questions() -> dict:
-    """The intake questionnaire itself, so the screen renders from one source.
-
-    The answers are what the analysis cannot measure — what the video is, what it
-    is for, what should survive the cut. Options live here rather than in the
-    renderer because the *weights* behind them live in `core.engine.intent`, and
-    a question whose effect is defined somewhere else will drift out of step with
-    it the first time either changes.
-    """
-    return intent_model.options()
-
-
-class BrainRequest(BaseModel):
-    template: dict | None = Field(default=None, description="A measured reference template")
-    footage: str | None = Field(default=None, description="The user's footage path, to measure")
-
-
-@router.post("/brain")
-async def brain(payload: BrainRequest) -> dict:
-    """The brain interrogates itself, on screen.
-
-    Reference in: every intake question the reference can answer, answered with
-    the number behind it. Footage in: the same for the footage, plus a menu of
-    genuinely different ways to start the edit. Decoding footage is seconds of
-    FFmpeg, so it runs off the event loop.
-    """
-    from core.brain import intake  # noqa: PLC0415
-
-    if payload.template is None and not payload.footage:
-        raise HTTPException(status_code=422, detail="give the brain a template or footage")
-    template = payload.template or {}
-
-    def work() -> dict:
-        ref_qa = intake.answer_reference(template) if template else []
-        sig = intake.measure_footage(payload.footage) if payload.footage else None
-        foot_qa = intake.answer_footage(template, sig) if sig else []
-        options = intake.edit_options(template, sig) if template else []
-        return {"reference_qa": ref_qa, "footage_qa": foot_qa,
-                "footage_signals": sig, "options": options}
-
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, work)
-
-
-class ImportRequest(BaseModel):
-    template: dict = Field(description="A template document, e.g. from an exported .cetemplate")
-    name: str | None = Field(default=None, description="Optional rename on import")
-
-
-@router.post("/templates/import")
-def import_template(payload: ImportRequest) -> dict:
-    """Save an outside template after checking it. 422 lists what is wrong."""
-    try:
-        path = style.import_template(payload.template, payload.name)
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-    return {"saved": path.name, "name": payload.name or payload.template.get("name")}
-
-
-@router.get("/starters")
-def starters() -> dict:
-    """Hand-authored rhythms so a fresh gallery is not empty."""
-    return {"starters": style.starters()}
-
-
 @router.get("/templates")
 def templates() -> dict:
     return {"templates": style.list_templates()}
@@ -181,13 +108,7 @@ async def apply(payload: ApplyRequest) -> dict:
     # in which case the edit is still produced and the omission is reported.
     cues: list[dict] | None = None
     loop = asyncio.get_running_loop()
-    # The owner's answer outrules the reference's implication: a Persian audience
-    # watching an English reference still wants Persian captions, and "no
-    # captions" means a minute of Whisper is not spent.
-    _choice = intent_model.Intent.from_dict(payload.intent).caption_preference()
-    wants_captions = payload.captions and (
-        _choice["wanted"] if _choice else bool((document.get("captions") or {}).get("wanted"))
-    )
+    wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
     if wants_captions:
         try:
             from core.engine.transcribe import transcribe_to_cues
@@ -200,7 +121,7 @@ async def apply(payload: ApplyRequest) -> dict:
     try:
         return await loop.run_in_executor(
             None, style.build_timeline, document, payload.path, payload.name,
-            payload.music, cues, None, payload.brain, payload.model, payload.intent,
+            payload.music, cues, None, payload.brain, payload.model,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
@@ -226,11 +147,7 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 document = style.load_template(payload.template)
 
             cues: list[dict] | None = None
-            _choice = intent_model.Intent.from_dict(payload.intent).caption_preference()
-            wants_captions = payload.captions and (
-                _choice["wanted"] if _choice
-                else bool((document.get("captions") or {}).get("wanted"))
-            )
+            wants_captions = payload.captions and bool((document.get("captions") or {}).get("wanted"))
             if wants_captions:
                 reporter.stage("transcribe", 0.1, "Transcribing the speech")
                 try:
@@ -249,20 +166,8 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 ),
                 brain=payload.brain,
                 model=payload.model,
-                intent=payload.intent,
             )
         finally:
             cancellation.bind(None)
 
     return tasks.start("style:apply", work).as_dict()
-
-
-class AiTransitionsRequest(BaseModel):
-    timeline: dict
-    bpm: float = 120.0
-
-
-@router.post("/ai-transitions")
-def ai_transitions(payload: AiTransitionsRequest) -> dict:
-    """One music-sized transition per video junction; the editor applies them."""
-    return {"transitions": style.suggest_transitions(payload.timeline, payload.bpm)}

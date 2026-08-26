@@ -83,32 +83,3 @@ def test_a_missing_engine_fails_the_task_with_a_reason_not_a_500():
     assert state["status"] in {"done", "failed"}
     if state["status"] == "failed":
         assert state["error"], "a failure has to say what went wrong"
-
-
-def test_parse_name_strips_version_pins():
-    from core.engine import _pypi
-
-    assert _pypi.parse_name("rapidocr-onnxruntime==1.4.4") == "rapidocr-onnxruntime"
-    assert _pypi.parse_name("six") == "six"
-
-
-def test_pick_wheel_prefers_a_loadable_wheel():
-    import pytest
-
-    pytest.importorskip("urllib.request")
-    from core.engine import _pypi
-
-    wheel = _pypi.pick_wheel("six")  # tiny pure wheel, safe to resolve
-    assert wheel is not None
-    assert wheel["filename"].endswith(".whl")
-
-
-def test_install_falls_back_when_pip_is_missing(monkeypatch, tmp_path):
-    from core import runtime_packages
-
-    monkeypatch.setattr(runtime_packages, "_pip_available", lambda: False)
-    monkeypatch.setattr(runtime_packages, "ensure_on_path", lambda: tmp_path)
-    result = runtime_packages.install(["six"], on_progress=lambda *a, **k: None)
-
-    assert (tmp_path / "six.py").exists(), "the pip-free install did not unpack the wheel"
-    assert result["target"] == str(tmp_path)

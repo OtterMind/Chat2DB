@@ -60,7 +60,7 @@ class PipelineOrchestrator:
             if src.exists(): shutil.copy2(src, dst); return dst
         if not source_url: raise RuntimeError("No source URL provided")
         video = IngestEngine.download_youtube(source_url, ingest_dir)
-        if not video or not video.exists(): raise RuntimeError("Download failed")
+        if not video or not video.exists(): raise RuntimeError(f"Download failed")
         return video
 
     def _stage_prepare(self, video_path: Path):
@@ -90,7 +90,7 @@ class PipelineOrchestrator:
                 r = subprocess.run(["ffmpeg","-i",str(self.job_dir/"ingest"/"original.mp4")], capture_output=True, text=True, timeout=15)
                 m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", r.stderr)
                 if m: duration = float(m.group(1))*3600+float(m.group(2))*60+float(m.group(3))
-            except Exception: duration = 60.0
+            except: duration = 60.0
         if duration == 0.0: duration = 60.0
         seg_len = max(5.0, duration / max(count, 1))
         results = [{"start":round(i*seg_len,2),"end":round(min((i+1)*seg_len,duration),2),"score":5,"reason":"Auto-selected"} for i in range(count)]

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json
+import os, json
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,25 +16,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
-    #: Which model answers the assistant: auto | off | ollama | openai | gemini
-    #: | anthropic. Stored here rather than in the panel so one choice covers the
-    #: chat, Settings and any future door to the same brain.
-    assistant_provider: str = "auto"
-    #: Which speech map the edit is built on: `energy` (FFmpeg silencedetect, the
-    #: default and what every release so far used) or `silero` (the on-demand
-    #: model). Opt-in until it has been measured on real speech — see core/engine/vad.py.
-    speech_engine: str = "energy"
-    #: Let a vision model (in the user's own Ollama) add one vote to the highlight
-    #: scorer. Off by default: a boost that is absent is not a regression, and the
-    #: judgement on whether it helps belongs to the user's own footage (§4.57).
-    vision_enabled: bool = False
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""
-    #: Freesound needs a key (free account). Without it the sound pack reports
-    #: "not configured" rather than guessing — a pack that cannot be searched is
-    #: not a pack.
-    freesound_api_key: str = ""
     hf_token: str = ""
     youtube_client_id: str = ""
     youtube_client_secret: str = ""
@@ -60,4 +44,4 @@ if CONFIG_PATH.exists():
         with open(CONFIG_PATH) as f: overrides = json.load(f)
         for k, v in overrides.items():
             if hasattr(settings, k): setattr(settings, k, v)
-    except Exception: pass
+    except: pass

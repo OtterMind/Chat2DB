@@ -55,8 +55,7 @@ MAX_SPEED = 0.35
 @dataclass
 class Detection:
     t: float
-    x: float | None  # subject centre, 0..1 across the frame; None = nothing found
-    kind: str = "face"  # how the subject was found: face, body, or none
+    x: float | None  # face centre, 0..1 across the frame; None = nothing found
     y: float | None = None
     size: float = 0.0
 
@@ -71,8 +70,6 @@ class ReframePlan:
     samples: int = 0
     fallback: bool = False
     reason: str = ""
-    #: Which signal the camera followed: a face, the moving region, or nothing.
-    tracker: str = "none"
 
     @property
     def coverage(self) -> float:
@@ -87,7 +84,6 @@ class ReframePlan:
             "coverage": self.coverage,
             "fallback": self.fallback,
             "reason": self.reason,
-            "tracker": self.tracker,
         }
 
 
@@ -111,10 +107,6 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
     if classifier is None:
         return []
 
-    from core.engine import pose as pose_engine  # noqa: PLC0415
-
-    with_pose = pose_engine.available()
-
     info = probe_media(path)
     source_w = int(info.get("width") or 0)
     source_h = int(info.get("height") or 0)
@@ -133,7 +125,6 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
     frame_bytes = width * height
     total = len(process.stdout) // frame_bytes
     detections: list[Detection] = []
-    prev: np.ndarray | None = None
     for index in range(total):
         frame = np.frombuffer(
             process.stdout[index * frame_bytes : (index + 1) * frame_bytes], dtype=np.uint8
@@ -142,55 +133,14 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
                                             minSize=(max(24, width // 20), max(24, width // 20)))
         moment = index / fps
         if len(faces) == 0:
-            # No face — but a sport rarely shows one. A person still has a body:
-            # MediaPipe's torso landmarks (when fetched) name the subject; only
-            # when neither a face nor a person is found do we follow the moving
-            # region, so a rally or a rep still has a subject.
-            person = pose_engine.track_frame(frame) if with_pose else None
-            if person is not None:
-                detections.append(
-                    Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
-                )
-                prev = frame
-                continue
-            centre = _motion_centre(prev, frame, width)
-            if centre is not None:
-                detections.append(
-                    Detection(t=moment, x=centre[0], y=centre[1], size=0.3, kind="motion")
-                )
-            else:
-                detections.append(Detection(t=moment, x=None, kind="none"))
-            prev = frame
+            detections.append(Detection(t=moment, x=None))
             continue
-        prev = frame
         # The biggest face is the subject; a face in the background is not the shot.
         fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
         detections.append(
             Detection(t=moment, x=(fx + fw / 2) / width, y=(fy + fh / 2) / height, size=fw / width)
         )
     return detections
-
-
-
-
-#: The Haar cascade needs a face ≥ ~24 px looking roughly at the camera. A
-#: volleyball player mid-rally, a back turned on a pull-up bar, a jumper mid-rope
-#: have no detectable face — but they are exactly the region of the frame that
-#: *moves*. So when the face cascade gives up, follow the centroid of motion
-#: (the frame-to-frame difference above a floor). It is OpenCV-only, needs no
-#: download, and it is the fallback that makes reframe useful for the sports the
-#: owner films. Camera shake moves the whole frame (a diffuse difference), while
-#: an athlete moves a compact region — the centroid still tracks the bulk of it.
-def _motion_centre(prev: np.ndarray, frame: np.ndarray, width: int):
-    if prev is None:
-        return None
-    diff = np.abs(frame.astype(np.int16) - prev.astype(np.int16))
-    mask = (diff > 18).astype(np.float32)
-    mass = float(mask.sum())
-    if mass < (width * prev.shape[0]) * 0.004:  # nothing really moved
-        return None
-    ys, xs = np.nonzero(mask)
-    return (float(xs.mean()) / width, float(ys.mean()) / prev.shape[0], mass)
 
 
 def smooth(detections: list[Detection], fps: float = SAMPLE_FPS) -> list[tuple[float, float]]:
@@ -320,18 +270,13 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
 
     detections = detect_faces(path, fps=fps)
     found = [d for d in detections if d.x is not None]
-    kinds = {d.kind for d in found}
-    tracker = ("face" if "face" in kinds
-               else "pose" if "pose" in kinds
-               else "motion" if "motion" in kinds else "none")
     if not detections:
         return ReframePlan(scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], fallback=True,
                            reason="no frames could be read")
     if not found:
         return ReframePlan(
             scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], samples=len(detections),
-            fallback=True, tracker="none",
-            reason="no face and no movement to follow — the crop stays centred",
+            fallback=True, reason="no face was found — the crop stays centred",
         )
 
     keyframes = [
@@ -339,13 +284,10 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
         for moment, fx in smooth(detections, fps=fps)
     ]
     keyframes = _thin(keyframes)
-    noun = ("face" if tracker == "face"
-            else "the person" if tracker == "pose"
-            else "the moving subject")
     return ReframePlan(
         scale=scale, keyframes=keyframes, faces_found=len(found), samples=len(detections),
-        fallback=False, tracker=tracker,
-        reason=f"followed {noun} in {len(found)} of {len(detections)} sampled frames",
+        fallback=False,
+        reason=f"followed a face in {len(found)} of {len(detections)} sampled frames",
     )
 
 

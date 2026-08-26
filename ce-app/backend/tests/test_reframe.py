@@ -144,18 +144,8 @@ def test_the_camera_move_is_smooth(moving_face):
 
 @requires_ffmpeg
 @requires_cv2
-def test_no_face_and_no_motion_means_an_honest_centre_crop(tmp_path):
-    """A *still* frame with no face has nothing to follow: centred, not faked.
-
-    (A moving faceless frame is followed by the motion fallback — see the moving
-    subject test. testsrc2, the old fixture here, moves, so it no longer belongs
-    in this test.)
-    """
-    target = tmp_path / "still.mp4"
-    _run(["-f", "lavfi", "-i", "color=c=black:s=320x240:rate=25:duration=2",
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(target)])
-
-    plan = reframe.plan(str(target), 1080, 1920)
+def test_no_face_means_an_honest_centre_crop(faceless):
+    plan = reframe.plan(str(faceless), 1080, 1920)
 
     assert plan.fallback is True
     assert plan.keyframes == [{"t": 0.0, "x": 0.0}]
@@ -179,52 +169,3 @@ def test_a_deadband_ignores_a_wobble():
     spread = max(x for _, x in path) - min(x for _, x in path)
 
     assert spread < 0.01, f"a 1 % wobble moved the camera by {spread:.3f}"
-
-
-@requires_ffmpeg
-def test_a_moving_subject_is_followed_when_there_is_no_face(tmp_path):
-    """A rally has no face to the Haar cascade; the moving region is the subject.
-
-    The fixture is a white block sweeping a black frame — nothing a face detector
-    will ever claim, but exactly the kind of moving bulk a sport puts in frame.
-    """
-    import subprocess
-
-    from core.engine import compose, reframe
-
-    mover = tmp_path / "mover.mp4"
-    subprocess.run([
-        compose.ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "color=c=black:s=320x240:rate=25:duration=4",
-        "-f", "lavfi", "-i", "color=c=white:s=40x80:rate=25:duration=4",
-        "-filter_complex", "[0][1]overlay=eval=frame:x='20+220*t/4':y=80",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(mover),
-    ], check=True)
-
-    plan = reframe.plan(str(mover), 1080, 1920)
-
-    assert plan.tracker == "motion", f"expected the motion fallback, got {plan.tracker}"
-    assert not plan.fallback
-    xs = [k["x"] for k in plan.keyframes]
-    assert max(xs) - min(xs) > 0.3, "the camera did not actually follow the movement"
-
-
-@requires_ffmpeg
-def test_a_still_frame_with_no_face_stays_centred(tmp_path):
-    """No face and no movement is an answer of 'centred', not an error."""
-    import subprocess
-
-    from core.engine import compose, reframe
-
-    still = tmp_path / "still.mp4"
-    subprocess.run([
-        compose.ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "color=c=black:s=320x240:rate=25:duration=2",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(still),
-    ], check=True)
-
-    plan = reframe.plan(str(still), 1080, 1920)
-
-    assert plan.tracker == "none"
-    assert plan.fallback
-    assert [k["x"] for k in plan.keyframes] == [0.0]

@@ -1,4 +1,4 @@
-import subprocess, json
+import subprocess, json, shutil
 from pathlib import Path
 
 class IngestEngine:

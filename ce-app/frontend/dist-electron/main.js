@@ -2233,19 +2233,7 @@ function initUpdater(mainWindow2) {
       send({ type: "error", error: e.message });
     }
   });
-  import_electron.ipcMain.on("update:install", () => {
-    try {
-      ;
-      globalThis.__ceStopBackend?.();
-    } catch (error) {
-      console.warn("[CE] could not stop the backend before installing:", error);
-    }
-    setTimeout(() => import_electron_updater.autoUpdater.quitAndInstall(true, true), 1200);
-  });
-  import_electron_updater.autoUpdater.on("before-quit-for-update", () => {
-    ;
-    globalThis.__ceStopBackend?.();
-  });
+  import_electron.ipcMain.on("update:install", () => import_electron_updater.autoUpdater.quitAndInstall(true, true));
   if (import_electron.app.isPackaged) {
     setTimeout(() => {
       import_electron_updater.autoUpdater.checkForUpdates().catch(() => void 0);
@@ -2262,17 +2250,10 @@ var init_updater = __esm({
 });
 
 // electron/main.ts
-var main_exports = {};
-__export(main_exports, {
-  stopBackend: () => stopBackend
-});
-module.exports = __toCommonJS(main_exports);
 var import_electron2 = require("electron");
 var import_path = __toESM(require("path"));
 var import_child_process = require("child_process");
 var import_fs = require("fs");
-var import_net = require("net");
-var import_crypto = require("crypto");
 var import_main = __toESM(require_main2());
 import_main.default.initialize();
 import_main.default.transports.file.level = "info";
@@ -2280,58 +2261,11 @@ import_main.default.transports.file.maxSize = 5 * 1024 * 1024;
 import_main.default.errorHandler.startCatching({ showDialog: false });
 Object.assign(console, import_main.default.functions);
 var backendProcess = null;
-function stopBackend() {
-  const child = backendProcess;
-  backendProcess = null;
-  if (!child?.pid) return;
-  try {
-    if (process.platform === "win32") {
-      (0, import_child_process.execFileSync)("taskkill", ["/pid", String(child.pid), "/T", "/F"], { timeout: 1e4, windowsHide: true });
-    } else {
-      process.kill(-child.pid, "SIGKILL");
-    }
-  } catch {
-    try {
-      child.kill();
-    } catch {
-    }
-  }
-}
 var backendFailure = null;
 function backendLogPath() {
   return import_path.default.join(import_electron2.app.getPath("userData"), "logs", "backend.log");
 }
 var mainWindow = null;
-var backendPort = 8742;
-function freePort(start, span = 20) {
-  return new Promise((resolve) => {
-    const tryPort = (p) => {
-      if (p >= start + span) return resolve(start);
-      const srv = (0, import_net.createServer)();
-      srv.once("error", () => tryPort(p + 1));
-      srv.listen(p, "127.0.0.1", () => srv.close(() => resolve(p)));
-    };
-    tryPort(start);
-  });
-}
-function writeCrashReport(where, detail) {
-  const id = (0, import_crypto.randomUUID)().slice(0, 8);
-  try {
-    const dir = import_path.default.dirname(import_main.default.transports.file.getFile().path);
-    const file = import_path.default.join(dir, `crash-${id}.json`);
-    writeFileSync(file, JSON.stringify({
-      id,
-      at: (/* @__PURE__ */ new Date()).toISOString(),
-      where,
-      detail,
-      version: import_electron2.app.getVersion(),
-      platform: process.platform
-    }, null, 2));
-    import_main.default.error(`[CE] crash report ${id} written to ${file}`);
-  } catch {
-  }
-  return id;
-}
 function startBackend() {
   if (process.env.CE_MANUAL_BACKEND === "1") return;
   if (backendProcess) return;
@@ -2361,19 +2295,7 @@ function startBackend() {
   }
   import_main.default.info("[CE] Starting backend:", cmd, args.join(" "));
   try {
-    backendProcess = (0, import_child_process.spawn)(cmd, args, {
-      cwd,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      // The backend sets Windows' per-application GPU preference, and the
-      // preference is per *executable* — so it has to know which .exe the user
-      // actually launched, not just its own python.exe.
-      // CE_VERSION is the release number the installer was built from. The
-      // backend cannot read the frontend's package.json in a packaged install —
-      // it is inside an asar — so without this it would fall back to a constant
-      // and `/api/health` would report the previous build forever.
-      env: { ...process.env, CE_APP_EXE: import_electron2.app.getPath("exe"), CE_VERSION: import_electron2.app.getVersion(), CE_PORT: String(backendPort) }
-    });
+    backendProcess = (0, import_child_process.spawn)(cmd, args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: process.env });
   } catch (error) {
     backendFailure = `spawn failed: ${String(error)}`;
     import_main.default.error("[CE] Backend spawn threw:", error);
@@ -2455,23 +2377,18 @@ function registerIpc() {
     };
   });
   import_electron2.ipcMain.handle("backend:restart", () => {
-    stopBackend();
+    if (backendProcess) {
+      try {
+        backendProcess.kill();
+      } catch {
+      }
+      backendProcess = null;
+    }
     backendFailure = null;
     startBackend();
     return { running: backendProcess !== null, failure: backendFailure };
   });
   import_electron2.ipcMain.on("log:open", () => import_electron2.shell.showItemInFolder(import_main.default.transports.file.getFile().path));
-  import_electron2.ipcMain.on("shell:open", (_e, url) => {
-    if (typeof url !== "string") return;
-    try {
-      const parsed = new URL(url);
-      const allowed = ["nvidia.com", "www.nvidia.com", "us.download.nvidia.com"];
-      if (parsed.protocol === "https:" && allowed.some((h) => parsed.hostname.endsWith(h))) {
-        void import_electron2.shell.openExternal(url);
-      }
-    } catch {
-    }
-  });
 }
 function setFullscreen(value) {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
@@ -2493,7 +2410,6 @@ function showFatal(win, message) {
   win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
 }
 function createWindow() {
-  import_electron2.Menu.setApplicationMenu(null);
   mainWindow = new import_electron2.BrowserWindow({
     width: 1440,
     height: 900,
@@ -2501,11 +2417,7 @@ function createWindow() {
     minHeight: 768,
     title: "Cutting Edge",
     backgroundColor: "#0F172A",
-    // The default menu bar (File/Edit/View/Window/Help) is a white strip that
-    // survived even in fullscreen. The app has no use for it: every action lives
-    // in the interface, so the whole bar goes.
-    autoHideMenuBar: true,
-    webPreferences: { preload: import_path.default.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, additionalArguments: [`--ce-backend-port=${backendPort}`] }
+    webPreferences: { preload: import_path.default.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false }
   });
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else {
@@ -2540,24 +2452,14 @@ ${validatedURL}`);
   });
   mainWindow.webContents.on("render-process-gone", (_e, details) => {
     import_main.default.error("[CE] Renderer process gone:", details.reason);
-    writeCrashReport("renderer", String(details.reason));
   });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     import_electron2.shell.openExternal(url);
     return { action: "deny" };
   });
 }
-process.on("uncaughtException", (error) => {
-  import_main.default.error("[CE] uncaughtException:", error);
-  writeCrashReport("main", String(error?.stack ?? error));
-});
-process.on("unhandledRejection", (reason) => {
-  import_main.default.error("[CE] unhandledRejection:", reason);
-  writeCrashReport("main", String(reason));
-});
-import_electron2.app.whenReady().then(async () => {
+import_electron2.app.whenReady().then(() => {
   registerIpc();
-  backendPort = import_electron2.app.isPackaged ? await freePort(8742) : 8742;
   import_main.default.info(`[CE] Cutting Edge ${import_electron2.app.getVersion()} starting \u2014 logs at ${import_main.default.transports.file.getFile().path}`);
   startBackend();
   createWindow();
@@ -2573,14 +2475,10 @@ import_electron2.app.whenReady().then(async () => {
 });
 import_electron2.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    stopBackend();
+    if (backendProcess) {
+      backendProcess.kill();
+      backendProcess = null;
+    }
     import_electron2.app.quit();
   }
-});
-import_electron2.app.on("before-quit", () => stopBackend());
-import_electron2.app.on("will-quit", () => stopBackend());
-globalThis.__ceStopBackend = stopBackend;
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  stopBackend
 });

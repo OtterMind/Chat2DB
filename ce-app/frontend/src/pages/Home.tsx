@@ -29,33 +29,6 @@ function Tile({ tile, onOpen }: { tile: FeatureTile; onOpen: (t: FeatureTile) =>
   )
 }
 
-
-/**
- * First-run tour: the golden path as an inline, dismissible banner.
- *
- * Shown once (localStorage), never a blocking overlay — a tour that traps the
- * editor on first launch is worse than none. Four steps: drop footage, auto-clip
- * to a 30s vertical, captions, export.
- */
-function TourBanner({ onDone }: { onDone: () => void }) {
-  const { t } = useI18n()
-  const steps = [
-    t('1 · Drop a video or a YouTube link', '۱ · یک ویدیو یا لینک یوتیوب بینداز'),
-    t('2 · Auto-clip to a 30s vertical', '۲ · برش خودکار به یک عمودی ۳۰ ثانیه‌ای'),
-    t('3 · Captions on', '۳ · زیرنویس روشن'),
-    t('4 · Export', '۴ · خروجی'),
-  ]
-  return (
-    <div className="ce-tour" role="note">
-      <strong>{t('New here? The whole loop:', 'اولین بار است؟ کل چرخه:')}</strong>
-      <span className="ce-tour__steps">{steps.join('  ·  ')}</span>
-      <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={onDone}>
-        {t('Got it', 'متوجه شدم')}
-      </button>
-    </div>
-  )
-}
-
 export default function Home() {
   const navigate = useNavigate()
   const { t, lang } = useI18n()
@@ -87,7 +60,6 @@ export default function Home() {
       .filter((g) => g.items.length > 0)
   }, [query])
 
-  const [tourDone, setTourDone] = useState(() => localStorage.getItem('ce.tour.done') === '1')
   const openTile = (tile: FeatureTile) => navigate(tile.route)
   const jobs = jobsData?.jobs ?? []
 
@@ -155,15 +127,6 @@ export default function Home() {
 
       {/* Updating must be reachable from the first screen: it used to hide in
           Settings, which the removed tab bar was the only way into. */}
-      {!tourDone && (
-        <TourBanner
-          onDone={() => {
-            localStorage.setItem('ce.tour.done', '1')
-            setTourDone(true)
-          }}
-        />
-      )}
-
       <UpdateCard />
 
       {/* The two things a video app is opened for, side by side. */}

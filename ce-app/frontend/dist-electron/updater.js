@@ -83,19 +83,7 @@ function initUpdater(mainWindow) {
       send({ type: "error", error: e.message });
     }
   });
-  import_electron.ipcMain.on("update:install", () => {
-    try {
-      ;
-      globalThis.__ceStopBackend?.();
-    } catch (error) {
-      console.warn("[CE] could not stop the backend before installing:", error);
-    }
-    setTimeout(() => import_electron_updater.autoUpdater.quitAndInstall(true, true), 1200);
-  });
-  import_electron_updater.autoUpdater.on("before-quit-for-update", () => {
-    ;
-    globalThis.__ceStopBackend?.();
-  });
+  import_electron.ipcMain.on("update:install", () => import_electron_updater.autoUpdater.quitAndInstall(true, true));
   if (import_electron.app.isPackaged) {
     setTimeout(() => {
       import_electron_updater.autoUpdater.checkForUpdates().catch(() => void 0);

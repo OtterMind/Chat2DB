@@ -122,7 +122,5 @@ ready. Next:
   (cd $ROOT/frontend && npm run dev -- --host 0.0.0.0) &
   (cd $ROOT/frontend && npm run test:ui && npm run test:playback)
 
-Always start uvicorn with --reload: a stale process has *three* times looked like a
-broken feature — most recently a word-boundary fix that was committed, tested and
-still 'failing' in the browser, because the server had been started before the fix.
+Always start uvicorn with --reload: a stale process has twice looked like a broken feature.
 TXT

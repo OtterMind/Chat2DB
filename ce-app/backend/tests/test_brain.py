@@ -45,10 +45,7 @@ def test_a_perfect_plan_scores_one():
     score = score_plan(picks, context)
 
     assert score.total > 0.99, score.as_dict()
-    # The 0.9.30 senses (story shape, platform pace, feature vectors) were not
-    # handed to this context, so they are skipped — dropped, not faked. Every
-    # sense that WAS measured scores one.
-    assert set(score.skipped) == {"narrative_arc", "platform_pacing", "visual_variety"}
+    assert score.skipped == [], "nothing here was unmeasurable"
 
 
 def test_a_plan_of_the_wrong_length_loses_the_duration_term():
@@ -127,11 +124,6 @@ def _highlights() -> list[Pick]:
 
 def test_the_rule_plan_is_always_in_the_race(monkeypatch):
     monkeypatch.setattr(planners, "ollama_plan", lambda *a, **k: None)
-    # The 0.9.30 planners join the race when their senses are alive (covered by
-    # test_brain_upgrade); here the question is the older invariant — with no
-    # model and nothing else to think with, the rule plan stands alone.
-    for name in ("narrative_plan", "retention_plan", "variety_plan"):
-        monkeypatch.setattr(planners, name, lambda *a, **k: None)
     result = race.race(_highlights(), _context(words=[]), use_llm=True)
 
     assert result.winner == "rules"
@@ -148,8 +140,6 @@ def test_a_bad_model_answer_can_never_win(monkeypatch):
         seconds=1.0,
     )
     monkeypatch.setattr(planners, "ollama_plan", lambda *a, **k: nonsense)
-    for name in ("narrative_plan", "retention_plan", "variety_plan"):
-        monkeypatch.setattr(planners, name, lambda *a, **k: None)
 
     offline = race.race(_highlights(), context, use_llm=False)
     with_model = race.race(_highlights(), context, use_llm=True)

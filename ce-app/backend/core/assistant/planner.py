@@ -125,21 +125,7 @@ def rule_based_plan(prompt: str, timeline: dict) -> Plan:
     notes: list[str] = []
 
     def wants(*words: str) -> bool:
-        """Does the request mention any of these?
-
-        A short token has to match as a **whole word**. `"خش"` is the hiss people
-        ask to remove — and it also sits inside **«بخش»**, so "which *part* is the
-        strongest?" came back as a noise-reduction plan. The same trap is waiting
-        in `"نما"` (inside «نمایش»). A three-letter fragment is not a word in
-        Persian or in English, and a substring test cannot tell the difference.
-        """
-        for word in words:
-            if len(word) <= 3 and word.isalpha():
-                if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text):
-                    return True
-            elif word in text:
-                return True
-        return False
+        return any(w in text for w in words)
 
     # --- silence ---------------------------------------------------------
     if wants("silence", "silent", "سکوت", "مکث", "pause"):

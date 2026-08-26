@@ -30,10 +30,6 @@ export const systemApi = {
   doctor: async () => (await api.get('/system/doctor')).data,
   info: async () => (await api.get('/system/info')).data,
   settings: async () => (await api.get('/system/settings')).data,
-  attribution: async (): Promise<{
-    backend: { name: string; version: string; licence: string; role: string }[]
-    bundled: { name: string; version: string; licence: string; role: string; why?: string }[]
-  }> => (await api.get('/system/attribution')).data,
   updateSettings: async (settings: Record<string, unknown>) =>
     (await api.put('/system/settings', settings)).data,
 }

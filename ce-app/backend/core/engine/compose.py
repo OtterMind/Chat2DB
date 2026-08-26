@@ -769,8 +769,7 @@ def build_command(
         from core.engine import audio as audio_engine
 
         activity = audio_engine.voice_envelope(
-            [(audio_engine.voice_source(c.src), c.start, c.offset, c.duration)
-             for c in voice_clips if c.src],  # type: ignore[misc]
+            [(c.src, c.start, c.offset, c.duration) for c in voice_clips if c.src],  # type: ignore[misc]
             total,
         )
         points = audio_engine.ducking_points(activity)

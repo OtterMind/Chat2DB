@@ -74,9 +74,6 @@ class Capabilities:
     #: Every hardware encoder that was tried, and why it did or did not work.
     encoders: list[dict] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    #: The NVENC driver-vs-FFmpeg API mismatch, when that is the specific cause.
-    #: The card uses it to show the one-click driver download.
-    nvenc_api: dict | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -91,7 +88,6 @@ class Capabilities:
             "decoder": self.decoder,
             "encoders": self.encoders,
             "notes": self.notes,
-            "nvencApi": self.nvenc_api,
             "used": [
                 *([f"export encoding ({self.encoder})"] if self.nvenc else []),
                 *(["editing proxies"] if self.nvenc else []),
@@ -158,7 +154,7 @@ def probe_encoders() -> tuple[dict, ...]:
                 # buffers several frames internally and only flushes at end of
                 # stream, so a three-frame probe finishes before the encoder has
                 # produced anything. The probe was wrong, not the card.
-                "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=1.5",
+                "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:duration=1.5",
                 "-an", "-pix_fmt", "yuv420p", "-c:v", name, target,
             ])
             wrote = os.path.exists(target) and os.path.getsize(target) > 1024
@@ -324,38 +320,6 @@ def whisper_status() -> tuple[str, str]:
         return "cpu", text[:160]
 
 
-def _cuda_compute_present() -> bool:
-    """Is a CUDA device visible to CTranslate2 — without loading a model.
-
-    Cheap on purpose: `get_cuda_device_count` asks the runtime, it does not load
-    weights, so it is safe to run inside the quick capabilities call. It lets the
-    card say, on the user's own machine, "your CUDA already works", which is the
-    sentence that disproves "I need the CUDA libraries" for an NVENC problem.
-    """
-    try:
-        import ctranslate2  # type: ignore
-
-        return int(ctranslate2.get_cuda_device_count()) > 0
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _nvenc_api_mismatch(reason: str) -> tuple[str, str] | None:
-    """`("13.1", "13.0")` when the failure is the driver-vs-FFmpeg ABI mismatch.
-
-    `h264_nvenc` is compiled against a snapshot of `nv-codec-headers`; the driver
-    must expose at least that NVENC API version. "Required: 13.1 Found: 13.0"
-    means the bundled FFmpeg wants 13.1 and the installed driver offers 13.0 — a
-    driver that is simply a little old. Recognising it matters because its fix is
-    a driver update, and because the one thing that will *not* fix it is the
-    Windows graphics preference.
-    """
-    import re  # noqa: PLC0415
-
-    match = re.search(r"Required:\s*([0-9.]+)\s*Found:\s*([0-9.]+)", reason or "")
-    return (match.group(1), match.group(2)) if match else None
-
-
 def capabilities(deep: bool = False) -> Capabilities:
     """Everything the app knows about this machine's card.
 
@@ -387,48 +351,15 @@ def capabilities(deep: bool = False) -> Capabilities:
         failures = [e for e in caps.encoders if e["reason"]]
         if failures:
             caps.notes.append(f"Hardware encoding is off: {failures[0]['reason']}")
-        mismatch = _nvenc_api_mismatch(failures[0]["reason"]) if failures else None
-        if mismatch:
-            caps.nvenc_api = {"required": mismatch[0], "found": mismatch[1]}
         if card:
-            if mismatch:
-                required, found = mismatch
-                caps.notes.append(
-                    f"That is a driver story, not a settings story: this FFmpeg was built "
-                    f"against nv-codec-headers that need NVENC API {required}, and the installed "
-                    f"driver exposes {found}. Updating the NVIDIA driver to the latest Studio "
-                    f"release (clean install) raises it to {required} and turns NVENC on."
-                )
-                caps.notes.append(
-                    "And note: the Windows graphics preference you already set — High "
-                    "performance — chooses *which* GPU runs the app. It cannot raise the NVENC "
-                    "API version, which is why it did not change this. It was still the right "
-                    "thing to set; the driver is the other half."
-                )
-                if _cuda_compute_present():
-                    caps.notes.append(
-                        "You do not need the CUDA libraries for this: a CUDA device is already "
-                        "visible and speech recognition uses it. NVENC is a separate block whose "
-                        "API version comes from the driver, so installing more CUDA would not "
-                        "raise it — only the driver update would."
-                    )
-                else:
-                    caps.notes.append(
-                        "You do not need the CUDA libraries for this. They are what speech "
-                        "recognition uses; NVENC is a separate block on the chip whose API "
-                        "version comes from the driver, so installing cuBLAS/cuDNN would not "
-                        "raise it. The CUDA download is only for machines whose speech "
-                        "recognition cannot see the GPU."
-                    )
-            else:
-                # The card is present and the encoder still will not run. On Windows
-                # this is nearly always one of three things, and all three are the
-                # user's to fix — so name them instead of shrugging.
-                caps.notes.append(
-                    "The card is there. On a laptop this is usually Windows running this app on the "
-                    "integrated graphics: Settings → System → Display → Graphics → Cutting Edge → "
-                    "High performance, then restart the app."
-                )
+            # The card is present and the encoder still will not run. On Windows
+            # this is nearly always one of three things, and all three are the
+            # user's to fix — so name them instead of shrugging.
+            caps.notes.append(
+                "The card is there. On a laptop this is usually Windows running this app on the "
+                "integrated graphics: Settings → System → Display → Graphics → Cutting Edge → "
+                "High performance, then restart the app."
+            )
             caps.notes.append(
                 "If that does not do it: install the NVIDIA Studio driver over the current one "
                 "with the clean-install option, and close anything else using the encoder "

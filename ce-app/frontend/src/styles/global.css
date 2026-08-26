@@ -269,10 +269,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* -------------------------------------------------------------- tiles ---- */
-/* Left-aligned, packed: the owner found the old space-between spread ugly, so
-   columns are fixed-size and the grid hugs the start edge instead of
-   stretching icons across the whole window. */
-.ce-grid { display: grid; gap: 14px 10px; grid-template-columns: repeat(auto-fill, minmax(96px, 116px)); justify-content: start; direction: ltr; }
+.ce-grid { display: grid; gap: 16px 10px; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
 .ce-tile {
   border: none; background: transparent; display: flex; flex-direction: column;
   align-items: center; gap: 8px; padding: 4px 2px;
@@ -483,7 +480,7 @@ button { font-family: inherit; cursor: pointer; }
 .ant-input, .ant-input-number, .ant-select-selector { border-radius: 10px !important; }
 
 @media (max-width: 520px) {
-  .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, minmax(72px, 92px)); }
+  .ce-grid { gap: 12px 4px; grid-template-columns: repeat(4, 1fr); }
   .ce-tile__icon { width: 54px; height: 54px; border-radius: 16px; }
   .ce-tile__label { font-size: 11.5px; }
   /* local AI engines in Settings */
@@ -1067,178 +1064,3 @@ button { font-family: inherit; cursor: pointer; }
 .ce-models__why { color: #94a3b8; }
 .ce-models__row[data-fits='false'] .ce-models__why { color: #fbbf24; }
 .ce-encoders li em { display: block; color: #64748b; font-style: normal; font-size: 11px; }
-
-/* ------------------------------------------------- the assistant, as a chat
-   The panel is glass over the editor: it floats at the end edge, opens with the
-   corner it came from, and every message arrives rather than appearing. The
-   animation is for the reading — the provider name and the milliseconds under
-   each reply are the part that has to be true. */
-
-.ai-fab { animation: ai-pulse 2.6s ease-out infinite; }
-@keyframes ai-pulse {
-  0%   { box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95), 0 0 0 0 rgba(99, 102, 241, .38); }
-  70%  { box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95), 0 0 0 16px rgba(99, 102, 241, 0); }
-  100% { box-shadow: 0 12px 26px -12px rgba(99, 102, 241, .95), 0 0 0 0 rgba(99, 102, 241, 0); }
-}
-
-.ai-chat {
-  position: fixed; inset-inline-end: 16px; bottom: 80px; z-index: 40;
-  width: min(440px, calc(100vw - 32px)); height: min(620px, calc(100vh - 110px));
-  display: flex; flex-direction: column;
-  background: linear-gradient(165deg, rgba(20, 32, 56, .98), rgba(13, 21, 38, .98));
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(99, 102, 241, .35); border-radius: 18px;
-  box-shadow: 0 30px 70px -30px #000, 0 0 0 1px rgba(255, 255, 255, .04) inset;
-  overflow: hidden;
-  animation: ai-in .26s cubic-bezier(.2, .9, .3, 1.2) both;
-  transform-origin: var(--ai-origin, bottom right);
-}
-[dir='rtl'] .ai-chat { --ai-origin: bottom left; }
-.ai-chat--full {
-  inset: 22px; inset-inline-end: 22px; width: auto; height: auto;
-  bottom: 22px; border-radius: 22px;
-}
-@keyframes ai-in {
-  from { opacity: 0; transform: translateY(14px) scale(.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.ai-chat__head {
-  display: flex; align-items: center; gap: 8px; padding: 11px 12px;
-  border-bottom: 1px solid var(--border); color: #c7d2fe; font-size: 13px;
-  background: linear-gradient(90deg, rgba(99, 102, 241, .18), transparent);
-}
-.ai-chat__head strong { flex: 1; font-weight: 600; color: var(--text); }
-.ai-chat__engine {
-  display: flex; align-items: center; gap: 4px; color: #94a3b8;
-  border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px;
-}
-.ai-chat__engine select {
-  background: transparent; border: none; color: #cbd5e1; font-size: 11.5px; outline: none;
-}
-.ai-chat__icon {
-  background: transparent; border: none; color: #94a3b8; cursor: pointer;
-  display: grid; place-items: center; padding: 4px; border-radius: 8px;
-}
-.ai-chat__icon:hover { color: #fff; background: rgba(148, 163, 184, .14); }
-
-.ai-chat__body {
-  flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px;
-}
-.ai-chat__empty { font-size: 12.5px; line-height: 1.9; color: #94a3b8; margin: 4px 2px; }
-
-.ai-msg {
-  max-width: 84%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.85;
-  white-space: pre-wrap; word-break: break-word;
-  animation: ai-msg-in .3s cubic-bezier(.2, .8, .3, 1) both;
-}
-@keyframes ai-msg-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.ai-msg--user {
-  align-self: flex-end; color: #fff; border-end-end-radius: 5px;
-  background: linear-gradient(140deg, #6366f1, #7c3aed);
-  box-shadow: 0 8px 20px -12px rgba(99, 102, 241, .9);
-}
-.ai-msg--assistant {
-  align-self: flex-start; color: #e2e8f0; border-end-start-radius: 5px;
-  background: var(--surface-2); border: 1px solid var(--border);
-}
-.ai-msg__src {
-  display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 7px;
-  font-size: 10.5px; color: #7f93b5; border-top: 1px dashed rgba(148, 163, 184, .18); padding-top: 5px;
-}
-.ai-msg__src span:first-child { color: #86efac; font-weight: 600; }
-.ai-msg__src span:not(:first-child)::before { content: '·'; margin-inline-end: 8px; color: #475569; }
-
-.ai-msg--thinking { display: flex; gap: 5px; align-items: center; padding: 13px 14px; }
-.ai-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: #818cf8;
-  animation: ai-bounce 1.1s ease-in-out infinite;
-}
-.ai-dot:nth-child(2) { animation-delay: .15s; }
-.ai-dot:nth-child(3) { animation-delay: .3s; }
-@keyframes ai-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
-  30%           { transform: translateY(-5px); opacity: 1; }
-}
-
-.ai-plan {
-  align-self: stretch; border: 1px solid rgba(251, 191, 36, .45); border-radius: 14px;
-  background: rgba(251, 191, 36, .07); padding: 11px 12px;
-  animation: ai-msg-in .3s ease both;
-}
-.ai-plan strong { font-size: 12px; color: #fde68a; }
-.ai-plan ul { margin: 8px 0; padding-inline-start: 18px; }
-.ai-plan li { font-size: 13px; color: #e2e8f0; line-height: 1.8; }
-.ai-plan__warn { font-size: 11.5px; color: #fdba74; margin: 4px 0 0; }
-.ai-plan__actions { display: flex; gap: 6px; margin-top: 8px; }
-
-.ai-chat__sug { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
-.ai-chat__sug button {
-  border: 1px solid var(--border); background: var(--surface-2); color: #cbd5e1;
-  border-radius: 999px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
-  transition: border-color .15s ease, color .15s ease, transform .12s ease;
-}
-.ai-chat__sug button:hover:not(:disabled) { border-color: rgba(99, 102, 241, .65); color: #fff; transform: translateY(-1px); }
-.ai-chat__sug button:disabled { opacity: .5; cursor: default; }
-
-.ai-chat .ai-panel__input { padding: 10px 12px 12px; border-top: 1px solid var(--border); align-items: center; }
-.ai-chat .ai-panel__input button {
-  width: 38px; height: 38px; border-radius: 10px; border: none; cursor: pointer; color: #fff;
-  background: linear-gradient(140deg, #6366f1, #06b6d4); display: grid; place-items: center;
-}
-.ai-chat .ai-panel__input button:disabled { opacity: .45; cursor: default; }
-.ai-chat .ai-panel__input kbd { color: #64748b; display: grid; place-items: center; }
-
-@media (prefers-reduced-motion: reduce) {
-  .ai-fab, .ai-chat, .ai-msg, .ai-dot, .ai-plan { animation: none; }
-}
-
-/* The caret is the only part of the streaming reply that is theatre, and it is
-   honest theatre: it means "more is coming", and it disappears when it is not. */
-.ai-caret {
-  display: inline-block; width: 7px; height: 14px; margin-inline-start: 3px;
-  vertical-align: -2px; background: #818cf8; border-radius: 2px;
-  animation: ai-blink 1s steps(2, start) infinite;
-}
-@keyframes ai-blink { to { visibility: hidden; } }
-@media (prefers-reduced-motion: reduce) { .ai-caret { animation: none; } }
-
-/* ------------------------------------------------------- the title pack
-   Chips, grouped by what they do. Deliberately plain: the pack is a list of
-   movements, and a picker that animates its own buttons is showing off in the
-   one place where the promise has to be "this is exactly what you will get". */
-.tb__presets { display: flex; flex-direction: column; gap: 7px; }
-.tb__presets-row { display: flex; flex-direction: column; gap: 4px; }
-.tb__presets-label { font-size: 10.5px; color: #7f93b5; letter-spacing: .02em; }
-.tb__presets-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.tb__preset {
-  border: 1px solid var(--border); background: var(--surface-2); color: #cbd5e1;
-  border-radius: 999px; padding: 4px 10px; font-size: 11.5px; cursor: pointer;
-  transition: border-color .15s ease, color .15s ease, transform .12s ease;
-}
-.tb__preset:hover { border-color: rgba(99, 102, 241, .65); color: #fff; transform: translateY(-1px); }
-
-/* ------------------------------------------------------- attribution rows */
-.attr-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px;
-  border-bottom: 1px dashed rgba(148,163,184,.12); }
-.attr-row strong { flex: 1; font-size: 13px; }
-.attr-row .ce-hint { flex: 1; }
-
-/* --------------------------------------------------- clip context menu */
-.tl__ctx { position: fixed; z-index: 90; width: 180px; display: flex; flex-direction: column;
-  gap: 2px; padding: 6px; background: rgba(15,23,42,.98); border: 1px solid var(--border);
-  border-radius: 10px; box-shadow: 0 18px 40px -18px #000; }
-.tl__ctx button { text-align: start; background: transparent; border: none; color: #cbd5e1;
-  border-radius: 7px; padding: 7px 10px; font-size: 12.5px; cursor: pointer; }
-.tl__ctx button:hover { background: rgba(99,102,241,.18); color: #fff; }
-.tl__ctx button.is-danger { color: #fca5a5; }
-.tl__ctx button.is-danger:hover { background: rgba(239,68,68,.15); }
-
-/* --------------------------------------------------------- first-run tour */
-.ce-tour { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 10px 14px; margin: 10px 0; border: 1px solid rgba(99,102,241,.4);
-  border-radius: 12px; background: rgba(99,102,241,.08); }
-.ce-tour__steps { flex: 1; color: #c7d2fe; font-size: 12.5px; }

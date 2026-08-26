@@ -180,15 +180,6 @@ interface EditorState extends Snapshot {
    * makes a phone video fill the monitor instead of sitting in a wide letterbox.
    */
   aspect: 'auto' | '9:16' | '1:1' | '4:5' | '16:9'
-  /**
-   * What this video is for, as answered on the Style Match card.
-   *
-   * It travels with the project rather than living in a component, so the
-   * assistant in the editor can answer "which part is the strongest?" about a
-   * lesson when it is a lesson. Not part of `Snapshot`: it is a statement about
-   * the footage, not an edit, so Ctrl+Z must not take it back.
-   */
-  intent: Record<string, unknown> | null
   /** Beat grid of the music, in timeline seconds — drawn on the ruler. */
   beats: number[]
   bpm: number
@@ -213,7 +204,6 @@ interface EditorState extends Snapshot {
   toggleSnapping: () => void
   setPanel: (panel: string | null) => void
   setAspect: (aspect: EditorState['aspect']) => void
-  setIntent: (intent: Record<string, unknown> | null) => void
   setBeats: (beats: number[], bpm: number) => void
   /** Split a clip at every beat that falls inside it. */
   splitAtBeats: (id: string) => number
@@ -267,10 +257,7 @@ interface EditorState extends Snapshot {
   toggleLock: (trackId: string) => void
   setProjectName: (name: string) => void
   markSaved: (at?: number) => void
-  loadSnapshot: (
-    snapshot: Partial<Snapshot> & { intent?: Record<string, unknown> | null },
-    name?: string
-  ) => void
+  loadSnapshot: (snapshot: Partial<Snapshot>, name?: string) => void
   toDocument: () => Snapshot
 }
 
@@ -345,7 +332,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   snapping: true,
   panel: null,
   aspect: 'auto',
-  intent: null,
   beats: [],
   bpm: 0,
   past: [],
@@ -407,9 +393,6 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleSnapping: () => set((s) => ({ snapping: !s.snapping })),
   setPanel: (panel) => set({ panel }),
   setAspect: (aspect) => set({ aspect, dirty: true }),
-  // Deliberately not `dirty`: a statement about the footage is not an unsaved edit,
-  // and flagging it would nag the user to save a project they have not touched.
-  setIntent: (intent) => set({ intent }),
   setBeats: (beats, bpm) => set({ beats, bpm }),
 
   splitAtBeats: (id) => {
@@ -964,7 +947,6 @@ export const useEditor = create<EditorState>((set, get) => ({
       tracks: (snapshot.tracks as Track[] | undefined) ?? state.tracks,
       clips: (snapshot.clips as Clip[] | undefined) ?? [],
       transitions: (snapshot.transitions as Transition[] | undefined) ?? [],
-      intent: snapshot.intent ?? null,
       projectName: name ?? state.projectName,
       selectedId: null,
       playhead: 0,
@@ -975,9 +957,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     })),
 
   toDocument: () => {
-    const { tracks, clips, transitions, intent } = get()
-    // `intent` rides along so a reopened project still knows what it is for.
-    return { tracks, clips, transitions, intent }
+    const { tracks, clips, transitions } = get()
+    return { tracks, clips, transitions }
   },
 }))
 

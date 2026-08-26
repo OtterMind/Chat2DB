@@ -17,7 +17,7 @@ class ExportEngine:
         try:
             r = subprocess.run([ExportEngine.find_ffmpeg(),"-hide_banner","-f","lavfi","-i","color=c=black:s=64x64:d=1","-c:v",encoder,"-frames:v","1","-f","null","-"], capture_output=True, text=True, timeout=10)
             return r.returncode == 0
-        except Exception: return False
+        except: return False
     @classmethod
     def select_encoder(cls) -> str:
         return "h264_nvenc" if cls.probe_encoder() else "libx264"

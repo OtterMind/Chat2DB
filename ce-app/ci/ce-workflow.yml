@@ -122,13 +122,6 @@ jobs:
         shell: pwsh
         run: pwsh ce-app/scripts/smoke-test.ps1 -AppDir ce-app/frontend/release/win-unpacked
 
-      # The smoke test proves the packaged app starts; this proves its window
-      # is not a black box: attach over CDP to the real Electron window and run
-      # the render/no-error/overflow checks at the artefact level.
-      - name: UI audit of the packaged window
-        shell: bash
-        run: node ce-app/scripts/packaged-ui-audit.mjs --exe "ce-app/frontend/release/win-unpacked/Cutting Edge.exe"
-
       - name: Debug session on failure
         if: failure() && github.event_name == 'workflow_dispatch'
         uses: mxschmitt/action-tmate@v3
