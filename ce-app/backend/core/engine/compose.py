@@ -164,6 +164,9 @@ class Timeline:
     width: int = 1080
     height: int = 1920
     fps: int = 30
+    #: Package B brand overlays — off by default, opt-in per export.
+    progress_bar: bool = False
+    brand_text: str = ""
 
     @property
     def duration(self) -> float:
@@ -188,6 +191,8 @@ class Timeline:
             for t in data.get("tracks", [])
         ]
         kind_by_track = {t.id: t.kind for t in tracks}
+        progress_bar = bool(data.get("progressBar", False))
+        brand_text = str(data.get("brandText", "") or "")
         clips = [
             Clip(
                 id=str(c["id"]),
@@ -220,6 +225,8 @@ class Timeline:
             tracks=tracks,
             clips=clips,
             transitions=transitions,
+            progress_bar=progress_bar,
+            brand_text=brand_text,
             width=int(data.get("width", 1080)),
             height=int(data.get("height", 1920)),
             fps=int(data.get("fps", 30)),
@@ -241,6 +248,20 @@ def ffmpeg_binary() -> str:
         if candidate.exists():
             return str(candidate)
     return shutil.which("ffmpeg") or "ffmpeg"
+
+
+def _brand_font() -> str | None:
+    """A real font for the watermark, or None — drawtext without a font is a
+    render failure waiting to happen, so absent font means no text watermark."""
+    import os
+    for candidate in (
+        "C:/Windows/Fonts/segoeui.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        os.path.expanduser("~/.fonts/Vazirmatn-Regular.ttf"),
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 def ffprobe_binary() -> str:
@@ -836,8 +857,26 @@ def build_command(
                 f"atrim=0:{total:.3f},alimiter=limit=0.95[aout]"
             )
 
+    # ---- Package B brand overlays (opt-in, appended after everything else) ----
+    final_label = "[voutfinal]" if any("[voutfinal]" in step for step in steps) else "[vout]"
+    if timeline.progress_bar:
+        steps.append(
+            f"{final_label}drawbox=x=0:y=ih-12:w='min(iw\,iw*t/{total:.3f})':h=8:"
+            "color=0x06B6D4@0.9:t=fill:eval=frame[vbrand]"
+        )
+        final_label = "[vbrand]"
+    if timeline.brand_text:
+        font = _brand_font()
+        if font:
+            safe = timeline.brand_text.replace(":", "\\:").replace("'", "’")
+            steps.append(
+                f"{final_label}drawtext=fontfile={font}:text='{safe}':"
+                "x=w-tw-24:y=h-th-28:fontsize=26:fontcolor=white@0.55[vbrand2]"
+            )
+            final_label = "[vbrand2]"
+
     args += ["-filter_complex", ";".join(steps)]
-    args += ["-map", "[voutfinal]" if any("[voutfinal]" in step for step in steps) else "[vout]"]
+    args += ["-map", final_label]
     if audio_labels:
         args += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
     else:

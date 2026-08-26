@@ -120,3 +120,27 @@ def probe(payload: ProbeRequest) -> dict:
         return compose.probe_media(str(path))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Could not read media: {exc}") from exc
+
+
+class RecordingSaveRequest(BaseModel):
+    name: str
+    data: str  # base64 blob from the renderer's MediaRecorder
+    ext: str = "webm"
+
+
+@router.post("/recordings/save")
+def recordings_save(payload: RecordingSaveRequest) -> dict:
+    """The screen/webcam recorder posts its blob here; it lands in the user's
+    recordings folder and comes back as a path the timeline can import."""
+    import base64
+    import os
+    import re
+    from pathlib import Path as _Path
+
+    safe = re.sub(r"[^A-Za-z0-9_\-]", "", payload.name) or "recording"
+    ext = re.sub(r"[^a-z0-9]", "", payload.ext.lower()) or "webm"
+    folder = _Path(os.path.expanduser("~/CuttingEdge/recordings"))
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"{safe}.{ext}"
+    dest.write_bytes(base64.b64decode(payload.data))
+    return {"path": str(dest)}

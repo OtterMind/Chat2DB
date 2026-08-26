@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet,
-  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film, Search,
+  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film, Search, Circle,
 } from 'lucide-react'
-import { Input, Modal, Radio, Select, message } from 'antd'
+import { Checkbox, Input, Modal, Radio, Select, message } from 'antd'
 import Page from '../components/Page'
 import Timeline from '../editor/Timeline'
 import PreviewMonitor from '../editor/PreviewMonitor'
@@ -15,6 +15,7 @@ import ProjectAutosave from '../editor/ProjectAutosave'
 import MediaBin from '../editor/MediaBin'
 import CommandPalette, { PALETTE_ICONS, type PaletteAction } from '../editor/CommandPalette'
 import BrainBar from '../editor/BrainBar'
+import RecorderModal from '../editor/RecorderModal'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, proxyApi, renderApi, saveDialog, type Quality } from '../api/render'
@@ -254,6 +255,7 @@ export default function Studio() {
   }
 
   const [exporting, setExporting] = useState(false)
+  const [recOpen, setRecOpen] = useState(false)
   const [lastOutput, setLastOutput] = useState<string | null>(null)
   const importedOnEntry = useRef(false)
 
@@ -383,9 +385,23 @@ export default function Studio() {
           width: settings.width,
           height: settings.height,
           fps: settings.fps,
+          progressBar: settings.progressBar,
+          brandText: settings.brandText,
         },
         { quality: settings.quality, output: chosen }
       )
+      // Package B: the export queue — the same edit, other platforms' shapes.
+      for (const extra of settings.extras) {
+        void renderApi.start(
+          'timeline',
+          {
+            tracks, clips: withMedia, transitions,
+            width: extra.width, height: extra.height, fps: settings.fps,
+            progressBar: settings.progressBar, brandText: settings.brandText,
+          },
+          { quality: settings.quality, output: null }
+        )
+      }
       renderId = state.id
 
       upsertTask({
@@ -547,6 +563,7 @@ export default function Studio() {
             <button className="ed__btn" onClick={importMedia} title={t('Import media', 'افزودن رسانه')}>
               <FolderOpen size={15} /> {t('Import', 'افزودن')}
             </button>
+            <button className="ed__btn" onClick={() => setRecOpen(true)} title={t('Record screen / webcam', 'ضبط صفحه / وبکم')}><Circle size={16} /></button>
             <button className="ed__btn ed__btn--primary" onClick={exportTimeline} disabled={exporting}>
               <Upload size={15} /> {exporting ? t('Exporting…', 'در حال خروجی…') : t('Export', 'خروجی')}
             </button>
@@ -609,6 +626,7 @@ export default function Studio() {
         </div>
 
         <BrainBar />
+        <RecorderModal open={recOpen} onClose={() => setRecOpen(false)} />
 
         <Modal open={scOpen} onCancel={() => setScOpen(false)} footer={null} width={560}
           title={t('Keyboard shortcuts', 'میان‌برهای صفحه‌کلید')}>
@@ -665,6 +683,9 @@ interface ExportSettings {
   height: number
   fps: number
   quality: Quality
+  progressBar: boolean
+  brandText: string
+  extras: { width: number; height: number; id: string }[]
 }
 
 const FORMATS: { id: string; label: [string, string]; width: number; height: number }[] = [
@@ -689,7 +710,12 @@ function askExportSettings(
 ): Promise<ExportSettings | null> {
   return new Promise((resolve) => {
     const initial = FORMATS.find((f) => f.id === preferred) ?? FORMATS[0]
-    const state: ExportSettings = { width: initial.width, height: initial.height, fps: 30, quality: 'balanced' }
+    const state: ExportSettings = {
+      width: initial.width, height: initial.height, fps: 30, quality: 'balanced',
+      progressBar: localStorage.getItem('ce-brand-progress') === '1',
+      brandText: localStorage.getItem('ce-brand-text') ?? '',
+      extras: [],
+    }
     let resolved = false
     const done = (value: ExportSettings | null) => {
       if (resolved) return
@@ -751,6 +777,44 @@ function askExportSettings(
             />
           </label>
 
+          <label>
+            <span>{t('Brand', 'برند')}</span>
+            <Input
+              defaultValue={state.brandText}
+              placeholder={t('Watermark text (optional)', 'متن واترمارک (اختیاری)')}
+              onChange={(e) => {
+                state.brandText = e.target.value
+                localStorage.setItem('ce-brand-text', e.target.value)
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Checkbox
+              defaultChecked={state.progressBar}
+              onChange={(e) => {
+                state.progressBar = e.target.checked
+                localStorage.setItem('ce-brand-progress', e.target.checked ? '1' : '0')
+              }}
+            />
+            <span>{t('Progress bar overlay', 'نوار پیشرفت روی ویدیو')}</span>
+          </label>
+          <label>
+            <span>{t('Also export for', 'خروجی هم‌زمان برای')}</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {FORMATS.filter((f) => f.id !== initial.id).map((f) => (
+                <Checkbox
+                  key={f.id}
+                  onChange={(e) => {
+                    state.extras = e.target.checked
+                      ? [...state.extras, { id: f.id, width: f.width, height: f.height }]
+                      : state.extras.filter((x) => x.id !== f.id)
+                  }}
+                >
+                  <span style={{ fontSize: 11 }}>{f.label[0].split(' — ')[0]}</span>
+                </Checkbox>
+              ))}
+            </div>
+          </label>
           <p className="ce-hint">
             {t(
               'You will be asked where to save the file next.',

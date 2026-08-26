@@ -1191,6 +1191,17 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+119. **Package B — creator tools, done.** Screen/webcam recorder
+    (`RecorderModal`, MediaRecorder → POST `/api/render/recordings/save` →
+    `~/CuttingEdge/recordings` → auto-import onto the timeline; nothing leaves
+    the machine); brand kit: watermark text + animated progress-bar overlay
+    (`compose` `progressBar`/`brandText`, drawbox `eval=frame`, drawtext only
+    when a real font exists — absent font skips, never fails a render); export
+    queue: extra platform shapes (1:1/4:5/16:9/4K) render alongside the main
+    export; brand choices persist in localStorage. Verified: 419/0/10 backend,
+    production bundle UI AUDIT PASSED + playback all-checks-passed + record
+    button present in the built app.
+
 118. **Package A — captions at Veed grade, built local-first.** (1) quality
     ladder `auto/fast/balanced/best` → base/medium/large-v3 with a chooser
     before transcription; asking for an absent rung returns 409 + the size and
