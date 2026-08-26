@@ -4,9 +4,9 @@ import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
   Rewind, AudioLines, Sparkles, SlidersHorizontal, Music4, Type, Layers,
   Wand2, Repeat, Ratio, ChevronLeft, RotateCw, Film, Blend, Undo2, Redo2, MoveHorizontal, Diamond, X,
-  AudioWaveform,
+  AudioWaveform, Captions as CaptionsIcon,
 } from 'lucide-react'
-import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
+import { Slider, Segmented, Input, ColorPicker, message, Modal } from 'antd'
 import { reframeApi } from '../api/reframe'
 import { titlesApi, type TitlePreset } from '../api/titles'
 import { captionsApi } from '../api/captions'
@@ -35,6 +35,7 @@ type PanelId =
   | 'timing'
   | 'keyframes'
   | 'ratio'
+  | 'captions'
   | 'soon'
 
 interface Tool {
@@ -181,6 +182,63 @@ export default function EditorToolbar({
     }
   }
 
+  const [capModal, setCapModal] = useState(false)
+  const [quality, setQuality] = useState<'auto' | 'fast' | 'balanced' | 'best'>('auto')
+
+  const fetchModelAndRetry = (size: string, source: Clip) => {
+    Modal.confirm({
+      title: t(`Model ${size} is not on this device`, `مدل ${size} روی این دستگاه نیست`),
+      content: t('Download it now? It lands in your own cache and survives updates.',
+        'الان دانلود شود؟ در کش خود شما می‌نشیند و به‌روزرسانی‌ها آن را پاک نمی‌کنند.'),
+      okText: t('Download', 'دانلود'),
+      cancelText: t('Later', 'بعداً'),
+      onOk: async () => {
+        const started = await fetch(`${backendOrigin}/api/ai/whisper/download/start`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ size }),
+        }).then((r) => r.json())
+        const hide2 = message.loading(t(`Fetching ${size}…`, `دانلود ${size}…`), 0)
+        const poll = window.setInterval(async () => {
+          const p = await fetch(`${backendOrigin}/api/tasks/${started.id}`).then((r) => r.json())
+          if (p.status === 'running') return
+          window.clearInterval(poll); hide2()
+          if (p.status === 'done') void runTranscribe(source, size as 'fast' | 'balanced' | 'best')
+          else message.error(p.error || t('download failed', 'دانلود ناموفق'))
+        }, 2000)
+      },
+    })
+  }
+
+  const runTranscribe = async (source: Clip, q: typeof quality) => {
+    if (!source.src) return
+    const src = source.src
+    const state = useEditor.getState()
+    const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
+    try {
+      const result = await captionsApi.transcribe(src, undefined, alignAvailable, q)
+      const count = state.addCaptions(result.cues, source.start - source.offset)
+      const aligned = result.alignment === 'aligned'
+      message.success(
+        `${count} ${t('captions added', 'زیرنویس اضافه شد')} · ${result.language} · ${result.quality ?? q}` +
+          (aligned ? ` · ${t('word-aligned', 'کلمه‌تراز')}` : '')
+      )
+    } catch (err) {
+      const resp = (err as { response?: { data?: { detail?: string }; status?: number } }).response
+      if (resp?.status === 409) {
+        const size = (resp.data?.detail ?? '').match(/model (\S+) not/)?.[1] ?? 'medium'
+        fetchModelAndRetry(size, source)
+      } else {
+        message.error(
+          resp?.status === 503
+            ? t('Speech recognition is not available in this build.', 'تشخیص گفتار در این نسخه نصب نشده است.')
+            : resp?.data?.detail ?? (err as Error).message
+        )
+      }
+    } finally {
+      hide()
+    }
+  }
+
   const generateCaptions = async () => {
     const state = useEditor.getState()
     const source =
@@ -190,33 +248,7 @@ export default function EditorToolbar({
       message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
       return
     }
-    const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
-    try {
-      const result = await captionsApi.transcribe(source.src, undefined, alignAvailable)
-      const count = state.addCaptions(result.cues, source.start - source.offset)
-      // Report honestly whether word alignment actually ran (it can't unless the
-      // engine is fetched), so the karaoke timing claim is never overstated.
-      const aligned = result.alignment === 'aligned'
-      message.success(
-        aligned
-          ? t(`${count} captions added, word-aligned (${result.language})`,
-              `${count} زیرنویس اضافه شد، کلمه‌تراز (${result.language})`)
-          : t(`${count} captions added (${result.language})`,
-              `${count} زیرنویس اضافه شد (${result.language})`)
-      )
-    } catch (err) {
-      const detail = (err as { response?: { data?: { detail?: string }; status?: number } }).response
-      message.error(
-        detail?.status === 503
-          ? t(
-              'Speech recognition is not available in this build.',
-              'تشخیص گفتار در این نسخه نصب نشده است.'
-            )
-          : detail?.data?.detail ?? (err as Error).message
-      )
-    } finally {
-      hide()
-    }
+    setCapModal(true)
   }
 
   const notReady = (label: [string, string]) => () => {
@@ -329,7 +361,10 @@ export default function EditorToolbar({
     { id: 'clipadjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'clipaudio', icon: <AudioLines {...ICON} />, label: ['Audio', 'پردازش صدا'], panel: 'audio' },
     ...(clip?.text !== undefined && clip?.src == null
-      ? [{ id: 'edittext', icon: <Type {...ICON} />, label: ['Edit text', 'ویرایش متن'] as [string, string], panel: 'text' as PanelId }]
+      ? [
+          { id: 'edittext', icon: <Type {...ICON} />, label: ['Edit text', 'ویرایش متن'] as [string, string], panel: 'text' as PanelId },
+          { id: 'captions', icon: <CaptionsIcon {...ICON} />, label: ['Captions', 'کپشن‌ها'] as [string, string], panel: 'captions' as PanelId },
+        ]
       : []),
     { id: 'delete', icon: <Trash2 {...ICON} />, label: ['Delete', 'حذف'], run: removeSelected },
   ]
@@ -426,6 +461,7 @@ export default function EditorToolbar({
               />
             )}
             {panel === 'ratio' && <PanelRatio />}
+            {panel === 'captions' && clip && <PanelCaptions clip={clip} />}
             {panel === 'soon' && (
               <p className="ce-hint">
                 {soonLabel} — {t('arriving in the next phase of the editor.', 'در فاز بعدی ویرایشگر اضافه می‌شود.')}
@@ -434,6 +470,38 @@ export default function EditorToolbar({
           </div>
         </div>
       )}
+
+      <Modal
+        open={capModal}
+        onCancel={() => setCapModal(false)}
+        onOk={() => {
+          setCapModal(false)
+          const state = useEditor.getState()
+          const source =
+            state.clips.find((c) => c.id === state.selectedId && c.src) ??
+            state.clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+          if (source?.src) void runTranscribe(source, quality)
+        }}
+        okText={t('Transcribe', 'رونویسی')}
+        title={t('Caption quality', 'کیفیت کپشن')}
+      >
+        <Segmented
+          value={quality}
+          onChange={(v) => setQuality(v as typeof quality)}
+          options={[
+            { value: 'auto', label: t('Auto', 'خودکار') },
+            { value: 'fast', label: t('Fast', 'سریع') },
+            { value: 'balanced', label: t('Balanced', 'متعادل') },
+            { value: 'best', label: t('Best', 'بهترین') },
+          ]}
+        />
+        <p className="ce-hint" style={{ marginTop: 10 }}>
+          {t(
+            'Best (large-v3) spells like the big services but needs a one-time download; Fast is instant. Spelling polish runs for every language afterwards.',
+            '«بهترین» (large-v3) مثل سرویس‌های بزرگ می‌نویسد ولی یک دانلود اولیه می‌خواهد؛ «سریع» آنی است. پولیش املا بعداً برای هر زبانی اجرا می‌شود.'
+          )}
+        </p>
+      </Modal>
 
       <div className="tb__rail">
         {tools.map((tool) => (
@@ -1234,6 +1302,94 @@ function PanelRatio() {
           'شکل مانیتور و پیش‌فرض خروجی همین است. حالت خودکار از اولین ویدیو پیروی می‌کند.'
         )}
       </span>
+    </div>
+  )
+}
+
+/**
+ * Veed-style caption review: every word chip wears its confidence (amber when
+ * the recogniser was unsure), one click edits it in place, and the LLM
+ * proof-read / translate / SRT doors live here. Timings never move from text
+ * edits — patchCaption rewrites text only.
+ */
+function PanelCaptions({ clip }: { clip: Clip }) {
+  const { t } = useI18n()
+  const [editIdx, setEditIdx] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  const words = clip.words ?? []
+  const patch = useEditor((s) => s.patchCaption)
+
+  const setCueText = async (fn: (cues: { start: number; end: number; text: string }[]) => Promise<{ cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string; prob?: number }[] }[]; changed?: number; provider: string | null }>, label: string) => {
+    const cue = [{ start: clip.start, end: clip.start + clip.duration, text: clip.text ?? '' }]
+    const hide = message.loading(label, 0)
+    try {
+      const out = await fn(cue)
+      const first = out.cues[0]
+      if (first) {
+        useEditor.getState().setText(clip.id, first.text)
+        message.success(out.provider ? `${label} · ${out.provider}` : label)
+      }
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      hide()
+    }
+  }
+
+  return (
+    <div className="tb__stack">
+      <div className="tb__row" style={{ flexWrap: 'wrap' }}>
+        {words.length === 0 && <span className="ce-hint">{t('No word timings on this caption.', 'این کپشن تایمینگ کلمه ندارد.')}</span>}
+        {words.map((w, i2) => (
+          <button
+            key={i2}
+            className="badge"
+            style={{
+              cursor: 'pointer',
+              color: (w.prob ?? 1) < 0.5 ? 'var(--warning)' : undefined,
+              borderColor: (w.prob ?? 1) < 0.5 ? 'var(--warning)' : undefined,
+            }}
+            title={`${((w.prob ?? 1) * 100).toFixed(0)}%`}
+            onClick={() => { setEditIdx(i2); setDraft(w.text) }}
+          >
+            {w.text}
+          </button>
+        ))}
+      </div>
+      <div className="tb__row" style={{ flexWrap: 'wrap' }}>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void setCueText((c) => captionsApi.refine(c), t('Proof-read', 'غلط‌گیری'))}>
+          {t('Proof-read (local AI)', 'غلط‌گیری (هوش محلی)')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void setCueText((c) => captionsApi.translate(c, t('English', 'انگلیسی')), t('Translate', 'ترجمه'))}>
+          {t('Translate', 'ترجمه')}
+        </button>
+        <button
+          className="ce-btn ce-btn--ghost ce-btn--sm"
+          onClick={() => {
+            const cues = useEditor.getState().clips
+              .filter((c) => c.text !== undefined && c.src == null)
+              .map((c) => ({ start: c.start, end: c.start + c.duration, text: c.text ?? '' }))
+            void captionsApi.srtExport('~/CuttingEdge/exports/captions.srt', cues)
+              .then(() => message.success(t('SRT saved to exports', 'SRT در exports ذخیره شد')))
+              .catch((e) => message.error((e as Error).message))
+          }}
+        >
+          {t('Export SRT', 'خروجی SRT')}
+        </button>
+      </div>
+      <Modal
+        open={editIdx !== null}
+        onCancel={() => setEditIdx(null)}
+        onOk={() => {
+          if (editIdx === null) return
+          const next = words.map((w, i2) => (i2 === editIdx ? { ...w, text: draft, prob: 1 } : w))
+          patch(clip.id, next)
+          setEditIdx(null)
+        }}
+        title={t('Edit word', 'ویرایش کلمه')}
+      >
+        <Input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+      </Modal>
     </div>
   )
 }

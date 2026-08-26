@@ -1536,3 +1536,6 @@ img { -webkit-user-drag: none; }
   transition: transform .12s, border-color .12s, color .12s;
 }
 .ai-chat__sug button:hover { transform: translateY(-1px); border-color: var(--accent); color: var(--text); }
+
+/* captions: unsure words wear amber — Veed-style review affordance */
+.ed__word.is-unsure { color: var(--warning); text-decoration: underline dotted; cursor: help; }

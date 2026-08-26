@@ -15,6 +15,7 @@ export interface CaptionCue {
 
 export interface Transcription {
   language: string
+  quality?: string
   duration: number
   text: string
   words: CaptionWord[]
@@ -32,11 +33,20 @@ export interface Transcription {
 const TRANSCRIBE = { timeout: 20 * 60_000 }
 
 export const captionsApi = {
-  transcribe: async (path: string, language?: string, align = false): Promise<Transcription> =>
-    (await api.post('/captions/transcribe', { path, language, align }, TRANSCRIBE)).data,
+  transcribe: async (path: string, language?: string, align = false,
+    quality: 'auto' | 'fast' | 'balanced' | 'best' = 'auto'): Promise<Transcription> =>
+    (await api.post('/captions/transcribe', { path, language, align, quality }, TRANSCRIBE)).data,
   status: async (): Promise<{ available: boolean; reason?: string }> =>
     (await api.get('/captions/status')).data,
   /** Is whisperX word-level alignment fetched? Honest, so the button can say. */
   alignStatus: async (): Promise<{ available: boolean; aligner: string; note: string }> =>
     (await api.get('/captions/align-status')).data,
+  srtExport: async (path: string, cues: unknown[]) =>
+    (await api.post('/captions/srt/export', { path, cues })).data,
+  srtImport: async (path: string): Promise<{ cues: CaptionCue[] }> =>
+    (await api.post('/captions/srt/import', { path })).data,
+  refine: async (cues: unknown[]): Promise<{ cues: CaptionCue[]; changed: number; provider: string | null }> =>
+    (await api.post('/captions/refine', { cues }, TRANSCRIBE)).data,
+  translate: async (cues: unknown[], target: string): Promise<{ cues: CaptionCue[]; provider: string | null }> =>
+    (await api.post('/captions/translate', { cues, target }, TRANSCRIBE)).data,
 }

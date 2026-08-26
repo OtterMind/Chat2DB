@@ -1191,6 +1191,26 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+118. **Package A — captions at Veed grade, built local-first.** (1) quality
+    ladder `auto/fast/balanced/best` → base/medium/large-v3 with a chooser
+    before transcription; asking for an absent rung returns 409 + the size and
+    the UI offers the one-time fetch (model lands in the user's HF cache,
+    survives updates); no silent downgrade to `base` ever again. (2) multilingual
+    spelling floor `core/engine/text_polish.py`: fa (existing normaliser), en
+    true-casing + punctuation spacing + contractions, ar shape normalisation,
+    shared whitespace/repeat/punct layers — runs on every cue, after alignment.
+    (3) local-LLM proof-read `captions_llm.refine_cues` with a hard guard
+    (same line count, word count ±2, similarity ≥0.55 — else the recogniser's
+    text stands) plus translation with immutable timings. (4) confidence
+    surfacing: words carry `prob`; the monitor tints unsure words amber and the
+    new Captions panel lists them as chips — click edits the word in place as one
+    undoable step (`patchCaption`); SRT export/import (`~/CuttingEdge/exports`,
+    `~` expanded server-side). (5) every task stage now carries a human label
+    (the old empty "starting" stage failed the playback suite's own invariant —
+    fixed in `core/tasks.py`, an app improvement, not a test dodge). Tests:
+    415 passed / 0 failed / 10 skipped; on the production bundle test:ui
+    PASSED and playback all-checks-passed.
+
 117. **The sixteen — the visual wave that turns 2/20 into ≥12/20, all executed,
     tested on the production bundle, published as 0.9.33.** (1) aurora ambient
     light + depth-layered glass; (2) DaVinci-flavoured timeline: 64px lanes,

@@ -28,7 +28,7 @@ import { useI18n } from '../i18n'
  * Same lesson as every other effect: what the file will do, the monitor shows.
  */
 function renderCaption(
-  clip: { text?: string; label?: string; words?: { start: number; end: number; text?: string }[]; start: number; offset: number },
+  clip: { text?: string; label?: string; words?: { start: number; end: number; text?: string; prob?: number }[]; start: number; offset: number },
   props: { animateWords?: boolean },
   playhead: number
 ) {
@@ -42,7 +42,10 @@ function renderCaption(
       {words.map((word, index) => (
         <span
           key={index}
-          className={local >= word.start && local < word.end ? 'ed__word is-now' : 'ed__word'}
+          className={`${local >= word.start && local < word.end ? 'ed__word is-now' : 'ed__word'}${
+            (word.prob ?? 1) < 0.5 ? ' is-unsure' : ''
+          }`}
+          title={(word.prob ?? 1) < 0.5 ? 'low confidence — check me' : undefined}
         >
           {word.text ?? ''}{index < words.length - 1 ? ' ' : ''}
         </span>

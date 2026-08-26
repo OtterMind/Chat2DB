@@ -123,7 +123,7 @@ export interface Clip {
   props?: Partial<ClipProps>
   /** Text clips carry their content instead of a media path. */
   text?: string
-  words?: { start: number; end: number; text: string }[]
+  words?: { start: number; end: number; text: string; prob?: number }[]
   /** Animation over time; empty or missing means the clip is static. */
   keyframes?: Keyframe[]
   /** Clips that move together. */
@@ -249,13 +249,15 @@ interface EditorState extends Snapshot {
   addClip: (clip: Omit<Clip, 'id'>) => string
   addTextClip: (text: string, options?: { start?: number; duration?: number; trackId?: string }) => string
   setText: (id: string, text: string) => void
+  /** Replace a caption clip's words (and line text) as one undoable step. */
+  patchCaption: (id: string, words: { start: number; end: number; text: string; prob?: number }[]) => void
   /** Add or update the keyframe at `t` (seconds inside the clip). */
   setKeyframe: (id: string, t: number, patch: Partial<Omit<Keyframe, 't'>>) => void
   removeKeyframe: (id: string, t: number) => void
   clearKeyframes: (id: string) => void
   /** Attach a finished editing proxy to every clip that came from this file. */
   setProxy: (src: string, proxy: string) => void
-  addCaptions: (cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string }[] }[], offset?: number) => number
+  addCaptions: (cues: { start: number; end: number; text: string; words?: { start: number; end: number; text: string; prob?: number }[] }[], offset?: number) => number
   clearTimeline: () => void
   /** Replace a clip with the given source-time windows, closing the gaps. */
   keepRanges: (id: string, ranges: { start: number; end: number }[]) => number
@@ -817,6 +819,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       clips: state.clips.map((clip) => (clip.src === src ? { ...clip, proxy } : clip)),
     })),
 
+  patchCaption: (id, words) =>
+    get().commit((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return
+      clip.words = words
+      clip.text = words.map((w) => w.text).join(' ')
+      clip.label = clip.text.slice(0, 24)
+    }),
+
   setText: (id, text) =>
     get().commit((s) => {
       const clip = s.clips.find((c) => c.id === id)
@@ -849,6 +860,7 @@ export const useEditor = create<EditorState>((set, get) => ({
             start: Math.max(0, w.start - cue.start),
             end: Math.max(0.05, w.end - cue.start),
             text: w.text,
+            prob: (w as { prob?: number }).prob,
           })),
           label: cue.text.slice(0, 24),
           color: '#0EA5E9',

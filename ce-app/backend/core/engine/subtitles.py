@@ -15,6 +15,7 @@ Text is drawn with **libass** through FFmpeg's `subtitles` filter rather than
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -210,3 +211,59 @@ def fonts_dir() -> str | None:
     if bundled and Path(bundled).exists():
         return bundled
     return None
+
+
+# ------------------------------------------------------------------ SRT
+#
+# The interchange every other tool speaks. Export mirrors build_ass's cue
+# list; import rebuilds cues (words stay empty — SRT carries none).
+
+def _srt_time(seconds: float) -> str:
+    value = max(0.0, float(seconds))
+    ms = int(round(value * 1000))
+    h, rem = divmod(ms, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, ms = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+_SRT_TIME = re.compile(r"(\d{1,2}):(\d{1,2}):(\d{1,2})[.,](\d{1,3})")
+
+
+def _parse_srt_time(text: str) -> float:
+    m = _SRT_TIME.search(text or "")
+    if not m:
+        raise ValueError(f"not an SRT timestamp: {text!r}")
+    h, mi, s, ms = (int(g) for g in m.groups())
+    return h * 3600 + mi * 60 + s + ms / 1000
+
+
+def build_srt(cues: list[dict]) -> str:
+    out: list[str] = []
+    for index, cue in enumerate(cues, 1):
+        out.append(str(index))
+        out.append(f"{_srt_time(cue['start'])} --> {_srt_time(cue['end'])}")
+        out.append(cue.get("text", ""))
+        out.append("")
+    return "\n".join(out)
+
+
+def parse_srt(text: str) -> list[dict]:
+    cues: list[dict] = []
+    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip())
+    for block in blocks:
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        if len(lines) < 2:
+            continue
+        arrow = next((ln for ln in lines if "-->" in ln), None)
+        if arrow is None:
+            continue
+        start_s, end_s = arrow.split("-->")
+        try:
+            start, end = _parse_srt_time(start_s), _parse_srt_time(end_s)
+        except ValueError:
+            continue
+        body = " ".join(ln for ln in lines if ln != arrow and not ln.strip().isdigit())
+        cues.append({"start": round(start, 3), "end": round(end, 3),
+                     "text": body.strip(), "words": [], "animate": False})
+    return cues

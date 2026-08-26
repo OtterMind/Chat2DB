@@ -17,6 +17,9 @@ class TranscribeRequest(BaseModel):
     path: str
     language: str | None = Field(default=None, description="ISO code; auto-detected when omitted")
     max_chars: int = Field(default=42, description="Soft limit per caption line")
+    quality: str = Field(default="auto",
+                         description="auto | fast(base) | balanced(medium) | best(large-v3)")
+    align: bool = Field(default=False, description="whisperX forced alignment when fetched")
     align: bool = Field(default=False,
                         description="Snap word edges to the audio with whisperX when fetched")
 
@@ -37,11 +40,15 @@ async def transcribe(payload: TranscribeRequest) -> dict:
         return await loop.run_in_executor(None, partial(
             engine.transcribe_to_cues,
             str(media), language=payload.language, max_chars=payload.max_chars,
-            align=payload.align,
+            align=payload.align, quality=payload.quality,
         ))
     except engine.TranscriberUnavailable as exc:
         # A missing model must say so plainly instead of looking like a crash.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except engine.ModelNotDownloaded as exc:
+        # The asked rung is not on disk: 409 + the size, so the UI offers its fetch.
+        raise HTTPException(status_code=409,
+                            detail=f"model {exc} not downloaded — fetch it in Settings") from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -89,3 +96,67 @@ def align_status() -> dict:
             "aligner": whisperx_align.PERSIAN_ALIGNER,
             "note": "Refines faster-whisper word timings for tighter karaoke; "
                     "captions work without it."}
+
+
+# ------------------------------------------------------------------ SRT / LLM
+
+
+class SrtExportRequest(BaseModel):
+    path: str
+    cues: list[dict]
+
+
+class SrtImportRequest(BaseModel):
+    path: str
+
+
+@router.post("/srt/export")
+def srt_export(payload: SrtExportRequest) -> dict:
+    import os
+    from pathlib import Path as _Path
+
+    from core.engine import subtitles
+
+    dest = _Path(os.path.expanduser(payload.path))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(subtitles.build_srt(payload.cues), encoding="utf-8")
+    return {"path": str(dest), "cues": len(payload.cues)}
+
+
+@router.post("/srt/import")
+def srt_import(payload: SrtImportRequest) -> dict:
+    import os
+    from pathlib import Path as _Path
+
+    from core.engine import subtitles
+
+    src = _Path(os.path.expanduser(payload.path))
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
+    return {"cues": subtitles.parse_srt(src.read_text(encoding="utf-8-sig", errors="replace"))}
+
+
+class RefineRequest(BaseModel):
+    cues: list[dict]
+    model: str | None = None
+
+
+@router.post("/refine")
+def refine(payload: RefineRequest) -> dict:
+    """Local-LLM proof-read with the similarity guard — timings never move."""
+    from core.engine import captions_llm
+
+    return captions_llm.refine_cues(payload.cues, model=payload.model)
+
+
+class TranslateRequest(BaseModel):
+    cues: list[dict]
+    target: str = "English"
+    model: str | None = None
+
+
+@router.post("/translate")
+def translate(payload: TranslateRequest) -> dict:
+    from core.engine import captions_llm
+
+    return captions_llm.translate_cues(payload.cues, payload.target, model=payload.model)

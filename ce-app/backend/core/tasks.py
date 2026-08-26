@@ -58,7 +58,7 @@ class Task:
     status: str = "running"          # running | done | failed | cancelled
     stage: str = "starting"
     progress: float = 0.0
-    label: str = ""
+    label: str = "Warming up"
     started: float = field(default_factory=time.time)
     finished: float | None = None
     result: Any = None

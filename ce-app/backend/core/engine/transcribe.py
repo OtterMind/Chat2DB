@@ -57,9 +57,17 @@ def availability() -> dict:
     return {"available": True, "model": _MODEL_NAME or "not loaded"}
 
 
+#: The quality ladder — Veed-grade captions start with a big enough model.
+QUALITY_MODELS = {"fast": "base", "balanced": "medium", "best": "large-v3"}
+
+
+def model_present(size: str) -> bool:
+    return size in local_models()
+
+
 def _load(model_size: str | None = None):
     global _MODEL, _MODEL_NAME
-    if _MODEL is not None:
+    if _MODEL is not None and (model_size is None or _MODEL_NAME.startswith(f"{model_size} ")):
         return _MODEL
     model_size = model_size or best_local_model()
     try:
@@ -126,9 +134,22 @@ def group_words(words: list[dict], max_chars: int = 42, max_gap: float = 0.8) ->
     return cues
 
 
+class ModelNotDownloaded(RuntimeError):
+    """Raised with the missing size so the UI can offer the right fetch."""
+
+
 def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42,
-                       align: bool = False) -> dict:
-    model = _load()
+                       align: bool = False, quality: str = "auto") -> dict:
+    """quality: auto (best on disk) | fast | balanced | best.
+    Asking for a rung that is not on disk raises ModelNotDownloaded — the UI
+    turns that into a fetch button, never a silent downgrade to `base`."""
+    if quality == "auto":
+        size = best_local_model()
+    else:
+        size = QUALITY_MODELS.get(quality, quality)
+        if not model_present(size):
+            raise ModelNotDownloaded(size)
+    model = _load(size)
     segments, info = model.transcribe(
         path, language=language, word_timestamps=True, vad_filter=True
     )
@@ -142,6 +163,8 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
                 "start": round(float(word.start), 3),
                 "end": round(float(word.end), 3),
                 "text": word.word.strip(),
+                # how sure the recogniser was — the UI tints the unsure words
+                "prob": round(float(getattr(word, "probability", 1.0) or 1.0), 3),
             })
 
     detected = getattr(info, "language", language) or "unknown"
@@ -158,8 +181,16 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
             words = refined["words"]
         alignment = refined.get("status", "off")
 
+    # deterministic spelling layer, per detected language — runs LAST so it
+    # cleans whatever the aligner left (Veed-quality floor, offline)
+    from core.engine import text_polish  # noqa: PLC0415
+
+    plain = [text_polish.polish(line, str(detected)) for line in plain]
+    words = text_polish.polish_words(words, str(detected))
+
     return {
         "language": detected,
+        "quality": size,
         "duration": round(float(getattr(info, "duration", 0.0)), 3),
         "text": " ".join(plain).strip(),
         "words": words,
