@@ -1,5 +1,35 @@
 # Road to 1.0 — the plan as of 0.5.3
 
+> ## Where we are — 2026-08-24, version **0.9.7**
+>
+> Re-measured from the code rather than from memory: each line below was checked
+> with a `grep`/`ls`, not recalled.
+>
+> **Shipped since this plan was written:** 0.6.2–0.6.3 (the size and quality
+> sweeps), 0.7.0–0.7.1 (the brain: objective, planners, race, meaning), 0.8.0
+> (real face tracking, `BETA` badge off), 0.9.0 (YouTube publishing —
+> `app/routers/uploads.py` + the Uploads screen), 0.9.2–0.9.6 (the GPU work:
+> probed encoders across four vendors, decode on the card, the permission button),
+> and — unnumbered until now — the **Style Match intake** (10 questions, the
+> whole-file highlight search, a requested length) and the **assistant as a
+> streaming conversation** that knows what the video is for.
+>
+> ### Four steps to 1.0
+>
+> | # | Step | State in the code | What it needs |
+> |---|---|---|---|
+> | 1 | **0.8.1 — things to put on the screen** | **done**: title pack (0.9.9), gallery with checked import/export + honest starters (0.9.16), and the Freesound shelf (0.9.16, key-required) | — |
+> | 2 | **0.9.1 — audio depth** | **the speech map can now come from silero-vad** (MIT, 2.22 MB, opt-in, with a Measure button); DeepFilterNet and the bed library still missing | DeepFilterNet (MIT/Apache) fetched on demand and *measured in dB against the current chain*, kept only if it wins; a music bed library |
+> | 3 | **Vision — a model that has seen frames** | **bridge built**: `core/engine/vision.py` sends small frames to the user's Ollama and casts one 0.3-weight vote in the highlight scorer; off by default, enable refused without a pulled model, quality verdict pending the user's own model | nothing left to build; the user's Ollama decides |
+> | 4 | **1.0 — stabilise and say what it is** | **attribution screen done** (0.9.20, generated from installed metadata); tour, crash reporting, manual, filmed install remain | first-run tour, crash reporting, a manual in both languages, a filmed clean install |
+>
+> Deliberately **not** on this road: anything GPL/AGPL or unlicensed
+> (`ultralytics`, `RobustVideoMatting`, `openshot-qt`, `pedalboard`, Remotion,
+> Shepherd, GSAS), and any dependency whose Windows closure was measured and
+> rejected (`librosa`, `mediapipe`) — see `OSS_EVALUATION.md` and
+> `OSS_SWEEP_0.9.2.md`.
+
+
 Written after auditing an outside review (`REVIEW_AUDIT_0.5.3.md`) and after
 **measuring** where the installer's weight actually is. Everything with a number
 in it was measured on the day of writing, not estimated.
@@ -259,6 +289,62 @@ what the *app* traded, and the numbers are bigger.
 Checked again and left alone: export presets (`high` = CRF 18/`slow`,
 `balanced` = CRF 21), the render path (the export never reads a proxy — asserted),
 waveform resolution, and `compression: "normal"` in electron-builder.
+
+## 2b. Action list, ranked by the advisors' value (post-review)
+
+The two external reviews were merged, de-duplicated and ranked; the full table is
+in `docs/CuttingEdge/DEFENSE.md` (appendix). The build order for the remaining
+work, highest value first:
+
+1. **Port discovery** — **done (0.9.22+)**: free-port bind + hand the port to the
+   renderer; a busy 8742 now degrades instead of killing.
+2. **Crash reporting** — **done (0.9.22+)**: crash-<id>.json beside the logs.
+3. **OTIO export/import** (pro interchange, Apache-2.0).
+4. **Practical-RIFE** slow-mo for sports (on-demand, MIT).
+5. **First-run tour** + **Playwright-on-packaged** + **performance-regression** tests.
+6. TransNetV2 / CLIP / whisperX / demucs / Real-ESRGAN / rembg — all on-demand,
+   licence-checked, measured before kept.
+Deliberately not in-process: GPL/AGPL/no-licence (aubio, peaks.js, mlt, YOLO,
+video-timeline-editor) and DeepFilterNet until its NOASSERTION licence is cleared.
+
+
+
+## 2c. The professional-editor brain (the "living editor")
+
+The headline ask: Style Match must not apply effects blindly; its brain must first
+*know every tool the app owns* (a fixed inventory) and then, for the reference and
+the footage, consider each tool **separately** and say *why* — like a seasoned
+editor, not an effect-sprinkler.
+
+* `core/brain/editor_brain.py` holds the tool inventory (beat-cuts, slow-mo,
+  captions, Persian-caption normalisation, karaoke, filler removal, ducking,
+  reframe, grade, transitions, RIFE motion-transitions, hook-first, denoise,
+  OTIO interchange — 14 tools) and `assess()` returns one use/skip decision per
+  tool with a human reason, keyed only off measured signals. `notes()` renders the
+  chosen tools as the editor's notes (fa/en), shown on the Style Match result card.
+* `build_timeline` attaches the assessment to the result (`brain`), so the plan is
+  visible and honest.
+* **Standing convention (owner's directive, no prompt needed):** every capability
+  that gets built is added to `TOOLS` **and** given an `assess()` decision the
+  moment it lands, so it surfaces in Style Match automatically. A feature that is
+  not in `TOOLS` does not exist as far as the editor is concerned;
+  `tests/test_editor_brain.py` enforces one decision per tool.
+
+Optimised remaining path (order by value): 1) ~~whisperX+Hazm+python-ass (Persian
+karaoke)~~ — **complete**: Hazm normalisation (§4.103), whisperX word-alignment
+(§4.105) and the ASS round-trip with `\kf` timing reconstruction (§4.107), all
+on-demand and degrade-safe · 2) ~~TransNetV2~~ bridge in (§4.107): boundaries
+when fetched, cut/dissolve/fade junction typing without it · 3) ~~Demucs~~
+bridge in (§4.108) **and wired** (§4.109): stems on-demand behind the Audio
+panel, and the duck envelope measured on the cached vocals stem when present ·
+4) ~~MediaPipe pose~~ bridge in (§4.110): 33-point torso tracking between the
+face cascade and the motion centroid in the reframe ladder · 5) 1.0 hardening —
+**in progress (§4.113)**: perf-regression ratchet in, MANUAL.md in, packaged
+CDP UI-audit script + workflow step in (runs on the Windows runner), crash
+reporting already shipped (§95); remaining: a filmed clean install on a real
+machine and the Playwright suite growing against the packaged artefact. Also in 0.9.28-dev: the brain interrogates itself on screen for both
+videos and offers a menu of different starts (§4.108) — the intake card is gone.
+Deliberately not in-process: GPL/AGPL/no-licence and HF-token-gated weights.
 
 ## 3. What is deliberately not on this road
 

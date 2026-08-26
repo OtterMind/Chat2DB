@@ -4,7 +4,16 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a0214a-chat2db` · App version: `0.9.6` · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.30` (the number that
+publishes is `ce-app/frontend/package.json`; the backend reads it, with
+`CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
+
+*Session handoff:* the previous session ended on `arena/01a0214a-chat2db`, which
+still points at `763a0de` on the remote — the same commit this branch starts
+from, so nothing was lost in the break. What *was* lost is the sandbox's
+throwaway half: `ce-app/.venv`, `ce-app/.ffmpeg` and `ce-app/frontend/node_modules`
+were gone and had to be rebuilt with `bash ce-app/scripts/dev-setup.sh` (§2).
+Code, docs and this file are the durable half, and they were all there.
 
 **The plan is in `docs/CuttingEdge/ROADMAP_1.0.md`** — release by release from
 here to 1.0, each with the number that has to move. Read it after this file.
@@ -17,6 +26,7 @@ here to 1.0, each with the number that has to move. Read it after this file.
 |---|---|
 | Backend | FastAPI + SQLite on port **8742**; job pipeline (ingest → prepare → transcribe → select → reframe → subtitle → export) |
 | **Render engine** | `core/engine/compose.py` — the edit model becomes one FFmpeg `filter_complex`; NVENC when present, libx264 otherwise; progress streamed over the WebSocket |
+| **Speech map** | Where someone is talking, which every cut depends on. Two sources, one return shape: FFmpeg's energy detector (the default, unchanged) and **silero-vad** (MIT, a 2.22 MB ONNX model fetched on demand, run by the `onnxruntime` that already ships with faster-whisper). Opt-in behind Settings → *Where the speech is*, which also has a **Measure it** button that runs both on a file you choose and shows the numbers — the verdict on real speech is deliberately left to that measurement, not claimed here |
 | **Auto-edit** | `core/engine/analyze.py` — silence detection (FFmpeg `silencedetect`) and scene detection (PySceneDetect, FFmpeg fallback) |
 | Frontend | React 18 + Vite + Electron 31, super-app launcher home, 8 screens, one shared `Page` shell |
 | **Preview** | Real video **with sound**, shaped to the project canvas (Auto follows the footage), every effect applied live as CSS, transitions cross-faded between two layers, text drawn on top, 720p proxies for heavy footage. A `requestAnimationFrame` transport drives the playhead |
@@ -29,9 +39,12 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Tool rail** | Undo/Redo always visible, then the context-sensitive toolbar (global set / 18-tool clip set) with nested panels: speed, volume + fades, crop, transform, opacity, rotate, freeze, reverse, mute, duplicate, replace, delete |
 | **Colour** | 10 looks (warm, cool, cinematic, vivid, b&w, sepia, vintage, matte, night) plus manual brightness, contrast, saturation, temperature, sharpen and vignette |
 | **Animation** | Per-clip in/out: fade, zoom in, zoom out, with adjustable length |
+| **Title pack** | 15 presets in three groups — entrance, hold, caption — served by `GET /api/titles` and applied from the text panel as **one undoable step**. Every one animates only the five channels the exporter reproduces (`x, y, scale, rotate, volume`); `titles.validate()` refuses anything else, and `tests/test_titles.py` runs each preset through the real FFmpeg expression builder. Fades are deliberately absent: opacity needs a per-pixel `geq` pass (§4.23) |
+| **On-screen text** | **RapidOCR 1.4.4** (Apache-2.0, checked from the wheel), an on-demand engine whose **models travel inside the wheel** (15.4 MB) — so, unlike DeepFilterNet, no runtime download and no dependency on a host that can fail; it runs on the `onnxruntime` that already ships. Installed to `~/CuttingEdge/runtime/py` with `--no-deps` (it hard-imports Pillow and wants pyclipper/Shapely; `opencv-python` is satisfied by the headless build). Unlocks reading the reference's caption typography, seeing hand-made titles, and the `no_on_screen_text` restriction — which, once OCR is fetched, is actually measured: `text_coverage()` samples frames and reports the share carrying type |
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
-| **Assistant** | Floating button: a sentence in English or Persian becomes whitelisted timeline operations, validated and applied as one undoable step. Works offline with rules; uses Ollama/OpenAI/Gemini/Claude when configured |
+| **Assistant** | A **conversation**, not a one-shot command: history in, one reply out, with the steps it took and the milliseconds, and the provider named on every answer (`ollama:qwen2.5` or `offline` — never hidden). An editing request still comes back as a whitelisted dry run applied only on Apply and undoable in one step. Floating panel or full screen, RTL, animated, and **streamed**: `POST /api/assistant/chat/stream` sends each step as it happens and each word as it is written (NDJSON, so one `fetch` and a line split), because three bouncing dots are not evidence that anything is happening. The model is the user's choice (`auto`/`off`/ollama/openai/gemini/anthropic), stored in `~/CuttingEdge/config.json` and settable from the chat **or** Settings — one setting, two doors, and `auto` means *the stored choice* before it means *whatever is installed*; with none connected it answers from what was measured and says so. And it **knows what the video is for**: the Style Match answers ride along in the project document, so a question about a lesson is answered about a lesson |
+| **Style Match** | A reference video becomes a `.cetemplate` of numbers, and your footage is rebuilt in its shape. The intake card asks what the video *is* — kind, goal, focus, rhythm, phrases to keep or drop, and a target length — because a frame cannot say any of it. Measured effect: the edit drew from **14.4 %** of a 120 s file before, and **97.9 %** with a length asked for; candidate moments that used to span **0.002** on a 0..1 scale now span the full range. *Built on the branch, version not bumped yet — bumping publishes a release* |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
 | **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
@@ -74,13 +87,26 @@ cd ce-app/frontend && npm run dev
 
 No Windows machine is needed for anything except packaging.
 
+**Verified from a cold sandbox on 2026-08-24.** The script builds the venv, the
+static ffmpeg and the frontend dependencies, and the suite then runs green
+(197 passed, 3 skipped). The one step that needs a hand in a network-filtering
+sandbox is the Electron binary: `npm install` dies inside `node install.js` with
+`unable to verify the first certificate`, because that download goes to a host
+the sandbox intercepts. Everything the checks need is TypeScript and the bridge
+contract, neither of which needs the binary, so:
+
+```
+cd ce-app/frontend && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install --no-audit --no-fund
+npm run verify
+```
+
 ## 3. The checks that protect the product
 
 | Command | What it guards |
 |---|---|
-| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — 86 tests |
+| `python -m pytest` (in `ce-app/backend`) | render engine geometry/duration/audio, the silent-source regression, silence and scene detection against known ground truth, and `test_effects.py` / `test_keyframes.py` / `test_audio.py` / `test_proxy.py` — which measure the exported pixels, the animated expressions, the beat detector against synthesised click tracks and the proxy pipeline — **279 collected: 273 passed, 6 skipped** (re-measured 2026-08-24 after rebuilding the environment from nothing; the three skips are the auto-reframe tests whose portrait fixture is deliberately not committed — `scripts/fetch-test-face.sh`). Needs `CE_FFMPEG_DIR` pointed at a real ffmpeg |
 | `npm run verify` (in `ce-app/frontend`) | TypeScript plus the renderer↔preload bridge contract |
-| `npm run test:ui` (in `ce-app/frontend`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
+| `npm run test:ui` (in `ce-app/frontend`, needs Chromium from `sandbox-test-env.sh`) | every route renders, no overlapping boxes, no horizontal overflow, one screen mounted after rapid tab switching, language switch flips direction and persists |
 | `npm run test:playback -- --a a.webm --b b.webm` (in `ce-app/frontend`) | the transport and the monitor: the playhead advances, the red marker moves, playback crosses a cut, stops at the end, pause pauses, a seek is followed, the junction diamond opens the transition chooser, and opacity/transform/rotate/look/grade/crop/animation/transition are actually visible in the preview, plus the Delete key and Ctrl+Z |
 | the same test also guards the layout the user asked for: no scale bar above the timeline, no magnifiers in the transport, the scale control inside the timeline, Ctrl+wheel zoom, the canvas shape, and the home screen's starting cards |
 | the same test also checks the film strip, the waveform, the beat grid, cut-on-beat, keyframe interpolation, mute vs hide, the docked wordmark, readable toasts, and that the update card / Settings / Diagnostics are reachable from the home screen — 71 checks |
@@ -660,6 +686,588 @@ gate that stops a broken installer from being published.
    they are stale by definition. `POST /api/gpu/preference`; the card also links
    straight to `ms-settings:display-advancedgraphics`.
 
+70. **`ps` truncates at 80 columns, and a test's venv path can be longer than
+    that.** Rebuilding the environment after a wipe, `pytest` reported
+    *the child never started* in `test_cancel_kills_the_child_process` — while the
+    child was running. `_python_sleepers()` greps `ps -eo pid,args` for
+    `time.sleep(60)`, and with no terminal to ask, procps cuts each line at 80
+    columns. From `/tmp/cevenv` (what `sandbox-test-env.sh` builds) the marker
+    survives; from `ce-app/.venv` inside a deep checkout the line ends at
+    `... -c import time; ti`. Measured side by side: `ps -eo` → 80 chars,
+    `ps -eww -o` → all 84. The helper passes `-ww` now, so the test no longer
+    depends on where the virtualenv happens to live. **A test that measures the
+    world through a fixed-width tool is measuring the width, not the world** —
+    the same shape as §61 (the probe was wrong, not the card) and §60.
+71. **The recovery script is code too, and it had rotted against today's PyPI.**
+    `dev-setup.sh` is the documented way back after a wipe (§2) and it produced
+    an environment where the suite could not even collect: starlette's
+    `TestClient` needs `httpx`, which the light set never installed — five test
+    modules failed at import, so `pytest` ran nothing at all. And `scenedetect`
+    pulls the GUI `opencv-python`, which cannot import without `libGL`, so
+    `test_camera_motion_is_recognised[pull]` failed exactly the way §60 warns
+    about. Both are now installed by the script itself (`httpx`, then uninstall
+    the GUI wheel and pin `opencv-python-headless==4.10.0.84`), matching what
+    `sandbox-test-env.sh` already did. After that: **197 passed, 3 skipped** from
+    a cold sandbox. Note one thing the sandbox *cannot* do: `npm install` fails
+    downloading the Electron binary (`unable to verify the first certificate`),
+    so `ELECTRON_SKIP_BINARY_DOWNLOAD=1` is needed to get the frontend's
+    TypeScript and bridge checks running here. Packaging still happens on the
+    Windows runner.
+
+72. **A scorer with no opinion makes "best" mean "earliest".** The user's report
+    was two sentences — "it shortens the first video" and "the highlight
+    detection of the second video is very weak" — and both were one bug, both
+    measured before anything was changed:
+    • the candidate moments were cut **inside the speech ranges**, ranked, and
+      truncated, so on 120 s of footage against a 12 s reference the rebuild
+      touched **17.3 s — 14.4 % of the material** — and produced the *same*
+      offsets it produced for a 30 s file;
+    • every window inside a speech range carried weight 1.0 and the only
+      variation was a 0.85–1.0 term for how full the window was: 26 candidates
+      scored 0.998–1.0, a spread of **0.002**. `list.sort` is stable, so the
+      ranking was decided by nothing and the earliest moments won by default.
+    Windows now cover the file end to end and each signal — speech coverage,
+    picture motion, audio activity, proximity to the footage's own shot changes —
+    is normalised *across the candidates* before it is weighted. `core/engine/intent.py`
+    holds what the answers are worth, because "the best moment in a lesson" and
+    "the best moment in a music clip" are not the same measurement. Measured
+    after: **97.9 %** of a 120 s file reachable, and a requested length lands on
+    the number (60 s asked, 60.00 s built).
+73. **A value resolved after the measurement it should have shaped is a value
+    that never happens.** `hook.firstCut` extended the opening shot *after* the
+    candidate windows had been cut to the old shot length, so the clip was
+    clamped straight back: a 4 s shot with a 7 s hook measured **4.0 s** in the
+    edit. The test that caught it was written expecting 7.0 and failed, which is
+    the point of a fixture with a known answer. The hook is resolved before the
+    measurement now, and it only ever **extends** an opening — the form it
+    replaced assigned the value outright inside a 6 s window, free to chop an
+    opening to a fraction of a second and blind to a held intro longer than that.
+
+74. **A substring is not a word.** The assistant's rule planner matched the hiss
+    people ask to remove with the three-letter fragment `"خش"` — which is also
+    inside **«بخش»**. So «کدام **بخش** قوی‌تر است؟» (*which part is the
+    strongest?*) came back as a noise-reduction plan, and the same trap was
+    waiting in `"نما"` inside «نمایش». Found by asking a question in Persian over
+    HTTP and reading the answer, not by reading the code. `wants()` now requires
+    a word boundary for any token of three letters or fewer, and
+    `tests/test_chat.py` pins both directions: the questions that must stay
+    questions, and the requests that must still be edits — a boundary fix that
+    deafened the assistant would be the same bug wearing a different hat.
+
+75. **A name the renderer does not know is a silent fallback, not an error.**
+    The first draft of the title pack asked for `textStyle: "plain"`, `"box"` and
+    `position: "center"`. The renderer's vocabulary is `clean`, `boxed`, `outline`,
+    `shadow` and `top`, `middle`, `bottom` — so libass would have taken its own
+    default and every one of those titles would have looked different in the file
+    than on the screen, with no error anywhere. Caught by reading
+    `subtitles.STYLE_PRESETS` instead of trusting the names I had written, and
+    then locked: `titles.validate()` checks the vocabulary, and
+    `test_the_pack_speaks_the_renderers_vocabulary` compares it against
+    `subtitles.py` directly, so renaming a style there now fails the suite.
+    **A string that crosses a boundary is an interface, and interfaces get
+    checked.**
+
+76. **A deprecation warning is a failed check, not a warning.** The Style Match
+    intake card used antd's `addonAfter` on the seconds field. antd logs
+    `[antd: InputNumber] addonAfter is deprecated`, and `npm run test:playback`
+    asserts the console is clean — because the 1.0 criterion is a clean install
+    with **no console error**, and "it is only a warning" is how a real error
+    arrives six months later riding along with fifty others. The whole browser
+    suite was green apart from that one line, which is the argument for running
+    it: 71 backend tests could not see it, and the user would have.
+77. **Coverage says where the tests are not.** Measured with `coverage run
+    --source=core,app`: **73 %** overall. The engine the editor uses is well
+    covered (`compose` 87 %, `style` 88 %, `subtitles` 98 %, `tasks` 98 %), and
+    the gap is one place: the **job pipeline** — `core/engine/export.py` 0 %,
+    `ingest.py` 0 %, `app/routers/jobs.py` 33 %, `services/pipeline.py`
+    untested. Not dead code (the pipeline imports both), just never exercised.
+    That is the honest next target for tests, ahead of any new feature.
+
+78. **An engine that is not shipped is not a dependency.** silero-vad's PyPI
+    package declares `torch>=1.12` and `torchaudio`, so `pip install silero-vad`
+    would pull several hundred megabytes to run a **2.22 MB** model that
+    `onnxruntime` — already in the installer, via faster-whisper — runs at
+    **165× realtime on this CPU**. So `vad.fetch()` does `pip download
+    --no-deps` and takes one file out of the wheel. The licence was read from the
+    wheel's own `METADATA` (`Classifier: License :: OSI Approved :: MIT
+    License`), not from a README, because the two have disagreed before.
+    Nothing new enters the installer: 0 MB.
+79. **"The model is better" is a claim, so it stayed a claim.** No real speech
+    exists in this sandbox — no apt, no espeak, GitHub blocked, no bundled sample
+    in any wheel — so the verdict was **not** invented. What was measured on a
+    known-answer fixture (three loud amplitude-modulated tone bursts, nobody
+    talking): the energy detector reports **51.5 % speech in 3 regions**, the
+    model reports **0 % in 0 regions**. That is the specific failure the energy
+    detector has — it cannot tell a loud tone from a voice — and it is why the
+    engine exists. Whether the model is better *on speech* is what
+    `POST /api/vad/compare` answers on the user's own file, from the Settings
+    card. Until that is read, the default is unchanged and choosing the model
+    without fetching it is refused with a 409 rather than silently downgraded.
+80. **The graceful path was found by accident, and kept.** The running server was
+    using a different virtualenv that had no `onnxruntime`, so
+    `/api/vad/status` answered `{"model": true, "ready": false}` and
+    `/api/vad/compare` returned the energy detector's numbers with `silero:
+    null` — no crash, no 500. That is the §4.51 rule holding on the first contact
+    with a real machine that lacks the runtime, and `tests/test_vad.py` now pins
+    it.
+
+81. **The shot detector was chosen by a scoreboard, not by a changelog.**
+    `scenedetect` was already shipping, so both of its detectors were free — and
+    "free" is exactly when a choice gets made by taste. Measured on fixtures built
+    to a recipe (`tests/test_scenes.py`):
+
+    | fixture | known cuts | ContentDetector | AdaptiveDetector |
+    |---|---|---|---|
+    | hard cuts, static shots | 6 | 6 found, precision 1.00 | 6 found, precision 1.00 |
+    | hard cuts, camera push | 6 | 6 found, precision 1.00 | 6 found, precision 1.00 |
+    | **fast pan + handheld wobble** | **2** | **3 found — a cut invented at 2.6 s, precision 0.67** | **2 found, precision 1.00** |
+    | 3 s clip, one cut | 1 | correct | correct |
+    | 1.5 s single shot | 0 | correct | correct |
+
+    A false cut is not cosmetic: it becomes a clip boundary in the rebuild and a
+    shot in the template's rhythm. Fast camera motion is what a phone video is
+    made of. AdaptiveDetector is now the detector, the scoreboard is the test, and
+    the `threshold` parameter — which belonged to ContentDetector and which
+    nothing passed — is gone rather than left as a knob that does nothing.
+82. **Two open-source candidates were checked and not added, and that is the
+    result.** Both were verified from the wheel's own `METADATA`, not a README:
+    • **`transnetv2-pytorch` 1.0.5 — refused.** Licence is genuinely MIT
+      (`License-Expression: MIT`, and the bundled `LICENSE` starts "MIT
+      License"), and it would give real transition detection. But it requires
+      `torch>=1.9.0` plus `ffmpeg-python`, `pandas`, `pillow` and `tqdm` — and
+      `pandas` and `Pillow` are precisely the dead weight removed in §4.38.
+      Several hundred megabytes of torch to replace a detector that now scores
+      1.00 on the fixtures above is not a trade this app makes.
+    • **`deepfilternet` 0.5.6 — deferred.** Licence MIT *or* Apache-2.0 (both
+      files are in `DeepFilterLib`), and — pleasantly — **no torch**: the runtime
+      is a 1.29 MB compiled `libdf` plus numpy, with a Windows wheel
+      (`DeepFilterLib-0.5.6-cp311-none-win_amd64.whl`, 0.49 MB). The whole
+      closure measured **10.5 MB**, of which **9.4 MB is sympy + mpmath** for a
+      denoiser, which is worth questioning before it is accepted. The blocker is
+      the model: `df/enhance.py:270` fetches it from
+      `https://github.com/Rikorose/DeepFilterNet/raw/main/models/*.zip` — GitHub
+      raw only, no PyPI, no mirror. That exact URL was tried here and failed
+      (curl exit 35 after a 302). Shipping a denoiser whose weights come from a
+      source we have just watched fail, with no way to measure it in dB against
+      the current chain, is the brochure §4.57 warns about. Revisit if the model
+      lands on a registry.
+
+83. **The one open-source import that passed every gate, and the gates it passed.**
+    RapidOCR 1.4.4 was verified the same way as everything else, from the wheel
+    rather than the README: licence **Apache-2.0** in the PyPI `License` field
+    (models are Baidu's PaddleOCR, also Apache-2.0); the **three ONNX models are
+    bundled in the wheel** (det 4.5 + rec 10.4 + cls 0.6 MB), so there is no
+    runtime download and it works with the network unplugged; it runs on
+    `onnxruntime` + `numpy`, both already in the installer. The honest costs are
+    on the wheel too: it hard-imports `Pillow` and wants `pyclipper` and
+    `Shapely`, and nominally `opencv-python` — satisfied by the headless build,
+    which is exactly why it is installed `--no-deps` into the user's runtime dir
+    rather than shipped. Measured on the repo's own launcher screenshot it reads
+    "New video", "Recent projects", "Face Tracking" and refuses words that are
+    not there; on a blank video `text_coverage()` is 0, which is an answer, not
+    an error. The newer `rapidocr` 3.x was checked and passed over: no licence
+    field, and its models come from a CDN at runtime. One quirk is named in the
+    module docstring rather than hidden: on tightly-set type the detector drops
+    spaces ("Open the editor" → "Opentheeditor"), so matching goes through
+    `normalise()`.
+84. **A restriction that becomes checkable must stop saying "cannot be checked".**
+    The moment OCR is fetched, the Style Match `no_on_screen_text` restriction is
+    measured: `text_coverage()` samples the footage and, if type covers more than
+    a fifth of frames, the summary says so in the open — OCR can read it and warn,
+    not erase it. Until then it reports "the OCR engine is not fetched". A
+    checkbox that flips from "impossible" to "checked" silently would be the same
+    lie in the other direction.
+
+86. **The gallery is an interface, so it is checked.** An exported `.cetemplate`
+    is a file someone else made, and a file someone else made is exactly the kind
+    of boundary this app checks (§4.75). `validate_template()` names what is wrong
+    (no shots, a negative length, an unknown camera move, an aspect the canvas
+    cannot hold) and `import_template()` refuses with a 422 listing the reasons;
+    a sound document round-trips and rebuilds footage. A fresh gallery is seeded
+    with three **starters** — hand-written rhythms that say they are starters,
+    each itself valid — rather than an empty room, and saving one copies it where
+    it can be deleted like anything else.
+87. **The sound pack is an online, key-required shelf, shaped like the other
+    opt-ins.** Freesound results carry licences, so only Creative-Commons-0 /
+    Attribution are offered, previews let the user hear before a byte downloads,
+    and files land in `~/CuttingEdge/sounds`. Without a key `status()` says
+    "not configured" and search is an empty shelf, not an error — nothing about
+    it is in the installer. The real search needs the user's own account, so its
+    verdict is theirs, exactly as the GPU benchmark left its verdict to the
+    user's card (§4.57).
+
+88. **"Encoding stays off even though I set High performance" is two different
+    failures wearing one symptom, and the owner's screenshot showed which.** The
+    probe said `[h264_nvenc] Driver does not support the required nvenc API
+    version. Required: 13.1 Found: 13.0`. That string is a driver story, not a
+    settings story: the bundled FFmpeg is compiled against `nv-codec-headers`
+    needing NVENC API 13.1, and the installed driver exposes 13.0. The Windows
+    graphics preference — which the owner had correctly set to High performance —
+    chooses *which GPU runs the app*; it **cannot** raise the NVENC API version,
+    which is exactly why it changed nothing. Searching the open web confirms the
+    only fixes: update the NVIDIA driver to the latest Studio release, or build
+    FFmpeg against older `nv-codec-headers` (the bundled build cannot). So
+    `capabilities()` now parses `Required: X Found: Y`, says "this is a driver
+    story, not a settings story", names the driver update, and explicitly tells
+    the user their High-performance setting was right but is the other half.
+    No new library fixes it — this is an ABI between two pieces of software the
+    app does not compile, and pretending otherwise would be the brochure.
+
+89. **The credit screen is generated, not written.** A hand-typed licence list
+    drifts the day a dependency changes; so `/api/system/attribution` reads each
+    pinned backend package's *installed* metadata — name, version, licence,
+    preferring `License-Expression` over a wall of classifiers — and the test only
+    requires a licence for packages that are actually present, so the light dev
+    venv passes while the packaged runtime (every pin installed) is fully
+    covered. Bundled non-Python pieces (FFmpeg, Electron, embeddable CPython) and
+    the on-demand engines are named beside them, marked "yours, not shipped". The
+    page is reachable from Diagnostics. It is the 1.0 criterion "every shipped
+    package listed with its licence" as a screen a person can read.
+
+90. **A rally has no face; the moving region is the subject.** The reframe used
+    only the Haar face cascade, which needs a ≥24 px face looking at the camera —
+    a volleyball player mid-rally, a back turned on a pull-up bar, a jumper
+    mid-rope have none of that. So when the face cascade gives up, `reframe`
+    now follows the **centroid of motion** (the frame-to-frame difference above
+    a floor), OpenCV-only and shipped already. `plan()` reports which signal it
+    followed (`tracker`: face / motion / none), so a followed rally and a centred
+    still are both honest. Measured on a white block sweeping a black frame:
+    `tracker: motion`, followed 15/16 frames, the camera actually pans; on a
+    still frame with no face it stays centred. The old "no face means centre
+    crop" test was rebuilt on a *still* fixture — its testsrc2 fixture moves, and
+    a moving faceless frame is now (correctly) followed, not centred.
+
+91. **A sports highlight lands on the burst, and the best one lingers.** Three
+    additions for the footage the owner actually shoots (volleyball, gym, jump
+    rope), each measured on a recipe-built fixture (`tests/test_sports.py`):
+    `action` = the largest frame-to-frame change in a window (a spike is one
+    violent frame; a pan is a steady moderate one — the max, not the mean,
+    separates them), `presence` = the share of frame pairs with change above a
+    floor (an empty court or a rest between sets ranks low), and `slowmo` = the
+    single best clip plays at half speed as a highlight beat while the rest keeps
+    the reference rhythm (the source window consumed is unchanged, so nothing is
+    invented). The sport kind weights action 1.0 / presence 0.9. Both new signals
+    come from the grayscale strip one FFmpeg call already decodes.
+92. **The blueprint lives in `docs/CuttingEdge/ARCHITECTURE.md`.** Written for a
+    reader who has never seen the program: the process topology, the edit model
+    (five keyframe channels, opacity deliberately absent), the render engine and
+    its CSS-twin preview, the analysis pipeline, Style Match and the intent
+    weights, the brain's "a model may only win by scoring higher" rule, the
+    on-demand/licence discipline, packaging and the differential update, the
+    known-answer testing philosophy, a directory map, and a rebuild-from-zero
+    checklist. It is the contract a new developer must not break.
+
+93. **Two external reviews were triaged against the code, not accepted on
+    authority.** Items the reviewers flagged that were already true (waveforms on
+    the timeline, Ctrl+wheel zoom, an existing shortcut set, an Ollama timeout with
+    a rule fallback) were verified and left; the genuinely-missing, safe ones were
+    built: J/K/L transport + `,`/`.` frame-stepping; CORS locked from a wildcard
+    with credentials to an allowlist (dev origins + the packaged opaque origin,
+    no credentials) with a test that a foreign origin gets no allowance; a
+    path-injection guard on the media endpoint (null byte / relative → 400); and
+    filler-word removal (EN+FA) that strips time-buying tokens from captions as
+    whole tokens only, behind `intent.clean_fillers`. Heavy or licence-risky
+    suggestions (typed-ffmpeg, YOLO, librosa, Playwright-as-replacement, macOS
+    packaging, TransNetV2's torch) were deferred with reasons, not shipped.
+
+94. **Right-click context menu on clips** (the pro affordance both reviews asked
+    for): Split at playhead / Duplicate / Delete, rendered through a portal so it
+    never clips inside the scroll pane, closed by outside-click / Escape / wheel.
+    Mute/Hide were left out of the menu because those flags live on the *track*,
+    not the clip — putting them on a clip menu would have lied about the model.
+
+95. **A busy port degrades, never kills; a crash leaves a quotable id.** Port
+    discovery: in the packaged app Electron picks the first free port from 8742
+    and hands it to the backend (`CE_PORT`) and the renderer
+    (`--ce-backend-port` via preload), so a port conflict means "use another
+    port", not a silent death; dev keeps 8742 so the Vite proxy lines up. Crash
+    reporting: renderer-gone, uncaughtException and unhandledRejection each write
+    a small JSON `crash-<id>.json` beside the logs (nothing leaves the machine),
+    so a field bug report is a file, not a guess. Both are the P0/1.0 reliability
+    items from the advisors' ranked list.
+
+96. **On-demand installs must not need pip.** The packaged backend runs on an
+    embeddable CPython that ships **without pip**, so every on-demand fetch that
+    shelled out to `python -m pip` died on the user's machine with "No module
+    named pip" (reported from the field on the Fetch-model / Fetch-OCR buttons).
+    A wheel is just a zip and PyPI's JSON API gives the URL, so
+    `core/engine/_pypi.py` fetches and unpacks wheels with the stdlib alone —
+    pure `py3-none-any` wheels, or a `win_amd64` wheel matching the interpreter —
+    and `runtime_packages.install` falls back to it whenever pip is absent.
+    `vad.fetch` uses it too. Measured: the silero model downloads and unpacks
+    pip-free, and a pure wheel installed this way imports from the runtime dir.
+
+97. **Every accepted AI engine is now a declared on-demand engine; the rejected
+    stay rejected, visibly.** `core/engine/engines.py` is a registry: RIFE,
+    whisperX, TransNetV2, Demucs, MediaPipe-pose, CLIP/SigLIP, Real-ESRGAN,
+    pyannote, FILM and OpenTimelineIO, each with its verified licence, role and
+    explicit fetch list; `/api/engines/status` reports installed/licence and the
+    rejected set (YOLO/AGPL, madmom/CC-BY-NC, gl-transitions, Remotion,
+    DeepFilterNet-NOASSERTION, librosa) with reasons. Nothing ships; each degrades
+    gracefully. A Settings card shows the shelf and the gate.
+98. **OTIO interchange is real and round-trips.** `core/engine/interchange.py`
+    exports the video lane to `.otio` and reads one back (Apache-2.0, on-demand);
+    transitions/keyframes are dropped on export rather than faked. Tested with a
+    round-trip.
+
+99. **RIFE arrives as a thin, on-demand, experimental bridge.** Real slow-mo
+    needs optical-flow interpolation; `setpts` only holds frames. `core/engine/rife.py`
+    bridges the ncnn/vulkan RIFE bindings (`rife-ncnn-vulkan-python`, no torch) and
+    is only exercised when fetched; otherwise `available()` is False and the caller
+    keeps the `setpts` slow-mo. Any upstream API mismatch raises a clear error
+    rather than a wrong frame — experimental means labelled, not unguarded.
+100. **First-run tour** as an inline dismissible banner (never a trapping
+    overlay): drop → auto-clip 30s vertical → captions → export; shown once via
+    localStorage.
+
+101. **AI Transitions button** in the editor rail: one music-sized transition per
+    contiguous junction (half a beat, clamped 0.2–0.8s), alternating soft and
+    directional types, suggested by `/api/style/ai-transitions` and applied via the
+    existing `addTransition` — a first, music-aware pass, not one repeated dissolve.
+102. **Transcript/caption engines registered on-demand** (not shipped): Hazm,
+    Virastar, whisperX, DadmaTools, Hezar, pyannote, python-ass join the registry
+    with verified licences; actual integration awaits the owner's go-ahead.
+
+103. **Persian captions are typeset, not dumped.** `core/engine/persian.py`
+    cleans ASR output deterministically (Arabic→Persian letters, diacritics
+    stripped, half-space for می/نمی and های/ام, Persian digits when the run is
+    Persian, spaces collapsed) and runs Hazm first when fetched. It feeds both
+    `subtitles.cues_from_clips` (so libass renders like a typesetter set it) and
+    `meaning.score_text` (so discourse scoring sees canonical tokens). Word
+    timings are left untouched so karaoke stays in sync.
+
+104. **Every tool the app owns is in the editor's brain — automatically.** The
+    owner's standing directive: *anything built from now on is added to the
+    editor brain and Style Match without being asked.* Made real in
+    `core/brain/editor_brain.py`, whose `TOOLS` inventory is the app's toolbelt —
+    now **14 tools**: beat-cuts, slow-mo, captions, **Persian-caption
+    normalisation**, karaoke, **filler removal**, ducking, reframe, grade,
+    transitions, **RIFE motion-transitions**, hook-first, denoise, **OTIO
+    interchange** (the four bolded are capabilities built this session that had
+    shipped *without* being in the brain — now folded in). Each has one `assess()`
+    decision keyed off a measured signal, so a new tool is *considered*, never
+    sprinkled. The convention is written into the module docstring and
+    `ROADMAP_1.0.md` §2c, and `tests/test_editor_brain.py` enforces one decision
+    per tool plus the four new signals (Persian → normalise, unscripted talk →
+    trim fillers, high motion at junctions → RIFE dissolves, handoff asked →
+    export OTIO). Suite: **336 passed, 0 failed, 10 skipped** (was 335).
+
+105. **Word-level forced alignment for tighter Persian karaoke — on-demand,
+    degrade-safe.** faster-whisper already gives word timings and `subtitles.build_ass`
+    already lights them word by word (`{\kf}`); the gap was that those edges
+    drift, so a highlight can fire a frame off the word. `core/engine/whisperx_align.py`
+    bridges **whisperX** (BSD-3) + the Apache-2.0 Persian wav2vec2 aligner
+    (`jonatasgrosman/wav2vec2-large-xlsr-53-persian`) to snap word edges to the
+    audio. Like `rife.py` it is a thin defensive bridge, but unlike RIFE it
+    **never raises into the caller** — alignment is a *refinement* of timings we
+    already have, so on any machine without the engine (or on any upstream
+    failure) `align()` returns the input words with `status: no-engine|error` and
+    the karaoke keeps working. `transcribe_to_cues(align=True)` uses it and
+    reports `alignment`; `/api/captions/align-status` tells the UI honestly
+    whether it is fetched. The editor auto-uses it when present (like Hazm for
+    text — no separate button) and the toast says "word-aligned" only when it
+    actually ran. Deliberately **not** a `TOOLS` entry: it is not a tool the
+    editor chooses on/off, it is a quality refinement *inside* the captions/
+    karaoke decision — noted here so the §104 convention was considered, not
+    skipped. Nothing ships; `torch` stays `heavy` and on-demand.
+    `tests/test_whisperx_align.py` (8 tests): no-engine returns words unchanged,
+    row conversion (incl. dropping rows missing a time/text), a mid-run failure
+    still returns the originals, a successful pass reports the Persian aligner,
+    the fetch list excludes torch, whisperX stays a registered engine, and the
+    endpoint reports honestly. Suite: **344 passed, 0 failed, 10 skipped**.
+
+106. **The engine shelf stopped being a brochure: every row now says whether it
+    can be downloaded on *this* machine, and the button only exists when it can
+    win.** The owner photographed Settings with ten "not fetched" rows and asked
+    that they actually be downloadable. The audit found six separate lies of
+    omission, all fixed:
+    • the card had **no fetch button at all** — it now has one per engine, wired
+      to `/api/engines/install/start` with a polled task bar;
+    • `transnet` was registered under a module name the wheel does not contain
+      (the PyPI wheel's top level is `transnetv2_pytorch`, verified by unpacking
+      it) — `available()` would have said "not fetched" forever after a
+      successful download;
+    • `virastar` is **not on PyPI** under any of five names (all 404) — now
+      honestly repo-only, its role covered by the built-in `persian.py` + Hazm;
+    • `mediapipe` 1.x ships no win_amd64 cp311 wheel — pinned to **0.10.21**, the
+      newest release that does (verified against PyPI's release list);
+    • heavy engines never fetched their heavy part — `install/start` now takes
+      `heavy=true` and adds the torch wheels (~120 MB CPU, opt-in behind a modal
+      that states the size);
+    • RIFE has no wheel at all: its sdist is 1081 C++ files and the upstream
+      GitHub zips stop at Python 3.10 — on a pip-less runtime the row now says
+      *why* instead of dying mid-download; where pip exists it remains a source
+      build.
+    The pip-free installer grew a real sdist path: a pure-Python sdist is
+    unpacked by `extract_sdist` (`.py` only, tests/docs skipped) and refused
+    outright when it carries compiled code — the check lives in the extractor
+    too, because silently dropping binaries would make a package that imports
+    and then dies. `engines.probe()` verifies each row against PyPI once per
+    process and the card renders `fetchable`/`why`. Proof, not promise:
+    `test_python_ass_downloads_end_to_end_through_the_real_endpoint` runs the
+    button's exact path (POST start → task poll → `is_installed("ass")`) and
+    passed in CI-sandbox.
+107. **Roadmap step 1 closes and step 2 opens.** `core/engine/assfile.py` round-
+    trips karaoke ASS: a file edited in Aegisub comes back as cues with the word
+    timings **reconstructed from the `\\kf` tags** (built-in parser as the tested
+    floor, python-ass as the fetched reader), and our cues write out through the
+    same `build_ass` the compositor burns — endpoints `/api/captions/ass/import|
+    export`. `core/engine/transnet.py` is the TransNetV2 bridge (boundaries when
+    fetched, degrade-safe) **plus junction typing that needs no engine at all**:
+    cut = one violent frame, dissolve = a ramp, fade = a dip towards black,
+    measured with the OpenCV we already ship; `/api/engines/transnet/detect`
+    serves both, naming which detector ran. Per the §104 convention both were
+    considered for the brain and deliberately filed as refinements, not new
+    tools: ASS is another door of the existing `interchange` tool, and junction
+    typing sharpens the measurement behind `transitions` — the reasoning is
+    written here so the convention was applied, not skipped. Suite: **363
+    passed, 0 failed, 10 skipped**.
+
+108. **The brain thinks out loud, the Audio panel extracts, and the home screen
+    stops spacing its icons.** Three owner asks, one release-worth of work:
+    • **Style Match no longer asks the user anything a measurement can answer.**
+      The ten-question intake card is gone. `core/brain/intake.py` makes the
+      brain interrogate *itself* — once when the reference arrives
+      (`answer_reference`: energy, platform, captions, beat, hook, junction
+      softness, length — each with the number behind it), once when the footage
+      arrives (`measure_footage` + `answer_footage`: kind, focus, goal, audience,
+      speech %, action burstiness, aspect, and an honest "noise not measured
+      yet"). Both interrogations render on screen as they run, so the owner
+      *watches* the brain think in Style Match — and the Assistant rides the
+      chosen plan because it travels with the edit. Then `edit_options` offers
+      four genuinely different starts (faithful / short-&-punchy / speech-first
+      or motion-montage / calm-cinematic), each carrying the intent payload the
+      rebuild already understands; picking one applies it. Guarded by
+      `tests/test_intake.py` (answers change with the measurements, options are
+      pairwise different, the endpoint answers for both videos).
+    • **Audio extraction** in the clip Audio panel: one button lifts the clip's
+      audio onto the audio lane, aligned under its picture — pure bundled
+      FFmpeg (AAC 192 k), probed so the clip length is exact, written to
+      `~/CuttingEdge/exports`; a second button splits stems
+      (vocals/drums/bass/other) with **Demucs** (facebookresearch/demucs, MIT —
+      the open-source GitHub engine the owner asked for), on-demand and an
+      honest 409 until fetched, run as a polled task because torch is minutes.
+      `core/engine/audio_extract.py` + `app/routers/audio.py`, guarded by
+      `tests/test_audio_extract.py` (a muxed video+audio clip lifts to an
+      audio-only file).
+    • **Home tiles left-aligned and packed**: `.ce-grid` used
+      `repeat(auto-fit, minmax(104px, 1fr))`, which stretched icons across the
+      window with big gaps — the owner said the spaced look is ugly. Columns are
+      now fixed-size with `justify-content: start` (and the grid stays LTR so
+      "left" holds in the Persian RTL UI too).
+    Per the §104 convention the two new builds were considered for the tool
+    belt: audio extraction is a utility door (the interchange family), and stem
+    separation is a refinement *inside* `ducking`'s future beat-accuracy — both
+    documented here as considered, not skipped. Suite: **371 passed, 0 failed,
+    10 skipped**.
+
+109. **Ducking listens to the vocals stem when Demucs has cached one.** The
+    duck envelope used to be measured on the voice clip's raw mix; if that mix
+    carries music, the activity curve hears the band as well as the words. Now
+    `audio.voice_source()` checks `~/CuttingEdge/exports/<name>.stems/vocals.wav`
+    — exactly where the Audio panel's Split-stems button writes — and the
+    compositor measures the envelope on that clean stem when present, on the
+    raw file otherwise (no stem → byte-identical behaviour, which the unchanged
+    ducking-depth test re-proves). A render **never** separates by itself:
+    torch is minutes of CPU and must stay a button the user presses, so the
+    refinement is a cache hit, not a hidden download. `tests/test_audio_extract.py`
+    pins the resolution both ways. Suite: **372 passed, 0 failed, 10 skipped**.
+
+110. **When no face looks at the camera, a person still has a body: MediaPipe
+    pose enters the reframe ladder.** The ladder was face → motion-centroid →
+    centred; the centroid follows *anything* that moves, including a waving
+    crowd. `core/engine/pose.py` bridges **MediaPipe Pose** (google-ai-edge/
+    mediapipe, Apache-2.0, pinned `0.10.21` — the newest release with a
+    win_amd64 cp311 wheel, §106) and, when fetched, sits between the two: a
+    frame with no face asks the 33-point model for the visible torso (mid of
+    shoulders+hips, joints under 0.5 visibility do not vote, one visible joint
+    is not a person) and the camera follows *the person*; `tracker` reports
+    `pose` and the plan's noun says so. Absent engine or upstream mismatch,
+    `track_frame` returns None per frame and the centroid takes over exactly as
+    before — the bridge degrades, never crashes, nothing ships. The geometry
+    (`centre_from_landmarks`) is tested without MediaPipe; the no-engine path
+    is tested; the fetched path runs on the owner's machine where the button
+    can win. Per the §104 convention this was considered for the tool belt and
+    filed as a refinement inside `reframe`'s measurement — documented, not
+    skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+114. **The UI/UX rebuild the professors demanded (2/20 → aimed ≥12/20),
+    implemented for real, not mocked.** From their two blueprints, triaged in
+    `BRAIN_UPGRADE.md` and proven first as mockups (`ui-proposal/*.png`,
+    including the *implemented* shots): (a) the 0.9.31 design tokens — layered
+    darks (#0A0E17→#243044, never pure black), brand = the wordmark's
+    violet+cyan, semantic success/warning/danger, softer borders; (b) real
+    Inter + JetBrains Mono (timecodes) + Vazirmatn, all bundled offline; (c)
+    timeline to spec: hue-coded lanes (video #3B82F6, audio #10B981, text
+    #A78BFA), 8px accent keyframe diamonds, rose playhead glow, mono ruler;
+    (d) the Studio's new panel grammar — a **MediaBin** library pane derived
+    from the timeline itself, and a **resizable** working-surface↔timeline
+    split (`react-resizable-panels` v4 Group/Panel/Separator); (e) **Ctrl+K
+    command palette** (cmdk, MIT) wired to the *real* handlers in both
+    languages; (f) glass toasts/modals and gradient CTAs on Home; (g) a11y:
+    :focus-visible rings everywhere. Guards: `npm run verify` OK, `test:ui`
+    PASSED (one new overlap fixed by capping the monitor inside its panel
+    share), `test:playback` — **all checks passed** on the restructured editor
+    (reframe, captions, assistant dry-run, undo all green). Suite/backend
+    untouched and green (404). No version bump — publishes on the owner's word.
+
+113. **1.0 hardening opens: tripwires, a manual, the other half of the taste
+    loop, and eyes on the packaged window.** (a) `tests/test_perf_regression.py`
+    is a ratchet, not a benchmark: caps set from a real clock on 3 s fixtures
+    (motion_curve 0.03 s, silence 0.02 s, beats 0.02 s, scenes 0.20 s, build_ass
+    <1 ms; caps 25–100× above) so a slow runner never flakes but a per-frame
+    FFmpeg loop — the class this project actually shipped once (§16) — trips
+    every wire. (b) `docs/CuttingEdge/MANUAL.md`: the one-page manual, Persian
+    first, true of 0.9.30 — home, editor, the brain's visible interrogation,
+    engines shelf, assistant, diagnostics. (c) The taste loop's missing half:
+    the result card now has **«این را نپسندیدم»** posting `rejected` to
+    `/api/brain/feedback`; the prior stays bounded either way. (d)
+    `scripts/packaged-ui-audit.mjs` attaches to the real packaged Electron
+    window over CDP (`--remote-debugging-port`) and runs the render/no-error/
+    overflow checks at the artefact level; the canonical workflow copy
+    (`ce-app/ci/ce-workflow.yml`, the file the owner pastes into
+    `.github/workflows/ce.yml`) gained the step after the smoke test. That step
+    runs on the Windows runner, not in this sandbox — stated, not pretended.
+    Suite after: **404 passed, 0 failed, 10 skipped**.
+
+112. **The professors' blueprints, triaged line by line — nothing dropped
+    silently.** Both upgrade plans (InternVL/LangGraph/ChromaDB list and the
+    FeatureBus/critic list) were read in full and triaged in
+    `docs/CuttingEdge/BRAIN_UPGRADE.md`: built this release — the FeatureBus
+    (`core/engine/features.py`, honest `unknown` list), the auto-editor-inspired
+    motion curve + `keep = speech OR motion` (Public Domain), meaning 2.0
+    (`narrative_arc`: hook/payoff/Q→A from markers, feeding a new objective
+    term), three new planners (narrative/retention/variety) that only emit
+    measured times, the bounded **critic** (≤2 revisions, bottom-quantile picks
+    swapped for unused highlights, rule plan as floor, `…+critic` on the
+    scoreboard), taste memory as a stdlib JSON prior clamped 0.75–1.33 with
+    `/api/brain/feedback` and the frontend reporting accepted edits, the
+    contact-sheet vision upgrade (4 frames/window, blend still ≤ 0.3),
+    `clip_embed.py` (open_clip on-demand, absent → renormalise, never fake),
+    glm-4v:9b in the Ollama catalogue for reasoning-on-scoreboard. Registered
+    on-demand: sentence-transformers, librosa (moved OUT of REJECTED — the
+    objection was shipping it to everyone), open-unmix, DOVER. Rejected with
+    reasons: Essentia (AGPL binds even on-demand), LangGraph/ChromaDB as
+    dependencies (architecture adopted natively, packages are tax),
+    InternVL/VideoLLaMA/Molmo (HF-gated multi-GB; roles covered by catalogued
+    Ollama vision + MediaPipe + CLIP), RTMPose (mmcv closure), YOLO-World
+    (weight licences unverified), pyAudioAnalysis (deferred: scipy closure for
+    signals we already measure). Suite: **399 passed, 0 failed, 10 skipped**.
+
+111. **The brain fires from every door.** The owner re-sent the same three asks
+    (Audio extraction, brain-asks-itself Style Match, left-aligned home) after
+    they had shipped in 0.9.29 — so every claim was re-verified live instead of
+    trusted: the backend served `/api/style/brain` (Persian Q&A with the numbers
+    behind each answer) and `/api/audio/extract` (a 3.02 s `.m4a` in the exports
+    dir) over HTTP; `npm run test:ui` walked all routes green; a targeted
+    Chromium check on `#/style` rendered with **zero console errors, the old
+    questionnaire absent, the reference card present**; the home grid rule is at
+    `global.css:275`. The audit also exposed one real gap: the *"Only analyse a
+    reference"* door set the template without waking the brain — `analyse()` now
+    calls `askBrain` too, so whichever door the first video arrives through, the
+    self-interrogation is on screen. Version stays 0.9.29 until the owner says
+    to publish; the fix rides the next release.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in
@@ -732,6 +1340,12 @@ candidates can be scored and raced; a free-form prompt has none, so it gets a dr
 preview and undo instead of a fake score.
 
 ## 6. Next, in order
+
+**Four steps to 1.0** — the table with the state of each, measured from the code
+on 2026-08-24, is at the top of `docs/CuttingEdge/ROADMAP_1.0.md`:
+template gallery and title/sound packs → audio depth (DeepFilterNet, measured in
+dB or dropped) → a vision model that has actually seen frames → stabilisation
+(tour, crash reporting, manual, attribution screen, a filmed clean install).
 
 The full plan, with the measurement each step has to pass, is in
 `docs/CuttingEdge/ROADMAP_1.0.md`. The short form:

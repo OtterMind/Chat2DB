@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Volume2, VolumeX, Lock, Unlock, Video, Music4, Type, Plus, Minus, Maximize, Crosshair, Eye, EyeOff,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { formatTimecode, snapTarget, useEditor, type Clip, type TrackKind, MIN_CLIP } from './model'
 import { peaksApi, thumbUrl } from '../api/render'
 import { useI18n } from '../i18n'
@@ -26,6 +27,24 @@ export default function Timeline() {
     setZoom, zoomToFit, setPanel, playing, beats,
   } = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Right-click context menu: the pro-editor affordance the reviews asked for.
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null)
+  useEffect(() => {
+    if (!menu) return undefined
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', close)
+    }
+  }, [menu])
+
+  const menuClip = menu ? clips.find((c) => c.id === menu.id) : undefined
 
   const { t } = useI18n()
   const laneRef = useRef<HTMLDivElement>(null)
@@ -408,6 +427,7 @@ export default function Timeline() {
                     selected={clip.id === selectedId}
                     kind={track.kind}
                     onSelect={() => select(clip.id)}
+                    onContextMenu={(e) => { select(clip.id); setMenu({ x: e.clientX, y: e.clientY, id: clip.id }) }}
                     onDragStart={(mode, grabTime) =>
                       setDrag(
                         mode === 'move'
@@ -422,6 +442,26 @@ export default function Timeline() {
           ))}
 
           {guide !== null && <div className="tl__guide" style={{ left: guide * pxPerSecond }} />}
+
+      {menu && menuClip &&
+        createPortal(
+          <div
+            className="tl__ctx"
+            style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 240) }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => { useEditor.getState().splitAtPlayhead(); setMenu(null) }}>
+              {t('Split at playhead', 'برش در playhead')}
+            </button>
+            <button onClick={() => { useEditor.getState().duplicateSelected(); setMenu(null) }}>
+              {t('Duplicate', 'تکثیر')}
+            </button>
+            <button className="is-danger" onClick={() => { useEditor.getState().removeSelected(); setMenu(null) }}>
+              {t('Delete', 'حذف')}
+            </button>
+          </div>,
+          document.body,
+        )}
 
           <div
             className={`tl__playhead ${centred ? 'is-centred' : ''}`}
@@ -523,12 +563,13 @@ function Waveform({ clip }: { clip: Clip }) {
 }
 
 function ClipView({
-  clip, pxPerSecond, selected, onSelect, onDragStart, xToTime, kind,
+  clip, pxPerSecond, selected, onSelect, onDragStart, xToTime, kind, onContextMenu,
 }: {
   clip: Clip
   pxPerSecond: number
   selected: boolean
   onSelect: () => void
+  onContextMenu?: (e: { clientX: number; clientY: number }) => void
   onDragStart: (mode: 'move' | 'trim-start' | 'trim-end', grabTime: number) => void
   xToTime: (clientX: number) => number
   kind: TrackKind
@@ -540,6 +581,11 @@ function ClipView({
         left: clip.start * pxPerSecond,
         width: Math.max(12, clip.duration * pxPerSecond),
         background: `linear-gradient(150deg, ${clip.color}, ${clip.color}bb)`,
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onContextMenu?.(e)
       }}
       onPointerDown={(e) => {
         e.stopPropagation()

@@ -28,6 +28,8 @@ interface GpuStatus {
   /** Every hardware encoder that was tried, and FFmpeg's own reason if it failed. */
   encoders: { name: string; vendor: string; codec: string; ok: boolean; reason: string; tried?: string[]; detail?: string }[]
   notes: string[]
+  /** The NVENC driver-vs-FFmpeg API mismatch, when that is the specific cause. */
+  nvencApi?: { required: string; found: string } | null
   used: string[]
 }
 
@@ -221,6 +223,22 @@ export default function GpuCard() {
               >
                 {busy === 'prefer' ? <Loader2 size={15} className="ce-spin" /> : <Cpu size={15} />}
                 {t('Ask Windows to use the card', 'از ویندوز بخواه از کارت استفاده کند')}
+              </button>
+            )}
+            {status.nvencApi && (
+              <button
+                className="ce-btn ce-btn--sm"
+                data-testid="nvidia-driver"
+                onClick={() =>
+                  (window as unknown as { cuttingEdge?: { openExternal?: (u: string) => void } })
+                    .cuttingEdge?.openExternal?.('https://www.nvidia.com/download/index.aspx')
+                }
+              >
+                <Download size={15} />
+                {t(
+                  `Update the NVIDIA driver (needs ${status.nvencApi.required}, you have ${status.nvencApi.found})`,
+                  `آپدیت درایور NVIDIA (نیاز ${status.nvencApi.required}، شما ${status.nvencApi.found})`
+                )}
               </button>
             )}
             {preference?.supported && (

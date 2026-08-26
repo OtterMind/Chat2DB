@@ -19,6 +19,8 @@ export interface Transcription {
   text: string
   words: CaptionWord[]
   cues: CaptionCue[]
+  /** 'off' | 'aligned' | 'no-engine' | 'error: ...' — whether word alignment ran */
+  alignment?: string
 }
 
 /**
@@ -30,8 +32,11 @@ export interface Transcription {
 const TRANSCRIBE = { timeout: 20 * 60_000 }
 
 export const captionsApi = {
-  transcribe: async (path: string, language?: string): Promise<Transcription> =>
-    (await api.post('/captions/transcribe', { path, language }, TRANSCRIBE)).data,
+  transcribe: async (path: string, language?: string, align = false): Promise<Transcription> =>
+    (await api.post('/captions/transcribe', { path, language, align }, TRANSCRIBE)).data,
   status: async (): Promise<{ available: boolean; reason?: string }> =>
     (await api.get('/captions/status')).data,
+  /** Is whisperX word-level alignment fetched? Honest, so the button can say. */
+  alignStatus: async (): Promise<{ available: boolean; aligner: string; note: string }> =>
+    (await api.get('/captions/align-status')).data,
 }

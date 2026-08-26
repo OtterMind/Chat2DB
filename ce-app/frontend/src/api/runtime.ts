@@ -6,7 +6,8 @@
  * - packaged (`file://`): there is no origin to be relative to, so talk to the
  *   bundled backend directly.
  */
-export const BACKEND_PORT = 8742
+const injected = (window as unknown as { cuttingEdge?: { backendPort?: number } }).cuttingEdge?.backendPort
+export const BACKEND_PORT = typeof injected === 'number' && injected > 0 ? injected : 8742
 
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:'
 

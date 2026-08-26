@@ -1,12 +1,515 @@
 import { useEffect, useState } from 'react'
-import { Form, Input, message } from 'antd'
+import { Form, Input, message, Modal } from 'antd'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
+import api from '../api/client'
 import AiRuntimeCard from '../components/AiRuntimeCard'
+import { assistantApi, type ProviderState } from '../api/assistant'
+import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
+import { ocrApi, type OcrStatus } from '../api/ocr'
+import { visionApi, type VisionStatus } from '../api/vision'
+import { pickMedia } from '../api/render'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
 import { useI18n, type Lang } from '../i18n'
+
+/**
+ * Which model answers the assistant.
+ *
+ * It lives here as well as in the chat panel because it is one setting with two
+ * doors, and a choice only one of them remembers is two settings. The state next
+ * to each name is **checked**, not read: Ollama being installed and Ollama being
+ * switched on are different facts, and both have misled a user before.
+ */
+function AssistantEngineCard() {
+  const { t } = useI18n()
+  const [choices, setChoices] = useState<string[]>([])
+  const [available, setAvailable] = useState<Record<string, ProviderState>>({})
+  const [selected, setSelected] = useState('auto')
+
+  useEffect(() => {
+    assistantApi
+      .providers()
+      .then((r) => {
+        setChoices(r.choices)
+        setAvailable(r.available)
+        setSelected(r.selected)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const save = async (value: string) => {
+    setSelected(value)
+    try {
+      await assistantApi.setProvider(value)
+      message.success(t('The assistant will answer with this', 'دستیار با این پاسخ می‌دهد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const label = (name: string) =>
+    name === 'auto'
+      ? t('Automatic — the first one that is set up', 'خودکار — اولین چیزی که وصل است')
+      : name === 'off'
+        ? t('Offline only — never call a model', 'فقط آفلاین — هیچ مدلی صدا نشود')
+        : name
+
+  return (
+    <Card title={t('The assistant\'s brain', 'مغز دستیار')}>
+      <div className="ce-kv">
+        <span>{t('Who answers', 'چه کسی پاسخ می‌دهد')}</span>
+        <select
+          value={selected}
+          data-testid="settings-assistant-provider"
+          style={{ minWidth: 220 }}
+          onChange={(event) => void save(event.target.value)}
+        >
+          {choices.map((name) => (
+            <option key={name} value={name}>{label(name)}</option>
+          ))}
+        </select>
+      </div>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        {Object.entries(available).map(([name, state]) => (
+          <span key={name} className="ce-badge" title={state.model}>
+            {state.ready ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+            {name}
+            {state.installed === false && t(' · not installed', ' · نصب نیست')}
+            {state.installed && !state.enabled && t(' · not enabled', ' · فعال نیست')}
+          </span>
+        ))}
+      </div>
+      <p className="ce-hint" style={{ marginTop: 8 }}>
+        {t(
+          'With no model connected the assistant still answers — from what is measured on your timeline — and says so instead of guessing.',
+          'بدون مدل هم دستیار پاسخ می‌دهد — از روی آنچه در تایم‌لاین اندازه گرفته — و به‌جای حدس زدن، همین را می‌گوید.'
+        )}
+      </p>
+    </Card>
+  )
+}
+
+/**
+ * The speech map — where the edit thinks someone is talking.
+ *
+ * Everything about the cut starts from this: which moments are candidates, where
+ * a cut may land without breaking a word. For every release so far it came from
+ * FFmpeg's energy detector, which cannot tell a loud tone from a voice. The model
+ * is opt-in, and the reason it is opt-in is on this card: a **Measure** button
+ * that runs both on a file the user chooses and shows the numbers, because
+ * "the model is better" without a measurement is a brochure (§4.57).
+ */
+function SpeechEngineCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<VadStatus | null>(null)
+  const [result, setResult] = useState<VadComparison | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    vadApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const install = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      setStatus(await vadApi.install((state) => setNote(state.label || '')))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+      setNote('')
+    }
+  }
+
+  const measure = async () => {
+    const picker = pickMedia()
+    const paths = picker ? await picker : null
+    const path = paths?.[0]
+    if (!path) return
+    setBusy(true)
+    try {
+      setResult(await vadApi.compare(path))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const choose = async (engine: string) => {
+    try {
+      await vadApi.choose(engine)
+      setStatus(await vadApi.status())
+      message.success(t('The speech map changed', 'نقشه‌ی گفتار عوض شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const percent = (value: number) => `${Math.round(value * 100)}%`
+
+  return (
+    <Card title={t('Where the speech is', 'گفتار کجاست')}>
+      <p className="ce-hint">
+        {t(
+          'Every cut starts from knowing where someone is talking. The energy detector has been used until now; it cannot tell a loud tone from a voice. The model is 2.2 MB, licence MIT, and runs on the runtime that already ships.',
+          'هر برشی از این شروع می‌شود که بدانیم کی دارد حرف می‌زند. تا حالا از تشخیص‌دهنده‌ی انرژی استفاده شده؛ آن نمی‌تواند یک تنِ بلند را از صداِ انسان تشخیص دهد. مدل ۲.۲ مگابایت است، مجوز MIT، و روی همان رانتایمی کار می‌کند که از قبل در برنامه هست.'
+        )}
+      </p>
+
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">
+          {t('engine', 'موتور')}: <Num>{status?.engine ?? '—'}</Num>
+        </span>
+        <span className="ce-badge">
+          {t('model', 'مدل')}: {status?.model ? `${status.modelMb} MB` : t('not fetched', 'گرفته نشده')}
+        </span>
+        <span className="ce-badge">
+          onnxruntime: <Num>{status?.onnxruntime ?? '—'}</Num>
+        </span>
+        <span className="ce-badge">{t('licence', 'مجوز')}: {status?.licence ?? '—'}</span>
+      </div>
+
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        {!status?.model && (
+          <button className="ce-btn ce-btn--sm" disabled={busy} onClick={() => void install()}>
+            <Download size={14} /> {busy && note ? note : t('Fetch the model (2.2 MB)', 'گرفتن مدل (۲.۲ مگابایت)')}
+          </button>
+        )}
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy} onClick={() => void measure()}>
+          <Sparkles size={14} /> {t('Measure it on a file', 'اندازه‌گیری روی یک فایل')}
+        </button>
+        {status?.model && status.engine !== 'silero' && (
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void choose('silero')}>
+            {t('Use the model', 'استفاده از مدل')}
+          </button>
+        )}
+        {status?.engine === 'silero' && (
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void choose('energy')}>
+            {t('Go back to the energy detector', 'برگشت به تشخیص‌دهنده‌ی انرژی')}
+          </button>
+        )}
+      </div>
+
+      {result && (
+        <div className="ce-kv" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+          <strong data-testid="vad-result">
+            {result.file} · {result.duration.toFixed(1)}s
+            {!result.hasAudio && t(' — no audio track', ' — ترک صوتی ندارد')}
+          </strong>
+          {result.silencedetect && (
+            <span>
+              {t('Energy detector', 'تشخیص‌دهنده‌ی انرژی')}: {percent(result.silencedetect.speechRatio)}{' '}
+              {t('speech', 'گفتار')} · {result.silencedetect.regions} {t('regions', 'ناحیه')} ·{' '}
+              {result.silencedetect.seconds}s
+            </span>
+          )}
+          {result.silero && (
+            <span>
+              {t('Model', 'مدل')}: {percent(result.silero.speechRatio)} {t('speech', 'گفتار')} ·{' '}
+              {result.silero.regions} {t('regions', 'ناحیه')} · {result.silero.seconds}s
+            </span>
+          )}
+          {typeof result.disagreementRatio === 'number' && (
+            <span className="ce-hint">
+              {t('They disagree over', 'اختلاف دارند روی')} {percent(result.disagreementRatio)}{' '}
+              {t('of the file. Only your own material can say which one is right.',
+                 'از فایل. فقط material خودت می‌تواند بگوید کدام درست است.')}
+            </span>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * On-screen text — what a frame says.
+ *
+ * Apache-2.0, models bundled in the wheel (15.4 MB) so it works with the network
+ * unplugged, and it runs on the onnxruntime that already ships. It is the pass
+ * behind copying the reference's caption style, seeing hand-made titles, and the
+ * "no on-screen text" restriction. On-demand: nothing is in the installer.
+ */
+function OcrCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<OcrStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    ocrApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const install = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      await ocrApi.install((state) => setNote(state.label || ''))
+      setStatus(await ocrApi.status())
+      message.success(t('OCR is ready', 'OCR آماده است'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+      setNote('')
+    }
+  }
+
+  return (
+    <Card title={t('On-screen text', 'متنِ روی تصویر')}>
+      <p className="ce-hint">
+        {t(
+          'Reads what is written on the picture. It is the pass behind copying the reference caption style, seeing hand-made titles, and the "no on-screen text" restriction. Apache-2.0; the models travel inside the package, so once fetched it works offline.',
+          'آنچه روی تصویر نوشته شده را می‌خواند: همان مرحله‌ای که کپی‌کردن سبک زیرنویسِ الگو، دیدن تایتل‌های دستی و محدودیت «متن روی تصویر نباشد» به آن وابسته‌اند. Apache-2.0؛ مدل‌ها داخل خود بسته‌اند، پس بعد از گرفتن، آفلاین کار می‌کند.'
+        )}
+      </p>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">{t('licence', 'مجوز')}: {status?.licence ?? '—'}</span>
+        <span className="ce-badge">
+          {status?.installed ? t('installed', 'نصب است') : t('not fetched', 'گرفته نشده')}
+        </span>
+        <span className="ce-badge">
+          {t('models', 'مدل‌ها')}: {status?.modelsBundled ? t('bundled', 'داخل بسته') : '—'}
+        </span>
+      </div>
+      {!status?.installed && (
+        <div className="ce-actions" style={{ marginTop: 12 }}>
+          <button className="ce-btn ce-btn--sm" disabled={busy} onClick={() => void install()}>
+            <Download size={14} /> {busy && note ? note : t('Fetch OCR (~16 MB)', 'گرفتن OCR (~۱۶ مگابایت)')}
+          </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * A model that has seen frames.
+ *
+ * The models live in the user's own Ollama — a 4 GB laptop is never promised an
+ * 11 B model, because the catalogue already says what fits (§4.62). The engine is
+ * off by default: a boost that is absent is not a regression, and whether the
+ * model's "interesting" agrees with a human is decided by the user's own footage
+ * through the preview, not by a claim.
+ */
+function VisionCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<VisionStatus | null>(null)
+  const [preview, setPreview] = useState<{ time: string; score: number }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    visionApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const toggle = async (enabled: boolean) => {
+    try {
+      await visionApi.enable(enabled)
+      setStatus(await visionApi.status())
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const measure = async () => {
+    const picker = pickMedia()
+    const paths = picker ? await picker : null
+    if (!paths?.[0]) return
+    setBusy(true)
+    try {
+      const r = await visionApi.preview(paths[0])
+      setPreview(
+        r.scores
+          ? Object.entries(r.scores).map(([time, score]) => ({ time, score }))
+          : null
+      )
+      if (!r.scores) message.warning(t('No vision model answered', 'مدل بینایی جوابی نداد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title={t('A model that sees', 'مدلی که می‌بیند')}>
+      <p className="ce-hint">
+        {t(
+          'One vote in the highlight scorer from a model that has actually looked at the frames. It runs in your own Ollama; nothing is installed. Off by default, and the preview shows the scores in the open.',
+          'یک رأی در امتیازدهنده‌ی هایلایت از مدلی که واقعاً به فریم‌ها نگاه کرده. روی Ollama خودت اجرا می‌شود؛ هیچ‌چیز نصب نمی‌شود. به‌صورت پیش‌فرض خاموش، و پیش‌نمایش نمره‌ها را آشکار نشان می‌دهد.'
+        )}
+      </p>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        <span className="ce-badge">
+          {t('Ollama', 'الاما')}: {status?.running ? t('running', 'روشن') : t('not running', 'خاموش')}
+        </span>
+        <span className="ce-badge">
+          {t('vision model', 'مدل بینایی')}: <Num>{status?.visionPulled ?? t('none pulled', 'گرفته نشده')}</Num>
+        </span>
+      </div>
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        <button
+          className={`ce-btn ce-btn--sm ${status?.enabled ? 'ce-btn--auto' : ''}`}
+          disabled={!status?.ready && !status?.enabled}
+          onClick={() => void toggle(!status?.enabled)}
+        >
+          {status?.enabled ? t('Turn off', 'خاموش کن') : t('Let the model vote', 'بگذار مدل رأی بدهد')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy || !status?.ready} onClick={() => void measure()}>
+          <Sparkles size={14} /> {t('Preview on a file', 'پیش‌نمایش روی یک فایل')}
+        </button>
+      </div>
+      {preview && (
+        <div className="ce-kv" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+          {preview.map((row) => (
+            <span key={row.time} dir="ltr">
+              {Number(row.time).toFixed(1)}s — {row.score.toFixed(2)}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+
+interface EngineInfo {
+  id: string; name: string; repo: string; licence: string; role: string;
+  installed: boolean; heavy?: string | null;
+  fetchable?: boolean; why?: string; heavy_note?: string;
+}
+
+interface EngineTask {
+  id: string; status: string; stage: string; progress: number; label: string; error?: string | null;
+}
+
+/**
+ * The on-demand engine shelf. Every accepted AI engine is listed with its
+ * verified licence and whether it is fetched on this machine — and, new, a
+ * download button that only appears when the download can actually win: the
+ * backend probes PyPI for a loadable artefact per engine and reports the reason
+ * when it cannot (repo-only, source-only, missing interpreter wheel), so this
+ * card never shows a button that dies. Fetching goes through the same
+ * licence-gated, pip-free installer; heavy engines (torch) ask first, because
+ * that is ~120 MB the user opts into. The rejected set is shown
+ * with its reason so the gate is visible, not hidden.
+ */
+function EnginesCard() {
+  const { t } = useI18n()
+  const [engines, setEngines] = useState<EngineInfo[]>([])
+  const [rejected, setRejected] = useState<{ name: string; licence: string; why: string }[]>([])
+  const [busy, setBusy] = useState<Record<string, EngineTask>>({})
+
+  const load = () =>
+    api.get('/engines/status').then((r) => {
+      setEngines(r.data.engines ?? [])
+      setRejected(r.data.rejected ?? [])
+    }).catch(() => undefined)
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const startFetch = (engine: EngineInfo, heavy: boolean) => {
+    api
+      .post('/engines/install/start', { engine: engine.id, heavy })
+      .then((r) => {
+        const task = r.data as EngineTask
+        setBusy((b) => ({ ...b, [engine.id]: task }))
+        const poll = window.setInterval(() => {
+          api.get(`/tasks/${task.id}`).then((p) => {
+            const now = p.data as EngineTask
+            setBusy((b) => ({ ...b, [engine.id]: now }))
+            if (now.status !== 'running') {
+              window.clearInterval(poll)
+              setBusy(({ [engine.id]: _drop, ...rest }) => rest)
+              if (now.status === 'done') {
+                message.success(t(`${engine.name} fetched — it is live now`, `${engine.name} گرفته شد و فعال است`))
+                load()
+              } else {
+                message.error(now.error || t('fetch failed', 'گرفتن ناموفق بود'))
+              }
+            }
+          }).catch(() => window.clearInterval(poll))
+        }, 1500)
+      })
+      .catch((err) => {
+        const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        message.error(detail ?? (err as Error).message)
+      })
+  }
+
+  const fetchClicked = (engine: EngineInfo) => {
+    const needsTorch = engine.heavy === 'torch' || engine.heavy === 'torch+HF-token'
+    if (needsTorch) {
+      Modal.confirm({
+        title: t(`Fetch ${engine.name} plus torch?`, `${engine.name} به‌همراه torch گرفته شود؟`),
+        content: t(
+          'This engine needs torch to run: about 120 MB of CPU wheels from PyPI, downloaded once to your runtime folder (updates never delete it).',
+          'این موتور برای اجرا به torch نیاز دارد: حدود ۱۲۰ مگابایت wheel پردازنده از PyPI، یک‌بار در پوشه‌ی runtime شما (به‌روزرسانی‌ها هرگز آن را پاک نمی‌کنند).'
+        ),
+        okText: t('Fetch engine + torch', 'گرفتن موتور + torch'),
+        cancelText: t('Cancel', 'انصراف'),
+        onOk: () => startFetch(engine, true),
+      })
+    } else {
+      startFetch(engine, false)
+    }
+  }
+
+  return (
+    <Card title={t('On-demand AI engines', 'موتورهای هوش مصنوعی اختیاری')}>
+      <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        {engines.map((e) => {
+          const task = busy[e.id]
+          const needsTorch = e.heavy === 'torch' || e.heavy === 'torch+HF-token'
+          return (
+            <div key={e.id} className="attr-row">
+              <strong dir="ltr">{e.name}</strong>
+              <span className="ce-hint">
+                {task
+                  ? `${task.stage} ${Math.round((task.progress ?? 0) * 100)}%`
+                  : e.role + (e.why && !e.installed && !e.fetchable ? ` — ${e.why}` : '')}
+              </span>
+              <span dir="ltr" className="ce-badge">{e.licence}</span>
+              {e.installed ? (
+                <span className="ce-badge">{t('ready', 'آماده')}</span>
+              ) : e.fetchable ? (
+                <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => fetchClicked(e)}>
+                  {t(needsTorch ? 'Fetch + torch' : 'Fetch', needsTorch ? 'گرفتن + torch' : 'گرفتن')}
+                </button>
+              ) : (
+                <span className="ce-badge" title={e.why}>{t('unavailable', 'در دسترس نیست')}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="ce-hint" style={{ marginTop: 10 }}>
+        {t(
+          'None of these ship in the installer; each is fetched when you ask and degrades gracefully when absent. Rejected engines stay listed with their reason.',
+          'هیچ‌کدام در نصب‌کننده نیستند؛ هرکدام وقتی بخواهی گرفته می‌شود و در غیابش برنامه بی‌صدا کار می‌کند. موتورهای ردشده با دلیلشان فهرست می‌مانند.'
+        )}
+      </p>
+      {rejected.length > 0 && (
+        <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch', marginTop: 8 }}>
+          {rejected.map((r) => (
+            <div key={r.name} className="attr-row">
+              <strong dir="ltr">{r.name}</strong>
+              <span className="ce-hint">{r.why}</span>
+              <span dir="ltr" className="ce-badge">{r.licence}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
 
 declare const __APP_VERSION__: string
 const APP_VERSION = __APP_VERSION__
@@ -212,6 +715,16 @@ export default function Settings() {
           {t('. Ollama runs fully locally and needs no key.', ' خوانده می‌شوند. Ollama کاملاً محلی و بدون نیاز به کلید کار می‌کند.')}
         </p>
       </Card>
+
+      <AssistantEngineCard />
+
+      <SpeechEngineCard />
+
+      <OcrCard />
+
+      <EnginesCard />
+
+      <VisionCard />
     </Page>
   )
 }

@@ -2,6 +2,8 @@ import { app, Menu, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { execFileSync, spawn } from 'child_process'
 import { existsSync, createWriteStream, mkdirSync, readFileSync, statSync } from 'fs'
+import { createServer } from 'net'
+import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 
 /**
@@ -55,6 +57,43 @@ function backendLogPath() {
 }
 let mainWindow: BrowserWindow | null = null
 
+let backendPort = 8742
+
+// A busy 8742 used to mean a silent crash. In the packaged app we now pick the
+// first free port and hand it to both the backend (CE_PORT) and the renderer
+// (--ce-backend-port), so a port conflict degrades to "use another port", never
+// to "the app died". Dev keeps 8742 so the Vite proxy still lines up.
+function freePort(start: number, span = 20): Promise<number> {
+  return new Promise((resolve) => {
+    const tryPort = (p: number) => {
+      if (p >= start + span) return resolve(start)
+      const srv = createServer()
+      srv.once('error', () => tryPort(p + 1))
+      srv.listen(p, '127.0.0.1', () => srv.close(() => resolve(p)))
+    }
+    tryPort(start)
+  })
+}
+
+
+// A crash the user can quote. Every failure of the shell writes a small JSON
+// report next to the logs with a short id, so a bug report from the field is a
+// file, not a guess. This is the 1.0 "crash reporting" item without a network:
+// nothing leaves the machine.
+function writeCrashReport(where: string, detail: string): string {
+  const id = randomUUID().slice(0, 8)
+  try {
+    const dir = path.dirname(log.transports.file.getFile().path)
+    const file = path.join(dir, `crash-${id}.json`)
+    writeFileSync(file, JSON.stringify({
+      id, at: new Date().toISOString(), where, detail,
+      version: app.getVersion(), platform: process.platform,
+    }, null, 2))
+    log.error(`[CE] crash report ${id} written to ${file}`)
+  } catch { /* a crash reporter must never crash */ }
+  return id
+}
+
 function startBackend() {
   if (process.env.CE_MANUAL_BACKEND === '1') return
   if (backendProcess) return
@@ -85,7 +124,11 @@ function startBackend() {
       // The backend sets Windows' per-application GPU preference, and the
       // preference is per *executable* — so it has to know which .exe the user
       // actually launched, not just its own python.exe.
-      env: { ...process.env, CE_APP_EXE: app.getPath('exe') },
+      // CE_VERSION is the release number the installer was built from. The
+      // backend cannot read the frontend's package.json in a packaged install —
+      // it is inside an asar — so without this it would fall back to a constant
+      // and `/api/health` would report the previous build forever.
+      env: { ...process.env, CE_APP_EXE: app.getPath('exe'), CE_VERSION: app.getVersion(), CE_PORT: String(backendPort) },
     })
   } catch (error) {
     backendFailure = `spawn failed: ${String(error)}`
@@ -195,6 +238,21 @@ function registerIpc() {
     return { running: backendProcess !== null, failure: backendFailure }
   })
   ipcMain.on('log:open', () => shell.showItemInFolder(log.transports.file.getFile().path))
+
+  // Open an external https URL in the default browser. Only https is allowed and
+  // only a small allowlist of hosts, so a stray string can never navigate the
+  // app or reach an arbitrary origin — this is the NVIDIA driver page and
+  // nothing else.
+  ipcMain.on('shell:open', (_e, url: unknown) => {
+    if (typeof url !== 'string') return
+    try {
+      const parsed = new URL(url)
+      const allowed = ['nvidia.com', 'www.nvidia.com', 'us.download.nvidia.com']
+      if (parsed.protocol === 'https:' && allowed.some((h) => parsed.hostname.endsWith(h))) {
+        void shell.openExternal(url)
+      }
+    } catch { /* not a URL: ignore */ }
+  })
 }
 
 function setFullscreen(value: boolean) {
@@ -228,7 +286,7 @@ function createWindow() {
     // survived even in fullscreen. The app has no use for it: every action lives
     // in the interface, so the whole bar goes.
     autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, additionalArguments: [`--ce-backend-port=${backendPort}`] },
   })
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   else {
@@ -269,14 +327,26 @@ function createWindow() {
   })
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
     log.error('[CE] Renderer process gone:', details.reason)
+    writeCrashReport('renderer', String(details.reason))
   })
 
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
 }
 
-app.whenReady().then(() => {
+
+process.on('uncaughtException', (error) => {
+  log.error('[CE] uncaughtException:', error)
+  writeCrashReport('main', String(error?.stack ?? error))
+})
+process.on('unhandledRejection', (reason) => {
+  log.error('[CE] unhandledRejection:', reason)
+  writeCrashReport('main', String(reason))
+})
+
+app.whenReady().then(async () => {
   registerIpc()
+  backendPort = app.isPackaged ? await freePort(8742) : 8742
   log.info(`[CE] Cutting Edge ${app.getVersion()} starting — logs at ${log.transports.file.getFile().path}`)
   startBackend()
   createWindow()

@@ -59,6 +59,10 @@ contextBridge.exposeInMainWorld('cuttingEdge', {
   logPath: () => ipcRenderer.invoke('log:path') as Promise<string>,
   /** Reveal the log file in Explorer so the user can attach it to a report. */
   openLogFolder: () => ipcRenderer.send('log:open'),
+  /** The backend port Electron actually bound (packaged); renderer falls back to 8742. */
+  backendPort: Number((process.argv.find((a) => a.startsWith('--ce-backend-port=')) ?? '').split('=')[1] || 8742),
+  /** Open an allowlisted https URL (the NVIDIA driver page) in the browser. */
+  openExternal: (url: string) => ipcRenderer.send('shell:open', url),
 
   /** Check + download in one shot. */
   runUpdate: () => ipcRenderer.send('update:run'),

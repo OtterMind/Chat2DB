@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { RefreshCw, CheckCircle2, AlertTriangle, FolderOpen } from 'lucide-react'
 import Page, { Card, Num, Stat } from '../components/Page'
 import { systemApi } from '../api/jobs'
@@ -29,6 +30,7 @@ interface DesktopBridge {
 
 export default function Doctor() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [logPath, setLogPath] = useState<string | null>(null)
   const [backend, setBackend] = useState<BackendStatus | null>(null)
   const bridge = (window as unknown as { cuttingEdge?: DesktopBridge }).cuttingEdge
@@ -84,6 +86,11 @@ export default function Doctor() {
             )}
           </Card>
 
+          <div className="ce-actions" style={{ marginBottom: 12 }}>
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => navigate('/attribution')}>
+              {t('Credits & licences', 'اعتبارها و پروانه‌ها')}
+            </button>
+          </div>
           <Card title={t('Machine', 'مشخصات دستگاه')}>
             <div className="ce-stats ce-stats--compact">
               <Stat label={t('Operating system', 'سیستم‌عامل')} value={<Num>{data.system?.platform ?? '—'}</Num>} />

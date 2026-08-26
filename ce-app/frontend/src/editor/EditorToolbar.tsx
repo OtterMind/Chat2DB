@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Scissors, Copy, Trash2, Gauge, Volume2, VolumeX, Crop, Move, Droplets, Snowflake,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { Slider, Segmented, Input, ColorPicker, message } from 'antd'
 import { reframeApi } from '../api/reframe'
+import { titlesApi, type TitlePreset } from '../api/titles'
 import { captionsApi } from '../api/captions'
 import {
   useEditor, propsOf, sampleChannel, MIN_CLIP, KEYFRAME_CHANNELS,
@@ -15,6 +16,7 @@ import {
 } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
+import { backendOrigin } from '../api/runtime'
 import { FEATURES } from '../features/catalog'
 
 type PanelId =
@@ -72,6 +74,12 @@ export default function EditorToolbar({
   const navigate = useNavigate()
   const i = lang === 'fa' ? 1 : 0
   const [soonLabel, setSoonLabel] = useState('')
+  // Word-level alignment (whisperX) is an on-demand refinement, like Hazm for
+  // text: used automatically when fetched, never a button the user must press.
+  const [alignAvailable, setAlignAvailable] = useState(false)
+  useEffect(() => {
+    captionsApi.alignStatus().then((s) => setAlignAvailable(s.available)).catch(() => setAlignAvailable(false))
+  }, [])
 
   const {
     clips, selectedId, playhead, transitions, panel: openPanel, setPanel: setStorePanel,
@@ -98,10 +106,34 @@ export default function EditorToolbar({
       run: redo,
       disabled: future.length === 0,
     },
+    {
+      id: 'aitransitions',
+      icon: <Wand2 {...ICON} />,
+      label: ['AI Transitions', 'ترنزیشن هوشمند'],
+      run: () => void applyAiTransitions(),
+    },
   ]
 
   const clip = clips.find((c) => c.id === selectedId) ?? null
   const props = clip ? propsOf(clip) : null
+
+  /** One music-sized transition per junction, suggested by the backend. */
+  const applyAiTransitions = async () => {
+    const state = useEditor.getState()
+    const bpm = state.bpm || 120
+    try {
+      const res = await fetch(`${backendOrigin}/api/style/ai-transitions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeline: { clips: state.clips }, bpm }),
+      })
+      const data = await res.json()
+      for (const t of data.transitions ?? []) addTransition(t.fromClipId, t.type, t.duration)
+      message.success(t('AI transitions applied to every junction', 'ترنزیشن هوشمند روی همه‌ی اتصال‌ها نشست'))
+    } catch {
+      message.error(t('Could not reach the backend', 'بک‌اند در دسترس نیست'))
+    }
+  }
 
   /** Transcribe the clip under the playhead and lay captions on the text lane. */
   /**
@@ -160,10 +192,17 @@ export default function EditorToolbar({
     }
     const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
     try {
-      const result = await captionsApi.transcribe(source.src)
+      const result = await captionsApi.transcribe(source.src, undefined, alignAvailable)
       const count = state.addCaptions(result.cues, source.start - source.offset)
+      // Report honestly whether word alignment actually ran (it can't unless the
+      // engine is fetched), so the karaoke timing claim is never overstated.
+      const aligned = result.alignment === 'aligned'
       message.success(
-        t(`${count} captions added (${result.language})`, `${count} زیرنویس اضافه شد (${result.language})`)
+        aligned
+          ? t(`${count} captions added, word-aligned (${result.language})`,
+              `${count} زیرنویس اضافه شد، کلمه‌تراز (${result.language})`)
+          : t(`${count} captions added (${result.language})`,
+              `${count} زیرنویس اضافه شد (${result.language})`)
       )
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string }; status?: number } }).response
@@ -370,6 +409,7 @@ export default function EditorToolbar({
             )}
             {panel === 'audio' && clip && props && (
               <PanelAudio
+                clip={clip}
                 denoise={props.denoise}
                 enhanceVoice={props.enhanceVoice}
                 duck={props.duck}
@@ -378,6 +418,7 @@ export default function EditorToolbar({
             )}
             {panel === 'text' && clip && props && (
               <PanelText
+                clipId={clip.id}
                 text={clip.text ?? ''}
                 props={props}
                 onText={(value) => useEditor.getState().setText(clip.id, value)}
@@ -878,16 +919,108 @@ function PanelAnimate({
 }
 
 function PanelAudio({
-  denoise, enhanceVoice, duck, onChange,
+  clip, denoise, enhanceVoice, duck, onChange,
 }: {
+  clip: Clip
   denoise: number
   enhanceVoice: boolean
   duck: boolean
   onChange: (patch: { denoise?: number; enhanceVoice?: boolean; duck?: boolean }) => void
 }) {
   const { t } = useI18n()
+
+  /**
+   * Audio extraction — lift this clip's audio onto the audio lane, aligned
+   * under the picture it came from, the way a desktop NLE does it. Pure FFmpeg
+   * on the backend, so it always works; the lifted file lands in the user's
+   * exports folder and the timeline clip points at it.
+   */
+  const extractAudio = async () => {
+    if (!clip.src) {
+      message.warning(t('Only clips with a media file have audio to extract.', 'فقط کلیپی که فایل رسانه دارد صدا برای استخراج دارد.'))
+      return
+    }
+    const hide = message.loading(t('Extracting audio…', 'در حال استخراج صدا…'), 0)
+    try {
+      const res = await fetch(`${backendOrigin}/api/audio/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: clip.src }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? res.statusText)
+      const state = useEditor.getState()
+      let lane = state.tracks.find((x) => x.kind === 'audio')
+      if (!lane) {
+        state.addTrack('audio')
+        lane = useEditor.getState().tracks.find((x) => x.kind === 'audio')
+      }
+      state.addClip({
+        trackId: lane?.id ?? 'a1',
+        start: clip.start,
+        duration: Math.max(0.5, data.duration),
+        offset: 0,
+        sourceDuration: Math.max(0.5, data.duration),
+        src: data.path,
+        label: t('extracted audio', 'صدای استخراج‌شده'),
+        color: '#10B981',
+      })
+      message.success(t('Audio extracted onto the audio lane', 'صدا استخراج شد و روی خط صوتی نشست'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      hide()
+    }
+  }
+
+  /**
+   * Stem separation with Demucs (MIT, on-demand): vocals / drums / bass / other
+   * into the exports folder. Absent engine is an honest 409 pointing at Settings.
+   */
+  const splitStems = async () => {
+    if (!clip.src) return
+    try {
+      const res = await fetch(`${backendOrigin}/api/audio/stems/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: clip.src }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? res.statusText)
+      const hide = message.loading(t('Demucs is splitting the mix…', 'Demucs در حال جداسازی اجزاست…'), 0)
+      const poll = window.setInterval(async () => {
+        const p = await fetch(`${backendOrigin}/api/tasks/${data.id}`).then((r) => r.json())
+        if (p.status === 'running') return
+        window.clearInterval(poll)
+        hide()
+        if (p.status === 'done') {
+          const stems = Object.keys(p.result?.stems ?? {}).join('، ')
+          message.success(t(`Stems ready: ${stems}`, `اجزا آماده شد: ${stems}`))
+        } else {
+          message.error(p.error || t('stem separation failed', 'جداسازی ناموفق بود'))
+        }
+      }, 2000)
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
   return (
     <div className="tb__stack">
+      <div className="tb__row">
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void extractAudio()}>
+          <AudioLines size={13} /> {t('Audio extraction', 'استخراج صدا')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void splitStems()}>
+          <Layers size={13} /> {t('Split stems (Demucs)', 'جداسازی اجزا (Demucs)')}
+        </button>
+      </div>
+      <p className="ce-hint">
+        {t(
+          'Extraction lifts this clip\'s audio onto the audio lane (FFmpeg, always). Stems split the mix into vocals/drums/bass/other with Demucs — fetch it in Settings.',
+          'استخراج، صدای این کلیپ را روی خط صوتی می‌برد (FFmpeg، همیشه). جداسازی اجزا میکس را به صدا/درام/بیس/دیگر تقسیم می‌کند با Demucs — از تنظیمات بگیرش.'
+        )}
+      </p>
       <Field label={t('Noise reduction', 'نویزگیری')} value={`${Math.round(denoise * 100)}%`}>
         <Slider min={0} max={1} step={0.05} value={denoise} onChange={(v) => onChange({ denoise: v })} />
       </Field>
@@ -925,8 +1058,9 @@ function PanelAudio({
 }
 
 function PanelText({
-  text, props, onText, onProps,
+  clipId, text, props, onText, onProps,
 }: {
+  clipId: string
   text: string
   props: ClipProps
   onText: (value: string) => void
@@ -945,8 +1079,66 @@ function PanelText({
     ['middle', ['Middle', 'وسط']],
     ['bottom', ['Bottom', 'پایین']],
   ]
+  /**
+   * The title pack, fetched once per panel.
+   *
+   * It comes from the backend rather than a list here because that is where
+   * `validate()` runs: a preset that animated a channel the exporter cannot
+   * reproduce would be refused there, and a duplicated list would drift.
+   */
+  const [pack, setPack] = useState<TitlePreset[]>([])
+  useEffect(() => {
+    titlesApi.pack().then((r) => setPack(r.presets)).catch(() => setPack([]))
+  }, [])
+  const apply = (preset: TitlePreset) => {
+    onProps({ ...preset.props })
+    // Keyframes live on the clip, not in its props, and go through the store so
+    // the whole preset lands as one undoable step — the same door auto-reframe
+    // uses, which is what makes Ctrl+Z take the title back in one press.
+    if (preset.keyframes.length) {
+      useEditor.getState().setClipKeyframes(clipId, preset.keyframes.map((k) => ({ ...k })))
+    }
+    message.success(lang === 'fa' ? preset.fa : preset.en)
+  }
+
   return (
     <div className="tb__stack">
+      {pack.length > 0 && (
+        <Field label={t('Title pack', 'پک تایتل')}>
+          <div className="tb__presets" data-testid="title-pack">
+            {(['entrance', 'hold', 'caption'] as const).map((category) => (
+              <div key={category} className="tb__presets-row">
+                <span className="tb__presets-label">
+                  {category === 'entrance'
+                    ? t('Entrance', 'ورود')
+                    : category === 'hold'
+                      ? t('While it is on screen', 'تا وقتی روی تصویر است')
+                      : t('Captions', 'زیرنویس')}
+                </span>
+                <div className="tb__presets-chips">
+                  {pack.filter((preset) => preset.category === category).map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="tb__preset"
+                      data-testid={`title-preset-${preset.id}`}
+                      onClick={() => apply(preset)}
+                    >
+                      {lang === 'fa' ? preset.fa : preset.en}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="ce-hint" style={{ marginTop: 6 }}>
+            {t(
+              'Every one of these animates only the channels the export can reproduce — so what you see here is what the file will contain.',
+              'همه‌ی این‌ها فقط کانال‌هایی را متحرک می‌کنند که خروجی می‌تواند بازتولید کند — پس آنچه اینجا می‌بینی همان است که در فایل خواهد بود.'
+            )}
+          </p>
+        </Field>
+      )}
       <Field label={t('Text', 'متن')}>
         <Input.TextArea
           value={text}

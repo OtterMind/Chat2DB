@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Group, Panel, Separator } from 'react-resizable-panels'
 import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet,
-  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film,
+  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film, Search,
 } from 'lucide-react'
 import { Input, Modal, Radio, Select, message } from 'antd'
 import Page from '../components/Page'
@@ -11,6 +12,8 @@ import PreviewMonitor from '../editor/PreviewMonitor'
 import EditorToolbar from '../editor/EditorToolbar'
 import AssistantButton from '../editor/AssistantButton'
 import ProjectAutosave from '../editor/ProjectAutosave'
+import MediaBin from '../editor/MediaBin'
+import CommandPalette, { PALETTE_ICONS, type PaletteAction } from '../editor/CommandPalette'
 import { formatTimecode, useEditor, TIMELINE_MAX } from '../editor/model'
 import { useI18n } from '../i18n'
 import { pickMedia, proxyApi, renderApi, saveDialog, type Quality } from '../api/render'
@@ -38,6 +41,21 @@ export default function Studio() {
   } = useEditor()
 
   const [analysing, setAnalysing] = useState<'silence' | 'scenes' | 'beats' | null>(null)
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const [binOpen, setBinOpen] = useState(true)
+
+  /** Ctrl+K opens the command palette — the keyboard-first door to every tool. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCmdOpen((v) => !v)
+      }
+      if (e.key === 'Escape') setCmdOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   /**
    * Beat detection.
@@ -132,6 +150,23 @@ export default function Studio() {
       if (key === ' ') {
         event.preventDefault()
         togglePlay()
+      } else if (key.toLowerCase() === 'k') {
+        // The J/K/L transport: K pauses; J/L shuttle back/forward. A video editor
+        // is driven from the keyboard, and these three are its alphabet.
+        event.preventDefault()
+        useEditor.getState().togglePlay(false)
+      } else if (key.toLowerCase() === 'l') {
+        event.preventDefault()
+        if (!useEditor.getState().playing) useEditor.getState().togglePlay(true)
+        else setPlayhead(useEditor.getState().playhead + 1)
+      } else if (key.toLowerCase() === 'j') {
+        event.preventDefault()
+        useEditor.getState().togglePlay(false)
+        setPlayhead(useEditor.getState().playhead - 1)
+      } else if (key === ',' || key === '.') {
+        // One frame at a time, the way colourists scrub.
+        event.preventDefault()
+        setPlayhead(useEditor.getState().playhead + (key === '.' ? 1 : -1) / 30)
       } else if (key === 'Delete' || key === 'Backspace') {
         if (!useEditor.getState().selectedId) return
         event.preventDefault()
@@ -273,7 +308,8 @@ export default function Studio() {
           height: info.height || undefined,
           src: info.path,
           label: path.split(/[\\/]/).pop() ?? 'clip',
-          color: info.has_video ? '#6366F1' : '#10B981',
+          /* hue-coded lanes: video blue, audio emerald, text violet */
+          color: info.has_video ? '#3B82F6' : '#10B981',
         })
         // Big footage gets a 720p editing proxy in the background; the preview
         // switches to it when it is ready and the export never uses it.
@@ -401,6 +437,25 @@ export default function Studio() {
     }
   }
 
+  /** The palette's verbs — the exact handlers the toolbar uses, nothing mocked. */
+  const paletteActions: PaletteAction[] = [
+    { id: 'import', icon: <PALETTE_ICONS.FolderOpen size={15} />, label: ['Import media', 'افزودن رسانه'], run: importMedia },
+    { id: 'export', icon: <PALETTE_ICONS.Upload size={15} />, label: ['Export', 'خروجی'], run: () => void exportTimeline() },
+    { id: 'split', icon: <PALETTE_ICONS.Scissors size={15} />, label: ['Split at playhead', 'برش در محل پلی‌هد'], run: splitAtPlayhead },
+    { id: 'dup', icon: <PALETTE_ICONS.Copy size={15} />, label: ['Duplicate clip', 'تکثیر کلیپ'], run: duplicateSelected },
+    { id: 'del', icon: <PALETTE_ICONS.Trash2 size={15} />, label: ['Delete clip', 'حذف کلیپ'], run: removeSelected },
+    { id: 'undo', icon: <PALETTE_ICONS.Undo2 size={15} />, label: ['Undo', 'واگرد'], run: undo },
+    { id: 'redo', icon: <PALETTE_ICONS.Redo2 size={15} />, label: ['Redo', 'ازنو'], run: redo },
+    { id: 'beats', icon: <PALETTE_ICONS.AudioWaveform size={15} />, label: ['Find the beat', 'یافتن ضرب'], run: () => void detectBeats() },
+    { id: 'cutbeat', icon: <PALETTE_ICONS.AudioWaveform size={15} />, label: ['Cut on beat', 'برش روی ضرب'], run: () => void cutOnBeat() },
+    { id: 'scenes', icon: <PALETTE_ICONS.Film size={15} />, label: ['Split scenes', 'تقسیم نما'], run: () => void splitScenes() },
+    { id: 'silence', icon: <PALETTE_ICONS.VolumeX size={15} />, label: ['Remove silence', 'حذف سکوت'], run: () => void removeSilence() },
+    { id: 'v', icon: <PALETTE_ICONS.Film size={15} />, label: ['Add video lane', 'لایه ویدیو'], run: () => addTrack('video') },
+    { id: 'a', icon: <PALETTE_ICONS.Music4 size={15} />, label: ['Add audio lane', 'لایه صدا'], run: () => addTrack('audio') },
+    { id: 't', icon: <PALETTE_ICONS.Type size={15} />, label: ['Add text lane', 'لایه متن'], run: () => addTrack('text') },
+    { id: 'bin', icon: <PALETTE_ICONS.FolderOpen size={15} />, label: ['Toggle library', 'نمایش/پنهان کردن کتابخانه'], run: () => setBinOpen((v) => !v) },
+  ]
+
   return (
     <Page
       title={t('Editor', 'میز تدوین')}
@@ -411,6 +466,15 @@ export default function Studio() {
       <div className="ed">
         <ProjectAutosave />
 
+        {/* 0.9.31 layout: library | stage+inspector, and a resizable split
+            between the working surface and the timeline — the panel grammar
+            the advisors' mockups use, without touching the edit model. */}
+        <div className="ed__layout">
+        <Group orientation="vertical">
+          <Panel defaultSize="60" minSize="38">
+          <div className="ed__body">
+            {binOpen && <MediaBin onImport={importMedia} />}
+            <div className="ed__main">
         {/* The monitor is the stage: the properties panel it used to share the
             row with said nothing the timeline does not already show. */}
         <div className="ed__stage">
@@ -436,6 +500,10 @@ export default function Studio() {
             <button className="ed__btn" onClick={undo} disabled={past.length === 0} title={t('Undo (Ctrl+Z)', 'واگرد (Ctrl+Z)')}><Undo2 size={16} /></button>
             <button className="ed__btn" onClick={redo} disabled={future.length === 0} title={t('Redo (Ctrl+Shift+Z)', 'ازنو (Ctrl+Shift+Z)')}><Redo2 size={16} /></button>
             <button className={`ed__btn ${snapping ? 'is-on' : ''}`} onClick={toggleSnapping} title={t('Snapping', 'چسبندگی')}><Magnet size={16} /></button>
+          </div>
+          <div className="ed__group">
+            <button className={`ed__btn ${binOpen ? 'is-on' : ''}`} onClick={() => setBinOpen((v) => !v)} title={t('Library', 'کتابخانه')}><FolderOpen size={16} /></button>
+            <button className="ed__btn" onClick={() => setCmdOpen(true)} title={`${t('Command palette', 'منوی فرمان')} (Ctrl+K)`}><Search size={16} /></button>
           </div>
 
           <div className="ed__group">
@@ -490,8 +558,19 @@ export default function Studio() {
           onDetectBeats={detectBeats}
           onCutOnBeat={cutOnBeat}
         />
-
+            </div>{/* ed__main */}
+          </div>{/* ed__body */}
+          </Panel>
+          <Separator className="ed__rsz" />
+          <Panel defaultSize="40" minSize="24" maxSize="62">
+            <div className="ed__tlwrap">
         <Timeline />
+            </div>
+          </Panel>
+        </Group>
+        </div>{/* ed__layout */}
+
+        <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} actions={paletteActions} />
 
         {lastOutput && (
           <div className="ce-note">
