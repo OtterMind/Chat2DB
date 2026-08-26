@@ -78,7 +78,7 @@
     "test:sql-completion-context": "tsx src/components/SQLEditor/core/sqlCompletionContext.test.ts && tsx src/components/SQLEditor/core/sqlCompletionRequestError.test.ts",
     "test:sql-in-clipboard": "tsx src/utils/sqlInClipboard.test.ts && tsx src/components/SQLEditor/helper/sqlInsertValueDefaults.test.ts",
     "test:console-tab-name": "tsx src/store/workspace/utils/consoleTabName.test.ts && tsx src/utils/workspaceObjectTabTitle.test.ts",
-    "test:workspace-tab-scroll": "tsx src/store/workspace/utils/workspaceTabScrollRequest.test.ts && tsx src/components/Tabs/activeTabScroll.test.ts",
+    "test:workspace-tab-scroll": "tsx src/store/workspace/utils/workspaceTabScrollRequest.test.ts && tsx src/components/Tabs/activeTabScroll.test.ts && tsx src/components/Tabs/wheelScroll.test.ts",
     "test:workspace-split-lifecycle": "tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabContentLayout.test.ts",
     "test:tree-title-highlight": "tsx src/blocks/NewTree/components/TitleRender/highlightSearchText.test.ts",
     "test:tree-data-update": "tsx src/store/tree/treeDataUpdate.test.ts",
