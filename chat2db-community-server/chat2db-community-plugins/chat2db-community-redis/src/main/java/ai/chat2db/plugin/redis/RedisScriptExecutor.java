@@ -222,7 +222,7 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         Connection connection = Chat2DBContext.getConnection();
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+            stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();

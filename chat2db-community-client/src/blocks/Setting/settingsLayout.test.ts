@@ -51,6 +51,7 @@ for (const targetId of [
   'editor.fontSize',
   'editor.completion',
   'editor.confirmBeforeClose',
+  'editor.defaultPageSize',
   'terminal.position',
   'terminal.shell',
   'shortcut.global',
@@ -69,6 +70,8 @@ for (const targetId of [
 assert.match(baseSettingSource, /<Palette\b/);
 assert.match(baseSettingSource, /<Globe\b/);
 assert.match(editorSettingSource, /<ShieldCheck\b/);
+assert.match(editorSettingSource, /name="defaultPageSize"/);
+assert.match(editorSettingSource, /setBaseSetting\(\{ defaultPageSize:/);
 assert.match(terminalSettingSource, /<Switch\b/);
 assert.doesNotMatch(networkProxySettingSource, /SettingSubsection/);
 assert.match(shortcutSettingSource, /aria-expanded=\{!collapsed\}/);

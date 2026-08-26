@@ -4,17 +4,21 @@ export const useStyles = createStyles(({ css, token }) => {
   return {
     treeBox: css`
       flex: 1;
+      min-width: 0;
+      min-height: 0;
       padding-left: 6px;
     `,
     panelPane: css`
       display: none;
       min-height: 0;
+      min-width: 0;
       flex: 1;
       flex-direction: column;
     `,
     panelPaneActive: css`
       display: flex;
       min-height: 0;
+      min-width: 0;
       flex: 1;
       flex-direction: column;
     `,
@@ -23,7 +27,7 @@ export const useStyles = createStyles(({ css, token }) => {
       align-items: center;
       justify-content: space-between;
       flex-shrink: 0;
-      height: 36px;
+      height: 42px;
       box-sizing: border-box;
       padding: 0 8px 0 6px;
       border-bottom: 1px solid ${token.colorBorderLayout};
@@ -31,11 +35,10 @@ export const useStyles = createStyles(({ css, token }) => {
     resourceSelector: css`
       display: inline-flex;
       align-items: center;
-      gap: 2px;
+      gap: 6px;
       min-width: 0;
       height: 30px;
-      margin-left: -4px;
-      padding: 0 4px;
+      padding: 0 6px;
       border: 0;
       border-radius: 6px;
       color: ${token.colorText};
@@ -57,6 +60,18 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     resourceSelectorLabel: css`
       overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `,
+    resourceSelectorStatic: css`
+      min-width: 0;
+      overflow: hidden;
+      padding: 0 6px;
+      color: ${token.colorText};
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 30px;
       text-overflow: ellipsis;
       white-space: nowrap;
     `,

@@ -1,7 +1,13 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStyles } from './style';
-import ResultSetToolbar, { ResultSetToolbarRef, ToolbarOperationType } from '../ResultSetToolbar';
+import ResultSetToolbar, { ToolbarOperationType } from '../ResultSetToolbar';
+import {
+  buildResultPageExecuteParams,
+  resolveResultPaging,
+  ResultPaging,
+  runResultPagingRequest,
+} from './pagination';
 import ScreeningResult, { IScreeningResultRef } from '../ScreeningResult';
 import FESearch, { FESearchRef } from '../FESearch';
 import ResultSetTable, { IResultSetSelection, ResultSetTableRef } from '../ResultSetTable';
@@ -11,8 +17,8 @@ import SQLPreviewExecute, { SQLPreviewExecuteRef } from '../SQLPreviewExecute';
 import ViewData, { ViewDataRef } from '../ViewData';
 import RowDetail, { IChangeDataParams, IViewDataParams, RowDetailRef } from '../RowDetail';
 import SelectionAggregates from '../SelectionAggregates';
-import { IManageResultData } from '@/typings';
-import { Button, Spin, Tabs, Tooltip } from 'antd';
+import { IExecuteSqlParams, IManageResultData } from '@/typings';
+import { Button, Tabs, Tooltip } from 'antd';
 import i18n from '@/i18n';
 import { copyToClipboard } from '@/utils';
 import StatusBar, { StatusBarRef } from '../StatusBar';
@@ -56,11 +62,13 @@ import {
 } from '../ResultSetTable/columnState';
 import { resolveResultInspectorActiveCell } from '../ResultSetTable/selectionState';
 import { areResultCellValuesEquivalent } from './inspectorState';
+import SqlExecutionLoading from '@/components/SqlExecutionLoading';
 
 interface IProps {
   resultData: IManageResultData;
   active: boolean;
   viewTable?: boolean;
+  onResultPagingChange?: (resultData: IManageResultData, params: IExecuteSqlParams) => Promise<unknown> | void;
 }
 
 const RESULT_INSPECTOR_MODE_STORAGE_KEY = createResultInspectorModeStorageKey(
@@ -74,7 +82,10 @@ export default memo<IProps>(
     const { styles, cx } = useStyles();
     const { executeSQL, stopExecuteSQL, executing, canExecuteSQL } = useSqlExecutor();
     const [resultData, setResultData] = useState<IManageResultData>(props.resultData);
-    const resultSetToolbarRef = useRef<ResultSetToolbarRef>(null);
+    const executeRequestSequenceRef = useRef(0);
+    const baseQuerySqlRef = useRef(
+      props.resultData.originalSql || props.resultData.sql || props.resultData.executeSqlParams?.sql || '',
+    );
     const screenResultRef = useRef<IScreeningResultRef>(null);
     const resultSetTableRef = useRef<ResultSetTableRef>(null);
     const [hasOperationRecord, setHasOperationRecord] = useState(false);
@@ -227,26 +238,35 @@ export default memo<IProps>(
 
     // Only resultData changes here. Database metadata is stable, and the toolbar controls pagination.
     const handleExecuteSQL = useCallback(
-      ({ pageNo: _pageNo }: { pageNo?: number } = {}) => {
+      (pagingOverride?: Partial<ResultPaging>) => {
         if (!canExecuteSQL()) return;
         // Clear operation records
         resultSetTableRef.current?.operationRecordUtils?.clearOperationRecord?.();
-        // Do not execute before the result toolbar is mounted.
-        if (!resultSetToolbarRef.current) return;
         // If there is no executeSqlParams, the execution information is not known, and no execution is performed.
         if (!resultData.executeSqlParams) return;
-        // Get the current paging
-        const { pageNo, pageSize } = resultSetToolbarRef.current.getPagingParams();
-        const executeSqlParams = {
-          ...resultData.executeSqlParams,
-          pageSize,
-          pageNo: _pageNo || pageNo,
-        };
-        // Filter conditions when viewing tables
-        if (viewTable) {
-          executeSqlParams.sql = screenResultRef.current?.getJointSQL() || '';
+        const paging = resolveResultPaging(resultData.executeSqlParams, pagingOverride);
+        const executeSqlParams = buildResultPageExecuteParams(
+          resultData.executeSqlParams,
+          paging,
+          viewTable ? screenResultRef.current?.getJointSQL() || '' : undefined,
+        );
+        const onResultPagingChange = props.onResultPagingChange;
+        if (onResultPagingChange) {
+          void runResultPagingRequest(
+            () => onResultPagingChange(resultData, executeSqlParams),
+            {
+              onSuccess: () => setExecuteErrorMessage(null),
+              onError: (message) => {
+                setExecuteErrorMessage(message);
+                setResultData((current) => ({ ...current }));
+              },
+            },
+          );
+          return;
         }
+        const requestSequence = ++executeRequestSequenceRef.current;
         executeSQL(executeSqlParams).then((data) => {
+          if (requestSequence !== executeRequestSequenceRef.current) return;
           setExecuteErrorMessage(null);
           if (data.length) {
             const curResult = data.filter((item) => item.resultSetId === executeSqlParams.resultSetId)?.[0];
@@ -254,7 +274,7 @@ export default memo<IProps>(
               setResultData({
                 ...curResult,
                 executeSqlParams: {
-                  ...resultData.executeSqlParams,
+                  ...executeSqlParams,
                   sql: curResult.originalSql,
                 },
               });
@@ -264,7 +284,7 @@ export default memo<IProps>(
           }
         });
       },
-      [canExecuteSQL, executeSQL, resultData, viewTable],
+      [canExecuteSQL, executeSQL, props.onResultPagingChange, resultData, viewTable],
     );
 
     const handleSearch = useCallback(() => {
@@ -382,11 +402,11 @@ export default memo<IProps>(
       });
     };
 
-    const handleToolbarOperation = (type: ToolbarOperationType) => {
+    const handleToolbarOperation = (type: ToolbarOperationType, paging?: ResultPaging) => {
       switch (type) {
         // execute SQL
         case ToolbarOperationType.EXECUTE_SQL:
-          handleExecuteSQL();
+          handleExecuteSQL(paging);
           break;
         // Add blank line
         case ToolbarOperationType.ADD_BLANK_ROW:
@@ -796,18 +816,10 @@ export default memo<IProps>(
       <>
         <div tabIndex={0} className={cx(styles.container)} ref={resultSetRef} id={searchAreaId}>
           {(executing || submitLoading) && (
-            <div className={styles.tableLoading}>
-              <Spin />
-              {executing && (
-                <div className={styles.stopExecuteSql} onClick={stopExecuteSQL}>
-                  {i18n('common.button.cancelRequest')}
-                </div>
-              )}
-            </div>
+            <SqlExecutionLoading onCancel={executing ? stopExecuteSQL : undefined} />
           )}
           <>
             <ResultSetToolbar
-              ref={resultSetToolbarRef}
               handleToolbarOperation={handleToolbarOperation}
               hasOperationRecord={hasOperationRecord}
               resultData={resultData}
@@ -819,7 +831,7 @@ export default memo<IProps>(
               <ScreeningResult
                 ref={screenResultRef}
                 onSearch={handleSearch}
-                originalSql={props.resultData.originalSql}
+                originalSql={baseQuerySqlRef.current}
                 promptWord={resultData.headerList}
                 orderByText={orderByText}
                 databaseType={resultData.executeSqlParams?.databaseType}

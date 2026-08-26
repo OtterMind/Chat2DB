@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef, useMemo, forwardRef } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo, forwardRef, useState } from 'react';
 import { Tree, TreeProps, ConfigProvider, TreeDataNode, Spin } from 'antd';
 import { useStyles } from './style';
 import { useStyles as renderTitleUseStyles } from './renderTitleStyle';
@@ -23,6 +23,7 @@ import { useGlobalStore } from '@/store/global';
 import connectionService from '@/service/connection';
 import { useSize } from 'ahooks';
 import { decorateDataSourceIdentityTree } from './dataSourceIdentity';
+import { measureTreeScrollWidth, resolveNextTreeScrollWidth } from './treeScrollWidth';
 
 interface IProps extends TreeProps<TreeNodeData> {
   className?: string;
@@ -65,6 +66,11 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   // TreeRef
   const treeRef = useRef<any>(null);
   const lastTreeSize = useRef<{ width: number; height: number }>();
+  const horizontalMeasureFrameRef = useRef<number>();
+  const horizontalMeasureResetRef = useRef(false);
+  const horizontalScrollHideTimerRef = useRef<number>();
+  const [treeScrollWidth, setTreeScrollWidth] = useState<number>();
+  const [isHorizontalScrolling, setIsHorizontalScrolling] = useState(false);
   const filteredTreeData = useTrimTreeData({ leafNodes, hiddenNoPermission, excludeNodes });
   const {
     editingTreeNode,
@@ -75,6 +81,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     expandedKeys,
     scrollTargetKey,
     setScrollTargetKey,
+    searchBarValue,
     dataSourceList,
   } = useTreeStore((state) => ({
     editingTreeNode: state.editingTreeNode,
@@ -85,6 +92,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     expandedKeys: state.expandedKeys,
     scrollTargetKey: state.scrollTargetKey,
     setScrollTargetKey: state.setScrollTargetKey,
+    searchBarValue: state.searchBarValue,
     dataSourceList: state.dataSourceList,
   }));
   const identityTreeData = useMemo(
@@ -104,7 +112,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   }, [setTreeRef]);
 
   useEffect(() => {
-    if (!scrollTargetKey || !filteredTreeData?.length) {
+    if (searchBarValue || !scrollTargetKey || !filteredTreeData?.length) {
       return;
     }
 
@@ -125,9 +133,66 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [scrollTargetKey, filteredTreeData, expandedKeys, setScrollTargetKey]);
+  }, [searchBarValue, scrollTargetKey, filteredTreeData, expandedKeys, setScrollTargetKey]);
 
   const treeSize = useSize(treeBoxRef);
+
+  const measureHorizontalScrollWidth = useCallback((resetMeasurement = false) => {
+    horizontalMeasureResetRef.current ||= resetMeasurement;
+    if (horizontalMeasureFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(horizontalMeasureFrameRef.current);
+    }
+    horizontalMeasureFrameRef.current = window.requestAnimationFrame(() => {
+      horizontalMeasureFrameRef.current = undefined;
+      const shouldResetMeasurement = horizontalMeasureResetRef.current;
+      horizontalMeasureResetRef.current = false;
+      const container = treeBoxRef.current;
+      if (!container) {
+        return;
+      }
+      const measuredWidth = measureTreeScrollWidth(container);
+      setTreeScrollWidth((currentWidth) =>
+        resolveNextTreeScrollWidth(currentWidth, measuredWidth, shouldResetMeasurement),
+      );
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (treeBoxRef.current?.scrollLeft) {
+      treeBoxRef.current.scrollLeft = 0;
+    }
+    measureHorizontalScrollWidth(true);
+    return () => {
+      if (horizontalMeasureFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(horizontalMeasureFrameRef.current);
+        horizontalMeasureFrameRef.current = undefined;
+      }
+    };
+  }, [editingTreeNode, expandedKeys, identityTreeData, measureHorizontalScrollWidth, treeSize?.width]);
+
+  useEffect(() => {
+    return () => {
+      if (horizontalScrollHideTimerRef.current !== undefined) {
+        window.clearTimeout(horizontalScrollHideTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleHorizontalWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const isShiftScroll = event.shiftKey && event.deltaY !== 0 && event.deltaX === 0;
+    const isHorizontalScroll = isShiftScroll || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!isHorizontalScroll) {
+      return;
+    }
+    setIsHorizontalScrolling(true);
+    if (horizontalScrollHideTimerRef.current !== undefined) {
+      window.clearTimeout(horizontalScrollHideTimerRef.current);
+    }
+    horizontalScrollHideTimerRef.current = window.setTimeout(() => {
+      horizontalScrollHideTimerRef.current = undefined;
+      setIsHorizontalScrolling(false);
+    }, 600);
+  }, []);
 
   // right-click menu
   const onRightClick = ({ event, node }) => {
@@ -256,6 +321,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
       motion: false,
       itemHeight: 26,
       height: treeHeight,
+      scrollWidth: treeScrollWidth,
       selectedKeys,
       expandedKeys,
       // Ant Design 5.21.5 supports custom loading and switcher icons.
@@ -298,18 +364,29 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
       onDrop,
       onScroll: () => {
         treeDropdownRef.current?.closeMenu();
+        measureHorizontalScrollWidth();
       },
       titleRender,
       ...restProps,
     };
-  }, [selectedKeys, expandedKeys, treeSize?.height, editingTreeNode, identityTreeData, restProps]);
+  }, [
+    selectedKeys,
+    expandedKeys,
+    treeSize?.height,
+    editingTreeNode,
+    identityTreeData,
+    restProps,
+    treeScrollWidth,
+    measureHorizontalScrollWidth,
+  ]);
 
   return (
     <div
       ref={treeBoxRef}
-      className={cx('bashful-scroller', styles.treeBox, className)}
+      className={cx(styles.treeBox, isHorizontalScrolling && styles.horizontalScrolling, className)}
       tabIndex={0}
       onKeyDown={handleDatabaseTreeShortcut}
+      onWheelCapture={handleHorizontalWheel}
     >
       <ConfigProvider
         theme={{

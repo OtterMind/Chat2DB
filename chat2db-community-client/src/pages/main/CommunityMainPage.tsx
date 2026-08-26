@@ -70,8 +70,7 @@ function CommunityMainPage() {
   const { styles } = useStyles({});
   const { tab: settingTab } = useParams<{ tab: string }>();
 
-  const { networkAbandoned, curUser } = useUserStore((state) => ({
-    networkAbandoned: state.networkAbandoned,
+  const { curUser } = useUserStore((state) => ({
     curUser: state.curUser,
   }));
 
@@ -159,11 +158,6 @@ function CommunityMainPage() {
       nextNavConfig = nextNavConfig.filter((item) => item.key !== 'dashboard');
     }
 
-    if (networkAbandoned) {
-      const filterKeys = ['stream', 'dashboard'];
-      nextNavConfig = nextNavConfig.filter((item) => !filterKeys.includes(item.key));
-    }
-
     setNavConfig(nextNavConfig);
 
     let page = '';
@@ -217,7 +211,7 @@ function CommunityMainPage() {
       navConfigTmp: nextNavConfig,
       isFirst: true,
     });
-  }, [allNavItems, handleChangePageTab, initNavConfig, mainPageActiveTab, networkAbandoned]);
+  }, [allNavItems, handleChangePageTab, initNavConfig, mainPageActiveTab]);
 
   useEffect(() => {
     if (mainPageActiveTab === 'stream') {
@@ -402,13 +396,22 @@ function CommunityMainPage() {
       isEmbedIframe !== IframeType.ZOER &&
       mainPageActiveTab === 'workspace' &&
       settingPageActiveTab === false;
+    const shouldShowTitleBarActions =
+      !showLeftContainer &&
+      isEmbedIframe !== IframeType.ZOER &&
+      (Boolean(clientExtension.mainPage.slots?.titleBarActions) || shouldShowWorkspaceTitleBarActions);
 
-    if (!shouldShowWorkspaceTitleBarActions) {
+    if (!shouldShowTitleBarActions) {
       setAppTitleBarRightComponent(false);
       return;
     }
 
-    setAppTitleBarRightComponent(<CommunityTitleBarActions />);
+    setAppTitleBarRightComponent(
+      <CommunityTitleBarActions
+        extras={clientExtension.mainPage.slots?.titleBarActions}
+        showWorkspaceActions={shouldShowWorkspaceTitleBarActions}
+      />,
+    );
   }, [
     isEmbedIframe,
     mainPageActiveTab,
@@ -435,8 +438,10 @@ function CommunityMainPage() {
           navItems={navConfig}
           activePage={mainPageActiveTab}
           settingsActive={settingPageActiveTab !== false}
-          hideSettings={Boolean(isEmbedIframe)}
-          extras={clientExtension.mainPage.actionBarExtras}
+          hideSettings={
+            Boolean(isEmbedIframe) || clientExtension.mainPage.hiddenCoreActions?.includes('settings') === true
+          }
+          extras={clientExtension.mainPage.slots?.actionBarFooter}
           onNavigate={handleNavItemClick}
           onOpenSettings={handleOpenSettings}
         />

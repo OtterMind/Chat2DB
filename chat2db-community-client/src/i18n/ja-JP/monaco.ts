@@ -73,6 +73,9 @@ export default {
   'monaco.completion.all': '全限定補完',
   'monaco.completion.all.tooltip':
     '補完候補で完全修飾名を使用するデータベース種別を選択します。未選択の種別では短い名前を使用します。',
+  'monaco.defaultPageSize': 'デフォルトのクエリ行数',
+  'monaco.defaultPageSize.tooltip':
+    'SQL クエリでページサイズを指定しない場合に返す最大行数です。以降のクエリに適用されます。',
   'monaco.errorContinue': 'エラー継続実行',
   'monaco.errorContinue.tooltip': '複数の SQL 文を実行するとき、1 つが失敗しても残りの文を続けて実行します。',
   'monaco.errorContinue.true': 'はい',

@@ -1,8 +1,9 @@
-import { memo, useCallback, useMemo, ForwardedRef, forwardRef, useImperativeHandle, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, ForwardedRef, forwardRef, useImperativeHandle, useRef } from 'react';
 import styles from './index.less';
 import classnames from 'classnames';
 import MonacoEditor, { IExportRefFunction } from '@/components/MonacoEditor';
 import { v4 as uuid } from 'uuid';
+import { createSingleFileShortcutController } from './shortcut';
 
 interface IProps {
   className?: string;
@@ -41,40 +42,40 @@ const options = {
 const SingleFileMonacoEditor = memo<IProps>(
   forwardRef((props, ref: ForwardedRef<ISingleFileMonacoEditorRefFunction>) => {
     const { className, handelEnter, focusChange } = props;
-    const editorRef = useRef<any>(null);
     const monacoEditorRef = useRef<IExportRefFunction>(null);
 
     const editorId = useMemo(() => {
       return uuid();
     }, []);
 
-    const handleKeydown = useCallback((event) => {
-      if (event.key === 'Enter' && editorRef.current) {
-        const controller = editorRef.current.getContribution('editor.contrib.suggestController') as any;
-        const suggestWidget = controller._widget;
-        if (suggestWidget && suggestWidget.suggestWidgetVisible.get()) {
-          return;
-        }
-        // Otherwise prevent Enter's default behavior.
-        event.preventDefault();
-        handleEnterSearch();
-      }
-    }, []);
-
-    const handleEnterSearch = () => {
+    const handleEnterSearch = useCallback(() => {
       const value = monacoEditorRef.current?.getAllContent().trim() || '';
-      handelEnter && handelEnter(value);
-    };
+      handelEnter?.(value);
+    }, [handelEnter]);
+
+    const handleEnterSearchRef = useRef(handleEnterSearch);
+    handleEnterSearchRef.current = handleEnterSearch;
+
+    const shortcutController = useMemo(
+      () => createSingleFileShortcutController(window, () => handleEnterSearchRef.current()),
+      [],
+    );
 
     // Listen for keydown and prevent Enter's default behavior.
     const registerShortcutKey = useCallback((_editor, _monaco, isActive) => {
       if (isActive) {
-        editorRef.current = _editor;
-        window.addEventListener('keydown', handleKeydown);
+        shortcutController.activate(_editor);
       } else {
-        window.removeEventListener('keydown', handleKeydown);
+        shortcutController.deactivate();
       }
-    }, []);
+    }, [shortcutController]);
+
+    useEffect(
+      () => () => {
+        shortcutController.dispose();
+      },
+      [shortcutController],
+    );
 
     const getAllContent = () => {
       return monacoEditorRef.current?.getAllContent() || '';
@@ -82,7 +83,7 @@ const SingleFileMonacoEditor = memo<IProps>(
 
     useImperativeHandle(ref, () => ({
       getAllContent,
-      setValue: monacoEditorRef.current?.setValue,
+      setValue: (value) => monacoEditorRef.current?.setValue(value),
       onSearch: handleEnterSearch,
     }));
 

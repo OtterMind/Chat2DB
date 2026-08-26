@@ -73,6 +73,9 @@ export default {
   'monaco.completion.all': '정규화된 이름 전체 자동 완성',
   'monaco.completion.all.tooltip':
     '자동 완성 제안에 완전히 정규화된 이름을 사용할 데이터베이스 유형을 선택합니다. 선택하지 않은 유형은 짧은 이름을 사용합니다.',
+  'monaco.defaultPageSize': '기본 쿼리 행 수',
+  'monaco.defaultPageSize.tooltip':
+    'SQL 쿼리에 페이지 크기가 지정되지 않았을 때 반환할 최대 행 수입니다. 이후 쿼리에 적용됩니다.',
   'monaco.errorContinue': '오류 발생 후 계속',
   'monaco.errorContinue.tooltip': '여러 SQL 문을 실행할 때 한 문장이 실패해도 나머지 문장을 계속 실행합니다.',
   'monaco.errorContinue.true': '예',

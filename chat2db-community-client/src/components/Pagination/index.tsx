@@ -8,7 +8,7 @@ import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { useStyles } from './style';
 import { CheckOutlined } from '@ant-design/icons';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { RESULT_PAGE_SIZE_OPTIONS } from '@/constants/pagination';
+import { MAX_RESULT_PAGE_SIZE, RESULT_PAGE_SIZE_OPTIONS } from '@/constants/pagination';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
 
@@ -156,7 +156,7 @@ export default function Pagination(props: IProps) {
             className={styles.customPageSizeInput}
             size="small"
             min={1}
-            max={100000}
+            max={MAX_RESULT_PAGE_SIZE}
             precision={0}
             controls={false}
             autoFocus

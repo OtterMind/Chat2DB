@@ -28,16 +28,6 @@ export interface SqlExecutionEvent<T = any> {
   message: T;
 }
 
-export function appendCompletedQueryResult(
-  current: IManageResultData[],
-  event: SqlExecutionEvent,
-): IManageResultData[] {
-  if (event.eventType !== 'resultFinished' || !Array.isArray(event.message?.dataList)) {
-    return current;
-  }
-  return [...current, event.message as IManageResultData];
-}
-
 export interface SqlExecutionStartResult {
   executionId: string;
 }
@@ -180,6 +170,39 @@ export function mergeRows(current: IManageResultData[], chunk: IManageResultData
     };
   });
   return matched ? next : [...next, normalizedChunk];
+}
+
+export type PendingSqlExecutionRows = Map<string, IManageResultData>;
+
+/**
+ * Accumulate streamed rows outside React state so high-volume result sets do
+ * not allocate a new complete dataList for every transport chunk.
+ */
+export function appendRowsToPendingResult(
+  pendingRows: PendingSqlExecutionRows,
+  resultKey: string,
+  chunk: IManageResultData,
+) {
+  const rows = Array.isArray(chunk.dataList) ? chunk.dataList : [];
+  const existing = pendingRows.get(resultKey);
+  if (!existing) {
+    pendingRows.set(resultKey, {
+      ...chunk,
+      dataList: [...rows],
+    });
+    return rows.length;
+  }
+
+  existing.dataList.push(...rows);
+  return existing.dataList.length;
+}
+
+export function discardPendingRowsForExecution(pendingRows: PendingSqlExecutionRows, executionId: string) {
+  for (const [resultKey, result] of pendingRows) {
+    if (result.extra?.executionId === executionId) {
+      pendingRows.delete(resultKey);
+    }
+  }
 }
 
 export function mergeResultFinished(current: IManageResultData[], result: IManageResultData) {

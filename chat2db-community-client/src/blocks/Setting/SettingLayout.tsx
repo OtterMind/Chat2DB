@@ -263,7 +263,11 @@ export default function SettingLayout({ activeTab, menus, onActiveTabChange }: S
           className={styles.menuContent}
           ref={menuContentRef}
         >
-          <div className={styles.menuContentInner}>
+          <div
+            className={cx(styles.menuContentInner, {
+              [styles.menuContentInnerNoHeader]: activeMenu?.hidePageHeader,
+            })}
+          >
             {activeMenu?.hidePageHeader ? null : (
               <div className={styles.pageHeader}>
                 <h1 className={styles.pageTitle} id="setting-page-title">

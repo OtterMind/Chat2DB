@@ -76,6 +76,9 @@ export default {
   'monaco.completion.all': 'Autocompletado con todos los calificadores',
   'monaco.completion.all.tooltip':
     'Selecciona los tipos de base de datos cuyas sugerencias deben usar nombres completamente calificados. Los demás usan nombres más cortos.',
+  'monaco.defaultPageSize': 'Filas de consulta predeterminadas',
+  'monaco.defaultPageSize.tooltip':
+    'Máximo de filas devueltas cuando una consulta SQL no especifica el tamaño de página. Se aplica a las consultas posteriores.',
   'monaco.errorContinue': 'Continuar tras un error',
   'monaco.errorContinue.tooltip':
     'Al ejecutar varias sentencias SQL, continúa con las restantes cuando una de ellas falla.',

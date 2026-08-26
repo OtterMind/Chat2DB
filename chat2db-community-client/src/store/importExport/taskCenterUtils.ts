@@ -1,4 +1,5 @@
 import { ImportExportTaskStatus } from '@/constants/importExport';
+import { ErrorCode } from '@/constants/request';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 
 export const TASK_LIST_PAGE_SIZE = 100;
@@ -19,6 +20,15 @@ const TERMINAL_TASK_STATUSES = new Set([
   ImportExportTaskStatus.SUCCESS,
   ImportExportTaskStatus.FAILED,
   ImportExportTaskStatus.CANCELLED,
+]);
+
+const NON_RETRYABLE_POLLING_ERRORS = new Set<string>([
+  ErrorCode.NeedLoggedIn,
+  ErrorCode.OfflineInvalidTrial,
+  ErrorCode.OfflineInvalidDevice,
+  ErrorCode.OfflineTrialExpired,
+  ErrorCode.OfflineLicenseExpired,
+  ErrorCode.LicenseNotSupported,
 ]);
 
 interface TaskPage {
@@ -137,4 +147,12 @@ export const mergeTaskEvents = (currentEvents: ImportExportTaskEvent[], incoming
 export const getTaskPollingDelay = (activeTaskCount: number, failed = false) => {
   if (failed) return FAILED_TASK_POLL_INTERVAL;
   return activeTaskCount > 0 ? ACTIVE_TASK_POLL_INTERVAL : null;
+};
+
+export const shouldRetryTaskPolling = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null || !('errorCode' in error)) {
+    return true;
+  }
+  const errorCode = (error as { errorCode?: unknown }).errorCode;
+  return typeof errorCode !== 'string' || !NON_RETRYABLE_POLLING_ERRORS.has(errorCode);
 };

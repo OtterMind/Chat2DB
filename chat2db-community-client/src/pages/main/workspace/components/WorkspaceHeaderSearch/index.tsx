@@ -57,7 +57,9 @@ const WorkspaceHeaderSearch = ({
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!searchRef.current?.contains(event.target as Node)) {
+      const target = event.target;
+      const clickedTree = target instanceof Element && target.closest('.ant-tree');
+      if (!searchRef.current?.contains(target as Node) && !clickedTree) {
         closeSearch();
       }
     };

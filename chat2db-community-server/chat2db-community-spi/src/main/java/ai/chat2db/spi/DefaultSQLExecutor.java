@@ -309,10 +309,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             notifyStatementCreated(statementListener, stmt);
             try {
                 checkTaskCancellation(cancellationChecker);
-                stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+                stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
                 if (sql.toLowerCase().startsWith("select")) {
                     if (offset != null && count != null) {
-                        stmt.setMaxRows(offset + count);
+                        setMaxRows(stmt, offset, count);
                     }
                 }
                 long startedAtEpochMs = System.currentTimeMillis();
@@ -1064,14 +1064,24 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         return executeResults;
     }
 
+    private static void setMaxRows(Statement statement, Integer offset, Integer count) throws SQLException {
+        if (offset == null || count == null || offset < 0 || count < 1) {
+            return;
+        }
+        long maxRows = (long) offset + count;
+        if (maxRows <= Integer.MAX_VALUE) {
+            statement.setMaxRows((int) maxRows);
+        }
+    }
+
     static PageBounds normalizePageBounds(Integer requestedPageNo, Integer requestedPageSize) {
         int pageNo = Optional.ofNullable(requestedPageNo).orElse(1);
-        int pageSize = Optional.ofNullable(requestedPageSize).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
+        int pageSize = Optional.ofNullable(requestedPageSize).orElse(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
         if (pageNo < 1) {
             pageNo = 1;
         }
-        if (pageSize < 1 || pageSize > IEasyToolsConstant.MAX_PAGE_SIZE) {
-            pageSize = IEasyToolsConstant.MAX_PAGE_SIZE;
+        if (pageSize < 1) {
+            pageSize = IEasyToolsConstant.DEFAULT_PAGE_SIZE;
         }
 
         long maxPageNo = (long) Integer.MAX_VALUE / pageSize + 1L;
@@ -1101,11 +1111,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         ArrayList<ExecuteResponse> executeResults = new ArrayList<>();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             clearWarnings(stmt, connection);
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+            stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             if (sql.toLowerCase().startsWith("select")) {
                 if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
                     if (offset != null && count != null) {
-                        stmt.setMaxRows(offset + count);
+                        setMaxRows(stmt, offset, count);
                     }
                 }
             }
@@ -1181,11 +1191,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         statementListener.onStatementCreated(stmt);
         try (stmt) {
             clearWarnings(stmt, connection);
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+            stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             if (sql.toLowerCase().startsWith("select")) {
                 if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
                     if (offset != null && count != null) {
-                        stmt.setMaxRows(offset + count);
+                        setMaxRows(stmt, offset, count);
                     }
                 }
             }

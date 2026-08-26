@@ -11,7 +11,7 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { copyToClipboard, getTemporaryId } from '@/utils';
 import { useTreeStore } from '@/store/tree';
 import { TreeNodeData } from '@/typings';
-import { RotateCw, SquareArrowOutUpRight } from 'lucide-react';
+import { Copy, RotateCw, SquareArrowOutUpRight } from 'lucide-react';
 import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
 
 interface IProps {
@@ -299,14 +299,14 @@ export default memo<IProps>((props) => {
                     <IconButton
                       className={styles.actionButton}
                       icon={SquareArrowOutUpRight}
-                      size="sm"
+                      size={{ boxSize: 20, iconSize: 14, borderRadius: 4, strokeWidth: 2 }}
                       title={i18n('common.button.openInNewConsole')}
                       onClick={(event) => openEditableHistoryTab(event, item)}
                     />
                     <IconButton
                       className={styles.actionButton}
-                      code="icon-copy"
-                      size="sm"
+                      icon={Copy}
+                      size={{ boxSize: 20, iconSize: 14, borderRadius: 4, strokeWidth: 2 }}
                       title={i18n('common.button.copy')}
                       onClick={(event) => copyHistorySql(event, item)}
                     />

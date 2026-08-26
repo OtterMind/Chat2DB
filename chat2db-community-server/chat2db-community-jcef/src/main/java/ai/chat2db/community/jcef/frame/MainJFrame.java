@@ -83,6 +83,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 import java.util.Timer;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -115,6 +116,7 @@ public class MainJFrame extends JFrame {
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>()
     );
+    private final Map<Long, CancellableCefQueryCallback> activeQueryCallbacks = new ConcurrentHashMap<>();
     private void ensureBrowserFocusIfNeeded() {
         if (browser_ == null || browserUI_ == null) {
             return;
@@ -670,6 +672,8 @@ public class MainJFrame extends JFrame {
             @Override
             public boolean onQuery(CefBrowser browser, CefFrame frame, long queryId, String data,
                                    boolean persistent, CefQueryCallback callback) {
+                CancellableCefQueryCallback guardedCallback = new CancellableCefQueryCallback(callback);
+                activeQueryCallbacks.put(queryId, guardedCallback);
                 executor.submit(() -> {
                     String action = "unKnow Action";
                     ConsoleMessage wsMessage = new ConsoleMessage();
@@ -688,14 +692,14 @@ public class MainJFrame extends JFrame {
                         bridge.setHeaders(wsMessage);
                         IJcefActionHandler handler = actionHandlers.get(Pair.of(action, wsMessage.getMethod().toLowerCase()));
                         if (handler != null) {
-                            handler.handle(wsMessage, wsResult, callback);
+                            handler.handle(wsMessage, wsResult, guardedCallback);
                         } else {
                             while (!bridge.isReady()) {
                                 Thread.sleep(20);
                             }
                             wsResult = bridge.doController(wsMessage);
                             if (wsResult != null) {
-                                ResponseBuilder.buildSuccess(wsResult, callback);
+                                ResponseBuilder.buildSuccess(wsResult, guardedCallback);
                             } else {
                                 ResponseBuilder.buildSuccess(
                                         ConsoleResult.builder()
@@ -705,14 +709,16 @@ public class MainJFrame extends JFrame {
                                                 .method(wsMessage.getMethod())
                                                 .message(Map.of("success", true))
                                                 .build(),
-                                        callback
+                                        guardedCallback
                                 );
                             }
                         }
                     } catch (ForestNetworkException ex) {
-                        handleNetworkException(ex, wsMessage, callback, action);
+                        handleNetworkException(ex, wsMessage, guardedCallback, action);
                     } catch (Exception e) {
-                        handleGenericException(e, wsMessage, callback, action);
+                        handleGenericException(e, wsMessage, guardedCallback, action);
+                    } finally {
+                        activeQueryCallbacks.remove(queryId, guardedCallback);
                     }
                 });
                 return true;
@@ -720,6 +726,10 @@ public class MainJFrame extends JFrame {
             @Override
             public void onQueryCanceled(CefBrowser browser, CefFrame frame, long queryId) {
                 log.info("JS query canceled: {}", queryId);
+                CancellableCefQueryCallback callback = activeQueryCallbacks.remove(queryId);
+                if (callback != null) {
+                    callback.cancel();
+                }
             }
         }, true);
         this.client_.addMessageRouter(messageRouter);
