@@ -160,3 +160,27 @@ def translate(payload: TranslateRequest) -> dict:
     from core.engine import captions_llm
 
     return captions_llm.translate_cues(payload.cues, payload.target, model=payload.model)
+
+
+class ChaptersRequest(BaseModel):
+    cues: list[dict]
+    duration: float = 0.0
+
+
+@router.post("/chapters")
+def chapters(payload: ChaptersRequest) -> dict:
+    from core.engine import chapters
+
+    return {"chapters": chapters.suggest_chapters(payload.cues, payload.duration)}
+
+
+class HookTitleRequest(BaseModel):
+    cues: list[dict]
+    model: str | None = None
+
+
+@router.post("/hook-title")
+def hook_title(payload: HookTitleRequest) -> dict:
+    from core.engine import captions_llm
+
+    return captions_llm.hook_title(payload.cues, model=payload.model)

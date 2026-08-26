@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.33` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.34` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,25 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+120. **The owner's three field bugs + Package C, released as 0.9.34.**
+    (1) "Fetch + torch" meant nothing to the owner — relabelled "دانلود موتور +
+    هستهٔ هوش مصنوعی" with a one-line explanation (torch = the one-time ~120 MB
+    base library) and the modal says the same in plain words; unavailable rows
+    now carry a green alternative line (RIFE→setpts slow-mo, FILM→RIFE,
+    virastar→built-in cleaner). (2) Downloads "stuck at 10%": the pip-free
+    installer reported once per package, so a 120 MB torch wheel sat silent for
+    minutes — `_pypi.download_wheel/sdist` now stream chunks with
+    `on_bytes(done,total)` and the task label shows real megabytes
+    ("torch 34/122 MB"). (3) open-unmix said "unavailable": PyPI publishes that
+    project as **`umx`** ("open-unmix" 404s) — deps fixed, it fetches now.
+    Package C: chapters from the transcript (`chapters.suggest_chapters`,
+    boundaries only at cue edges, marker-named titles) with a panel button that
+    drops chapter cards on the text lane; guarded hook-title
+    (`captions_llm.hook_title`, ≤80 chars/14 words else the first cue stands);
+    three one-click recipes (punchy sport reel / calm lesson / story vlog) on
+    Style Match that arm a template plus intent. Suite 424/0/10; verify+build
+    green.
 
 119. **Package B — creator tools, done.** Screen/webcam recorder
     (`RecorderModal`, MediaRecorder → POST `/api/render/recordings/save` →

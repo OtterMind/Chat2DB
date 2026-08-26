@@ -262,6 +262,11 @@ class AiTransitionsRequest(BaseModel):
     bpm: float = 120.0
 
 
+@router.get("/recipes")
+def recipes() -> dict:
+    return {"recipes": style.recipes()}
+
+
 @router.post("/ai-transitions")
 def ai_transitions(payload: AiTransitionsRequest) -> dict:
     """One music-sized transition per video junction; the editor applies them."""

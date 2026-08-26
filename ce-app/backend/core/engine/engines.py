@@ -95,7 +95,9 @@ ENGINES: list[dict] = [
      "module": "librosa", "deps": ["librosa"], "heavy": "numba/scipy"},
     {"id": "open-unmix", "name": "open-unmix", "repo": "sigsep/open-unmix-pytorch",
      "licence": "MIT", "role": "light vocals/music split (Demucs alternative)",
-     "module": "umx", "deps": ["open-unmix"], "heavy": "torch"},
+     # PyPI publishes this project under the name `umx` — "open-unmix" 404s,
+     # which is why the shelf wrongly said "unavailable" (0.9.33 bug).
+     "module": "umx", "deps": ["umx"], "heavy": "torch"},
     {"id": "dover", "name": "DOVER", "repo": "VQAssessment/DOVER", "licence": "MIT",
      "role": "post-export technical/aesthetic quality score for the taste loop",
      "module": "dover", "deps": ["dover"], "heavy": "torch+HF"},

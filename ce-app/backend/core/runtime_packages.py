@@ -75,14 +75,23 @@ def _install_pip_free(packages: list[str], say) -> dict:
     from core.engine import _pypi  # noqa: PLC0415
 
     target = ensure_on_path()
+    count = max(1, len(packages))
     for index, spec in enumerate(packages):
         name = _pypi.parse_name(spec)
-        say("download", 0.1 + 0.8 * index / max(1, len(packages)), f"Fetching {name}")
+        base = 0.1 + 0.8 * index / count
+        span = 0.8 / count
+
+        def report(done: int, total: int, _name=name, _base=base, _span=span) -> None:
+            mb = f"{done // 1_000_000}/{total // 1_000_000} MB" if total else f"{done // 1_000_000} MB"
+            frac = _base + _span * (done / total if total else 0.0)
+            say("download", frac, f"{_name} {mb}")
+
+        say("download", base, f"Fetching {name}")
         try:
-            wheel = _pypi.download_wheel(name, target / "_wheels")
+            wheel = _pypi.download_wheel(name, target / "_wheels", on_bytes=report)
             _pypi.extract_wheel(wheel, target)
         except RuntimeError:
-            sdist = _pypi.download_sdist(name, target / "_wheels")
+            sdist = _pypi.download_sdist(name, target / "_wheels", on_bytes=report)
             if not _pypi.sdist_is_pure(sdist):
                 raise RuntimeError(
                     f"{name} is source-only on PyPI and contains compiled code; "

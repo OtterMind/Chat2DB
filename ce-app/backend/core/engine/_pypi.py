@@ -98,14 +98,23 @@ def sdist_is_pure(path: Path) -> bool:
         return not any(n.lower().endswith(_C_SOURCE) for n in archive.getnames())
 
 
-def download_sdist(name: str, dest: Path) -> Path:
+def download_sdist(name: str, dest: Path, on_bytes=None) -> Path:
     sdist = pick_sdist(name)
     if sdist is None:
         raise RuntimeError(f"no source distribution on PyPI for {name}")
     dest.mkdir(parents=True, exist_ok=True)
     target = dest / sdist["filename"]
-    with urllib.request.urlopen(sdist["url"], timeout=600) as response, open(target, "wb") as out:
-        out.write(response.read())
+    total = int(sdist.get("size") or 0)
+    done = 0
+    with urllib.request.urlopen(sdist["url"], timeout=1800) as response, open(target, "wb") as out:
+        while True:
+            chunk = response.read(1 << 16)
+            if not chunk:
+                break
+            out.write(chunk)
+            done += len(chunk)
+            if on_bytes:
+                on_bytes(done, total)
     return target
 
 
@@ -167,14 +176,26 @@ def extract_sdist(path: Path, target_dir: Path) -> None:
         raise RuntimeError(f"{path.name}: nothing importable found in the sdist")
 
 
-def download_wheel(name: str, dest: Path) -> Path:
+def download_wheel(name: str, dest: Path, on_bytes=None) -> Path:
+    """Download with honest byte progress — a 120 MB torch wheel that reports
+    nothing for five minutes reads as "stuck at 10%", which is exactly the
+    complaint that reached the owner. `on_bytes(done, total)` fires per chunk."""
     wheel = pick_wheel(name)
     if wheel is None:
         raise RuntimeError(f"no loadable wheel on PyPI for {name}")
     dest.mkdir(parents=True, exist_ok=True)
     target = dest / wheel["filename"]
-    with urllib.request.urlopen(wheel["url"], timeout=600) as response, open(target, "wb") as out:
-        out.write(response.read())
+    total = int(wheel.get("size") or 0)
+    done = 0
+    with urllib.request.urlopen(wheel["url"], timeout=1800) as response, open(target, "wb") as out:
+        while True:
+            chunk = response.read(1 << 16)
+            if not chunk:
+                break
+            out.write(chunk)
+            done += len(chunk)
+            if on_bytes:
+                on_bytes(done, total)
     return target
 
 

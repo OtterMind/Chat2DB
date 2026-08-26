@@ -169,6 +169,8 @@ export const styleApi = {
   questions: async (): Promise<Questions> => (await api.get('/style/questions')).data,
   /** The brain interrogates itself: Q&A for reference and footage, plus a menu
    *  of genuinely different ways to start the edit. */
+  recipes: async (): Promise<{ recipes: { id: string; fa: string; en: string; intent: Record<string, string>; template: StyleTemplate }[] }> =>
+    (await api.get('/style/recipes')).data,
   brain: async (template: Record<string, unknown> | null, footage?: string | null): Promise<BrainReport> =>
     (await api.post('/style/brain', { template, footage: footage ?? null }, { timeout: 10 * 60_000 })).data,
   remove: async (name: string): Promise<void> => {

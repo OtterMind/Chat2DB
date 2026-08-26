@@ -415,6 +415,11 @@ function EnginesCard() {
     load()
   }, [])
 
+  const ALT: Record<string, [string, string]> = {
+    rife: ['Slow-mo still works with the built-in setpts method.', 'اسلومو با روش داخلی (setpts) همچنان کار می‌کند.'],
+    film: ['RIFE covers frame interpolation when fetched.', 'دریافت RIFE همان نیاز را پوشش می‌دهد.'],
+    virastar: ['The built-in Persian cleaner is already active.', 'پاک‌ساز داخلی فارسی همین حالا فعال است.'],
+  }
   const startFetch = (engine: EngineInfo, heavy: boolean) => {
     api
       .post('/engines/install/start', { engine: engine.id, heavy })
@@ -448,10 +453,10 @@ function EnginesCard() {
     const needsTorch = engine.heavy === 'torch' || engine.heavy === 'torch+HF-token'
     if (needsTorch) {
       Modal.confirm({
-        title: t(`Fetch ${engine.name} plus torch?`, `${engine.name} به‌همراه torch گرفته شود؟`),
+        title: t(`Download ${engine.name} + the AI core (torch)?`, `دانلود ${engine.name} + هستهٔ هوش مصنوعی (torch)؟`),
         content: t(
-          'This engine needs torch to run: about 120 MB of CPU wheels from PyPI, downloaded once to your runtime folder (updates never delete it).',
-          'این موتور برای اجرا به torch نیاز دارد: حدود ۱۲۰ مگابایت wheel پردازنده از PyPI، یک‌بار در پوشه‌ی runtime شما (به‌روزرسانی‌ها هرگز آن را پاک نمی‌کنند).'
+          'torch is the ~120 MB base library these models run on — one big one-time download into your own cache; updates never delete it. The bar now shows real megabytes.',
+          'torch کتابخانهٔ پایهٔ ~۱۲۰ مگابایتی است که این مدل‌ها روی آن اجرا می‌شوند — یک دانلود حجیم یک‌باره در کش خود شما؛ به‌روزرسانی‌ها هرگز آن را پاک نمی‌کنند. نوار از این به بعد مگابایت واقعی نشان می‌دهد.'
         ),
         okText: t('Fetch engine + torch', 'گرفتن موتور + torch'),
         cancelText: t('Cancel', 'انصراف'),
@@ -473,18 +478,24 @@ function EnginesCard() {
               <strong dir="ltr">{e.name}</strong>
               <span className="ce-hint">
                 {task
-                  ? `${task.stage} ${Math.round((task.progress ?? 0) * 100)}%`
+                  ? `${task.label || task.stage} — ${Math.round((task.progress ?? 0) * 100)}%`
                   : e.role + (e.why && !e.installed && !e.fetchable ? ` — ${e.why}` : '')}
+                {!task && !e.installed && !e.fetchable && ALT[e.id] && (
+                  <em style={{ display: 'block', fontStyle: 'normal', color: 'var(--success)' }}>
+                    {t(ALT[e.id][0], ALT[e.id][1])}
+                  </em>
+                )}
               </span>
               <span dir="ltr" className="ce-badge">{e.licence}</span>
               {e.installed ? (
                 <span className="ce-badge">{t('ready', 'آماده')}</span>
               ) : e.fetchable ? (
                 <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => fetchClicked(e)}>
-                  {t(needsTorch ? 'Fetch + torch' : 'Fetch', needsTorch ? 'گرفتن + torch' : 'گرفتن')}
+                  {t(needsTorch ? 'Download engine + AI core' : 'Download',
+                    needsTorch ? 'دانلود موتور + هستهٔ هوش مصنوعی' : 'دانلود')}
                 </button>
               ) : (
-                <span className="ce-badge" title={e.why}>{t('unavailable', 'در دسترس نیست')}</span>
+                <span className="ce-badge" title={e.why}>{t('unavailable here', 'این‌جا در دسترس نیست')}</span>
               )}
             </div>
           )
@@ -494,6 +505,12 @@ function EnginesCard() {
         {t(
           'None of these ship in the installer; each is fetched when you ask and degrades gracefully when absent. Rejected engines stay listed with their reason.',
           'هیچ‌کدام در نصب‌کننده نیستند؛ هرکدام وقتی بخواهی گرفته می‌شود و در غیابش برنامه بی‌صدا کار می‌کند. موتورهای ردشده با دلیلشان فهرست می‌مانند.'
+        )}
+      </p>
+      <p className="ce-hint">
+        {t(
+          '“AI core (torch)” is the base library these models run on — one big one-time download (~120 MB); afterwards each engine is a small download.',
+          '«هستهٔ هوش مصنوعی (torch)» کتابخانهٔ پایه‌ای است که این مدل‌ها روی آن اجرا می‌شوند — یک دانلود حجیمِ یک‌باره (~۱۲۰ مگابایت)؛ بعد از آن هر موتور دانلود کوچکی است.'
         )}
       </p>
       {rejected.length > 0 && (

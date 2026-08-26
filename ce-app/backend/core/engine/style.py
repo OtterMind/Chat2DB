@@ -1438,3 +1438,22 @@ def suggest_transitions(timeline: dict, bpm: float = 120.0) -> list[dict]:
             "duration": duration,
         })
     return out
+
+
+def recipes() -> list[dict]:
+    """Ready-made edit recipes: a starter rhythm plus the intent that makes it
+    a *kind* of video — one click on Style Match, no questionnaire."""
+    sts = starters()
+    pick = lambda i: sts[i] if len(sts) > i else sts[0]
+    return [
+        {"id": "reels-punch", "fa": "ریلز کوبندهٔ ورزشی", "en": "Punchy sport reel",
+         "intent": {"kind": "sport", "goal": "hook", "energy": "punchy",
+                    "platform": "instagram_reels"},
+         "template": pick(0)},
+        {"id": "lesson-calm", "fa": "آموزش آرام با زیرنویس فارسی", "en": "Calm lesson, Persian captions",
+         "intent": {"kind": "tutorial", "goal": "teach", "energy": "calm", "captions": "fa"},
+         "template": pick(2)},
+        {"id": "vlog-story", "fa": "ولاگ روایی متعادل", "en": "Balanced story vlog",
+         "intent": {"kind": "vlog", "goal": "story", "energy": "balanced"},
+         "template": pick(1)},
+    ]

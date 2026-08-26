@@ -95,3 +95,40 @@ def translate_cues(cues: list[dict], target: str, model: str | None = None) -> d
     out = [{**c, "text": re.sub(r"\s+", " ", t).strip() or c.get("text", "")}
            for c, t in zip(cues, lines)]
     return {"cues": out, "provider": chosen}
+
+
+def hook_title(cues: list[dict], model: str | None = None) -> dict:
+    """One short hook title for the opening seconds — guarded.
+
+    The model may only style what the transcript already says: the fallback is
+    the first cue's own words, and an over-long or hallucinated answer (longer
+    than 14 words / 80 chars, or empty) is thrown away.
+    """
+    from core.brain.planners import ollama_available  # noqa: PLC0415
+
+    fallback = re.sub(r"\s+", " ", cues[0].get("text", "")).strip()[:60] if cues else ""
+    body = " ".join(c.get("text", "") for c in cues[:6]).strip()
+    chosen = ollama_available(model)
+    if chosen is None or not body:
+        return {"title": fallback, "provider": None}
+    prompt = (
+        "Write ONE hook title of at most 8 words for a short video whose opening "
+        f"lines are: {body[:400]}. Do not invent facts. "
+        'Reply with JSON {"title": "..."}'
+    )
+    try:
+        import json as _json  # noqa: PLC0415
+        import requests  # noqa: PLC0415
+
+        response = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={"model": chosen, "prompt": prompt, "stream": False, "format": "json"},
+            timeout=60,
+        )
+        data = _json.loads(response.json().get("response", "{}"))
+        title = str(data.get("title", "")).strip()
+    except Exception:  # noqa: BLE001
+        title = None
+    if not title or len(title) > 80 or len(title.split()) > 14:
+        return {"title": fallback, "provider": chosen}
+    return {"title": title, "provider": chosen}

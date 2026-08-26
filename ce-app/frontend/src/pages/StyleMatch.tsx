@@ -77,10 +77,13 @@ export default function StyleMatch() {
   const wasCancelled = (error: unknown) => Boolean((error as { cancelled?: boolean })?.cancelled)
 
   const [starters, setStarters] = useState<StyleTemplate[]>([])
+  const [recipes, setRecipes] = useState<{ id: string; fa: string; en: string; intent: Record<string, string>; template: StyleTemplate }[]>([])
+  const [recipeIntent, setRecipeIntent] = useState<Record<string, string> | null>(null)
   const refresh = () => styleApi.templates().then((r) => setTemplates(r.templates)).catch(() => undefined)
   useEffect(() => {
     refresh()
     styleApi.starters().then((r) => setStarters(r.starters)).catch(() => setStarters([]))
+    styleApi.recipes().then((r) => setRecipes(r.recipes)).catch(() => setRecipes([]))
   }, [])
 
   /** The brain interrogates itself about a template (and optionally footage). */
@@ -231,7 +234,7 @@ export default function StyleMatch() {
         t('Styled edit', 'تدوین بر اساس الگو'),
         pending.music,
         watcher,
-        option.intent
+        recipeIntent ? { ...option.intent, ...recipeIntent } : option.intent
       )
       setResult(built)
       tellBrainAccepted(built)
@@ -242,7 +245,7 @@ export default function StyleMatch() {
       // The chosen plan travels with the edit, so the assistant in the editor
       // answers "which part is the strongest?" about a lesson when it is a
       // lesson — from data the brain measured, not a guess.
-      editor.setIntent((built.summary.intent ?? option.intent) as Record<string, unknown>)
+      editor.setIntent((built.summary.intent ?? (recipeIntent ? { ...option.intent, ...recipeIntent } : option.intent)) as Record<string, unknown>)
       message.success(
         t(`Ready — ${built.summary.shots} shots`, `آماده شد — ${built.summary.shots} نما`)
       )
@@ -557,6 +560,24 @@ export default function StyleMatch() {
               </div>
             ))}
           </div>
+          {recipes.length > 0 && (
+            <div className="ce-reel" style={{ marginTop: 10 }}>
+              {recipes.map((recipe) => (
+                <div key={recipe.id} className="ce-reelcard" role="button" tabIndex={0}
+                  onKeyDown={() => undefined}
+                  onClick={() => {
+                    setTemplate(recipe.template)
+                    setRecipeIntent(recipe.intent)
+                    message.success(t(`Recipe armed: ${recipe.en}`, `رسپی فعال شد: ${recipe.fa}`))
+                  }}>
+                  <span className="ce-reelcard__art"><Wand2 size={18} />
+                    <span className="ce-reelcard__len">{t('recipe', 'رسپی')}</span>
+                  </span>
+                  <span className="ce-reelcard__name">{lang === 'fa' ? recipe.fa : recipe.en}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="ce-actions" style={{ marginTop: 10 }}>
             <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void importFile()}>
               {t('Import .cetemplate', 'درون‌بری .cetemplate')}

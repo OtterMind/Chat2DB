@@ -1376,6 +1376,42 @@ function PanelCaptions({ clip }: { clip: Clip }) {
         >
           {t('Export SRT', 'خروجی SRT')}
         </button>
+        <button
+          className="ce-btn ce-btn--ghost ce-btn--sm"
+          onClick={() => {
+            const all = useEditor.getState().clips
+              .filter((c) => c.text !== undefined && c.src == null)
+              .map((c) => ({ start: c.start, end: c.start + c.duration, text: c.text ?? '' }))
+            fetch(`${backendOrigin}/api/captions/chapters`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cues: all }),
+            }).then((r) => r.json()).then((out) => {
+              const state = useEditor.getState()
+              for (const ch of out.chapters ?? []) {
+                state.addCaptions([{ start: ch.start, end: Math.min(ch.start + 2.5, ch.end), text: ch.title }])
+              }
+              message.success(`${(out.chapters ?? []).length} ${t('chapters added', 'چپتر اضافه شد')}`)
+            }).catch((e) => message.error((e as Error).message))
+          }}
+        >
+          {t('Chapters', 'چپترها')}
+        </button>
+        <button
+          className="ce-btn ce-btn--ghost ce-btn--sm"
+          onClick={() => {
+            const all = useEditor.getState().clips
+              .filter((c) => c.text !== undefined && c.src == null)
+              .map((c) => ({ start: c.start, end: c.start + c.duration, text: c.text ?? '' }))
+            fetch(`${backendOrigin}/api/captions/hook-title`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cues: all }),
+            }).then((r) => r.json()).then((out) => {
+              if (out.title) message.success(`${t('Hook', 'قلاب')}: ${out.title}`)
+            }).catch((e) => message.error((e as Error).message))
+          }}
+        >
+          {t('Hook title', 'تیتر قلاب')}
+        </button>
       </div>
       <Modal
         open={editIdx !== null}
