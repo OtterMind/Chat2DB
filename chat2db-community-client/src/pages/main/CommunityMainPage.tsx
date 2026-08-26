@@ -70,8 +70,7 @@ function CommunityMainPage() {
   const { styles } = useStyles({});
   const { tab: settingTab } = useParams<{ tab: string }>();
 
-  const { networkAbandoned, curUser } = useUserStore((state) => ({
-    networkAbandoned: state.networkAbandoned,
+  const { curUser } = useUserStore((state) => ({
     curUser: state.curUser,
   }));
 
@@ -159,11 +158,6 @@ function CommunityMainPage() {
       nextNavConfig = nextNavConfig.filter((item) => item.key !== 'dashboard');
     }
 
-    if (networkAbandoned) {
-      const filterKeys = ['stream', 'dashboard'];
-      nextNavConfig = nextNavConfig.filter((item) => !filterKeys.includes(item.key));
-    }
-
     setNavConfig(nextNavConfig);
 
     let page = '';
@@ -217,7 +211,7 @@ function CommunityMainPage() {
       navConfigTmp: nextNavConfig,
       isFirst: true,
     });
-  }, [allNavItems, handleChangePageTab, initNavConfig, mainPageActiveTab, networkAbandoned]);
+  }, [allNavItems, handleChangePageTab, initNavConfig, mainPageActiveTab]);
 
   useEffect(() => {
     if (mainPageActiveTab === 'stream') {

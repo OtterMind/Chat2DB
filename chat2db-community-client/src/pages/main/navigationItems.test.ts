@@ -26,5 +26,10 @@ assert.ok(
 const communityMainPage = readFileSync('src/pages/main/CommunityMainPage.tsx', 'utf8');
 assert.match(communityMainPage, /createCoreMainNavItems/);
 assert.doesNotMatch(communityMainPage, /organization|team|upgrade|pricing/i);
+assert.doesNotMatch(
+  communityMainPage,
+  /networkAbandoned/,
+  'shared navigation must not hide local Chat or Dashboard based on commercial activation mode',
+);
 
 console.log('Main navigation item tests passed.');
