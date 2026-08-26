@@ -20,6 +20,7 @@ export interface ClientRuntime {
   showUpgradeEntry: boolean;
   showDownloadEntry: boolean;
   enableAutoUpdate: boolean;
+  enableTaskCenterAutoPolling: boolean;
   showMcpSetting: boolean;
   showNetworkProxySetting: boolean;
   showLicenseSetting: boolean;
@@ -76,6 +77,7 @@ export const clientRuntime: ClientRuntime = {
   showUpgradeEntry: false,
   showDownloadEntry: false,
   enableAutoUpdate: false,
+  enableTaskCenterAutoPolling: true,
   showMcpSetting: isDesktop,
   showNetworkProxySetting: isDesktop,
   showLicenseSetting: false,

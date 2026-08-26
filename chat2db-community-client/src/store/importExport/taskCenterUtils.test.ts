@@ -9,7 +9,9 @@ import {
   mergeTaskEvents,
   mergeTasks,
   reconcileCompletedTaskNotifications,
+  shouldRetryTaskPolling,
 } from './taskCenterUtils';
+import { ErrorCode } from '@/constants/request';
 
 const event = (sequence: number, message: string): ImportExportTaskEvent => ({
   eventId: sequence,
@@ -112,6 +114,15 @@ function testPollingDelay() {
   assert.equal(getTaskPollingDelay(0, true), FAILED_TASK_POLL_INTERVAL);
 }
 
+function testPollingRetryPolicy() {
+  assert.equal(shouldRetryTaskPolling(new Error('temporary failure')), true);
+  assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.NetworkError }), true);
+  assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.NeedLoggedIn }), false);
+  assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.OfflineInvalidTrial }), false);
+  assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.OfflineTrialExpired }), false);
+  assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.OfflineLicenseExpired }), false);
+}
+
 function testCompletedTaskNotifications() {
   const historicalTask = task(1, ImportExportTaskStatus.SUCCESS, '2026-08-06T10:00:00Z', 100);
   const baseline = reconcileCompletedTaskNotifications({}, [historicalTask], false);
@@ -161,6 +172,7 @@ void testActiveTaskPagination().then(async () => {
   testTaskMerge();
   testEventMerge();
   testPollingDelay();
+  testPollingRetryPolicy();
   testCompletedTaskNotifications();
   console.log('Task center utility tests passed');
 });

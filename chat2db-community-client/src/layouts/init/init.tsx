@@ -17,6 +17,7 @@ import {
   storageItem,
 } from '@/components/ConnectionEdit/config/dataSource';
 import { isDesktop } from '@/utils/env';
+import clientRuntime from '@client-runtime';
 import { initializeDevEnvironmentIcon } from '@/utils/initLocalIcon';
 import queryString from 'query-string';
 import { useEffect, useLayoutEffect } from 'react';
@@ -30,6 +31,7 @@ import useJcef from './useJcef';
 import useOpenFile from './useOpenFile';
 import useApplicationExit from './useApplicationExit';
 import useTaskCenter from './useTaskCenter';
+import { shouldAutoPollTaskCenter } from './taskCenterPolling';
 
 const useInit = () => {
   const { reload } = queryString.parse(location.search);
@@ -67,7 +69,13 @@ const useInit = () => {
   useOpenFile();
   useJavaMessageReceiver();
   useApplicationExit();
-  useTaskCenter(!isDesktop || serviceStatus === ServiceStatus.SUCCESS);
+  useTaskCenter(
+    shouldAutoPollTaskCenter({
+      enabled: clientRuntime.enableTaskCenterAutoPolling,
+      desktop: isDesktop,
+      serviceReady: serviceStatus === ServiceStatus.SUCCESS,
+    }),
+  );
 
   // Check service status
   const checkServiceStatus = () => {

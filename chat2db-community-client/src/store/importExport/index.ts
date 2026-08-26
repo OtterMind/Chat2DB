@@ -12,6 +12,7 @@ import {
   loadMissingTrackedTasks,
   mergeTasks,
   reconcileCompletedTaskNotifications,
+  shouldRetryTaskPolling,
   TASK_CENTER_PAGE_SIZE,
   TaskNotificationCursor,
   TaskStatusById,
@@ -149,9 +150,12 @@ export const createImportExportAction: StateCreator<
           getTaskListTimer: pollDelay === null ? null : setTimeout(() => get().getTaskList(), pollDelay),
         });
       })
-      .catch(() => {
+      .catch((error) => {
         if (requestGeneration !== taskListRequestGeneration) return;
-        set({ getTaskListTimer: setTimeout(() => get().getTaskList(), getTaskPollingDelay(0, true)!) });
+        const retryDelay = shouldRetryTaskPolling(error) ? getTaskPollingDelay(0, true) : null;
+        set({
+          getTaskListTimer: retryDelay === null ? null : setTimeout(() => get().getTaskList(), retryDelay),
+        });
       });
   },
   loadMoreTasks: () => {
