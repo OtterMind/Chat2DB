@@ -1191,6 +1191,20 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+111. **The brain fires from every door.** The owner re-sent the same three asks
+    (Audio extraction, brain-asks-itself Style Match, left-aligned home) after
+    they had shipped in 0.9.29 — so every claim was re-verified live instead of
+    trusted: the backend served `/api/style/brain` (Persian Q&A with the numbers
+    behind each answer) and `/api/audio/extract` (a 3.02 s `.m4a` in the exports
+    dir) over HTTP; `npm run test:ui` walked all routes green; a targeted
+    Chromium check on `#/style` rendered with **zero console errors, the old
+    questionnaire absent, the reference card present**; the home grid rule is at
+    `global.css:275`. The audit also exposed one real gap: the *"Only analyse a
+    reference"* door set the template without waking the brain — `analyse()` now
+    calls `askBrain` too, so whichever door the first video arrives through, the
+    self-interrogation is on screen. Version stays 0.9.29 until the owner says
+    to publish; the fix rides the next release.
+
 ## 5. Release procedure
 
 Bump `version` in `ce-app/frontend/package.json`, commit, push. The workflow in

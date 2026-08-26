@@ -156,6 +156,9 @@ export default function StyleMatch() {
       const found = await styleApi.analyse(path, undefined, watcher)
       setTemplate(found)
       refresh()
+      // The first video is in: the brain interrogates itself about it on screen,
+      // whichever door the reference arrived through.
+      void askBrain(found as unknown as Record<string, unknown>)
       message.success(
         t(`Template ready — ${found.shots.length} shots`, `قالب آماده شد — ${found.shots.length} نما`)
       )
