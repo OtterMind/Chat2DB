@@ -1020,16 +1020,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   };
 
   const handleResultPagingChange = useCallback(
-    (resultData: IManageResultData, paging: { pageNo: number; pageSize: number }) => {
-      resultPageSizeRef.current = paging.pageSize;
-      if (!resultData.executeSqlParams) {
-        return;
-      }
-      return handleExecuteSQL({
-        ...resultData.executeSqlParams,
-        ...paging,
-        sql: resultData.originalSql || resultData.executeSqlParams.sql,
-      });
+    (_resultData: IManageResultData, executeSqlParams: IExecuteSqlParams) => {
+      resultPageSizeRef.current = executeSqlParams.pageSize;
+      return handleExecuteSQL(executeSqlParams);
     },
     [handleExecuteSQL],
   );

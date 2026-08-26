@@ -14,7 +14,7 @@ import classnames from 'classnames';
 import { Dropdown, type MenuProps } from 'antd';
 import { ArrowDownUp, Check, SlidersHorizontal } from 'lucide-react';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
-import { IManageResultData } from '@/typings';
+import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
 import i18n from '@/i18n';
@@ -51,7 +51,6 @@ import { retainPinnedResults } from './resultTabPinning';
 import { useTreeStore } from '@/store/tree';
 import { resolveDataSourceIdentityColor } from '@/utils/dataSourceIdentity';
 import type { DataSourceExecutionTarget } from '@/service/dataSourceExecutionSnapshot';
-import type { ResultPaging } from './components/ResultSet/pagination';
 
 interface IProps {
   className?: string;
@@ -73,7 +72,7 @@ interface IProps {
     historyResultDataList: IManageResultData[];
     closedResultIdentities: SqlExecutionResultIdentity[];
   }) => void;
-  onResultPagingChange?: (resultData: IManageResultData, paging: ResultPaging) => Promise<unknown> | void;
+  onResultPagingChange?: (resultData: IManageResultData, params: IExecuteSqlParams) => Promise<unknown> | void;
 }
 
 const RESULT_TAB_ORDER_STORAGE_KEY = createResultTabOrderStorageKey('community', __RUNTIME_ENV__);

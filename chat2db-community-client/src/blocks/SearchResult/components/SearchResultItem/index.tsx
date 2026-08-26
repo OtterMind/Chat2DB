@@ -5,18 +5,17 @@ import StatusBar from '../StatusBar';
 import ResultSet from '../ResultSet';
 import i18n from '@/i18n';
 import { useStyles } from './style';
-import { IManageResultData } from '@/typings';
+import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
 import { QuestionType } from '@/constants/chat';
-import type { ResultPaging } from '../ResultSet/pagination';
 
 interface IProps {
   resultData: IManageResultData;
   active: boolean;
   viewTable?: boolean;
-  onResultPagingChange?: (resultData: IManageResultData, paging: ResultPaging) => Promise<unknown> | void;
+  onResultPagingChange?: (resultData: IManageResultData, params: IExecuteSqlParams) => Promise<unknown> | void;
 }
 
 export default memo<IProps>(
