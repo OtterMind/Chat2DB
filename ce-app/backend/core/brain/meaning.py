@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import re
 
+from core.engine import persian
+
 MARKERS: dict[str, tuple[str, ...]] = {
     "en": (
         "but ", "however", "the most important", "most important", "the point is",
@@ -41,6 +43,7 @@ QUESTIONS = ("?", "؟", "چرا", "چطور", "چگونه", "چیست", "how ", 
 
 
 def score_text(text: str) -> float:
+    text = persian.normalize(text or '')
     """A 0..1 score for one caption's worth of speech."""
     words = [w for w in re.split(r"\s+", text.strip()) if w]
     if not words:
@@ -110,3 +113,50 @@ def blend(measured: float, meaning: float, weight: float = 0.5) -> float:
     the answer comes from the words.
     """
     return max(0.0, min(1.0, (1.0 - weight) * measured + weight * meaning))
+
+
+# ------------------------------------------------------------------ arc 2.0
+#
+# The advisors' "narrative arc" as markers, not embeddings: a story the
+# transcript tells has a hook early, a payoff late, and question→answer pairs
+# in between. Embeddings (sentence-transformers, on-demand) may sharpen this
+# later; the marker version is the offline floor and it is what the objective's
+# new `narrative_arc` term reads when no engine is fetched.
+
+PAYOFF = ("نتیجه", "خلاصه", "در آخر", "حرف آخر", "پایان", "therefore", "finally",
+          "in the end", "to sum up", "so in the end")
+HOOK_OPEN = ("امروز", "ببین", "ببینید", "می‌دونستی", "today", "watch this",
+             "hey", "did you know", "here is")
+
+
+def narrative_arc(cues: list[dict]) -> dict:
+    """Hook → development → payoff, with the timestamps, measured from text.
+
+    `cues` are `{start, end, text}`. Returns None-fields rather than guesses
+    when the transcript is empty — the objective drops the term in that case.
+    """
+    if not cues:
+        return {"hook": None, "payoff": None, "qna": 0, "claim_density": 0.0,
+                "arc": 0.0}
+
+    hook: float | None = None
+    payoff: float | None = None
+    qna = 0
+    claims = 0
+    for index, cue in enumerate(cues):
+        text = cue.get("text", "") or ""
+        lowered = text.lower()
+        if hook is None and (any(h in lowered or h in text for h in HOOK_OPEN)
+                             or score_text(text) >= 0.5):
+            hook = float(cue.get("start", 0.0))
+        if any(p in lowered or p in text for p in PAYOFF):
+            payoff = float(cue.get("start", 0.0))
+        if any(q in text for q in ("?", "؟")) and index + 1 < len(cues):
+            qna += 1
+        claims += len(re.findall(r"\d+", text))
+    density = round(min(1.0, claims / max(1, len(cues))), 3)
+
+    arc = (0.5 if hook is not None else 0.0) + (0.5 if payoff is not None else 0.0)
+    arc = min(1.0, arc + (0.1 if qna else 0.0))
+    return {"hook": hook, "payoff": payoff, "qna": qna, "claim_density": density,
+            "arc": round(arc, 3)}

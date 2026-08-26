@@ -1381,3 +1381,11 @@ button { font-family: inherit; cursor: pointer; }
 /* keep the top panel's content inside its share so audit boxes never collide */
 .ed__main { overflow: hidden; }
 .ed__layout .ed__preview { max-height: 34vh; }
+
+/* ── 0.9.31 debug: dragging must never paint words blue like a word processor.
+      The app is an instrument; inputs stay editable/selectable. ──────────── */
+body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable='true'], .ce-hint code, .allow-select {
+  user-select: text; -webkit-user-select: text;
+}
+img { -webkit-user-drag: none; }

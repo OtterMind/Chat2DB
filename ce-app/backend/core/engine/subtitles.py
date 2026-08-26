@@ -18,6 +18,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.engine import persian
+
 # Windows ships Persian-capable fonts; nothing has to be bundled or licensed.
 DEFAULT_FONT_LATIN = "Arial"
 DEFAULT_FONT_RTL = "Tahoma"
@@ -173,7 +175,7 @@ def cues_from_clips(clips: list[dict], default_size: int = 54) -> list[TextCue]:
     """Turn text clips of the edit model into cues."""
     cues: list[TextCue] = []
     for clip in clips:
-        text = (clip.get("text") or clip.get("label") or "").strip()
+        text = persian.normalize((clip.get("text") or clip.get("label") or "").strip())
         if not text:
             continue
         props = clip.get("props") or {}

@@ -28,6 +28,11 @@ const TOOL_NOTE: Record<string, [en: string, fa: string]> = {
   music: ['Mixing and ducking apply to the audio lane.', 'میکس و داکینگ صدا روی لایه‌ی صدا اعمال می‌شود.'],
 }
 
+/** One picker at a time, from any door (entry effect, toolbar, palette, bin).
+    A second call while the first dialog is open is exactly the "Import fired
+    twice on entry" complaint — with this flag it is impossible by construction. */
+let pickerBusy = false
+
 export default function Studio() {
   const [params] = useSearchParams()
   const { t, lang } = useI18n()
@@ -274,6 +279,9 @@ export default function Studio() {
 
   /** Import real media: OS picker in the desktop app, typed path in the browser. */
   const importMedia = async () => {
+    if (pickerBusy) return
+    pickerBusy = true
+    try {
     let paths: string[] = []
     try {
       const picker = pickMedia()
@@ -325,6 +333,9 @@ export default function Studio() {
             : t('Could not read ', 'خواندن فایل ممکن نشد ') + path + ': ' + (err as Error).message
         )
       }
+    }
+    } finally {
+      pickerBusy = false
     }
   }
 

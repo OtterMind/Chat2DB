@@ -210,6 +210,24 @@ def beats(path: str, minimum_bpm: float = 60.0, maximum_bpm: float = 200.0) -> B
 # ------------------------------------------------------------------ ducking
 
 
+def voice_source(path: str) -> str:
+    """The cleanest voice track we have for `path`.
+
+    If the user split stems for this file (the Audio panel's Demucs button), the
+    vocals stem is cached in `~/CuttingEdge/exports/<name>.stems/vocals.wav` —
+    voice activity measured on a vocals-only stem is cleaner than on the raw
+    mix, so ducking follows the *words*, not the band behind them. Without it,
+    the file itself is used, exactly as before. We never separate during a
+    render: torch is minutes of CPU and a render must not trigger that silently.
+    """
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    from core.engine import audio_extract  # noqa: PLC0415
+
+    stem = audio_extract.exports_dir() / f"{_Path(path).stem}.stems" / "vocals.wav"
+    return str(stem) if stem.exists() else path
+
+
 def voice_envelope(
     sources: list[tuple[str, float, float, float]],
     total: float,

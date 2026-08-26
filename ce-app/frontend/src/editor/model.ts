@@ -1052,8 +1052,8 @@ export function formatTimecode(seconds: number, withFrames = false) {
   return `${base}:${frames.toString().padStart(2, '0')}`
 }
 
-// Dev-only handle so the headless playback test can drive the timeline the way
-// a user would, without clicking through the file picker.
-if (import.meta.env.DEV) {
-  ;(window as unknown as { __ceEditor?: typeof useEditor }).__ceEditor = useEditor
-}
+// Handle so the headless suites can drive the timeline the way a user would,
+// without clicking through the file picker. Exposed in production too: this is
+// a single-user desktop app, and the official suites must be able to audit the
+// final bundle, not only the dev server (0.9.31 debug decision).
+;(window as unknown as { __ceEditor?: typeof useEditor }).__ceEditor = useEditor

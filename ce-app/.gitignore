@@ -2,6 +2,8 @@ node_modules/
 dist/
 release/
 .venv/
+# the static ffmpeg dev-setup.sh extracts (76 MB, rebuilt by the script)
+.ffmpeg/
 __pycache__/
 *.py[cod]
 .env
@@ -13,3 +15,4 @@ build/
 .DS_Store
 build-assets/icon-src.png
 package-lock.json
+.coverage

@@ -54,6 +54,47 @@ def is_installed(module: str) -> bool:
         return False
 
 
+def _pip_available() -> bool:
+    try:
+        run = subprocess.run([sys.executable, "-m", "pip", "--version"],
+                             capture_output=True, timeout=30)
+        return run.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _install_pip_free(packages: list[str], say) -> dict:
+    """The packaged embeddable Python has no pip, so fetch wheels directly.
+
+    A wheel is a zip and PyPI's JSON API gives the URL; the stdlib is enough.
+    Callers pass the explicit dependency list, so no resolution is needed.
+    When a project publishes **no wheel** (source only), a pure-Python sdist is
+    unpacked by our own extractor; one that carries C/C++ code is refused with a
+    plain reason instead of dying in a zip error.
+    """
+    from core.engine import _pypi  # noqa: PLC0415
+
+    target = ensure_on_path()
+    for index, spec in enumerate(packages):
+        name = _pypi.parse_name(spec)
+        say("download", 0.1 + 0.8 * index / max(1, len(packages)), f"Fetching {name}")
+        try:
+            wheel = _pypi.download_wheel(name, target / "_wheels")
+            _pypi.extract_wheel(wheel, target)
+        except RuntimeError:
+            sdist = _pypi.download_sdist(name, target / "_wheels")
+            if not _pypi.sdist_is_pure(sdist):
+                raise RuntimeError(
+                    f"{name} is source-only on PyPI and contains compiled code; "
+                    "the packaged runtime cannot build it (needs pip + a C++ toolchain)"
+                ) from None
+            say("install", 0.15 + 0.8 * index / max(1, len(packages)),
+                f"{name}: no wheel — unpacking the pure-Python source")
+            _pypi.extract_sdist(sdist, target)
+    say("done", 1.0, f"Installed into {target} (no pip)")
+    return {"target": str(target), "packages": packages, "log": ["pip-free install"]}
+
+
 def install(packages: list[str], on_progress=None) -> dict:
     """`pip install --target ~/CuttingEdge/runtime/py`, narrated.
 
@@ -64,6 +105,9 @@ def install(packages: list[str], on_progress=None) -> dict:
     target = ensure_on_path()
     say = on_progress or (lambda *_args, **_kwargs: None)
     say("resolve", 0.05, f"Fetching {', '.join(packages)}")
+
+    if not _pip_available():
+        return _install_pip_free(packages, say)
 
     process = subprocess.Popen(
         [

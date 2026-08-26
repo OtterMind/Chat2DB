@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.30` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.31` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,23 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+115. **The 0.9.31 debug round: everything re-tested by running it, on the
+    PRODUCTION bundle, then published.** (a) The "Import fires twice on entry"
+    complaint was reproduced-hunted on a `vite build` + `vite preview` run: the
+    entry guard held (exactly one picker), and a second lock (`pickerBusy`
+    around `importMedia`) now makes a double fire impossible from *any* door —
+    entry effect, toolbar, palette, MediaBin. (b) No more word-processor blue:
+    app-wide `user-select: none` with inputs/textareas re-enabled; a puppeteer
+    drag across Home and the Studio toolbar leaves `getSelection()` empty.
+    (c) The official suites now audit the final bundle, not only dev: the
+    `__ceEditor` handle is exposed in production too, and the CORS allowlist
+    gained the local preview port — `test:ui` and the full `playback-test`
+    (all checks) now pass against `vite preview`. (d) A click-around on the
+    production build verified live: tiles navigate, MediaBin shows/toggles,
+    Ctrl+K opens/filters/Esc-closes, the Text tool adds a clip and Ctrl+Z
+    removes it, zero console errors. Backend suite 404/0/10. Published as
+    0.9.31 on the owner's instruction.
 
 114. **The UI/UX rebuild the professors demanded (2/20 → aimed ≥12/20),
     implemented for real, not mocked.** From their two blueprints, triaged in

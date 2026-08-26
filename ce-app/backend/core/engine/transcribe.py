@@ -126,7 +126,8 @@ def group_words(words: list[dict], max_chars: int = 42, max_gap: float = 0.8) ->
     return cues
 
 
-def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42) -> dict:
+def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42,
+                       align: bool = False) -> dict:
     model = _load()
     segments, info = model.transcribe(
         path, language=language, word_timestamps=True, vad_filter=True
@@ -143,12 +144,27 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
                 "text": word.word.strip(),
             })
 
+    detected = getattr(info, "language", language) or "unknown"
+
+    # Optional refinement: snap word edges to the audio with whisperX when the
+    # engine is fetched, so karaoke highlights fire on the word, not near it.
+    # Never raises — on any machine without it the timings above are used as-is.
+    alignment = "off"
+    if align and words:
+        from core.engine import whisperx_align  # noqa: PLC0415
+
+        refined = whisperx_align.align(path, words, language=str(detected))
+        if refined.get("words"):
+            words = refined["words"]
+        alignment = refined.get("status", "off")
+
     return {
-        "language": getattr(info, "language", language) or "unknown",
+        "language": detected,
         "duration": round(float(getattr(info, "duration", 0.0)), 3),
         "text": " ".join(plain).strip(),
         "words": words,
         "cues": group_words(words, max_chars=max_chars),
+        "alignment": alignment,
     }
 
 

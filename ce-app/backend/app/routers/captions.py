@@ -17,6 +17,8 @@ class TranscribeRequest(BaseModel):
     path: str
     language: str | None = Field(default=None, description="ISO code; auto-detected when omitted")
     max_chars: int = Field(default=42, description="Soft limit per caption line")
+    align: bool = Field(default=False,
+                        description="Snap word edges to the audio with whisperX when fetched")
 
 
 @router.post("/transcribe")
@@ -35,6 +37,7 @@ async def transcribe(payload: TranscribeRequest) -> dict:
         return await loop.run_in_executor(None, partial(
             engine.transcribe_to_cues,
             str(media), language=payload.language, max_chars=payload.max_chars,
+            align=payload.align,
         ))
     except engine.TranscriberUnavailable as exc:
         # A missing model must say so plainly instead of looking like a crash.
@@ -46,3 +49,43 @@ async def transcribe(payload: TranscribeRequest) -> dict:
 @router.get("/status")
 def status() -> dict:
     return engine.availability()
+
+
+class AssImportRequest(BaseModel):
+    path: str
+
+
+class AssExportRequest(BaseModel):
+    path: str
+    cues: list[dict]
+    width: int = 1080
+    height: int = 1920
+
+
+@router.post("/ass/import")
+def ass_import(payload: AssImportRequest) -> dict:
+    """A `.ass` edited in Aegisub comes back as cues, word timings from `\\kf`."""
+    from core.engine import assfile
+
+    try:
+        return assfile.import_cues(payload.path)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
+
+
+@router.post("/ass/export")
+def ass_export(payload: AssExportRequest) -> dict:
+    from core.engine import assfile
+
+    return assfile.export(payload.cues, payload.path, payload.width, payload.height)
+
+
+@router.get("/align-status")
+def align_status() -> dict:
+    """Is word-level forced alignment available? Honest, so the button can say."""
+    from core.engine import whisperx_align
+
+    return {"available": whisperx_align.available(),
+            "aligner": whisperx_align.PERSIAN_ALIGNER,
+            "note": "Refines faster-whisper word timings for tighter karaoke; "
+                    "captions work without it."}

@@ -63,6 +63,16 @@ def race(
     if on_the_beat is not None:
         candidates.append(on_the_beat)
 
+    # The 0.9.30 strategies. Each one skips itself when the signal it thinks
+    # with is absent — a planner without its sense is not a candidate.
+    for extra in (
+        planners.narrative_plan(highlights, context),
+        planners.retention_plan(highlights, context),
+        planners.variety_plan(highlights, context),
+    ):
+        if extra is not None:
+            candidates.append(extra)
+
     if use_llm:
         proposed = planners.ollama_plan(highlights, context, transcript, model=model, timeout=timeout)
         if proposed is not None:
@@ -90,5 +100,21 @@ def race(
         # Strictly greater: a tie keeps the deterministic plan.
         if best_score is None or score.total > best_score.total:
             best_candidate, best_score = candidate, score
+
+    # The living part: the critic looks at the winning cut once more — at most
+    # two revisions, replacements drawn from unused measured highlights, and the
+    # pure rule plan's score as a floor it can never fall below.
+    from core.brain import critic  # noqa: PLC0415
+
+    rules_score = next((row["score"] for row in scoreboard if row["name"] == "rules"), None)
+    revised, iterations, final = critic.revise(
+        best_candidate.picks, highlights, context, rules_score)
+    if iterations and final is not None and best_score is not None and final > best_score.total:
+        name = f"{best_candidate.name}+critic"
+        scoreboard.append({"name": name, "score": round(final, 4), "seconds": 0.0,
+                           "shots": len(revised), "note": f"{iterations} weak pick(s) revised",
+                           "terms": {}, "skipped": []})
+        best_candidate = planners.Candidate(name=name, picks=revised, seconds=0.0,
+                                            note=f"critic revised {iterations} pick(s)")
 
     return Result(winner=best_candidate.name, picks=best_candidate.picks, scoreboard=scoreboard)

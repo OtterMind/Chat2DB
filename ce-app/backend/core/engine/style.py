@@ -26,10 +26,15 @@ from pathlib import Path
 
 import numpy as np
 
+from app.config import settings
 from core.brain import meaning as brain_meaning
 from core.brain import objective
 from core.brain import race as brain_race
+from core.brain import editor_brain
 from core.engine import analyze as analysis
+from core.engine import intent as intent_model
+from core.engine import fillers as fillers_engine
+from core.engine import vad as vad_engine
 from core.engine import cancellation
 from core.engine import audio as audio_engine
 from core.engine.compose import ffmpeg_binary, probe_media
@@ -318,6 +323,49 @@ def _classify_motion(path: str, start: float, duration: float) -> tuple[str, flo
     return "static", energy
 
 
+
+
+def _coarse_action(path: str, duration: float) -> tuple[float, float]:
+    """Average action-peak and presence over a few windows, for the brain.
+
+    Coarse on purpose: the brain only needs "is there a sharp peak / a moving
+    subject", not a per-window map; a handful of samples is enough and cheap.
+    """
+    if duration <= 0:
+        return 0.0, 0.0
+    n = 6
+    acts, pres = [], []
+    for i in range(n):
+        start = duration * i / n
+        peak, presence = _action_profile(path, start, max(0.5, duration / n))
+        acts.append(peak)
+        pres.append(presence)
+    return (sum(acts) / n, sum(pres) / n)
+
+
+def _action_profile(path: str, start: float, duration: float) -> tuple[float, float]:
+    """How *burst-like* and how *occupied* a window is, from sampled frames.
+
+    Two numbers a sport needs that mean energy does not capture:
+
+    * **peak** — the largest frame-to-frame change inside the window. A pan is a
+      steady moderate change; a spike or a jump is one violent frame. The max,
+      not the mean, is what separates them.
+    * **presence** — the share of consecutive frame pairs with change above a
+      floor. An empty court or a rest between sets is near zero; a rally is near
+      one. This is the "is the subject even in this moment" vote.
+
+    Both come from the same grayscale strip `sample_strip` already decodes in one
+    FFmpeg call, so the cost is a handful of array diffs.
+    """
+    frames = sample_strip(path, start, duration, 6)
+    if len(frames) < 2:
+        return 0.0, 0.0
+    diffs = [float(np.abs(a - b).mean() / 255.0) for a, b in zip(frames, frames[1:])]
+    peak = max(diffs)
+    active = sum(1 for d in diffs if d > 0.02) / len(diffs)
+    return peak, active
+
 def _silent(stage: str, progress: float, label: str = "") -> None:
     """The default reporter: analysis works exactly as before when nobody is watching."""
 
@@ -451,71 +499,202 @@ def analyse(path: str, name: str | None = None, progress=None) -> Template:
 
 
 def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
-                prefer_speech: bool = True) -> list[dict]:
-    """Candidate moments in the user's footage — **many small ones**, best first.
+                prefer_speech: bool = True, intent=None,
+                captions: list[dict] | None = None) -> list[dict]:
+    """Candidate moments across the **whole** file, ranked by measured signals.
 
-    This function used to return whole ranges: one uninterrupted minute of
-    talking came back as a single pick, and a twenty-shot template then took
-    twenty clips from the same starting second. The result was the same
-    half-second of footage repeated twenty times, which is exactly how it
-    looked. (Measured on a 60 s clip against a 20-shot template: 20 clips, one
-    unique offset.)
+    Three failures lived in the version this replaces, and all three were
+    measurable rather than matters of taste:
 
-    So a long range is now **sliced into shot-sized windows**, each scored on
-    its own, and the ranking happens between windows. A speech range of a
-    minute becomes forty candidates instead of one.
+    1. **It only ever looked at the beginning.** Windows were cut inside the
+       speech ranges, ranked, and truncated to `wanted` — so on 120 s of footage
+       against a 12 s reference the rebuild touched **17.3 s, 14.4 % of the
+       material**, and the same 17 s on a 30 s file. The other 85 % was never a
+       candidate. Windows now cover the file end to end.
+    2. **It could not tell one moment from another.** Every window inside a
+       speech range got weight 1.0, and the only variation was a 0.85–1.0 term
+       for how full the window was. Measured on 26 candidates: scores 0.998 to
+       1.0, a spread of **0.002** — so the sort was decided by nothing, and
+       because it is a stable sort "best" silently became "earliest". Each
+       signal is now normalised across the candidates before it is weighted, so
+       the ranking is a comparison rather than a constant.
+    3. **It had no idea what the video was.** A lesson and a music clip were
+       ranked identically. The signals are the same measurements as before —
+       speech coverage, picture motion, audio activity, proximity to the
+       footage's own shot changes — but `core.engine.intent` says how much each
+       one is worth for *this* video. An answer rebalances measurements; it
+       never replaces one, and with no answers at all the weights are neutral.
+
+    Motion costs an FFmpeg call per window, so the cheap signals pick a
+    shortlist first and only the shortlist is decoded. A two-minute file ranks
+    in a couple of seconds instead of spawning a hundred processes.
     """
     info = probe_media(path)
     duration = float(info.get("duration") or 0.0)
-    span_length = max(0.4, window or minimum)
+    span = max(0.4, window or minimum)
     #: Overlap the windows a little so a good moment is not split down the middle.
-    stride = max(0.25, span_length * 0.75)
+    stride = max(0.25, span * 0.75)
+    if duration <= 0:
+        return [{"start": 0.0, "end": 0.0, "score": 0.0}]
 
-    ranges: list[tuple[float, float, float]] = []  # (start, end, weight)
+    weights = dict(intent.signal_weights()) if intent is not None else dict(intent_model.NEUTRAL)
+    if not prefer_speech:
+        # A reference that barely speaks is a montage: the microphone being open
+        # is not evidence of anything.
+        weights["speech"] = 0.0
 
-    # `prefer_speech` comes from the reference's own `speech_ratio`: rebuilding a
-    # montage should not hunt for talking, and rebuilding a talking-head video
-    # should not rank by how much the picture moves. The field was measured from
-    # 0.5.0 and, until now, read by nothing.
-    if info.get("has_audio") and prefer_speech:
-        silences = analysis.detect_silence(path)
-        for span in analysis.keep_ranges(duration, silences):
-            if span.duration >= minimum * 0.6:
-                ranges.append((span.start, span.end, 1.0))
+    # ---- candidate windows: the whole file -------------------------------
+    windows: list[tuple[float, float]] = []
+    cursor = 0.0
+    while cursor + span * 0.7 <= duration:
+        finish = min(duration, cursor + span)
+        # A window that ran out of file is not a shorter candidate, it is a clip
+        # the timeline cannot fill: one of these reached the edit as a 0.75 s
+        # shot in a rhythm of 1.0 s ones. The end of the file gets its own
+        # full-length window below.
+        if finish - cursor >= span * 0.9:
+            windows.append((round(cursor, 3), round(finish, 3)))
+        cursor += stride
+    if duration > span and (not windows or windows[-1][1] < duration - 0.05):
+        # The last second of a file is a candidate like any other.
+        windows.append((round(duration - span, 3), round(duration, 3)))
+    if not windows:
+        windows = [(0.0, round(duration, 3))]
 
-    if not ranges:
-        cuts = [c for c in analysis.detect_scenes(path) if 0 < c < duration]
-        bounds = [0.0, *cuts, duration]
-        for start, end in zip(bounds, bounds[1:]):
-            if end - start >= minimum * 0.6:
-                _, energy = _classify_motion(path, start, end - start)
-                ranges.append((start, end, 0.2 + energy))
+    # ---- the cheap signals, each measured once for the whole file --------
+    speech: list[tuple[float, float]] = []
+    if info.get("has_audio") and weights.get("speech", 0.0) > 0:
+        try:
+            # Whichever speech map is chosen — the model, or the energy detector
+            # every earlier release used. Both return silence as ranges, so
+            # nothing downstream knows the difference.
+            silences = vad_engine.silent_ranges_auto(path)
+            speech = [(r.start, r.end) for r in analysis.keep_ranges(duration, silences)]
+        except Exception:  # noqa: BLE001 — no audio is a normal answer
+            speech = []
 
-    if not ranges:
-        ranges = [(0.0, duration, 1.0)]
+    envelope: list[float] = []
+    envelope_duration = 0.0
+    if info.get("has_audio") and weights.get("onset", 0.0) > 0:
+        try:
+            peaks = audio_engine.peaks(path)
+            envelope = [float(v) for v in (peaks.get("peaks") or [])]
+            envelope_duration = float(peaks.get("duration") or 0.0)
+        except Exception:  # noqa: BLE001
+            envelope = []
 
-    picks: list[dict] = []
-    for start, end, weight in ranges:
-        cursor = start
-        while cursor + span_length * 0.7 <= end:
-            finish = min(end, cursor + span_length)
-            picks.append({
-                "start": round(cursor, 3),
-                "end": round(finish, 3),
-                # Prefer the *middle* of a long take: the first second of a
-                # sentence is usually someone drawing breath.
-                "score": round(weight * (0.85 + 0.15 * min(1.0, (finish - cursor) / span_length)), 4),
-            })
-            cursor += stride
-        if not picks or picks[-1]["end"] < end - 0.05:
-            if end - cursor > 0.2:
-                picks.append({"start": round(cursor, 3), "end": round(end, 3), "score": round(weight * 0.8, 4)})
+    cuts: list[float] = []
+    if weights.get("edge", 0.0) > 0:
+        try:
+            cuts = [c for c in analysis.detect_scenes(path) if 0 < c < duration]
+        except Exception:  # noqa: BLE001
+            cuts = []
 
-    if not picks:
-        picks = [{"start": 0.0, "end": duration, "score": 1.0}]
+    def speech_coverage(start: float, end: float) -> float:
+        if not speech:
+            return 0.0
+        covered = sum(max(0.0, min(e, end) - max(s, start)) for s, e in speech)
+        return covered / max(1e-6, end - start)
 
-    picks.sort(key=lambda p: p["score"], reverse=True)
-    return picks[: max(wanted, 1)]
+    def audio_activity(start: float, end: float) -> float:
+        if not envelope or envelope_duration <= 0:
+            return 0.0
+        first = int(len(envelope) * start / envelope_duration)
+        last = max(first + 1, int(len(envelope) * end / envelope_duration))
+        band = envelope[first:min(len(envelope), last)]
+        return float(np.mean(band)) if band else 0.0
+
+    def edge_proximity(start: float, end: float) -> float:
+        """1.0 when the window starts or ends exactly on the footage's own cut."""
+        if not cuts:
+            return 0.0
+        near = min(min(abs(start - c), abs(end - c)) for c in cuts)
+        return max(0.0, 1.0 - near / max(0.5, span))
+
+    rough: list[dict] = []
+    for start, end in windows:
+        signals = {
+            "speech": speech_coverage(start, end),
+            "onset": audio_activity(start, end),
+            "edge": edge_proximity(start, end),
+        }
+        cheap = sum(signals[key] * weights.get(key, 0.0) for key in signals)
+        rough.append({"start": start, "end": end, "signals": signals, "cheap": cheap})
+
+    # ---- motion is expensive: only the shortlist pays for it -------------
+    finalists = sorted(rough, key=lambda c: c["cheap"], reverse=True)[:max(12, min(40, wanted * 2))]
+    for candidate in finalists:
+        _, energy = _classify_motion(path, candidate["start"], candidate["end"] - candidate["start"])
+        candidate["signals"]["motion"] = float(energy)
+        peak, presence = _action_profile(path, candidate["start"], candidate["end"] - candidate["start"])
+        candidate["signals"]["action"] = float(peak)
+        candidate["signals"]["presence"] = float(presence)
+
+    # ---- vision: one vote from a model that has seen the frame ------------
+    # Strictly optional and off by default. When a vision model the user runs is
+    # present, it scores the shortlist's frames and joins the normalisation as one
+    # more signal — a vote, never a veto (§4.45). When absent, nothing changes.
+    from core.engine import vision as vision_engine
+
+    has_vision = False
+    if settings.vision_enabled and vision_engine.available():
+        scores = vision_engine.score_moments(
+            path, [c["start"] + (c["end"] - c["start"]) / 2 for c in finalists]
+        )
+        if scores:
+            for candidate in finalists:
+                at = min(scores, key=lambda t: abs(t - (candidate["start"] + (candidate["end"] - candidate["start"]) / 2)))
+                candidate["signals"]["vision"] = float(scores[at])
+            has_vision = True
+
+    # ---- normalise across the finalists, then weigh ---------------------
+    # Relative on purpose: "the strongest moment in this file" is a comparison
+    # between moments, and an absolute threshold would rank a quiet recording
+    # as having no highlights.
+    _w = dict(weights)
+    if has_vision:
+        _w["vision"] = vision_engine.MAX_WEIGHT
+
+    active = [key for key in ("speech", "motion", "onset", "edge", "vision", "action", "presence")
+              if _w.get(key, 0.0) > 0.0 and any(key in c["signals"] for c in finalists)]
+    ranges: dict[str, tuple[float, float]] = {}
+    for key in active:
+        values = [c["signals"].get(key, 0.0) for c in finalists]
+        low, high = min(values), max(values)
+        ranges[key] = (low, max(1e-9, high - low))
+    total_weight = sum(_w.get(key, 0.0) for key in active) or 1.0
+
+    for candidate in finalists:
+        score = 0.0
+        for key in active:
+            low, spread = ranges[key]
+            value = (candidate["signals"].get(key, 0.0) - low) / spread
+            score += _w.get(key, 0.0) * max(0.0, min(1.0, value))
+        candidate["score"] = round(score / total_weight, 4)
+
+    # ---- meaning: what was said, not how loud it was ---------------------
+    if captions:
+        for candidate in finalists:
+            sense = brain_meaning.score_window(captions, candidate["start"], candidate["end"])
+            candidate["score"] = round(brain_meaning.blend(candidate["score"], sense), 4)
+            candidate["meaning"] = round(sense, 4)
+
+    # ---- the user's own definition of a highlight ------------------------
+    if captions and intent is not None and (intent.keep or intent.avoid):
+        for candidate in finalists:
+            said = " ".join(
+                str(cue.get("text", ""))
+                for cue in captions
+                if min(float(cue.get("end", 0.0)), candidate["end"])
+                > max(float(cue.get("start", 0.0)), candidate["start"])
+            )
+            hit = intent.keyword_score(said)
+            if hit:
+                candidate["score"] = round(max(0.0, min(1.0, candidate["score"] + 0.5 * hit)), 4)
+                candidate["keywords"] = round(hit, 4)
+
+    finalists.sort(key=lambda c: c["score"], reverse=True)
+    return [{k: v for k, v in c.items() if k != "cheap"} for c in finalists[:max(wanted, 1)]]
 
 
 def _brain_context(
@@ -526,6 +705,7 @@ def _brain_context(
     measured: list[dict],
     captions: list[dict] | None,
     music: str | None,
+    intent: intent_model.Intent | None = None,
 ) -> objective.Context:
     """Everything the judge is allowed to know, all of it measured here.
 
@@ -546,7 +726,7 @@ def _brain_context(
     duration = float(info.get("duration") or 0.0)
     if info.get("has_audio"):
         try:
-            silences = analysis.detect_silence(source)
+            silences = vad_engine.silent_ranges_auto(source)
             speech = [(r.start, r.end) for r in analysis.keep_ranges(duration, silences)]
         except Exception:  # noqa: BLE001
             speech = []
@@ -554,6 +734,18 @@ def _brain_context(
     words: list[dict] = []
     for cue in captions or []:
         words.extend(cue.get("words") or [])
+
+    # The transcript's story shape, measured by markers (meaning 2.0). With no
+    # captions the field stays None and the term is skipped, not faked.
+    narrative = None
+    if captions:
+        from core.brain import meaning as meaning_engine  # noqa: PLC0415
+
+        narrative = meaning_engine.narrative_arc(captions)
+
+    # Taste as a prior: what the user approved or rejected before nudges the
+    # weights, bounded — a rebalance, never a replacement for a measurement.
+    from core.brain import memory as taste  # noqa: PLC0415
 
     return objective.Context(
         duration=duration,
@@ -563,7 +755,58 @@ def _brain_context(
         speech=speech,
         words=words,
         best_highlight=max((p.get("score", 0.0) for p in measured), default=0.0),
+        # The judge is told what the user is trying to do, so a lesson that cuts
+        # mid-sentence loses to one that does not. Terms that could not be
+        # measured stay skipped — a weight is not a measurement.
+        weights=intent.weight_multipliers() if intent is not None else {},
+        narrative=narrative,
+        platform=getattr(intent, "platform", None) if intent is not None else None,
+        prior=taste.prior(),
     )
+
+
+def _fit_to_length(shots: list[dict], seconds: float) -> list[dict]:
+    """Repeat the reference's rhythm until the edit is the length asked for.
+
+    The rebuild used to be *exactly* as long as the reference, always: a 12 s
+    template turned three minutes of footage into a 12 s edit that had looked at
+    the first 17 s. That is the complaint "it shortens the first video", and the
+    honest fix is not to stretch the shots — a 12 s rhythm stretched to 60 s is
+    five slow shots — but to run the same rhythm again, which is what an editor
+    does when a reference is shorter than the story.
+    """
+    total = sum(float(s["duration"]) for s in shots)
+    if total <= 0 or not shots:
+        return shots
+
+    if seconds <= total:
+        out: list[dict] = []
+        running = 0.0
+        for shot in shots:
+            length = float(shot["duration"])
+            if running + length > seconds:
+                remainder = round(seconds - running, 3)
+                if remainder >= 0.2:
+                    out.append({**shot, "duration": remainder})
+                break
+            out.append(dict(shot))
+            running += length
+        return out or [dict(shots[0])]
+
+    out = [dict(s) for s in shots] * int(math.ceil(seconds / total))
+    # Come back to the target by **dropping whole shots** first. Trimming only
+    # the last one cannot absorb a multi-second overshoot and left a 0.2 s flash
+    # on the end of the timeline (measured: a 15 s request produced 17.18 s).
+    while len(out) > 1:
+        without_last = sum(float(s["duration"]) for s in out[:-1])
+        if without_last >= seconds:
+            out.pop()
+            continue
+        break
+    overshoot = sum(float(s["duration"]) for s in out) - seconds
+    if overshoot > 0.05 and out:
+        out[-1] = {**out[-1], "duration": round(max(0.2, float(out[-1]["duration"]) - overshoot), 3)}
+    return out
 
 
 def build_timeline(
@@ -575,6 +818,7 @@ def build_timeline(
     progress=None,
     brain: bool = True,
     model: str | None = None,
+    intent: dict | intent_model.Intent | None = None,
 ) -> dict:
     """Cut the user's footage into the shape of the template.
 
@@ -582,11 +826,17 @@ def build_timeline(
     the timeline saves and the compositor renders, so what the user sees in the
     editor is exactly what will be exported.
 
-    This is the *automatic* door of the app: no prompt, no parameters. Whatever
-    the template implies is carried out here — the cut rhythm, the colour, the
-    camera moves, and, when they are available, the captions and a ducked music
-    bed. Anything that could not be done is reported in `summary.skipped` rather
-    than quietly dropped.
+    This is the *automatic* door of the app: no prompt. Whatever the template
+    implies is carried out here — the cut rhythm, the colour, the camera moves,
+    and, when they are available, the captions and a ducked music bed. Anything
+    that could not be done is reported in `summary.skipped` rather than quietly
+    dropped.
+
+    `intent` is the one thing a frame cannot say: what the video is for. It is
+    optional and neutral by default — a rebuild with no answers behaves exactly
+    as it did before — but it is what tells the difference between a lesson and
+    a music clip, and it is the only way the user can ask for a length that is
+    not the reference's. Everything it changes is reported in `summary.intent`.
     """
     say = progress or _silent
     say("plan", 0.05, "Reading the template")
@@ -594,6 +844,33 @@ def build_timeline(
     shots = data.get("shots") or []
     if not shots:
         shots = [{"duration": max(1.0, data.get("mean_shot") or 2.0), "motion": "static"}]
+
+    # ---- what the user said the video is for -----------------------------
+    wanted = intent if isinstance(intent, intent_model.Intent) else intent_model.Intent.from_dict(intent)
+    factor = wanted.shot_length_factor()
+    if factor != 1.0:
+        shots = [{**s, "duration": round(max(0.2, float(s["duration"]) * factor), 3)} for s in shots]
+    if wanted.seconds > 0:
+        shots = _fit_to_length(shots, wanted.seconds)
+
+    # ---- the hook ---------------------------------------------------------
+    # `hook.firstCut` is how long the reference waited before its first cut. It
+    # is resolved **here**, before the candidate moments are measured, because
+    # the windows those moments are cut into are sized from the longest shot on
+    # the timeline: extending the opening afterwards could never be reproduced
+    # by a window that was already cut to the old length. (Measured: a 4 s shot
+    # with a 7 s hook came back at 4.0 s.)
+    hook = data.get("hook") or {}
+    first_cut = float(hook.get("firstCut") or 0.0)
+    if shots and first_cut > 0.2 and first_cut > float(shots[0]["duration"]):
+        # Only ever **extend** the opening. In a template we analysed, the
+        # reference's first shot *is* `firstCut`, so this can only lengthen a
+        # hand-made or edited one. The form this replaced assigned the value
+        # outright inside a 6 s window — free to chop an opening down to a
+        # fraction of a second, and blind to a genuinely held 7 s intro.
+        opening = dict(shots[0])
+        opening["duration"] = round(first_cut, 3)
+        shots = [opening, *shots[1:]]
 
     info = probe_media(source)
     source_duration = float(info.get("duration") or 0.0)
@@ -605,28 +882,41 @@ def build_timeline(
         np.median([float(s["duration"]) for s in shots])
     )
     speech_ratio = float(data.get("speech_ratio") or 0.0)
+    # A reference that barely speaks is a montage, so the microphone being open
+    # proves nothing — unless the user has just said this video is a lesson, in
+    # which case the microphone is the whole point.
+    # A restriction the transcript can screen for is just another phrase the
+    # owner asked to avoid, so it travels through the mechanism that already
+    # exists instead of growing a second one.
+    screened = wanted
+    extra = wanted.restriction_markers()
+    if extra:
+        screened = intent_model.Intent.from_dict({
+            **wanted.as_dict(),
+            "avoid": [*wanted.avoid, *extra],
+        })
+
+    hunts_speech = speech_ratio >= 0.2
+    if wanted.prefers_speech() is not None:
+        hunts_speech = bool(wanted.prefers_speech())
     measured = _highlights(
         source,
         # Ask for far more candidates than shots, so the planner has somewhere
         # else to go instead of using the same moment again.
         wanted=max(len(shots) * 4, 24),
         minimum=max(0.4, shortest * 0.8),
-        window=max(0.5, typical),
-        # A reference that barely speaks is a montage: rank by picture, not by
-        # where the microphone happened to be open.
-        prefer_speech=speech_ratio >= 0.2,
+        # A window must be able to hold the **longest** shot on the timeline, not
+        # just the reference's median: with a calm rhythm or a requested length
+        # the shots grow past `typical`, and every clip was then clamped back to
+        # the window (a 60 s request produced 47 s). Measured, not assumed.
+        window=max(0.5, typical, max(float(s["duration"]) for s in shots)),
+        prefer_speech=hunts_speech,
+        # Loudness finds energy; the transcript finds the sentence where the
+        # point is made; the user's own words outrank both. All three are scored
+        # in one place now, so nothing can disagree with itself about the order.
+        intent=screened,
+        captions=captions,
     )
-
-    # ---- meaning ----------------------------------------------------------
-    # Loudness finds energy; the transcript finds the sentence where the point
-    # is made. When there are captions, half of a moment's strength comes from
-    # what was said in it (`core/brain/meaning.py`).
-    if captions:
-        strongest = max((p.get("score", 0.0) for p in measured), default=0.0) or 1.0
-        for moment in measured:
-            sense = brain_meaning.score_window(captions, moment["start"], moment["end"])
-            moment["score"] = brain_meaning.blend(moment.get("score", 0.0) / strongest, sense)
-            moment["meaning"] = round(sense, 4)
 
     # ---- the brain --------------------------------------------------------
     # Measuring produced the candidate moments; *choosing and ordering* them is
@@ -639,13 +929,27 @@ def build_timeline(
     # points are scored against the beats of the track that will really play.
     used_reference_bed = False
     reference_bed = (data.get("audio") or {}).get("bed")
-    if not music and reference_bed and Path(reference_bed).exists():
+    if wanted.music == "none":
+        # "No music" means no music — including the one the template kept.
+        music = None
+    elif wanted.music == "mine":
+        pass  # only a track the user brought; the reference's bed stays out
+    elif not music and reference_bed and Path(reference_bed).exists():
         music = reference_bed
         used_reference_bed = True
 
-    brain_context = _brain_context(data, shots, source, info, measured, captions, music)
+    brain_context = _brain_context(data, shots, source, info, measured, captions, music, screened)
+
+    def _feat(p: dict) -> tuple | None:
+        s = p.get("signals") or {}
+        if not s:
+            return None
+        return (float(s.get("speech", 0.0)), float(s.get("motion", 0.0)),
+                float(s.get("action", 0.0)), float(s.get("presence", 0.0)))
+
     decision = brain_race.race(
-        [objective.Pick(p["start"], p["end"], p.get("score", 0.0)) for p in measured],
+        [objective.Pick(p["start"], p["end"], p.get("score", 0.0), features=_feat(p))
+         for p in measured],
         brain_context,
         transcript=captions,
         use_llm=brain,
@@ -656,18 +960,6 @@ def build_timeline(
         picks = measured
     say("layout", 0.6, "Laying the clips out to the rhythm")
 
-    # ---- the hook ---------------------------------------------------------
-    # `hook.firstCut` is how long the reference waited before its first cut —
-    # the single most important number in a short video, measured since 0.5.0
-    # and, until now, never used by anything. If the reference opens on a held
-    # shot, the rebuild should too.
-    hook = data.get("hook") or {}
-    first_cut = float(hook.get("firstCut") or 0.0)
-    if shots and 0.2 < first_cut < 6.0:
-        opening = dict(shots[0])
-        opening["duration"] = round(first_cut, 3)
-        shots = [opening, *shots[1:]]
-
     clips: list[dict] = []
     transitions: list[dict] = []
     cursor = 0.0
@@ -677,6 +969,12 @@ def build_timeline(
     counted = (data.get("transitions") or {}).get("count") or 0
     soft_ratio = ((data.get("transitions") or {}).get("soft") or 0) / counted if counted else 0.0
     soft_every = max(1, round(1 / soft_ratio)) if soft_ratio > 0.05 else 10**6
+
+    # The single best moment, for the slow-mo beat when the user asked for one.
+    best_index = (
+        max(range(len(picks)), key=lambda i: picks[i].get("score", 0.0))
+        if (wanted.slowmo and picks) else -1
+    )
 
     for index, shot in enumerate(shots):
         want = float(shot["duration"])
@@ -695,6 +993,14 @@ def build_timeline(
         length = min(want, available, max(0.2, source_duration - pick["start"]))
         if length < 0.2:
             continue
+
+        # Slow-mo: the same source window at half speed, twice the screen time.
+        # The source consumed is length*speed = the original window, so nothing is
+        # invented; the highlight simply lingers.
+        speed = 1.0
+        if index == best_index:
+            speed = 0.5
+            length = length * 2
 
         motion = shot.get("motion", "static")
         keyframes: list[dict] = []
@@ -736,6 +1042,7 @@ def build_timeline(
                     "vignette": 0.0,
                 },
                 **({"keyframes": keyframes} if keyframes else {}),
+                **({"speed": speed} if speed != 1.0 else {}),
             },
         }
         clips.append(clip)
@@ -758,11 +1065,58 @@ def build_timeline(
 
     applied = ["cut to the template rhythm", "colour", "camera moves", "aspect"]
     skipped: list[str] = []
+    if wanted.seconds > 0:
+        applied.append(f"length set to {wanted.seconds:g} s")
+    if wanted.slowmo and best_index >= 0:
+        applied.append("half-speed slow-mo on the best moment")
+    markers = wanted.restriction_markers()
+    if markers:
+        # One line, not the words themselves: a summary that prints a swear list
+        # is a summary the user has to read to believe, and the words are in the
+        # code where they can be checked.
+        applied.append(f"screening the transcript for {len(markers)} banned phrases")
+    # A restriction that is now checkable, is checked — and one that is not, is
+    # still reported honestly rather than silently skipped.
+    from core.engine import ocr as ocr_engine
+
+    ocr_here = ocr_engine.installed()
+    if "no_on_screen_text" in wanted.restrictions:
+        if ocr_here:
+            coverage = ocr_engine.text_coverage(source, every=3.0)
+            if coverage > 0.2:
+                skipped.append(
+                    f"on-screen text on {coverage * 100:.0f}% of sampled frames — "
+                    "OCR can read it and warn, not erase it"
+                )
+            else:
+                applied.append("no on-screen text detected")
+        else:
+            skipped.append("no on-screen text (the OCR engine is not fetched)")
+    for limit in wanted.cannot_honour():
+        # `no_on_screen_text` is handled above once the engine exists; the rest
+        # (identity, brand entities) still need a pass that is not built.
+        if limit.startswith("no_on_screen_text") and ocr_here:
+            continue
+        skipped.append(f"{limit} — cannot be checked yet")
+    if factor != 1.0:
+        applied.append(f"rhythm {'slowed' if factor > 1 else 'tightened'} × {factor:.2f}")
     if transitions:
         applied.append(f"{len(transitions)} × {transition_kind}")
 
     # ---- captions -------------------------------------------------------
-    caption_style = data.get("captions") or {}
+    if captions and wanted.clean_fillers:
+        # Filler words make captions longer than the shot and light up words
+        # nobody should read; remove them before the cues touch the timeline.
+        captions = fillers_engine.clean_cues(captions)
+    caption_style = dict(data.get("captions") or {})
+    caption_choice = wanted.caption_preference()
+    if caption_choice:
+        caption_style.update(caption_choice)
+        if not caption_choice["wanted"]:
+            # The owner said no subtitles. A transcript that arrived anyway is not
+            # a reason to overrule them — dropping it is reported, not hidden.
+            captions = None
+            skipped.append("captions (you asked for none)")
     if captions:
         for index, cue in enumerate(captions):
             start = max(0.0, float(cue.get("start", 0.0)))
@@ -811,6 +1165,10 @@ def build_timeline(
             "props": {"duck": under < 0, "volume": 0.9},
         })
         applied.append("music bed" + (" with ducking" if under < 0 else ""))
+    elif wanted.music == "none":
+        # The owner asked for silence under the voice; reporting that as
+        # something we failed to do would be arguing with them.
+        applied.append("no music, as asked")
     elif (data.get("audio") or {}).get("musicUnderVoice", 0.0) < 0:
         skipped.append("music (the template has one, you did not give me a track)")
 
@@ -828,6 +1186,13 @@ def build_timeline(
             "clips": clips,
             "transitions": transitions,
         },
+        "brain": editor_brain.assess(
+            data,
+            {"speech_ratio": speech_ratio,
+             "action": _coarse_action(source, source_duration)[0],
+             "presence": _coarse_action(source, source_duration)[1]},
+            intent=wanted.as_dict(),
+        ),
         "summary": {
             "shots": len([c for c in clips if c["trackId"] == "v1"]),
             "duration": round(cursor, 3),
@@ -837,6 +1202,17 @@ def build_timeline(
             "bpm": data.get("bpm", 0.0),
             "applied": applied,
             "skipped": skipped,
+            # What the answers changed, said out loud: an answer with no visible
+            # effect is an answer the user will not trust twice.
+            "intent": wanted.as_dict(),
+            "intentSaid": wanted.describe(),
+            # How much of the user's own file the edit draws from. It was 14.4 %
+            # on a 120 s file before the candidate windows covered the file, and
+            # a number like that is the only honest way to keep it honest.
+            "sourceSpanUsed": round(
+                100 * max((c["offset"] + c["duration"] for c in clips if c["trackId"] == "v1"),
+                          default=0.0) / source_duration, 1,
+            ) if source_duration > 0 else 0.0,
             # The race, in the open: who planned, what each scored, who won.
             # "rules 0.71 · ollama:qwen2.5 0.83 → used ollama:qwen2.5" is the
             # only honest answer to "did the AI help?" — and sometimes it is no.
@@ -933,5 +1309,132 @@ def load_template(name: str) -> dict:
     return json.loads(file.read_text(encoding="utf-8"))
 
 
+MOTIONS = ("static", "push", "pull", "pan", "handheld")
+ASPECTS = ("9:16", "1:1", "4:5", "16:9", "4:3")
+
+
+def validate_template(doc: dict) -> list[str]:
+    """What is wrong with a template document, or [] when it is sound.
+
+    Import is an interface that crosses a boundary (a file someone else made),
+    and interfaces get checked — an unchecked `.cetemplate` is how a number the
+    render cannot honour reaches the compositor (§4.75).
+    """
+    errors: list[str] = []
+    if not isinstance(doc, dict):
+        return ["the template is not a JSON object"]
+    if not str(doc.get("name", "")).strip():
+        errors.append("the template has no name")
+    try:
+        if float(doc.get("duration", -1)) < 0:
+            errors.append("duration is negative")
+    except (TypeError, ValueError):
+        errors.append("duration is not a number")
+    shots = doc.get("shots")
+    if not isinstance(shots, list) or not shots:
+        errors.append("the template has no shots")
+    else:
+        for index, shot in enumerate(shots):
+            if not isinstance(shot, dict):
+                errors.append(f"shot {index} is not an object")
+                continue
+            try:
+                if float(shot.get("duration", 0)) <= 0:
+                    errors.append(f"shot {index} has no length")
+            except (TypeError, ValueError):
+                errors.append(f"shot {index} length is not a number")
+            if shot.get("motion", "static") not in MOTIONS:
+                errors.append(f"shot {index} names an unknown camera move")
+    if doc.get("aspect") and doc["aspect"] not in ASPECTS:
+        errors.append(f"aspect {doc.get('aspect')!r} is not one the canvas knows")
+    return errors
+
+
+def import_template(doc: dict, name: str | None = None) -> Path:
+    """Save a template document that came from outside, after checking it.
+
+    The caller may rename it (an imported file should not clobber an existing
+    gallery entry by accident unless asked). Raises ValueError with the joined
+    problems when the document is not sound.
+    """
+    errors = validate_template(doc)
+    if errors:
+        raise ValueError("; ".join(errors))
+    template = Template.from_dict if hasattr(Template, "from_dict") else None
+    doc = dict(doc)
+    if name:
+        doc["name"] = name
+    template = Template(**{
+        **{k: v for k, v in doc.items() if k != "shots"},
+        "shots": [Shot(
+            start=float(sh.get("start", 0.0)), duration=float(sh["duration"]),
+            motion=str(sh.get("motion", "static")), energy=float(sh.get("energy", 0.0)),
+        ) for sh in doc["shots"]],
+    })
+    return save_template(template)
+
+
+def starters() -> list[dict]:
+    """A few hand-authored rhythms so a fresh gallery is not an empty room.
+
+    These are not analysed from a video; they are editing grammars written down —
+    a fast on-beat cut, a slow held one, a talking-head pace — each labelled as a
+    starter so nobody mistakes one for a measured reference. Saving one copies it
+    into the user's gallery where it can be deleted like anything else.
+    """
+    def make(name, bpm, lengths, motion, aspect):
+        shots, at = [], 0.0
+        for length in lengths:
+            shots.append(Shot(start=round(at, 3), duration=length, motion=motion, energy=0.5))
+            at += length
+        return Template(
+            name=name, source="", duration=round(at, 3), aspect=aspect,
+            width=1080, height=1920 if aspect == "9:16" else 1080,
+            shots=shots, bpm=float(bpm), cuts_on_beat=0.6,
+            mean_shot=round(at / len(lengths), 3), median_shot=float(lengths[len(lengths) // 2]),
+            shortest_shot=float(min(lengths)),
+            motion_mix={motion: 1.0}, transitions={"count": len(lengths) - 1, "soft": 0, "type": "cut", "duration": 0.4},
+            captions={"wanted": False}, audio={"hasBed": False},
+        ).as_dict()
+
+    return [
+        make("starter · fast on-beat", 128, [0.5, 0.75, 0.5, 0.75, 0.5, 1.0, 0.5, 0.75], "static", "9:16"),
+        make("starter · slow held", 80, [3.0, 2.5, 3.5, 3.0], "push", "16:9"),
+        make("starter · talking head", 100, [2.0, 1.5, 2.5, 1.5, 2.0], "static", "9:16"),
+    ]
+
+
 def delete_template(name: str) -> None:
     (templates_dir() / f"{name}.cetemplate").unlink(missing_ok=True)
+
+
+def suggest_transitions(timeline: dict, bpm: float = 120.0) -> list[dict]:
+    """An "AI transitions" pass: one transition per video junction, sized to the
+    music and varied by position, instead of a single type everywhere.
+
+    The duration is half a beat (a cut that lands on the music reads as
+    intentional), clamped so a very fast or very slow tempo cannot produce a
+    subliminal flash or a dissolve longer than the clip. The type alternates
+    between a soft and a directional move so a montage does not read as one
+    repeated dissolve. It only *suggests*; the caller applies.
+    """
+    clips = [c for c in timeline.get("clips", []) if c.get("trackId") == "v1"]
+    clips.sort(key=lambda c: float(c.get("start", 0)))
+    half_beat = (60.0 / max(40.0, bpm)) / 2.0
+    duration = round(max(0.2, min(0.8, half_beat)), 3)
+    soft = ["fade", "smoothleft", "circleopen"]
+    hard = ["slideleft", "wipeleft", "distance"]
+
+    out = []
+    for index in range(len(clips) - 1):
+        a, b = clips[index], clips[index + 1]
+        # Contiguous junction only; a gap means the user left a deliberate break.
+        if abs((float(a["start"]) + float(a["duration"])) - float(b["start"])) > 0.05:
+            continue
+        family = soft if index % 2 == 0 else hard
+        out.append({
+            "fromClipId": a["id"], "toClipId": b["id"],
+            "type": family[(index // 2) % len(family)],
+            "duration": duration,
+        })
+    return out
