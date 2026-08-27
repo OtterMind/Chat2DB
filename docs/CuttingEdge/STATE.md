@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.38` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.39` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,25 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+125. **0.9.39 — the professors' tiers 1–3, shipped as one package.** Tier 1:
+    transcript-first editing + one-click jump cut (`core/engine/transcript_edit.py`,
+    `/api/transcript/*`) — keep/cut are exact complements and apply through the
+    existing ripple `keepRanges`; emotional arc + hook score
+    (`core/engine/arc_hook.py`, `/api/board/arc|hook`). Tier 2: batch clips board +
+    sports/gym markers (`core/engine/clips_board.py`), the social export pack
+    (`core/engine/export_pack.py`, `/api/render/export-pack`: MP4+SRT/ASS+thumb+
+    description.md+meta.json+OTIO, video copied never re-encoded), and the cut
+    inspector (`/api/board/explain-cut`). Tier 3: an agent-native surface
+    (`app/routers/agent.py`: `/api/agent/tools|nl|call`) mapping the brain's 17 tools
+    to JSON-Schema actions with a deterministic fa/en NL parser. Seven new brain
+    tools (`text_based_edit`…`agent_tools`) registered with measured decisions. One
+    Hybrid panel (`editor/TierPanel.tsx`) wires arc/hook/markers/jump-cut/inspector/
+    agent; screenshots in `ui-proposal/hybrid-tier-panel.png`. Suites: backend
+    **480 passed / 0 failed / 10 skipped**; `verify`, `build`, `test:ui`, `test:playback`
+    and a TierPanel browser check all green on the production bundle. Tier 0 gates
+    (filmed clean install, workflow paste, real-GPU NVENC number) remain owner-side
+    and are unchanged.
 
 124. **0.9.38 — a stabilization release: nothing new shipped, everything re-proven.**
     The sandbox wiped `/tmp`, `node_modules` and the live servers between turns,

@@ -149,3 +149,33 @@ def recordings_save(payload: RecordingSaveRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"path": str(dest)}
+
+
+class ExportPackRequest(BaseModel):
+    video: str = Field(description="Path of the already-rendered MP4 to package")
+    destination: str = Field(description="Folder to write the pack into")
+    timeline: dict | None = None
+    cues: list[dict] = []
+    meta: dict = {}
+    chapters: list[dict] = []
+    name: str = "cutting-edge"
+
+
+@router.post("/export-pack")
+def export_pack(payload: ExportPackRequest) -> dict:
+    """Tier 2: one edit → a full deliverable folder (video, SRT/ASS, thumb,
+    description.md, meta.json, OTIO). The video is copied, never re-encoded."""
+    from core.engine import export_pack as pack_engine  # noqa: PLC0415
+
+    try:
+        safe_user_path(payload.video)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return pack_engine.build_pack(
+            payload.video, payload.destination, timeline=payload.timeline,
+            cues=payload.cues, meta=payload.meta, chapters=payload.chapters,
+            name=payload.name,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"video not found: {exc}") from exc

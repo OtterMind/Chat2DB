@@ -61,6 +61,20 @@ TOOLS: list[dict] = [
      "when": "more than one camera recorded the same moment", "signal": "angles"},
     {"id": "providers", "en": "let an installed provider help", "fa": "کمک‌گرفتن از افزونه‌ی نصب‌شده",
      "when": "the user plugged a provider in", "signal": "providers"},
+    {"id": "text_based_edit", "en": "edit by deleting transcript words", "fa": "ویرایش با حذف کلمه‌های رونوشت",
+     "when": "there is a transcript to treat as the timeline", "signal": "speech"},
+    {"id": "jump_cut", "en": "one-click jump cut of fillers and dead air", "fa": "جامپ‌کات یک‌کلیکی تپق‌ها و سکوت‌ها",
+     "when": "unscripted talk with pauses worth tightening", "signal": "speech"},
+    {"id": "hook_lab", "en": "score and rebuild the first seconds", "fa": "امتیاز و بازسازی ثانیه‌های اول",
+     "when": "short-form; the opening decides the watch", "signal": "action"},
+    {"id": "batch_clips", "en": "one file into a board of ranked clips", "fa": "یک فایل به تخته‌ی کلیپ‌های رتبه‌بندی‌شده",
+     "when": "long footage holds several shorts", "signal": "duration"},
+    {"id": "export_pack", "en": "ship a full deliverable folder", "fa": "خروجی یک بسته‌ی کامل انتشار",
+     "when": "always — a publish is a package, not a lone file", "signal": "always"},
+    {"id": "sports_markers", "en": "mark spikes and reps on the lane", "fa": "نشانکردن اسپایک و تکرار روی خط",
+     "when": "sport or gym footage with action peaks", "signal": "action"},
+    {"id": "agent_tools", "en": "expose the brain as an agent protocol", "fa": "برنامه‌ریز به‌صورت پروتکل ایجنت",
+     "when": "an external agent should drive the real timeline", "signal": "always"},
 ]
 
 
@@ -78,6 +92,7 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
     action = float(footage.get("action", 0) or 0)
     presence = float(footage.get("presence", 0) or 0)
     motion = float(footage.get("motion", 0) or 0)  # peak optical-flow magnitude (RIFE worth it?)
+    duration = float(footage.get("duration", template.get("duration", 0)) or 0)
     lang = (intent.get("language") or template.get("language") or "").lower()
     persian = lang.startswith("fa") or lang.startswith("per")
     handoff = bool(intent.get("finish_elsewhere") or intent.get("handoff"))
@@ -161,6 +176,33 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
           else "no provider installed (~/CuttingEdge/providers)",
           "نصب‌شده: " + "، ".join(str(p.get("id")) for p in plugged[:3]) if plugged
           else "افزونه‌ای نصب نیست (~/CuttingEdge/providers)"),
+        d("text_based_edit", speech > 0.2,
+          f"{speech:.0%} speech — a transcript exists to edit as the timeline" if speech > 0.2
+          else "no transcript to edit",
+          f"{speech:.0%} گفتار — رونوشتی هست که بشود مثل تایم‌لاین ویرایشش کرد" if speech > 0.2
+          else "رونوشتی برای ویرایش نیست"),
+        d("jump_cut", speech > 0.3,
+          "talk has fillers and dead air to tighten" if speech > 0.3 else "little talk to tighten",
+          "گفتار تپق و سکوت مرده برای فشرده‌شدن دارد" if speech > 0.3 else "گفتار کمی برای فشرده‌شدن"),
+        d("hook_lab", sport or kind in ("vlog", "product"),
+          "the first seconds decide a short — score and rebuild them" if sport or kind in ("vlog", "product")
+          else "not short-form, no hook to lab",
+          "ثانیه‌های اول یک شورت را تعیین می‌کنند — بسنج و بازسازی کن" if sport or kind in ("vlog", "product")
+          else "فرم کوتاه نیست، هوکی برای آزمایش نیست"),
+        d("batch_clips", duration >= 60,
+          f"{duration:.0f}s of footage holds several shorts" if duration >= 60
+          else "too short to hold more than one clip",
+          f"{duration:.0f} ثانیه فوتیج چند شورت در خود دارد" if duration >= 60
+          else "کوتاه‌تر از آن که چند کلیپ داشته باشد"),
+        d("export_pack", True,
+          "a publish is a package: video, captions, thumb, chapters, OTIO",
+          "انتشار یک بسته است: ویدیو، زیرنویس، تامبنیل، چپترها، OTIO"),
+        d("sports_markers", sport,
+          "action peaks to mark as spikes/reps" if sport else "no sport action to mark",
+          "اوج‌های حرکت برای نشان‌کردن اسپایک/تکرار" if sport else "حرکت ورزشی برای نشان‌کردن نیست"),
+        d("agent_tools", True,
+          "the brain's tools are exposed as a protocol an agent can drive",
+          "ابزارهای مغز به‌صورت پروتکلی که ایجنت می‌راند در دسترس‌اند"),
     ]
     return out
 

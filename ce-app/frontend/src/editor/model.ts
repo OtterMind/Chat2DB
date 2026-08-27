@@ -245,6 +245,7 @@ interface EditorState extends Snapshot {
   rippleDelete: (id: string) => void
   splitAtPlayhead: () => void
   removeSelected: () => void
+  removeClip: (id: string) => void
   duplicateSelected: () => void
   addClip: (clip: Omit<Clip, 'id'>) => string
   addTextClip: (text: string, options?: { start?: number; duration?: number; trackId?: string }) => string
@@ -735,6 +736,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     })
     set({ selectedId: null })
   },
+
+  removeClip: (id) =>
+    get().commit((s) => {
+      s.clips = s.clips.filter((c) => c.id !== id)
+      s.transitions = s.transitions.filter((t) => t.fromClipId !== id && t.toClipId !== id)
+    }),
 
   duplicateSelected: () => {
     const id = get().selectedId

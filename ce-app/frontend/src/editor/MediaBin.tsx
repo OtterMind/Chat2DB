@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { FolderOpen, Film, AudioLines, Type, Clapperboard, Layers } from 'lucide-react'
+import { FolderOpen, Film, AudioLines, Type, Clapperboard, Layers, Activity } from 'lucide-react'
 import { Modal, message } from 'antd'
 import { useEditor, formatTimecode } from './model'
 import { useI18n } from '../i18n'
 import { backendOrigin } from '../api/runtime'
 import { multicamApi, type MulticamAlign, type MulticamPlan } from '../api/multicam'
+import TierPanel from './TierPanel'
 import { renderApi } from '../api/render'
 
 /**
@@ -197,6 +198,7 @@ export default function MediaBin({ onImport }: { onImport: () => void }) {
   const [board, setBoard] = useState<number[]>([])
   const [boardPath, setBoardPath] = useState('')
   const [multicam, setMulticam] = useState(false)
+  const [tiers, setTiers] = useState(false)
 
   /** B7: the ten most informative frames of the first video clip. */
   const storyboard = async () => {
@@ -238,6 +240,10 @@ export default function MediaBin({ onImport }: { onImport: () => void }) {
             title={t('Multi-cam switcher', 'سوئیچر چنددوربینی')}>
             <Layers size={13} />
           </button>
+          <button className="ed__btn ed__btn--sm" onClick={() => setTiers(true)}
+            title={t('Signal & transcript (tiers 1-3)', 'سیگنال و رونوشت (لایه‌های ۱-۳)')}>
+            <Activity size={13} />
+          </button>
           <button className="ed__btn ed__btn--sm" onClick={onImport} title={t('Import media', 'افزودن رسانه')}>
             <FolderOpen size={13} /> {t('Add', 'افزودن')}
           </button>
@@ -245,6 +251,7 @@ export default function MediaBin({ onImport }: { onImport: () => void }) {
       </div>
       <MulticamModal open={multicam} onClose={() => setMulticam(false)}
         sources={videos.map((v) => ({ src: v.src, label: v.label }))} />
+      <TierPanel open={tiers} onClose={() => setTiers(false)} />
       <Modal open={board.length > 0} onCancel={() => setBoard([])} footer={null} title={t('Storyboard', 'استوری‌برد')}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {board.map((time) => (
