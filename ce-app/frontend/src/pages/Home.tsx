@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Modal, message } from 'antd'
 import { Plus, Wand2, Film, Clock3, Trash2, CircleDashed, Search, Sparkles, Settings, Activity } from 'lucide-react'
-import BrandMark from '../components/BrandMark'
 import { useI18n } from '../i18n'
 import { systemApi } from '../api/jobs'
 import { projectsApi } from '../api/projects'
@@ -131,9 +130,9 @@ export default function Home() {
         </button>
       </div>
 
-      {/* hero */}
+      {/* hero — the wordmark itself is the shell's single shared mark (see Layout);
+          here we only carry the tagline + version so the logo never doubles. */}
       <header className="ln-hero">
-        <BrandMark size="lg" />
         <p className="ln-hero__tag">{t('AI-powered desktop video editor', 'میز تدوین ویدیوی رومیزی با هوش مصنوعی')}</p>
         <p className="ln-hero__ver mono" dir="ltr">v{__APP_VERSION__}</p>
         <span className="ln-hairline" />

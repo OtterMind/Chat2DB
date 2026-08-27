@@ -58,6 +58,38 @@ def install_start(payload: InstallRequest) -> dict:
     return tasks.start(f"engine:{engine['id']}", work).as_dict()
 
 
+@router.get("/install-all/plan")
+def install_all_plan() -> dict:
+    """What the one-click button would fetch, before the user commits to it."""
+    plan = engines.bulk_install_plan()
+    return {"engines": plan["ids"], "deps": plan["deps"], "count": len(plan["ids"])}
+
+
+@router.post("/install-all/start")
+def install_all_start() -> dict:
+    """One button: torch once, then every fetchable engine — no one-by-one clicks."""
+    plan = engines.bulk_install_plan()
+    if not plan["deps"]:
+        raise HTTPException(status_code=409, detail="nothing to install")
+
+    def work(reporter) -> dict:
+        result = runtime_packages.install(
+            plan["deps"],
+            on_progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
+        )
+        # Reflect reality: which engines are importable now that the dust settles?
+        runtime_packages.ensure_on_path()
+        result["now_available"] = [
+            eid for eid in plan["ids"]
+            if next((e for e in engines.ENGINES if e["id"] == eid), None)
+            and runtime_packages.is_installed(
+                next(e for e in engines.ENGINES if e["id"] == eid)["module"])
+        ]
+        return result
+
+    return tasks.start("engine:all", work).as_dict()
+
+
 # ------------------------------------------------------- TransNetV2 / junctions
 
 

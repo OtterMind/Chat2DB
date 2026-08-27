@@ -18,9 +18,16 @@ import importlib.util
 #: What `heavy` actually means at install time: the extra pip packages the user
 #: opts into. torch from PyPI is the CPU build (~120 MB wheel); CUDA builds live
 #: on the PyTorch index and stay out of the pip-free installer.
+#: torch's own wheel deps, spelled out because the packaged (pip-free) installer
+#: extracts exactly this list and does *not* resolve transitive requirements.
+#: Omitting them is the bug that made "Download + torch" produce a torch that
+#: could not import in the installed app (ModuleNotFoundError: filelock/sympy/…).
+_TORCH_FULL = ["torch", "torchaudio", "filelock", "typing-extensions", "sympy",
+               "mpmath", "networkx", "jinja2", "markupsafe", "fsspec"]
+
 HEAVY_DEPS: dict[str, list[str]] = {
-    "torch": ["torch", "torchaudio"],
-    "torch+HF-token": ["torch", "torchaudio"],
+    "torch": _TORCH_FULL,
+    "torch+HF-token": _TORCH_FULL,
     "ncnn": [],
     "own": [],
     "tensorflow": [],
@@ -160,6 +167,29 @@ def probe(engine: dict) -> dict:
         out["heavy_note"] = ("needs torch (~120 MB CPU wheels from PyPI, opt-in)")
     _PROBE_CACHE[engine["id"]] = out
     return out
+
+
+def bulk_install_plan() -> dict:
+    """The one-click list: every engine this machine can fetch, with torch once.
+
+    Engines that need an HF token (pyannote) are excluded — a bulk download must
+    not stall on a licence the user has to accept by hand. Torch's full dep list
+    goes first so the pip-free installer lays the runtime down before the engines.
+    """
+    ids: list[str] = []
+    deps: list[str] = list(HEAVY_DEPS["torch"])
+    for engine in ENGINES:
+        if not engine.get("deps"):
+            continue
+        if engine.get("heavy") in ("torch+HF-token",):
+            continue
+        if engine.get("heavy") == "tensorflow":
+            continue  # FILM is a separate, very large decision — not in the bulk
+        ids.append(engine["id"])
+        for dep in list(HEAVY_DEPS.get(engine.get("heavy") or "", [])) + list(engine["deps"]):
+            if dep not in deps:
+                deps.append(dep)
+    return {"ids": ids, "deps": deps}
 
 
 def status() -> dict:

@@ -142,3 +142,29 @@ def test_python_ass_downloads_end_to_end_through_the_real_endpoint():
 
     assert body["status"] == "done", body.get("error")
     assert runtime_packages.is_installed("ass")
+
+
+def test_torch_heavy_deps_include_transitive_runtime_deps():
+    """The packaged pip-free installer extracts exactly this list, so it must carry
+    torch's own deps — omitting them is what made 'Download + torch' unimportable."""
+    from core.engine import engines
+
+    for key in ("torch", "torch+HF-token"):
+        deps = engines.HEAVY_DEPS[key]
+        for required in ("torch", "filelock", "sympy", "jinja2", "typing-extensions"):
+            assert required in deps, f"{key} is missing {required}"
+
+
+def test_bulk_install_plan_includes_torch_and_skips_gated():
+    from core.engine import engines
+
+    plan = engines.bulk_install_plan()
+    assert "torch" in plan["deps"]
+    assert {"transnet", "demucs"} <= set(plan["ids"])
+    assert "pyannote" not in plan["ids"]
+    assert "film" not in plan["ids"]
+
+
+def test_install_all_plan_endpoint():
+    body = client.get("/api/engines/install-all/plan").json()
+    assert body["count"] >= 2 and "torch" in body["deps"]

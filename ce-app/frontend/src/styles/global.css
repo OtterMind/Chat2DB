@@ -1616,7 +1616,8 @@ body { font-family: var(--ce-font-sans); }
 }
 .ln-top__btn:hover { border-color: var(--ce-border-strong); color: var(--ce-text); }
 .ln-top__kbd { font-family: var(--ce-font-mono); font-size: 10px; opacity: .7; }
-.ln-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 0 8px; }
+/* The wordmark is the shell's fixed hero, so the tag hugs it — no doubled logo. */
+.ln-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0 8px; }
 .ln-hero__tag { color: var(--ce-text-secondary); font-size: 14px; }
 .ln-hero__ver { color: var(--ce-text-tertiary); font-size: 11px; }
 .ln-hairline { width: 60px; height: 1px; background: var(--ce-border-strong); margin-top: 10px; }
@@ -1662,8 +1663,8 @@ body { font-family: var(--ce-font-sans); }
 .ln-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .ln-row__body strong { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ln-row__meta { display: flex; align-items: center; gap: 5px; color: var(--ce-text-tertiary); font-size: 11px; }
-.ln-row__del { border: none; background: transparent; color: var(--ce-text-disabled); cursor: pointer; opacity: 0; transition: opacity var(--ce-duration-fast); }
-.ln-row:hover .ln-row__del { opacity: 1; }
+.ln-row__del { border: none; background: transparent; color: var(--ce-text-disabled); cursor: pointer; opacity: .7; transition: opacity var(--ce-duration-fast), color var(--ce-duration-fast); }
+.ln-row:hover .ln-row__del, .ln-row:focus-within .ln-row__del { opacity: 1; }
 .ln-row__del:hover { color: var(--ce-neon-red); }
 .ln-row__dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .ln-row__dot--green { background: var(--ce-neon-green); box-shadow: var(--ce-glow-green); }

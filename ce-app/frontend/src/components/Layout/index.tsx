@@ -65,7 +65,8 @@ export default function AppLayout() {
         title={isLauncher ? 'Cutting Edge' : t('Back to home', 'برگشت به خانه')}
         aria-label={t('Home', 'خانه')}
       >
-        <BrandMark />
+        {/* The single wordmark: the big hero on the launcher, docked elsewhere. */}
+        <BrandMark size={isLauncher ? 'lg' : 'md'} />
       </motion.button>
 
       {/* The launcher keeps the two window-level actions; sections stay clean. */}

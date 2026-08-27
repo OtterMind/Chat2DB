@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.42` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.43` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,22 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+129. **0.9.43 — four field fixes from the owner's review.** (1) Recent projects
+    now show a **visible delete button** (it was `opacity:0` until hover — invisible
+    without a pointer). (2) The launcher's **doubled logo is gone**: the shell's
+    shared wordmark is the single hero (big on the launcher, docked in sections)
+    and the Home hero no longer renders its own mark — verified exactly one visible
+    `.ce-brand`. (3) The real reason packaged **"Download + torch" engines never
+    worked**: the pip-free installer extracts only the explicit wheel list, and
+    `HEAVY_DEPS["torch"]` omitted torch's transitive deps, so torch could not
+    import; the list now carries them (`engines.py::_TORCH_FULL`, asserted by a
+    test). (4) A **one-click "Download all + torch"** (`engines.bulk_install_plan`,
+    `/api/engines/install-all/plan|start`, Settings button) installs torch once then
+    every fetchable engine, skipping HF-token/tensorflow gates, and reports which
+    engines became importable. Browser check: one logo, visible delete, install-all
+    button, 0 console errors. Backend **498 passed / 0 failed / 10 skipped**;
+    `verify`, `build`, `test:ui`, `test:playback` green on the production bundle.
 
 128. **0.9.42 — the publish loop closes: export-pack button + Plan Diff view.**
     The export-success note now offers *Build publish pack*: it bundles the finished

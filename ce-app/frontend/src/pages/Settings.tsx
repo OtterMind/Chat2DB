@@ -656,6 +656,37 @@ function EnginesCard() {
       })
   }
 
+  /** One click: torch once, then every fetchable engine — no one-by-one. */
+  const [allTask, setAllTask] = useState<EngineTask | null>(null)
+  const fetchAll = () => {
+    api
+      .post('/engines/install-all/start', {})
+      .then((r) => {
+        const task = r.data as EngineTask
+        setAllTask(task)
+        const poll = window.setInterval(() => {
+          api.get(`/tasks/${task.id}`).then((p) => {
+            const now = p.data as EngineTask
+            setAllTask(now)
+            if (now.status !== 'running') {
+              window.clearInterval(poll)
+              setAllTask(null)
+              if (now.status === 'done') {
+                message.success(t('All engines fetched — the heavy ones are live now', 'همه‌ی موتورهای سنگین گرفته و فعال شدند'))
+                load()
+              } else {
+                message.error(now.error || t('fetch failed', 'گرفتن ناموفق بود'))
+              }
+            }
+          }).catch(() => window.clearInterval(poll))
+        }, 2000)
+      })
+      .catch((err) => {
+        const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        message.error(detail ?? (err as Error).message)
+      })
+  }
+
   const fetchClicked = (engine: EngineInfo) => {
     const needsTorch = engine.heavy === 'torch' || engine.heavy === 'torch+HF-token'
     if (needsTorch) {
@@ -676,6 +707,14 @@ function EnginesCard() {
 
   return (
     <Card title={t('On-demand AI engines', 'موتورهای هوش مصنوعی اختیاری')}>
+      <div className="ce-actions" style={{ marginBottom: 10 }}>
+        <button className="ce-btn ce-btn--sm" disabled={allTask !== null} onClick={() => fetchAll()}>
+          <Download size={14} />
+          {allTask
+            ? `${allTask.label || allTask.stage} — ${Math.round((allTask.progress ?? 0) * 100)}%`
+            : t('Download all + torch (one click)', 'دانلود همه + torch (یک کلیک)')}
+        </button>
+      </div>
       <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
         {engines.map((e) => {
           const task = busy[e.id]
