@@ -114,6 +114,28 @@ def install(packages: list[str], on_progress=None) -> dict:
     """
     target = ensure_on_path()
     say = on_progress or (lambda *_args, **_kwargs: None)
+
+    # Never re-install what already imports. Overwriting a library the running
+    # backend has loaded is exactly what raises "[WinError 5] Permission denied"
+    # on Windows (DLL in use), and re-downloading torch the user already has only
+    # burns their bandwidth. So a second "download all" is a fast no-op, not a
+    # fight with the operating system.
+    import importlib.util  # noqa: PLC0415
+
+    from core.engine import _pypi  # noqa: PLC0415
+
+    def _present(spec: str) -> bool:
+        module = _pypi.parse_name(spec).replace("-", "_").split("[")[0]
+        try:
+            return importlib.util.find_spec(module) is not None
+        except Exception:  # noqa: BLE001 — an unimportable name is "not present"
+            return False
+
+    packages = [p for p in packages if not _present(p)]
+    if not packages:
+        say("done", 1.0, "Everything requested is already installed")
+        return {"target": str(target), "packages": [], "log": ["nothing to do"]}
+
     say("resolve", 0.05, f"Fetching {', '.join(packages)}")
 
     if not _pip_available():

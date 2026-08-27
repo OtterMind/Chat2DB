@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.44` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.45` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,22 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+131. **0.9.45 — the engines shelf stops fighting the user.** Two owner-reported
+    bugs fixed at the root. (1) **"Download all + torch" → Permission denied**: the
+    installer re-installed packages the running backend already had loaded; on
+    Windows that is `[WinError 5]` (DLL in use). `runtime_packages.install` now
+    skips anything already importable (a re-run is a fast no-op), and
+    `/api/engines/install-all` installs torch once then each engine as its **own
+    stage**, so one bad wheel reports itself instead of killing the batch and the
+    result lists installed/failed/now-available. (2) **RIFE/FILM/VIRASTAR "unavailable
+    here"**: these genuinely can't be auto-built in the packaged app, so the shelf
+    now shows a green **"covered by built-in"** state pointing at the working
+    fallback (setpts slow-mo / RIFE / the Persian cleaner) instead of a dead-end
+    badge; "unavailable" remains only where no fallback exists. Backend **500 passed
+    / 0 failed / 10 skipped**; `verify`, `build`, `test:ui`, `test:playback` and an
+    engines browser check (2 covered badges, install-all button, 0 console errors)
+    all green on the production bundle.
 
 130. **0.9.44 — the wordmark, done the professional way.** The single shared
     wordmark is now **accent-aware and hero-lit**: the periodic element boxes take

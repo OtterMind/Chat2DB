@@ -168,3 +168,25 @@ def test_bulk_install_plan_includes_torch_and_skips_gated():
 def test_install_all_plan_endpoint():
     body = client.get("/api/engines/install-all/plan").json()
     assert body["count"] >= 2 and "torch" in body["deps"]
+
+
+def test_install_skips_already_importable_packages():
+    """A re-run must be a fast no-op, not a Permission-denied fight (numpy is
+    importable in the test env, so nothing should be fetched)."""
+    from core import runtime_packages
+
+    out = runtime_packages.install(["numpy"])
+    assert out["packages"] == []
+    assert "nothing to do" in out["log"]
+
+
+def test_bulk_plan_excludes_unbuildable_and_gated():
+    from core.engine import engines
+
+    plan = engines.bulk_install_plan()
+    assert "rife" not in plan["ids"]       # source-only C++: packaged can't build
+    assert "film" not in plan["ids"]       # tensorflow
+    assert "pyannote" not in plan["ids"]   # HF token
+    assert {"transnet", "demucs"} <= set(plan["ids"])
+    assert plan["groups"], "each engine must be its own resilient stage"
+    assert all(g["deps"] for g in plan["groups"])

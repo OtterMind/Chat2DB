@@ -170,26 +170,32 @@ def probe(engine: dict) -> dict:
 
 
 def bulk_install_plan() -> dict:
-    """The one-click list: every engine this machine can fetch, with torch once.
+    """The one-click list, as ordered stages: torch once, then each engine alone.
 
     Engines that need an HF token (pyannote) are excluded — a bulk download must
-    not stall on a licence the user has to accept by hand. Torch's full dep list
-    goes first so the pip-free installer lays the runtime down before the engines.
+    not stall on a licence the user has to accept by hand; FILM (tensorflow) and
+    source-only-C++ engines (rife) are excluded because the packaged runtime can't
+    build them. Each engine is its **own stage** so one failure reports itself and
+    the rest still install — a batch must not die because of one wheel.
     """
+    groups: list[dict] = []
     ids: list[str] = []
-    deps: list[str] = list(HEAVY_DEPS["torch"])
+    all_deps: list[str] = list(HEAVY_DEPS["torch"])
     for engine in ENGINES:
         if not engine.get("deps"):
             continue
-        if engine.get("heavy") in ("torch+HF-token",):
+        if engine.get("heavy") in ("torch+HF-token", "tensorflow"):
             continue
-        if engine.get("heavy") == "tensorflow":
-            continue  # FILM is a separate, very large decision — not in the bulk
+        if engine.get("sdist") == "build":
+            continue  # needs a C++ toolchain; not buildable in the packaged app
         ids.append(engine["id"])
-        for dep in list(HEAVY_DEPS.get(engine.get("heavy") or "", [])) + list(engine["deps"]):
-            if dep not in deps:
-                deps.append(dep)
-    return {"ids": ids, "deps": deps}
+        own = list(engine["deps"])
+        groups.append({"id": engine["id"], "deps": own})
+        for dep in own:
+            if dep not in all_deps:
+                all_deps.append(dep)
+    return {"torch_deps": list(HEAVY_DEPS["torch"]), "groups": groups,
+            "ids": ids, "deps": all_deps}
 
 
 def status() -> dict:

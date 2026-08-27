@@ -62,30 +62,53 @@ def install_start(payload: InstallRequest) -> dict:
 def install_all_plan() -> dict:
     """What the one-click button would fetch, before the user commits to it."""
     plan = engines.bulk_install_plan()
-    return {"engines": plan["ids"], "deps": plan["deps"], "count": len(plan["ids"])}
+    return {"engines": plan["ids"], "deps": plan["deps"], "count": len(plan["ids"]),
+            "groups": plan["groups"]}
 
 
 @router.post("/install-all/start")
 def install_all_start() -> dict:
-    """One button: torch once, then every fetchable engine — no one-by-one clicks."""
+    """One button: torch once, then every fetchable engine — no one-by-one clicks.
+
+    Staged so a single bad wheel reports itself without killing the rest, and the
+    already-present filter makes a re-run a fast no-op instead of a Permission-
+    denied fight with loaded libraries.
+    """
     plan = engines.bulk_install_plan()
-    if not plan["deps"]:
+    if not plan["groups"]:
         raise HTTPException(status_code=409, detail="nothing to install")
 
     def work(reporter) -> dict:
-        result = runtime_packages.install(
-            plan["deps"],
-            on_progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
-        )
-        # Reflect reality: which engines are importable now that the dust settles?
+        installed: list[str] = []
+        failed: list[dict] = []
+
+        reporter.stage("download", 0.05, "AI core (torch)")
+        try:
+            runtime_packages.install(
+                plan["torch_deps"],
+                on_progress=lambda s, f, label="": reporter.stage(s, 0.05 + 0.3 * f, label))
+            installed.append("torch")
+        except Exception as error:  # noqa: BLE001
+            failed.append({"id": "torch", "error": str(error)[:300]})
+
+        span = 0.6 / max(1, len(plan["groups"]))
+        for index, group in enumerate(plan["groups"]):
+            reporter.stage("download", 0.35 + span * index, group["id"])
+            try:
+                runtime_packages.install(
+                    group["deps"],
+                    on_progress=lambda s, f, label="": reporter.stage(
+                        s, 0.35 + span * index + span * f, label))
+                installed.append(group["id"])
+            except Exception as error:  # noqa: BLE001 — one failure, not a batch failure
+                failed.append({"id": group["id"], "error": str(error)[:300]})
+
         runtime_packages.ensure_on_path()
-        result["now_available"] = [
-            eid for eid in plan["ids"]
-            if next((e for e in engines.ENGINES if e["id"] == eid), None)
-            and runtime_packages.is_installed(
-                next(e for e in engines.ENGINES if e["id"] == eid)["module"])
-        ]
-        return result
+        by_id = {e["id"]: e for e in engines.ENGINES}
+        now_available = [eid for eid in plan["ids"]
+                         if eid in by_id and runtime_packages.is_installed(by_id[eid]["module"])]
+        reporter.stage("done", 1.0, f"{len(installed)} installed, {len(failed)} failed")
+        return {"installed": installed, "failed": failed, "now_available": now_available}
 
     return tasks.start("engine:all", work).as_dict()
 

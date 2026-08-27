@@ -740,6 +740,11 @@ function EnginesCard() {
                   {t(needsTorch ? 'Download engine + AI core' : 'Download',
                     needsTorch ? 'دانلود موتور + هستهٔ هوش مصنوعی' : 'دانلود')}
                 </button>
+              ) : ALT[e.id] ? (
+                /* Not a dead end: the capability is covered by a built-in method. */
+                <span className="ce-badge" style={{ color: 'var(--success)', borderColor: 'var(--success)' }} title={e.why}>
+                  {t('covered by built-in', 'پوشش با روش داخلی')}
+                </span>
               ) : (
                 <span className="ce-badge" title={e.why}>{t('unavailable here', 'این‌جا در دسترس نیست')}</span>
               )}
