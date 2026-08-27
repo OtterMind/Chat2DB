@@ -6,6 +6,7 @@ from functools import partial
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from app.routers.paths import safe_user_path
 from pydantic import BaseModel, Field
 
 from core.engine import transcribe as engine
@@ -32,9 +33,10 @@ async def transcribe(payload: TranscribeRequest) -> dict:
     for the whole transcription, so the health poll, the WebSocket and every task
     progress event stopped with it (STATE.md §4.7).
     """
-    media = Path(payload.path)
-    if not media.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
+    try:
+        media = safe_user_path(payload.path)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400 if isinstance(exc, ValueError) else 404, detail=str(exc)) from exc
     loop = asyncio.get_running_loop()
     try:
         return await loop.run_in_executor(None, partial(
@@ -118,6 +120,8 @@ def srt_export(payload: SrtExportRequest) -> dict:
     from core.engine import subtitles
 
     dest = _Path(os.path.expanduser(payload.path))
+    if ".." in dest.parts:
+        raise HTTPException(status_code=400, detail="path traversal is not allowed")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(subtitles.build_srt(payload.cues), encoding="utf-8")
     return {"path": str(dest), "cues": len(payload.cues)}
@@ -131,7 +135,7 @@ def srt_import(payload: SrtImportRequest) -> dict:
     from core.engine import subtitles
 
     src = _Path(os.path.expanduser(payload.path))
-    if not src.exists():
+    if ".." in src.parts or not src.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
     return {"cues": subtitles.parse_srt(src.read_text(encoding="utf-8-sig", errors="replace"))}
 

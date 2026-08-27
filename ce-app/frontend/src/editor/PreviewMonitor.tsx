@@ -30,7 +30,8 @@ import { useI18n } from '../i18n'
 function renderCaption(
   clip: { text?: string; label?: string; words?: { start: number; end: number; text?: string; prob?: number }[]; start: number; offset: number },
   props: { animateWords?: boolean },
-  playhead: number
+  playhead: number,
+  beatPop: number
 ) {
   const words = clip.words ?? []
   if (!props.animateWords || words.length === 0) return clip.text || clip.label
@@ -44,7 +45,8 @@ function renderCaption(
           key={index}
           className={`${local >= word.start && local < word.end ? 'ed__word is-now' : 'ed__word'}${
             (word.prob ?? 1) < 0.5 ? ' is-unsure' : ''
-          }`}
+          }${beatPop ? ' is-pop' : ''}`}
+          style={beatPop ? { animationDuration: `${(60 / beatPop).toFixed(2)}s` } : undefined}
           title={(word.prob ?? 1) < 0.5 ? 'low confidence — check me' : undefined}
         >
           {word.text ?? ''}{index < words.length - 1 ? ' ' : ''}
@@ -55,6 +57,7 @@ function renderCaption(
 }
 
 export default function PreviewMonitor() {
+  const beatBpm = useEditor((s) => (s.bpm >= 60 ? s.bpm : 0))
   const { t } = useI18n()
   const baseRef = useRef<HTMLVideoElement>(null)
   const topRef = useRef<HTMLVideoElement>(null)
@@ -393,7 +396,7 @@ export default function PreviewMonitor() {
                   ['--ce-text-highlight' as string]: props.highlight,
                 }}
               >
-                {renderCaption(clip, props, playhead)}
+                {renderCaption(clip, props, playhead, beatBpm)}
               </span>
             )
           })}

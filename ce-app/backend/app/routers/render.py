@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from app.routers.paths import safe_user_path
 from pydantic import BaseModel, Field
 
 from core.engine import compose
@@ -143,4 +144,8 @@ def recordings_save(payload: RecordingSaveRequest) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
     dest = folder / f"{safe}.{ext}"
     dest.write_bytes(base64.b64decode(payload.data))
+    try:
+        safe_user_path(str(dest), must_exist=False)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"path": str(dest)}

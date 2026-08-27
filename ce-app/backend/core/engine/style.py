@@ -819,6 +819,7 @@ def build_timeline(
     brain: bool = True,
     model: str | None = None,
     intent: dict | intent_model.Intent | None = None,
+    use_plan: str | None = None,
 ) -> dict:
     """Cut the user's footage into the shape of the template.
 
@@ -956,6 +957,10 @@ def build_timeline(
         model=model,
     )
     picks = [{"start": p.start, "end": p.end, "score": p.score} for p in decision.picks]
+    if use_plan:
+        row = next((r for r in decision.scoreboard if r["name"] == use_plan and r.get("picks")), None)
+        if row:
+            picks = row["picks"]
     if not picks:  # a planner that produced nothing must not empty the timeline
         picks = measured
     say("layout", 0.6, "Laying the clips out to the rhythm")

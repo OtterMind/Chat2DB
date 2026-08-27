@@ -88,7 +88,7 @@ class TextCue:
     animate: bool = False
 
 
-def build_ass(cues: list[TextCue], width: int, height: int) -> str:
+def build_ass(cues: list[TextCue], width: int, height: int, bpm: float = 0.0) -> str:
     """A complete ASS document for the whole timeline."""
     styles: list[str] = []
     events: list[str] = []
@@ -128,7 +128,10 @@ def build_ass(cues: list[TextCue], width: int, height: int) -> str:
             parts = []
             for word in cue.words:
                 centis = max(1, int(round((word.end - word.start) * 100)))
-                parts.append(f"{{\\kf{centis}}}{_escape(word.text)} ")
+                # B4: when the beat is known, the word also pops in scale —
+                # the same decoration the preview plays, so the twin holds.
+                pop = "{\\t(0,120,\\fscx126\\fscy126)}" if bpm >= 60 else ""
+                parts.append(f"{{\\kf{centis}}}{pop}{_escape(word.text)} ")
             body = "".join(parts).strip()
         else:
             body = _escape(cue.text)
@@ -159,9 +162,9 @@ def build_ass(cues: list[TextCue], width: int, height: int) -> str:
     ])
 
 
-def write_ass(cues: list[TextCue], width: int, height: int, destination: Path) -> Path:
+def write_ass(cues: list[TextCue], width: int, height: int, destination: Path, bpm: float = 0.0) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(build_ass(cues, width, height), encoding="utf-8")
+    destination.write_text(build_ass(cues, width, height, bpm), encoding="utf-8")
     return destination
 
 

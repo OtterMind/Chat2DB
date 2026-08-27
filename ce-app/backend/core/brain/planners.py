@@ -220,6 +220,15 @@ def ollama_plan(
     try:
         import requests
 
+        # A5 (advisors): a cold model can spend minutes loading; ping it briefly
+        # so the scoreboard can say "warming up" instead of dying at 0.00.
+        warmup = "ok"
+        try:
+            requests.post(f"{OLLAMA_URL}/api/generate",
+                          json={"model": chosen_model, "prompt": "ping", "stream": False},
+                          timeout=10)
+        except Exception:  # noqa: BLE001 — slow model load: the long call still tries
+            warmup = "slow"
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={"model": chosen_model, "prompt": prompt, "stream": False, "format": "json"},
@@ -232,7 +241,7 @@ def ollama_plan(
                          note=f"no usable answer ({type(error).__name__})")
 
     picks = _picks_from_indices(data.get("picks"), highlights, context)
-    note = str(data.get("why", ""))[:120]
+    note = (f"warmup {warmup} · " if warmup != "ok" else "") + str(data.get("why", ""))[:120]
     return Candidate(name=f"ollama:{chosen_model}", picks=picks, seconds=time.time() - started, note=note)
 
 

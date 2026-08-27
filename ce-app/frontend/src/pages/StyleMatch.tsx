@@ -224,7 +224,7 @@ export default function StyleMatch() {
   }
 
   /** Apply the edit the user picked from the brain's menu. */
-  const applyWith = async (option: BrainOption) => {
+  const applyWith = async (option: BrainOption, usePlan?: string) => {
     if (!template || !pending) return
     setChosen(option)
     setBusy('apply')
@@ -235,7 +235,8 @@ export default function StyleMatch() {
         t('Styled edit', 'تدوین بر اساس الگو'),
         pending.music,
         watcher,
-        recipeIntent ? { ...option.intent, ...recipeIntent } : option.intent
+        recipeIntent ? { ...option.intent, ...recipeIntent } : option.intent,
+        usePlan ?? null
       )
       setResult(built)
       tellBrainAccepted(built)
@@ -676,6 +677,36 @@ export default function StyleMatch() {
                 scoreboard={result.summary.brain.scoreboard}
                 variant="cyberpunk"
               />
+              {/* B10: every planner's plan is inspectable and re-applicable. */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                {result.summary.brain.scoreboard.map((row) => (
+                  <div key={row.name} className="ln-row" style={{ padding: '8px 4px' }}>
+                    <span className="ln-row__body">
+                      <strong className="mono" dir="ltr">{row.name} · {row.score?.toFixed?.(2) ?? row.score}</strong>
+                      <span className="ln-row__meta">{row.note ?? ''} · {row.shots} shots</span>
+                    </span>
+                    <button
+                      className="ce-btn ce-btn--ghost ce-btn--sm"
+                      onClick={() => void applyWith({ id: row.name, title: { fa: row.name, en: row.name }, intent: (chosen?.intent ?? {}) as IntentAnswers, traits: { fa: [], en: [] }, why: { fa: '', en: '' } } as BrainOption, row.name)}
+                    >
+                      {t('Use this plan', 'همین برنامه')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button
+                  className="ce-btn ce-btn--ghost ce-btn--sm"
+                  onClick={() => {
+                    const name = `recipe-${new Date().toISOString().slice(0, 10)}`
+                    styleApi.recipeSave(name, { template, intent: recipeIntent ?? chosen?.intent ?? {} })
+                      .then(() => message.success(t('Recipe saved to ~/CuttingEdge/recipes', 'رسپی در recipes ذخیره شد')))
+                      .catch((e) => message.error((e as Error).message))
+                  }}
+                >
+                  {t('Save recipe', 'ذخیره رسپی')}
+                </button>
+              </div>
             </div>
           )}
 

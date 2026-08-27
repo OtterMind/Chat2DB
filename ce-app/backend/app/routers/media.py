@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.config import settings
@@ -188,3 +189,63 @@ async def waveform(path: str, points: int = 800):
         raise HTTPException(status_code=404, detail="File not found") from error
     # A silent video answers with an empty envelope, not an error: the clip
     # simply draws no waveform.
+
+
+class StoryboardRequest(BaseModel):
+    path: str
+    count: int = 10
+
+
+@router.post("/storyboard")
+def storyboard(payload: StoryboardRequest) -> dict:
+    """B7 (advisors): the N most informative frames as timestamps — a storyboard.
+
+    Frames are scored by frame-to-frame change plus edge energy (a face/action
+    frame beats a blank one); the winner list is de-duplicated in time so the
+    board tells the video's story instead of ten near-identical frames.
+    """
+    import subprocess  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    from core.engine.compose import ffmpeg_binary, probe_media  # noqa: PLC0415
+
+    try:
+        from app.routers.paths import safe_user_path  # noqa: PLC0415
+
+        safe_user_path(payload.path)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    info = probe_media(payload.path)
+    duration = float(info.get("duration") or 0)
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="could not probe media")
+    fps = 4
+    run = subprocess.run(
+        [ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-i", payload.path,
+         "-vf", f"fps={fps},scale=96:-2,format=gray", "-f", "rawvideo", "-"],
+        capture_output=True,
+    )
+    h = int(96 * (int(info.get("height") or 16)) / max(1, int(info.get("width") or 16)) / 2) * 2
+    frame_bytes = 96 * h
+    total = len(run.stdout) // frame_bytes
+    if total < 2:
+        return {"times": [], "duration": duration}
+    scores: list[float] = []
+    prev = None
+    for i in range(total):
+        f = np.frombuffer(run.stdout[i * frame_bytes:(i + 1) * frame_bytes], dtype=np.uint8).reshape(h, 96)
+        diff = float(np.abs(f.astype(int) - prev.astype(int)).mean()) if prev is not None else 0.0
+        edges = float(np.abs(np.diff(f.astype(int), axis=1)).mean())
+        scores.append(diff * 0.6 + edges * 0.4)
+        prev = f
+    order = sorted(range(total), key=lambda i: -scores[i])
+    picked: list[float] = []
+    for i in order:
+        t = i / fps
+        if all(abs(t - p) > 1.0 for p in picked):
+            picked.append(round(t, 2))
+        if len(picked) >= max(1, min(payload.count, 24)):
+            break
+    return {"times": sorted(picked), "duration": duration}

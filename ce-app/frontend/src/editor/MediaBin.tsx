@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
-import { FolderOpen, Film, AudioLines, Type } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { FolderOpen, Film, AudioLines, Type, Clapperboard } from 'lucide-react'
+import { Modal, message } from 'antd'
 import { useEditor, formatTimecode } from './model'
 import { useI18n } from '../i18n'
 import { backendOrigin } from '../api/runtime'
@@ -11,6 +12,22 @@ import { backendOrigin } from '../api/runtime'
  */
 export default function MediaBin({ onImport }: { onImport: () => void }) {
   const { t } = useI18n()
+  const [board, setBoard] = useState<number[]>([])
+  const [boardPath, setBoardPath] = useState('')
+
+  /** B7: the ten most informative frames of the first video clip. */
+  const storyboard = async () => {
+    const src = useEditor.getState().clips.find((c) => c.src)?.src
+    if (!src) { message.warning(t('Import media first.', 'اول یک فایل اضافه کن.')); return }
+    try {
+      const out = await fetch(`${backendOrigin}/api/media/storyboard`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: src, count: 10 }),
+      }).then((r) => r.json())
+      setBoardPath(src)
+      setBoard(out.times ?? [])
+    } catch (err) { message.error((err as Error).message) }
+  }
   const { clips, select } = useEditor()
 
   const rows = useMemo(() => {
@@ -28,10 +45,23 @@ export default function MediaBin({ onImport }: { onImport: () => void }) {
     <aside className="ed__bin" aria-label={t('Library', 'کتابخانه')}>
       <div className="ed__bin-head">
         <strong>{t('Library', 'کتابخانه')}</strong>
-        <button className="ed__btn ed__btn--sm" onClick={onImport} title={t('Import media', 'افزودن رسانه')}>
-          <FolderOpen size={13} /> {t('Add', 'افزودن')}
-        </button>
+        <span style={{ display: 'flex', gap: 6 }}>
+          <button className="ed__btn ed__btn--sm" onClick={() => void storyboard()} title={t('Storyboard of the first clip', 'استوری‌برد کلیپ اول')}>
+            <Clapperboard size={13} />
+          </button>
+          <button className="ed__btn ed__btn--sm" onClick={onImport} title={t('Import media', 'افزودن رسانه')}>
+            <FolderOpen size={13} /> {t('Add', 'افزودن')}
+          </button>
+        </span>
       </div>
+      <Modal open={board.length > 0} onCancel={() => setBoard([])} footer={null} title={t('Storyboard', 'استوری‌برد')}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {board.map((time) => (
+            <img key={time} width={120} style={{ borderRadius: 8, border: '1px solid var(--ce-border)' }}
+              src={`${backendOrigin}/api/media/thumb?path=${encodeURIComponent(boardPath)}&t=${time}&h=96`} alt="" />
+          ))}
+        </div>
+      </Modal>
       {rows.length === 0 && (
         <p className="ce-hint" style={{ padding: '10px 12px' }}>
           {t('Nothing here yet — add a file and it appears in the bin.', 'هنوز خالی است — فایلی اضافه کن تا اینجا دیده شود.')}

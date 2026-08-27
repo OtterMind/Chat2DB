@@ -31,6 +31,7 @@ class ApplyRequest(BaseModel):
     captions: bool = Field(default=True, description="Transcribe and lay captions automatically")
     brain: bool = Field(default=True, description="Let a local model race the rule planner")
     model: str | None = Field(default=None, description="Ollama model to race with, when installed")
+    use_plan: str | None = Field(default=None, description="B10: apply a specific planner's picks from the scoreboard instead of the winner")
     intent: dict | None = Field(
         default=None,
         description=(
@@ -250,6 +251,7 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 brain=payload.brain,
                 model=payload.model,
                 intent=payload.intent,
+                use_plan=payload.use_plan,
             )
         finally:
             cancellation.bind(None)
@@ -271,3 +273,41 @@ def recipes() -> dict:
 def ai_transitions(payload: AiTransitionsRequest) -> dict:
     """One music-sized transition per video junction; the editor applies them."""
     return {"transitions": style.suggest_transitions(payload.timeline, payload.bpm)}
+
+
+class RecipeSaveRequest(BaseModel):
+    name: str
+    recipe: dict
+
+
+@router.post("/recipes/save")
+def recipe_save(payload: RecipeSaveRequest) -> dict:
+    """B5: recipes live in ~/CuttingEdge/recipes as shareable JSON files."""
+    import json
+    import os
+    import re
+    from pathlib import Path as _Path
+
+    safe = re.sub(r"[^A-Za-z0-9_\-一-ی ]", "", payload.name).strip() or "recipe"
+    folder = _Path(os.path.expanduser("~/CuttingEdge/recipes"))
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"{safe}.json"
+    dest.write_text(json.dumps(payload.recipe, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"path": str(dest)}
+
+
+@router.get("/recipes/list")
+def recipe_list() -> dict:
+    import json
+    import os
+    from pathlib import Path as _Path
+
+    folder = _Path(os.path.expanduser("~/CuttingEdge/recipes"))
+    out = []
+    if folder.exists():
+        for f in sorted(folder.glob("*.json")):
+            try:
+                out.append({"name": f.stem, "recipe": json.loads(f.read_text(encoding="utf-8"))})
+            except Exception:  # noqa: BLE001
+                continue
+    return {"recipes": out}

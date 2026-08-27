@@ -171,6 +171,9 @@ export const styleApi = {
    *  of genuinely different ways to start the edit. */
   recipes: async (): Promise<{ recipes: { id: string; fa: string; en: string; intent: Record<string, string>; template: StyleTemplate }[] }> =>
     (await api.get('/style/recipes')).data,
+  recipeSave: async (name: string, recipe: unknown) => (await api.post('/style/recipes/save', { name, recipe })).data,
+  recipeList: async (): Promise<{ recipes: { name: string; recipe: Record<string, unknown> }[] }> =>
+    (await api.get('/style/recipes/list')).data,
   brain: async (template: Record<string, unknown> | null, footage?: string | null): Promise<BrainReport> =>
     (await api.post('/style/brain', { template, footage: footage ?? null }, { timeout: 10 * 60_000 })).data,
   remove: async (name: string): Promise<void> => {
@@ -183,10 +186,11 @@ export const styleApi = {
     name = 'Styled edit',
     music?: string | null,
     watch?: Watcher,
-    intent?: IntentAnswers
+    intent?: IntentAnswers,
+    usePlan?: string | null
   ): Promise<StyledEdit> => {
     const started = (
-      await api.post('/style/apply/start', { path, template, name, music, intent: intent ?? null })
+      await api.post('/style/apply/start', { path, template, name, music, intent: intent ?? null, use_plan: usePlan ?? null })
     ).data as TaskState
     const follow = followTask(started.id, watch?.onProgress ?? (() => undefined))
     watch?.onStart?.(follow.cancel)

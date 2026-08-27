@@ -1703,3 +1703,15 @@ body { font-family: var(--ce-font-sans); }
   color: var(--ce-text) !important;
   box-shadow: var(--ce-glass-shadow) !important;
 }
+
+/* B4: beat-synced word pop (preview twin of the ASS \t pop) */
+@keyframes wordpop { 0% { transform: scale(1); } 40% { transform: scale(1.16); } 100% { transform: scale(1); } }
+.ed__word.is-pop.is-now { display: inline-block; animation: wordpop .5s var(--ce-ease); }
+/* B9: performance HUD */
+.ce-hud {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 90;
+  display: flex; gap: 14px; padding: 5px 12px; font-size: 11px;
+  background: rgba(10, 10, 10, .8); border: 1px solid var(--ce-border-strong);
+  border-radius: var(--ce-radius-md); color: var(--ce-neon-cyan);
+}
+.ce-hud--static { position: static; transform: none; display: block; margin-top: 10px; color: var(--ce-text-secondary); white-space: pre-wrap; }

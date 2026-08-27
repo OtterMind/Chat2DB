@@ -93,6 +93,7 @@ def race(
                 "note": candidate.note,
                 "terms": score.terms if score else {},
                 "skipped": score.skipped if score else ["no plan"],
+                "picks": [p.as_dict() for p in candidate.picks],
             }
         )
         if score is None:

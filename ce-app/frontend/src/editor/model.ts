@@ -987,9 +987,10 @@ export const useEditor = create<EditorState>((set, get) => ({
     })),
 
   toDocument: () => {
-    const { tracks, clips, transitions, intent } = get()
-    // `intent` rides along so a reopened project still knows what it is for.
-    return { tracks, clips, transitions, intent }
+    const { tracks, clips, transitions, intent, bpm } = get()
+    // `intent` rides along so a reopened project still knows what it is for;
+    // bpm rides along so the export's karaoke pops on the same beat as preview.
+    return { tracks, clips, transitions, intent, bpm }
   },
 }))
 

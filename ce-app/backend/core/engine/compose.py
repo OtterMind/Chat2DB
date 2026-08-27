@@ -164,6 +164,7 @@ class Timeline:
     width: int = 1080
     height: int = 1920
     fps: int = 30
+    bpm: float = 0.0
     #: Package B brand overlays — off by default, opt-in per export.
     progress_bar: bool = False
     brand_text: str = ""
@@ -191,6 +192,7 @@ class Timeline:
             for t in data.get("tracks", [])
         ]
         kind_by_track = {t.id: t.kind for t in tracks}
+        bpm = float(data.get("bpm", 0.0) or 0.0)
         progress_bar = bool(data.get("progressBar", False))
         brand_text = str(data.get("brandText", "") or "")
         clips = [
@@ -227,6 +229,7 @@ class Timeline:
             transitions=transitions,
             progress_bar=progress_bar,
             brand_text=brand_text,
+            bpm=bpm,
             width=int(data.get("width", 1080)),
             height=int(data.get("height", 1920)),
             fps=int(data.get("fps", 30)),
@@ -764,7 +767,7 @@ def build_command(
     if text_clips and ass_path is not None:
         cues = subs.cues_from_clips([c.as_text_dict() for c in text_clips])
         if cues:
-            subs.write_ass(cues, timeline.width, timeline.height, ass_path)
+            subs.write_ass(cues, timeline.width, timeline.height, ass_path, getattr(timeline, "bpm", 0.0))
             fonts = subs.fonts_dir()
             arg = f"subtitles={subs.filter_path(ass_path)}"
             if fonts:

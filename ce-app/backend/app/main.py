@@ -7,6 +7,37 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app import __version__, __app_name__
+
+
+def _setup_structured_logging() -> None:
+    """A10 (advisors): JSON lines into ~/CuttingEdge/data/logs/backend.jsonl with
+    rotation (10 MB x 5). print() stays for the console; the file is the shareable
+    crash/diagnostic trail."""
+    import json
+    import logging
+    import os
+    from logging.handlers import RotatingFileHandler
+
+    folder = os.path.expanduser("~/CuttingEdge/data/logs")
+    os.makedirs(folder, exist_ok=True)
+
+    class Jsonl(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            return json.dumps({
+                "t": self.formatTime(record),
+                "level": record.levelname,
+                "msg": record.getMessage(),
+                "where": f"{record.pathname}:{record.lineno}",
+            }, ensure_ascii=False)
+
+    handler = RotatingFileHandler(os.path.join(folder, "backend.jsonl"),
+                                  maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
+    handler.setFormatter(Jsonl())
+    root = logging.getLogger()
+    root.addHandler(handler)
+
+
+_setup_structured_logging()
 from app.config import settings
 from app.database import db
 from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, audio, brain, projects, style, ai, reframe, gpu, tasks, titles, vad, ocr, vision, sounds, engines

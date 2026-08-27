@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import {
   Play, Pause, Scissors, Copy, Trash2, Undo2, Redo2, Magnet,
-  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film, Search, Circle,
+  Plus, SkipBack, Info, FolderOpen, Upload, FileVideo, AudioLines, Film, Search, Circle, Mic, Activity,
 } from 'lucide-react'
 import { Checkbox, Input, Modal, Radio, Select, message } from 'antd'
 import Page from '../components/Page'
@@ -22,6 +22,7 @@ import { pickMedia, proxyApi, renderApi, saveDialog, type Quality } from '../api
 import { analyzeApi } from '../api/analyze'
 import { useRuntime } from '../store/runtime'
 import { wsClient } from '../api/websocket'
+import { backendOrigin } from '../api/runtime'
 
 const TOOL_NOTE: Record<string, [en: string, fa: string]> = {
   bgremove: ['Background removal arrives with the render engine.', 'حذف پس‌زمینه بعد از اتصال موتور رندر فعال می‌شود.'],
@@ -41,7 +42,7 @@ export default function Studio() {
   const note = params.get('tool') ? TOOL_NOTE[params.get('tool')!]?.[lang === 'fa' ? 1 : 0] : undefined
 
   const {
-    playing, playhead, snapping, selectedId, clips, tracks, past, future,
+    playing, snapping, selectedId, clips, tracks, past, future,
     togglePlay, setPlayhead, toggleSnapping, splitAtPlayhead,
     removeSelected, duplicateSelected, undo, redo, addTrack, addClip,
     keepRanges, splitAtSourceTimes, transitions,
@@ -256,6 +257,7 @@ export default function Studio() {
 
   const [exporting, setExporting] = useState(false)
   const [recOpen, setRecOpen] = useState(false)
+  const [dirOpen, setDirOpen] = useState(false)
   const [lastOutput, setLastOutput] = useState<string | null>(null)
   const importedOnEntry = useRef(false)
 
@@ -518,7 +520,7 @@ export default function Studio() {
             <button className="ed__btn ed__btn--primary" onClick={() => togglePlay()} title={t('Play / pause (Space)', 'پخش / مکث (Space)')}>
               {playing ? <Pause size={16} /> : <Play size={16} />}
             </button>
-            <span className="ed__tc ed__tc--sm" dir="ltr">{formatTimecode(playhead, true)}</span>
+            <TransportClock />
           </div>
 
           <div className="ed__group">
@@ -564,6 +566,7 @@ export default function Studio() {
               <FolderOpen size={15} /> {t('Import', 'افزودن')}
             </button>
             <button className="ed__btn" onClick={() => setRecOpen(true)} title={t('Record screen / webcam', 'ضبط صفحه / وبکم')}><Circle size={16} /></button>
+            <button className="ed__btn" onClick={() => setDirOpen(true)} title={t('Director Mode — say it, we plan it', 'حالت کارگردان — بگو، برنامه می‌ریزیم')}><Mic size={16} /></button>
             <button className="ed__btn ed__btn--primary" onClick={exportTimeline} disabled={exporting}>
               <Upload size={15} /> {exporting ? t('Exporting…', 'در حال خروجی…') : t('Export', 'خروجی')}
             </button>
@@ -627,6 +630,8 @@ export default function Studio() {
 
         <BrainBar />
         <RecorderModal open={recOpen} onClose={() => setRecOpen(false)} />
+        <DirectorModal open={dirOpen} onClose={() => setDirOpen(false)} />
+        <PerfHud />
 
         <Modal open={scOpen} onCancel={() => setScOpen(false)} footer={null} width={560}
           title={t('Keyboard shortcuts', 'میان‌برهای صفحه‌کلید')}>
@@ -829,4 +834,100 @@ function askExportSettings(
       onCancel: () => done(null),
     })
   })
+}
+
+
+/** A9: the clock subscribes alone — playhead ticks no longer re-render Studio. */
+function TransportClock() {
+  const playhead = useEditor((s) => s.playhead)
+  return <span className="ed__tc ed__tc--sm" dir="ltr">{formatTimecode(playhead, true)}</span>
+}
+
+/** B9: F3 — a small, honest performance HUD (FPS, WS events/s, backend ms). */
+function PerfHud() {
+  const [on, setOn] = useState(false)
+  const [fps, setFps] = useState(0)
+  const [ws, setWs] = useState(0)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'F3') { e.preventDefault(); setOn((v) => !v) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  useEffect(() => {
+    if (!on) return undefined
+    let frames = 0; let events = 0; let raf = 0
+    const tick = () => { frames++; raf = requestAnimationFrame(tick) }
+    raf = requestAnimationFrame(tick)
+    const off = wsClient.onEvent(() => { events++ })
+    const id = window.setInterval(() => { setFps(frames); setWs(events); frames = 0; events = 0 }, 1000)
+    return () => { cancelAnimationFrame(raf); window.clearInterval(id); off() }
+  }, [on])
+  if (!on) return null
+  return (
+    <div className="ce-hud mono" dir="ltr">
+      <span>{fps} fps</span><span>{ws} ws/s</span><span>F3 off</span>
+    </div>
+  )
+}
+
+/** B1: Director Mode — say the edit; faster-whisper transcribes on-device and the
+ *  assistant plans it. The plan is shown before anything touches the timeline. */
+function DirectorModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n()
+  const [recording, setRecording] = useState(false)
+  const [out, setOut] = useState<string>('')
+  const recRef = useRef<MediaRecorder | null>(null)
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const rec = new MediaRecorder(stream)
+      const chunks: Blob[] = []
+      rec.ondataavailable = (e) => chunks.push(e.data)
+      rec.onstop = async () => {
+        stream.getTracks().forEach((x) => x.stop())
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' })
+        const reader = new FileReader()
+        reader.onload = async () => {
+          const b64 = String(reader.result).split(',')[1]
+          setOut(t('Thinking…', 'در حال فکر کردن…'))
+          try {
+            const saved = await fetch(`${backendOrigin}/api/render/recordings/save`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: `direct-${Date.now()}`, data: b64, ext: 'webm' }),
+            }).then((r) => r.json())
+            const tr = await fetch(`${backendOrigin}/api/captions/transcribe`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: saved.path }),
+            }).then((r) => r.json())
+            const said: string = tr.text || ''
+            const chat = await fetch(`${backendOrigin}/api/assistant/chat`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: [{ role: 'user', content: said || '...' }], language: 'fa' }),
+            }).then((r) => r.json())
+            setOut(`${t('Heard', 'شنیدم')}: «${said}»
+${chat.reply ?? ''}`)
+          } catch (err) {
+            setOut((err as Error).message)
+          }
+        }
+        reader.readAsDataURL(blob)
+        setRecording(false)
+      }
+      recRef.current = rec
+      rec.start()
+      setRecording(true)
+    } catch {
+      setOut(t('Microphone needs permission here.', 'میکروفون اینجا به اجازه نیاز دارد.'))
+    }
+  }
+
+  return (
+    <Modal open={open} onCancel={onClose} footer={null} title={t('Director Mode', 'حالت کارگردان')}>
+      <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => (recording ? recRef.current?.stop() : void start())}>
+        <Mic size={14} /> {recording ? t('Stop', 'توقف') : t('Speak', 'صحبت کن')}
+      </button>
+      {out && <pre className="ce-hud ce-hud--static" dir="auto">{out}</pre>}
+    </Modal>
+  )
 }

@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.35` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.36` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,25 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+122. **0.9.36 — sections A, B, C finished and wired to the new UI.** A done:
+    A4 `_safe_path` gate on captions/render/media (absolute, no traversal, exists,
+    ≤4 GB); A5 Ollama warm-up ping with `warmup slow` in the scoreboard note;
+    A9 `TransportClock` subscribes alone so playhead ticks stop re-rendering
+    Studio; A10 JSON-lines rotating log at `~/CuttingEdge/data/logs/backend.jsonl`;
+    A11 axios interceptors (503 → readable warning, optional 404 silent,
+    correlation id + ms logging); A12 already conformant. B wired and producing
+    output: B1 Director Mode (mic → on-device faster-whisper → assistant plan,
+    shown before anything touches the timeline); B4 beat-synced word pop, twin in
+    preview (CSS, duration = 60/bpm) and in the ASS export (`\t` scale pop when
+    bpm ≥ 60, bpm rides in the project document); B5 recipes saved as shareable
+    JSON in `~/CuttingEdge/recipes` (+ save button on the Style Match result);
+    B7 storyboard endpoint (`/api/media/storyboard`, top-10 informative frames)
+    with a modal in the MediaBin; B9 F3 performance HUD (fps / ws events/s);
+    B10 every planner's picks ride the scoreboard and each row has
+    «همین برنامه» which re-applies that exact plan via `use_plan`. Suites:
+    backend 424/0/10; verify/build green; ui-audit PASSED; playback all-checks-
+    passed on the production bundle.
 
 121. **0.9.35 — the Hybrid redesign from the root + advisors' P0/P1 fixes.**
     The professors' `v0.9.34-hybrid-design-system` package was audited item by
