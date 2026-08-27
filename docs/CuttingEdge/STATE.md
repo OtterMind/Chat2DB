@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.41` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.42` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,17 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+128. **0.9.42 — the publish loop closes: export-pack button + Plan Diff view.**
+    The export-success note now offers *Build publish pack*: it bundles the finished
+    MP4 with SRT/ASS captions, thumbnail, `description.md`, `meta.json` and the OTIO
+    timeline into a folder next to the render (`/api/render/export-pack`, endpoint-
+    tested for the happy path and a missing video). Style Match's B10 rows gained a
+    Plan Diff line — each non-winner plan reports how many of its moments agree with
+    the winner's, computed client-side from the scoreboard's own picks, so "the race"
+    is inspectable per-segment, not just as a score. Backend **495 passed / 0 failed /
+    10 skipped**; `verify`, `build`, `test:ui`, `test:playback` green on the
+    production bundle.
 
 127. **0.9.41 — Style DNA + a real MCP stdio server close out the tier work.**
     `core/engine/dna.py` (`/api/style/dna`) projects a measured template into a

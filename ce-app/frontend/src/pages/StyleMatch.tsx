@@ -697,7 +697,17 @@ export default function StyleMatch() {
                   <div key={row.name} className="ln-row" style={{ padding: '8px 4px' }}>
                     <span className="ln-row__body">
                       <strong className="mono" dir="ltr">{row.name} · {row.score?.toFixed?.(2) ?? row.score}</strong>
-                      <span className="ln-row__meta">{row.note ?? ''} · {row.shots} shots</span>
+                      <span className="ln-row__meta">
+                        {row.note ?? ''} · {row.shots} shots
+                        {(() => {
+                          const brain = result.summary.brain
+                          if (!brain || row.name === brain.winner) return null
+                          const win = (brain.scoreboard.find((r) => r.name === brain.winner) as { picks?: { start: number; end: number }[] } | undefined)?.picks ?? []
+                          const mine = (row as { picks?: { start: number; end: number }[] }).picks ?? []
+                          const agree = mine.filter((p) => win.some((w) => p.start < w.end && w.start < p.end)).length
+                          return ` · ${t('agrees with winner on', 'هم‌رأی با برنده روی')} ${agree}/${mine.length || 0}`
+                        })()}
+                      </span>
                     </span>
                     <button
                       className="ce-btn ce-btn--ghost ce-btn--sm"

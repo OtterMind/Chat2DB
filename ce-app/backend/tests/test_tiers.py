@@ -294,3 +294,19 @@ def test_propose_intensity_does_not_crash_and_returns_cards(burst_mp4):
     hot = clips_board.propose(str(burst_mp4), n=4, intensity=0.9)
     cold = clips_board.propose(str(burst_mp4), n=4, intensity=0.1)
     assert isinstance(hot["cards"], list) and isinstance(cold["cards"], list)
+
+
+def test_export_pack_endpoint(tmp_path, burst_mp4):
+    body = client.post("/api/render/export-pack", json={
+        "video": str(burst_mp4),
+        "destination": str(tmp_path / "ep"),
+        "name": "job",
+        "cues": [{"text": "hi", "start": 0.0, "end": 1.0}],
+        "meta": {"name": "job"},
+    }).json()
+    assert body["count"] >= 3 and "job.mp4" in body["files"]
+
+
+def test_export_pack_rejects_missing_video(tmp_path):
+    assert client.post("/api/render/export-pack", json={
+        "video": "/tmp/does-not-exist.mp4", "destination": str(tmp_path)}).status_code in (400, 404)

@@ -36,6 +36,20 @@ export const renderApi = {
     })).data,
   get: async (id: string): Promise<RenderState> => (await api.get(`/render/${id}`)).data,
   probe: async (path: string): Promise<MediaInfo> => (await api.post('/render/probe', { path })).data,
+  /** Tier 2: bundle the finished edit into a publish folder (video+captions+thumb+meta+OTIO). */
+  exportPack: async (q: {
+    video: string
+    destination: string
+    timeline?: unknown
+    cues?: { start: number; end: number; text: string }[]
+    meta?: Record<string, unknown>
+    chapters?: { t: number; title: string }[]
+    name?: string
+  }) => (await api.post('/render/export-pack', q, { timeout: 120_000 })).data as {
+    dir: string
+    files: string[]
+    count: number
+  },
 }
 
 /** Streamed through the API so seeking works from a file:// page. */

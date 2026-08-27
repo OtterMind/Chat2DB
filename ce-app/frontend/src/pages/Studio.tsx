@@ -234,6 +234,24 @@ export default function Studio() {
     }
   }
 
+  /** Tier 2: bundle the finished edit into a publish folder next to the MP4. */
+  const buildPack = async () => {
+    if (!lastOutput) return
+    try {
+      const dir = lastOutput.replace(/[^\\/]+$/, '') + 'pack'
+      const cues = clips
+        .flatMap((c) => (c.words ?? []).map((w) => ({ start: w.start, end: w.end, text: w.text })))
+      const name = useEditor.getState().projectName || 'cutting-edge'
+      const out = await renderApi.exportPack({
+        video: lastOutput, destination: dir, name,
+        cues, meta: { name }, chapters: [],
+      })
+      message.success(t(`Pack ready (${out.count} files) in ${out.dir}`, `بسته آماده شد (${out.count} فایل) در ${out.dir}`))
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
   const splitScenes = async () => {
     if (!targetClip?.src) {
       message.warning(t('Import media first.', 'اول یک فایل اضافه کن.'))
@@ -614,6 +632,9 @@ export default function Studio() {
             <span>
               {t('Saved to', 'ذخیره شد در')} <span className="ce-num" dir="ltr">{lastOutput}</span>
             </span>
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void buildPack()}>
+              {t('Build publish pack', 'بستنِ بسته‌ی انتشار')}
+            </button>
           </div>
         )}
 
