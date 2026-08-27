@@ -116,7 +116,7 @@
     "antd-style": "^3.6.1",
     "apng-js": "^1.1.5",
     "babel-plugin-antd-style": "^1.0.4",
-    "big.js": "^5.2.2",
+    "big.js": "^7.0.1",
     "copy-to-clipboard": "^3.3.3",
     "dayjs": "^1.11.11",
     "dexie": "^4.0.11",
