@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.43` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.44` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,15 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+130. **0.9.44 — the wordmark, done the professional way.** The single shared
+    wordmark is now **accent-aware and hero-lit**: the periodic element boxes take
+    the user's chosen accent via `color-mix` (C leads with the accent, E answers in
+    cyan) and the launcher hero carries a soft accent halo, while sections keep the
+    minimal docked mark — one identity, alive with the four-accent theme, never a
+    duplicate. Verified in-browser: exactly one visible `.ce-brand`, delete icons
+    present, 0 console errors; `test:ui` PASSED on the production bundle. This is a
+    CSS-only patch on top of 0.9.43's single-wordmark restructure.
 
 129. **0.9.43 — four field fixes from the owner's review.** (1) Recent projects
     now show a **visible delete button** (it was `opacity:0` until hover — invisible

@@ -116,8 +116,11 @@ button { font-family: inherit; cursor: pointer; }
   width: 30px; height: 30px; border-radius: 6px; color: #fff;
   box-shadow: 0 4px 12px -6px rgba(0, 0, 0, .9);
 }
-.ce-brand__el--c { background: linear-gradient(150deg, #7c3aed, #4f46e5); }
-.ce-brand__el--e { background: linear-gradient(150deg, #06b6d4, #0891b2); }
+/* The element boxes follow the user's chosen accent (color-mix over a confident
+   base), so the single wordmark is alive with the theme — C leads with the
+   accent, E answers in cyan. Brand stays recognisable across all four accents. */
+.ce-brand__el--c { background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 72%, #7c3aed), color-mix(in srgb, var(--accent) 40%, #4f46e5)); }
+.ce-brand__el--e { background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 26%, #06b6d4), #0891b2); }
 .ce-brand__sym { font-size: 18px; font-weight: 800; line-height: 1; padding-top: 3px; }
 .ce-brand__num {
   position: absolute; top: 2px; left: 4px; font-size: 8px; font-weight: 600;
@@ -1548,6 +1551,8 @@ img { -webkit-user-drag: none; }
 }
 @keyframes splashout { to { opacity: 0; visibility: hidden; } }
 .ce-splash .ce-brand__el { box-shadow: 0 0 34px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+/* The launcher hero carries a soft accent halo — the one place the brand is big. */
+.ce-brandbtn.is-hero .ce-brand__el { box-shadow: 0 0 26px -6px color-mix(in srgb, var(--accent) 55%, transparent), 0 4px 12px -6px rgba(0,0,0,.9); }
 .ce-brand__el { transition: box-shadow .25s, transform .25s; }
 .ce-brandbtn:hover .ce-brand__el { box-shadow: 0 0 22px -4px color-mix(in srgb, var(--accent) 65%, transparent); transform: translateY(-1px); }
 
