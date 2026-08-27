@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     #: scorer. Off by default: a boost that is absent is not a regression, and the
     #: judgement on whether it helps belongs to the user's own footage (§4.57).
     vision_enabled: bool = False
+    #: Let the measured reaction of the room (crowd / laughter cues, B2) add one
+    #: light vote to the highlight scorer. Unlike the vision vote this is a
+    #: measurement the backend can always make — spectrum shape, level and
+    #: rhythm — so it is on, capped at `emotion.MAX_WEIGHT`, and its numbers are
+    #: shown in Settings → *Cut on emotion* → *Measure it*.
+    emotion_enabled: bool = True
     ollama_enabled: bool = False
     ollama_model: str = "llama3"
     pexels_api_key: str = ""

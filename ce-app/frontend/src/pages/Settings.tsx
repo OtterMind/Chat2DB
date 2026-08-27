@@ -9,6 +9,8 @@ import { assistantApi, type ProviderState } from '../api/assistant'
 import { vadApi, type VadComparison, type VadStatus } from '../api/vad'
 import { ocrApi, type OcrStatus } from '../api/ocr'
 import { visionApi, type VisionStatus } from '../api/vision'
+import { emotionApi, type EmotionPreview, type EmotionStatus } from '../api/emotion'
+import { providersApi, type ProviderShelf } from '../api/providers'
 import { pickMedia } from '../api/render'
 import GpuCard from '../components/GpuCard'
 import { formatBytes, updateBridge, type UpdatePayload } from '../services/updater'
@@ -373,6 +375,211 @@ function VisionCard() {
           ))}
         </div>
       )}
+    </Card>
+  )
+}
+
+
+/**
+ * B2 — cut on emotion.
+ *
+ * The card is honest about what is measured: the *sound* of a reaction
+ * (broadband roar, tonal bursts, whooshes), not a face-reading model. A face
+ * engine is listed as one of the possible voters and shown as absent until the
+ * on-demand MediaPipe model is fetched, because an absent engine that claims to
+ * be there is worse than no engine at all. *Measure it* runs the maths on a file
+ * the user picks and prints the cue values, so the verdict stays with their
+ * footage.
+ */
+function EmotionCard() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<EmotionStatus | null>(null)
+  const [preview, setPreview] = useState<EmotionPreview | null>(null)
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    emotionApi.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  const toggle = async (enabled: boolean) => {
+    try {
+      await emotionApi.enable(enabled)
+      setStatus(await emotionApi.status())
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const measure = async () => {
+    const picker = pickMedia()
+    const paths = picker ? await picker : null
+    if (!paths?.[0]) return
+    setBusy('measure')
+    try {
+      setPreview(await emotionApi.preview(paths[0], 10))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const fetchFace = async () => {
+    setBusy('face')
+    try {
+      await emotionApi.fetchFaceModel()
+      setStatus(await emotionApi.status())
+      message.success(t('Face model ready', 'مدل چهره آماده شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <Card title={t('Cut on the reaction', 'برش روی واکنش')}>
+      <p className="ce-hint">
+        {t(
+          'A goal and its celebration are equally loud, but they do not sound alike: a crowd is broadband noise, a voice is a tone. That difference is measured here and gets one light vote in the highlight scorer — never the deciding one.',
+          'گل و جشنِ بعد از گل هر دو بلندند، اما صدایشان یکی نیست: جمعیت نویز پهن‌باند است و صدا تُن. همین تفاوت اینجا سنجیده می‌شود و یک رأی سبک در امتیازدهنده‌ی هایلایت می‌گیرد — هیچ‌وقت رأی تعیین‌کننده نیست.'
+        )}
+      </p>
+      <div className="ce-kv" style={{ marginTop: 10, flexDirection: 'column', alignItems: 'stretch' }}>
+        {(status?.sources ?? []).map((row) => (
+          <span key={row.id} className="ce-rowline">
+            {row.active ? <CheckCircle2 size={13} /> : <span className="ce-dot ce-dot--off" />}
+            <strong>{row.name}</strong>
+            <Num>{row.licence}</Num>
+            <span className="ce-hint">{row.detail}</span>
+          </span>
+        ))}
+      </div>
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        <button
+          className={`ce-btn ce-btn--sm ${status?.enabled ? 'ce-btn--auto' : ''}`}
+          onClick={() => void toggle(!status?.enabled)}
+        >
+          {status?.enabled ? t('Turn off', 'خاموش کن') : t('Let the reaction vote', 'بگذار واکنش رأی بدهد')}
+        </button>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== ''} onClick={() => void measure()}>
+          <Sparkles size={14} />
+          {busy === 'measure' ? t('Measuring…', 'در حال سنجش…') : t('Measure it on a file', 'روی یک فایل بسنج')}
+        </button>
+        {status && !status.faceAvailable && (
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== ''} onClick={() => void fetchFace()}>
+            <Download size={14} />
+            {busy === 'face' ? t('Downloading…', 'در حال دانلود…') : t('Fetch the face model', 'گرفتن مدل چهره')}
+          </button>
+        )}
+      </div>
+      {preview && (
+        <div className="ce-kv" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+          <span className="ce-hint">
+            {t('mean reaction', 'میانگین واکنش')} <Num>{preview.meanJoy.toFixed(2)}</Num> ·{' '}
+            {t('measured frames', 'فریم سنجیده‌شده')} <Num>{preview.frames}</Num> ·{' '}
+            <Num>{preview.duration.toFixed(1)}s</Num>
+          </span>
+          {preview.peaks.map((row) => (
+            <span key={row.t} dir="ltr">
+              {row.t.toFixed(2)}s — joy <Num>{row.joy.toFixed(2)}</Num> crowd <Num>{row.crowd.toFixed(2)}</Num>{' '}
+              voiced <Num>{row.voiced.toFixed(2)}</Num> whoosh <Num>{row.whoosh.toFixed(2)}</Num>
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * B8 — the provider shelf.
+ *
+ * What is installed, what each one is allowed to do, what licence it declares,
+ * and whether it actually answers when started. The app never installs a
+ * provider and never imports one: this card only reports what the user put in
+ * the folder, including the reasons a folder is *not* a provider.
+ */
+function ProvidersCard() {
+  const { t } = useI18n()
+  const [shelf, setShelf] = useState<ProviderShelf | null>(null)
+  const [busy, setBusy] = useState('')
+
+  const refresh = () => providersApi.list().then(setShelf).catch(() => setShelf(null))
+  useEffect(() => { void refresh() }, [])
+
+  const toggle = async (id: string, enabled: boolean) => {
+    try {
+      await providersApi.enable(id, enabled)
+      await refresh()
+    } catch (err) {
+      message.error((err as Error).message)
+    }
+  }
+
+  const test = async (id: string) => {
+    setBusy(id)
+    try {
+      const out = await providersApi.test(id)
+      if (out.ok) message.success(`${id}: ${out.note}`)
+      else message.warning(`${id}: ${out.note}`)
+      await refresh()
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <Card title={t('Providers (plugins)', 'افزونه‌ها')}>
+      <p className="ce-hint">
+        {t(
+          'A provider is a folder with a manifest. It runs as its own process, so code the app could never ship — GPL, or a model with no licence to read — can still be used without touching this one. Drop a folder in',
+          'افزونه یک پوشه با یک فایل معرفی است. در پروسه‌ی جدا اجرا می‌شود، پس کدی که هرگز نمی‌توانیم داخل برنامه بیاوریم — GPL یا مدلی بدون مجوز قابل بررسی — بدون دست‌زدن به این برنامه قابل استفاده است. یک پوشه بینداز در'
+        )}{' '}
+        <Num>{shelf?.dir ?? '~/CuttingEdge/providers'}</Num>
+      </p>
+      <div className="ce-badges" style={{ marginTop: 10 }}>
+        {(shelf?.capabilities ?? []).map((cap) => (
+          <span className="ce-badge" key={cap.id} title={cap.contract}>
+            <Num>{cap.id}</Num>
+          </span>
+        ))}
+      </div>
+      {(shelf?.providers ?? []).length === 0 && (
+        <p className="ce-hint" style={{ marginTop: 10 }}>
+          {t('Nothing installed yet.', 'هنوز چیزی نصب نشده.')}
+        </p>
+      )}
+      <div className="ce-kv" style={{ marginTop: 10, flexDirection: 'column', alignItems: 'stretch' }}>
+        {(shelf?.providers ?? []).map((row) => (
+          <div key={row.id} className="ce-rowline">
+            <span className={`ce-dot ${row.enabled && !row.problems.length ? '' : 'ce-dot--off'}`} />
+            <strong>{row.name}</strong>
+            <Num>{row.licence || t('no licence declared', 'بدون مجوز')}</Num>
+            <span className="ce-hint">{(row.capabilities ?? []).join(' · ')}</span>
+            <span style={{ flex: 1 }} />
+            {row.problems.length > 0 ? (
+              <span className="ce-hint" style={{ color: 'var(--ce-neon-red)' }}>{row.problems[0]}</span>
+            ) : (
+              <>
+                <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== ''} onClick={() => void test(row.id)}>
+                  {busy === row.id ? t('Starting…', 'در حال اجرا…') : t('Test', 'آزمایش')}
+                </button>
+                <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void toggle(row.id, !row.enabled)}>
+                  {row.enabled ? t('Disable', 'غیرفعال') : t('Enable', 'فعال')}
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="ce-actions" style={{ marginTop: 12 }}>
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => void refresh()}>
+          <RefreshCw size={14} /> {t('Rescan the folder', 'اسکن دوباره‌ی پوشه')}
+        </button>
+      </div>
     </Card>
   )
 }
@@ -767,6 +974,10 @@ export default function Settings() {
       <EnginesCard />
 
       <VisionCard />
+
+      <EmotionCard />
+
+      <ProvidersCard />
     </Page>
   )
 }

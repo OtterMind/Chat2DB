@@ -185,7 +185,7 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
     # cleans whatever the aligner left (Veed-quality floor, offline)
     from core.engine import text_polish  # noqa: PLC0415
 
-    plain = [text_polish.polish(line, str(detected)) for line in plain]
+    plain, polished_by = text_polish.polish_lines(plain, str(detected))
     words = text_polish.polish_words(words, str(detected))
 
     return {
@@ -196,6 +196,9 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
         "words": words,
         "cues": group_words(words, max_chars=max_chars),
         "alignment": alignment,
+        # Which pass cleaned the text: "" is the built-in layer alone, anything
+        # else is the name of a provider the user installed (§B8).
+        "polishedBy": polished_by,
     }
 
 

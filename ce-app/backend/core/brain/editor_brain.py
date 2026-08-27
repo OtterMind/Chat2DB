@@ -55,6 +55,12 @@ TOOLS: list[dict] = [
      "when": "the noise floor is high", "signal": "noise"},
     {"id": "interchange", "en": "hand off to Premiere/Resolve (OTIO)", "fa": "تحویل به پریمیر/داونچی (OTIO)",
      "when": "you want to finish in a pro NLE", "signal": "handoff"},
+    {"id": "cut_on_emotion", "en": "cut on the reaction", "fa": "برش روی واکنش",
+     "when": "the room reacts — applause, laughter, a roar", "signal": "emotion"},
+    {"id": "multicam", "en": "switch between camera angles", "fa": "سوئیچ بین زاویه‌های دوربین",
+     "when": "more than one camera recorded the same moment", "signal": "angles"},
+    {"id": "providers", "en": "let an installed provider help", "fa": "کمک‌گرفتن از افزونه‌ی نصب‌شده",
+     "when": "the user plugged a provider in", "signal": "providers"},
 ]
 
 
@@ -77,6 +83,14 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
     handoff = bool(intent.get("finish_elsewhere") or intent.get("handoff"))
     kind = intent.get("kind", "")
     sport = kind in ("sport", "gaming") or action > 0.5
+    # Measured reaction of the room (crowd/laughter cues, `core/engine/emotion.py`).
+    emotion = float(footage.get("emotion", 0) or 0)
+    # How many camera angles recorded this material — 0 or 1 means there is nothing
+    # to switch between, and the switcher must not be offered.
+    angles = int(footage.get("angles", 0) or 0)
+    # Providers the user installed and enabled, as [{id, capabilities}] — never
+    # a guess about what is on their machine.
+    plugged = footage.get("providers") or []
 
     def d(tool: str, use: bool, reason_en: str, reason_fa: str) -> dict:
         t = next(x for x in TOOLS if x["id"] == tool)
@@ -122,10 +136,31 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
         d("hook_first", sport or kind in ("vlog", "product"),
           "short-form lives or dies in the first seconds" if sport else "not short-form",
           "فرم کوتاه در ثانیه‌های اول جان می‌گیرد" if sport else "فرم کوتاه نیست"),
-        d("denoise", False, "noise floor not measured yet", "کف نویز هنوز سنجیده نشده"),
+        d("denoise", any("audio.denoise" in (p.get("capabilities") or []) for p in plugged),
+          "a provider offers denoising — the noise floor itself is still unmeasured"
+          if any("audio.denoise" in (p.get("capabilities") or []) for p in plugged)
+          else "noise floor not measured and no denoiser installed",
+          "یک افزونه نویزگیری می‌دهد — خودِ کف نویز هنوز سنجیده نشده"
+          if any("audio.denoise" in (p.get("capabilities") or []) for p in plugged)
+          else "کف نویز سنجیده نشده و نویزگیری نصب نیست"),
         d("interchange", handoff,
           "handing off to a pro NLE — export OTIO" if handoff else "finishing here; no handoff asked",
           "تحویل به ان‌ال‌ای حرفه‌ای — خروجی OTIO" if handoff else "همین‌جا تمام می‌شود؛ تحویلی خواسته نشده"),
+        d("cut_on_emotion", emotion >= 0.15,
+          f"the room reacts (measured reaction {emotion:.2f})" if emotion >= 0.15
+          else "no measured reaction to cut on",
+          f"جمعیت واکنش نشان می‌دهد (واکنش سنجیده‌شده {emotion:.2f})" if emotion >= 0.15
+          else "واکنش سنجیده‌شده‌ای برای برش نیست"),
+        d("multicam", angles >= 2,
+          f"{angles} angles to line up and switch" if angles >= 2
+          else "one camera — nothing to switch to",
+          f"{angles} زاویه برای هم‌ترازی و سوئیچ" if angles >= 2
+          else "یک دوربین — زاویه‌ی دومی برای سوئیچ نیست"),
+        d("providers", bool(plugged),
+          "installed: " + ", ".join(str(p.get("id")) for p in plugged[:3]) if plugged
+          else "no provider installed (~/CuttingEdge/providers)",
+          "نصب‌شده: " + "، ".join(str(p.get("id")) for p in plugged[:3]) if plugged
+          else "افزونه‌ای نصب نیست (~/CuttingEdge/providers)"),
     ]
     return out
 

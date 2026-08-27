@@ -122,8 +122,20 @@ def measure_footage(path: str) -> dict:
         except Exception:  # noqa: BLE001 — a silent-file edge must not kill the brain
             speech_ratio = 0.0
     peak, presence = style._coarse_action(path, duration) if duration > 0 else (0.0, 0.0)
+    # How much the room reacts over the whole file — the crowd/laughter cues from
+    # `core/engine/emotion.py`. A measurement like the others, and cached with the
+    # rest of the audio maths; a file with no audio simply has no reaction.
+    reaction = 0.0
+    if duration > 0:
+        try:
+            from core.engine import emotion  # noqa: PLC0415
+
+            cues = emotion.audio_cues(path)
+            reaction = float(sum(cues.joy) / len(cues.joy)) if cues.joy else 0.0
+        except Exception:  # noqa: BLE001 — no audio is a normal answer
+            reaction = 0.0
     return {"duration": duration, "aspect": aspect, "speech_ratio": speech_ratio,
-            "action": float(peak), "presence": float(presence),
+            "action": float(peak), "presence": float(presence), "emotion": round(reaction, 4),
             "vertical": bool(height > width)}
 
 

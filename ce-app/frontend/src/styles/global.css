@@ -376,6 +376,30 @@ button { font-family: inherit; cursor: pointer; }
 .ce-dot--processing { background: #6366f1; }
 .ce-dot--done { background: #22c55e; }
 .ce-dot--failed { background: #f87171; }
+/* Absent, not broken: a provider or engine that is simply not there. Same size
+   as the others so a row does not move when a status changes. */
+.ce-dot--off { background: var(--ce-text-disabled); flex: 0 0 auto; }
+
+/* One status row: dot, name, licence, detail, then the controls at the end.
+   Used by the provider shelf and the emotion voters, where each line is a
+   thing on this machine and not a promise. */
+.ce-rowline {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 0; border-bottom: 1px solid var(--ce-border);
+  font-size: 12.5px;
+}
+.ce-rowline:last-child { border-bottom: 0; }
+.ce-rowline strong { font-weight: 600; }
+
+/* The small form control the inline panels use (multi-cam mode/dwell and
+   friends): same 6 px radius and hairline border as the rest of the Hybrid
+   system, so a control in a modal matches the one in Settings. */
+.ce-input {
+  height: 28px; padding: 0 8px; border-radius: var(--ce-radius-sm);
+  border: 1px solid var(--ce-border); background: var(--ce-bg-elev);
+  color: var(--ce-text); font: inherit; font-size: 12.5px;
+}
+.ce-input:focus { outline: none; border-color: var(--ce-neon-pink); }
 
 .ce-empty {
   border: 1px dashed var(--border); border-radius: 14px; padding: 26px;

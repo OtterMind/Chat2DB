@@ -1191,6 +1191,41 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+123. **The three deferred advisors' items are built, not promised (B2, B3, B8).**
+    *B2 Cut-on-Emotion*: `core/engine/emotion.py` measures the *sound* of a
+    reaction with the maths the backend already ships — `crowd` (broadband, loud,
+    not tonal), `voiced` (tonal bursts with a 2–9 Hz rhythm), `whoosh` (a fast
+    broadband rise that dies again) — and feeds `joy = 0.9·crowd + 0.3·voiced`
+    into the highlight scorer as one capped vote (`MAX_WEIGHT 0.25`, on by
+    default, toggle + *Measure it* in Settings). Measured on synthetic fixtures:
+    applause joy 0.57 vs a steady voice 0.30, and a sustained clap bed no longer
+    reads as a whoosh. There is no `vit-fer` on PyPI (404 ×3), so there is no
+    wheel whose METADATA could be read — the visual half is two honest optional
+    doors instead: MediaPipe FaceLandmarker blendshapes (Apache-2.0, fetched on
+    demand, named as *action units*) and an `emotion.score` provider.
+    *B3 Multi-cam*: `core/engine/multicam.py` finds each angle's offset by the
+    normalised cross-correlation of their audio — the lag is the offset and the
+    peak is the confidence, verified numerically to have the right sign — then
+    builds a switch plan whose cuts follow the loudest talker / crowd with a
+    minimum dwell and hysteresis. Driven end to end in the browser: two angles
+    imported, aligned (offset +2.0 s on a delayed copy, confidence 1.0), planned
+    in crowd mode (one switch at the burst), and the segments landed on the
+    timeline.
+    *B8 Providers*: `core/providers/channel.py` is a VSCode-style channel into
+    `~/CuttingEdge/providers/<name>/` — a manifest declares `licence` and
+    `capabilities`, the provider runs as its **own subprocess** over a line-JSON
+    protocol, and nothing is imported, so GPL or licence-less code can be used
+    without touching this app. Two capability consumers are wired for real:
+    `captions.polish` (one batched call after the built-in clean, with a rewrite
+    guard) and `emotion.score`. Broken, slow, lying or disabled providers are
+    reported and ignored, never raised.
+    The brain's toolbelt gained `cut_on_emotion`, `multicam` and `providers`
+    (each with a measured decision, and `denoise` now honestly offered only when
+    a provider declares `audio.denoise`). Suites: backend **454 passed / 0
+    failed / 10 skipped** (was 414 before these); UI audit PASSED; playback
+    all-checks-passed; a targeted 13/13 browser check of the three new cards plus
+    a full multi-cam E2E, all on the production bundle.
+
 122. **0.9.36 — sections A, B, C finished and wired to the new UI.** A done:
     A4 `_safe_path` gate on captions/render/media (absolute, no traversal, exists,
     ≤4 GB); A5 Ollama warm-up ping with `warmup slow` in the scoreboard note;

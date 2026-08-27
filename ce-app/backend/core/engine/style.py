@@ -647,6 +647,27 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
                 candidate["signals"]["vision"] = float(scores[at])
             has_vision = True
 
+    # ---- emotion: how the room reacted (B2) ------------------------------
+    # The celebration outranks the goal, and level alone cannot tell them apart:
+    # applause and laughter are broadband and rhythmic, a voice is tonal. Those
+    # are measurements, so unlike the vision vote this is on — but capped at the
+    # same small weight, because its thresholds have not been verified on the
+    # user's footage and a new sense gets a seat, not the chairman's vote.
+    from core.engine import emotion as emotion_engine
+
+    has_emotion = False
+    if settings.emotion_enabled and emotion_engine.available():
+        moments = [c["start"] + (c["end"] - c["start"]) / 2 for c in finalists]
+        try:
+            reacted = emotion_engine.score_moments(path, moments)
+        except Exception:  # noqa: BLE001 — no audio, no cues, no vote
+            reacted = {}
+        if reacted:
+            for candidate in finalists:
+                at = min(reacted, key=lambda t: abs(t - (candidate["start"] + (candidate["end"] - candidate["start"]) / 2)))
+                candidate["signals"]["emotion"] = float(reacted[at])
+            has_emotion = True
+
     # ---- normalise across the finalists, then weigh ---------------------
     # Relative on purpose: "the strongest moment in this file" is a comparison
     # between moments, and an absolute threshold would rank a quiet recording
@@ -654,8 +675,10 @@ def _highlights(path: str, wanted: int, minimum: float, window: float = 0.0,
     _w = dict(weights)
     if has_vision:
         _w["vision"] = vision_engine.MAX_WEIGHT
+    if has_emotion:
+        _w["emotion"] = emotion_engine.MAX_WEIGHT
 
-    active = [key for key in ("speech", "motion", "onset", "edge", "vision", "action", "presence")
+    active = [key for key in ("speech", "motion", "onset", "edge", "vision", "action", "presence", "emotion")
               if _w.get(key, 0.0) > 0.0 and any(key in c["signals"] for c in finalists)]
     ranges: dict[str, tuple[float, float]] = {}
     for key in active:
@@ -1177,6 +1200,25 @@ def build_timeline(
     elif (data.get("audio") or {}).get("musicUnderVoice", 0.0) < 0:
         skipped.append("music (the template has one, you did not give me a track)")
 
+    # What the brain is told about the machine and the room, measured here so the
+    # editor's notes are never a guess: the reaction of the crowd in the source,
+    # and the providers the user actually installed.
+    reaction = 0.0
+    try:
+        from core.engine import emotion as emotion_engine  # noqa: PLC0415
+
+        _cues = emotion_engine.audio_cues(source)
+        reaction = float(sum(_cues.joy) / len(_cues.joy)) if _cues.joy else 0.0
+    except Exception:  # noqa: BLE001 — no audio means no reaction to report
+        reaction = 0.0
+    try:
+        from core.providers import channel as providers  # noqa: PLC0415
+
+        plugged = [{"id": p["id"], "capabilities": p.get("capabilities") or []}
+                   for p in providers.discover() if p.get("enabled") and not p.get("problems")]
+    except Exception:  # noqa: BLE001
+        plugged = []
+
     say("done", 1.0, "Edit ready")
     return {
         "name": name,
@@ -1195,7 +1237,9 @@ def build_timeline(
             data,
             {"speech_ratio": speech_ratio,
              "action": _coarse_action(source, source_duration)[0],
-             "presence": _coarse_action(source, source_duration)[1]},
+             "presence": _coarse_action(source, source_duration)[1],
+             "emotion": reaction,
+             "providers": plugged},
             intent=wanted.as_dict(),
         ),
         "summary": {

@@ -16,6 +16,9 @@
 > | 0.9.31 | brain interrogates itself (no on-screen questionnaire), quality ladder + multilingual spelling floor + guarded LLM proof-read + SRT + confidence-tinted words | STATE §118 |
 > | 0.9.32 | screen/webcam recorder, brand kit (watermark + animated progress bar), multi-platform export queue | STATE §119 |
 > | 0.9.33→0.9.34 | field fixes (torch wording, MB-accurate progress, `umx` name) + chapters, hook title, one-click recipes | STATE §120 |
+| 0.9.35 | Hybrid redesign from the root + advisors' P0/P1 debug fixes (WS broadcast, pip watchdog, thread-local sqlite, RAF pause) | STATE §121 |
+| 0.9.36 | sections A+B+C wired to the new UI: Director Mode, beat-synced word pop, recipes, storyboard, PerfHud, planner race with per-plan apply | STATE §122 |
+| *(next)* | **B2 cut-on-emotion** (crowd/voiced/whoosh cues → one capped highlight vote), **B3 multi-cam** (audio x-correlation offsets + dwell/hysteresis switch plan), **B8 provider channel** (out-of-process plugins, licence-declared, batched `captions.polish` + `emotion.score`) | STATE §123, `PROVIDERS.md` |
 >
 > ### Gates still open on the way to 1.0
 >
@@ -30,7 +33,7 @@
 > reasons), `MANUAL.md`, `CLEAN_INSTALL_CHECKLIST.md`, `ARCHITECTURE.md`,
 > `OSS_SURVEY_0.3.8.md` / `OSS_SWEEP_0.9.2.md` (licence gates).
 >
-> Test posture at 0.9.34: **424 backend tests, 0 failures**; `npm run verify`
+> Test posture at the next release: **454 backend tests, 0 failures**; `npm run verify`
 > (tsc + bridge + shutdown contracts); `test:ui` and the 71-check
 > `playback-test` run against the **production bundle**; every release is
 > exercised in CI before publishing.
