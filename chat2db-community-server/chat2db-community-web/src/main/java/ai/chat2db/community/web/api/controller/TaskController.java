@@ -82,11 +82,6 @@ public class TaskController {
                 request.effectiveLimit()));
     }
 
-    @PostMapping("/cancel")
-    public DataResult<Task> cancel(@Valid @RequestBody TaskIdRequest request) {
-        return DataResult.of(taskService.cancel(request.getTaskId()));
-    }
-
     @DeleteMapping("/delete")
     public ActionResult delete(@Valid TaskIdRequest request) {
         taskService.delete(request.getTaskId());

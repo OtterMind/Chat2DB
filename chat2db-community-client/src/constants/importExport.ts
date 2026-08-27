@@ -28,4 +28,7 @@ export enum ImportExportTaskStatus {
   CANCELLED = 'CANCELLED',
 }
 
-export const ACTIVE_TASK_STATUSES = [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING];
+export const ACTIVE_TASK_STATUSES: ImportExportTaskStatus[] = [
+  ImportExportTaskStatus.PENDING,
+  ImportExportTaskStatus.RUNNING,
+];

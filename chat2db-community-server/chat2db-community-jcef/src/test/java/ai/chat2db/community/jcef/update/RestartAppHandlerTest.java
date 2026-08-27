@@ -32,9 +32,11 @@ class RestartAppHandlerTest {
     void tearDown() throws ReflectiveOperationException {
         setBrowser(originalBrowser);
         ApplicationExitCoordinator.cancel("restart-test");
+        ApplicationExitCoordinator.markFrontendUnavailable();
         DesktopUpdaterRegistry.resetForTests();
         System.clearProperty("chat2db.runtime.mode");
         System.clearProperty("chat2db.mode");
+        System.clearProperty("chat2db.network.status");
     }
 
     @Test
@@ -97,6 +99,38 @@ class RestartAppHandlerTest {
     }
 
     @Test
+    void desktopLocalRestartUsesTheSameApplicationExitProtocol() throws ReflectiveOperationException {
+        useDesktopLocalRuntime();
+        setBrowser(browserProxy());
+        StubDesktopUpdater updater = new StubDesktopUpdater(true);
+        DesktopUpdaterRegistry.register(updater);
+
+        CallbackResult callbackResult = restart();
+
+        assertEquals(0, updater.prepareCount.get());
+        assertEquals(0, updater.exitCount.get());
+        assertTrue(callbackResult.successResponse.get().contains("\"accepted\":true"));
+        assertTrue(ApplicationExitCoordinator.confirm("restart-test"));
+        assertEquals(1, updater.prepareCount.get());
+        assertEquals(1, updater.exitCount.get());
+    }
+
+    @Test
+    void desktopDispatchFailureFallsBackToTheConfirmedAction() throws ReflectiveOperationException {
+        useDesktopCommunityRuntime();
+        setBrowser(throwingBrowserProxy());
+        StubDesktopUpdater updater = new StubDesktopUpdater(true);
+        DesktopUpdaterRegistry.register(updater);
+
+        CallbackResult callbackResult = restart();
+
+        assertEquals(1, updater.prepareCount.get());
+        assertEquals(1, updater.exitCount.get());
+        assertTrue(callbackResult.successResponse.get().contains("\"accepted\":true"));
+        assertFalse(ApplicationExitCoordinator.cancel("restart-test"));
+    }
+
+    @Test
     void mismatchedOperationCannotCancelDesktopRestart() throws ReflectiveOperationException {
         useDesktopCommunityRuntime();
         setBrowser(browserProxy());
@@ -131,6 +165,14 @@ class RestartAppHandlerTest {
     private void useDesktopCommunityRuntime() {
         System.setProperty("chat2db.runtime.mode", "community");
         System.setProperty("chat2db.mode", "DESKTOP");
+        ApplicationExitCoordinator.markFrontendReady();
+    }
+
+    private void useDesktopLocalRuntime() {
+        System.setProperty("chat2db.runtime.mode", "pro");
+        System.setProperty("chat2db.network.status", "OFFLINE");
+        System.setProperty("chat2db.mode", "DESKTOP");
+        ApplicationExitCoordinator.markFrontendReady();
     }
 
     private void setBrowser(CefBrowser browser) throws ReflectiveOperationException {
@@ -144,6 +186,28 @@ class RestartAppHandlerTest {
                 CefBrowser.class.getClassLoader(),
                 new Class<?>[]{CefBrowser.class},
                 (proxy, method, args) -> {
+                    if (method.getReturnType().equals(boolean.class)) {
+                        return false;
+                    }
+                    if (method.getReturnType().equals(int.class)) {
+                        return 0;
+                    }
+                    if (method.getReturnType().equals(long.class)) {
+                        return 0L;
+                    }
+                    return null;
+                }
+        );
+    }
+
+    private CefBrowser throwingBrowserProxy() {
+        return (CefBrowser) Proxy.newProxyInstance(
+                CefBrowser.class.getClassLoader(),
+                new Class<?>[]{CefBrowser.class},
+                (proxy, method, args) -> {
+                    if ("executeJavaScript".equals(method.getName())) {
+                        throw new IllegalStateException("renderer unavailable");
+                    }
                     if (method.getReturnType().equals(boolean.class)) {
                         return false;
                     }

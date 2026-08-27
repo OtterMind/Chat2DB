@@ -9,6 +9,7 @@ import {
   mergeTaskEvents,
   mergeTasks,
   reconcileCompletedTaskNotifications,
+  shouldKeepTaskPolling,
   shouldRetryTaskPolling,
 } from './taskCenterUtils';
 import { ErrorCode } from '@/constants/request';
@@ -112,6 +113,9 @@ function testPollingDelay() {
   assert.equal(getTaskPollingDelay(1), 1000);
   assert.equal(getTaskPollingDelay(0), null);
   assert.equal(getTaskPollingDelay(0, true), FAILED_TASK_POLL_INTERVAL);
+  assert.equal(shouldKeepTaskPolling(true, 0), true);
+  assert.equal(shouldKeepTaskPolling(false, 1), true);
+  assert.equal(shouldKeepTaskPolling(false, 0), false);
 }
 
 function testPollingRetryPolicy() {

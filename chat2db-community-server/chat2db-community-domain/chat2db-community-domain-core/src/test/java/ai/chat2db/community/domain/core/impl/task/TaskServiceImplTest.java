@@ -69,7 +69,6 @@ class TaskServiceImplTest {
         assertEquals(1, service.listEvents(1L, 0L, 10).size());
         assertEquals(List.of(), service.listEvents(2L, 0L, 10));
         assertEquals(List.of(), service.listEventsBefore(3L, null, 10));
-        assertNull(service.cancel(2L));
         assertThrows(DataNotFoundException.class, () -> service.delete(2L));
         assertThrows(DataNotFoundException.class, () -> service.delete(3L));
         assertThrows(DataNotFoundException.class, () -> service.resolveArtifact(2L));

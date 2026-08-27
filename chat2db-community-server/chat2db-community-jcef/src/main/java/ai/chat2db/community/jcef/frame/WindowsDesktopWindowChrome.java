@@ -13,17 +13,17 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.Function;
 
-final class WindowsCommunityWindowChrome {
+final class WindowsDesktopWindowChrome {
 
     static final int TITLE_BAR_HEIGHT = 34;
     private static final int WEB_APP_MENU_RESERVED_WIDTH = 220;
     private static final int WEB_TRAILING_ACTIONS_RESERVED_WIDTH = 320;
 
-    private WindowsCommunityWindowChrome() {
+    private WindowsDesktopWindowChrome() {
     }
 
-    static boolean isEnabled(boolean windows, boolean community) {
-        return windows && community;
+    static boolean isEnabled(boolean windows) {
+        return windows;
     }
 
     static void configureRootPane(JRootPane rootPane) {

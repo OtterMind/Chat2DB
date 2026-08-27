@@ -8,7 +8,7 @@ import ImportFileModal from '@/blocks/ImportAndExport/components/ImportFileModal
 import importExportServices from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import LogModal from '@/blocks/ImportAndExport/components/LogModal';
-import { ImportExportTaskStatus } from '@/constants/importExport';
+import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/importExport';
 import dayjs from 'dayjs';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
@@ -101,8 +101,9 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
 
   useEffect(() => {
     setTaskCenterOpen(true);
+    void getTaskList();
     return () => setTaskCenterOpen(false);
-  }, [setTaskCenterOpen]);
+  }, [getTaskList, setTaskCenterOpen]);
 
   const openArtifact = (task) => {
     if (isDesktop && task.artifactId) {
@@ -110,12 +111,6 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
       return;
     }
     window.open(`/api/tasks/artifact?taskId=${task.id}`, '_blank');
-  };
-
-  const handleStopTask = (id) => {
-    importExportServices.cancelTask({ taskId: id }).then(() => {
-      getTaskList();
-    });
   };
 
   const handleDeleteTask = (task: ImportExportTaskDetails) => {
@@ -156,8 +151,7 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
         {taskList.length ? (
           <>
             {taskList.map((item) => {
-              const canCancel =
-                item.status === ImportExportTaskStatus.PENDING || item.status === ImportExportTaskStatus.RUNNING;
+              const isActive = ACTIVE_TASK_STATUSES.includes(item.status);
               const statusLabel = i18n(TASK_STATUS_I18N_KEYS[item.status]);
               const startTime = formatTaskTime(item.startedAt, 'YYYY-MM-DD HH:mm:ss');
               const endTime = formatTaskTime(item.finishedAt);
@@ -210,22 +204,16 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         <span className={styles.taskName}>{item.name}</span>
                       </Tooltip>
                     </div>
-                    {canCancel && (
-                      <div className={styles.listItemRight}>
-                        <IconButton
-                          code={'icon-close'}
-                          size={{ boxSize: 14, iconSize: 12, borderRadius: 14 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStopTask(item.id);
-                          }}
-                        />
-                      </div>
-                    )}
                     <div className={styles.listItemLeft}>
                       <time>{startTime}</time>
-                      <span aria-hidden>-</span>
-                      <time>{endTime}</time>
+                      <span aria-hidden>{isActive ? '·' : '-'}</span>
+                      {isActive ? (
+                        <span className={styles.activeStatus} data-status={item.status}>
+                          {statusLabel}
+                        </span>
+                      ) : (
+                        <time>{endTime}</time>
+                      )}
                       <span aria-hidden>·</span>
                       <span>
                         {i18n('common.text.timeConsuming')} {duration}
@@ -242,7 +230,7 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         <span className={styles.taskProgressValue}>{progress}%</span>
                       </div>
                     )}
-                    {!canCancel && (
+                    {!isActive && (
                       <div className={styles.taskActions}>
                         {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
                           <IconButton

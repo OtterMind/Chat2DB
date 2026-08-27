@@ -5,6 +5,8 @@ export interface ApplicationExitConfirmation {
 }
 
 interface ApplicationExitOperations {
+  confirmDirtyEditors: () => Promise<boolean>;
+  shouldManageTasks: () => boolean;
   getActiveTaskCount: () => Promise<number>;
   prepareUserExit: () => Promise<void>;
   abortUserExit: () => Promise<void>;
@@ -14,29 +16,42 @@ interface ApplicationExitOperations {
   onCancel: () => void;
 }
 
-const finishApplicationExit = async (operations: ApplicationExitOperations) => {
+const finishApplicationExit = async (operations: ApplicationExitOperations, manageTasks: boolean) => {
   try {
-    await operations.prepareUserExit();
+    if (manageTasks) {
+      await operations.prepareUserExit();
+    }
     const confirmed = await operations.confirmCloseWindow();
     if (!confirmed) {
       throw new Error('No pending application exit request');
     }
   } catch (error) {
-    await operations.abortUserExit().catch(() => undefined);
+    if (manageTasks) {
+      await operations.abortUserExit().catch(() => undefined);
+    }
     await operations.cancelApplicationExit().catch(() => undefined);
     throw error;
   }
 };
 
 export const coordinateApplicationExit = async (operations: ApplicationExitOperations) => {
+  if (!(await operations.confirmDirtyEditors())) {
+    operations.onCancel();
+    return;
+  }
+  const manageTasks = operations.shouldManageTasks();
+  if (!manageTasks) {
+    await finishApplicationExit(operations, false);
+    return;
+  }
   const activeTaskCount = await operations.getActiveTaskCount();
   if (activeTaskCount > 0) {
     operations.requestConfirmation({
       activeTaskCount,
       onCancel: operations.onCancel,
-      onConfirm: () => finishApplicationExit(operations),
+      onConfirm: () => finishApplicationExit(operations, true),
     });
     return;
   }
-  await finishApplicationExit(operations);
+  await finishApplicationExit(operations, true);
 };

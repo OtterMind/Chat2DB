@@ -13,7 +13,7 @@ import { openWebPage } from '@/utils/url';
 
 import { useStyles } from './style';
 
-const CommunityAppMenu = () => {
+const DesktopAppMenu = () => {
   const { styles } = useStyles();
   const appUrlConfig = useGlobalStore((state) => state.appUrlConfig);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -111,12 +111,12 @@ const CommunityAppMenu = () => {
   };
 
   return (
-    <div ref={menuRef} className={styles.communityMenuContent} onDoubleClick={stopWindowGesture}>
-      <span className={styles.communityMenuLogoSlot}>
-        <ProductLogo className={styles.communityMenuLogo} size={24} />
+    <div ref={menuRef} className={styles.desktopMenuContent} onDoubleClick={stopWindowGesture}>
+      <span className={styles.desktopMenuLogoSlot}>
+        <ProductLogo className={styles.desktopMenuLogo} size={24} />
       </span>
       {expanded ? (
-        <div className={styles.communityMenuBar}>
+        <div className={styles.desktopMenuBar}>
           <Dropdown
             destroyPopupOnHide
             menu={{ items: viewItems }}
@@ -127,7 +127,7 @@ const CommunityAppMenu = () => {
           >
             <button
               type="button"
-              className={styles.communityMenuItem}
+              className={styles.desktopMenuItem}
               onMouseEnter={() => switchOpenMenu('view')}
             >
               {i18n('common.menu.view')}
@@ -143,7 +143,7 @@ const CommunityAppMenu = () => {
           >
             <button
               type="button"
-              className={styles.communityMenuItem}
+              className={styles.desktopMenuItem}
               onMouseEnter={() => switchOpenMenu('help')}
             >
               {i18n('common.menu.help')}
@@ -164,4 +164,4 @@ const CommunityAppMenu = () => {
   );
 };
 
-export default CommunityAppMenu;
+export default DesktopAppMenu;

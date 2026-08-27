@@ -6,7 +6,6 @@ import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
-import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
@@ -126,59 +125,6 @@ public class LocalTaskManager {
             throw new IllegalArgumentException("Task type is required");
         }
         taskExecutorRegistry.require(spec);
-    }
-
-    Task cancel(Long taskId) {
-        lifecycleLock.lock();
-        try {
-            RunningTask runningTask = runningTaskRegistry.get(taskId);
-            Task task = taskStorage.get(taskId).orElse(null);
-            if (task == null || task.getStatus() == null || TaskStatus.isTerminal(task.getStatus())
-                    || runningTask == null) {
-                return task;
-            }
-            runningTask.completionLock().lock();
-            try {
-                task = taskStorage.get(taskId).orElse(task);
-                if (TaskStatus.isTerminal(task.getStatus()) || runningTask.isClosed()) {
-                    return task;
-                }
-                if (TaskStatus.PENDING.name().equals(task.getStatus())) {
-                    runningTask.requestCancellation(false);
-                    Date now = new Date();
-                    taskStorage.compareAndSetStatus(taskId, TaskStatus.PENDING.name(), TaskStatus.CANCELLED.name(),
-                            TaskStatusPatch.builder()
-                                    .progressMessage("Task cancelled before execution")
-                                    .finishedAt(now)
-                                    .updatedAt(now)
-                                    .build(),
-                            event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(),
-                                    "Task cancelled before execution"));
-                    runningTask.close();
-                    runningTask.markFinished();
-                    runningTaskRegistry.remove(taskId, runningTask);
-                } else if (TaskStatus.RUNNING.name().equals(task.getStatus())) {
-                    taskStorage.appendEvent(TaskEvent.builder()
-                            .taskId(taskId)
-                            .level(TaskEventLevel.INFO.name())
-                            .code(TaskEventCode.TASK_CANCEL_ACCEPTED.name())
-                            .message("Task cancellation accepted")
-                            .details(Collections.emptyMap())
-                            .build());
-                    taskStorage.updateProgressIfRunning(taskId, TaskProgress.builder()
-                            .progress(task.getProgress())
-                            .stage(task.getStage())
-                            .message("Cancelling task")
-                            .build());
-                    runningTask.requestCancellation(true);
-                }
-                return taskStorage.get(taskId).orElse(task);
-            } finally {
-                runningTask.completionLock().unlock();
-            }
-        } finally {
-            lifecycleLock.unlock();
-        }
     }
 
     int activeTaskCount(Long userId, Long organizationId) {

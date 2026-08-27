@@ -24,7 +24,7 @@ export const useStyles = createStyles(({ css, token }) => {
     windowsAppBar: css`
       height: 34px;
     `,
-    communityAppBar: css`
+    integratedAppBar: css`
       height: ${COMMUNITY_TITLE_BAR_HEIGHT}px;
     `,
     titleBarActions: css`
@@ -44,7 +44,7 @@ export const useStyles = createStyles(({ css, token }) => {
     windowsDesktopTitleBarActions: css`
       right: 144px;
     `,
-    communityMenu: css`
+    desktopMenu: css`
       position: absolute;
       top: 0;
       left: ${(COMMUNITY_MAIN_ACTION_BAR_WIDTH - COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize) / 2}px;
@@ -54,14 +54,14 @@ export const useStyles = createStyles(({ css, token }) => {
       height: 100%;
       -webkit-app-region: no-drag;
     `,
-    communityMenuContent: css`
+    desktopMenuContent: css`
       display: flex;
       align-items: center;
       gap: 2px;
       height: 100%;
       -webkit-app-region: no-drag;
     `,
-    communityMenuLogoSlot: css`
+    desktopMenuLogoSlot: css`
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -69,20 +69,20 @@ export const useStyles = createStyles(({ css, token }) => {
       height: ${COMMUNITY_MAIN_ACTION_BUTTON_SIZE.boxSize}px;
       flex-shrink: 0;
     `,
-    communityMenuLogo: css`
+    desktopMenuLogo: css`
       display: block;
       width: 20px;
       height: 20px;
       border-radius: 4px;
       object-fit: contain;
     `,
-    communityMenuBar: css`
+    desktopMenuBar: css`
       display: flex;
       align-items: center;
       gap: 2px;
       height: 100%;
     `,
-    communityMenuItem: css`
+    desktopMenuItem: css`
       display: inline-flex;
       align-items: center;
       height: 30px;
@@ -108,7 +108,7 @@ export const useStyles = createStyles(({ css, token }) => {
       padding-left: 12px;
       flex: 1;
     `,
-    communityLogoContainer: css`
+    integratedLogoContainer: css`
       position: absolute;
       inset: 0;
       padding: 0;
@@ -120,7 +120,7 @@ export const useStyles = createStyles(({ css, token }) => {
       text-align: center;
       -webkit-app-region: no-drag;
     `,
-    communityAppName: css`
+    integratedAppName: css`
       font-size: 14px;
       line-height: ${COMMUNITY_TITLE_BAR_HEIGHT}px;
       font-weight: 600;

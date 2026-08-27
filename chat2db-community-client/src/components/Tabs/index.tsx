@@ -32,6 +32,7 @@ import {
   registerCloseActiveResultTabHandler,
 } from '@/service/resultTabShortcut';
 import { shouldProcessTabScrollRequest, type ProcessedTabScrollRequest } from './activeTabScroll';
+import { getTabWheelScrollAmount } from './wheelScroll';
 
 export interface ITabItem {
   prefixIcon?: string | React.ReactNode;
@@ -280,30 +281,19 @@ export default memo<IProps>((props) => {
   }, [items]);
 
   useUpdateEffect(() => {
-    const fn = (e) => {
-      if (e.deltaY) {
-        e.preventDefault();
-  // Use the mouse wheel to scroll tabs horizontally.
-        if (tabListBoxRef.current) {
-          const deltaY = Math.abs(e.deltaY);
-          let scrollAmount = 0;
-          console.log('deltaY', deltaY);
-          if (deltaY < 10) {
-            scrollAmount = e.deltaY;
-          } else if (deltaY < 30) {
-            scrollAmount = e.deltaY * 0.5;
-          } else {
-            scrollAmount = e.deltaY * 0.2;
-          }
-          tabListBoxRef.current.scrollLeft += scrollAmount;
-        }
+    const handleWheel = (event: WheelEvent) => {
+      const scrollAmount = getTabWheelScrollAmount(event.deltaX, event.deltaY);
+      if (scrollAmount === null || !tabListBoxRef.current) {
+        return;
       }
+
+      event.preventDefault();
+      tabListBoxRef.current.scrollLeft += scrollAmount;
     };
     const tabListBoxContent = tabListBoxRef.current;
-    tabListBoxContent?.removeEventListener('wheel', fn);
-    tabListBoxRef.current?.addEventListener('wheel', fn);
+    tabListBoxContent?.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
-      tabListBoxContent?.removeEventListener('wheel', fn);
+      tabListBoxContent?.removeEventListener('wheel', handleWheel);
     };
   }, [internalTabs]);
 

@@ -7,9 +7,9 @@ import { history } from 'umi';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
-import CommunityAppMenu from './CommunityAppMenu';
+import DesktopAppMenu from './DesktopAppMenu';
 import { COMMUNITY_TITLE_BAR_HEIGHT } from '@/constants/mainLayout';
-import { resolveTitleBarPlatform } from './platform';
+import { resolveTitleBarPlatform, shouldUseWindowsDesktopChrome } from './platform';
 
 interface AppBarProps {
   className?: string;
@@ -19,6 +19,8 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   const { styles, cx } = useStyles();
   const appTitleBarRightComponent = useGlobalStore((state) => state.appTitleBarRightComponent);
   const { isMac, isWindows } = resolveTitleBarPlatform(window.navigator.os_type, window.navigator.userAgent);
+  const useWindowsDesktopChrome = shouldUseWindowsDesktopChrome(isWindows, isDesktop);
+  const useIntegratedTitleBar = isCommunityEnv || useWindowsDesktopChrome;
   const [isMaximized, setIsMaximized] = useState(false);
 
   const syncWindowMaximized = useCallback(() => {
@@ -29,7 +31,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
   }, []);
 
   useEffect(() => {
-    if (!isCommunityEnv || !isWindows || !isDesktop) {
+    if (!useWindowsDesktopChrome) {
       return;
     }
 
@@ -45,7 +47,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
       window.removeEventListener('resize', handleResize);
       window.clearTimeout(resizeTimer);
     };
-  }, [isWindows, syncWindowMaximized]);
+  }, [syncWindowMaximized, useWindowsDesktopChrome]);
 
   const items: MenuProps['items'] = [
     {
@@ -116,7 +118,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     jcefApi.closeWindow();
   };
 
-  if (!isMac && !isCommunityEnv) {
+  if (!isMac && !useIntegratedTitleBar) {
     // const showLeftContainer = checkIsSharePage();
     // if (__WEBAPP__ && !isEmbedIframe && !showLeftContainer) {
     //   window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
@@ -140,7 +142,7 @@ const AppBar = memo<AppBarProps>(({ className }) => {
     return <></>;
   }
 
-  window._appTitleBarHeight = isCommunityEnv ? COMMUNITY_TITLE_BAR_HEIGHT : 30;
+  window._appTitleBarHeight = useIntegratedTitleBar ? COMMUNITY_TITLE_BAR_HEIGHT : 30;
 
   // When testing appBar on the web side, comment out the if else code above and open the comment code below.
   // window._appTitleBarHeight = COMMUNITY_TITLE_BAR_HEIGHT;
@@ -151,36 +153,36 @@ const AppBar = memo<AppBarProps>(({ className }) => {
         styles.appBar,
         {
           [styles.windowsAppBar]: !isMac,
-          [styles.communityAppBar]: isCommunityEnv,
+          [styles.integratedAppBar]: useIntegratedTitleBar,
         },
         className,
       )}
       onDoubleClick={handleDoubleClick}
     >
-      {isCommunityEnv && isWindows && isDesktop && (
-        <div className={styles.communityMenu}>
-          <CommunityAppMenu />
+      {useWindowsDesktopChrome && (
+        <div className={styles.desktopMenu}>
+          <DesktopAppMenu />
         </div>
       )}
       {appTitleBarRightComponent && (
         <div
           className={cx(styles.titleBarActions, {
-            [styles.windowsDesktopTitleBarActions]: isCommunityEnv && isWindows && isDesktop,
+            [styles.windowsDesktopTitleBarActions]: useWindowsDesktopChrome,
           })}
         >
           {appTitleBarRightComponent}
         </div>
       )}
-      <div className={cx(styles.logoContainer, { [styles.communityLogoContainer]: isCommunityEnv })}>
-        {!isMac && !isCommunityEnv ? (
+      <div className={cx(styles.logoContainer, { [styles.integratedLogoContainer]: useIntegratedTitleBar })}>
+        {!isMac && !useIntegratedTitleBar ? (
           <Dropdown destroyPopupOnHide menu={{ items }} trigger={['click']} className={styles.dropdown}>
             <div className={styles.appName}>Chat2DB</div>
           </Dropdown>
         ) : (
-          <div className={cx(styles.appName, { [styles.communityAppName]: isCommunityEnv })}>Chat2DB</div>
+          <div className={cx(styles.appName, { [styles.integratedAppName]: useIntegratedTitleBar })}>Chat2DB</div>
         )}
       </div>
-      {isCommunityEnv && isWindows && isDesktop && (
+      {useWindowsDesktopChrome && (
         <div className={styles.windowsActionBar} onDoubleClick={(event) => event.stopPropagation()}>
           <button
             type="button"

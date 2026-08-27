@@ -7,7 +7,6 @@ import miscServices from '@/service/misc';
 import { useGlobalStore } from '@/store/global';
 import { clearOlderLocalStorage } from '@/utils';
 import { isDesktop } from '@/utils/env';
-import clientRuntime from '@client-runtime';
 import { initializeDevEnvironmentIcon } from '@/utils/initLocalIcon';
 import queryString from 'query-string';
 import { useEffect, useLayoutEffect } from 'react';
@@ -20,8 +19,6 @@ import useIframe from './useIframe';
 import useJcef from './useJcef';
 import useOpenFile from './useOpenFile';
 import useApplicationExit from './useApplicationExit';
-import useTaskCenter from './useTaskCenter';
-import { shouldAutoPollTaskCenter } from './taskCenterPolling';
 
 const useInit = () => {
   const { reload } = queryString.parse(location.search);
@@ -57,15 +54,8 @@ const useInit = () => {
   useCopyFocusData();
   useDocumentListener();
   useOpenFile();
-  useJavaMessageReceiver();
   useApplicationExit();
-  useTaskCenter(
-    shouldAutoPollTaskCenter({
-      enabled: clientRuntime.enableTaskCenterAutoPolling,
-      desktop: isDesktop,
-      serviceReady: serviceStatus === ServiceStatus.SUCCESS,
-    }),
-  );
+  useJavaMessageReceiver();
 
   // Check service status
   const checkServiceStatus = () => {
