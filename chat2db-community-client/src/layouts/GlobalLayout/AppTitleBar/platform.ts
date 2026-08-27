@@ -8,3 +8,7 @@ export function resolveTitleBarPlatform(runtimePlatform: Platform | undefined, u
     isWindows: runtimePlatform === Platform.Windows || (useBrowserPlatform && /Windows/.test(userAgent)),
   };
 }
+
+export function shouldUseWindowsDesktopChrome(isWindows: boolean, isDesktop: boolean) {
+  return isWindows && isDesktop;
+}

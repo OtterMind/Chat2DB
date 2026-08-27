@@ -372,8 +372,8 @@ public class MainJFrame extends JFrame {
     private void setupGenericPlatformSpecifics(Image appIcon) {
         this.setTitle(appName);
         this.setIconImage(appIcon);
-        if (WindowsCommunityWindowChrome.isEnabled(OS.isWindows(), ConfigUtils.isCommunity())) {
-            WindowsCommunityWindowChrome.configureRootPane(getRootPane());
+        if (WindowsDesktopWindowChrome.isEnabled(OS.isWindows())) {
+            WindowsDesktopWindowChrome.configureRootPane(getRootPane());
         }
         applyTheme(ThemeEnum.DARK);
     }
@@ -764,9 +764,9 @@ public class MainJFrame extends JFrame {
         }
         this.browser_ = this.client_.createBrowser(indexHtmlFile, CefRendering.DEFAULT, false);
         this.browserUI_ = browser_.getUIComponent();
-        if (WindowsCommunityWindowChrome.isEnabled(OS.isWindows(), ConfigUtils.isCommunity())) {
-            WindowsCommunityWindowChrome.configureBrowserComponent(browserUI_);
-            WindowsCommunityWindowChrome.installWindowDragging(this, browserUI_);
+        if (WindowsDesktopWindowChrome.isEnabled(OS.isWindows())) {
+            WindowsDesktopWindowChrome.configureBrowserComponent(browserUI_);
+            WindowsDesktopWindowChrome.installWindowDragging(this, browserUI_);
         }
         this.browserUI_.addMouseListener(new MouseAdapter() {
             @Override
