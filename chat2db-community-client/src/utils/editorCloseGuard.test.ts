@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { WorkspaceTabType } from '@/constants/workspace';
 import type { IWorkspaceTab } from '@/typings';
-import { confirmDirtyEditorTabs, isEditorCloseConfirmationEnabled, type EditorCloseGuardMap } from './editorCloseGuard';
+import {
+  confirmDirtyEditorTabs,
+  isEditorCloseConfirmationEnabled,
+  prepareEditorsForApplicationExit,
+  type EditorCloseGuardMap,
+} from './editorCloseGuard';
 
 const editorOne: IWorkspaceTab = {
   id: 'editor-1',
@@ -97,6 +102,34 @@ async function run() {
 
   const alreadySaved = await confirmDirtyEditorTabs([editorOne], editorList, async () => 'saved');
   assert.equal(alreadySaved, true, 'a decision handler may complete the save while its dialog is open');
+
+  let persistedDrafts = 0;
+  let applicationExitPrompts = 0;
+  assert.equal(
+    await prepareEditorsForApplicationExit(
+      [editorOne, editorTwo],
+      {
+        [editorOne.id]: {
+          hasUnsavedChangesBeforeClose: () => true,
+          persistBeforeApplicationExit: async () => {
+            persistedDrafts += 1;
+            return true;
+          },
+        },
+        [editorTwo.id]: {
+          hasUnsavedChangesBeforeClose: () => true,
+        },
+      },
+      async () => {
+        applicationExitPrompts += 1;
+        return 'discard';
+      },
+      true,
+    ),
+    true,
+  );
+  assert.equal(persistedDrafts, 1, 'application exit flushes recoverable console drafts');
+  assert.equal(applicationExitPrompts, 1, 'only non-auto-saved editors require an application-exit prompt');
 
   const workspaceTabsSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/index.tsx', 'utf8');
   const consoleActionSource = readFileSync('src/store/workspace/slices/console/action.ts', 'utf8');

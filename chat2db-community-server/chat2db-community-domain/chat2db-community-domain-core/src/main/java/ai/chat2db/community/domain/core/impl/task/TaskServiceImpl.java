@@ -90,14 +90,6 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
-    public Task cancel(Long taskId) {
-        if (get(taskId) == null) {
-            return null;
-        }
-        return localTaskManager.cancel(taskId);
-    }
-
-    @Override
     public void delete(Long taskId) {
         Lock deletionLock = deletionLocks.get(taskId);
         deletionLock.lock();

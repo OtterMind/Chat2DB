@@ -149,6 +149,9 @@ export const getTaskPollingDelay = (activeTaskCount: number, failed = false) => 
   return activeTaskCount > 0 ? ACTIVE_TASK_POLL_INTERVAL : null;
 };
 
+export const shouldKeepTaskPolling = (taskCenterOpen: boolean, activeTaskCount: number) =>
+  taskCenterOpen || activeTaskCount > 0;
+
 export const shouldRetryTaskPolling = (error: unknown): boolean => {
   if (typeof error !== 'object' || error === null || !('errorCode' in error)) {
     return true;

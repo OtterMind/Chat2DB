@@ -12,6 +12,7 @@ import {
   loadMissingTrackedTasks,
   mergeTasks,
   reconcileCompletedTaskNotifications,
+  shouldKeepTaskPolling,
   shouldRetryTaskPolling,
   TASK_CENTER_PAGE_SIZE,
   TaskNotificationCursor,
@@ -152,7 +153,11 @@ export const createImportExportAction: StateCreator<
       })
       .catch((error) => {
         if (requestGeneration !== taskListRequestGeneration) return;
-        const retryDelay = shouldRetryTaskPolling(error) ? getTaskPollingDelay(0, true) : null;
+        const state = get();
+        const retryDelay =
+          shouldRetryTaskPolling(error) && shouldKeepTaskPolling(state.taskCenterOpen, state.activeTaskIds.length)
+            ? getTaskPollingDelay(0, true)
+            : null;
         set({
           getTaskListTimer: retryDelay === null ? null : setTimeout(() => get().getTaskList(), retryDelay),
         });
@@ -207,10 +212,18 @@ export const createImportExportAction: StateCreator<
     set({ logModalTaskId: taskId });
   },
   setTaskCenterOpen: (open) => {
+    const state = get();
+    if (!open && state.activeTaskIds.length === 0) {
+      taskListRequestGeneration += 1;
+      if (state.getTaskListTimer) {
+        clearTimeout(state.getTaskListTimer);
+      }
+    }
     set({
       taskCenterOpen: open,
       unreadCompletedTaskCount: open ? 0 : get().unreadCompletedTaskCount,
       unreadCompletedTaskIds: open ? [] : get().unreadCompletedTaskIds,
+      getTaskListTimer: !open && state.activeTaskIds.length === 0 ? null : state.getTaskListTimer,
     });
   },
 });

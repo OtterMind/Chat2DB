@@ -181,31 +181,36 @@ export const useSaveEditorData = (props: IProps) => {
       });
   };
 
+  const persistAutomaticValue = async (value = editorRef.current?.getValue()) => {
+    if (value === undefined || value === lastSyncConsole.current || isReadOnly) {
+      return true;
+    }
+    if (!storageId) {
+      return false;
+    }
+    try {
+      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
+        await saveConsole(value, { mode: 'automatic' });
+      } else {
+        await indexDB.setValue(storageId, {
+          ddl: value,
+          userId: curUser?.id,
+        });
+        lastSyncConsole.current = value;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to persist editor content', error);
+      return false;
+    }
+  };
+
   function timingAutoSave() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
     timerRef.current = setInterval(() => {
-      const curValue = editorRef.current?.getValue();
-      if (curValue === lastSyncConsole.current) {
-        return;
-      }
-      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        void saveConsole(curValue, { mode: 'automatic' });
-      } else {
-        if (isReadOnly || !storageId) {
-          lastSyncConsole.current = curValue;
-          return;
-        }
-        indexDB
-          .setValue(storageId, {
-            ddl: curValue,
-            userId: curUser?.id,
-          })
-          .then(() => {
-            lastSyncConsole.current = curValue;
-          });
-      }
+      void persistAutomaticValue();
     }, 5000);
   }
 
@@ -219,26 +224,7 @@ export const useSaveEditorData = (props: IProps) => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      const curValue = editorRef?.current?.getValue();
-      if (curValue === lastSyncConsole.current) {
-        return;
-      }
-      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        void saveConsole(curValue, { mode: 'automatic' });
-      } else {
-        if (isReadOnly || !storageId) {
-          lastSyncConsole.current = curValue;
-          return;
-        }
-        indexDB
-          .setValue(storageId, {
-            ddl: curValue,
-            userId: curUser?.id,
-          })
-          .then(() => {
-            lastSyncConsole.current = curValue;
-          });
-      }
+      void persistAutomaticValue();
     } else {
       timingAutoSave();
     }
@@ -288,5 +274,5 @@ export const useSaveEditorData = (props: IProps) => {
     [hasSavedSqlRecord],
   );
 
-  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges };
+  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges, flushAutoSave: persistAutomaticValue };
 };

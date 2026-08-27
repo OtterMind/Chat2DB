@@ -4,7 +4,6 @@ import ai.chat2db.community.jcef.context.JcefContext;
 import ai.chat2db.community.jcef.enums.ActionTypeEnum;
 import ai.chat2db.community.jcef.update.Updater;
 import ai.chat2db.community.tools.console.ConsoleResult;
-import ai.chat2db.community.tools.util.ConfigUtils;
 import com.alibaba.fastjson2.JSON;
 import org.cef.browser.CefBrowser;
 
@@ -13,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 public final class ApplicationExitCoordinator {
@@ -24,6 +24,7 @@ public final class ApplicationExitCoordinator {
     }
 
     private static final AtomicReference<PendingExit> PENDING_EXIT = new AtomicReference<>();
+    private static final AtomicBoolean FRONTEND_READY = new AtomicBoolean();
 
     private ApplicationExitCoordinator() {
     }
@@ -39,7 +40,7 @@ public final class ApplicationExitCoordinator {
         ExitAction validatedAction = requireAction(action);
         String validatedOperationId = requireOperationId(operationId);
         Objects.requireNonNull(confirmedAction, "Confirmed exit action is required");
-        if (!ConfigUtils.isCommunity()) {
+        if (!FRONTEND_READY.get()) {
             return confirmedAction.getAsBoolean();
         }
         CefBrowser browser = JcefContext.getInstance().getBrowser_();
@@ -61,7 +62,8 @@ public final class ApplicationExitCoordinator {
             CallJsFunctionUtil.callHandleJavaMessage(browser, JSON.toJSONString(result));
         } catch (RuntimeException exception) {
             PENDING_EXIT.compareAndSet(pendingExit, null);
-            throw exception;
+            FRONTEND_READY.set(false);
+            return confirmedAction.getAsBoolean();
         }
         return true;
     }
@@ -76,6 +78,14 @@ public final class ApplicationExitCoordinator {
 
     public static boolean cancel(String operationId) {
         return takePendingExit(operationId) != null;
+    }
+
+    public static void markFrontendReady() {
+        FRONTEND_READY.set(true);
+    }
+
+    public static void markFrontendUnavailable() {
+        FRONTEND_READY.set(false);
     }
 
     private static PendingExit takePendingExit(String operationId) {

@@ -4,13 +4,25 @@ import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 final class RunningTask {
+
+    private static final AtomicInteger CANCELLATION_THREAD_SEQUENCE = new AtomicInteger();
+
+    private static final ExecutorService CANCELLATION_EXECUTOR = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable,
+                "chat2db-task-cancel-" + CANCELLATION_THREAD_SEQUENCE.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final Long taskId;
 
@@ -50,19 +62,21 @@ final class RunningTask {
         if (closed) {
             return false;
         }
-        cancellationToken.cancel();
-        cancelRegisteredResource();
+        if (!cancellationToken.cancel()) {
+            return false;
+        }
         Future<?> currentFuture = future;
         if (currentFuture != null) {
             currentFuture.cancel(mayInterruptIfRunning);
         }
+        cancelRegisteredResourceAsync(cancelable.get());
         return true;
     }
 
     void registerCancelable(TaskCancelable resource) {
         cancelable.set(resource);
         if (resource != null && cancellationToken.isCancelled()) {
-            cancelRegisteredResource();
+            cancelRegisteredResourceAsync(resource);
         }
     }
 
@@ -87,15 +101,16 @@ final class RunningTask {
         return executionFinished.await(timeout, unit);
     }
 
-    private void cancelRegisteredResource() {
-        TaskCancelable resource = cancelable.get();
+    private void cancelRegisteredResourceAsync(TaskCancelable resource) {
         if (resource == null) {
             return;
         }
-        try {
-            resource.cancel();
-        } catch (Exception e) {
-            log.warn("Failed to cancel task resource for task {}", taskId, e);
-        }
+        CANCELLATION_EXECUTOR.execute(() -> {
+            try {
+                resource.cancel();
+            } catch (Exception e) {
+                log.warn("Failed to cancel task resource for task {}", taskId, e);
+            }
+        });
     }
 }

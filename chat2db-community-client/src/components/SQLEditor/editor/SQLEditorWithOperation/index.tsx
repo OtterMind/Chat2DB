@@ -208,6 +208,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     executeSQL: handleExecuteSQL,
     hasUnsavedChangesBeforeClose,
     saveBeforeClose,
+    persistBeforeApplicationExit: type === WorkspaceTabType.CONSOLE ? flushAutoSave : undefined,
   }));
 
   const getInstance = useCallback(() => {
@@ -310,7 +311,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     }
   }, [active]);
 
-  const { saveConsole, hasSavedSqlRecord, hasUnsavedChanges } = useSaveEditorData({
+  const { saveConsole, hasSavedSqlRecord, hasUnsavedChanges, flushAutoSave } = useSaveEditorData({
     editorRef: sqlEditorRef,
     isActive: active,
     boundInfo: dbInfo,
@@ -893,10 +894,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     const executionBoundInfo = createDataSourceExecutionBoundInfo(dbInfo);
     const executionTarget = createDataSourceExecutionSnapshot(executionBoundInfo);
     const executionDataSourceState = dataSourceState;
-    await sqlEditorRef.current?.handleQuickSQLParser(
-      sqlEditorRef.current?.getValue() || '',
-      executionBoundInfo,
-    );
+    await sqlEditorRef.current?.handleQuickSQLParser(sqlEditorRef.current?.getValue() || '', executionBoundInfo);
     // await sqlEditorRef.current?.handleSQLParser(sqlEditorRef.current?.getValue() || '', dbInfo);
 
     const selectSQL = sqlEditorRef.current?.getSelectedContent() || '';

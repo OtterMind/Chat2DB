@@ -81,7 +81,6 @@ const getTaskEvents = createRequest<TaskEventListParams, ImportExportTaskEvent[]
   errorLevel: false,
 });
 
-const cancelTask = createRequest<TaskIdParams, ImportExportTaskDetails>('/api/tasks/cancel', { method: 'post' });
 const deleteTask = createRequest<TaskIdParams, void>('/api/tasks/delete', { method: 'delete' });
 const getActiveTaskCount = createRequest<void, number>('/api/tasks/active-count', { method: 'get', errorLevel: false });
 const prepareUserExit = createRequest<void, void>('/api/tasks/prepare-user-exit', {
@@ -104,7 +103,6 @@ export default {
   getTaskList,
   getTaskDetails,
   getTaskEvents,
-  cancelTask,
   deleteTask,
   getActiveTaskCount,
   prepareUserExit,

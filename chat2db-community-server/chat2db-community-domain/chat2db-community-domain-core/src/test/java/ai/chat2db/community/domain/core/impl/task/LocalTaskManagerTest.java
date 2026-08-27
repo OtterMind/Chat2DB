@@ -38,8 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -78,8 +76,6 @@ class LocalTaskManagerTest {
 
         assertTrue(storage.awaitTerminal());
         assertEquals(TaskStatus.SUCCESS.name(), storage.get(task.getId()).orElseThrow().getStatus());
-        Task afterCancel = taskManager.cancel(task.getId());
-        assertEquals(TaskStatus.SUCCESS.name(), afterCancel.getStatus());
         assertEquals(1, storage.terminalTransitionCount());
     }
 
@@ -191,76 +187,6 @@ class LocalTaskManagerTest {
         assertFalse(reason.contains("\n"));
         assertTrue(reason.startsWith("Export failed "));
         assertTrue(reason.endsWith("..."));
-    }
-
-    @Test
-    void cancellationWinsBeforeExecutorCompletes() throws Exception {
-        TestTaskStorage storage = new TestTaskStorage();
-        CountDownLatch started = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        taskManager = manager(storage, (spec, context) -> {
-            started.countDown();
-            try {
-                release.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            context.checkCancelled();
-        });
-        Task task = newTask();
-        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
-        assertTrue(started.await(5, TimeUnit.SECONDS));
-
-        Task cancelling = taskManager.cancel(task.getId());
-        release.countDown();
-
-        assertNotNull(cancelling);
-        assertTrue(storage.awaitTerminal());
-        assertEquals(TaskStatus.CANCELLED.name(), storage.get(task.getId()).orElseThrow().getStatus());
-        assertEquals(1, storage.terminalTransitionCount());
-    }
-
-    @Test
-    void cancellationWaitsUntilPersistedTaskIsRegistered() throws Exception {
-        TestTaskStorage storage = new TestTaskStorage();
-        CountDownLatch firstStarted = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
-        AtomicLong executions = new AtomicLong();
-        taskManager = manager(storage, (spec, context) -> {
-            executions.incrementAndGet();
-            firstStarted.countDown();
-            try {
-                releaseFirst.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            context.checkCancelled();
-        });
-        Task first = newTask();
-        taskManager.submit(first, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
-        assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
-
-        CountDownLatch persisted = new CountDownLatch(1);
-        CountDownLatch allowRegistration = new CountDownLatch(1);
-        storage.pauseNextCreate(persisted, allowRegistration);
-        Task second = newTask();
-        ExecutorService requests = Executors.newFixedThreadPool(2);
-        try {
-            Future<?> submission = requests.submit(
-                    () -> taskManager.submit(second, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null));
-            assertTrue(persisted.await(5, TimeUnit.SECONDS));
-            Future<Task> cancellation = requests.submit(() -> taskManager.cancel(second.getId()));
-
-            allowRegistration.countDown();
-            submission.get();
-            assertEquals(TaskStatus.CANCELLED.name(), cancellation.get().getStatus());
-        } finally {
-            releaseFirst.countDown();
-            requests.shutdownNow();
-        }
-
-        assertEquals(TaskStatus.CANCELLED.name(), storage.get(second.getId()).orElseThrow().getStatus());
-        assertEquals(1L, executions.get());
     }
 
     @Test
