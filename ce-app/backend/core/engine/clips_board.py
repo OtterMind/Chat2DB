@@ -22,9 +22,14 @@ PERSONAS = {
 }
 
 
-def propose(path: str, n: int = 8, persona: str = "sport") -> dict:
-    """A board of ranked clip cards, each with score, hook, reason and a thumb."""
-    cfg = PERSONAS.get(persona, PERSONAS["sport"])
+def propose(path: str, n: int = 8, persona: str = "sport", intensity: float = 0.5) -> dict:
+    """A board of ranked clip cards, each with score, hook, reason and a thumb.
+
+    `intensity` is the cut-rate dial: higher intensity shortens the minimum window
+    so the board proposes more, punchier clips (the "more TikTok" end of the scale).
+    """
+    cfg = dict(PERSONAS.get(persona, PERSONAS["sport"]))
+    cfg["minimum"] = max(0.5, cfg["minimum"] * (1.2 - 0.6 * max(0.0, min(1.0, intensity))))
     try:
         highlights = style._highlights(path, wanted=n, minimum=cfg["minimum"],
                                        prefer_speech=cfg["prefer_speech"])
@@ -132,3 +137,66 @@ def sports_markers(path: str, fps: float = 4.0) -> dict:
         else:
             out.append(m)
     return {"fps": fps, "markers": out, "count": len(out)}
+
+
+#: The five cold-open interpretations the Hook Lab offers for one moment.
+#: Each is a different *answer* to "how do I open this?", all measured from the
+#: same window so the user compares interpretations, not guesses.
+HOOK_VARIANTS = [
+    ("zoom-punch", "punch in on the subject", {"zoom": 1.25, "speed": 1.0}),
+    ("jump-in", "skip the breath, land mid-action", {"zoom": 1.0, "speed": 1.0, "skip": 0.5}),
+    ("text-card", "let a title carry the hook", {"textPunch": True}),
+    ("reverse-tease", "a half-second reversed tease", {"reverse": True}),
+    ("reaction", "open on the room's reaction", {"crowd": True}),
+]
+
+
+def hook_lab(path: str, intensity: float = 0.5, window: float = 3.0) -> dict:
+    """Five cold-open variants for the strongest measured moment.
+
+    The base window is the peak of the emotional arc; `reaction` re-aims it at the
+    strongest crowd cue when one exists. Every variant carries the hook score of
+    its own window plus the parameters the compositor/preview should apply, so a
+    variant is an executable recipe, not a thumbnail.
+    """
+    arc = None
+    try:
+        from core.engine.arc_hook import emotional_arc  # noqa: PLC0415
+
+        arc = emotional_arc(path, fps=2.0)
+    except Exception:  # noqa: BLE001
+        arc = None
+    if not arc or not arc.get("points"):
+        return {"variants": [], "base": None}
+
+    peak = max(arc["points"], key=lambda p: p["score"])
+    base_start = max(0.0, peak["t"] - 0.5)
+
+    # the reaction variant aims at the loudest crowd cue if there is one
+    reaction_start = base_start
+    try:
+        from core.engine import emotion  # noqa: PLC0415
+
+        cues = emotion.audio_cues(path, fps=2.0)
+        if cues.frames:
+            best = max(range(cues.frames), key=lambda i: cues.crowd[i])
+            if cues.crowd[best] > 0.3:
+                reaction_start = cues.time_of(best)
+    except Exception:  # noqa: BLE001
+        pass
+
+    from core.engine.arc_hook import hook_score  # noqa: PLC0415
+
+    variants = []
+    for kind, label, params in HOOK_VARIANTS:
+        start = reaction_start if kind == "reaction" else base_start
+        start = start + float(params.get("skip", 0.0))
+        hook = hook_score(path, start, start + window)
+        variants.append({
+            "kind": kind, "label": label, "params": params,
+            "start": round(start, 2), "end": round(start + window, 2),
+            "hook": hook["score"], "hookLabel": hook["label"],
+            "reasons": hook["reasons"],
+        })
+    variants.sort(key=lambda v: v["hook"], reverse=True)
+    return {"base": round(base_start, 2), "intensity": intensity, "variants": variants}

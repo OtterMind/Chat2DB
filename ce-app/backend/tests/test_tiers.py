@@ -248,3 +248,49 @@ def test_the_brain_offers_the_new_tools():
     assert by["batch_clips"]["use"] is True     # 120 s holds several shorts
     assert by["sports_markers"]["use"] is True  # sport action
     assert by["text_based_edit"]["use"] is True
+
+
+# ------------------------------------------------------------------ hook lab + intensity
+
+
+def test_hook_lab_returns_five_distinct_variants(burst_mp4):
+    lab = clips_board.hook_lab(str(burst_mp4))
+    kinds = {v["kind"] for v in lab["variants"]}
+    assert len(lab["variants"]) == 5
+    assert {"zoom-punch", "jump-in", "text-card", "reverse-tease", "reaction"} <= kinds
+    for v in lab["variants"]:
+        assert 0 <= v["hook"] <= 100 and v["params"]
+
+
+def test_hook_lab_endpoint(burst_mp4):
+    body = client.post("/api/board/hook-lab", json={"path": str(burst_mp4)}).json()
+    assert body["variants"] and body["base"] is not None
+
+
+def test_intensity_pops_captions_and_punches_video():
+    from core.engine.style import _apply_intensity
+
+    clips = [
+        {"text": "hi", "props": {}},
+        {"src": "/x.mp4", "duration": 2.0, "props": {}},
+    ]
+    hot = _apply_intensity(clips, 0.9)
+    cold = _apply_intensity(clips, 0.1)
+    assert hot[0]["props"]["animateWords"] is True
+    assert hot[1]["keyframes"], "high intensity adds a zoom punch"
+    assert cold[0]["props"]["animateWords"] is False
+    assert not cold[1].get("keyframes")
+
+
+def test_intensity_never_moves_a_cut():
+    from core.engine.style import _apply_intensity
+
+    clips = [{"src": "/x.mp4", "start": 1.0, "duration": 2.0, "offset": 1.0, "props": {}}]
+    hot = _apply_intensity(clips, 1.0)
+    assert hot[0]["start"] == 1.0 and hot[0]["duration"] == 2.0 and hot[0]["offset"] == 1.0
+
+
+def test_propose_intensity_does_not_crash_and_returns_cards(burst_mp4):
+    hot = clips_board.propose(str(burst_mp4), n=4, intensity=0.9)
+    cold = clips_board.propose(str(burst_mp4), n=4, intensity=0.1)
+    assert isinstance(hot["cards"], list) and isinstance(cold["cards"], list)

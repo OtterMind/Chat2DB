@@ -55,13 +55,30 @@ class ProposeRequest(BaseModel):
     path: str
     n: int = Field(default=8, ge=1, le=24)
     persona: str = Field(default="sport", pattern="^(sport|vlog|gym)$")
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 @router.post("/propose")
 async def propose(payload: ProposeRequest) -> dict:
     path = _checked(payload.path)
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, clips_board.propose, path, payload.n, payload.persona)
+    return await loop.run_in_executor(
+        None, clips_board.propose, path, payload.n, payload.persona, payload.intensity)
+
+
+class HookLabRequest(BaseModel):
+    path: str
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    window: float = Field(default=3.0, ge=1.0, le=10.0)
+
+
+@router.post("/hook-lab")
+async def hook_lab(payload: HookLabRequest) -> dict:
+    """Tier 2: five cold-open variants for the strongest measured moment."""
+    path = _checked(payload.path)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, clips_board.hook_lab, path, payload.intensity, payload.window)
 
 
 class MarkersRequest(BaseModel):

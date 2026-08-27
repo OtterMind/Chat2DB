@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.39` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.40` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,18 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+126. **0.9.40 — Hook Lab + the intensity dial complete the tier package.**
+    `clips_board.hook_lab` (`/api/board/hook-lab`) returns five measured cold-open
+    variants (zoom-punch / jump-in / text-card / reverse-tease / reaction), each an
+    executable recipe carrying the hook score of its own window; `reaction` re-aims
+    the open at the loudest crowd cue. The Tier-3 intensity slider (`style.
+    _apply_intensity`, threaded through `/api/style/apply` and `/api/board/propose`)
+    moves caption-pop + zoom-punch + cut-rate together *without moving any measured
+    cut* — asserted by `test_intensity_never_moves_a_cut`. Both are wired into the
+    Hybrid Tier panel (slider + variant chips, click = seek). Backend **485 passed /
+    0 failed / 10 skipped**; `verify`, `build`, `test:ui`, `test:playback` and a
+    Hook-Lab browser check all green on the production bundle.
 
 125. **0.9.39 — the professors' tiers 1–3, shipped as one package.** Tier 1:
     transcript-first editing + one-click jump cut (`core/engine/transcript_edit.py`,

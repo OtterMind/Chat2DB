@@ -832,6 +832,36 @@ def _fit_to_length(shots: list[dict], seconds: float) -> list[dict]:
     return out
 
 
+def _apply_intensity(clips: list[dict], intensity: float) -> list[dict]:
+    """The Tier-3 "Make it more TikTok" slider, applied after the cut is built.
+
+    0..1 moves three dials together, deterministically:
+      * caption pop — high intensity lights captions word-by-word;
+      * zoom punch — high intensity adds a small push-in on video clips;
+      * (cut rate is handled upstream by the board/intensity, not here).
+    It only *augments* props; it never moves a cut, so a rebuild at any intensity
+    stays on the same measured moments. Pure and unit-testable.
+    """
+    intensity = max(0.0, min(1.0, float(intensity)))
+    pop = intensity >= 0.6
+    punch = intensity >= 0.7
+    out = []
+    for clip in clips:
+        c = dict(clip)
+        props = dict(c.get("props") or {})
+        if c.get("text") is not None or c.get("words"):
+            props["animateWords"] = pop
+        if c.get("src") and punch and not (c.get("keyframes") or []):
+            # a gentle push-in: 1.0 → 1.08 across the clip, linear like the rest
+            c["keyframes"] = [
+                {"t": 0.0, "scale": 1.0},
+                {"t": round(max(0.1, c.get("duration", 1.0)), 3), "scale": 1.08},
+            ]
+        c["props"] = props
+        out.append(c)
+    return out
+
+
 def build_timeline(
     template: Template | dict,
     source: str,
@@ -843,6 +873,7 @@ def build_timeline(
     model: str | None = None,
     intent: dict | intent_model.Intent | None = None,
     use_plan: str | None = None,
+    intensity: float = 0.5,
 ) -> dict:
     """Cut the user's footage into the shape of the template.
 
@@ -1219,6 +1250,10 @@ def build_timeline(
     except Exception:  # noqa: BLE001
         plugged = []
 
+    # The intensity slider is the last word: it augments props (caption pop, zoom
+    # punch) without moving any measured cut.
+    clips = _apply_intensity(clips, intensity)
+
     say("done", 1.0, "Edit ready")
     return {
         "name": name,
@@ -1249,6 +1284,7 @@ def build_timeline(
             "motion": [c["label"].split("· ")[-1] for c in clips if c["trackId"] == "v1"],
             "captions": len([c for c in clips if c["trackId"] == "t1"]),
             "bpm": data.get("bpm", 0.0),
+            "intensity": round(max(0.0, min(1.0, float(intensity))), 2),
             "applied": applied,
             "skipped": skipped,
             # What the answers changed, said out loud: an answer with no visible

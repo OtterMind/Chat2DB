@@ -32,6 +32,7 @@ class ApplyRequest(BaseModel):
     brain: bool = Field(default=True, description="Let a local model race the rule planner")
     model: str | None = Field(default=None, description="Ollama model to race with, when installed")
     use_plan: str | None = Field(default=None, description="B10: apply a specific planner's picks from the scoreboard instead of the winner")
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0, description="Tier 3: the 'more TikTok' dial — caption pop + zoom punch + cut rate")
     intent: dict | None = Field(
         default=None,
         description=(
@@ -202,6 +203,7 @@ async def apply(payload: ApplyRequest) -> dict:
         return await loop.run_in_executor(
             None, style.build_timeline, document, payload.path, payload.name,
             payload.music, cues, None, payload.brain, payload.model, payload.intent,
+            None, payload.intensity,
         )
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
@@ -252,6 +254,7 @@ async def apply_start(payload: ApplyRequest) -> dict:
                 model=payload.model,
                 intent=payload.intent,
                 use_plan=payload.use_plan,
+                intensity=payload.intensity,
             )
         finally:
             cancellation.bind(None)

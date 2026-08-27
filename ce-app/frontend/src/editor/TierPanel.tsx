@@ -5,7 +5,7 @@ import { Activity, Wand2, Send } from 'lucide-react'
 import { useEditor } from './model'
 import { useI18n } from '../i18n'
 import { backendOrigin } from '../api/runtime'
-import { boardApi, type Arc, type HookScore, type Marker } from '../api/board'
+import { boardApi, type Arc, type HookScore, type Marker, type HookVariant } from '../api/board'
 import { transcriptApi } from '../api/transcript'
 import { agentApi } from '../api/agent'
 import { analyzeApi } from '../api/analyze'
@@ -32,6 +32,8 @@ export default function TierPanel({ open, onClose }: { open: boolean; onClose: (
   const [hook, setHook] = useState<HookScore | null>(null)
   const [markers, setMarkers] = useState<Marker[]>([])
   const [explain, setExplain] = useState<{ total: number; headline: string } | null>(null)
+  const [variants, setVariants] = useState<HookVariant[]>([])
+  const [intensity, setIntensity] = useState(0.5)
   const [command, setCommand] = useState('')
   const [busy, setBusy] = useState('')
 
@@ -39,19 +41,31 @@ export default function TierPanel({ open, onClose }: { open: boolean; onClose: (
     if (!target?.src) return
     setBusy('load')
     try {
-      const [a, h, m] = await Promise.all([
+      const [a, h, m, lab] = await Promise.all([
         boardApi.arc(target.src, 2).catch(() => null),
         boardApi.hook(target.src).catch(() => null),
         boardApi.markers(target.src).catch(() => null),
+        boardApi.hookLab(target.src, intensity).catch(() => null),
       ])
       setArc(a)
       setHook(h)
       setMarkers(m?.markers ?? [])
+      setVariants(lab?.variants ?? [])
     } finally {
       setBusy('')
     }
   }
   useEffect(() => { if (open && target?.src) void load() }, [open, target?.src]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-run just the Hook Lab when the intensity dial moves (debounced).
+  useEffect(() => {
+    const src = target?.src
+    if (!open || !src) return
+    const id = setTimeout(() => {
+      boardApi.hookLab(src, intensity).then((l) => setVariants(l.variants)).catch(() => undefined)
+    }, 250)
+    return () => clearTimeout(id)
+  }, [intensity, open, target?.src])
 
   const inspect = async () => {
     const clip = clips.find((c) => c.id === selectedId)
@@ -154,6 +168,23 @@ export default function TierPanel({ open, onClose }: { open: boolean; onClose: (
             <button key={i} className="ce-badge" style={{ cursor: 'pointer' }}
               onClick={() => setPlayhead(m.t)} title={`${m.type} ${m.conf}`}>
               {m.type} {m.t.toFixed(1)}s
+            </button>
+          ))}
+        </div>
+      )}
+
+      <label className="ce-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
+        {t('intensity', 'شدت')}
+        <input type="range" min={0} max={1} step={0.05} value={intensity}
+          onChange={(e) => setIntensity(Number(e.target.value))} style={{ flex: 1 }} />
+        <span className="mono">{intensity.toFixed(2)}</span>
+      </label>
+      {variants.length > 0 && (
+        <div className="ce-badges" style={{ margin: '0 0 8px' }}>
+          {variants.map((v) => (
+            <button key={v.kind} className="ce-badge" style={{ cursor: 'pointer' }}
+              title={v.reasons.join(' · ')} onClick={() => setPlayhead(v.start)}>
+              {v.kind} · {v.hook}
             </button>
           ))}
         </div>
