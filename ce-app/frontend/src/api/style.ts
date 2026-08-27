@@ -158,6 +158,13 @@ export const styleApi = {
     return (await follow.promise).result as StyleTemplate
   },
   templates: async (): Promise<{ templates: TemplateSummary[] }> => (await api.get('/style/templates')).data,
+  /** Tier 3: the compact style fingerprint of a measured template. */
+  dna: async (template: Record<string, unknown>) =>
+    (await api.post('/style/dna', { template })).data as {
+      pacing: { label: string; count: number; share: number }[]
+      avg_shot: number; cut_rate: number; motion: string; mood: string
+      bpm: number; cuts_on_beat: number; talk: number; line: string
+    },
   /** Hand-authored rhythms for a fresh gallery. */
   starters: async (): Promise<{ starters: StyleTemplate[] }> => (await api.get('/style/starters')).data,
   importTemplate: async (template: unknown, name?: string): Promise<{ saved: string }> =>

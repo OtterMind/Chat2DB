@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.40` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.41` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,18 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+127. **0.9.41 — Style DNA + a real MCP stdio server close out the tier work.**
+    `core/engine/dna.py` (`/api/style/dna`) projects a measured template into a
+    deterministic fingerprint — pacing histogram, cut-rate, dominant motion, colour
+    mood, BPM, on-beat ratio, talk — surfaced as a badge in Style Match; a recipe an
+    agent can store/replay. `core/mcp_server.py` is a local Model-Context-Protocol
+    JSON-RPC server over stdio (`python -m core.mcp_server`) exposing the brain and
+    the tier tools (`assess`, `parse_nl_command`, `style_dna`, `emotional_arc`,
+    `hook_score`, `propose_clips`) so an external agent drives the real editor —
+    tested by spawning the server and round-tripping initialize/tools-list/tools-
+    call. Backend **493 passed / 0 failed / 10 skipped**; `verify`, `build`,
+    `test:ui`, `test:playback` green on the production bundle.
 
 126. **0.9.40 — Hook Lab + the intensity dial complete the tier package.**
     `clips_board.hook_lab` (`/api/board/hook-lab`) returns five measured cold-open

@@ -36,6 +36,14 @@ export default function StyleMatch() {
   const navigate = useNavigate()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
   const [template, setTemplate] = useState<StyleTemplate | null>(null)
+  const [dna, setDna] = useState<{ line: string; mood: string; motion: string } | null>(null)
+
+  // Tier 3: the style fingerprint of the measured template, for the DNA badge.
+  useEffect(() => {
+    if (!template) { setDna(null); return }
+    styleApi.dna(template as unknown as Record<string, unknown>)
+      .then(setDna).catch(() => setDna(null))
+  }, [template])
   const [busy, setBusy] = useState<'analyse' | 'apply' | null>(null)
   const [result, setResult] = useState<StyledEdit | null>(null)
   /** The brain's self-interrogation replaces the questionnaire the screen used
@@ -597,6 +605,12 @@ export default function StyleMatch() {
             <span className="ce-badge"><CropIcon size={13} /> {template.aspect}</span>
             <span className="ce-badge">{t('cuts on beat', 'برش روی ضرب')} {percent(template.cuts_on_beat)}</span>
             <span className="ce-badge">{t('speech', 'گفتار')} {percent(template.speech_ratio)}</span>
+            {dna && (
+              <span className="ce-badge" title={`${dna.motion} · ${dna.mood}`}
+                style={{ borderColor: 'var(--ce-neon-cyan)' }}>
+                <Target size={13} /> {t('DNA', 'دی‌ان‌ای')} {dna.line}
+              </span>
+            )}
           </div>
 
           <div className="ce-kv" style={{ marginTop: 10 }}>

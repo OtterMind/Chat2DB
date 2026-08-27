@@ -314,3 +314,28 @@ def recipe_list() -> dict:
             except Exception:  # noqa: BLE001
                 continue
     return {"recipes": out}
+
+
+class DnaRequest(BaseModel):
+    path: str | None = Field(default=None, description="A reference video to measure")
+    template: dict | None = Field(default=None, description="Or an already-measured template")
+
+
+@router.post("/dna")
+async def dna(payload: DnaRequest) -> dict:
+    """Tier 3: the compact style fingerprint of a reference (pacing/motion/mood/rhythm)."""
+    from core.engine import dna as dna_engine  # noqa: PLC0415
+
+    if payload.template is not None:
+        return dna_engine.style_dna(payload.template)
+    if not payload.path:
+        raise HTTPException(status_code=400, detail="give me a path or a template")
+    loop = asyncio.get_running_loop()
+
+    def run() -> dict:
+        return dna_engine.style_dna(style.analyse(payload.path).as_dict())
+
+    try:
+        return await loop.run_in_executor(None, run)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=f"File not found: {payload.path}") from error
