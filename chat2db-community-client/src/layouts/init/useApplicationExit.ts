@@ -21,6 +21,11 @@ const useApplicationExit = () => {
       const operationId = request?.operationId;
       if (!operationId || handlingExitRef.current) return;
       handlingExitRef.current = true;
+      const acknowledged = await jcefApi.acknowledgeApplicationExit({ operationId }).catch(() => false);
+      if (!acknowledged) {
+        handlingExitRef.current = false;
+        return;
+      }
       const cancelNativeExit = () => jcefApi.cancelApplicationExit({ operationId });
       try {
         await coordinateApplicationExit({
