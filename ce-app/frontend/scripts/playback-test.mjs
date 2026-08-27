@@ -1142,25 +1142,21 @@ else bad('the self-test reported nothing', JSON.stringify(engines))
 /* 12 — the home screen starts a video --------------------------------------- */
 await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 900))
+// 0.9.36 launcher (hybrid C7.1): actions + recent rows + palette, no tile grid.
 const home = await page.evaluate(() => ({
-  starters: document.querySelectorAll('.ce-start__main').length,
-  recents: Boolean(document.querySelector('.ce-reel, .ce-empty')),
-  editorTileSaysSoon: [...document.querySelectorAll('.ce-tile')].some(
-    (tile) => /Editor/.test(tile.textContent ?? '') && /SOON/i.test(tile.textContent ?? '')
-  ),
-  styleTile: [...document.querySelectorAll('.ce-tile')].some((tile) => /Style Match|شبیه الگو/.test(tile.textContent ?? '')),
-  clipTools: [...document.querySelectorAll('.ce-tile')]
-    .map((tile) => tile.textContent ?? '')
+  starters: document.querySelectorAll('.ln-action').length,
+  recents: Boolean(document.querySelector('.ln-recent')),
+  styleTile: [...document.querySelectorAll('.ln-action')].some((b) => /Style Match|استایل مچ/.test(b.textContent ?? '')),
+  clipTools: [...document.querySelectorAll('.ln-action')]
+    .map((b) => b.textContent ?? '')
     .filter((text) => /Voice Over|Auto B-Roll|Translate|Silence Removal|Smart Captions/.test(text)).length,
 }))
-if (home.starters === 2) ok('the home screen leads with New video / Open editor')
-else bad('the home screen has no starting cards', JSON.stringify(home))
+if (home.starters >= 2) ok('the launcher leads with New Project / Style Match')
+else bad('the launcher has no starting actions', JSON.stringify(home))
 if (home.recents) ok('the recent projects strip is there')
 else bad('no recent projects strip on the home screen')
-if (!home.editorTileSaysSoon) ok('the editor tile no longer claims to be "soon"')
-else bad('the editor tile still says "soon"')
-if (home.styleTile) ok('the Style Match tile is on the home screen')
-else bad('the Style Match tile is missing', JSON.stringify(home))
+if (home.styleTile) ok('the Style Match action is on the launcher')
+else bad('the Style Match action is missing', JSON.stringify(home))
 if (home.clipTools === 0) ok('clip tools are no longer on the home screen')
 else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
 
@@ -1169,18 +1165,15 @@ else bad('clip tools are still on the home screen', `${home.clipTools} tiles`)
 // user could no longer update the app. Every route must be reachable by
 // clicking, not just by typing a URL.
 const reachable = await page.evaluate(() => {
-  const routes = new Set()
-  for (const tile of document.querySelectorAll('.ce-tile')) {
-    routes.add((tile.textContent ?? '').trim())
-  }
+  const titles = [...document.querySelectorAll('.ln-top__btn')].map((b) => (b.getAttribute('title') ?? ''))
   return {
     updateCard: Boolean(document.querySelector('.ce-updatecard')),
     updateButton: Boolean(
       [...document.querySelectorAll('.ce-updatecard button')].find((b) => /Check for updates|بررسی/.test(b.textContent ?? ''))
     ),
-    settingsButton: Boolean(document.querySelector('.ce-updatecard__actions .ce-iconbtn')),
-    settingsTile: [...routes].some((label) => /Settings|تنظیمات/.test(label)),
-    doctorTile: [...routes].some((label) => /System Health|Doctor|Diagnostics|سلامت|عیب/.test(label)),
+    settingsButton: Boolean(document.querySelector('.ln-top__btn')),
+    settingsTile: titles.some((label) => /Settings|تنظیمات/.test(label)),
+    doctorTile: titles.some((label) => /Diagnostics|عیب/.test(label)),
   }
 })
 if (reachable.updateCard && reachable.updateButton) ok('the update control is on the home screen')
@@ -1192,7 +1185,7 @@ else bad('Diagnostics cannot be reached by clicking', JSON.stringify(reachable))
 
 // …and the buttons really navigate.
 const gearWorks = await page.evaluate(() => (window.__pending = (async () => {
-  const gear = document.querySelector('.ce-updatecard__actions .ce-iconbtn')
+  const gear = [...document.querySelectorAll('.ln-top__btn')].find((b) => /Settings|تنظیمات/.test(b.getAttribute('title') ?? ''))
   gear?.click()
   await new Promise((r) => setTimeout(r, 700))
   const hash = location.hash
@@ -1218,9 +1211,9 @@ await page.evaluate(() => (window.__pending = (async () => {
 })()))
 
 const recents = await page.evaluate(() => ({
-  cards: document.querySelectorAll('.ce-reelcard').length,
-  draft: Boolean(document.querySelector('.ce-reelcard.is-unfinished')),
-  deletes: document.querySelectorAll('.ce-reelcard__del').length,
+  cards: document.querySelectorAll('.ln-row').length,
+  draft: Boolean(document.querySelector('.ln-row__dot--amber')),
+  deletes: document.querySelectorAll('.ln-row__del').length,
 }))
 if (recents.draft) ok('the unfinished project appears in Recent projects')
 else bad('the unfinished (autosaved) project is not offered on the home screen', JSON.stringify(recents))
