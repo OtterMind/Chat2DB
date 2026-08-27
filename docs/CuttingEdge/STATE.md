@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.34` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.35` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,20 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+121. **0.9.35 — the Hybrid redesign from the root + advisors' P0/P1 fixes.**
+    The professors' `v0.9.34-hybrid-design-system` package was audited item by
+    item (report in chat): `design-tokens.css` ported as the source of truth and
+    every legacy variable remapped onto it (near-black minimal surfaces, neon
+    pink playhead/primary with glow, cyan info, purple text lane, 4px spacing,
+    type scale C2); the reference `Scoreboard` component (cyberpunk variant)
+    replaces the plain brain line; source docs + screenshots live in
+    `docs/CuttingEdge/HYBRID_*` and `ui-proposal/hybrid-*.png`. Debug items A1–A3,
+    A6–A8 fixed for real (concurrent WS broadcast with per-client timeout, pip
+    watchdog, thread-local sqlite, drag latest-ref, RAF pause on hidden tab, WS
+    exponential backoff + manual reconnect). Verdicts for the rest (A4/A5/A9–A12,
+    B1–B10, C7–C14) are recorded with accept/defer/reject reasons. Suite
+    424/0/10; ui-audit + playback green on the production bundle.
 
 120. **The owner's three field bugs + Package C, released as 0.9.34.**
     (1) "Fetch + torch" meant nothing to the owner — relabelled "دانلود موتور +
