@@ -393,11 +393,16 @@ export default function Timeline() {
               className={`tl__lane ${track.locked ? 'is-locked' : ''}`}
               data-track-id={track.id}
               onPointerDown={(e) => {
-                // Only the empty part of a lane pans; clips handle their own drag.
-                if (!centred || e.target !== e.currentTarget) return
+                // Any lane click that is not on a clip/junction clears the
+                // selection, so the global toolbar returns the moment the pointer
+                // leaves the edited clip. (The beat-grid is a child, so test with
+                // closest() rather than target===currentTarget.)
+                if ((e.target as HTMLElement).closest('.tl__clip, .tl__junction')) return
                 e.preventDefault()
                 select(null)
-                setDrag({ mode: 'pan', fromX: e.clientX, fromTime: playhead })
+                if (centred && e.target === e.currentTarget) {
+                  setDrag({ mode: 'pan', fromX: e.clientX, fromTime: playhead })
+                }
               }}
             >
               {/* A junction marker between neighbours, exactly where a

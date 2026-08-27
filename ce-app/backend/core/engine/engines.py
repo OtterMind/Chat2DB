@@ -180,7 +180,7 @@ def bulk_install_plan() -> dict:
     """
     groups: list[dict] = []
     ids: list[str] = []
-    all_deps: list[str] = list(HEAVY_DEPS["torch"])
+    all_deps: list[str] = []
     for engine in ENGINES:
         if not engine.get("deps"):
             continue
@@ -188,9 +188,12 @@ def bulk_install_plan() -> dict:
             continue
         if engine.get("sdist") == "build":
             continue  # needs a C++ toolchain; not buildable in the packaged app
+        needs_torch = engine.get("heavy") == "torch"
         ids.append(engine["id"])
-        own = list(engine["deps"])
-        groups.append({"id": engine["id"], "deps": own})
+        # Torch rides along ONLY for engines that actually run on it; a light
+        # engine (mediapipe, hazm, otio…) downloads without dragging 120 MB in.
+        own = (list(HEAVY_DEPS["torch"]) if needs_torch else []) + list(engine["deps"])
+        groups.append({"id": engine["id"], "deps": own, "needs_torch": needs_torch})
         for dep in own:
             if dep not in all_deps:
                 all_deps.append(dep)

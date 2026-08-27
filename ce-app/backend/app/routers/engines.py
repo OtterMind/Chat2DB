@@ -82,23 +82,18 @@ def install_all_start() -> dict:
         installed: list[str] = []
         failed: list[dict] = []
 
-        reporter.stage("download", 0.05, "AI core (torch)")
-        try:
-            runtime_packages.install(
-                plan["torch_deps"],
-                on_progress=lambda s, f, label="": reporter.stage(s, 0.05 + 0.3 * f, label))
-            installed.append("torch")
-        except Exception as error:  # noqa: BLE001
-            failed.append({"id": "torch", "error": str(error)[:300]})
-
-        span = 0.6 / max(1, len(plan["groups"]))
+        # Torch is carried inside the groups that need it; the already-present
+        # filter makes the second torch-bearing engine a no-op for the core, so
+        # it is downloaded once and only when some engine actually runs on it.
+        span = 0.9 / max(1, len(plan["groups"]))
         for index, group in enumerate(plan["groups"]):
-            reporter.stage("download", 0.35 + span * index, group["id"])
+            reporter.stage("download", 0.05 + span * index,
+                           f"{group['id']}{' + torch' if group.get('needs_torch') else ''}")
             try:
                 runtime_packages.install(
                     group["deps"],
                     on_progress=lambda s, f, label="": reporter.stage(
-                        s, 0.35 + span * index + span * f, label))
+                        s, 0.05 + span * index + span * f, label))
                 installed.append(group["id"])
             except Exception as error:  # noqa: BLE001 — one failure, not a batch failure
                 failed.append({"id": group["id"], "error": str(error)[:300]})

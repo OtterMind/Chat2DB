@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.45` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.46` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,20 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+132. **0.9.46 — the editor returns to its global toolbar, and the bulk button
+    stops force-feeding torch.** (1) Clicking anywhere on a lane that is not a clip
+    or junction now clears the selection (the beat-grid is a child, so the handler
+    uses `closest('.tl__clip,.tl__junction')` rather than `target===currentTarget`,
+    which the grid silently defeated), and `Esc` deselects — so the first/global
+    toolbar returns the moment the pointer leaves the edited clip. Verified in a
+    real browser: select → empty-lane click deselects → Escape deselects. (2) The
+    one-click download is now *per-engine*: torch rides along **only inside the
+    groups that run on it** (`needs_torch`), so light engines (mediapipe/hazm/otio)
+    download without the 120 MB core, and the shared core is still fetched once via
+    the already-present filter. Backend **501 passed / 0 failed / 10 skipped**;
+    `verify`, `build`, `test:ui`, `test:playback` and the toolbar browser check all
+    green on the production bundle.
 
 131. **0.9.45 — the engines shelf stops fighting the user.** Two owner-reported
     bugs fixed at the root. (1) **"Download all + torch" → Permission denied**: the

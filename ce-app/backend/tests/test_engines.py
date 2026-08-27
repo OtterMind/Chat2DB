@@ -190,3 +190,13 @@ def test_bulk_plan_excludes_unbuildable_and_gated():
     assert {"transnet", "demucs"} <= set(plan["ids"])
     assert plan["groups"], "each engine must be its own resilient stage"
     assert all(g["deps"] for g in plan["groups"])
+
+
+def test_bulk_torch_only_for_engines_that_need_it():
+    from core.engine import engines
+
+    plan = engines.bulk_install_plan()
+    by_id = {g["id"]: g for g in plan["groups"]}
+    assert by_id["transnet"]["needs_torch"] is True and "torch" in by_id["transnet"]["deps"]
+    assert by_id["mediapipe"]["needs_torch"] is False and "torch" not in by_id["mediapipe"]["deps"]
+    assert by_id["hazm"]["needs_torch"] is False

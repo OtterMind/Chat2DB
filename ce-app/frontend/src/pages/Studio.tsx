@@ -191,6 +191,9 @@ export default function Studio() {
       } else if (key === 'ArrowRight') {
         event.preventDefault()
         setPlayhead(useEditor.getState().playhead + (event.shiftKey ? 1 : 1 / 30))
+      } else if (key === 'Escape') {
+        // Leaving the edited clip returns the global toolbar.
+        useEditor.getState().select(null)
       } else if (key === 'Home') {
         event.preventDefault()
         setPlayhead(0)

@@ -712,7 +712,7 @@ function EnginesCard() {
           <Download size={14} />
           {allTask
             ? `${allTask.label || allTask.stage} — ${Math.round((allTask.progress ?? 0) * 100)}%`
-            : t('Download all + torch (one click)', 'دانلود همه + torch (یک کلیک)')}
+            : t('Download all (torch only where needed)', 'دانلود همه (torch فقط برای نیازمندان)')}
         </button>
       </div>
       <div className="ce-kv" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
