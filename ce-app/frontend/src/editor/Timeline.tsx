@@ -103,8 +103,15 @@ export default function Timeline() {
     [clips, playhead]
   )
 
+  // A6 (advisors): latest-ref pattern — the listener is created once per drag,
+  // and reads the freshest state from a ref, so a guide/clip update mid-drag can
+  // no longer tear the listener down.
+  const liveRef = useRef({ clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime })
+  liveRef.current = { clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime }
+
   useEffect(() => {
     if (!drag) return
+    const { clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime } = liveRef.current
 
     const onMove = (e: PointerEvent) => {
       const time = xToTime(e.clientX)
@@ -167,7 +174,8 @@ export default function Timeline() {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [drag, clips, magnets, moveClip, pxPerSecond, setPlayhead, snapping, trimClip, xToTime])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag])
 
   // Centred mode: the scroll position *is* the playhead. Classic mode: keep the
   // marker inside the viewport, otherwise it walks off screen after a few seconds.

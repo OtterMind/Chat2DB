@@ -294,8 +294,17 @@ export default function PreviewMonitor() {
       frame = requestAnimationFrame(tick)
     }
 
+    // A7 (advisors): a hidden tab must not bank up time — pause instead of jump.
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') useEditor.getState().togglePlay(false)
+    }
+    document.addEventListener('visibilitychange', onVis)
+
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      cancelAnimationFrame(frame)
+    }
   }, [playing])
 
   /* ------------------------------------------------------------- styling -- */

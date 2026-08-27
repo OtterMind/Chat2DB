@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -127,10 +128,26 @@ def install(packages: list[str], on_progress=None) -> dict:
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
 
+    # A2 (advisors): a pip that hangs on a dead network must not hang the task
+    # forever — 20 silent minutes kill the child and surface a real error.
+    import threading  # noqa: PLC0415
+
+    last_activity = time.monotonic()
+
+    def watchdog() -> None:
+        while process.poll() is None:
+            if time.monotonic() - last_activity > 1200:
+                process.kill()
+                return
+            time.sleep(5)
+
+    threading.Thread(target=watchdog, daemon=True).start()
+
     lines: list[str] = []
     downloaded = 0
     assert process.stdout is not None
     for line in process.stdout:
+        last_activity = time.monotonic()
         line = line.rstrip()
         if not line:
             continue

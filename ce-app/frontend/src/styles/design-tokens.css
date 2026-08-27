@@ -1,0 +1,225 @@
+/* ============================================================
+ * Cutting Edge — Design Tokens (Hybrid: Minimal + Cyberpunk + Glass)
+ * v0.9.34 — Production-ready CSS variables
+ *
+ * این فایل جایگزین global.css:root می‌شود.
+ * Usage: import './styles/design-tokens.css' at the top of global.css
+ * ============================================================ */
+
+:root {
+  /* ============================================================
+   * LAYER 1: FOUNDATION (Minimal Pro) — always on, 95% of every screen
+   * ============================================================ */
+
+  /* Surfaces (از تیره‌ترین به روشن‌ترین) */
+  --ce-bg:               #0A0A0A;   /* canvas */
+  --ce-bg-elev:          #0F0F14;   /* sidebar, toolbar */
+  --ce-surface:          #18181F;   /* card, modal */
+  --ce-surface-2:        #25252E;   /* nested card, hover */
+
+  /* Borders & dividers */
+  --ce-border:           rgba(255, 255, 255, 0.08);
+  --ce-border-strong:    rgba(255, 255, 255, 0.16);
+  --ce-divider:          rgba(255, 255, 255, 0.06);
+
+  /* Text hierarchy */
+  --ce-text:             #FFFFFF;                 /* primary */
+  --ce-text-secondary:   rgba(255, 255, 255, 0.7);
+  --ce-text-tertiary:    rgba(255, 255, 255, 0.5);
+  --ce-text-disabled:    rgba(255, 255, 255, 0.3);
+
+  /* Typography */
+  --ce-font-sans:        'Inter', 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --ce-font-mono:        'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+  --ce-font-fa:          'Vazirmatn', 'Inter', system-ui, sans-serif;
+
+  /* Spacing scale (4px grid) */
+  --ce-space-1:          4px;
+  --ce-space-2:          8px;
+  --ce-space-3:          12px;
+  --ce-space-4:          16px;
+  --ce-space-5:          24px;
+  --ce-space-6:          32px;
+  --ce-space-7:          48px;
+  --ce-space-8:          64px;
+  --ce-space-9:          96px;
+
+  /* Radius scale */
+  --ce-radius-sm:        6px;
+  --ce-radius-md:        8px;
+  --ce-radius-lg:        12px;
+  --ce-radius-xl:        16px;
+
+  /* Motion (واحد: ms) */
+  --ce-ease:             cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ce-ease-in:          cubic-bezier(0.4, 0, 1, 1);
+  --ce-ease-out:         cubic-bezier(0, 0, 0.2, 1);
+  --ce-duration-fast:    150ms;
+  --ce-duration:         200ms;
+  --ce-duration-slow:    300ms;
+
+  /* Z-index scale */
+  --ce-z-base:           1;
+  --ce-z-sticky:         20;
+  --ce-z-overlay:        40;
+  --ce-z-modal:          60;
+  --ce-z-toast:          80;
+
+  /* ============================================================
+   * LAYER 2: ACCENT (Cyberpunk) — only on 5 elements
+   * ============================================================ */
+
+  --ce-neon-pink:        #FF2D9C;
+  --ce-neon-cyan:        #00F0FF;
+  --ce-neon-purple:      #A855F7;
+  --ce-neon-green:       #10F0A0;
+  --ce-neon-amber:       #FFB800;
+  --ce-neon-red:         #EF4444;
+
+  /* Glow shadows */
+  --ce-glow-pink:        0 0 8px rgba(255, 45, 156, 0.6);
+  --ce-glow-pink-lg:     0 0 16px rgba(255, 45, 156, 0.8);
+  --ce-glow-cyan:        0 0 8px rgba(0, 240, 255, 0.5);
+  --ce-glow-green:       0 0 12px rgba(16, 240, 160, 0.5);
+  --ce-glow-amber:       0 0 8px rgba(255, 184, 0, 0.4);
+
+  /* ============================================================
+   * LAYER 3: OVERLAY (Glassmorphism) — only on floating UI
+   * ============================================================ */
+
+  --ce-glass-bg:         rgba(255, 255, 255, 0.05);
+  --ce-glass-bg-strong:  rgba(255, 255, 255, 0.08);
+  --ce-glass-border:     rgba(255, 255, 255, 0.12);
+  --ce-glass-blur:       blur(20px);
+  --ce-glass-blur-lg:    blur(40px);
+  --ce-glass-shadow:     0 8px 32px rgba(0, 0, 0, 0.4);
+
+  /* ============================================================
+   * SEMANTIC TOKENS — refer to the layers, not raw values
+   * ============================================================ */
+
+  /* Buttons */
+  --ce-button-bg:        var(--ce-surface-2);
+  --ce-button-bg-hover:  var(--ce-surface);
+  --ce-button-text:      var(--ce-text);
+  --ce-button-border:    var(--ce-border);
+
+  /* Inputs */
+  --ce-input-bg:         var(--ce-bg-elev);
+  --ce-input-border:     var(--ce-border);
+  --ce-input-border-focus: var(--ce-neon-cyan);
+  --ce-input-text:       var(--ce-text);
+  --ce-input-placeholder: var(--ce-text-tertiary);
+
+  /* Status */
+  --ce-status-online:    var(--ce-neon-green);
+  --ce-status-warning:   var(--ce-neon-amber);
+  --ce-status-error:     var(--ce-neon-red);
+  --ce-status-info:      var(--ce-neon-cyan);
+
+  /* Accent semantic */
+  --ce-accent:           var(--ce-neon-pink);       /* default primary */
+  --ce-accent-glow:      var(--ce-glow-pink);
+  --ce-accent-subtle:    rgba(255, 45, 156, 0.16);
+}
+
+/* ============================================================
+ * UTILITY CLASSES — for direct application in components
+ * ============================================================ */
+
+/* Glassmorphism (only on floating elements) */
+.ce-glass {
+  background: var(--ce-glass-bg);
+  backdrop-filter: var(--ce-glass-blur);
+  -webkit-backdrop-filter: var(--ce-glass-blur);
+  border: 1px solid var(--ce-glass-border);
+  box-shadow: var(--ce-glass-shadow);
+}
+
+.ce-glass-strong {
+  background: var(--ce-glass-bg-strong);
+  backdrop-filter: var(--ce-glass-blur-lg);
+  -webkit-backdrop-filter: var(--ce-glass-blur-lg);
+  border: 1px solid var(--ce-glass-border);
+  box-shadow: var(--ce-glass-shadow);
+}
+
+/* Cyberpunk accents (only on 5 elements) */
+.ce-neon-pink {
+  color: var(--ce-neon-pink);
+  text-shadow: var(--ce-glow-pink);
+}
+.ce-neon-cyan {
+  color: var(--ce-neon-cyan);
+  text-shadow: var(--ce-glow-cyan);
+}
+.ce-neon-green {
+  color: var(--ce-neon-green);
+  text-shadow: var(--ce-glow-green);
+}
+
+.ce-glow-pink {
+  box-shadow: var(--ce-glow-pink);
+}
+.ce-glow-cyan {
+  box-shadow: var(--ce-glow-cyan);
+}
+
+/* Typography utilities */
+.ce-mono {
+  font-family: var(--ce-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ce-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ce-text-tertiary);
+}
+
+.ce-h1 {
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.ce-h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+
+.ce-body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--ce-text-secondary);
+}
+
+/* Card primitive */
+.ce-card {
+  background: var(--ce-surface);
+  border: 1px solid var(--ce-border);
+  border-radius: var(--ce-radius-lg);
+  padding: var(--ce-space-5);
+}
+
+/* Hairline divider */
+.ce-hairline {
+  height: 1px;
+  background: var(--ce-divider);
+  border: none;
+  margin: 0;
+}
+
+/* Reduced motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

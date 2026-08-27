@@ -1,21 +1,28 @@
 from __future__ import annotations
-import json, sqlite3
+import json, sqlite3, threading
 from pathlib import Path
 from app.config import settings
 
 class Database:
+    """One connection per thread (A3, advisors): WAL allows many readers, but a
+    single shared connection with check_same_thread=False let two threads
+    interleave writes. Thread-local connections + a busy timeout keep SQLITE_BUSY
+    rare and recoverable."""
+
     def __init__(self, db_path: Path | str):
         self.db_path = Path(db_path)
-        self._local = None
+        self._tls = threading.local()
     def connect(self) -> sqlite3.Connection:
-        if self._local is None:
+        conn = getattr(self._tls, "conn", None)
+        if conn is None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            conn = sqlite3.connect(str(self.db_path), timeout=10)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
-            self._local = conn
-        return self._local
+            conn.execute("PRAGMA busy_timeout=5000")
+            self._tls.conn = conn
+        return conn
     def initialize(self):
         conn = self.connect()
         conn.executescript("""
@@ -55,6 +62,7 @@ class Database:
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
         conn.commit()
     def close(self):
-        if self._local: self._local.close(); self._local = None
+        conn = getattr(self._tls, "conn", None)
+        if conn: conn.close(); self._tls.conn = None
 
 db = Database(settings.db_path)

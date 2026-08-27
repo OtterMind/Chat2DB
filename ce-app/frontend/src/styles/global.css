@@ -1,5 +1,6 @@
 /* Cutting Edge (CE) — Global Styles */
 /* Bundled offline — the packaged app must never depend on a CDN. */
+@import './design-tokens.css';
 @import '@fontsource/vazirmatn/400.css';
 @import '@fontsource/vazirmatn/600.css';
 @import '@fontsource/vazirmatn/700.css';
@@ -1539,3 +1540,41 @@ img { -webkit-user-drag: none; }
 
 /* captions: unsure words wear amber — Veed-style review affordance */
 .ed__word.is-unsure { color: var(--warning); text-decoration: underline dotted; cursor: help; }
+
+
+/* ══ 0.9.35 HYBRID ROOT REDESIGN — later definitions win ══════════════════
+   The Hybrid design system (90% minimal pro + 9% cyberpunk + 1% glass) is the
+   source of truth; legacy variable names remap onto it so every existing rule
+   repaints from one place. */
+:root {
+  --bg: var(--ce-bg);
+  --bg-elevated: var(--ce-bg-elev);
+  --surface: var(--ce-surface);
+  --surface-2: var(--ce-surface-2);
+  --border: var(--ce-border);
+  --text: var(--ce-text);
+  --muted: var(--ce-text-secondary);
+  --brand: var(--ce-neon-pink);
+  --brand-2: var(--ce-neon-cyan);
+  --grad: linear-gradient(135deg, var(--ce-neon-pink), var(--ce-neon-purple));
+  --success: var(--ce-neon-green);
+  --warning: var(--ce-neon-amber);
+  --danger: var(--ce-neon-red);
+  --playhead: var(--ce-neon-pink);
+  --texttrack: var(--ce-neon-purple);
+  --kf: var(--ce-neon-cyan);
+  --font-mono: var(--ce-font-mono);
+  --accent: var(--ce-neon-pink);
+  --accent-2: var(--ce-neon-cyan);
+}
+.ce-page__head h1, .ce-h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+.ce-card h2, .ce-h2 { font-size: 18px; font-weight: 500; }
+.ce-h3 { font-size: 14px; font-weight: 500; }
+.ce-eyebrow { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ce-text-tertiary); }
+body { font-family: var(--ce-font-sans); }
+[dir='rtl'], [dir='rtl'] body { font-family: var(--ce-font-fa); }
+.tl__playhead { background: var(--playhead); box-shadow: var(--ce-glow-pink); }
+[data-accent='violet'] { --accent: #a855f7; --accent-2: #00f0ff; }
+[data-accent='amber']  { --accent: #ffb800; --accent-2: #ff2d9c; }
+[data-accent='rose']   { --accent: #ef4444; --accent-2: #a855f7; }
+[data-accent='cyan']   { --accent: #00f0ff; --accent-2: #ff2d9c; }

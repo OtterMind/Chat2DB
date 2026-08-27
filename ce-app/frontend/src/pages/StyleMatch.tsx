@@ -7,6 +7,7 @@ import {
   ListChecks, Target, Crosshair, Timer, Globe, Users, Captions, Ban, Music4 as MusicIcon,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
+import { Scoreboard } from '../editor/Scoreboard'
 import {
   styleApi,
   type IntentAnswers,
@@ -669,11 +670,12 @@ export default function StyleMatch() {
           )}
 
           {result.summary.brain && result.summary.brain.scoreboard.length > 0 && (
-            <div className="ce-kv" style={{ marginTop: 8 }}>
-              <span>{t('Who planned it', 'چه کسی برنامه‌ریزی کرد')}</span>
-              <strong dir="ltr" data-testid="brain-line">
-                {result.summary.brain.line}
-              </strong>
+            <div style={{ marginTop: 10 }} data-testid="brain-line">
+              <Scoreboard
+                winner={result.summary.brain.winner ?? ''}
+                scoreboard={result.summary.brain.scoreboard}
+                variant="cyberpunk"
+              />
             </div>
           )}
 
