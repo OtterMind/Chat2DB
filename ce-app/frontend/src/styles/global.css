@@ -1663,3 +1663,43 @@ body { font-family: var(--ce-font-sans); }
   padding: 9px 10px; border-radius: var(--ce-radius-md); cursor: pointer; font-size: 13px;
 }
 .ln-pal:hover { background: var(--ce-surface-2); }
+
+/* ══ 0.9.36 — Hybrid compliance: EXACTLY 5 cyberpunk + 3 glass (golden rules) ══
+   1 playhead pink+glow · 2 scoreboard winner pink+★ · 3 primary/export pink
+   border + hover glow · 4 success green glow · 5 beat grid amber 1px.        */
+.ce-btn--primary, .ed__btn--primary, .ant-btn-primary, .ce-btn--auto {
+  background: var(--ce-surface) !important;
+  border: 1px solid var(--ce-neon-pink) !important;
+  color: var(--ce-text) !important;
+  box-shadow: none;
+}
+.ce-btn--primary:hover, .ed__btn--primary:hover, .ant-btn-primary:hover, .ce-btn--auto:hover {
+  box-shadow: var(--ce-glow-pink);
+}
+/* active tool = minimal strong border, not neon */
+.ed__btn.is-on, .ce-btn.is-on { border-color: var(--ce-border-strong) !important; color: var(--ce-text) !important; }
+/* snap guide = confirmation feedback: minimal white hairline, no glow */
+.tl__guide { background: var(--ce-text-tertiary); box-shadow: none; }
+/* beat grid: 1px amber (element 5) */
+.tl__beat { border-left: 1px solid var(--ce-neon-amber); opacity: .55; }
+/* brainbar heartbeat = success green (semantic), not pink */
+.brainbar .pulse { background: var(--ce-neon-green); }
+/* glass ONLY: TaskDock (.ce-running), AI FABs, share card. Strip it elsewhere. */
+.ce-running {
+  background: var(--ce-glass-bg-strong) !important;
+  border: 1px solid var(--ce-glass-border) !important;
+  backdrop-filter: var(--ce-glass-blur) !important;
+}
+.ln-tour { background: var(--ce-surface); border: 1px solid var(--ce-border); backdrop-filter: none; }
+.ant-modal-content, .ant-message-notice-content { backdrop-filter: none !important; background: var(--ce-surface) !important; }
+.ln-fab:hover { border-color: var(--ce-glass-border); box-shadow: var(--ce-glass-shadow); }
+/* launcher action dots are the C7.1 diagram's minimal accents (small, static) */
+.ln-action__dot { box-shadow: none; }
+/* AI Assistant FAB = glass element #2 */
+.ai-fab {
+  background: var(--ce-glass-bg-strong) !important;
+  border: 1px solid var(--ce-glass-border) !important;
+  backdrop-filter: var(--ce-glass-blur) !important;
+  color: var(--ce-text) !important;
+  box-shadow: var(--ce-glass-shadow) !important;
+}
