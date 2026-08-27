@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.37` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.38` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,18 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+124. **0.9.38 — a stabilization release: nothing new shipped, everything re-proven.**
+    The sandbox wiped `/tmp`, `node_modules` and the live servers between turns,
+    so the whole stack was rebuilt from nothing (`sandbox-test-env.sh` +
+    `npm i`) and the *already-shipped* 0.9.37 code was re-executed end to end on
+    the fresh environment: backend **454 passed / 0 failed / 10 skipped**;
+    `npm run verify` and `build` green; `test:ui` PASSED and `test:playback`
+    all-checks-passed against the production bundle; the three 0.9.37 doors
+    (`/api/emotion/status`, `/api/providers`, `/api/multicam/align`) answered
+    live, with multi-cam honestly reporting a weak match for unrelated clips.
+    No code changed — this number exists so the published installer always
+    corresponds to a state that was rebuilt and re-verified from a cold start.
 
 123. **The three deferred advisors' items are built, not promised (B2, B3, B8).**
     *B2 Cut-on-Emotion*: `core/engine/emotion.py` measures the *sound* of a
