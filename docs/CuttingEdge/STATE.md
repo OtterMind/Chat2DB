@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.48` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.49` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,19 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+135. **0.9.49 — Style Match rebuilt to professional Hybrid + the transcription hang
+    is now the user's choice.** The #1 "stuck" report was the automatic door forcing a
+    Whisper pass; section 1 now has a **captions switch** (on by default, one tap for
+    the fast path) threaded through `styleApi.apply(..., captions)`. Section 4's
+    bubble buttons became **professional option cards** (`.sm-opt`: numbered head,
+    why-line, trait chips, hover CTA, a single cyberpunk accent on the recommended
+    card) and the menu grew three capability presets (Sport highlight, Karaoke
+    captions, 30s TikTok hook) that map to intent fields the rebuild already knows.
+    Starters now carry a **mini shot-rhythm preview** (`RhythmBars`) so a starter's
+    pacing is visible before use. Verified live: captions switch present, rhythm
+    previews render, brain returns 4 options +3 presets, 0 console errors; `verify`,
+    `build`, `test:ui`, `test:playback` green.
 
 134. **0.9.48 — no dead tool left on the editor rail.** The greyed "SOON" tools the
     owner flagged (Translate & Dub, Voice Over, B-Roll, BG-remove, Enhance, Titles,

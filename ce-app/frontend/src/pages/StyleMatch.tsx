@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts'
-import { message, Modal, Input, InputNumber, Segmented } from 'antd'
+import { message, Modal, Input, InputNumber, Segmented, Switch } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
   ListChecks, Target, Crosshair, Timer, Globe, Users, Captions, Ban, Music4 as MusicIcon,
@@ -53,6 +53,9 @@ export default function StyleMatch() {
   const [brainFoot, setBrainFoot] = useState<BrainQA[]>([])
   const [footSig, setFootSig] = useState<Record<string, number> | null>(null)
   const [options, setOptions] = useState<BrainOption[]>([])
+  /** Captions need a Whisper pass that can take minutes on CPU — the #1 "stuck"
+      report. Default on, but the user can trade captions for speed in one tap. */
+  const [withCaptions, setWithCaptions] = useState(true)
   const [pending, setPending] = useState<{ footage: string; music: string | null } | null>(null)
   const [thinking, setThinking] = useState<'ref' | 'foot' | null>(null)
   const [chosen, setChosen] = useState<BrainOption | null>(null)
@@ -244,7 +247,8 @@ export default function StyleMatch() {
         pending.music,
         watcher,
         recipeIntent ? { ...option.intent, ...recipeIntent } : option.intent,
-        usePlan ?? null
+        usePlan ?? null,
+        withCaptions
       )
       setResult(built)
       tellBrainAccepted(built)
@@ -387,6 +391,10 @@ export default function StyleMatch() {
           <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void analyse()}>
             <FileVideo size={15} /> {t('Only analyse a reference', 'فقط الگو را تحلیل کن')}
           </button>
+          <label className="ce-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <Switch size="small" checked={withCaptions} onChange={setWithCaptions} />
+            {t('Captions (needs a Whisper pass — turn off for speed)', 'زیرنویس (نیاز به Whisper — برای سرعت خاموش کن)')}
+          </label>
         </div>
         {busy && (
           <div className="ce-work" data-testid="style-progress" data-stage={progress?.stage ?? 'starting'}>
@@ -528,22 +536,25 @@ export default function StyleMatch() {
               'هر گزینه یک تدوین متفاوت روی همان اندازه‌گیری‌هاست — یکی را انتخاب کن تا مغز بسازدش.'
             )}
           </p>
-          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', marginTop: 10 }}>
-            {options.map((o) => (
+          <div className="sm-grid" style={{ marginTop: 12 }}>
+            {[...options, ...CAP_PRESETS].map((o, idx) => (
               <button
                 key={o.id}
-                className="ce-btn ce-btn--ghost"
-                style={{ flexDirection: 'column', alignItems: 'stretch', textAlign: 'start', gap: 6, padding: '10px 12px', height: 'auto' }}
+                className={`sm-opt ${idx === 0 ? 'is-primary' : ''}`}
                 disabled={busy !== null}
                 onClick={() => void applyWith(o)}
               >
-                <strong>{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
-                <span className="ce-hint">{o.why[lang === 'fa' ? 'fa' : 'en']}</span>
-                <span className="ce-hint" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                <span className="sm-opt__head">
+                  <span className="sm-opt__num mono" dir="ltr">{String(idx + 1).padStart(2, '0')}</span>
+                  <strong>{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
+                </span>
+                <span className="sm-opt__why">{o.why[lang === 'fa' ? 'fa' : 'en']}</span>
+                <span className="sm-opt__traits">
                   {o.traits[lang === 'fa' ? 'fa' : 'en'].map((trait) => (
                     <span key={trait} className="ce-badge">{trait}</span>
                   ))}
                 </span>
+                <span className="sm-opt__cta mono" dir="ltr">{t('build this edit →', 'این تدوین را بساز ←')}</span>
               </button>
             ))}
           </div>
@@ -563,8 +574,9 @@ export default function StyleMatch() {
               <div key={starter.name} className="ce-reelcard" role="button" tabIndex={0}
                    onKeyDown={() => undefined}
                    onClick={() => void saveStarter(starter)}>
-                <span className="ce-reelcard__art"><Sparkles size={18} />
-                  <span className="ce-reelcard__len" dir="ltr">{starter.shots.length}×{starter.bpm}bpm</span>
+                <span className="ce-reelcard__art" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '10px 10px 8px' }}>
+                  <RhythmBars shots={(starter.shots as (number | { duration: number })[]).map((s) => ({ duration: typeof s === 'number' ? s : s.duration }))} />
+                  <span className="ce-reelcard__len" dir="ltr" style={{ alignSelf: 'flex-start' }}>{starter.shots.length}×{starter.bpm}bpm</span>
                 </span>
                 <span className="ce-reelcard__name">{starter.name}</span>
               </div>
@@ -810,5 +822,52 @@ function SigBars({ title, data }: { title: string; data: { k: string; v: number 
         </ResponsiveContainer>
       </div>
     </div>
+  )
+}
+
+/** Capability presets offered beside the brain's own menu — each maps to intent
+    fields the rebuild already understands, so they are real edits, not décor. */
+const CAP_PRESETS: BrainOption[] = [
+  {
+    id: 'cap-sport',
+    title: { en: 'Sport highlight', fa: 'هایلایت ورزشی' },
+    why: { en: 'slow-mo on the peaks, cut on the beat, open on the crowd', fa: 'اسلوموی اوج‌ها، برش روی ضرب، شروع با واکنش جمعیت' },
+    traits: { en: ['slow-mo peaks', 'cut on beat', 'crowd open'], fa: ['اسلوموی اوج', 'برش روی ضرب', 'شروع با جمعیت'] },
+    intent: { kind: 'sport', energy: 'high', goal: 'hook' },
+  },
+  {
+    id: 'cap-karaoke',
+    title: { en: 'Karaoke captions', fa: 'کپشن کارائوکه' },
+    why: { en: 'word-by-word highlight synced to the voice', fa: 'هایلایت کلمه‌به‌کلمه هم‌گام با صدا' },
+    traits: { en: ['word-by-word', 'synced'], fa: ['کلمه‌به‌کلمه', 'هم‌گام'] },
+    intent: { captions: 'karaoke' },
+  },
+  {
+    id: 'cap-30',
+    title: { en: '30s hook (TikTok)', fa: 'قلاب ۳۰ث (تیک‌تاک)' },
+    why: { en: 'thirty seconds, instant hook, vertical pacing', fa: 'سی ثانیه، قلاب آنی، ریتم عمودی' },
+    traits: { en: ['30 seconds', 'instant hook'], fa: ['۳۰ ثانیه', 'قلاب آنی'] },
+    intent: { seconds: 30, energy: 'high', platform: 'tiktok' },
+  },
+]
+
+/** A miniature shot-rhythm preview: one bar per shot, width = its length, so a
+    starter/template shows its pacing at a glance. */
+function RhythmBars({ shots, accent }: { shots: { duration: number }[]; accent?: string }) {
+  const total = shots.reduce((a, s) => a + (s.duration || 1), 0) || 1
+  return (
+    <span dir="ltr" style={{ display: 'flex', gap: 2, alignItems: 'stretch', height: 26, width: '100%' }}>
+      {shots.slice(0, 24).map((s, i) => (
+        <span
+          key={i}
+          style={{
+            flex: `${Math.max(0.12, (s.duration || 1) / total)} 1 0`,
+            borderRadius: 2,
+            background: accent ?? 'var(--ce-neon-cyan)',
+            opacity: 0.55 + 0.45 * ((i % 3) / 2),
+          }}
+        />
+      ))}
+    </span>
   )
 }

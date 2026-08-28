@@ -194,10 +194,11 @@ export const styleApi = {
     music?: string | null,
     watch?: Watcher,
     intent?: IntentAnswers,
-    usePlan?: string | null
+    usePlan?: string | null,
+    captions = true
   ): Promise<StyledEdit> => {
     const started = (
-      await api.post('/style/apply/start', { path, template, name, music, intent: intent ?? null, use_plan: usePlan ?? null })
+      await api.post('/style/apply/start', { path, template, name, music, intent: intent ?? null, use_plan: usePlan ?? null, captions })
     ).data as TaskState
     const follow = followTask(started.id, watch?.onProgress ?? (() => undefined))
     watch?.onStart?.(follow.cancel)

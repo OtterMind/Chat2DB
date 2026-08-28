@@ -1745,3 +1745,25 @@ body { font-family: var(--ce-font-sans); }
   border-radius: var(--ce-radius-md); color: var(--ce-neon-cyan);
 }
 .ce-hud--static { position: static; transform: none; display: block; margin-top: 10px; color: var(--ce-text-secondary); white-space: pre-wrap; }
+
+/* ---- Style Match "Choose how to start" — professional Hybrid option cards ---- */
+.sm-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.sm-opt {
+  display: flex; flex-direction: column; align-items: stretch; text-align: start; gap: 8px;
+  padding: 14px; border-radius: var(--ce-radius-lg);
+  background: var(--ce-surface); border: 1px solid var(--ce-border);
+  color: var(--ce-text); cursor: pointer;
+  transition: border-color var(--ce-duration) var(--ce-ease), transform var(--ce-duration) var(--ce-ease), box-shadow var(--ce-duration) var(--ce-ease);
+}
+.sm-opt:hover:not(:disabled) { border-color: var(--ce-border-strong); transform: translateY(-2px); }
+.sm-opt:disabled { opacity: .5; cursor: default; }
+/* The single cyberpunk accent: the recommended (first) option. */
+.sm-opt.is-primary { border-color: color-mix(in srgb, var(--ce-neon-pink) 55%, transparent); }
+.sm-opt.is-primary:hover:not(:disabled) { box-shadow: var(--ce-glow-pink); }
+.sm-opt__head { display: flex; align-items: center; gap: 8px; }
+.sm-opt__num { font-size: 11px; color: var(--ce-neon-cyan); }
+.sm-opt__head strong { font-size: 14px; font-weight: 600; }
+.sm-opt__why { color: var(--ce-text-secondary); font-size: 12px; line-height: 1.5; }
+.sm-opt__traits { display: flex; flex-wrap: wrap; gap: 4px; }
+.sm-opt__cta { font-size: 11px; color: var(--ce-neon-pink); opacity: 0; transition: opacity var(--ce-duration-fast); }
+.sm-opt:hover:not(:disabled) .sm-opt__cta { opacity: 1; }
