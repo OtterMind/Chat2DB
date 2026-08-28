@@ -5,18 +5,15 @@ import { ErrorCodesWithoutToast } from '@/constants/request';
 import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
-import { buildCommandLineParams } from './commandLineHeaders';
 
 export interface ICommandLineRequest {
   requestUrl: string;
   method: string;
   message: any;
-  headers?: Record<string, string>;
 }
 
 export interface ICommandLineParams extends ICommandLineRequest {
   uuid: string;
-  actionType: string;
 }
 
 export interface DesktopAbortControllerSignalParams {
@@ -26,7 +23,6 @@ export interface DesktopAbortControllerSignalParams {
 
 export interface DesktopRequestOptions {
   signal: (params: DesktopAbortControllerSignalParams) => void;
-  headers?: Record<string, string>;
 }
 
 export interface IOptions {
@@ -58,18 +54,15 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
   const language = useGlobalStore.getState().baseSetting.language;
   const id = uuidv4();
 
-  const commandLineParams = buildCommandLineParams(
-    {
-      ...data,
-      headers: {
-        ...data.headers,
-        ...options?.restParams?.headers,
-      },
+  const commandLineParams = {
+    actionType: 'execute',
+    headers: {
+      'Accept-Language': language,
+      'Time-Zone': new Intl.DateTimeFormat().resolvedOptions().timeZone,
     },
-    id,
-    language,
-    new Intl.DateTimeFormat().resolvedOptions().timeZone,
-  );
+    uuid: id,
+    ...data,
+  };
   return new Promise<R>((resolve, reject) => {
     const res = JSON.parse(
       JSON.stringify(commandLineParams, (key, value) => {

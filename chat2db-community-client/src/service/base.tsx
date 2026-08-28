@@ -79,7 +79,6 @@ export default function createRequest<P = void, R = void>(url: string, options?:
     params: P,
     restParams?: {
       signal: AbortSignal | DesktopRequestOptions['signal'] | null;
-      headers?: Record<string, string>;
     },
   ) {
     const paramsInUrl: string[] = [];
@@ -141,16 +140,14 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           eventualUrl = params as string;
         }
 
-        const { headers: restHeaders, ...requestRestParams } = restParams || {};
         const requestOptions: any = {
           credentials: 'include', // Whether to bring cookies with the default request
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            ...restHeaders,
           },
           [dataName]: params,
-          ...requestRestParams,
+          ...restParams,
         };
 
         if (contentType === 'formData') {
