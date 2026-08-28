@@ -7,6 +7,8 @@ const request = buildCommandLineParams(
     method: 'get',
     message: undefined,
     headers: {
+      'Accept-Language': 'overridden-language',
+      'Time-Zone': 'overridden-time-zone',
       'Chat2db-Organization-Id': '42',
       'Chat2db-Organization-Token': 'personal-token',
     },

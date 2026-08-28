@@ -15,8 +15,8 @@ export const buildCommandLineParams = (
   uuid: id,
   ...data,
   headers: {
+    ...data.headers,
     'Accept-Language': language,
     'Time-Zone': timeZone,
-    ...data.headers,
   },
 });
