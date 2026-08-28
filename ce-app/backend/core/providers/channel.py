@@ -47,6 +47,7 @@ CAPABILITIES: dict[str, str] = {
     "captions.polish": "clean caption text after the built-in pass — {items} → {items}",
     "audio.denoise": "write a cleaned copy of an audio file — {path, out} → {path}",
     "media.analyse": "extra measured signals for a file — {path} → {signals}",
+    "tts.synthesize": "text → spoken audio file (dub/voice-over) — {text, lang} → {path}",
 }
 
 #: Copyleft licences are fine *here* — that is the whole point of the separate

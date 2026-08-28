@@ -237,3 +237,18 @@ def test_denoise_is_offered_only_by_a_provider_that_has_it(shelf):
     # …and with nothing installed the old honest answer stands
     assert next(x for x in editor_brain.assess({"bpm": 0, "shots": []}, {}, {})
                 if x["tool"] == "denoise")["use"] is False
+
+
+def test_tts_endpoint_without_provider_is_a_clear_409():
+    r = client.post("/api/providers/tts", json={"text": "hello", "lang": "en"})
+    assert r.status_code == 409
+    assert "provider" in r.json()["detail"].lower()
+
+
+def test_tts_endpoint_empty_text_is_400():
+    assert client.post("/api/providers/tts", json={"text": "  "}).status_code == 400
+
+
+def test_tts_capability_is_in_the_catalogue():
+    from core.providers import channel
+    assert "tts.synthesize" in channel.CAPABILITIES

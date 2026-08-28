@@ -10,6 +10,7 @@ import { Slider, Segmented, Input, ColorPicker, message, Modal } from 'antd'
 import { reframeApi } from '../api/reframe'
 import { titlesApi, type TitlePreset } from '../api/titles'
 import { captionsApi } from '../api/captions'
+import { renderApi } from '../api/render'
 import {
   useEditor, propsOf, sampleChannel, MIN_CLIP, KEYFRAME_CHANNELS,
   type Clip, type ClipProps, type KeyframeChannel,
@@ -75,6 +76,7 @@ export default function EditorToolbar({
   const navigate = useNavigate()
   const i = lang === 'fa' ? 1 : 0
   const [soonLabel, setSoonLabel] = useState('')
+  const [dubOpen, setDubOpen] = useState(false)
   // Word-level alignment (whisperX) is an on-demand refinement, like Hazm for
   // text: used automatically when fetched, never a button the user must press.
   const [alignAvailable, setAlignAvailable] = useState(false)
@@ -274,7 +276,7 @@ export default function EditorToolbar({
       },
     },
     { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
-    { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], soon: true },
+    { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], panel: 'filters' },
     { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
@@ -284,19 +286,48 @@ export default function EditorToolbar({
     // Everything that was taken off the home screen: these act on footage, so
     // they belong next to the footage.
     ...FEATURES.filter((feature) => feature.place === 'editor').map<Tool>((feature) => {
-      // Two of them already exist here for real; the rest either open their own
-      // screen or admit they are not built yet.
+      // Every rail tool is wired to a real door — none is left a dead "SOON".
+      // The heavy ones (dub, translate) open the dub modal; the panel-backed ones
+      // select a clip and open their panel; the on-demand ones say exactly what
+      // they need and take the user to Settings.
+      const withClip = (panelId: PanelId) => () => {
+        const first = clips.find((c) => c.src) ?? clips[0]
+        if (first) {
+          select(first.id)
+          setPanel(panelId)
+        } else {
+          message.info(t('Add a clip first.', 'اول یک کلیپ اضافه کن.'))
+        }
+      }
       const local: Record<string, (() => void) | undefined> = {
         subtitles: () => void generateCaptions(),
         silence: onRemoveSilence,
         facetrack: () => void autoReframe(),
+        translate: () => setDubOpen(true),
+        voiceover: () => setDubOpen(true),
+        music: withClip('audio'),
+        enhance: withClip('adjust'),
+        titles: () => {
+          const id = useEditor.getState().addTextClip(t('Title', 'تیتراژ'))
+          select(id)
+          setPanel('text')
+        },
+        bgremove: () => {
+          message.info(t('Background removal is on-demand — add a segmentation provider in Settings.',
+            'حذف پس‌زمینه on-demand است — یک provider در Settings اضافه کن.'))
+          navigate('/settings')
+        },
+        broll: () => {
+          message.info(t('Auto B-Roll needs a Pexels key in Settings.', 'بی‌رول خودکار به کلید Pexels در Settings نیاز دارد.'))
+          navigate('/settings')
+        },
       }
       const run = local[feature.id]
       return {
         id: `f-${feature.id}`,
         icon: feature.icon,
         label: feature.label,
-        soon: !run && feature.badge === 'soon',
+        soon: false,
         run: run ?? (() => navigate(feature.route)),
       }
     }),
@@ -502,6 +533,8 @@ export default function EditorToolbar({
           )}
         </p>
       </Modal>
+
+      <DubModal open={dubOpen} onClose={() => setDubOpen(false)} />
 
       <div className="tb__rail">
         {tools.map((tool) => (
@@ -1427,5 +1460,93 @@ function PanelCaptions({ clip }: { clip: Clip }) {
         <Input value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
       </Modal>
     </div>
+  )
+}
+
+/**
+ * Translate & Dub door. Translate rewrites the text through the local-LLM
+ * captions path; Dub sends the text to an out-of-process TTS provider and drops
+ * the returned audio onto the audio lane. Without a provider the backend answers
+ * a clear 409, so the button explains itself instead of sitting dead.
+ */
+function DubModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n()
+  const [text, setText] = useState('')
+  const [lang, setLang] = useState('en')
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      const caps = useEditor.getState().clips.filter((c) => c.text !== undefined && c.src == null)
+      setText(caps.map((c) => c.text).join(' ').slice(0, 500))
+    }
+  }, [open])
+
+  const translate = async () => {
+    if (!text.trim()) return
+    setBusy('tr')
+    try {
+      const out = await captionsApi.translate([{ start: 0, end: 1, text }], lang)
+      if (out.cues[0]) setText(out.cues[0].text)
+      message.success(out.provider ? `${t('Translated', 'ترجمه شد')} · ${out.provider}` : t('Translated', 'ترجمه شد'))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const dub = async () => {
+    if (!text.trim()) return
+    setBusy('dub')
+    try {
+      const res = await fetch(`${backendOrigin}/api/providers/tts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang }),
+      })
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => ({}))).detail
+        throw new Error(detail ?? res.statusText)
+      }
+      const { path } = await res.json()
+      const info = await renderApi.probe(path)
+      const state = useEditor.getState()
+      let lane = state.tracks.find((x) => x.kind === 'audio')
+      if (!lane) {
+        state.addTrack('audio')
+        lane = useEditor.getState().tracks.find((x) => x.kind === 'audio')
+      }
+      const start = state.clips.filter((c) => c.trackId === lane!.id).reduce((a, c) => Math.max(a, c.start + c.duration), 0)
+      state.addClip({
+        trackId: lane!.id, start, duration: Math.max(0.5, info.duration), offset: 0,
+        sourceDuration: Math.max(0.5, info.duration), src: path,
+        label: t('Dub', 'دوبله'), color: '#EC4899',
+      })
+      message.success(t('Dub added to the audio lane', 'دوبله روی خط صوتی نشست'))
+      onClose()
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <Modal open={open} onCancel={onClose} footer={null} title={t('Translate & Dub', 'ترجمه و دوبله')}>
+      <Input.TextArea rows={4} value={text} onChange={(e) => setText(e.target.value)} dir="auto" />
+      <div className="ce-actions" style={{ marginTop: 10 }}>
+        <Segmented
+          value={lang}
+          onChange={(v) => setLang(String(v))}
+          options={[{ value: 'en', label: 'English' }, { value: 'fa', label: 'فارسی' }, { value: 'ar', label: 'عربی' }]}
+        />
+        <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== ''} onClick={() => void translate()}>
+          {busy === 'tr' ? t('Translating…', 'در حال ترجمه…') : t('Translate', 'ترجمه')}
+        </button>
+        <button className="ce-btn ce-btn--sm" disabled={busy !== ''} onClick={() => void dub()}>
+          {busy === 'dub' ? t('Dubbing…', 'در حال دوبله…') : t('Dub (TTS provider)', 'دوبله (provider TTS)')}
+        </button>
+      </div>
+    </Modal>
   )
 }

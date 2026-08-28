@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.47` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.48` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,18 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+134. **0.9.48 — no dead tool left on the editor rail.** The greyed "SOON" tools the
+    owner flagged (Translate & Dub, Voice Over, B-Roll, BG-remove, Enhance, Titles,
+    Music, Effects) are all wired now: Translate & Dub open a real modal (translate
+    via the local-LLM captions path; **dub = a new `tts.synthesize` provider
+    capability**, `/api/providers/tts`, that drops the returned audio on the audio
+    lane and answers a clear 409 when no TTS provider is installed — piper stays
+    out-of-process); Music/Enhance/Effects select a clip and open their panels;
+    Titles adds a title clip; BG-remove/B-Roll state exactly what they need and go
+    to Settings. Verified in-browser: **0** `.is-soon` tools, the dub modal opens,
+    0 console errors. Backend **505 passed / 0 failed / 10 skipped**; `verify`,
+    `build`, `test:ui`, `test:playback` green on the production bundle.
 
 133. **0.9.47 — every on-demand-engine button audited; a half-broken install can
     no longer pin the user.** Each engine-dependent endpoint behind the editor and
