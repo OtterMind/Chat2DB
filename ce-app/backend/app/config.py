@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
+    #: A local OpenAI-compatible gateway (OmniRoute / LiteLLM / OpenRouter-local).
+    #: One endpoint in front of many providers, with our own fallback on top —
+    #: the OmniRoute pattern, adopted natively and keyless for local gateways.
+    gateway_base_url: str = ""
+    gateway_api_key: str = ""
+    gateway_model: str = ""
     #: Which model answers the assistant: auto | off | ollama | openai | gemini
     #: | anthropic. Stored here rather than in the panel so one choice covers the
     #: chat, Settings and any future door to the same brain.

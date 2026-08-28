@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.51` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `1.0.0` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,20 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+138. **1.0.0 — the final cut.** Two MIT open-source projects evaluated at the
+    owner's request and folded in where they help (`FINAL_UX_AND_ROUTING_NOTES.md`):
+    **ui-ux-pro-max** as the design checklist for the closing polish (focus rings,
+    reduced-motion, loading states with Stop, confidence next to every AI decision),
+    and **OmniRoute** as a pattern, adopted natively: a new keyless **gateway**
+    provider (any local OpenAI-compatible endpoint) plus a **fallback ladder**
+    (`gateway→ollama→openai→gemini→anthropic`) so a dead provider degrades to the
+    next instead of silencing the assistant (regression-tested). Plans were already
+    deterministic by construction (no randomness in the planners). Backend
+    **508 passed / 0 failed / 10 skipped**; `verify`, `build`, `test:ui`,
+    `test:playback` green. Owner-side 1.0 gates (filmed clean install, workflow
+    paste, real-GPU NVENC number) remain documented in ROADMAP_1.0.md and do not
+    block this build.
 
 137. **0.9.51 — before/after scrub + real video loops on the studio.** Two additions
     from the open-source playbook, rebuilt dependency-free (the MIT clip-path +

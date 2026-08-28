@@ -306,3 +306,49 @@ def test_the_video_it_knows_about_is_described_in_the_user_language():
     step = next(step for step in turn["steps"] if "می‌دانم" in step["fa"])
     assert "آموزشی" in step["fa"]
     assert "Tutorial" not in step["fa"], "the Persian answer carried English labels"
+
+
+def test_fallback_ladder_moves_to_next_provider_on_failure(monkeypatch):
+    """OmniRoute-style resilience: a dead first provider degrades to the next."""
+    from core.assistant import providers
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "assistant_provider", "auto")
+    monkeypatch.setattr(settings, "ollama_enabled", True)
+    monkeypatch.setattr(settings, "openai_api_key", "sk-test")
+    monkeypatch.setattr(settings, "gateway_base_url", "")
+    monkeypatch.setattr(providers, "_requests", lambda: object())
+
+    calls = []
+    def fake_dispatch(provider, key, model, messages, json_mode, timeout, requests):
+        calls.append(provider)
+        if provider == "ollama":
+            raise RuntimeError("ollama down")
+        return "hello from " + provider
+
+    monkeypatch.setattr(providers, "_dispatch", fake_dispatch)
+    answer = providers.chat([{"role": "user", "content": "hi"}], choice="auto")
+
+    assert calls[:2] == ["ollama", "openai"]  # fell through the ladder
+    assert answer is not None and answer.provider == "openai"
+
+
+def test_gateway_is_first_in_the_ladder_when_configured(monkeypatch):
+    from core.assistant import providers
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "assistant_provider", "auto")
+    monkeypatch.setattr(settings, "gateway_base_url", "http://localhost:20128/v1")
+    monkeypatch.setattr(settings, "gateway_model", "omni")
+    ladder = providers.candidates("auto")
+    assert ladder[0][0] == "gateway" and ladder[0][2] == "omni"
+
+
+def test_no_provider_means_none_not_crash(monkeypatch):
+    from core.assistant import providers
+    from app.config import settings
+    for attr, val in [("ollama_enabled", False), ("openai_api_key", ""),
+                      ("gemini_api_key", ""), ("anthropic_api_key", ""),
+                      ("gateway_base_url", "")]:
+        monkeypatch.setattr(settings, attr, val)
+    assert providers.chat([{"role": "user", "content": "hi"}]) is None

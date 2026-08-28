@@ -25,7 +25,12 @@ from dataclasses import dataclass
 from app.config import settings
 
 #: What the user may pick in Settings. `auto` is the first one that is set up.
-CHOICES = ("auto", "off", "ollama", "openai", "gemini", "anthropic")
+CHOICES = ("auto", "off", "gateway", "ollama", "openai", "gemini", "anthropic")
+
+#: The OmniRoute-style fallback ladder: a local gateway first (one endpoint in
+#: front of many models), then local Ollama, then hosted keys. `chat` walks this
+#: ladder on failure, so a dead provider degrades to the next instead of silence.
+FALLBACK_ORDER = ("gateway", "ollama", "openai", "gemini", "anthropic")
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 
@@ -69,8 +74,11 @@ def configured(choice: str = "auto") -> tuple[str, str, str] | None:
             choice = "auto"
     if choice == "off":
         return None
-    order = ("ollama", "openai", "gemini", "anthropic") if choice == "auto" else (choice,)
+    order = FALLBACK_ORDER if choice == "auto" else (choice,)
     for name in order:
+        if name == "gateway" and settings.gateway_base_url:
+            return ("gateway", settings.gateway_api_key,
+                    settings.gateway_model or "default")
         if name == "ollama" and settings.ollama_enabled:
             return ("ollama", "", settings.ollama_model or "llama3")
         if name == "openai" and settings.openai_api_key:
@@ -80,6 +88,30 @@ def configured(choice: str = "auto") -> tuple[str, str, str] | None:
         if name == "anthropic" and settings.anthropic_api_key:
             return ("anthropic", settings.anthropic_api_key, "claude-3-5-haiku-latest")
     return None
+
+
+def candidates(choice: str = "auto") -> list[tuple[str, str, str]]:
+    """Every provider that could answer, in fallback order — the resilience ladder.
+
+    An explicit choice still allows the ladder to catch it if it fails at runtime
+    (a chosen but dead Ollama should not silence the assistant).
+    """
+    if choice == "off":
+        return []
+    if choice == "auto":
+        choice = (settings.assistant_provider or "auto").strip().lower()
+        if choice not in CHOICES:
+            choice = "auto"
+    if choice == "off":
+        return []
+    order = FALLBACK_ORDER if choice == "auto" else (choice,) + tuple(
+        p for p in FALLBACK_ORDER if p != choice)
+    out: list[tuple[str, str, str]] = []
+    for name in order:
+        one = configured(name) if name != "auto" else None
+        if one:
+            out.append(one)
+    return out
 
 
 def available() -> dict[str, dict]:
@@ -111,109 +143,88 @@ def available() -> dict[str, dict]:
     out["openai"] = {"ready": bool(settings.openai_api_key), "model": "gpt-4o-mini"}
     out["gemini"] = {"ready": bool(settings.gemini_api_key), "model": "gemini-1.5-flash"}
     out["anthropic"] = {"ready": bool(settings.anthropic_api_key), "model": "claude-3-5-haiku-latest"}
+    out["gateway"] = {
+        "ready": bool(settings.gateway_base_url),
+        "model": settings.gateway_model or "default",
+        "url": settings.gateway_base_url,
+    }
     return out
 
 
-def chat(
-    messages: list[dict],
-    *,
-    choice: str = "auto",
-    json_mode: bool = False,
-    timeout: float = 90.0,
-) -> Answer | None:
-    """Send a conversation, get one reply. `None` when no provider can answer.
+def _dispatch(provider, key, model, messages, json_mode, timeout, requests) -> str | None:
+    """One provider call; raise on any failure so the ladder can move on."""
+    if provider in ("gateway", "openai"):
+        base = (settings.gateway_base_url if provider == "gateway"
+                else settings.openai_base_url).rstrip("/")
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        response = requests.post(
+            f"{base}/chat/completions",
+            headers=headers,
+            json={"model": model, "messages": messages, "temperature": 0.2,
+                  **({"response_format": {"type": "json_object"}} if json_mode else {})},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    if provider == "ollama":
+        response = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={"model": model, "messages": messages, "stream": False,
+                  **({"format": "json"} if json_mode else {})},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json().get("message", {}).get("content")
+    if provider == "gemini":
+        system = " ".join(m["content"] for m in messages if m.get("role") == "system")
+        turns = [m for m in messages if m.get("role") != "system"]
+        contents = [{"role": "model" if m["role"] == "assistant" else "user",
+                     "parts": [{"text": m["content"]}]} for m in turns]
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
+            json={**({"systemInstruction": {"parts": [{"text": system}]}} if system else {}),
+                  "contents": contents,
+                  "generationConfig": {"temperature": 0.2,
+                                       **({"responseMimeType": "application/json"} if json_mode else {})}},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    # anthropic
+    system = " ".join(m["content"] for m in messages if m.get("role") == "system")
+    turns = [{"role": "assistant" if m["role"] == "assistant" else "user", "content": m["content"]}
+             for m in messages if m.get("role") != "system"]
+    response = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+        json={"model": model, "max_tokens": 1024, "temperature": 0.2,
+              **({"system": system} if system else {}), "messages": turns},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()["content"][0]["text"]
 
-    `messages` is `[{role, content}, ...]` in the OpenAI shape, which all four
-    providers accept with a little translation. History is the caller's — this
-    module holds no state, so a restart cannot lose half a conversation.
+
+def chat(messages, *, choice="auto", json_mode=False, timeout=90.0):
+    """Send a conversation, get one reply; `None` only when *no* provider can answer.
+
+    OmniRoute-style resilience: walk the fallback ladder and let a dead or slow
+    provider degrade to the next instead of silencing the assistant.
     """
-    config = configured(choice)
-    if config is None:
-        return None
     requests = _requests()
     if requests is None:
         return None
-
-    provider, key, model = config
     began = time.perf_counter()
-    try:
-        if provider == "ollama":
-            response = requests.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={"model": model, "messages": messages, "stream": False,
-                      **({"format": "json"} if json_mode else {})},
-                timeout=timeout,
-            )
-            text = response.json().get("message", {}).get("content")
-        elif provider == "openai":
-            response = requests.post(
-                f"{settings.openai_base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {key}"},
-                json={
-                    "model": model, "messages": messages, "temperature": 0.2,
-                    **({"response_format": {"type": "json_object"}} if json_mode else {}),
-                },
-                timeout=timeout,
-            )
-            text = response.json()["choices"][0]["message"]["content"]
-        elif provider == "gemini":
-            # Gemini separates the system instruction from the turns.
-            system = " ".join(m["content"] for m in messages if m.get("role") == "system")
-            turns = [m for m in messages if m.get("role") != "system"]
-            contents = [
-                {
-                    "role": "model" if m["role"] == "assistant" else "user",
-                    "parts": [{"text": m["content"]}],
-                }
-                for m in turns
-            ]
-            response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
-                f":generateContent?key={key}",
-                json={
-                    **({"systemInstruction": {"parts": [{"text": system}]}} if system else {}),
-                    "contents": contents,
-                    "generationConfig": {
-                        "temperature": 0.2,
-                        **({"responseMimeType": "application/json"} if json_mode else {}),
-                    },
-                },
-                timeout=timeout,
-            )
-            text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            system = " ".join(m["content"] for m in messages if m.get("role") == "system")
-            turns = [
-                {"role": "assistant" if m["role"] == "assistant" else "user", "content": m["content"]}
-                for m in messages
-                if m.get("role") != "system"
-            ]
-            response = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": model, "max_tokens": 1024, "temperature": 0.2,
-                    **({"system": system} if system else {}),
-                    "messages": turns,
-                },
-                timeout=timeout,
-            )
-            text = response.json()["content"][0]["text"]
-    except Exception:  # noqa: BLE001 — no model is an answer, not a crash
-        return None
-
-    if not text:
-        return None
-    return Answer(
-        text=str(text),
-        provider=provider,
-        model=model,
-        seconds=round(time.perf_counter() - began, 2),
-    )
+    for provider, key, model in candidates(choice):
+        try:
+            text = _dispatch(provider, key, model, messages, json_mode, timeout, requests)
+        except Exception:  # noqa: BLE001 — this provider failed; try the next
+            continue
+        if not text:
+            continue
+        return Answer(text=str(text), provider=provider, model=model,
+                      seconds=round(time.perf_counter() - began, 2))
+    return None
 
 
 def chat_stream(
