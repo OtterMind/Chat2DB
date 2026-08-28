@@ -1767,3 +1767,33 @@ body { font-family: var(--ce-font-sans); }
 .sm-opt__traits { display: flex; flex-wrap: wrap; gap: 4px; }
 .sm-opt__cta { font-size: 11px; color: var(--ce-neon-pink); opacity: 0; transition: opacity var(--ce-duration-fast); }
 .sm-opt:hover:not(:disabled) .sm-opt__cta { opacity: 1; }
+
+/* ---- Style Match redesign: stepper + studio band + live cards ---- */
+.sm-steps { display: flex; align-items: center; gap: 6px; margin: 4px 0 18px; }
+.sm-step { display: flex; align-items: center; gap: 6px; }
+.sm-step__num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11px; border: 1px solid var(--ce-border-strong); color: var(--ce-text-tertiary); }
+.sm-step--done .sm-step__num { background: var(--ce-neon-green); border-color: transparent; color: #06251b; }
+.sm-step--now  .sm-step__num { background: var(--ce-neon-pink); border-color: transparent; color: #2b0716; box-shadow: var(--ce-glow-pink); }
+.sm-step__label { font-size: 12px; color: var(--ce-text-secondary); }
+.sm-step--now .sm-step__label { color: var(--ce-text); }
+.sm-step__line { width: 26px; height: 1px; background: var(--ce-border); margin-inline-start: 6px; }
+
+.sm-studio { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 12px; margin: 0 0 14px;
+  background: var(--ce-surface); border: 1px solid var(--ce-border); border-radius: var(--ce-radius-lg); padding: 14px; }
+@media (max-width: 860px) { .sm-studio { grid-template-columns: 1fr; } }
+.sm-studio__col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sm-readout { font-size: 11px; color: var(--ce-text-tertiary); }
+
+.sm-loop { display: flex; gap: 4px; }
+.sm-loop img { width: 33%; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--ce-border); filter: saturate(.8); }
+
+.sm-meter { display: flex; align-items: center; gap: 6px; }
+.sm-meter__fill { height: 3px; border-radius: 2px; background: var(--ce-neon-cyan); }
+.sm-meter { position: relative; }
+.sm-meter::before { content: ''; position: absolute; inset-inline-start: 0; width: 78%; height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); }
+.sm-meter__num { font-size: 10px; color: var(--ce-text-tertiary); }
+
+.sm-opt__title { font-size: 14px; font-weight: 600; }
+.sm-opt__head { justify-content: space-between; }
+.sm-opt__head .sm-loop { flex: 1; }

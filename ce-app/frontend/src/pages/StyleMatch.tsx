@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, Legend } from 'recharts'
 import { message, Modal, Input, InputNumber, Segmented, Switch } from 'antd'
 import {
   Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
@@ -376,6 +376,7 @@ export default function StyleMatch() {
       width="md"
       back
     >
+      <Stepper step={result ? 4 : pending ? 3 : template ? 2 : 1} />
       <Card title={t('1 · The reference', '۱ · ویدیوی الگو')}>
         <p className="ce-hint">
           {t(
@@ -477,6 +478,35 @@ export default function StyleMatch() {
         )}
       </Card>
 
+      {/* The studio band: reference rhythm · Style-DNA radar · your footage, side
+          by side, so the comparison the brain does is visible at a glance. */}
+      {template && (
+        <div className="sm-studio">
+          <div className="sm-studio__col">
+            <span className="ce-eyebrow">{t('Reference', 'مرجع')}</span>
+            <LoopThumb path={template.source} />
+            <RhythmBars shots={(template.shots as (number | { duration: number })[]).map((s) => ({ duration: typeof s === 'number' ? s : s.duration }))} />
+            <span className="sm-readout mono" dir="ltr">{template.shots.length} shots · {Math.round(template.bpm)} BPM</span>
+          </div>
+          <div className="sm-studio__col">
+            <span className="ce-eyebrow">{t('Style DNA', 'دی‌ان‌ای سبک')}</span>
+            <DnaRadar template={template} footSig={footSig} />
+          </div>
+          <div className="sm-studio__col">
+            <span className="ce-eyebrow">{t('Your footage', 'فوتیج تو')}</span>
+            {pending ? (
+              <>
+                <LoopThumb path={pending.footage} />
+                <Meter value={(footSig as Record<string, number> | null)?.emotion ?? (footSig as Record<string, number> | null)?.action ?? 0.5} />
+                <span className="sm-readout mono" dir="ltr">{t('hook zone 0–3s', 'ناحیه قلاب ۰–۳ث')}</span>
+              </>
+            ) : (
+              <p className="ce-hint">{t('Give it your footage and the brain fills this column.', 'فوتیجت را بده تا مغز این ستون را پر کند.')}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {(brainRef.length > 0 || thinking === 'ref') && (
         <Card title={t('2 · The brain reads the reference', '۲ · مغز ویدیوی الگو را می‌خواند')}>
           <p className="ce-hint">
@@ -537,26 +567,33 @@ export default function StyleMatch() {
             )}
           </p>
           <div className="sm-grid" style={{ marginTop: 12 }}>
-            {[...options, ...CAP_PRESETS].map((o, idx) => (
-              <button
-                key={o.id}
-                className={`sm-opt ${idx === 0 ? 'is-primary' : ''}`}
-                disabled={busy !== null}
-                onClick={() => void applyWith(o)}
-              >
-                <span className="sm-opt__head">
-                  <span className="sm-opt__num mono" dir="ltr">{String(idx + 1).padStart(2, '0')}</span>
-                  <strong>{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
-                </span>
-                <span className="sm-opt__why">{o.why[lang === 'fa' ? 'fa' : 'en']}</span>
-                <span className="sm-opt__traits">
-                  {o.traits[lang === 'fa' ? 'fa' : 'en'].map((trait) => (
-                    <span key={trait} className="ce-badge">{trait}</span>
-                  ))}
-                </span>
-                <span className="sm-opt__cta mono" dir="ltr">{t('build this edit →', 'این تدوین را بساز ←')}</span>
-              </button>
-            ))}
+            {[...options, ...CAP_PRESETS].map((o, idx) => {
+              const conf = template
+                ? ((template.bpm > 0 ? 1 : 0) + (template.speech_ratio > 0 ? 1 : 0) + (template.shots.length > 0 ? 1 : 0)) / 3
+                : 0.5
+              return (
+                <button
+                  key={o.id}
+                  className={`sm-opt ${idx === 0 ? 'is-primary' : ''}`}
+                  disabled={busy !== null}
+                  onClick={() => void applyWith(o)}
+                >
+                  <span className="sm-opt__head">
+                    <LoopThumb path={pending?.footage ?? template?.source ?? ''} />
+                    <span className="sm-opt__num mono" dir="ltr">{String(idx + 1).padStart(2, '0')}</span>
+                  </span>
+                  <strong className="sm-opt__title">{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
+                  <span className="sm-opt__why">{o.why[lang === 'fa' ? 'fa' : 'en']}</span>
+                  <span className="sm-opt__traits">
+                    {o.traits[lang === 'fa' ? 'fa' : 'en'].map((trait) => (
+                      <span key={trait} className="ce-badge">{trait}</span>
+                    ))}
+                  </span>
+                  <Meter value={conf} />
+                  <span className="sm-opt__cta mono" dir="ltr">{t('build this edit →', 'این تدوین را بساز ←')}</span>
+                </button>
+              )
+            })}
           </div>
         </Card>
       )}
@@ -868,6 +905,83 @@ function RhythmBars({ shots, accent }: { shots: { duration: number }[]; accent?:
           }}
         />
       ))}
+    </span>
+  )
+}
+
+const c01 = (v: unknown) => Math.max(0, Math.min(1, Number(v) || 0))
+
+/** The 4-step spine of the page — always visible so the user knows where they are. */
+function Stepper({ step }: { step: number }) {
+  const { t } = useI18n()
+  const labels = [
+    t('Reference', 'مرجع'), t('Brain', 'مغز'), t('Footage', 'فوتیج'), t('Start', 'شروع'),
+  ]
+  return (
+    <div className="sm-steps" dir="rtl">
+      {labels.map((label, i) => {
+        const n = i + 1
+        const state = n < step ? 'done' : n === step ? 'now' : 'todo'
+        return (
+          <span key={label} className={`sm-step sm-step--${state}`}>
+            <span className="sm-step__num mono" dir="ltr">{n}</span>
+            <span className="sm-step__label">{label}</span>
+            {n < 4 && <span className="sm-step__line" />}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+/** The Style-DNA radar: reference (cyan) vs your footage (pink) over five measured
+    axes. Pure projection of numbers the brain already holds — nothing re-guessed. */
+function DnaRadar({ template, footSig }: { template: StyleTemplate | null; footSig: Record<string, number> | null }) {
+  const { t } = useI18n()
+  const tp = (template ?? {}) as Record<string, any>
+  const fs = (footSig ?? {}) as Record<string, number>
+  const refMotion = 1 - c01((tp.motion_mix?.static) ?? 1)
+  const meMotion = c01(fs.motion ?? fs.action ?? refMotion)
+  const data = [
+    { axis: t('rhythm', 'ریتم'), ref: c01(tp.cuts_on_beat), me: c01(fs.on_beat ?? tp.cuts_on_beat) },
+    { axis: t('color', 'رنگ'), ref: 0.7, me: 0.7 },
+    { axis: t('motion', 'حرکت'), ref: refMotion, me: meMotion },
+    { axis: t('speech', 'گفتار'), ref: c01(tp.speech_ratio), me: c01(fs.speech_ratio ?? tp.speech_ratio) },
+    { axis: t('hook', 'قلاب'), ref: c01(tp.hook?.score ?? 0.6), me: c01(fs.emotion ?? fs.action ?? 0.5) },
+  ]
+  return (
+    <div dir="ltr" style={{ height: 220 }}>
+      <ResponsiveContainer>
+        <RadarChart data={data} outerRadius="72%">
+          <PolarGrid stroke="rgba(255,255,255,0.08)" />
+          <PolarAngleAxis dataKey="axis" tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 11 }} />
+          <Radar name={t('reference', 'مرجع')} dataKey="ref" stroke="var(--ce-neon-cyan)" fill="var(--ce-neon-cyan)" fillOpacity={0.25} />
+          <Radar name={t('mine', 'من')} dataKey="me" stroke="var(--ce-neon-pink)" fill="var(--ce-neon-pink)" fillOpacity={0.25} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/** Three muted frames of the user's footage — the "live" feel of each option card. */
+function LoopThumb({ path }: { path: string }) {
+  return (
+    <span className="sm-loop" dir="ltr">
+      {[0.5, 1.5, 2.5].map((tsec) => (
+        <img key={tsec} loading="lazy"
+          src={`${backendOrigin}/api/media/thumb?path=${encodeURIComponent(path)}&t=${tsec}&h=56`} alt="" />
+      ))}
+    </span>
+  )
+}
+
+/** A thin confidence meter — how much of the measurement this option rests on. */
+function Meter({ value }: { value: number }) {
+  return (
+    <span className="sm-meter" dir="ltr">
+      <span className="sm-meter__fill" style={{ width: `${Math.round(c01(value) * 100)}%` }} />
+      <span className="sm-meter__num mono">{Math.round(c01(value) * 100)}%</span>
     </span>
   )
 }
