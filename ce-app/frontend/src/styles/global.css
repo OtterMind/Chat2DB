@@ -1797,3 +1797,21 @@ body { font-family: var(--ce-font-sans); }
 .sm-opt__title { font-size: 14px; font-weight: 600; }
 .sm-opt__head { justify-content: space-between; }
 .sm-opt__head .sm-loop { flex: 1; }
+
+/* ---- before/after scrub + hover video loops ---- */
+.sm-compare { position: relative; overflow: hidden; border-radius: 8px; border: 1px solid var(--ce-border);
+  aspect-ratio: 16/9; cursor: ew-resize; touch-action: none; background: #000; }
+.sm-compare__v { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sm-compare__v--after { /* clipped inline */ }
+.sm-compare__bar { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ce-neon-pink);
+  box-shadow: var(--ce-glow-pink); }
+.sm-compare__bar::after { content: ''; position: absolute; top: 50%; left: 50%; width: 14px; height: 14px;
+  transform: translate(-50%,-50%); border-radius: 50%; background: var(--ce-neon-pink); box-shadow: var(--ce-glow-pink); }
+.sm-compare__tag { position: absolute; bottom: 6px; font: 600 9px var(--font-mono, monospace); color: #fff;
+  background: rgba(0,0,0,.5); padding: 2px 6px; border-radius: 4px; }
+.sm-compare__tag--l { left: 6px; }
+.sm-compare__tag--r { right: 6px; }
+
+.sm-loop--video { display: block; }
+.sm-loop--video video { width: 100%; height: 56px; object-fit: cover; border-radius: 6px;
+  border: 1px solid var(--ce-border); filter: saturate(.85); }

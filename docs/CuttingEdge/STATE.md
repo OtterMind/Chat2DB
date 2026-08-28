@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.50` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.51` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,17 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+137. **0.9.51 — before/after scrub + real video loops on the studio.** Two additions
+    from the open-source playbook, rebuilt dependency-free (the MIT clip-path +
+    draggable-delimiter pattern): a **CompareSlider** in the "your footage" column —
+    two synced muted videos, the top one clipped and wearing the reference's grade
+    as a CSS filter, drag anywhere to sweep raw→graded — and **hover video loops**
+    on every "choose how to start" card (play on hover, rest otherwise, so seven
+    cards never decode at once). Both project the brain's numbers (the grade comes
+    from `template.look`); nothing new is guessed. Verified live: 1 compare slider
+    with 2 videos, 7 loop videos, 0 page errors; `verify`, `build`, `test:ui`,
+    `test:playback` green. Screenshot `ui-proposal/hybrid-compare-loop.png`.
 
 136. **0.9.50 — the Style Match studio redesign, shipped as one patch.** The page is
     now a studio, not a form: a 4-step spine (Reference/Brain/Footage/Start); a

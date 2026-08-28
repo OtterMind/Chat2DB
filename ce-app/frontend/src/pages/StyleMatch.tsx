@@ -19,7 +19,7 @@ import {
   type StyledEdit,
 } from '../api/style'
 import type { TaskState } from '../api/tasks'
-import { pickMedia } from '../api/render'
+import { pickMedia, mediaUrl } from '../api/render'
 import { backendOrigin } from '../api/runtime'
 import { useEditor, formatTimecode } from '../editor/model'
 import { useI18n } from '../i18n'
@@ -496,9 +496,9 @@ export default function StyleMatch() {
             <span className="ce-eyebrow">{t('Your footage', 'فوتیج تو')}</span>
             {pending ? (
               <>
-                <LoopThumb path={pending.footage} />
+                <CompareSlider path={pending.footage} filter={lookToFilter((template as StyleTemplate | null)?.look as Record<string, number> | undefined)} />
                 <Meter value={(footSig as Record<string, number> | null)?.emotion ?? (footSig as Record<string, number> | null)?.action ?? 0.5} />
-                <span className="sm-readout mono" dir="ltr">{t('hook zone 0–3s', 'ناحیه قلاب ۰–۳ث')}</span>
+                <span className="sm-readout mono" dir="ltr">{t('drag to sweep the grade · hook 0–3s', 'بکش تا گرید را ببینی · قلاب ۰–۳ث')}</span>
               </>
             ) : (
               <p className="ce-hint">{t('Give it your footage and the brain fills this column.', 'فوتیجت را بده تا مغز این ستون را پر کند.')}</p>
@@ -579,7 +579,7 @@ export default function StyleMatch() {
                   onClick={() => void applyWith(o)}
                 >
                   <span className="sm-opt__head">
-                    <LoopThumb path={pending?.footage ?? template?.source ?? ''} />
+                    <LoopVideo path={pending?.footage ?? template?.source ?? ''} />
                     <span className="sm-opt__num mono" dir="ltr">{String(idx + 1).padStart(2, '0')}</span>
                   </span>
                   <strong className="sm-opt__title">{o.title[lang === 'fa' ? 'fa' : 'en']}</strong>
@@ -982,6 +982,60 @@ function Meter({ value }: { value: number }) {
     <span className="sm-meter" dir="ltr">
       <span className="sm-meter__fill" style={{ width: `${Math.round(c01(value) * 100)}%` }} />
       <span className="sm-meter__num mono">{Math.round(c01(value) * 100)}%</span>
+    </span>
+  )
+}
+
+/** Turn a measured template look into a CSS filter, for the "after" side of the
+    compare. Pure projection of the numbers the analyser stored. */
+function lookToFilter(look: Record<string, number> | undefined): string {
+  const l = (look ?? {}) as Record<string, number>
+  const b = 1 + (l.brightness ?? 0)
+  const c = (l.contrast ?? 1)
+  const s = (l.saturation ?? 1)
+  const warm = l.temperature ?? 0
+  const hue = warm > 0 ? 'sepia(0.15)' : warm < 0 ? 'hue-rotate(8deg)' : ''
+  return `brightness(${b.toFixed(2)}) contrast(${c.toFixed(2)}) saturate(${s.toFixed(2)}) ${hue}`.trim()
+}
+
+/** Before/after scrub — the open-source clip-path + draggable-delimiter pattern,
+    rebuilt dependency-free over two synced muted videos (raw vs the reference's
+    grade). Drag anywhere on it to sweep the grade across your footage. */
+function CompareSlider({ path, filter }: { path: string; filter: string }) {
+  const [pos, setPos] = useState(50)
+  const ref = useRef<HTMLDivElement>(null)
+  const set = (clientX: number) => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    setPos(Math.max(0, Math.min(100, ((clientX - r.left) / r.width) * 100)))
+  }
+  return (
+    <div
+      ref={ref}
+      className="sm-compare"
+      onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); set(e.clientX) }}
+      onPointerMove={(e) => { if (e.buttons) set(e.clientX) }}
+      title="before / after"
+    >
+      <video className="sm-compare__v" src={mediaUrl(path)} muted loop autoPlay playsInline />
+      <video className="sm-compare__v sm-compare__v--after" style={{ filter, clipPath: `inset(0 0 0 ${pos}%)` }}
+        src={mediaUrl(path)} muted loop autoPlay playsInline />
+      <span className="sm-compare__bar" style={{ left: `${pos}%` }} />
+      <span className="sm-compare__tag sm-compare__tag--l" dir="ltr">raw</span>
+      <span className="sm-compare__tag sm-compare__tag--r" dir="ltr">graded</span>
+    </div>
+  )
+}
+
+/** A real muted video loop for option cards — plays on hover, rests otherwise so
+    seven cards never decode at once. */
+function LoopVideo({ path }: { path: string }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  return (
+    <span className="sm-loop sm-loop--video"
+      onMouseEnter={() => ref.current?.play().catch(() => undefined)}
+      onMouseLeave={() => ref.current?.pause()}>
+      <video ref={ref} src={mediaUrl(path)} muted loop playsInline preload="metadata" />
     </span>
   )
 }
