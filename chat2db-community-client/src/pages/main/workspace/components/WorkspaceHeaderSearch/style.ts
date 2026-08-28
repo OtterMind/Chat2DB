@@ -24,6 +24,29 @@ export const useStyles = createStyles(({ css, token }) => ({
     white-space: nowrap;
     user-select: none;
   `,
+  searchSuffix: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  `,
+  closeButton: css`
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: ${token.borderRadiusSM}px;
+    color: ${token.colorTextTertiary};
+    background: transparent;
+    cursor: pointer;
+
+    &:hover {
+      color: ${token.colorText};
+      background: ${token.colorFillSecondary};
+    }
+  `,
   iconButton: css`
     flex-shrink: 0;
     color: ${token.colorTextTertiary};

@@ -7,8 +7,9 @@ import { DeleteOutlined } from '@ant-design/icons';
 import connectionService, { IDriverResponse } from '@/service/connection';
 import UploadDriver from '@/components/UploadDriver';
 import LoadingGracile from '@/components/Loading/LoadingGracile';
-import { isDesktop } from '@/utils/env';
+import { isCommunityEnv, isDesktop } from '@/utils/env';
 import feedback from '@/utils/feedback';
+import { canSaveDriverDraft, resolveDriverSavePayload, type IDriverSaveDraft } from './driverUpload';
 const { Option } = Select;
 
 interface IProps {
@@ -31,7 +32,7 @@ export default memo<IProps>((props) => {
   const [driverForm] = Form.useForm();
   const [driverObj, setDriverObj] = useState<IDriverResponse>();
   const [uploadDriverModal, setUploadDriverModal] = useState(false);
-  const [driverSaved, setDriverSaved] = useState<any>({});
+  const [driverSaved, setDriverSaved] = useState<IDriverSaveDraft>({ dbType: backfillData?.type });
   const [desktopLoading, setDesktopLoading] = useState(false);
 
   useEffect(() => {
@@ -78,7 +79,10 @@ export default memo<IProps>((props) => {
   async function saveDriver() {
     try {
       setDesktopLoading(true);
-      await connectionService.saveDriver(driverSaved);
+      const savePayload = await resolveDriverSavePayload(driverSaved, isDesktop, (file) =>
+        connectionService.uploadDriver({ file }),
+      );
+      await connectionService.saveDriver(savePayload);
       setDesktopLoading(false);
       setUploadDriverModal(false);
       getDriverList();
@@ -191,7 +195,7 @@ export default memo<IProps>((props) => {
         ) : (
           <div />
         )}
-        {isDesktop && (
+        {(isDesktop || isCommunityEnv) && (
           <div
             className={styles.uploadCustomDrive}
             onClick={() => {
@@ -214,6 +218,7 @@ export default memo<IProps>((props) => {
           setUploadDriverModal(false);
         }}
         confirmLoading={desktopLoading}
+        okButtonProps={{ disabled: !canSaveDriverDraft(driverSaved) }}
       >
         <UploadDriver
           jdbcDriverClass={driverObj?.defaultDriverConfig?.jdbcDriverClass}

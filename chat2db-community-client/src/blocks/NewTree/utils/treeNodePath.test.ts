@@ -27,18 +27,16 @@ test('returns undefined when a search result is no longer in the source tree', (
   assert.equal(findTreeNodeWithAncestors([node('data-source')], 'data_source'), undefined);
 });
 
-test('restores the source node only when the click came from a search result', () => {
+test('restores the source node without terminating the active search session', () => {
   const sourceTree = [node('data-source', [node('data_source')])];
   const filteredNode = { ...sourceTree[0].children![0] };
 
   assert.deepEqual(resolveTreeNodeSelection(sourceTree, filteredNode, true), {
     node: sourceTree[0].children![0],
     ancestors: ['data-source'],
-    clearSearch: true,
   });
   assert.deepEqual(resolveTreeNodeSelection(sourceTree, filteredNode, false), {
     node: filteredNode,
     ancestors: [],
-    clearSearch: false,
   });
 });

@@ -43,8 +43,6 @@ const TitleRender = (props: IProps) => {
     toggleExpandedKeys,
     currentLoadingTreeNode,
     treeData,
-    setSearchBarValue,
-    setScrollTargetKey,
     userConfigTree,
   } = useTreeStore((state) => ({
     editingTreeNode: state.editingTreeNode,
@@ -61,8 +59,6 @@ const TitleRender = (props: IProps) => {
     toggleExpandedKeys: state.toggleExpandedKeys,
     currentLoadingTreeNode: state.currentLoadingTreeNode,
     treeData: state.treeData,
-    setSearchBarValue: state.setSearchBarValue,
-    setScrollTargetKey: state.setScrollTargetKey,
     userConfigTree: state.userConfigTree,
   }));
 
@@ -76,12 +72,10 @@ const TitleRender = (props: IProps) => {
       setFocusedContent(selectedNode.originalTitle || '');
     }
 
-    if (selection.clearSearch) {
-      // Search renders a filtered copy. Restore the source node before selecting
-      // it so a click becomes a real locate action after filtering ends.
-      setSearchBarValue('');
+    if (searchBarValue && selection.ancestors.length) {
+      // Search renders a filtered copy. Keep the search session active while
+      // rebinding selection to the source node and its stable ancestor path.
       setExpandedKeys(Array.from(new Set([...expandedKeys, ...selection.ancestors])));
-      setScrollTargetKey(selectedNode.key);
     }
 
     setCurrentTreeNode(selectedNode);

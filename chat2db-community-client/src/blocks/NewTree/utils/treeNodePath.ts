@@ -6,9 +6,7 @@ export interface TreeNodePath {
   ancestors: Key[];
 }
 
-export interface TreeNodeSelection extends TreeNodePath {
-  clearSearch: boolean;
-}
+export type TreeNodeSelection = TreeNodePath;
 
 export function findTreeNodeWithAncestors(
   treeData: TreeNodeData[] | null | undefined,
@@ -41,6 +39,5 @@ export function resolveTreeNodeSelection(
   return {
     node: located?.node || nodeData,
     ancestors: located?.ancestors || [],
-    clearSearch: Boolean(located),
   };
 }
