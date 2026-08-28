@@ -25,6 +25,7 @@
     "lint:style": "stylelint \"src/**/*.{css,less}\" --max-warnings=0",
     "test:i18n": "node ./scripts/validate-i18n.cjs",
     "test:community-boundary": "node ./scripts/verify-community-boundary.cjs",
+    "test:command-line-headers": "tsx src/service/commandLine/commandLineHeaders.test.ts",
     "test:retired-ai": "tsx src/blocks/AI/retiredAiSurface.test.ts && tsx src/blocks/AI/components/AIChatInput/mentionSelection.test.ts && tsx src/blocks/AI/knowledgeSelection.test.ts",
     "test:hot-update": "tsx src/store/global/slices/hotUpdate/action.test.ts",
     "test:result-pagination": "tsx src/blocks/SearchResult/components/ResultSet/pagination.test.ts",
