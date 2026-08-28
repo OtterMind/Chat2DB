@@ -22,6 +22,9 @@ export interface ClientNavigationResolutionContext {
 export type ClientMainPageCoreAction = 'settings';
 
 export interface ClientMainPageSlots {
+  actionBarBeforeTerminal?: ReactNode;
+  actionBarAfterTerminal?: ReactNode;
+  /** @deprecated Use actionBarBeforeTerminal. */
   actionBarFooter?: ReactNode;
   titleBarActions?: ReactNode;
 }

@@ -441,7 +441,11 @@ function CommunityMainPage() {
           hideSettings={
             Boolean(isEmbedIframe) || clientExtension.mainPage.hiddenCoreActions?.includes('settings') === true
           }
-          extras={clientExtension.mainPage.slots?.actionBarFooter}
+          beforeTerminal={
+            clientExtension.mainPage.slots?.actionBarBeforeTerminal ??
+            clientExtension.mainPage.slots?.actionBarFooter
+          }
+          afterTerminal={clientExtension.mainPage.slots?.actionBarAfterTerminal}
           onNavigate={handleNavItemClick}
           onOpenSettings={handleOpenSettings}
         />
