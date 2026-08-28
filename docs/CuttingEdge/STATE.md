@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `0.9.46` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `0.9.47` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,20 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+133. **0.9.47 — every on-demand-engine button audited; a half-broken install can
+    no longer pin the user.** Each engine-dependent endpoint behind the editor and
+    Style-Match buttons was exercised live: TransNet detect falls back to
+    scenedetect (200), transcribe answers 503 with a readable "not installed",
+    stems 409 "fetch it in Settings", ai-transitions 200, reframe uses the existing
+    `/reframe/plan` — all graceful, none crashes. The real defect found was self-
+    inflicted in 0.9.45: the already-present filter used `find_spec`, which reports
+    a package folder left by a *dead* download, so a broken torch was skipped
+    forever ("none of the engines work"). `_importable` now requires a real import —
+    missing **or broken** both get re-fetched (regression-tested). Install→available
+    without restart verified live (python-ass installed, status flipped to true on
+    the running backend). Backend **502 passed / 0 failed / 10 skipped**; `verify`,
+    `build`, `test:ui`, `test:playback` green on the production bundle.
 
 132. **0.9.46 — the editor returns to its global toolbar, and the bulk button
     stops force-feeding torch.** (1) Clicking anywhere on a lane that is not a clip

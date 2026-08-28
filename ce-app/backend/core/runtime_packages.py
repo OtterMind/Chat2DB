@@ -105,6 +105,26 @@ def _install_pip_free(packages: list[str], say) -> dict:
     return {"target": str(target), "packages": packages, "log": ["pip-free install"]}
 
 
+def _importable(spec: str) -> bool:
+    """Does this package's module actually *import* right now?
+
+    `find_spec` alone is not enough: a download that died halfway leaves a package
+    folder that `find_spec` happily reports, and skipping it would pin the user to
+    a broken install forever ("none of the engines work"). A real import is the
+    only honest test — a half-extracted torch raises and therefore gets re-fetched.
+    """
+    import importlib  # noqa: PLC0415
+
+    from core.engine import _pypi  # noqa: PLC0415
+
+    module = _pypi.parse_name(spec).replace("-", "_").split("[")[0]
+    try:
+        importlib.import_module(module)
+        return True
+    except Exception:  # noqa: BLE001 — missing OR broken both mean "re-install it"
+        return False
+
+
 def install(packages: list[str], on_progress=None) -> dict:
     """`pip install --target ~/CuttingEdge/runtime/py`, narrated.
 
@@ -115,23 +135,11 @@ def install(packages: list[str], on_progress=None) -> dict:
     target = ensure_on_path()
     say = on_progress or (lambda *_args, **_kwargs: None)
 
-    # Never re-install what already imports. Overwriting a library the running
-    # backend has loaded is exactly what raises "[WinError 5] Permission denied"
-    # on Windows (DLL in use), and re-downloading torch the user already has only
-    # burns their bandwidth. So a second "download all" is a fast no-op, not a
-    # fight with the operating system.
-    import importlib.util  # noqa: PLC0415
-
-    from core.engine import _pypi  # noqa: PLC0415
-
-    def _present(spec: str) -> bool:
-        module = _pypi.parse_name(spec).replace("-", "_").split("[")[0]
-        try:
-            return importlib.util.find_spec(module) is not None
-        except Exception:  # noqa: BLE001 — an unimportable name is "not present"
-            return False
-
-    packages = [p for p in packages if not _present(p)]
+    # Never re-install what already imports cleanly. Overwriting a library the
+    # running backend has loaded is exactly what raises "[WinError 5] Permission
+    # denied" on Windows (DLL in use), and re-downloading a healthy torch only
+    # burns bandwidth. A *broken* package fails the import test and IS re-fetched.
+    packages = [p for p in packages if not _importable(p)]
     if not packages:
         say("done", 1.0, "Everything requested is already installed")
         return {"target": str(target), "packages": [], "log": ["nothing to do"]}

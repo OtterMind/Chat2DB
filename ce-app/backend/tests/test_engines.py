@@ -200,3 +200,23 @@ def test_bulk_torch_only_for_engines_that_need_it():
     assert by_id["transnet"]["needs_torch"] is True and "torch" in by_id["transnet"]["deps"]
     assert by_id["mediapipe"]["needs_torch"] is False and "torch" not in by_id["mediapipe"]["deps"]
     assert by_id["hazm"]["needs_torch"] is False
+
+
+def test_importable_false_for_broken_half_install(tmp_path, monkeypatch):
+    """A download that died halfway must NOT be treated as present (the 0.9.45
+    find_spec regression that pinned users to broken torch)."""
+    import importlib.util
+
+    from app.config import settings
+    from core import runtime_packages
+
+    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
+    runtime_packages.ensure_on_path()
+    broken = runtime_packages.runtime_dir() / "brokenmod"
+    broken.mkdir(parents=True)
+    (broken / "__init__.py").write_text("raise RuntimeError('half extracted')")
+
+    assert importlib.util.find_spec("brokenmod") is not None  # find_spec lies…
+    assert runtime_packages._importable("brokenmod") is False  # …the import tells truth
+    assert runtime_packages._importable("json") is True
+    assert runtime_packages._importable("definitely-missing-xyz") is False
