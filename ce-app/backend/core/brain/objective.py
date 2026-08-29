@@ -104,6 +104,9 @@ class Context:
     #: Taste as a *prior* over weights (approve/reject memory), bounded tightly —
     #: a rebalance learned from the user, never a replacement for a measurement.
     prior: dict = field(default_factory=dict)
+    #: The footage's measured reaction (crowd/laughter) — lets an emotion-aware
+    #: planner put the roar where it belongs. 0 when not measured.
+    emotion: float = 0.0
 
     @property
     def target_duration(self) -> float:

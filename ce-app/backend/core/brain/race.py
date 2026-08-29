@@ -45,6 +45,34 @@ class Result:
         return " · ".join(parts) + (f" → used {self.winner}" if parts else "")
 
 
+def _ensemble(scoreboard: list[dict], context: Context) -> planners.Candidate | None:
+    """Collaboration, not just competition: a Borda-style vote across planners.
+
+    A pick that several planners independently chose gathers their scores; the
+    ensemble is the plan the brains agree on. It competes on the same scoreboard,
+    so agreement only wins when it actually scores — consensus is a candidate,
+    never a veto.
+    """
+    rows = [r for r in scoreboard if r.get("picks") and r["score"] > 0]
+    if len(rows) < 2:
+        return None
+    votes: dict[tuple[float, float], list] = {}
+    for row in rows:
+        for pick in row["picks"]:
+            key = (round(pick["start"], 2), round(pick["end"], 2))
+            votes.setdefault(key, [0.0, pick, set()])
+            votes[key][0] += row["score"]
+            votes[key][2].add(row["name"])
+    # Genuine agreement only: a pick counts when at least two *different* planners
+    # chose it. One planner's solo idea — including a bad model's — is not consensus.
+    ordered = [v[1] for v in sorted(votes.values(), key=lambda item: -item[0]) if len(v[2]) >= 2]
+    picks = planners._ordered([Pick(p["start"], p["end"], p.get("score", 0.0)) for p in ordered])
+    if not picks:
+        return None
+    return planners.Candidate(name="ensemble", picks=picks,
+                              note="the picks the planners agree on")
+
+
 def race(
     highlights: list[Pick],
     context: Context,
@@ -69,6 +97,8 @@ def race(
         planners.narrative_plan(highlights, context),
         planners.retention_plan(highlights, context),
         planners.variety_plan(highlights, context),
+        planners.hook_plan(highlights, context),
+        planners.emotion_plan(highlights, context),
     ):
         if extra is not None:
             candidates.append(extra)
@@ -101,6 +131,21 @@ def race(
         # Strictly greater: a tie keeps the deterministic plan.
         if best_score is None or score.total > best_score.total:
             best_candidate, best_score = candidate, score
+
+    # The brains collaborating: the ensemble of picks they agree on joins the race
+    # as one more candidate, scored like the rest.
+    ensemble = _ensemble(scoreboard, context)
+    if ensemble is not None:
+        escore = score_plan(ensemble.picks, context) if ensemble.picks else None
+        if escore is not None:
+            scoreboard.append({
+                "name": "ensemble", "score": round(escore.total, 4), "seconds": 0.0,
+                "shots": len(ensemble.picks), "note": ensemble.note,
+                "terms": escore.terms, "skipped": escore.skipped,
+                "picks": [p.as_dict() for p in ensemble.picks],
+            })
+            if best_score is None or escore.total > best_score.total:
+                best_candidate, best_score = ensemble, escore
 
     # The living part: the critic looks at the winning cut once more — at most
     # two revisions, replacements drawn from unused measured highlights, and the

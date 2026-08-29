@@ -324,6 +324,13 @@ def plan(path: str, canvas_width: int, canvas_height: int, fps: float = SAMPLE_F
     tracker = ("face" if "face" in kinds
                else "pose" if "pose" in kinds
                else "motion" if "motion" in kinds else "none")
+    if found:
+        # A vertical clip on a vertical canvas has scale=1 and no room to pan, so
+        # tracking was invisible on exactly the sports footage people reframe.
+        # Zoom in a touch whenever we have a subject to follow, so the camera move
+        # is real instead of a no-op.
+        scale = max(scale, 1.25)
+        room = max(0.0, (scale - 1.0) / 2.0)
     if not detections:
         return ReframePlan(scale=scale, keyframes=[{"t": 0.0, "x": 0.0}], fallback=True,
                            reason="no frames could be read")

@@ -252,3 +252,35 @@ def test_the_automatic_result_still_renders(reference, moves, tmp_path):
     assert output.exists()
     info = compose.probe_media(str(output))
     assert info["has_video"] and info["has_audio"]
+
+
+def test_suggest_transitions_works_on_any_video_track():
+    """The old code only looked at trackId=='v1', so a uid video track got nothing
+    while the UI still said 'applied'. Grouping by track fixes it."""
+    from core.engine import style
+
+    timeline = {
+        "tracks": [{"id": "vidA", "kind": "video"}],
+        "clips": [
+            {"id": "c1", "trackId": "vidA", "src": "/a.mp4", "start": 0, "duration": 2},
+            {"id": "c2", "trackId": "vidA", "src": "/b.mp4", "start": 2, "duration": 2},
+        ],
+    }
+    out = style.suggest_transitions(timeline, bpm=120)
+    assert len(out) == 1 and out[0]["fromClipId"] == "c1" and out[0]["toClipId"] == "c2"
+
+
+def test_suggest_transitions_skips_audio_and_gaps():
+    from core.engine import style
+
+    timeline = {
+        "tracks": [{"id": "a1", "kind": "audio"}, {"id": "v1", "kind": "video"}],
+        "clips": [
+            {"id": "s1", "trackId": "a1", "src": "/x.mp3", "start": 0, "duration": 2},
+            {"id": "s2", "trackId": "a1", "src": "/y.mp3", "start": 2, "duration": 2},
+            {"id": "v1c", "trackId": "v1", "src": "/a.mp4", "start": 0, "duration": 2},
+            {"id": "v2c", "trackId": "v1", "src": "/b.mp4", "start": 3, "duration": 2},  # gap
+        ],
+    }
+    out = style.suggest_transitions(timeline, bpm=120)
+    assert out == []  # audio junctions ignored; the video junction has a gap

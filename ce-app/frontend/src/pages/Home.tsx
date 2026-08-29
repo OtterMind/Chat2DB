@@ -27,6 +27,7 @@ const NAV: { id: string; route: string; fa: string; en: string }[] = [
   { id: 'dashboard', route: '/dashboard', fa: 'کارهای کلیپ', en: 'Clip jobs' },
   { id: 'uploads', route: '/uploads', fa: 'انتشار', en: 'Publish' },
   { id: 'settings', route: '/settings', fa: 'تنظیمات', en: 'Settings' },
+  { id: 'workflows', route: '/workflows', fa: 'ورکفلوها', en: 'Workflows' },
   { id: 'doctor', route: '/doctor', fa: 'عیب‌یابی', en: 'Diagnostics' },
 ]
 

@@ -369,3 +369,30 @@ def variety_plan(highlights: list[Pick], context: Context) -> Candidate | None:
     return Candidate(name="variety", picks=_ordered(chosen),
                      seconds=time.time() - started,
                      note="maximally different neighbours")
+
+
+def hook_plan(highlights: list[Pick], context: Context) -> Candidate | None:
+    """Short-form retention: the single strongest moment opens the edit.
+
+    A different strategy from the others — it sacrifices rhythm to guarantee the
+    hook lands in the first seconds. Only a candidate; the score decides.
+    """
+    if len(highlights) < 2:
+        return None
+    best = max(highlights, key=lambda p: p.score)
+    rest = sorted((p for p in highlights if p is not best), key=lambda p: -p.score)
+    picks = _ordered([best, *rest])
+    return Candidate(name="hook-first", picks=picks, note="strongest moment opens")
+
+
+def emotion_plan(highlights: list[Pick], context: Context) -> Candidate | None:
+    """When the room reacts (measured), weight the roar into the pick order.
+
+    Skips itself when no reaction was measured — a planner without its sense is
+    not a candidate, same rule as the rest.
+    """
+    if context.emotion <= 0.05 or not highlights:
+        return None
+    picks = _ordered(sorted(highlights, key=lambda p: -p.score))
+    return Candidate(name="emotion", picks=picks,
+                     note=f"reaction {context.emotion:.2f} weighted into the order")

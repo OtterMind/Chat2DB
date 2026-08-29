@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, Legend } from 'recharts'
 import { message, Modal, Input, InputNumber, Segmented, Switch } from 'antd'
 import {
-  Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle,
+  Sparkles, FileVideo, Wand2, Trash2, Loader2, Film, Music4, Gauge, Crop as CropIcon, Info, XCircle, Layers as LayersIcon,
   ListChecks, Target, Crosshair, Timer, Globe, Users, Captions, Ban, Music4 as MusicIcon,
 } from 'lucide-react'
 import Page, { Card } from '../components/Page'
@@ -166,6 +166,60 @@ export default function StyleMatch() {
         onCancel: () => resolve(null),
       })
     })
+  }
+
+  /** Several files at once — for blending references or batching footage. */
+  const chooseMulti = async (): Promise<string[]> => {
+    const picker = pickMedia()
+    if (picker) return await picker
+    const one = await choose()
+    return one ? [one] : []
+  }
+
+  /** Blend two or more references into one template. */
+  const analyseBlended = async () => {
+    const paths = await chooseMulti()
+    if (paths.length < 2) {
+      message.info(t('Pick at least two reference videos to blend.', 'حداقل دو ویدیوی الگو برای ترکیب انتخاب کن.'))
+      return
+    }
+    setBusy('analyse')
+    try {
+      const blended = await styleApi.analyseMulti(paths)
+      setTemplate(blended)
+      refresh()
+      message.success(t(`Blended ${paths.length} references into one template`, `${paths.length} الگو در یک قالب ترکیب شد`))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      clearWork()
+    }
+  }
+
+  /** Apply the current template to several of your videos at once. */
+  const applyToMany = async () => {
+    if (!template) return
+    const paths = await chooseMulti()
+    if (paths.length < 2) {
+      message.info(t('Pick at least two footage files.', 'حداقل دو فایل فوتیج انتخاب کن.'))
+      return
+    }
+    setBusy('apply')
+    try {
+      const out = await styleApi.applyMulti(paths, template.name, chosen?.intent as IntentAnswers | undefined, withCaptions)
+      const first = out.edits[0]
+      if (first) {
+        const editor = useEditor.getState()
+        editor.loadSnapshot(first.timeline as never, first.name)
+        editor.setAspect((first.aspect as never) ?? 'auto')
+        navigate('/studio')
+      }
+      message.success(t(`${out.count} edits built — the rest are saved as projects`, `${out.count} تدوین ساخته شد — بقیه به‌صورت پروژه ذخیره شدند`))
+    } catch (err) {
+      message.error((err as Error).message)
+    } finally {
+      clearWork()
+    }
   }
 
   const analyse = async () => {
@@ -392,6 +446,14 @@ export default function StyleMatch() {
           <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void analyse()}>
             <FileVideo size={15} /> {t('Only analyse a reference', 'فقط الگو را تحلیل کن')}
           </button>
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void analyseBlended()}>
+            <LayersIcon size={15} /> {t('Blend several references', 'ترکیب چند الگو')}
+          </button>
+          {template && (
+            <button className="ce-btn ce-btn--ghost ce-btn--sm" disabled={busy !== null} onClick={() => void applyToMany()}>
+              <Film size={15} /> {t('Apply to several footages', 'اعمال روی چند فوتیج')}
+            </button>
+          )}
           <label className="ce-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
             <Switch size="small" checked={withCaptions} onChange={setWithCaptions} />
             {t('Captions (needs a Whisper pass — turn off for speed)', 'زیرنویس (نیاز به Whisper — برای سرعت خاموش کن)')}

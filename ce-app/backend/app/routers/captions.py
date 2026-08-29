@@ -20,9 +20,12 @@ class TranscribeRequest(BaseModel):
     max_chars: int = Field(default=42, description="Soft limit per caption line")
     quality: str = Field(default="auto",
                          description="auto | fast(base) | balanced(medium) | best(large-v3)")
-    align: bool = Field(default=False, description="whisperX forced alignment when fetched")
     align: bool = Field(default=False,
                         description="Snap word edges to the audio with whisperX when fetched")
+
+
+class TranscribeStartRequest(TranscribeRequest):
+    pass
 
 
 @router.post("/transcribe")
@@ -53,6 +56,27 @@ async def transcribe(payload: TranscribeRequest) -> dict:
                             detail=f"model {exc} not downloaded — fetch it in Settings") from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/transcribe/start")
+def transcribe_start(payload: TranscribeStartRequest) -> dict:
+    """The same transcription as a *task* with live stages, so the UI can show the
+    model loading and the words arriving instead of a frozen spinner."""
+    from core.tasks import tasks  # noqa: PLC0415
+
+    try:
+        media = safe_user_path(payload.path)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400 if isinstance(exc, ValueError) else 404, detail=str(exc)) from exc
+
+    def work(reporter) -> dict:
+        return engine.transcribe_to_cues(
+            str(media), language=payload.language, max_chars=payload.max_chars,
+            align=payload.align, quality=payload.quality,
+            progress=lambda stage, fraction, label="": reporter.stage(stage, fraction, label),
+        )
+
+    return tasks.start("captions:transcribe", work).as_dict()
 
 
 @router.get("/status")

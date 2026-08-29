@@ -139,25 +139,40 @@ class ModelNotDownloaded(RuntimeError):
 
 
 def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42,
-                       align: bool = False, quality: str = "auto") -> dict:
+                       align: bool = False, quality: str = "auto", progress=None) -> dict:
     """quality: auto (best on disk) | fast | balanced | best.
     Asking for a rung that is not on disk raises ModelNotDownloaded — the UI
-    turns that into a fetch button, never a silent downgrade to `base`."""
+    turns that into a fetch button, never a silent downgrade to `base`.
+
+    Speed: greedy decode (beam=1) and best_of=1 on the fast rungs cut CPU time
+    several-fold with negligible caption-quality loss; `best` keeps beam=5.
+    `progress(stage, fraction, label)` is called per segment so the UI shows the
+    transcription actually moving instead of a frozen spinner.
+    """
+    say = progress or (lambda *a, **k: None)
     if quality == "auto":
         size = best_local_model()
     else:
         size = QUALITY_MODELS.get(quality, quality)
         if not model_present(size):
             raise ModelNotDownloaded(size)
+    say("model", 0.05, f"loading {size}")
     model = _load(size)
+    beam = 5 if quality == "best" else 1
     segments, info = model.transcribe(
-        path, language=language, word_timestamps=True, vad_filter=True
+        path, language=language, word_timestamps=True, vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 500},
+        beam_size=beam, best_of=1, condition_on_previous_text=False,
     )
+    duration = float(getattr(info, "duration", 0) or 0)
 
     words: list[dict] = []
     plain: list[str] = []
     for segment in segments:
         plain.append(segment.text.strip())
+        if duration > 0:
+            say("transcribe", 0.1 + 0.8 * min(1.0, float(segment.end) / duration),
+                f"…{segment.text.strip()[:24]}")
         for word in getattr(segment, "words", None) or []:
             words.append({
                 "start": round(float(word.start), 3),

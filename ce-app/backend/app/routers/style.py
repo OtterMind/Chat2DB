@@ -57,6 +57,81 @@ async def analyse(payload: AnalyseRequest) -> dict:
     return template.as_dict()
 
 
+class BlendRequest(BaseModel):
+    templates: list[dict] = Field(description="Two or more measured template documents")
+
+
+@router.post("/blend")
+def blend(payload: BlendRequest) -> dict:
+    """Combine several references into one blended template (numbers only)."""
+    if len(payload.templates) < 2:
+        raise HTTPException(status_code=400, detail="blending needs at least two references")
+    try:
+        return style.blend_templates(payload.templates)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+class AnalyseMultiRequest(BaseModel):
+    paths: list[str]
+    save: bool = True
+
+
+@router.post("/analyze-multi")
+async def analyse_multi(payload: AnalyseMultiRequest) -> dict:
+    """Analyse several reference videos and return their blend as one template."""
+    if len(payload.paths) < 2:
+        raise HTTPException(status_code=400, detail="give me at least two references")
+    loop = asyncio.get_running_loop()
+
+    def run() -> dict:
+        templates = [style.analyse(p, name=None) for p in payload.paths]
+        blended = style.blend_templates([t.as_dict() for t in templates])
+        if payload.save:
+            style.save_template({**blended, "name": blended["name"]})
+        return blended
+
+    try:
+        return await loop.run_in_executor(None, run)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+class ApplyMultiRequest(ApplyRequest):
+    paths: list[str] = Field(description="Several of your own footage files")
+
+
+@router.post("/apply-multi")
+async def apply_multi(payload: ApplyMultiRequest) -> dict:
+    """Rebuild each of several footage files in the same template — a batch."""
+    loop = asyncio.get_running_loop()
+
+    def run() -> list[dict]:
+        document = payload.inline
+        if document is None:
+            if not payload.template:
+                raise ValueError("Give a template name or an inline template")
+            document = style.load_template(payload.template)
+        return [
+            style.build_timeline(document, p, name=f"{payload.name}-{i}",
+                                 music=payload.music, captions=payload.captions,
+                                 brain=payload.brain, model=payload.model,
+                                 intent=payload.intent, use_plan=payload.use_plan,
+                                 intensity=payload.intensity)
+            for i, p in enumerate(payload.paths)
+        ]
+
+    try:
+        results = await loop.run_in_executor(None, run)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"count": len(results), "edits": results}
+
+
 @router.post("/analyze/start")
 async def analyse_start(payload: AnalyseRequest) -> dict:
     """Begin an analysis and answer immediately with a task to watch.

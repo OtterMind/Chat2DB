@@ -130,7 +130,7 @@ def test_the_rule_plan_is_always_in_the_race(monkeypatch):
     # The 0.9.30 planners join the race when their senses are alive (covered by
     # test_brain_upgrade); here the question is the older invariant — with no
     # model and nothing else to think with, the rule plan stands alone.
-    for name in ("narrative_plan", "retention_plan", "variety_plan"):
+    for name in ("narrative_plan", "retention_plan", "variety_plan", "hook_plan", "emotion_plan"):
         monkeypatch.setattr(planners, name, lambda *a, **k: None)
     result = race.race(_highlights(), _context(words=[]), use_llm=True)
 
@@ -148,7 +148,7 @@ def test_a_bad_model_answer_can_never_win(monkeypatch):
         seconds=1.0,
     )
     monkeypatch.setattr(planners, "ollama_plan", lambda *a, **k: nonsense)
-    for name in ("narrative_plan", "retention_plan", "variety_plan"):
+    for name in ("narrative_plan", "retention_plan", "variety_plan", "hook_plan", "emotion_plan"):
         monkeypatch.setattr(planners, name, lambda *a, **k: None)
 
     offline = race.race(_highlights(), context, use_llm=False)

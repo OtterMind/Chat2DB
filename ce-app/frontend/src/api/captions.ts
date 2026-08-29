@@ -36,6 +36,10 @@ export const captionsApi = {
   transcribe: async (path: string, language?: string, align = false,
     quality: 'auto' | 'fast' | 'balanced' | 'best' = 'auto'): Promise<Transcription> =>
     (await api.post('/captions/transcribe', { path, language, align, quality }, TRANSCRIBE)).data,
+  /** Task-based transcription with live stages, for a progress UI. */
+  transcribeStart: async (path: string, language: string | undefined, align: boolean,
+    quality: 'auto' | 'fast' | 'balanced' | 'best'): Promise<{ id: string }> =>
+    (await api.post('/captions/transcribe/start', { path, language, align, quality })).data,
   status: async (): Promise<{ available: boolean; reason?: string }> =>
     (await api.get('/captions/status')).data,
   /** Is whisperX word-level alignment fetched? Honest, so the button can say. */

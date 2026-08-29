@@ -360,3 +360,32 @@ def chat_stream(
             return
 
     return chunks()
+
+
+def run_chain(subject_text: str) -> dict:
+    """LLM-chaining (the n8n "LLM Chaining" pattern), native: three sequential
+    provider calls — summarise → title → hook — each feeding the next.
+
+    Without a provider every step reports None and the chain still returns its
+    shape, so the UI can show the pipeline even when it must run offline.
+    """
+    steps: list[dict] = []
+
+    summary = chat([{"role": "user",
+                     "content": f"Summarise this footage description in one sentence:\n{subject_text}"}])
+    steps.append({"step": "summarise", "provider": summary.label if summary else None,
+                  "out": summary.text if summary else None})
+    base = summary.text if summary else subject_text
+
+    title = chat([{"role": "user",
+                   "content": f"Give a 5-word title for: {base}"}])
+    steps.append({"step": "title", "provider": title.label if title else None,
+                  "out": title.text if title else None})
+
+    hook = chat([{"role": "user",
+                  "content": f"Write a one-line opening hook for: {base}"}])
+    steps.append({"step": "hook", "provider": hook.label if hook else None,
+                  "out": hook.text if hook else None})
+
+    return {"steps": steps,
+            "complete": all(s["out"] for s in steps)}

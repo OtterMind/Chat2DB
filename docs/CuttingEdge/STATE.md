@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `1.0.0` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `1.1.0` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,58 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+142. **1.1.0 — the eight n8n-inspired extensions, all local-first.** (1) outgoing
+    **webhook** after renders/workflows to the user's own n8n (`publish_webhook_url`);
+    (2) **AI-BOM / provenance** (`/api/extend/provenance`) listing which models/
+    providers touched an edit with licences; (3) personal **DNA RAG** archive
+    (`dna/save|match`) retrieving the closest accepted edit; (4) **auto-tag** +
+    natural-language clip search; (5) **scheduled/batch** workflow trigger
+    (`workflows/batch`, watch interval); (6) multi-platform **fan-out** export specs +
+    per-platform metadata; (7) **LLM-chaining** (summarise→title→hook) via the
+    provider ladder; (8) a local **AES-encrypted key vault** with tamper detection.
+    All exposed under `/api/extend/*` with a compact Extensions card in Workflows;
+    each degrades honestly when its piece is absent. Backend **529 passed / 0 failed
+    / 10 skipped**; `verify`, `build` green.
+
+141. **Multi-reference + multi-footage Style Match, and collaborating brains.**
+    Style Match now blends **two or more reference videos** into one template
+    (`style.blend_templates`, `/api/style/blend|analyze-multi` — scalars averaged,
+    shot rhythms merged, motion/colour mixes averaged; still numbers-only) and can
+    **apply one template to several of your footage files** at once
+    (`/api/style/apply-multi`). The brains collaborate: a new **ensemble** candidate
+    votes the picks that ≥2 planners agree on (a bad model's solo idea is never
+    consensus), plus two new planners (**hook-first**, **emotion**-aware via a new
+    `Context.emotion`). The editor gains an **Automation** door (run the Shorts
+    workflow on the selected clip, or open the Workflows studio). Tests: blend
+    averaging, ensemble-in-race, hook/emotion planners, bad-model invariant kept.
+    Backend **519 passed / 0 failed / 10 skipped**; `verify`, `build`, `test:ui`,
+    `test:playback` green; blend/apply-multi/automation controls verified in-browser.
+
+140. **A local n8n-flavoured automation layer (from zie619/n8n-workflows).** The
+    transferable idea of n8n is its shape — a trigger feeds an ordered node chain,
+    observable per node, fired manually/webhook/scheduled. `core/workflows.py`
+    rebuilds that shape local-first: nodes are our own engine steps
+    (ingest→measure→template→build→captions→save/export), presets are shipping
+    templates (Volleyball highlight / Talking-head clean-up / Shorts factory), and a
+    **watched-folder trigger** auto-runs a preset on every new video. `/api/workflows
+    /list|run|watch/*`; a Workflows page renders the node chains with live per-node
+    progress. Tests: chain builds+saves a project, watch start/stop. Backend
+    **514 passed / 0 failed / 10 skipped**; Workflows page renders 17 nodes, 0 errors.
+
+139. **Three field bugs fixed post-1.0 (ready to ship as 1.0.1).** (1) **AI
+    transitions** said "applied" while applying nothing: `suggest_transitions` only
+    looked at `trackId=='v1'`, so any other video track got zero junctions. It now
+    groups by video track (trusting the document's track kinds) and the UI reports
+    the real count (or "no junction" honestly) — verified in-browser: "applied to 1
+    junction". (2) **Face tracking on sports**: vertical→vertical gave scale=1 and
+    zero pan room, so tracking was invisible on exactly the footage people reframe;
+    the plan now zooms to ≥1.25 whenever a subject is found, and the message names
+    what was followed (speaker/athlete/action via `tracker`). (3) **Smart captions**:
+    transcription now runs as a task with live stages (model-load + per-segment words
+    shown in the progress toast) and is several-fold faster on the fast rungs
+    (beam=1, best_of=1, no condition-on-previous). Backend **510 passed / 0 failed /
+    10 skipped**; `verify`, `build`, `test:ui`, `test:playback` green.
 
 138. **1.0.0 — the final cut.** Two MIT open-source projects evaluated at the
     owner's request and folded in where they help (`FINAL_UX_AND_ROUTING_NOTES.md`):

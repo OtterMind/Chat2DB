@@ -157,6 +157,13 @@ export const styleApi = {
     watch?.onStart?.(follow.cancel)
     return (await follow.promise).result as StyleTemplate
   },
+  /** Blend several reference videos into one template (numbers only). */
+  analyseMulti: async (paths: string[]): Promise<StyleTemplate> =>
+    (await api.post('/style/analyze-multi', { paths, save: true }, { timeout: 20 * 60_000 })).data,
+  /** Rebuild each of several footage files in the same template. */
+  applyMulti: async (paths: string[], template: string, intent?: IntentAnswers, captions = true) =>
+    (await api.post('/style/apply-multi', { paths, template, intent: intent ?? null, captions },
+      { timeout: 20 * 60_000 })).data as { count: number; edits: StyledEdit[] },
   templates: async (): Promise<{ templates: TemplateSummary[] }> => (await api.get('/style/templates')).data,
   /** Tier 3: the compact style fingerprint of a measured template. */
   dna: async (template: Record<string, unknown>) =>

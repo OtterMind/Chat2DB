@@ -1815,3 +1815,10 @@ body { font-family: var(--ce-font-sans); }
 .sm-loop--video { display: block; }
 .sm-loop--video video { width: 100%; height: 56px; object-fit: cover; border-radius: 6px;
   border: 1px solid var(--ce-border); filter: saturate(.85); }
+
+/* ---- workflows: n8n-style node chain ---- */
+.wf-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.wf-node { display: inline-flex; align-items: center; gap: 6px; }
+.wf-node__id { font-size: 11px; padding: 4px 8px; border-radius: 6px;
+  background: var(--ce-surface); border: 1px solid var(--ce-border-strong); color: var(--ce-text-secondary); }
+.wf-node__arrow { color: var(--ce-neon-cyan); font-size: 12px; }

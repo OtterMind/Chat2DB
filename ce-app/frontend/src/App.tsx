@@ -15,6 +15,7 @@ import Uploads from './pages/Uploads'
 import Doctor from './pages/Doctor'
 import Attribution from './pages/Attribution'
 import StyleMatch from './pages/StyleMatch'
+import Workflows from './pages/Workflows'
 import { useI18n } from './i18n'
 
 const queryClient = new QueryClient({
@@ -73,6 +74,7 @@ function App() {
               <Route path="/doctor" element={<Doctor />} />
               <Route path="/attribution" element={<Attribution />} />
               <Route path="/style" element={<StyleMatch />} />
+              <Route path="/workflows" element={<Workflows />} />
             </Route>
           </Routes>
         </HashRouter>

@@ -17,6 +17,7 @@ import {
 } from './model'
 import { useI18n } from '../i18n'
 import { TRANSITIONS } from './transitions'
+import { Workflow as WorkflowIcon } from 'lucide-react'
 import { backendOrigin } from '../api/runtime'
 import { FEATURES } from '../features/catalog'
 
@@ -77,6 +78,7 @@ export default function EditorToolbar({
   const i = lang === 'fa' ? 1 : 0
   const [soonLabel, setSoonLabel] = useState('')
   const [dubOpen, setDubOpen] = useState(false)
+  const [autoOpen, setAutoOpen] = useState(false)
   // Word-level alignment (whisperX) is an on-demand refinement, like Hazm for
   // text: used automatically when fetched, never a button the user must press.
   const [alignAvailable, setAlignAvailable] = useState(false)
@@ -128,11 +130,19 @@ export default function EditorToolbar({
       const res = await fetch(`${backendOrigin}/api/style/ai-transitions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timeline: { clips: state.clips }, bpm }),
+        body: JSON.stringify({ timeline: { clips: state.clips, tracks: state.tracks }, bpm }),
       })
       const data = await res.json()
-      for (const t of data.transitions ?? []) addTransition(t.fromClipId, t.type, t.duration)
-      message.success(t('AI transitions applied to every junction', 'ترنزیشن هوشمند روی همه‌ی اتصال‌ها نشست'))
+      let applied = 0
+      for (const tr of data.transitions ?? []) {
+        if (addTransition(tr.fromClipId, tr.type, tr.duration)) applied++
+      }
+      if (applied === 0) {
+        message.info(t('No side-by-side junction to put a transition on — add a second clip on the same lane.',
+          'اتصال کنارهمی برای ترنزیشن نیست — یک کلیپ دوم روی همان لاین اضافه کن.'))
+      } else {
+        message.success(t(`AI transitions applied to ${applied} junction(s)`, `ترنزیشن هوشمند روی ${applied} اتصال نشست`))
+      }
     } catch {
       message.error(t('Could not reach the backend', 'بک‌اند در دسترس نیست'))
     }
@@ -171,10 +181,14 @@ export default function EditorToolbar({
         return
       }
       state.setClipKeyframes(target.id, plan.keyframes, plan.scale)
+      const noun =
+        plan.tracker === 'face' ? t('the speaker', 'گوینده')
+        : plan.tracker === 'pose' ? t('the athlete', 'ورزشکار')
+        : t('the action', 'اکشن')
       message.success(
         t(
-          `Following the speaker (${Math.round(plan.coverage * 100)}% of frames, ${plan.keyframes.length} keys)`,
-          `قاب روی گوینده قفل شد (${Math.round(plan.coverage * 100)}٪ فریم‌ها، ${plan.keyframes.length} کی‌فریم)`
+          `Following ${noun} (${Math.round(plan.coverage * 100)}% of frames, ${plan.keyframes.length} keys)`,
+          `قاب روی ${noun} قفل شد (${Math.round(plan.coverage * 100)}٪ فریم‌ها، ${plan.keyframes.length} کی‌فریم)`
         )
       )
     } catch (err) {
@@ -215,9 +229,43 @@ export default function EditorToolbar({
     if (!source.src) return
     const src = source.src
     const state = useEditor.getState()
-    const hide = message.loading(t('Transcribing…', 'در حال رونویسی…'), 0)
+    const KEY = 'ce-cap'
+    const show = (content: string) =>
+      message.open({ key: KEY, type: 'loading', content, duration: 0 })
+    show(t('Starting transcription…', 'شروع رونویسی…'))
+    const fail = (detail: string, status?: number) => {
+      message.destroy(KEY)
+      if (status === 409) {
+        const size = detail.match(/model (\S+) not/)?.[1] ?? 'medium'
+        fetchModelAndRetry(size, source)
+      } else {
+        message.error(
+          status === 503
+            ? t('Speech recognition is not available in this build.', 'تشخیص گفتار در این نسخه نصب نشده است.')
+            : detail
+        )
+      }
+    }
     try {
-      const result = await captionsApi.transcribe(src, undefined, alignAvailable, q)
+      const started = await captionsApi.transcribeStart(src, undefined, alignAvailable, q)
+      // Live progress: the task reports model-load and per-segment words, so the
+      // spinner finally shows WHAT the transcription is doing.
+      const task = await new Promise<any>((resolve, reject) => {
+        const poll = window.setInterval(async () => {
+          try {
+            const p = await fetch(`${backendOrigin}/api/tasks/${started.id}`).then((r) => r.json())
+            if (p.status === 'running') {
+              const pct = Math.round((p.progress ?? 0) * 100)
+              show(`${p.stage === 'model' ? t('loading model', 'بارگیری مدل') : t('listening', 'گوش می‌دهم')} ${pct}%${p.label ? ` · ${p.label}` : ''}`)
+              return
+            }
+            window.clearInterval(poll)
+            p.status === 'done' ? resolve(p) : reject(new Error(p.error || 'failed'))
+          } catch (e) { window.clearInterval(poll); reject(e as Error) }
+        }, 700)
+      })
+      message.destroy(KEY)
+      const result = task.result
       const count = state.addCaptions(result.cues, source.start - source.offset)
       const aligned = result.alignment === 'aligned'
       message.success(
@@ -226,18 +274,8 @@ export default function EditorToolbar({
       )
     } catch (err) {
       const resp = (err as { response?: { data?: { detail?: string }; status?: number } }).response
-      if (resp?.status === 409) {
-        const size = (resp.data?.detail ?? '').match(/model (\S+) not/)?.[1] ?? 'medium'
-        fetchModelAndRetry(size, source)
-      } else {
-        message.error(
-          resp?.status === 503
-            ? t('Speech recognition is not available in this build.', 'تشخیص گفتار در این نسخه نصب نشده است.')
-            : resp?.data?.detail ?? (err as Error).message
-        )
-      }
-    } finally {
-      hide()
+      if (resp) fail(resp.data?.detail ?? (err as Error).message, resp.status)
+      else fail((err as Error).message)
     }
   }
 
@@ -277,6 +315,7 @@ export default function EditorToolbar({
     },
     { id: 'overlay', icon: <Layers {...ICON} />, label: ['Overlay', 'لایه رویی'], run: () => addTrack('video') },
     { id: 'effects', icon: <Sparkles {...ICON} />, label: ['Effects', 'جلوه‌ها'], panel: 'filters' },
+    { id: 'automation', icon: <WorkflowIcon {...ICON} />, label: ['Automation', 'اتوماسیون'], run: () => setAutoOpen(true) },
     { id: 'filters', icon: <Wand2 {...ICON} />, label: ['Filters', 'فیلترها'], panel: 'filters' },
     { id: 'adjust', icon: <SlidersHorizontal {...ICON} />, label: ['Adjust', 'تنظیم رنگ'], panel: 'adjust' },
     { id: 'ratio', icon: <Ratio {...ICON} />, label: ['Ratio', 'نسبت تصویر'], panel: 'ratio' },
@@ -535,6 +574,39 @@ export default function EditorToolbar({
       </Modal>
 
       <DubModal open={dubOpen} onClose={() => setDubOpen(false)} />
+
+      <Modal open={autoOpen} onCancel={() => setAutoOpen(false)} footer={null}
+        title={t('Automation — run a pipeline on this clip', 'اتوماسیون — اجرا روی این کلیپ')}>
+        <div className="tb__stack">
+          <button className="ce-btn ce-btn--sm" onClick={() => {
+            const state = useEditor.getState()
+            const target = state.clips.find((c) => c.id === state.selectedId && c.src) ??
+              state.clips.filter((c) => c.src).sort((a, b) => a.start - b.start)[0]
+            if (!target?.src) { message.warning(t('Select a clip first.', 'اول یک کلیپ انتخاب کن.')); return }
+            setAutoOpen(false)
+            void (async () => {
+              const started = await fetch(`${backendOrigin}/api/workflows/run`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ preset: 'shorts', path: target.src }),
+              }).then((r) => r.json())
+              const hide = message.loading(t('Shorts factory running…', 'کارخانه‌ی شورت در حال اجرا…'), 0)
+              const poll = window.setInterval(async () => {
+                const p = await fetch(`${backendOrigin}/api/tasks/${started.id}`).then((r) => r.json())
+                if (p.status === 'running') return
+                window.clearInterval(poll); hide()
+                p.status === 'done'
+                  ? message.success(t('Automation done — project saved', 'اتوماسیون تمام شد و پروژه ذخیره شد'))
+                  : message.error(p.error || t('automation failed', 'اتوماسیون ناموفق'))
+              }, 900)
+            })()
+          }}>
+            <WorkflowIcon size={14} /> {t('Shorts factory on this clip', 'کارخانه‌ی شورت روی این کلیپ')}
+          </button>
+          <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={() => { setAutoOpen(false); navigate('/workflows') }}>
+            {t('Open the Workflows studio', 'بازکردن استودیوی ورکفلوها')}
+          </button>
+        </div>
+      </Modal>
 
       <div className="tb__rail">
         {tools.map((tool) => (

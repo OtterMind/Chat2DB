@@ -11,6 +11,8 @@ export interface ReframePlan {
   coverage: number
   fallback: boolean
   reason: string
+  /** face | pose | motion | none — what the camera actually followed. */
+  tracker?: string
 }
 
 /**

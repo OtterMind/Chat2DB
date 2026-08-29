@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     gateway_base_url: str = ""
     gateway_api_key: str = ""
     gateway_model: str = ""
+    #: After each render, notify the user's own endpoint (e.g. their n8n webhook).
+    #: Empty = off; a dead endpoint is reported, never fatal.
+    publish_webhook_url: str = ""
     #: Which model answers the assistant: auto | off | ollama | openai | gemini
     #: | anthropic. Stored here rather than in the panel so one choice covers the
     #: chat, Settings and any future door to the same brain.

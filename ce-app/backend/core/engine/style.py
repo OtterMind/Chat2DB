@@ -770,6 +770,18 @@ def _brain_context(
     # weights, bounded — a rebalance, never a replacement for a measurement.
     from core.brain import memory as taste  # noqa: PLC0415
 
+    # The footage's measured reaction, so the emotion planner can join the race
+    # when the room actually reacts; 0 (planner skips itself) otherwise.
+    emotion = 0.0
+    if info.get("has_audio"):
+        try:
+            from core.engine import emotion as emotion_engine  # noqa: PLC0415
+
+            cues = emotion_engine.audio_cues(source)
+            emotion = float(sum(cues.joy) / len(cues.joy)) if cues.joy else 0.0
+        except Exception:  # noqa: BLE001 — no reaction is a normal answer
+            emotion = 0.0
+
     return objective.Context(
         duration=duration,
         target_shots=[float(s["duration"]) for s in shots],
@@ -785,6 +797,7 @@ def _brain_context(
         narrative=narrative,
         platform=getattr(intent, "platform", None) if intent is not None else None,
         prior=taste.prior(),
+        emotion=emotion,
     )
 
 
@@ -1459,6 +1472,64 @@ def import_template(doc: dict, name: str | None = None) -> Path:
     return save_template(template)
 
 
+def blend_templates(templates: list[dict]) -> dict:
+    """Combine two or more measured references into one blended template.
+
+    The user asked to treat several videos as *one* reference. A template is only
+    numbers, so blending is well-defined: average the scalars, merge the shot lists
+    (the rhythm becomes the union of the references' cuts), and average the motion
+    and colour mixes. Nothing is copied from any video — the same guarantee as a
+    single reference, extended to many.
+    """
+    templates = [t for t in templates if t]
+    if not templates:
+        raise ValueError("nothing to blend")
+    if len(templates) == 1:
+        return templates[0]
+
+    def avg(key: str, default: float = 0.0) -> float:
+        vals = [float(t.get(key, default) or default) for t in templates]
+        return round(sum(vals) / len(vals), 3)
+
+    shots: list[dict] = []
+    for t in templates:
+        for s in (t.get("shots") or []):
+            shots.append(s if isinstance(s, dict) else {"duration": float(s)})
+
+    motion: dict[str, float] = {}
+    look: dict[str, float] = {}
+    for t in templates:
+        for k, v in (t.get("motion_mix") or {}).items():
+            motion[k] = motion.get(k, 0.0) + float(v) / len(templates)
+        for k, v in (t.get("look") or {}).items():
+            look[k] = look.get(k, 0.0) + float(v) / len(templates)
+
+    hook_scores = [ (t.get("hook") or {}).get("score", 0.0) or 0.0 for t in templates ]
+    blended = {
+        "name": f"blend×{len(templates)}",
+        "source": " + ".join(str(t.get("source", "")) for t in templates),
+        "duration": avg("duration"),
+        "aspect": templates[0].get("aspect", "16:9"),
+        "width": templates[0].get("width", 1920),
+        "height": templates[0].get("height", 1080),
+        "shots": shots,
+        "bpm": avg("bpm"),
+        "cuts_on_beat": avg("cuts_on_beat"),
+        "mean_shot": avg("mean_shot"),
+        "median_shot": avg("median_shot"),
+        "shortest_shot": avg("shortest_shot"),
+        "motion_mix": {k: round(v, 3) for k, v in motion.items()},
+        "look": {k: round(v, 3) for k, v in look.items()},
+        "speech_ratio": avg("speech_ratio"),
+        "hook": {"score": round(sum(hook_scores) / len(hook_scores), 3)},
+        "captions": templates[0].get("captions", {}),
+        "audio": templates[0].get("audio", {}),
+        "transitions": templates[0].get("transitions", {}),
+        "unknown": ["blended from %d references" % len(templates)],
+    }
+    return blended
+
+
 def starters() -> list[dict]:
     """A few hand-authored rhythms so a fresh gallery is not an empty room.
 
@@ -1503,25 +1574,39 @@ def suggest_transitions(timeline: dict, bpm: float = 120.0) -> list[dict]:
     between a soft and a directional move so a montage does not read as one
     repeated dissolve. It only *suggests*; the caller applies.
     """
-    clips = [c for c in timeline.get("clips", []) if c.get("trackId") == "v1"]
-    clips.sort(key=lambda c: float(c.get("start", 0)))
+    clips = list(timeline.get("clips", []))
+    track_kind = {t.get("id"): t.get("kind") for t in timeline.get("tracks", []) or []}
+
+    def is_video(clip) -> bool:
+        kind = track_kind.get(clip.get("trackId"))
+        if kind:  # trust the document when it tells us
+            return kind == "video"
+        return str(clip.get("trackId") or "")[:1].lower() not in ("a", "t")
+
+    groups: dict[str, list[dict]] = {}
+    for clip in clips:
+        if is_video(clip):
+            groups.setdefault(clip.get("trackId"), []).append(clip)
+
     half_beat = (60.0 / max(40.0, bpm)) / 2.0
     duration = round(max(0.2, min(0.8, half_beat)), 3)
     soft = ["fade", "smoothleft", "circleopen"]
     hard = ["slideleft", "wipeleft", "distance"]
 
     out = []
-    for index in range(len(clips) - 1):
-        a, b = clips[index], clips[index + 1]
-        # Contiguous junction only; a gap means the user left a deliberate break.
-        if abs((float(a["start"]) + float(a["duration"])) - float(b["start"])) > 0.05:
-            continue
-        family = soft if index % 2 == 0 else hard
-        out.append({
-            "fromClipId": a["id"], "toClipId": b["id"],
-            "type": family[(index // 2) % len(family)],
-            "duration": duration,
-        })
+    for group in groups.values():
+        group.sort(key=lambda c: float(c.get("start", 0)))
+        for index in range(len(group) - 1):
+            a, b = group[index], group[index + 1]
+            # Contiguous junction only; a gap means the user left a deliberate break.
+            if abs((float(a["start"]) + float(a["duration"])) - float(b["start"])) > 0.05:
+                continue
+            family = soft if index % 2 == 0 else hard
+            out.append({
+                "fromClipId": a["id"], "toClipId": b["id"],
+                "type": family[(index // 2) % len(family)],
+                "duration": duration,
+            })
     return out
 
 
