@@ -18,6 +18,53 @@ import { Bell, Menu } from 'lucide-react'
  * home. Everything else that used to live in the bars is on the launcher, where
  * a session starts.
  */
+/**
+ * The world-class landing (Finn-Loop phase 1, option D): gradient-mesh aurora,
+ * sparse gated particles, a spring logo, a sweeping filmstrip playhead and a
+ * glass CTA. Reduced-motion collapses it to a calm static mark. It dismisses on
+ * the CTA or on its own after a beat, so it never blocks the app.
+ */
+function Landing({ onDone }: { onDone: () => void }) {
+  const reduce = useReducedMotion()
+  const [gone, setGone] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => { setGone(true); onDone() }, reduce ? 400 : 2600)
+    return () => clearTimeout(t)
+  }, [onDone, reduce])
+  const leave = () => { setGone(true); onDone() }
+  return (
+    <motion.div className="ln-landing" initial={{ opacity: 1 }}
+      animate={{ opacity: gone ? 0 : 1 }} transition={{ duration: 0.5 }}
+      onAnimationComplete={() => { if (gone) onDone() }} role="dialog" aria-label="Cutting Edge">
+      <span className="ln-landing__aurora" aria-hidden />
+      {!reduce && (
+        <span className="ln-landing__parts" aria-hidden>
+          {Array.from({ length: 14 }).map((_, i) => (
+            <motion.i key={i} style={{ left: `${(i * 7.3) % 100}%`, top: `${(i * 13.7) % 100}%` }}
+              initial={{ y: 0, opacity: 0 }} animate={{ y: [0, -18, 0], opacity: [0, 0.7, 0] }}
+              transition={{ duration: 3 + (i % 4), repeat: Infinity, delay: i * 0.2 }} />
+          ))}
+        </span>
+      )}
+      <motion.div initial={reduce ? {} : { scale: 0.8, opacity: 0, y: 14 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 240, damping: 20 }}>
+        <BrandMark size="lg" />
+      </motion.div>
+      <span className="ln-landing__strip" aria-hidden>
+        <motion.i className="ln-landing__playhead"
+          initial={reduce ? { left: '50%' } : { left: '0%' }} animate={{ left: '100%' }}
+          transition={{ duration: 2.2, ease: 'easeInOut' }} />
+      </span>
+      <motion.button className="ln-landing__cta" onClick={leave}
+        initial={reduce ? {} : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: reduce ? 0 : 0.7, type: 'spring', stiffness: 200, damping: 18 }}>
+        Start Editing
+      </motion.button>
+    </motion.div>
+  )
+}
+
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -34,7 +81,8 @@ export default function AppLayout() {
   useEffect(() => {
     const acc = localStorage.getItem('ce-accent')
     if (acc) document.documentElement.dataset.accent = acc
-    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 950)
+    // The Landing owns its timing (CTA or ~2.6s); this is only a safety net.
+    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 4000)
     return () => clearTimeout(timer)
   }, [reduceMotion])
 
@@ -48,14 +96,7 @@ export default function AppLayout() {
 
   return (
     <div className={`ce-shell ${isLauncher ? 'is-launcher' : 'is-immersive'}`}>
-      {splash && (
-        <div className="ce-splash" aria-hidden>
-          <motion.div initial={{ scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 22 }}>
-            <BrandMark size="lg" />
-          </motion.div>
-        </div>
-      )}
+      {splash && <Landing onDone={() => setSplash(false)} />}
       {/* One shared element: centred on the launcher, docked in a section. */}
       <motion.button
         layoutId="ce-wordmark"

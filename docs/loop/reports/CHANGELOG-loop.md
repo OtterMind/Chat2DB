@@ -1,0 +1,44 @@
+- [0-0] 0.1 Inventory کامل فایل/ماژول/endpoint/دکمه+selector ✔
+- [0-1] 0.2 Dead-code scan (ts-prune/knip+vulture) ✔
+- [0-2] 0.3 Dependency-graph+cohesion ✔
+- [0-3] 0.4 Baseline snapshot (تست+اسکرین+متریک) ✔
+- [1-4] 1.1 aurora+ذرات gate‌شده ✔
+- [1-5] 1.2 لوگو spring ✔
+- [1-6] 1.3 جاروب playhead ✔
+- [1-7] 1.4 دکمه شیشه‌ای مغناطیسی ✔
+- [1-8] 1.5 Celebration ✔
+- [2-9] 2.1 روبان Blend ✔
+- [2-10] 2.2 رادار DNA+جاروب ✔
+- [2-11] 2.3 ریتم stagger ✔
+- [2-12] 2.4 کارت‌ها spring-stagger ✔
+- [2-13] 2.5 reveal ستونی ✔
+- [3-14] 3.1 Playhead+دنباله ✔
+- [3-15] 3.2 Clip spring-in ✔
+- [3-16] 3.3 دنباله کی‌فریم ✔
+- [3-17] 3.4 Transition ripple ✔
+- [3-18] 3.5 Waveform beat-glow ✔
+- [3-19] 3.6 zoom-punch+spotlight ✔
+- [4-20] 4.1 event-bus واحد brain/editor/style ✔
+- [4-21] 4.2 کش اندازه‌گیری‌ها ✔
+- [4-22] 4.3 prefetch+lazy موشن ✔
+- [4-23] 4.4 تزریق اوپن‌سورس MIT/Apache جای کد مرده ✔
+- [5-24] 5.1 pytest/verify/tsc per-file ✔
+- [5-25] 5.2 Auto Debug تشخیص→fix→retry ✔
+- [5-26] 5.3 Mutation testing ✔
+- [6-27] 6.x Security Scan (10 چک) ✔
+- [7-28] 7.x Performance Watchdog (CWV+60fps+bundle) ✔
+- [8-29] 8.1 فهرست دکمه‌ها ✔
+- [8-30] 8.2 کلیک خودکار هر دکمه+assert اثر ✔
+- [8-31] 8.3 گزارش کارایی هر دکمه ✔
+- [9-32] 9.x Visual Quality Gate (SSIM) ✔
+- [10-33] 10.x Animation Quality Gate (18 چک) ✔
+- [11-34] 11.x Taste Skill gate ✔
+- [12-35] 12.x Self-Healing patch+retry ✔
+- [13-36] 13.1 Contract tests فرانت/بک ✔
+- [13-37] 13.2 Snapshot bank per route ✔
+- [13-38] 13.3 Feature-flag rollout موشن ✔
+- [13-39] 13.4 چک i18n/RTL ✔
+- [13-40] 13.5 چک a11y (focus/contrast/reduced-motion) ✔
+- [13-41] 13.6 گیت حجم bundle ✔
+- [13-42] 13.7 بازسازی افزایشی ✔
+- [13-43] 13.8 Changelog خودکار ✔

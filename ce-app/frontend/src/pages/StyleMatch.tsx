@@ -955,7 +955,7 @@ const CAP_PRESETS: BrainOption[] = [
 function RhythmBars({ shots, accent }: { shots: { duration: number }[]; accent?: string }) {
   const total = shots.reduce((a, s) => a + (s.duration || 1), 0) || 1
   return (
-    <span dir="ltr" style={{ display: 'flex', gap: 2, alignItems: 'stretch', height: 26, width: '100%' }}>
+    <span className="sm-loop--bars" dir="ltr" style={{ display: 'flex', gap: 2, alignItems: 'stretch', height: 26, width: '100%' }}>
       {shots.slice(0, 24).map((s, i) => (
         <span
           key={i}

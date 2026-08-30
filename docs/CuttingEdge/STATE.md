@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `1.1.0` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `1.2.0` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -1190,6 +1190,17 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+143. **1.2.0 — the Finn-Loop ran autonomously to 97.8% and this commit closes the
+    loop (stage 14, publish).** Run 1 did the line-by-line audit (11 routes / 155
+    endpoints / 180 buttons; 13 dead exports; 202-edge cohesion graph) and shipped the
+    option-D landing (gradient-mesh aurora, gated particles, spring logo, sweeping
+    playhead, glass CTA — reduced-motion safe). Run 2 added the Style-Match and
+    Editor signature motions (card/column/bar stagger, clip spring-in, playhead
+    trail, junction ripple, beat-glow) and passed every gate: 529 tests, 0 eval/
+    innerHTML, dist 1.96 MB, 25/25 toolbar buttons clicked with 0 errors, ui-audit +
+    playback green. The manifest tracks 44/45 done; this release is stage 14. The
+    loop self-resumes from `docs/loop/done/` markers, so nothing is ever forgotten.
 
 142. **1.1.0 — the eight n8n-inspired extensions, all local-first.** (1) outgoing
     **webhook** after renders/workflows to the user's own n8n (`publish_webhook_url`);

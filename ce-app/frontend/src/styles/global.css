@@ -1822,3 +1822,55 @@ body { font-family: var(--ce-font-sans); }
 .wf-node__id { font-size: 11px; padding: 4px 8px; border-radius: 6px;
   background: var(--ce-surface); border: 1px solid var(--ce-border-strong); color: var(--ce-text-secondary); }
 .wf-node__arrow { color: var(--ce-neon-cyan); font-size: 12px; }
+
+/* ---- Finn-Loop phase 1: world-class landing (option D) ---- */
+.ln-landing { position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 26px; background: var(--ce-bg, #0A0A0A); overflow: hidden; }
+.ln-landing__aurora { position: absolute; inset: -20%; pointer-events: none;
+  background:
+    radial-gradient(38% 42% at 22% 30%, rgba(255,45,156,.20), transparent 60%),
+    radial-gradient(40% 46% at 78% 26%, rgba(0,240,255,.16), transparent 60%),
+    radial-gradient(46% 50% at 50% 78%, rgba(168,85,247,.14), transparent 62%);
+  filter: blur(30px); animation: ln-aurora 9s ease-in-out infinite alternate; }
+@keyframes ln-aurora { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 2%, 0) scale(1.06); } }
+.ln-landing__parts { position: absolute; inset: 0; pointer-events: none; }
+.ln-landing__parts i { position: absolute; width: 3px; height: 3px; border-radius: 50%;
+  background: rgba(255,255,255,.5); box-shadow: 0 0 8px rgba(0,240,255,.5); }
+.ln-landing__strip { position: relative; width: min(560px, 72vw); height: 34px; overflow: hidden;
+  border-block: 1px solid var(--ce-border); background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 34px, rgba(255,255,255,.02) 34px 40px); }
+.ln-landing__playhead { position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--ce-neon-pink); box-shadow: var(--ce-glow-pink); }
+.ln-landing__cta { padding: 12px 26px; border-radius: 12px; cursor: pointer;
+  color: #fff; font-weight: 600; letter-spacing: .3px;
+  background: var(--ce-glass-bg-strong); border: 1px solid color-mix(in srgb, var(--ce-neon-pink) 60%, transparent);
+  backdrop-filter: var(--ce-glass-blur); box-shadow: 0 0 24px -6px color-mix(in srgb, var(--ce-neon-pink) 50%, transparent);
+  transition: transform .2s var(--ce-ease), box-shadow .2s var(--ce-ease); }
+.ln-landing__cta:hover { transform: translateY(-2px); box-shadow: var(--ce-glow-pink-lg); }
+@media (prefers-reduced-motion: reduce) { .ln-landing__aurora { animation: none; } }
+
+/* ---- Finn-Loop phase 2: Style Match signature motions ---- */
+.sm-opt { animation: sm-cardin .45s var(--ce-ease) both; }
+.sm-grid .sm-opt:nth-child(2){animation-delay:.06s}.sm-grid .sm-opt:nth-child(3){animation-delay:.12s}
+.sm-grid .sm-opt:nth-child(4){animation-delay:.18s}.sm-grid .sm-opt:nth-child(5){animation-delay:.24s}
+.sm-grid .sm-opt:nth-child(6){animation-delay:.3s}.sm-grid .sm-opt:nth-child(7){animation-delay:.36s}
+@keyframes sm-cardin { from { opacity:0; transform: translateY(10px) scale(.97);} to { opacity:1; transform:none;} }
+.sm-studio__col { animation: sm-colin .5s var(--ce-ease) both; }
+.sm-studio__col:nth-child(2){animation-delay:.1s}.sm-studio__col:nth-child(3){animation-delay:.2s}
+@keyframes sm-colin { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
+.sm-loop--bars span { transform-origin: bottom; animation: sm-bar .6s var(--ce-ease) both; }
+.sm-loop--bars span:nth-child(odd){animation-delay:.1s}.sm-loop--bars span:nth-child(3n){animation-delay:.2s}
+@keyframes sm-bar { from{ transform: scaleY(.2);} to{ transform: scaleY(1);} }
+
+/* ---- Finn-Loop phase 3: Editor signature motions ---- */
+.tl__clip { animation: ed-clipin .3s var(--ce-ease) both; }
+@keyframes ed-clipin { from{ opacity:0; transform: scale(.96);} to{ opacity:1; transform:none;} }
+.tl__playhead::after { content:''; position:absolute; top:0; bottom:0; left:-6px; width:6px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ce-neon-pink) 40%, transparent)); }
+.tl__junction.is-set { animation: ed-ripple .5s var(--ce-ease); }
+@keyframes ed-ripple { 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--ce-neon-cyan) 60%, transparent);} 100%{ box-shadow:0 0 0 12px transparent;} }
+.tl__beat { animation: ed-beat 1s ease-in-out infinite; }
+@keyframes ed-beat { 0%,100%{opacity:.5} 50%{opacity:.9} }
+@media (prefers-reduced-motion: reduce) {
+  .sm-opt,.sm-studio__col,.sm-loop--bars span,.tl__clip,.tl__junction.is-set,.tl__beat { animation: none !important; }
+}

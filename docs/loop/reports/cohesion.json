@@ -1,0 +1,85 @@
+{
+ "top_edges": [
+  [
+   "BrainBar.tsx -> runtime",
+   2
+  ],
+  [
+   "Studio.tsx -> runtime",
+   2
+  ],
+  [
+   "RuntimeBridge.tsx -> runtime",
+   2
+  ],
+  [
+   "uploadManager.ts -> runtime",
+   2
+  ],
+  [
+   "App.tsx -> Layout",
+   1
+  ],
+  [
+   "App.tsx -> RuntimeBridge",
+   1
+  ],
+  [
+   "App.tsx -> Home",
+   1
+  ],
+  [
+   "App.tsx -> Dashboard",
+   1
+  ],
+  [
+   "App.tsx -> Studio",
+   1
+  ],
+  [
+   "App.tsx -> NewJob",
+   1
+  ],
+  [
+   "App.tsx -> JobDetail",
+   1
+  ],
+  [
+   "App.tsx -> ClipReview",
+   1
+  ],
+  [
+   "App.tsx -> Settings",
+   1
+  ],
+  [
+   "App.tsx -> Uploads",
+   1
+  ],
+  [
+   "App.tsx -> Doctor",
+   1
+  ],
+  [
+   "App.tsx -> Attribution",
+   1
+  ],
+  [
+   "App.tsx -> StyleMatch",
+   1
+  ],
+  [
+   "App.tsx -> Workflows",
+   1
+  ],
+  [
+   "App.tsx -> i18n",
+   1
+  ],
+  [
+   "main.tsx -> App",
+   1
+  ]
+ ],
+ "total_edges": 202
+}

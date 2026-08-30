@@ -1,0 +1,321 @@
+{
+  "version": 2,
+  "loop": "finn-loop",
+  "stages": [
+    {
+      "id": "0-0",
+      "phase": "0",
+      "title": "0.1 Inventory کامل فایل/ماژول/endpoint/دکمه+selector",
+      "gate": "report exists",
+      "done": true
+    },
+    {
+      "id": "0-1",
+      "phase": "0",
+      "title": "0.2 Dead-code scan (ts-prune/knip+vulture)",
+      "gate": "dead-code report",
+      "done": true
+    },
+    {
+      "id": "0-2",
+      "phase": "0",
+      "title": "0.3 Dependency-graph+cohesion",
+      "gate": "graph report",
+      "done": true
+    },
+    {
+      "id": "0-3",
+      "phase": "0",
+      "title": "0.4 Baseline snapshot (تست+اسکرین+متریک)",
+      "gate": "baseline saved",
+      "done": true
+    },
+    {
+      "id": "1-4",
+      "phase": "1",
+      "title": "1.1 aurora+ذرات gate‌شده",
+      "gate": "visual gate",
+      "done": true
+    },
+    {
+      "id": "1-5",
+      "phase": "1",
+      "title": "1.2 لوگو spring",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "1-6",
+      "phase": "1",
+      "title": "1.3 جاروب playhead",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "1-7",
+      "phase": "1",
+      "title": "1.4 دکمه شیشه‌ای مغناطیسی",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "1-8",
+      "phase": "1",
+      "title": "1.5 Celebration",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "2-9",
+      "phase": "2",
+      "title": "2.1 روبان Blend",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "2-10",
+      "phase": "2",
+      "title": "2.2 رادار DNA+جاروب",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "2-11",
+      "phase": "2",
+      "title": "2.3 ریتم stagger",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "2-12",
+      "phase": "2",
+      "title": "2.4 کارت‌ها spring-stagger",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "2-13",
+      "phase": "2",
+      "title": "2.5 reveal ستونی",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-14",
+      "phase": "3",
+      "title": "3.1 Playhead+دنباله",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-15",
+      "phase": "3",
+      "title": "3.2 Clip spring-in",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-16",
+      "phase": "3",
+      "title": "3.3 دنباله کی‌فریم",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-17",
+      "phase": "3",
+      "title": "3.4 Transition ripple",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-18",
+      "phase": "3",
+      "title": "3.5 Waveform beat-glow",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "3-19",
+      "phase": "3",
+      "title": "3.6 zoom-punch+spotlight",
+      "gate": "anim gate",
+      "done": true
+    },
+    {
+      "id": "4-20",
+      "phase": "4",
+      "title": "4.1 event-bus واحد brain/editor/style",
+      "gate": "cohesion test",
+      "done": true
+    },
+    {
+      "id": "4-21",
+      "phase": "4",
+      "title": "4.2 کش اندازه‌گیری‌ها",
+      "gate": "cache test",
+      "done": true
+    },
+    {
+      "id": "4-22",
+      "phase": "4",
+      "title": "4.3 prefetch+lazy موشن",
+      "gate": "perf gate",
+      "done": true
+    },
+    {
+      "id": "4-23",
+      "phase": "4",
+      "title": "4.4 تزریق اوپن‌سورس MIT/Apache جای کد مرده",
+      "gate": "licence gate",
+      "done": true
+    },
+    {
+      "id": "5-24",
+      "phase": "5",
+      "title": "5.1 pytest/verify/tsc per-file",
+      "gate": "tests pass",
+      "done": true
+    },
+    {
+      "id": "5-25",
+      "phase": "5",
+      "title": "5.2 Auto Debug تشخیص→fix→retry",
+      "gate": "self-debug",
+      "done": true
+    },
+    {
+      "id": "5-26",
+      "phase": "5",
+      "title": "5.3 Mutation testing",
+      "gate": "mutation score",
+      "done": true
+    },
+    {
+      "id": "6-27",
+      "phase": "6",
+      "title": "6.x Security Scan (10 چک)",
+      "gate": "security pass",
+      "done": true
+    },
+    {
+      "id": "7-28",
+      "phase": "7",
+      "title": "7.x Performance Watchdog (CWV+60fps+bundle)",
+      "gate": "perf pass",
+      "done": true
+    },
+    {
+      "id": "8-29",
+      "phase": "8",
+      "title": "8.1 فهرست دکمه‌ها",
+      "gate": "inventory",
+      "done": true
+    },
+    {
+      "id": "8-30",
+      "phase": "8",
+      "title": "8.2 کلیک خودکار هر دکمه+assert اثر",
+      "gate": "button E2E",
+      "done": true
+    },
+    {
+      "id": "8-31",
+      "phase": "8",
+      "title": "8.3 گزارش کارایی هر دکمه",
+      "gate": "button report",
+      "done": true
+    },
+    {
+      "id": "9-32",
+      "phase": "9",
+      "title": "9.x Visual Quality Gate (SSIM)",
+      "gate": "visual pass",
+      "done": true
+    },
+    {
+      "id": "10-33",
+      "phase": "10",
+      "title": "10.x Animation Quality Gate (18 چک)",
+      "gate": "anim pass",
+      "done": true
+    },
+    {
+      "id": "11-34",
+      "phase": "11",
+      "title": "11.x Taste Skill gate",
+      "gate": "taste pass",
+      "done": true
+    },
+    {
+      "id": "12-35",
+      "phase": "12",
+      "title": "12.x Self-Healing patch+retry",
+      "gate": "heal",
+      "done": true
+    },
+    {
+      "id": "13-36",
+      "phase": "13",
+      "title": "13.1 Contract tests فرانت/بک",
+      "gate": "contract pass",
+      "done": true
+    },
+    {
+      "id": "13-37",
+      "phase": "13",
+      "title": "13.2 Snapshot bank per route",
+      "gate": "snapshot saved",
+      "done": true
+    },
+    {
+      "id": "13-38",
+      "phase": "13",
+      "title": "13.3 Feature-flag rollout موشن",
+      "gate": "flag test",
+      "done": true
+    },
+    {
+      "id": "13-39",
+      "phase": "13",
+      "title": "13.4 چک i18n/RTL",
+      "gate": "i18n pass",
+      "done": true
+    },
+    {
+      "id": "13-40",
+      "phase": "13",
+      "title": "13.5 چک a11y (focus/contrast/reduced-motion)",
+      "gate": "a11y pass",
+      "done": true
+    },
+    {
+      "id": "13-41",
+      "phase": "13",
+      "title": "13.6 گیت حجم bundle",
+      "gate": "bundle gate",
+      "done": true
+    },
+    {
+      "id": "13-42",
+      "phase": "13",
+      "title": "13.7 بازسازی افزایشی",
+      "gate": "incremental ok",
+      "done": true
+    },
+    {
+      "id": "13-43",
+      "phase": "13",
+      "title": "13.8 Changelog خودکار",
+      "gate": "changelog",
+      "done": true
+    },
+    {
+      "id": "14-44",
+      "phase": "14",
+      "title": "14.x Publish یک پچ تفاضلی+آپدیت",
+      "gate": "release",
+      "done": true
+    }
+  ]
+}

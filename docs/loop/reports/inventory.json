@@ -1,0 +1,17 @@
+{
+ "routes": [
+  "/dashboard",
+  "/studio",
+  "/new",
+  "/jobs/:id",
+  "/jobs/:id/clips",
+  "/settings",
+  "/uploads",
+  "/doctor",
+  "/attribution",
+  "/style",
+  "/workflows"
+ ],
+ "endpoints": 155,
+ "buttons": 180
+}
