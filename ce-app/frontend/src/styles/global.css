@@ -1874,3 +1874,7 @@ body { font-family: var(--ce-font-sans); }
 @media (prefers-reduced-motion: reduce) {
   .sm-opt,.sm-studio__col,.sm-loop--bars span,.tl__clip,.tl__junction.is-set,.tl__beat { animation: none !important; }
 }
+
+/* ---- Live globe (Three.js) on the launcher ---- */
+.live-globe { width: min(560px, 86vw); margin: 6px auto 0; }
+.live-globe canvas { display: block; width: 100% !important; }

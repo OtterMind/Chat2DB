@@ -36,7 +36,8 @@
     "react-resizable-panels": "^4.12.3",
     "react-router-dom": "^6.26.0",
     "recharts": "^3.10.1",
-    "zustand": "^4.5.4"
+    "zustand": "^4.5.4",
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@types/node": "^22.4.0",
@@ -53,7 +54,8 @@
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.0",
-    "wait-on": "^8.0.0"
+    "wait-on": "^8.0.0",
+    "@types/three": "^0.160.0"
   },
   "build": {
     "appId": "com.cuttingedge.studio",

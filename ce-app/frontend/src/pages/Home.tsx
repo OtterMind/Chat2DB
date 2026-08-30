@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, useReducedMotion } from 'framer-motion'
+import LiveGlobe from '../components/LiveGlobe'
 import { useQuery } from '@tanstack/react-query'
 import { Modal, message } from 'antd'
 import { Plus, Wand2, Film, Clock3, Trash2, CircleDashed, Search, Sparkles, Settings, Activity } from 'lucide-react'
@@ -49,6 +51,7 @@ export default function Home() {
   const navigate = useNavigate()
   const { t, lang } = useI18n()
   const i = lang === 'fa' ? 1 : 0
+  const reduce = useReducedMotion()
 
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -139,23 +142,27 @@ export default function Home() {
         <span className="ln-hairline" />
       </header>
 
+      <LiveGlobe height={300} />
+
       {!tourDone && (
         <TourLine onDone={() => { localStorage.setItem('ce.tour.done', '1'); setTourDone(true) }} />
       )}
 
       {/* the two actions, cyberpunk dots */}
       <div className="ln-actions">
-        <button className="ln-action" onClick={() => navigate('/studio?import=1')}>
-          <span className="ln-action__dot ln-action__dot--cyan" />
-          <Plus size={16} /> {t('New Project', 'پروژه‌ی جدید')}
-        </button>
-        <button className="ln-action" onClick={() => navigate('/style')}>
-          <span className="ln-action__dot ln-action__dot--pink" />
-          <Sparkles size={16} /> {t('Style Match', 'استایل مچ')}
-        </button>
-        <button className="ln-action ln-action--ghost" onClick={() => navigate('/new')}>
-          <Wand2 size={15} /> {t('Auto clip', 'کلیپ خودکار')}
-        </button>
+        {[
+          { dot: 'ln-action__dot--cyan', icon: <Plus size={16} />, label: t('New Project', 'پروژه‌ی جدید'), to: '/studio?import=1', ghost: false },
+          { dot: 'ln-action__dot--pink', icon: <Sparkles size={16} />, label: t('Style Match', 'استایل مچ'), to: '/style', ghost: false },
+          { dot: '', icon: <Wand2 size={15} />, label: t('Auto clip', 'کلیپ خودکار'), to: '/new', ghost: true },
+        ].map((a, idx) => (
+          <motion.button key={a.to} className={`ln-action ${a.ghost ? 'ln-action--ghost' : ''}`}
+            onClick={() => navigate(a.to)}
+            initial={reduce ? {} : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 * idx, type: 'spring', stiffness: 220, damping: 20 }}>
+            {a.dot && <span className={`ln-action__dot ${a.dot}`} />}
+            {a.icon} {a.label}
+          </motion.button>
+        ))}
       </div>
 
       <UpdateCard />
