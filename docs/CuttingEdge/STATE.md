@@ -1207,7 +1207,8 @@ gate that stops a broken installer from being published.
     Captions: an empty transcription is now a result, not a crash, and a library failure
     raises `TranscriptionFailed` naming the stage (the reported "max() arg" path).
     Verified in-browser: bang/spread/settle screenshots committed, ui-audit 7/7 green.
-    Backend **548 passed / 0 failed / 11 skipped**. *On the branch, not published.*
+    Backend **548 passed / 0 failed / 11 skipped**. This is the **1.4.0** release:
+    `package.json` and this header moved together.
 
 144. **1.3.0 — live 3D globe launcher + the motion-package switcher, and the audit that
     found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the

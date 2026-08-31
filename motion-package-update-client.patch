@@ -32,6 +32,20 @@ index 863e481..6f708b7 100644
  app.include_router(ai.router)
  app.include_router(reframe.router)
  app.include_router(gpu.router)
+diff --git a/ce-app/backend/app/routers/captions.py b/ce-app/backend/app/routers/captions.py
+index a86d540..02b6518 100644
+--- a/ce-app/backend/app/routers/captions.py
++++ b/ce-app/backend/app/routers/captions.py
+@@ -54,6 +54,9 @@ async def transcribe(payload: TranscribeRequest) -> dict:
+         # The asked rung is not on disk: 409 + the size, so the UI offers its fetch.
+         raise HTTPException(status_code=409,
+                             detail=f"model {exc} not downloaded — fetch it in Settings") from exc
++    except engine.TranscriptionFailed as exc:
++        # The recogniser died mid-pass: the message already names the stage.
++        raise HTTPException(status_code=422, detail=str(exc)) from exc
+     except Exception as exc:  # noqa: BLE001
+         raise HTTPException(status_code=400, detail=str(exc)) from exc
+ 
 diff --git a/ce-app/backend/app/routers/motion.py b/ce-app/backend/app/routers/motion.py
 new file mode 100644
 index 0000000..805e61f
@@ -135,6 +149,232 @@ index 33dd331..8a65a47 100644
      return out
  
  
+diff --git a/ce-app/backend/core/engine/engines.py b/ce-app/backend/core/engine/engines.py
+index 26ca41b..8ae5b89 100644
+--- a/ce-app/backend/core/engine/engines.py
++++ b/ce-app/backend/core/engine/engines.py
+@@ -49,8 +49,8 @@ ENGINES: list[dict] = [
+     {"id": "demucs", "name": "Demucs", "repo": "facebookresearch/demucs", "licence": "MIT",
+      "role": "drums/vocals separation for beat-accurate ducking",
+      "module": "demucs", "deps": ["demucs"], "heavy": "torch"},
+-    {"id": "mediapipe", "name": "MediaPipe Pose", "repo": "google-ai-edge/mediapipe", "licence": "Apache-2.0",
+-     "role": "33-point pose landmarks for sports reframe",
++    {"id": "mediapipe", "name": "MediaPipe Pose + Face", "repo": "google-ai-edge/mediapipe", "licence": "Apache-2.0",
++     "role": "BlazeFace face detection + 33-point pose for an accurate reframe",
+      # 1.x publishes no win_amd64 cp311 wheel (verified against PyPI); 0.10.21
+      # is the newest release that does.
+      "module": "mediapipe", "deps": ["mediapipe==0.10.21"], "heavy": "own"},
+diff --git a/ce-app/backend/core/engine/face.py b/ce-app/backend/core/engine/face.py
+new file mode 100644
+index 0000000..83cfc4a
+--- /dev/null
++++ b/ce-app/backend/core/engine/face.py
+@@ -0,0 +1,75 @@
++"""MediaPipe Face Detection — the professional tracker the Haar cascade is not.
++
++The reframe used to rely on OpenCV's `haarcascade_frontalface_default`, which
++needs a roughly frontal, ≥24 px face and drops out on the footage this app is
++for: a spiker seen from the side, a back on a pull-up bar, a jumper mid-rope.
++MediaPipe's **BlazeFace** short-range detector (part of the same `mediapipe`
++package the pose bridge ships, Apache-2.0, pinned `0.10.21` in the engine
++registry) detects faces at any orientation on CPU, so the subject centre is a
++real face, not a guess.
++
++The bridge is thin and degrade-safe, exactly like `pose.py`: without the
++package `available()` is False and the caller keeps the Haar cascade; an
++upstream API mismatch returns None per frame instead of a wrong centre. Nothing
++ships in the installer — the engine is fetched on demand.
++"""
++from __future__ import annotations
++
++import importlib.util
++
++PACKAGE = "mediapipe==0.10.21"  # matches the engine registry and pose.py
++
++
++def available() -> bool:
++    return importlib.util.find_spec("mediapipe") is not None
++
++
++class FaceDetector:
++    """A lazily-created BlazeFace short-range detector, reused across frames.
++
++    Kept as a class (not module globals) so the caller owns its lifecycle and a
++    second detector is never created by accident.
++    """
++
++    def __init__(self) -> None:
++        self._det = None
++        self._broken = False
++
++    def _build(self):
++        if self._det is not None or self._broken:
++            return self._det
++        try:
++            import mediapipe as mp  # noqa: PLC0415
++
++            self._det = mp.solutions.face_detection.FaceDetection(
++                model_selection=0,  # short-range: the subject is near the lens
++                min_detection_confidence=0.5,
++            )
++        except Exception:  # noqa: BLE001 — an API mismatch must not crash tracking
++            self._broken = True
++            self._det = None
++        return self._det
++
++    def detect(self, frame) -> tuple[float, float, float] | None:
++        """Normalised (x, y, size) centre of the most-confident face, or None."""
++        det = self._build()
++        if det is None:
++            return None
++        try:
++            result = det.process(frame)
++        except Exception:  # noqa: BLE001
++            return None
++        if not result.detections:
++            return None
++        best = max(result.detections, key=lambda d: d.score[0])
++        box = best.location_data.relative_bounding_box
++        h, w = frame.shape[:2]
++        return ((box.xmin + box.width / 2), (box.ymin + box.height / 2),
++                max(0.02, box.width))
++
++
++def centre_from_box(box: dict) -> tuple[float, float, float]:
++    """Pure conversion, testable without MediaPipe: relative box → (x, y, size)."""
++    x = float(box["xmin"]) + float(box["width"]) / 2
++    y = float(box["ymin"]) + float(box["height"]) / 2
++    return (x, y, max(0.02, float(box["width"])))
+diff --git a/ce-app/backend/core/engine/reframe.py b/ce-app/backend/core/engine/reframe.py
+index 19e09df..bec52a4 100644
+--- a/ce-app/backend/core/engine/reframe.py
++++ b/ce-app/backend/core/engine/reframe.py
+@@ -41,9 +41,9 @@ except Exception:  # pragma: no cover - a machine without the wheel
+ 
+ #: Frames per second to look at. Faces do not move fast enough to need more, and
+ #: this is the difference between two seconds of analysis and twenty.
+-SAMPLE_FPS = 4.0
++SAMPLE_FPS = 6.0
+ #: Width the frames are analysed at. Haar needs the face to be ≥ ~24 px.
+-ANALYSIS_WIDTH = 480
++ANALYSIS_WIDTH = 640
+ #: Movements smaller than this fraction of the width are not worth a camera move.
+ DEADBAND = 0.02
+ #: How fast the smoothed path may chase a new position (0..1 per sample).
+@@ -107,13 +107,14 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
+     One FFmpeg process for the whole file (the lesson from `style.sample_strip`:
+     a process per frame costs more in startup than in decoding).
+     """
+-    classifier = _cascade()
+-    if classifier is None:
+-        return []
+-
+     from core.engine import pose as pose_engine  # noqa: PLC0415
++    from core.engine import face as face_engine  # noqa: PLC0415
+ 
+     with_pose = pose_engine.available()
++    classifier = _cascade()
++    face_detector = face_engine.FaceDetector() if face_engine.available() else None
++    if classifier is None and not with_pose and face_detector is None:
++        return []
+ 
+     info = probe_media(path)
+     source_w = int(info.get("width") or 0)
+@@ -122,52 +123,67 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
+         return []
+     height = max(2, int(round(width * source_h / source_w / 2)) * 2)
+ 
++    # -vf now decodes RGB so the MediaPipe bridges get what they need; the gray
++    # frame Haar and the motion centroid use is derived from it, once per frame.
+     process = subprocess.run(
+         [
+             ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-i", str(path),
+-            "-vf", f"fps={fps:.3f},scale={width}:{height},format=gray",
++            "-vf", f"fps={fps:.3f},scale={width}:{height},format=rgb24",
+             "-f", "rawvideo", "-",
+         ],
+         capture_output=True,
+     )
+-    frame_bytes = width * height
++    frame_bytes = width * height * 3
+     total = len(process.stdout) // frame_bytes
+     detections: list[Detection] = []
+     prev: np.ndarray | None = None
+     for index in range(total):
+-        frame = np.frombuffer(
++        rgb = np.frombuffer(
+             process.stdout[index * frame_bytes : (index + 1) * frame_bytes], dtype=np.uint8
+-        ).reshape(height, width)
+-        faces = classifier.detectMultiScale(frame, scaleFactor=1.1, minNeighbors=5,
+-                                            minSize=(max(24, width // 20), max(24, width // 20)))
++        ).reshape(height, width, 3)
++        gray = rgb.mean(axis=2).astype(np.uint8)
+         moment = index / fps
+-        if len(faces) == 0:
+-            # No face — but a sport rarely shows one. A person still has a body:
+-            # MediaPipe's torso landmarks (when fetched) name the subject; only
+-            # when neither a face nor a person is found do we follow the moving
+-            # region, so a rally or a rep still has a subject.
+-            person = pose_engine.track_frame(frame) if with_pose else None
+-            if person is not None:
++
++        # 1. BlazeFace: a face at any orientation beats a frontal-only cascade.
++        if face_detector is not None:
++            face = face_detector.detect(rgb)
++            if face is not None:
+                 detections.append(
+-                    Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
++                    Detection(t=moment, x=face[0], y=face[1], size=face[2], kind="face")
+                 )
+-                prev = frame
++                prev = gray
+                 continue
+-            centre = _motion_centre(prev, frame, width)
+-            if centre is not None:
++
++        # 2. Haar — still the right call on a clear frontal face.
++        if classifier is not None:
++            faces = classifier.detectMultiScale(
++                gray, scaleFactor=1.1, minNeighbors=5,
++                minSize=(max(24, width // 20), max(24, width // 20)))
++            if len(faces):
++                fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+                 detections.append(
+-                    Detection(t=moment, x=centre[0], y=centre[1], size=0.3, kind="motion")
++                    Detection(t=moment, x=(fx + fw / 2) / width, y=(fy + fh / 2) / height,
++                              size=fw / width, kind="face")
+                 )
+-            else:
+-                detections.append(Detection(t=moment, x=None, kind="none"))
+-            prev = frame
++                prev = gray
++                continue
++
++        # 3. A body when no face shows; 4. the moving region as the last resort.
++        person = pose_engine.track_frame(rgb) if with_pose else None
++        if person is not None:
++            detections.append(
++                Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
++            )
++            prev = gray
+             continue
+-        prev = frame
+-        # The biggest face is the subject; a face in the background is not the shot.
+-        fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+-        detections.append(
+-            Detection(t=moment, x=(fx + fw / 2) / width, y=(fy + fh / 2) / height, size=fw / width)
+-        )
++        centre = _motion_centre(prev, gray, width)
++        if centre is not None:
++            detections.append(
++                Detection(t=moment, x=centre[0], y=centre[1], size=0.3, kind="motion")
++            )
++        else:
++            detections.append(Detection(t=moment, x=None, kind="none"))
++        prev = gray
+     return detections
+ 
+ 
 diff --git a/ce-app/backend/core/engine/style.py b/ce-app/backend/core/engine/style.py
 index f5d19cd..771bfa7 100644
 --- a/ce-app/backend/core/engine/style.py
@@ -163,6 +403,59 @@ index f5d19cd..771bfa7 100644
              # What the answers changed, said out loud: an answer with no visible
              # effect is an answer the user will not trust twice.
              "intent": wanted.as_dict(),
+diff --git a/ce-app/backend/core/engine/transcribe.py b/ce-app/backend/core/engine/transcribe.py
+index b04f215..58bf465 100644
+--- a/ce-app/backend/core/engine/transcribe.py
++++ b/ce-app/backend/core/engine/transcribe.py
+@@ -138,6 +138,11 @@ class ModelNotDownloaded(RuntimeError):
+     """Raised with the missing size so the UI can offer the right fetch."""
+ 
+ 
++class TranscriptionFailed(RuntimeError):
++    """The recogniser itself failed; the stage is in the message so a log
++    line is enough to point at the culprit (model, VAD, or decode)."""
++
++
+ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42,
+                        align: bool = False, quality: str = "auto", progress=None) -> dict:
+     """quality: auto (best on disk) | fast | balanced | best.
+@@ -157,15 +162,30 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
+         if not model_present(size):
+             raise ModelNotDownloaded(size)
+     say("model", 0.05, f"loading {size}")
+-    model = _load(size)
++    try:
++        model = _load(size)
++    except Exception as error:  # noqa: BLE001
++        raise TranscriptionFailed(f"model load ({size}): {error}") from error
+     beam = 5 if quality == "best" else 1
+-    segments, info = model.transcribe(
+-        path, language=language, word_timestamps=True, vad_filter=True,
+-        vad_parameters={"min_silence_duration_ms": 500},
+-        beam_size=beam, best_of=1, condition_on_previous_text=False,
+-    )
++    try:
++        segments, info = model.transcribe(
++            path, language=language, word_timestamps=True, vad_filter=True,
++            vad_parameters={"min_silence_duration_ms": 500},
++            beam_size=beam, best_of=1, condition_on_previous_text=False,
++        )
++    except Exception as error:  # noqa: BLE001
++        # A library-level failure (the VAD or the decoder) must say what stage
++        # died instead of surfacing as a bare "max() arg is an empty sequence".
++        raise TranscriptionFailed(f"recognise: {error}") from error
+     duration = float(getattr(info, "duration", 0) or 0)
+ 
++    # A file with no speech is a *result*, not a crash: return empty cues so a
++    # downstream `max()` over words/segments can never blow up on silence.
++    if not segments:
++        return {"language": getattr(info, "language", language) or "unknown",
++                "quality": size, "duration": round(duration, 3), "text": "",
++                "words": [], "cues": [], "alignment": "off", "polishedBy": ""}
++
+     words: list[dict] = []
+     plain: list[str] = []
+     for segment in segments:
 diff --git a/ce-app/backend/core/motion_packages.py b/ce-app/backend/core/motion_packages.py
 new file mode 100644
 index 0000000..b209f30
@@ -381,6 +674,43 @@ index 0000000..b209f30
 +
 +def CONFIG_TEXT() -> str:
 +    return CONFIG_PATH().read_text(encoding="utf-8")
+diff --git a/ce-app/backend/tests/test_face.py b/ce-app/backend/tests/test_face.py
+new file mode 100644
+index 0000000..fb84c49
+--- /dev/null
++++ b/ce-app/backend/tests/test_face.py
+@@ -0,0 +1,31 @@
++"""The BlazeFace bridge: geometry is testable without MediaPipe, and the bridge
++must degrade to "not available" on a machine without the package."""
++from __future__ import annotations
++
++import importlib.util
++
++from core.engine import face
++
++
++def test_relative_box_to_centre():
++    x, y, size = face.centre_from_box({"xmin": 0.2, "ymin": 0.3, "width": 0.4, "height": 0.5})
++    assert x == 0.4 and y == 0.55
++    assert size == 0.4
++
++
++def test_tiny_box_gets_a_floor_size():
++    _, _, size = face.centre_from_box({"xmin": 0, "ymin": 0, "width": 0.0, "height": 0.1})
++    assert size == 0.02  # a degenerate box still yields a sane subject size
++
++
++def test_available_reflects_the_package():
++    assert face.available() is (importlib.util.find_spec("mediapipe") is not None)
++
++
++def test_detector_without_mediapipe_is_broken_safe(monkeypatch):
++    monkeypatch.setattr(face, "available", lambda: False)
++    # When the package is absent the caller must not build a detector at all;
++    # and a detector whose build fails never raises, it reports None per frame.
++    det = face.FaceDetector()
++    det._broken = True
++    assert det.detect(object()) is None
 diff --git a/ce-app/backend/tests/test_motion.py b/ce-app/backend/tests/test_motion.py
 new file mode 100644
 index 0000000..ab36cad
@@ -571,15 +901,54 @@ index 0000000..ab36cad
 +    by_crowd = motion_packages.recommend({"bpm": 0, "action": 0.0, "emotion": 0.5})
 +    assert by_crowd["id"] == "celebration"
 +    assert "reacts" in by_crowd["reasonEn"]
+diff --git a/ce-app/backend/tests/test_transcribe.py b/ce-app/backend/tests/test_transcribe.py
+index 8f0e549..6aaa8f3 100644
+--- a/ce-app/backend/tests/test_transcribe.py
++++ b/ce-app/backend/tests/test_transcribe.py
+@@ -95,3 +95,34 @@ def test_the_chosen_model_is_the_one_that_loads(monkeypatch):
+ 
+     assert calls == ["cuda"]
+     assert model.size == "small", "the engine loaded a different model than the card reports"
++
++
++def test_silence_is_a_result_not_a_crash(monkeypatch, tmp_path):
++    """No speech → empty cues, so a downstream `max()` can never blow up."""
++    class Info:
++        language = "en"
++        duration = 4.0
++
++    class Stub:
++        def transcribe(self, *a, **k):
++            return [], Info()
++
++    monkeypatch.setattr(transcribe, "model_present", lambda size: True)
++    monkeypatch.setattr(transcribe, "_load", lambda size: Stub())
++    out = transcribe.transcribe_to_cues(str(tmp_path / "silent.wav"), quality="fast")
++    assert out["cues"] == [] and out["words"] == [] and out["text"] == ""
++    assert out["duration"] == 4.0
++
++
++def test_recogniser_failure_names_the_stage(monkeypatch, tmp_path):
++    """The library dying mid-pass must say where, not surface as a bare error."""
++    class Stub:
++        def transcribe(self, *a, **k):
++            raise ValueError("max() arg is an empty sequence")
++
++    monkeypatch.setattr(transcribe, "model_present", lambda size: True)
++    monkeypatch.setattr(transcribe, "_load", lambda size: Stub())
++    with pytest.raises(transcribe.TranscriptionFailed) as exc:
++        transcribe.transcribe_to_cues(str(tmp_path / "x.wav"), quality="fast")
++    assert "recognise" in str(exc.value)
++    assert "max() arg is an empty sequence" in str(exc.value)
 diff --git a/ce-app/frontend/package.json b/ce-app/frontend/package.json
-index c6c38af..1598ad0 100644
+index c6c38af..60db6fa 100644
 --- a/ce-app/frontend/package.json
 +++ b/ce-app/frontend/package.json
 @@ -1,6 +1,6 @@
  {
    "name": "cutting-edge-frontend",
 -  "version": "1.2.0",
-+  "version": "1.3.0",
++  "version": "1.4.0",
    "description": "Cutting Edge (CE) — AI-powered video clipping studio",
    "private": true,
    "main": "dist-electron/main.js",
@@ -611,10 +980,18 @@ index c6c38af..1598ad0 100644
 +}
 \ No newline at end of file
 diff --git a/ce-app/frontend/src/components/Layout/index.tsx b/ce-app/frontend/src/components/Layout/index.tsx
-index fb2a3d0..45410d1 100644
+index fb2a3d0..0ecef94 100644
 --- a/ce-app/frontend/src/components/Layout/index.tsx
 +++ b/ce-app/frontend/src/components/Layout/index.tsx
-@@ -6,6 +6,7 @@ import BackendBanner from '../BackendBanner'
+@@ -1,11 +1,14 @@
+-import { useEffect, useRef, useState } from 'react'
++import { useCallback, useEffect, useRef, useState } from 'react'
+ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+ import BrandMark from '../BrandMark'
++import LoadingScreen, { type BootStep } from '../LoadingScreen'
++import Starfield from '../Starfield'
+ import BackendBanner from '../BackendBanner'
  import FullscreenButton from '../FullscreenButton'
  import RunningStrip from '../RunningStrip'
  import { useRuntime, selectActiveTasks } from '../../store/runtime'
@@ -622,16 +999,31 @@ index fb2a3d0..45410d1 100644
  import { useI18n } from '../../i18n'
  import { Bell, Menu } from 'lucide-react'
  
-@@ -78,6 +79,29 @@ export default function AppLayout() {
+@@ -69,7 +72,7 @@ export default function AppLayout() {
+   const navigate = useNavigate()
+   const location = useLocation()
+   const activeCount = useRuntime(selectActiveTasks).length
+-  const { t } = useI18n()
++  const { t, lang } = useI18n()
+   const contentRef = useRef<HTMLElement>(null)
+   const reduceMotion = useReducedMotion()
+ 
+@@ -78,13 +81,87 @@ export default function AppLayout() {
    /** The saved accent repaints before first paint of content; the splash is a
     *  one-second brand breath on cold start (skipped for reduced motion). */
    const [splash, setSplash] = useState(true)
 +
-+  // Motion package switcher: the active package tunes the whole motion language
-+  // via CSS vars + a window flag (LiveGlobe reads it). Runtime-switchable, so it
-+  // grows through differential updates without a reinstall.
-+  useEffect(() => {
-+    const apply = () => {
++  /** Cold start: the big-bang loading screen, and the work it reports. */
++  const [loading, setLoading] = useState(true)
++  const [boot, setBoot] = useState<BootStep>({ progress: 0, stage: 0 })
++
++  /**
++   * The active motion package tunes the whole motion language through CSS vars
++   * plus a window flag the canvas components read. Runtime-switchable, so it
++   * grows through differential updates without a reinstall.
++   */
++  const applyMotion = useCallback(
++    () =>
 +      fetch(`${backendOrigin}/api/motion/params`)
 +        .then((r) => r.json())
 +        .then((p) => {
@@ -642,16 +1034,87 @@ index fb2a3d0..45410d1 100644
 +          ;(window as any).__ceMotion = p
 +          window.dispatchEvent(new Event('ce:motion'))
 +        })
-+        .catch(() => undefined)
++        .catch(() => undefined),
++    []
++  )
++
++  useEffect(() => {
++    void applyMotion()
++    const onChange = () => void applyMotion()
++    window.addEventListener('ce:motion-change', onChange)
++    return () => window.removeEventListener('ce:motion-change', onChange)
++  }, [applyMotion])
++
++  /**
++   * The ring reports the three requests that actually gate the app — the engine
++   * answering, the projects loading, the motion package arriving — not a timer
++   * pretending to be progress. A step that fails still counts as done (the app
++   * opens and says what is missing), and an 8 s cap means a dead backend can
++   * never trap anyone behind this screen.
++   */
++  useEffect(() => {
++    const started = performance.now()
++    const done = [false, false, false]
++    let closed = false
++    const bump = (index: number) => {
++      done[index] = true
++      const finished = done.filter(Boolean).length
++      setBoot({ progress: finished / done.length, stage: Math.min(finished, 2) })
++      if (finished === done.length && !closed) {
++        // The bang, the flight and the settle take ~2.6 s at the built-in
++        // package; cutting that short is what made the screen unreadable. The
++        // package's own duration scales it, reduced-motion skips straight past.
++        const sequence = 2650 * Number((window as any).__ceMotion?.duration || 1)
++        const hold = Math.max(0, Math.min(4200, reduceMotion ? 200 : sequence) - (performance.now() - started))
++        window.setTimeout(() => { if (!closed) setLoading(false) }, hold)
++      }
 +    }
-+    apply()
-+    window.addEventListener('ce:motion-change', apply)
-+    return () => window.removeEventListener('ce:motion-change', apply)
-+  }, [])
++    const step = (index: number, url: string, then?: () => Promise<unknown> | void) => {
++      fetch(`${backendOrigin}${url}`)
++        .then((r) => r.json())
++        .then((d) => { void then?.(); bump(index) })
++        .catch(() => { void then?.(); bump(index) })
++    }
++    step(0, '/api/health')
++    step(1, '/api/projects')
++    step(2, '/api/motion/params', applyMotion)
++    const cap = window.setTimeout(() => setLoading(false), 8000)
++    return () => { closed = true; window.clearTimeout(cap) }
++  }, [applyMotion, reduceMotion])
 +
    useEffect(() => {
      const acc = localStorage.getItem('ce-accent')
      if (acc) document.documentElement.dataset.accent = acc
+-    // The Landing owns its timing (CTA or ~2.6s); this is only a safety net.
+-    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 4000)
++    // The Landing owns its timing (CTA or ~2.6 s); this is only a safety net.
++    // It is keyed on `loading` because the net used to start at shell mount —
++    // with the loading screen in front of the landing it fired 1.4 s into the
++    // landing and cut the brand beat in half.
++    if (loading) return
++    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 3600)
+     return () => clearTimeout(timer)
+-  }, [reduceMotion])
++  }, [reduceMotion, loading])
+ 
+   useEffect(() => {
+     contentRef.current?.scrollTo({ top: 0 })
+@@ -96,7 +173,14 @@ export default function AppLayout() {
+ 
+   return (
+     <div className={`ce-shell ${isLauncher ? 'is-launcher' : 'is-immersive'}`}>
+-      {splash && <Landing onDone={() => setSplash(false)} />}
++      {/* The live backdrop: cheap 2D stars + drifting planets, behind every
++          screen, driven by the active motion package. */}
++      <Starfield />
++      {loading ? (
++        <LoadingScreen boot={boot} lang={lang} onDone={() => setLoading(false)} />
++      ) : (
++        splash && <Landing onDone={() => setSplash(false)} />
++      )}
+       {/* One shared element: centred on the launcher, docked in a section. */}
+       <motion.button
+         layoutId="ce-wordmark"
 diff --git a/ce-app/frontend/src/components/LiveGlobe.tsx b/ce-app/frontend/src/components/LiveGlobe.tsx
 new file mode 100644
 index 0000000..0782b23
@@ -834,6 +1297,492 @@ index 0000000..0782b23
 +  }, [height])
 +
 +  return <div ref={mount} className="live-globe" style={{ height }} aria-hidden />
++}
+diff --git a/ce-app/frontend/src/components/LoadingScreen.tsx b/ce-app/frontend/src/components/LoadingScreen.tsx
+new file mode 100644
+index 0000000..20e81eb
+--- /dev/null
++++ b/ce-app/frontend/src/components/LoadingScreen.tsx
+@@ -0,0 +1,349 @@
++import { useEffect, useRef, useState } from 'react'
++import * as THREE from 'three'
++
++/**
++ * The cold-start loading screen: a **big bang**.
++ *
++ * A single point holds for a beat, detonates, and the debris spreads out like
++ * stars and planets before settling into the constellation the launcher keeps.
++ * It is the design the owner drew (`docs/CuttingEdge/ui-proposal/
++ * loadscreen-frame1.png`, `loadscreen-frame2.png`), implemented for real.
++ *
++ * Three deliberate engineering choices:
++ *
++ * 1. **Plain `three`, not `@react-three/fiber` + `drei` + `gsap`.** The mockup
++ *    named those, but `three` is already a dependency (the live globe), and a
++ *    React reconciler plus two animation libraries would add ~150 KB to a
++ *    bundle this app measures. One imperative scene does the same job.
++ * 2. **The ring reports real work, not a timer.** It advances on the steps that
++ *    actually gate the app — the backend answering, the projects loading, the
++ *    motion package arriving — so a slow machine shows a slow ring instead of a
++ *    lie that finishes before the app is ready.
++ * 3. **`prefers-reduced-motion` gets the settled frame, not the explosion.** No
++ *    flashes, no travel; the galaxy is drawn once and the screen steps aside.
++ *
++ * The active **motion package** drives it: `particles` sizes the debris field,
++ * `duration` scales the whole sequence, `ease` shapes the settle.
++ */
++
++const NODES = [
++  { name: 'MySQL', color: 0x22c55e, angle: 0.4 },
++  { name: 'Postgres', color: 0xfbbf24, angle: 1.7 },
++  { name: 'MongoDB', color: 0x3b82f6, angle: 2.9 },
++  { name: 'Redis', color: 0xef4444, angle: 4.2 },
++  { name: 'SQLite', color: 0xf97316, angle: 5.4 },
++]
++
++const STATUS_LINES = [
++  ['Waking the engine', 'بیدارکردن موتور'],
++  ['Reading your projects', 'خواندن پروژه‌ها'],
++  ['Tuning the motion language', 'تنظیم زبان موشن'],
++  ['Ready', 'آماده'],
++]
++
++/** Solve a CSS `cubic-bezier(...)`/keyword into an easing function. */
++function makeEase(css?: string): (t: number) => number {
++  const spec = (css ?? '').trim()
++  let c: [number, number, number, number] | undefined
++  if (spec.startsWith('cubic-bezier(')) {
++    const p = spec.slice(13, -1).split(',').map((n) => Number(n.trim()))
++    if (p.length === 4 && p.every((n) => Number.isFinite(n))) c = p as [number, number, number, number]
++  } else if (spec === 'linear') c = [0, 0, 1, 1]
++  else if (spec === 'ease') c = [0.25, 0.1, 0.25, 1]
++  else if (spec === 'ease-in') c = [0.42, 0, 1, 1]
++  else if (spec === 'ease-out') c = [0, 0, 0.58, 1]
++  else if (spec === 'ease-in-out') c = [0.42, 0, 0.58, 1]
++  if (!c) return (t) => t
++  const [x1, y1, x2, y2] = c
++  const bez = (a: number, b: number, t: number) =>
++    3 * a * (1 - t) ** 2 * t + 3 * b * (1 - t) * t ** 2 + t ** 3
++  return (x: number) => {
++    let t = x
++    for (let i = 0; i < 5; i += 1) {
++      const slope = 3 * x1 * (1 - t) ** 2 + 6 * (x2 - x1) * (1 - t) * t + 3 * (1 - x2) * t ** 2
++      if (Math.abs(slope) < 1e-6) break
++      t -= (bez(x1, x2, t) - x) / slope
++    }
++    return bez(y1, y2, Math.min(1, Math.max(0, t)))
++  }
++}
++
++export interface BootStep {
++  /** 0..1 — how much of this step is done. */
++  progress: number
++  /** Which line of `STATUS_LINES` to type. */
++  stage: number
++}
++
++export default function LoadingScreen({
++  onDone,
++  boot,
++  lang,
++}: {
++  onDone: () => void
++  boot: BootStep
++  lang: string
++}) {
++  const mount = useRef<HTMLDivElement>(null)
++  const [typed, setTyped] = useState('')
++  const [shown, setShown] = useState(0)
++  const reduce =
++    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
++
++  /**
++   * Two honesty rules for the ring and the narration.
++   *
++   * The ring **never shows more than the truth** — `shown` eases up towards the
++   * real progress and stops there. On a fast machine the three boot requests
++   * land inside one frame; without this the ring would snap 0 → 100 % and the
++   * screen would be a flash, which is exactly the "nothing animated" complaint.
++   *
++   * The narration **never claims a stage that has not happened** — it walks the
++   * lines in order, but only up to the stage the boot really reached, and it
++   * holds each line long enough to be read.
++   */
++  useEffect(() => {
++    if (reduce) { setShown(boot.progress); return }
++    let raf = 0
++    let last = performance.now()
++    const tick = (now: number) => {
++      const dt = Math.min(0.1, (now - last) / 1000)
++      last = now
++      setShown((prev) => {
++        const next = Math.min(boot.progress, prev + dt * 0.62)
++        return boot.progress - next < 0.004 ? boot.progress : next
++      })
++      raf = requestAnimationFrame(tick)
++    }
++    raf = requestAnimationFrame(tick)
++    return () => cancelAnimationFrame(raf)
++  }, [boot.progress, reduce])
++
++  const [line, setLine] = useState(0)
++  useEffect(() => {
++    if (reduce) { setLine(Math.min(boot.stage, STATUS_LINES.length - 1)); return }
++    const ceiling = boot.progress >= 1
++      ? STATUS_LINES.length - 1
++      : Math.min(boot.stage, STATUS_LINES.length - 2)
++    // One line at a time, on a clock: advancing inside the effect body raced to
++    // the last line in a single render, so the narration only ever said "Ready".
++    const id = window.setInterval(() => {
++      setLine((prev) => (prev >= ceiling ? prev : prev + 1))
++    }, 520)
++    return () => window.clearInterval(id)
++  }, [boot.stage, boot.progress, reduce])
++
++  /* ---- the typewriter ---------------------------------------------------- */
++  useEffect(() => {
++    const entry = STATUS_LINES[Math.min(line, STATUS_LINES.length - 1)]
++    const full = lang === 'fa' ? entry[1] : entry[0]
++    if (reduce) { setTyped(full); return }
++    let i = 0
++    setTyped('')
++    const id = window.setInterval(() => {
++      i += 1
++      setTyped(full.slice(0, i))
++      if (i >= full.length) window.clearInterval(id)
++    }, 26)
++    return () => window.clearInterval(id)
++  }, [line, lang, reduce])
++
++  /* ---- the scene ---------------------------------------------------------- */
++  useEffect(() => {
++    const el = mount.current
++    if (!el) return
++    const pkg = (window as any).__ceMotion ?? {}
++    const count = Math.min(3000, Math.max(400, Math.round((pkg.particles ?? 8) * 180)))
++    const timeScale = 1 / (pkg.duration || 1)
++    const ease = makeEase(pkg.ease)
++
++    const scene = new THREE.Scene()
++    const camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 200)
++    camera.position.z = 9
++    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
++    renderer.setSize(el.clientWidth, el.clientHeight)
++    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
++    el.appendChild(renderer.domElement)
++
++    /* Debris: one buffer, allocated once. Position 0 is the singularity. */
++    const home = new Float32Array(count * 3)
++    const vel = new Float32Array(count * 3)
++    const pos = new Float32Array(count * 3)
++    const colors = new Float32Array(count * 3)
++    const cyan = new THREE.Color(0x00f0ff)
++    const violet = new THREE.Color(0x8b5cf6)
++    const pink = new THREE.Color(0xff2d9c)
++    for (let i = 0; i < count; i += 1) {
++      const v = new THREE.Vector3().randomDirection()
++      // 80 % become a flat galaxy disc, the rest stay a halo — a disc reads as
++      // a system, a sphere reads as smoke.
++      if (i % 5 !== 0) v.multiplyScalar(0.35 + Math.random() * 0.65).setZ(v.z * 0.18)
++      const radius = 2.2 + Math.random() * 4.6
++      home[i * 3] = v.x * radius
++      home[i * 3 + 1] = v.y * radius
++      home[i * 3 + 2] = v.z * radius
++      // The bang throws everything outward; the far ones fly fastest.
++      const speed = 5 + Math.random() * 16
++      vel[i * 3] = v.x * speed
++      vel[i * 3 + 1] = v.y * speed
++      vel[i * 3 + 2] = v.z * speed
++      const tint = cyan.clone().lerp(Math.random() < 0.3 ? pink : violet, Math.random())
++      colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b
++    }
++    const geo = new THREE.BufferGeometry()
++    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
++    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
++    const debris = new THREE.Points(geo, new THREE.PointsMaterial({
++      size: 0.045, vertexColors: true, transparent: true, opacity: 0,
++      blending: THREE.AdditiveBlending, depthWrite: false,
++    }))
++    scene.add(debris)
++
++    /* The singularity: one sprite that swells, then is gone. */
++    const core = new THREE.Mesh(
++      new THREE.SphereGeometry(0.16, 24, 24),
++      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 }),
++    )
++    scene.add(core)
++
++    /* The planets the debris leaves behind. */
++    const planets = NODES.map((n, i) => {
++      const mesh = new THREE.Mesh(
++        new THREE.SphereGeometry(0.13 + i * 0.015, 20, 20),
++        new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: 0 }),
++      )
++      scene.add(mesh)
++      return mesh
++    })
++
++    /* The arcs between them, with a pulse running along each. */
++    const pulses: { mesh: THREE.Mesh; from: number; to: number; t: number }[] = []
++    for (let i = 0; i < NODES.length; i += 1) {
++      const m = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10),
++        new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0 }))
++      scene.add(m)
++      pulses.push({ mesh: m, from: i, to: (i + 1) % NODES.length, t: i * 0.2 })
++    }
++
++    const nodePos = (i: number, spin: number) => {
++      const a = NODES[i].angle + spin
++      const r = 2.5
++      return new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r * 0.55, Math.sin(a) * 0.8)
++    }
++
++    /* Reduced motion: draw the settled frame once and stop. */
++    if (reduce) {
++      for (let i = 0; i < count; i += 1) {
++        pos[i * 3] = home[i * 3]; pos[i * 3 + 1] = home[i * 3 + 1]; pos[i * 3 + 2] = home[i * 3 + 2]
++      }
++      geo.attributes.position.needsUpdate = true
++      ;(debris.material as THREE.PointsMaterial).opacity = 0.75
++      core.visible = false
++      planets.forEach((p, i) => { p.position.copy(nodePos(i, 0)); (p.material as THREE.MeshBasicMaterial).opacity = 0.9 })
++      renderer.render(scene, camera)
++      const onResize = () => {
++        renderer.setSize(el.clientWidth, el.clientHeight)
++        camera.aspect = el.clientWidth / el.clientHeight
++        camera.updateProjectionMatrix()
++        renderer.render(scene, camera)
++      }
++      window.addEventListener('resize', onResize)
++      return () => { window.removeEventListener('resize', onResize); renderer.dispose(); el.removeChild(renderer.domElement) }
++    }
++
++    const BANG = 0.42          // s — how long the singularity holds
++    const FLY = 1.05           // s — the explosion
++    const SETTLE = 1.15        // s — debris finds its orbit
++    const TOTAL = (BANG + FLY + SETTLE) * (1 / timeScale)
++    const start = performance.now()
++    let raf = 0
++
++    const tick = () => {
++      const t = (performance.now() - start) / 1000
++      const scaled = t * timeScale
++
++      if (scaled < BANG) {
++        // Hold: the point breathes and swells.
++        const k = scaled / BANG
++        core.scale.setScalar(0.6 + k * 2.4)
++        ;(core.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * Math.sin(k * 18)
++        ;(debris.material as THREE.PointsMaterial).opacity = 0
++      } else {
++        core.visible = false
++        const fly = Math.min(1, (scaled - BANG) / FLY)
++        const settle = ease(Math.min(1, Math.max(0, (scaled - BANG - FLY * 0.35) / SETTLE)))
++        const mat = debris.material as THREE.PointsMaterial
++        mat.opacity = Math.min(0.9, fly * 1.4)
++        for (let i = 0; i < count; i += 1) {
++          // outward flight, then an eased pull back to the settled position
++          const drag = fly * (1 - settle)
++          pos[i * 3] = vel[i * 3] * drag + home[i * 3] * settle
++          pos[i * 3 + 1] = vel[i * 3 + 1] * drag + home[i * 3 + 1] * settle
++          pos[i * 3 + 2] = vel[i * 3 + 2] * drag + home[i * 3 + 2] * settle
++        }
++        geo.attributes.position.needsUpdate = true
++
++        const spin = (scaled - BANG) * 0.22
++        debris.rotation.z = spin * 0.25
++        planets.forEach((p, i) => {
++          const v = nodePos(i, spin * 0.4)
++          p.position.copy(v)
++          ;(p.material as THREE.MeshBasicMaterial).opacity = settle * 0.95
++        })
++        for (const p of pulses) {
++          p.t = (p.t + 0.006 * timeScale) % 1
++          const a = nodePos(p.from, spin * 0.4)
++          const b = nodePos(p.to, spin * 0.4)
++          p.mesh.position.lerpVectors(a, b, ease(p.t))
++          ;(p.mesh.material as THREE.MeshBasicMaterial).opacity = settle * 0.85 * Math.sin(Math.PI * p.t)
++        }
++      }
++
++      camera.position.z = 9 - Math.min(1.4, scaled * 0.5)
++      renderer.render(scene, camera)
++      if (t < TOTAL + 0.6) raf = requestAnimationFrame(tick)
++    }
++    tick()
++
++    const onResize = () => {
++      renderer.setSize(el.clientWidth, el.clientHeight)
++      camera.aspect = el.clientWidth / el.clientHeight
++      camera.updateProjectionMatrix()
++    }
++    window.addEventListener('resize', onResize)
++    return () => {
++      cancelAnimationFrame(raf)
++      window.removeEventListener('resize', onResize)
++      renderer.dispose()
++      el.removeChild(renderer.domElement)
++    }
++  }, [reduce])
++
++  const pct = Math.round(Math.min(1, Math.max(0, shown)) * 100)
++  const R = 46
++  const circ = 2 * Math.PI * R
++
++  return (
++    <div className="ld-screen" role="status" aria-live="polite" aria-label="Cutting Edge">
++      <div className="ld-screen__gl" ref={mount} aria-hidden />
++      <div className="ld-screen__ui">
++        <svg className="ld-ring" width="112" height="112" viewBox="0 0 112 112" aria-hidden>
++          <circle cx="56" cy="56" r={R} className="ld-ring__track" />
++          <circle
++            cx="56" cy="56" r={R} className="ld-ring__bar"
++            strokeDasharray={circ}
++            strokeDashoffset={circ * (1 - Math.min(1, Math.max(0, shown)))}
++          />
++        </svg>
++        <div className="ld-screen__pct mono">{pct}%</div>
++        <div className="ld-screen__status" data-testid="ld-status">
++          {typed}
++          <span className="ld-screen__caret" aria-hidden />
++        </div>
++      </div>
++      <button className="ld-screen__skip" onClick={onDone} type="button">
++        {lang === 'fa' ? 'رد کردن' : 'Skip'}
++      </button>
++    </div>
++  )
++}
+diff --git a/ce-app/frontend/src/components/Starfield.tsx b/ce-app/frontend/src/components/Starfield.tsx
+new file mode 100644
+index 0000000..4366a14
+--- /dev/null
++++ b/ce-app/frontend/src/components/Starfield.tsx
+@@ -0,0 +1,125 @@
++import { useEffect, useRef } from 'react'
++
++/**
++ * The live background: a slow starfield with a few drifting planets.
++ *
++ * It is deliberately a **2D canvas**, not WebGL. The editor already owns the GPU
++ * (real-time preview, film strips, waveforms) and this has to sit behind every
++ * screen including that one, so it costs a couple of hundred `fillRect`s a frame
++ * instead of a second GL context. No allocations happen inside the frame loop.
++ *
++ * The active motion package drives it (`particles` → how many stars,
++ * `duration` → how fast they drift) and `prefers-reduced-motion` gets one static
++ * frame. It stops entirely when the tab is hidden.
++ */
++export default function Starfield({ dim = 1 }: { dim?: number }) {
++  const ref = useRef<HTMLCanvasElement>(null)
++
++  useEffect(() => {
++    const canvas = ref.current
++    if (!canvas) return
++    const ctx = canvas.getContext('2d')
++    if (!ctx) return
++
++    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
++    const read = () => {
++      const m = (window as any).__ceMotion ?? {}
++      return {
++        count: Math.min(420, Math.max(60, Math.round((m.particles ?? 8) * 22))),
++        speed: 1 / (m.duration || 1),
++      }
++    }
++    let cfg = read()
++
++    const TINTS = ['0,240,255', '139,92,246', '255,45,156', '255,255,255']
++    let w = 0
++    let h = 0
++    let stars: { x: number; y: number; z: number; r: number; c: string }[] = []
++    let planets: { x: number; y: number; r: number; vx: number; vy: number; c: string }[] = []
++
++    const seed = () => {
++      w = canvas.clientWidth
++      h = canvas.clientHeight
++      canvas.width = Math.max(1, Math.round(w * Math.min(2, window.devicePixelRatio)))
++      canvas.height = Math.max(1, Math.round(h * Math.min(2, window.devicePixelRatio)))
++      ctx.setTransform(canvas.width / w, 0, 0, canvas.height / h, 0, 0)
++      stars = new Array(cfg.count).fill(0).map(() => ({
++        x: Math.random() * w,
++        y: Math.random() * h,
++        z: 0.25 + Math.random() * 0.75,          // depth = parallax + brightness
++        r: 0.4 + Math.random() * 1.5,
++        c: TINTS[Math.floor(Math.random() * TINTS.length)],
++      }))
++      planets = new Array(4).fill(0).map((_, i) => ({
++        x: Math.random() * w,
++        y: Math.random() * h,
++        r: 26 + i * 14,
++        vx: (Math.random() - 0.5) * 0.06,
++        vy: (Math.random() - 0.5) * 0.04,
++        c: TINTS[i % TINTS.length],
++      }))
++    }
++
++    const draw = (t: number) => {
++      ctx.clearRect(0, 0, w, h)
++      // planets: a soft radial wash, drawn first so stars sit on top
++      for (const p of planets) {
++        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r)
++        g.addColorStop(0, `rgba(${p.c},${0.10 * dim})`)
++        g.addColorStop(1, `rgba(${p.c},0)`)
++        ctx.fillStyle = g
++        ctx.beginPath()
++        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
++        ctx.fill()
++      }
++      for (const s of stars) {
++        const twinkle = reduce ? 0.8 : 0.55 + 0.45 * Math.sin(t * 0.0016 * s.z + s.x)
++        ctx.fillStyle = `rgba(${s.c},${(0.15 + 0.55 * s.z) * twinkle * dim})`
++        ctx.fillRect(s.x, s.y, s.r, s.r)
++      }
++    }
++
++    let raf = 0
++    let last = 0
++    const frame = (t: number) => {
++      const dt = Math.min(50, t - last) / 16.67
++      last = t
++      for (const s of stars) {
++        s.x -= s.z * 0.14 * cfg.speed * dt
++        if (s.x < -2) { s.x = w + 2; s.y = Math.random() * h }
++      }
++      for (const p of planets) {
++        p.x += p.vx * cfg.speed * dt
++        p.y += p.vy * cfg.speed * dt
++        if (p.x < -p.r) p.x = w + p.r
++        if (p.x > w + p.r) p.x = -p.r
++        if (p.y < -p.r) p.y = h + p.r
++        if (p.y > h + p.r) p.y = -p.r
++      }
++      draw(t)
++      raf = requestAnimationFrame(frame)
++    }
++
++    seed()
++    if (reduce) draw(0)
++    else raf = requestAnimationFrame(frame)
++
++    const onResize = () => { seed(); if (reduce) draw(0) }
++    const onMotion = () => { cfg = read(); seed(); if (reduce) draw(0) }
++    const onVisibility = () => {
++      if (document.hidden) { cancelAnimationFrame(raf); raf = 0 }
++      else if (!reduce && !raf) { last = performance.now(); raf = requestAnimationFrame(frame) }
++    }
++    window.addEventListener('resize', onResize)
++    window.addEventListener('ce:motion', onMotion)
++    document.addEventListener('visibilitychange', onVisibility)
++    return () => {
++      cancelAnimationFrame(raf)
++      window.removeEventListener('resize', onResize)
++      window.removeEventListener('ce:motion', onMotion)
++      document.removeEventListener('visibilitychange', onVisibility)
++    }
++  }, [dim])
++
++  return <canvas ref={ref} className="ce-starfield" aria-hidden />
 +}
 diff --git a/ce-app/frontend/src/pages/Home.tsx b/ce-app/frontend/src/pages/Home.tsx
 index 29273f7..1e9de88 100644
@@ -1024,7 +1973,7 @@ index d26dd09..ae1416c 100644
        const editor = useEditor.getState()
        editor.loadSnapshot(built.timeline as never, built.name)
 diff --git a/ce-app/frontend/src/styles/global.css b/ce-app/frontend/src/styles/global.css
-index 95d5502..31a1307 100644
+index 95d5502..5d6bdf2 100644
 --- a/ce-app/frontend/src/styles/global.css
 +++ b/ce-app/frontend/src/styles/global.css
 @@ -1448,18 +1448,32 @@ img { -webkit-user-drag: none; }
@@ -1066,7 +2015,7 @@ index 95d5502..31a1307 100644
  }
  .ce-btn--primary:active::after, .ce-start__main:active::after { opacity: 1; transform: scale(2.2); transition: 0s; }
  .skeleton {
-@@ -1845,32 +1859,36 @@ body { font-family: var(--ce-font-sans); }
+@@ -1845,32 +1859,88 @@ body { font-family: var(--ce-font-sans); }
    color: #fff; font-weight: 600; letter-spacing: .3px;
    background: var(--ce-glass-bg-strong); border: 1px solid color-mix(in srgb, var(--ce-neon-pink) 60%, transparent);
    backdrop-filter: var(--ce-glass-blur); box-shadow: 0 0 24px -6px color-mix(in srgb, var(--ce-neon-pink) 50%, transparent);
@@ -1115,6 +2064,58 @@ index 95d5502..31a1307 100644
 +/* ---- Live globe (Three.js) on the launcher ---- */
 +.live-globe { width: min(560px, 86vw); margin: 6px auto 0; }
 +.live-globe canvas { display: block; width: 100% !important; }
++
++/* ---- Big-bang loading screen + the live starfield backdrop ---------------
++   Both read the motion-package variables, so the package switches the cold
++   start too. Reduced-motion keeps a static frame (handled in the components)
++   and kills the caret here. */
++.ld-screen {
++  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
++  overflow: hidden;  /* full-bleed intro: its glow must never widen the page */
++  background: radial-gradient(120% 90% at 50% 45%, #0b1220 0%, #070a12 58%, #05070d 100%);
++}
++.ld-screen__gl { position: absolute; inset: 0; }
++.ld-screen__gl canvas { display: block; width: 100% !important; height: 100% !important; }
++.ld-screen__ui { position: relative; display: grid; place-items: center; }
++.ld-ring { grid-area: 1 / 1; transform: rotate(-90deg); }
++.ld-ring__track { fill: none; stroke: color-mix(in srgb, var(--ce-neon-cyan) 14%, transparent); stroke-width: 3; }
++.ld-ring__bar {
++  fill: none; stroke: var(--ce-neon-cyan); stroke-width: 3; stroke-linecap: round;
++  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--ce-neon-cyan) 55%, transparent));
++  transition: stroke-dashoffset calc(.3s * var(--m-speed)) var(--m-ease);
++}
++.ld-screen__pct { grid-area: 1 / 1; font-size: 13px; letter-spacing: .4px; color: var(--ce-text-dim); }
++.ld-screen__status {
++  grid-area: 2 / 1; margin-top: 18px; min-height: 20px; font-size: 13px;
++  color: color-mix(in srgb, var(--ce-text) 78%, transparent); letter-spacing: .2px;
++}
++.ld-screen__caret {
++  display: inline-block; width: 7px; height: 14px; margin-inline-start: 3px;
++  vertical-align: -2px; background: var(--ce-neon-pink);
++  animation: ld-caret calc(1s * var(--m-speed)) steps(1, end) infinite;
++}
++@keyframes ld-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
++.ld-screen__skip {
++  position: absolute; inset-block-end: 22px; inset-inline-end: 26px;
++  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 12px;
++  color: var(--ce-text-dim); background: transparent;
++  border: 1px solid color-mix(in srgb, var(--ce-border) 80%, transparent);
++  transition: color calc(.2s * var(--m-speed)) var(--m-ease), border-color calc(.2s * var(--m-speed)) var(--m-ease);
++}
++.ld-screen__skip:hover { color: var(--ce-text); border-color: var(--ce-neon-cyan); }
++
++.ce-starfield { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .6; }
++/* Lift the real chrome above the starfield. (The loading screen and landing are
++   fixed overlays with their own z-index; a blanket `position: relative` here once
++   flattened both of them — so we name the structural children instead.) */
++/* Only the in-flow chrome needs lifting above the starfield; the wordmark and the
++   launcher actions are position:fixed (z-index 60) and must stay fixed. */
++.ce-content, .ce-running, .ce-offline { position: relative; z-index: 1; }
++
++@media (prefers-reduced-motion: reduce) {
++  .ld-screen__caret { animation: none; opacity: .7; }
++  .ld-ring__bar { transition: none; }
++}
 diff --git a/docs/CuttingEdge/ENGINEERING_MAP.md b/docs/CuttingEdge/ENGINEERING_MAP.md
 index db0d98c..e561488 100644
 --- a/docs/CuttingEdge/ENGINEERING_MAP.md
@@ -1271,7 +2272,7 @@ index 0000000..08320c1
 +| `ce-app/frontend/src/pages/Settings.tsx` | the switcher, the live parameter read-out, the brain's suggestion |
 +| `ce-app/backend/tests/test_motion.py` | the contract, the clamping, the brain decision |
 diff --git a/docs/CuttingEdge/STATE.md b/docs/CuttingEdge/STATE.md
-index 776dc22..be7e2f8 100644
+index 776dc22..2d087e1 100644
 --- a/docs/CuttingEdge/STATE.md
 +++ b/docs/CuttingEdge/STATE.md
 @@ -4,7 +4,7 @@
@@ -1297,10 +2298,27 @@ index 776dc22..be7e2f8 100644
  | **Languages** | English default + Persian, flips LTR/RTL instantly, persisted |
  | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
  | Auto-update | One button: check → differential download → install; silent check at startup |
-@@ -1191,6 +1193,32 @@ gate that stops a broken installer from being published.
+@@ -1191,6 +1193,49 @@ gate that stops a broken installer from being published.
      filed as a refinement inside `reframe`'s measurement — documented, not
      skipped. Suite: **376 passed, 0 failed, 10 skipped**.
  
++145. **The cold start is now a big bang, every screen has a live backdrop, and the
++    reframe got a real face tracker.** The owner's animated designs existed only as
++    PNGs (`loadscreen-frame1/2.png`, the neural landing) — nothing was coded, which is
++    exactly why "no animation applied". Now: `LoadingScreen.tsx` — a singularity
++    detonates, ~1400 debris spread like stars/planets and settle into the launcher's
++    constellation; the ring reports real boot steps (health/projects/motion) and the
++    narration types each stage; `prefers-reduced-motion` gets the settled frame.
++    `Starfield.tsx` puts a cheap 2D-canvas star backdrop behind every screen, driven
++    by the motion package. Both use plain `three`/canvas (no new deps). Face tracking:
++    `core/engine/face.py` bridges MediaPipe **BlazeFace** (any orientation) ahead of the
++    Haar cascade, decoding RGB at 6 fps/640 px (was 4/480); degrade-safe like pose.
++    Captions: an empty transcription is now a result, not a crash, and a library failure
++    raises `TranscriptionFailed` naming the stage (the reported "max() arg" path).
++    Verified in-browser: bang/spread/settle screenshots committed, ui-audit 7/7 green.
++    Backend **548 passed / 0 failed / 11 skipped**. This is the **1.4.0** release:
++    `package.json` and this header moved together.
++
 +144. **1.3.0 — live 3D globe launcher + the motion-package switcher, and the audit that
 +    found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the
 +    launcher's connections as nodes on a slowly rotating three.js sphere with
