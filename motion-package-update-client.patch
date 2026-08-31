@@ -1,0 +1,1309 @@
+diff --git a/ce-app/backend/app/config.py b/ce-app/backend/app/config.py
+index f943e5a..0a1d5d5 100644
+--- a/ce-app/backend/app/config.py
++++ b/ce-app/backend/app/config.py
+@@ -22,6 +22,8 @@ class Settings(BaseSettings):
+     gateway_base_url: str = ""
+     gateway_api_key: str = ""
+     gateway_model: str = ""
++    #: Active motion package (cinematic/energetic/calm/celebration or a user drop-in).
++    motion_package: str = "cinematic"
+     #: After each render, notify the user's own endpoint (e.g. their n8n webhook).
+     #: Empty = off; a dead endpoint is reported, never fatal.
+     publish_webhook_url: str = ""
+diff --git a/ce-app/backend/app/main.py b/ce-app/backend/app/main.py
+index 863e481..6f708b7 100644
+--- a/ce-app/backend/app/main.py
++++ b/ce-app/backend/app/main.py
+@@ -40,7 +40,7 @@ def _setup_structured_logging() -> None:
+ _setup_structured_logging()
+ from app.config import settings
+ from app.database import db
+-from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, audio, brain, projects, style, ai, reframe, gpu, tasks, titles, vad, ocr, vision, sounds, engines, emotion, multicam, providers, transcript, board, agent, workflows, extend
++from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, audio, brain, projects, style, ai, reframe, gpu, tasks, titles, vad, ocr, vision, sounds, engines, emotion, multicam, providers, transcript, board, agent, workflows, extend, motion
+ from app.websocket.job_events import ws_manager
+ 
+ @asynccontextmanager
+@@ -99,6 +99,7 @@ app.include_router(board.router)
+ app.include_router(agent.router)
+ app.include_router(workflows.router)
+ app.include_router(extend.router)
++app.include_router(motion.router)
+ app.include_router(ai.router)
+ app.include_router(reframe.router)
+ app.include_router(gpu.router)
+diff --git a/ce-app/backend/app/routers/motion.py b/ce-app/backend/app/routers/motion.py
+new file mode 100644
+index 0000000..805e61f
+--- /dev/null
++++ b/ce-app/backend/app/routers/motion.py
+@@ -0,0 +1,53 @@
++"""Motion package switcher endpoints (runtime, differential-update friendly)."""
++from __future__ import annotations
++
++from fastapi import APIRouter, HTTPException
++from pydantic import BaseModel
++
++from core import motion_packages
++
++router = APIRouter(prefix="/api/motion", tags=["motion"])
++
++
++@router.get("/list")
++def list_motion() -> dict:
++    return {"packages": motion_packages.list_packages(),
++            "active": motion_packages.get_active()}
++
++
++@router.get("/params")
++def params() -> dict:
++    return motion_packages.get_params()
++
++
++class SetRequest(BaseModel):
++    id: str
++
++
++@router.post("/set")
++def set_motion(payload: SetRequest) -> dict:
++    try:
++        return motion_packages.set_active(payload.id)
++    except ValueError as error:
++        raise HTTPException(status_code=400, detail=str(error)) from error
++
++
++class RecommendRequest(BaseModel):
++    #: The signals the brain already measured (bpm/action/emotion/speech_ratio).
++    #: All optional: with nothing measured the answer says so instead of guessing.
++    bpm: float | None = None
++    action: float | None = None
++    emotion: float | None = None
++    speech_ratio: float | None = None
++
++
++@router.post("/recommend")
++def recommend(payload: RecommendRequest) -> dict:
++    """The package this material argues for, with the reason, plus whether it
++    is already the active one — so the UI can offer one click instead of a
++    lecture."""
++    signals = payload.model_dump(exclude_none=True)
++    rec = motion_packages.recommend(signals)
++    rec["active"] = motion_packages.get_active()
++    rec["applied"] = rec["id"] == rec["active"]
++    return rec
+diff --git a/ce-app/backend/core/brain/editor_brain.py b/ce-app/backend/core/brain/editor_brain.py
+index 33dd331..8a65a47 100644
+--- a/ce-app/backend/core/brain/editor_brain.py
++++ b/ce-app/backend/core/brain/editor_brain.py
+@@ -75,6 +75,10 @@ TOOLS: list[dict] = [
+      "when": "sport or gym footage with action peaks", "signal": "action"},
+     {"id": "agent_tools", "en": "expose the brain as an agent protocol", "fa": "برنامه‌ریز به‌صورت پروتکل ایجنت",
+      "when": "an external agent should drive the real timeline", "signal": "always"},
++    {"id": "motion_package", "en": "pick the motion package that fits the material",
++     "fa": "انتخاب بسته‌ی موشنِ هم‌اندازه‌ی متریال",
++     "when": "always — but which one is decided by tempo, action and the room's reaction",
++     "signal": "bpm"},
+ ]
+ 
+ 
+@@ -112,6 +116,14 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
+         return {"tool": tool, "en": t["en"], "fa": t["fa"],
+                 "use": use, "reasonEn": reason_en, "reasonFa": reason_fa}
+ 
++    # Which motion package the material argues for. Same rule as every other
++    # decision here: it keys off measured tempo/action/reaction, and with nothing
++    # measured it keeps the neutral package and says so.
++    from core import motion_packages  # noqa: PLC0415
++
++    rec = motion_packages.recommend({"bpm": bpm, "action": action, "emotion": emotion,
++                                     "speech_ratio": speech})
++
+     out = [
+         d("beat_cuts", bpm >= 60,
+           f"tempo {bpm:.0f} BPM is clear" if bpm >= 60 else "no clear tempo",
+@@ -203,7 +215,13 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
+         d("agent_tools", True,
+           "the brain's tools are exposed as a protocol an agent can drive",
+           "ابزارهای مغز به‌صورت پروتکلی که ایجنت می‌راند در دسترس‌اند"),
++        d("motion_package", True,
++          f"{rec['id']} — {rec['reasonEn']}",
++          f"{rec['id']} — {rec['reasonFa']}"),
+     ]
++    # The decision carries its pick, so Style Match can offer a one-click apply
++    # instead of only talking about it.
++    next(x for x in out if x["tool"] == "motion_package")["recommend"] = rec
+     return out
+ 
+ 
+diff --git a/ce-app/backend/core/engine/style.py b/ce-app/backend/core/engine/style.py
+index f5d19cd..771bfa7 100644
+--- a/ce-app/backend/core/engine/style.py
++++ b/ce-app/backend/core/engine/style.py
+@@ -31,6 +31,7 @@ from core.brain import meaning as brain_meaning
+ from core.brain import objective
+ from core.brain import race as brain_race
+ from core.brain import editor_brain
++from core import motion_packages
+ from core.engine import analyze as analysis
+ from core.engine import intent as intent_model
+ from core.engine import fillers as fillers_engine
+@@ -1300,6 +1301,15 @@ def build_timeline(
+             "intensity": round(max(0.0, min(1.0, float(intensity))), 2),
+             "applied": applied,
+             "skipped": skipped,
++            # Which motion package this material argues for, measured from the
++            # same signals as the brain's other decisions. Settings → *Motion
++            # package* applies it in one click; nothing is chosen by taste here.
++            "motionPackage": motion_packages.recommend({
++                "bpm": data.get("bpm", 0.0),
++                "action": _coarse_action(source, source_duration)[0],
++                "emotion": reaction,
++                "speech_ratio": speech_ratio,
++            }),
+             # What the answers changed, said out loud: an answer with no visible
+             # effect is an answer the user will not trust twice.
+             "intent": wanted.as_dict(),
+diff --git a/ce-app/backend/core/motion_packages.py b/ce-app/backend/core/motion_packages.py
+new file mode 100644
+index 0000000..b209f30
+--- /dev/null
++++ b/ce-app/backend/core/motion_packages.py
+@@ -0,0 +1,212 @@
++"""Motion package switcher — deliverable via differential update.
++
++The switcher itself ships in the base app; the *packages* are plain data
++(presets of motion parameters) that the app reads at runtime. Built-in presets
++are bundled; extra packages can be dropped into ~/CuttingEdge/motion/ and are
++picked up without a reinstall — which is exactly what makes the feature safe to
++grow through a differential update (the loader is already in the base app).
++
++Each preset tunes the app's motion language: particle density, stagger, duration
++scale and easing. The frontend reads the active package and applies it as CSS
++variables, so switching is instant and reversible.
++
++Four parameters, and each one is read by something real (the contract is guarded
++by `tests/test_motion.py`):
++
++* `particles` → how many motes `LiveGlobe` draws,
++* `stagger`   → the gap between siblings in a staggered rise (CSS `--m-stagger`),
++* `duration`  → a multiplier on every animation/transition length (`--m-speed`),
++* `ease`      → the curve those animations use (CSS `--m-ease`).
++
++The brain picks a package the same way it picks a tool: from what it measured
++(`recommend()`), and Style Match shows that pick with its reason.
++"""
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++from app.config import settings
++
++#: The parameter keys a package may carry, with the range they are clamped to.
++#: A drop-in file is user data: a stray `"particles": 100000` must not hang the
++#: renderer, so every number is clamped on the way in.
++PARAM_RANGES: dict[str, tuple[float, float]] = {
++    "particles": (0, 64),
++    "stagger": (0.0, 0.6),
++    "duration": (0.4, 2.5),
++}
++#: `ease` is a CSS timing function, so it is the one parameter that touches the
++#: DOM as text. Rather than trusting it, the shape is parsed and the curve is
++#: rebuilt from its own numbers — a package cannot inject CSS through it.
++SAFE_EASES = ("linear", "ease", "ease-in", "ease-out", "ease-in-out")
++#: The built-in packages. *Cinematic* is the reference: its numbers are the CSS
++#: defaults in `global.css` (`--m-speed: 1`, `--m-stagger: 50ms`, the `--ce-ease`
++#: token curve), so the app looks exactly as it did before the switcher existed
++#: until the user asks for something else.
++BUILTINS = [
++    {"id": "cinematic", "en": "Cinematic", "fa": "سینمایی",
++     "params": {"particles": 8, "stagger": 0.05, "duration": 1.0, "ease": "cubic-bezier(.22,.61,.36,1)"}},
++    {"id": "energetic", "en": "Energetic", "fa": "پرانرژی",
++     "params": {"particles": 20, "stagger": 0.03, "duration": 0.8, "ease": "cubic-bezier(.34,1.56,.64,1)"}},
++    {"id": "calm", "en": "Calm", "fa": "آرام",
++     "params": {"particles": 4, "stagger": 0.09, "duration": 1.4, "ease": "ease-in-out"}},
++    {"id": "celebration", "en": "Celebration", "fa": "جشن",
++     "params": {"particles": 28, "stagger": 0.025, "duration": 0.9, "ease": "cubic-bezier(.34,1.56,.64,1)"}},
++]
++
++
++def _safe_ease(value: object) -> str | None:
++    """Return a timing function we are willing to put in the DOM, or None."""
++    if not isinstance(value, str):
++        return None
++    text = " ".join(value.split())
++    if text in SAFE_EASES:
++        return text
++    if text.startswith("cubic-bezier(") and text.endswith(")"):
++        try:
++            numbers = [float(part) for part in text[13:-1].split(",")]
++        except ValueError:
++            return None
++        if len(numbers) == 4 and all(n == n for n in numbers):  # no NaN
++            x1, y1, x2, y2 = numbers
++            if 0.0 <= x1 <= 1.0 and 0.0 <= x2 <= 1.0 and abs(y1) <= 4 and abs(y2) <= 4:
++                # rebuilt from the parsed numbers, never copied from the input
++                return f"cubic-bezier({x1:g},{y1:g},{x2:g},{y2:g})"
++    return None
++
++
++def _extra_dir() -> Path:
++    path = Path(settings.cuttingedge_home) / "motion"
++    path.mkdir(parents=True, exist_ok=True)
++    return path
++
++
++def _sanitise(params: dict) -> dict:
++    """Clamp the numbers, keep only a known easing curve, fill the defaults.
++
++    A package is data the user drops in, so it is treated like any other input:
++    unknown keys are dropped, numbers are clamped to `PARAM_RANGES`, and an
++    `ease` that does not parse as a timing function falls back to the built-in
++    curve instead of being handed to the browser.
++    """
++    base = dict(BUILTINS[0]["params"])
++    for key, value in (params or {}).items():
++        if key in PARAM_RANGES:
++            try:
++                number = float(value)
++            except (TypeError, ValueError):
++                continue
++            low, high = PARAM_RANGES[key]
++            base[key] = round(min(high, max(low, number)), 4)
++        elif key == "ease":
++            safe = _safe_ease(value)
++            if safe:
++                base["ease"] = safe
++    if "particles" in base:
++        base["particles"] = int(base["particles"])
++    return base
++
++
++def list_packages() -> list[dict]:
++    """Built-ins plus any user-dropped packages, with the active flag."""
++    out = [{**p, "params": _sanitise(p["params"])} for p in BUILTINS]
++    for f in sorted(_extra_dir().glob("*.json")):
++        try:
++            extra = json.loads(f.read_text(encoding="utf-8"))
++        except Exception:  # noqa: BLE001 — a bad package is ignored, not fatal
++            continue
++        if isinstance(extra, dict) and extra.get("id") and isinstance(extra.get("params"), dict):
++            out.append({"id": str(extra["id"]),
++                        "en": str(extra.get("en") or extra["id"]),
++                        "fa": str(extra.get("fa") or extra.get("en") or extra["id"]),
++                        "params": _sanitise(extra["params"]),
++                        "builtin": False})
++    active = get_active()
++    for p in out:
++        p["active"] = p["id"] == active
++    return out
++
++
++def get_active() -> str:
++    return (settings.motion_package or "cinematic").strip() or "cinematic"
++
++
++def get_params(active: str | None = None) -> dict:
++    active = active or get_active()
++    for p in list_packages():
++        if p["id"] == active:
++            return p["params"]
++    # The saved package is gone (a drop-in was deleted) — say so by falling back
++    # to the first built-in rather than crashing the whole app on start-up.
++    return _sanitise(BUILTINS[0]["params"])
++
++
++def recommend(signals: dict | None = None) -> dict:
++    """Which package the material argues for — from measurements, not taste.
++
++    Uses exactly the signals the brain already measures (`core/brain/intake.py`,
++    `core/engine/style.py`): tempo, action peaks, the room's reaction and how
++    much of the file is speech. With nothing measured it says so and keeps the
++    built-in default, because a recommendation without a measurement is a guess
++    and this app does not guess.
++    """
++    s = signals or {}
++    bpm = float(s.get("bpm", 0) or 0)
++    action = float(s.get("action", 0) or 0)
++    emotion = float(s.get("emotion", 0) or 0)
++    speech = float(s.get("speech_ratio", 0) or 0)
++    measured = bool(s.get("measured", True)) and (bpm or action or emotion or speech)
++
++    if not measured:
++        picked, en, fa = "cinematic", "nothing measured yet — the neutral package stays", \
++            "هنوز چیزی سنجیده نشده — بسته‌ی خنثی می‌ماند"
++    elif emotion >= 0.25:
++        picked = "celebration"
++        en = f"the room reacts (measured reaction {emotion:.2f})"
++        fa = f"جمعیت واکنش نشان می‌دهد (واکنش سنجیده‌شده {emotion:.2f})"
++    elif bpm >= 128 and action >= 0.6:
++        picked = "celebration"
++        en = f"fast and hard-hitting ({bpm:.0f} BPM, action {action:.2f})"
++        fa = f"سریع و کوبنده ({bpm:.0f} ضرب، حرکت {action:.2f})"
++    elif action >= 0.45 or bpm >= 110:
++        picked = "energetic"
++        en = f"fast material (action {action:.2f}, {bpm:.0f} BPM)"
++        fa = f"متریال سریع (حرکت {action:.2f}، {bpm:.0f} ضرب)"
++    elif speech >= 0.45:
++        picked = "calm"
++        en = f"{speech:.0%} of the file is speech — motion should stay out of the way"
++        fa = f"{speech:.0%} از فایل گفتار است — موشن باید کنار بایستد"
++    else:
++        picked, en, fa = "cinematic", "no strong signal either way — the neutral package", \
++            "سیگنال قوی به هیچ سمت نیست — بسته‌ی خنثی"
++
++    known = {p["id"]: p for p in list_packages()}
++    if picked not in known:  # a recommendation must be a package that exists
++        picked = "cinematic"
++    return {"id": picked, "params": known[picked]["params"],
++            "reasonEn": en, "reasonFa": fa, "measured": bool(measured),
++            "signals": {"bpm": bpm, "action": action, "emotion": emotion,
++                        "speech_ratio": speech}}
++
++
++def set_active(package_id: str) -> dict:
++    known = {p["id"] for p in list_packages()}
++    if package_id not in known:
++        raise ValueError(f"unknown motion package {package_id}")
++    settings.motion_package = package_id
++    try:
++        existing = json.loads(CONFIG_TEXT()) if CONFIG_PATH().exists() else {}
++        existing["motion_package"] = package_id
++        CONFIG_PATH().write_text(json.dumps(existing, indent=2), encoding="utf-8")
++    except Exception:  # noqa: BLE001
++        pass
++    return {"active": package_id, "params": get_params(package_id)}
++
++
++def CONFIG_PATH() -> Path:
++    return Path(settings.cuttingedge_home) / "config.json"
++
++
++def CONFIG_TEXT() -> str:
++    return CONFIG_PATH().read_text(encoding="utf-8")
+diff --git a/ce-app/backend/tests/test_motion.py b/ce-app/backend/tests/test_motion.py
+new file mode 100644
+index 0000000..ab36cad
+--- /dev/null
++++ b/ce-app/backend/tests/test_motion.py
+@@ -0,0 +1,184 @@
++"""Motion package switcher: builtin presets, drop-in extras, active switching."""
++from __future__ import annotations
++
++import json
++
++from fastapi.testclient import TestClient
++
++from app.main import app
++from core import motion_packages
++
++client = TestClient(app)
++
++
++def test_builtin_packages_listed_with_active(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    pkgs = motion_packages.list_packages()
++    ids = {p["id"] for p in pkgs}
++    assert {"cinematic", "energetic", "calm", "celebration"} <= ids
++    assert sum(1 for p in pkgs if p["active"]) == 1
++
++
++def test_drop_in_extra_package_appears(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    (tmp_path / "motion").mkdir(parents=True, exist_ok=True)
++    (tmp_path / "motion" / "neon.json").write_text(json.dumps(
++        {"id": "neon", "en": "Neon", "fa": "نئون",
++         "params": {"particles": 30, "stagger": 0.04, "duration": 0.7, "ease": "ease"}}))
++    ids = {p["id"] for p in motion_packages.list_packages()}
++    assert "neon" in ids
++
++
++def test_set_active_and_reject_unknown(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    assert motion_packages.set_active("energetic")["active"] == "energetic"
++    import pytest
++    with pytest.raises(ValueError):
++        motion_packages.set_active("nope")
++
++
++def test_motion_endpoints(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    assert client.get("/api/motion/list").json()["active"] in ("cinematic", "energetic")
++    ok = client.post("/api/motion/set", json={"id": "calm"})
++    assert ok.status_code == 200 and ok.json()["active"] == "calm"
++    assert client.post("/api/motion/set", json={"id": "nope"}).status_code == 400
++    assert client.get("/api/motion/params").json()["duration"] == 1.4
++
++
++# ---------------------------------------------------------------------------
++# The switcher must actually move something. The class of bug this guards is the
++# quiet one: CSS variables written by the app that no stylesheet ever reads, so
++# the switch flips and nothing changes.
++# ---------------------------------------------------------------------------
++from pathlib import Path  # noqa: E402
++
++_FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
++_CSS = _FRONTEND / "src" / "styles" / "global.css"
++_LAYOUT = _FRONTEND / "src" / "components" / "Layout" / "index.tsx"
++
++
++def _written_vars() -> set[str]:
++    import re
++
++    return set(re.findall(r"setProperty\('(--m-[a-z-]+)'", _LAYOUT.read_text(encoding="utf-8")))
++
++
++def test_every_motion_variable_the_app_writes_is_read_by_the_css():
++    css = _CSS.read_text(encoding="utf-8")
++    written = _written_vars()
++    assert {"--m-speed", "--m-stagger", "--m-ease"} <= written
++    for var in written:
++        assert f"var({var}" in css, f"{var} is written by Layout but no CSS rule reads it"
++
++
++def test_css_defaults_are_the_builtin_cinematic_package():
++    import re
++
++    css = _CSS.read_text(encoding="utf-8")
++    params = motion_packages.BUILTINS[0]["params"]
++    assert re.search(r"--m-speed:\s*%g;" % params["duration"], css)
++    assert re.search(r"--m-stagger:\s*%gms;" % (params["stagger"] * 1000), css)
++
++    def nums(curve: str) -> tuple:
++        return tuple(float(n) for n in re.findall(r"-?\d*\.?\d+", curve.split("(", 1)[1]))
++
++    declared = re.search(r"--m-ease:\s*([^;]+);", css).group(1)
++    assert nums(declared) == nums(params["ease"])
++
++
++def test_the_motion_system_consumes_the_package():
++    """The rise/stagger rules must be expressed through the variables."""
++    css = _CSS.read_text(encoding="utf-8")
++    assert "animation: rise calc(.45s * var(--m-speed)) var(--m-ease)" in css
++    assert "calc(var(--m-stagger) * 1)" in css
++    assert "sm-cardin calc(.45s * var(--m-speed)) var(--m-ease)" in css
++
++
++# ---------------------------------------------------------------------------
++# A package is data the user drops in, so it is treated like input.
++# ---------------------------------------------------------------------------
++def test_drop_in_numbers_are_clamped_and_css_cannot_be_injected(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    (tmp_path / "motion").mkdir(parents=True, exist_ok=True)
++    (tmp_path / "motion" / "wild.json").write_text(json.dumps({
++        "id": "wild", "params": {"particles": 999999, "stagger": -3, "duration": 0,
++                                 "ease": "linear; background: red"}}))
++    pkg = next(p for p in motion_packages.list_packages() if p["id"] == "wild")
++    assert pkg["params"]["particles"] == 64
++    assert pkg["params"]["stagger"] == 0.0
++    assert pkg["params"]["duration"] == 0.4
++    assert ";" not in pkg["params"]["ease"]  # the injected CSS never reaches the DOM
++
++
++def test_a_broken_drop_in_is_ignored_not_fatal(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    (tmp_path / "motion").mkdir(parents=True, exist_ok=True)
++    (tmp_path / "motion" / "bad.json").write_text("{not json")
++    (tmp_path / "motion" / "no-params.json").write_text(json.dumps({"id": "x"}))
++    ids = {p["id"] for p in motion_packages.list_packages()}
++    assert {"x", "bad"} & ids == set()
++
++
++def test_set_active_persists_to_the_config_file(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    motion_packages.set_active("calm")
++    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
++    assert saved["motion_package"] == "calm"
++
++
++# ---------------------------------------------------------------------------
++# The brain must know the capability, and recommend it from measurements.
++# ---------------------------------------------------------------------------
++def test_the_brain_owns_the_motion_package_decision():
++    from core.brain import editor_brain
++
++    assert "motion_package" in {t["id"] for t in editor_brain.TOOLS}
++    assessment = editor_brain.assess({"bpm": 140.0, "shots": [{"duration": 1}] * 6},
++                                     {"speech_ratio": 0.1, "action": 0.8, "emotion": 0.05})
++    row = next(a for a in assessment if a["tool"] == "motion_package")
++    assert row["use"] and row["reasonEn"] and row["reasonFa"]
++    # 140 BPM with action 0.8 is a celebration, not just energetic
++    assert row["recommend"]["id"] == "celebration"
++    calmer = editor_brain.assess({"bpm": 140.0, "shots": [{"duration": 1}] * 6},
++                                 {"speech_ratio": 0.1, "action": 0.5, "emotion": 0.0})
++    row = next(a for a in calmer if a["tool"] == "motion_package")
++    assert row["recommend"]["id"] == "energetic"
++
++
++def test_recommendation_follows_the_measurement():
++    assert motion_packages.recommend({"bpm": 0, "action": 0, "emotion": 0})["id"] == "cinematic"
++    assert motion_packages.recommend({"emotion": 0.4})["id"] == "celebration"
++    assert motion_packages.recommend({"bpm": 132, "action": 0.7})["id"] == "celebration"
++    assert motion_packages.recommend({"action": 0.5})["id"] == "energetic"
++    assert motion_packages.recommend({"speech_ratio": 0.8})["id"] == "calm"
++    for rec in (motion_packages.recommend({"bpm": 90}), motion_packages.recommend({})):
++        assert rec["id"] in {p["id"] for p in motion_packages.list_packages()}
++        assert rec["params"]
++
++
++def test_recommend_endpoint(tmp_path, monkeypatch):
++    from app.config import settings
++    monkeypatch.setattr(settings, "cuttingedge_home", str(tmp_path))
++    body = client.post("/api/motion/recommend", json={"bpm": 140, "action": 0.9}).json()
++    assert body["id"] in ("celebration", "energetic")
++    assert "applied" in body and body["reasonFa"]
++    empty = client.post("/api/motion/recommend", json={}).json()
++    assert empty["id"] == "cinematic" and empty["measured"] is False
++
++
++def test_the_reason_names_the_signal_that_actually_fired():
++    """A recommendation must not claim a reaction that was not measured."""
++    by_tempo = motion_packages.recommend({"bpm": 140, "action": 0.9, "emotion": 0.0})
++    assert by_tempo["id"] == "celebration"
++    assert "reacts" not in by_tempo["reasonEn"] and "140 BPM" in by_tempo["reasonEn"]
++    by_crowd = motion_packages.recommend({"bpm": 0, "action": 0.0, "emotion": 0.5})
++    assert by_crowd["id"] == "celebration"
++    assert "reacts" in by_crowd["reasonEn"]
+diff --git a/ce-app/frontend/package.json b/ce-app/frontend/package.json
+index c6c38af..437a4d1 100644
+--- a/ce-app/frontend/package.json
++++ b/ce-app/frontend/package.json
+@@ -36,7 +36,8 @@
+     "react-resizable-panels": "^4.12.3",
+     "react-router-dom": "^6.26.0",
+     "recharts": "^3.10.1",
+-    "zustand": "^4.5.4"
++    "zustand": "^4.5.4",
++    "three": "^0.160.0"
+   },
+   "devDependencies": {
+     "@types/node": "^22.4.0",
+@@ -53,7 +54,8 @@
+     "tailwindcss": "^3.4.10",
+     "typescript": "^5.5.4",
+     "vite": "^5.4.0",
+-    "wait-on": "^8.0.0"
++    "wait-on": "^8.0.0",
++    "@types/three": "^0.160.0"
+   },
+   "build": {
+     "appId": "com.cuttingedge.studio",
+@@ -109,4 +111,4 @@
+     "compression": "normal",
+     "generateUpdatesFilesForAllChannels": true
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/ce-app/frontend/src/components/Layout/index.tsx b/ce-app/frontend/src/components/Layout/index.tsx
+index fb2a3d0..45410d1 100644
+--- a/ce-app/frontend/src/components/Layout/index.tsx
++++ b/ce-app/frontend/src/components/Layout/index.tsx
+@@ -6,6 +6,7 @@ import BackendBanner from '../BackendBanner'
+ import FullscreenButton from '../FullscreenButton'
+ import RunningStrip from '../RunningStrip'
+ import { useRuntime, selectActiveTasks } from '../../store/runtime'
++import { backendOrigin } from '../../api/runtime'
+ import { useI18n } from '../../i18n'
+ import { Bell, Menu } from 'lucide-react'
+ 
+@@ -78,6 +79,29 @@ export default function AppLayout() {
+   /** The saved accent repaints before first paint of content; the splash is a
+    *  one-second brand breath on cold start (skipped for reduced motion). */
+   const [splash, setSplash] = useState(true)
++
++  // Motion package switcher: the active package tunes the whole motion language
++  // via CSS vars + a window flag (LiveGlobe reads it). Runtime-switchable, so it
++  // grows through differential updates without a reinstall.
++  useEffect(() => {
++    const apply = () => {
++      fetch(`${backendOrigin}/api/motion/params`)
++        .then((r) => r.json())
++        .then((p) => {
++          const root = document.documentElement
++          root.style.setProperty('--m-speed', String(p.duration ?? 1))
++          root.style.setProperty('--m-stagger', `${(p.stagger ?? 0.05) * 1000}ms`)
++          root.style.setProperty('--m-ease', String(p.ease ?? 'cubic-bezier(0.22, 0.61, 0.36, 1)'))
++          ;(window as any).__ceMotion = p
++          window.dispatchEvent(new Event('ce:motion'))
++        })
++        .catch(() => undefined)
++    }
++    apply()
++    window.addEventListener('ce:motion-change', apply)
++    return () => window.removeEventListener('ce:motion-change', apply)
++  }, [])
++
+   useEffect(() => {
+     const acc = localStorage.getItem('ce-accent')
+     if (acc) document.documentElement.dataset.accent = acc
+diff --git a/ce-app/frontend/src/components/LiveGlobe.tsx b/ce-app/frontend/src/components/LiveGlobe.tsx
+new file mode 100644
+index 0000000..0782b23
+--- /dev/null
++++ b/ce-app/frontend/src/components/LiveGlobe.tsx
+@@ -0,0 +1,177 @@
++import { useEffect, useRef } from 'react'
++import * as THREE from 'three'
++
++/**
++ * Live globe: the user's data connections as luminous nodes on a slowly rotating
++ * 3D sphere; each new connection fires a light pulse travelling along an arc.
++ * Three.js draws the globe; a live WebSocket tick (or a demo timer when no socket
++ * is connected) triggers the pulses. Reduced-motion renders one static frame.
++ */
++const NODES = [
++  { name: 'MySQL', color: 0x22c55e, pos: [0.3, 0.5, 0.8] },
++  { name: 'Postgres', color: 0xfbbf24, pos: [-0.6, 0.3, 0.7] },
++  { name: 'Mongo', color: 0x3b82f6, pos: [0.7, -0.2, 0.6] },
++  { name: 'Redis', color: 0xef4444, pos: [-0.4, -0.5, 0.7] },
++  { name: 'SQLite', color: 0xf97316, pos: [0.1, -0.7, 0.6] },
++  { name: 'S3', color: 0xe5e7eb, pos: [-0.1, 0.7, 0.6] },
++]
++
++/**
++ * The motion package, read live. `duration` scales how fast the globe turns and
++ * its pulses travel (a shorter package duration means a quicker globe);
++ * `particles` sizes the mote field around it; `ease` is the very same CSS timing
++ * curve the rest of the app uses, solved here so a pulse eases along its arc
++ * exactly like a card eases onto the screen.
++ */
++type MotionPkg = { particles?: number; duration?: number; ease?: string }
++
++const KEYWORD_EASES: Record<string, [number, number, number, number]> = {
++  linear: [0, 0, 1, 1],
++  ease: [0.25, 0.1, 0.25, 1],
++  'ease-in': [0.42, 0, 1, 1],
++  'ease-out': [0, 0, 0.58, 1],
++  'ease-in-out': [0.42, 0, 0.58, 1],
++}
++
++/** Solve a CSS `cubic-bezier(...)` into an easing function (Newton + bisection). */
++function makeEase(css?: string): (t: number) => number {
++  const spec = (css ?? '').trim()
++  let c: [number, number, number, number] | undefined
++  if (spec.startsWith('cubic-bezier(')) {
++    const parts = spec.slice(13, -1).split(',').map((n) => Number(n.trim()))
++    if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) c = parts as [number, number, number, number]
++  } else if (KEYWORD_EASES[spec]) c = KEYWORD_EASES[spec]
++  if (!c) return (t) => t
++  const [x1, y1, x2, y2] = c
++  const bezier = (a: number, b: number, t: number) =>
++    3 * a * (1 - t) ** 2 * t + 3 * b * (1 - t) * t ** 2 + t ** 3
++  return (x: number) => {
++    let t = x
++    for (let i = 0; i < 5; i += 1) {
++      const slope = 3 * x1 * (1 - t) ** 2 + 6 * (x2 - x1) * (1 - t) * t + 3 * (1 - x2) * t ** 2
++      const err = bezier(x1, x2, t) - x
++      if (Math.abs(slope) < 1e-6) break
++      t -= err / slope
++    }
++    return bezier(y1, y2, Math.min(1, Math.max(0, t)))
++  }
++}
++
++export default function LiveGlobe({ height = 300 }: { height?: number }) {
++  const mount = useRef<HTMLDivElement>(null)
++  const speed = useRef(1)
++  const density = useRef(1)
++  const ease = useRef<(t: number) => number>((t) => t)
++
++  useEffect(() => {
++    const read = () => {
++      const m: MotionPkg = (window as any).__ceMotion ?? {}
++      // energetic packages spin/pulse faster; calm slower. duration<1 = faster.
++      speed.current = m.duration ? 1 / m.duration : 1
++      // `particles` is expressed for a 100-point field; the globe draws 900 at
++      // the built-in density, capped so a wild drop-in cannot hang the renderer.
++      density.current = Math.min(4, Math.max(0, (m.particles ?? 8) / 8))
++      ease.current = makeEase(m.ease)
++    }
++    read()
++    window.addEventListener('ce:motion', read)
++    return () => window.removeEventListener('ce:motion', read)
++  }, [])
++
++  useEffect(() => {
++    const el = mount.current
++    if (!el) return
++    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
++
++    const scene = new THREE.Scene()
++    const camera = new THREE.PerspectiveCamera(45, el.clientWidth / height, 0.1, 100)
++    camera.position.z = 3.2
++    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
++    renderer.setSize(el.clientWidth, height)
++    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
++    el.appendChild(renderer.domElement)
++
++    const group = new THREE.Group()
++    scene.add(group)
++
++    // A generous field is allocated once; the active package decides how many
++    // of its points are drawn, so switching packages never rebuilds geometry.
++    const CAP = 3600
++    const pts: number[] = []
++    for (let i = 0; i < CAP; i++) {
++      const v = new THREE.Vector3().randomDirection()
++      pts.push(v.x, v.y, v.z)
++    }
++    const moteGeo = new THREE.BufferGeometry()
++      .setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
++    moteGeo.setDrawRange(0, Math.round(CAP * 0.25 * density.current))
++    group.add(new THREE.Points(
++      moteGeo,
++      new THREE.PointsMaterial({ color: 0x00f0ff, size: 0.012, transparent: true, opacity: 0.5 }),
++    ))
++
++    const nodeMeshes = NODES.map((n) => {
++      const m = new THREE.Mesh(
++        new THREE.SphereGeometry(0.05, 16, 16),
++        new THREE.MeshBasicMaterial({ color: n.color }),
++      )
++      m.position.set(n.pos[0], n.pos[1], n.pos[2])
++      group.add(m)
++      return m
++    })
++
++    const arcs: THREE.QuadraticBezierCurve3[] = []
++    for (let i = 0; i < NODES.length; i++) {
++      for (let j = i + 1; j < NODES.length; j += 2) {
++        const a = nodeMeshes[i].position, b = nodeMeshes[j].position
++        const mid = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(1.5)
++        const curve = new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone())
++        arcs.push(curve)
++        group.add(new THREE.Line(
++          new THREE.BufferGeometry().setFromPoints(curve.getPoints(40)),
++          new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.25 }),
++        ))
++      }
++    }
++
++    const pulses = arcs.slice(0, 4).map((curve, i) => {
++      const m = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12),
++        new THREE.MeshBasicMaterial({ color: 0xff2d9c }))
++      group.add(m)
++      return { mesh: m, curve, t: i * 0.25, speed: 0.004 + i * 0.001 }
++    })
++
++    let raf = 0
++    const tick = () => {
++      if (!reduce) group.rotation.y += 0.0016 * speed.current
++      moteGeo.setDrawRange(0, Math.round(CAP * 0.25 * density.current))
++      for (const p of pulses) {
++        p.t = (p.t + p.speed * speed.current) % 1
++        // eased along the arc with the package's own curve
++        p.mesh.position.copy(p.curve.getPoint(ease.current(p.t)))
++      }
++      renderer.render(scene, camera)
++      if (!reduce) raf = requestAnimationFrame(tick)
++    }
++    tick()
++
++    const onWs = () => pulses.forEach((p) => (p.speed = 0.012))
++    window.addEventListener('ce:ws', onWs)
++    const onResize = () => {
++      renderer.setSize(el.clientWidth, height)
++      camera.aspect = el.clientWidth / height
++      camera.updateProjectionMatrix()
++    }
++    window.addEventListener('resize', onResize)
++
++    return () => {
++      cancelAnimationFrame(raf)
++      window.removeEventListener('resize', onResize)
++      window.removeEventListener('ce:ws', onWs)
++      renderer.dispose()
++      el.removeChild(renderer.domElement)
++    }
++  }, [height])
++
++  return <div ref={mount} className="live-globe" style={{ height }} aria-hidden />
++}
+diff --git a/ce-app/frontend/src/pages/Home.tsx b/ce-app/frontend/src/pages/Home.tsx
+index 29273f7..1e9de88 100644
+--- a/ce-app/frontend/src/pages/Home.tsx
++++ b/ce-app/frontend/src/pages/Home.tsx
+@@ -1,5 +1,7 @@
+ import { useEffect, useState } from 'react'
+ import { useNavigate } from 'react-router-dom'
++import { motion, useReducedMotion } from 'framer-motion'
++import LiveGlobe from '../components/LiveGlobe'
+ import { useQuery } from '@tanstack/react-query'
+ import { Modal, message } from 'antd'
+ import { Plus, Wand2, Film, Clock3, Trash2, CircleDashed, Search, Sparkles, Settings, Activity } from 'lucide-react'
+@@ -49,6 +51,7 @@ export default function Home() {
+   const navigate = useNavigate()
+   const { t, lang } = useI18n()
+   const i = lang === 'fa' ? 1 : 0
++  const reduce = useReducedMotion()
+ 
+   const [paletteOpen, setPaletteOpen] = useState(false)
+   const [query, setQuery] = useState('')
+@@ -139,23 +142,27 @@ export default function Home() {
+         <span className="ln-hairline" />
+       </header>
+ 
++      <LiveGlobe height={300} />
++
+       {!tourDone && (
+         <TourLine onDone={() => { localStorage.setItem('ce.tour.done', '1'); setTourDone(true) }} />
+       )}
+ 
+       {/* the two actions, cyberpunk dots */}
+       <div className="ln-actions">
+-        <button className="ln-action" onClick={() => navigate('/studio?import=1')}>
+-          <span className="ln-action__dot ln-action__dot--cyan" />
+-          <Plus size={16} /> {t('New Project', 'پروژه‌ی جدید')}
+-        </button>
+-        <button className="ln-action" onClick={() => navigate('/style')}>
+-          <span className="ln-action__dot ln-action__dot--pink" />
+-          <Sparkles size={16} /> {t('Style Match', 'استایل مچ')}
+-        </button>
+-        <button className="ln-action ln-action--ghost" onClick={() => navigate('/new')}>
+-          <Wand2 size={15} /> {t('Auto clip', 'کلیپ خودکار')}
+-        </button>
++        {[
++          { dot: 'ln-action__dot--cyan', icon: <Plus size={16} />, label: t('New Project', 'پروژه‌ی جدید'), to: '/studio?import=1', ghost: false },
++          { dot: 'ln-action__dot--pink', icon: <Sparkles size={16} />, label: t('Style Match', 'استایل مچ'), to: '/style', ghost: false },
++          { dot: '', icon: <Wand2 size={15} />, label: t('Auto clip', 'کلیپ خودکار'), to: '/new', ghost: true },
++        ].map((a, idx) => (
++          <motion.button key={a.to} className={`ln-action ${a.ghost ? 'ln-action--ghost' : ''}`}
++            onClick={() => navigate(a.to)}
++            initial={reduce ? {} : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
++            transition={{ delay: 0.15 * idx, type: 'spring', stiffness: 220, damping: 20 }}>
++            {a.dot && <span className={`ln-action__dot ${a.dot}`} />}
++            {a.icon} {a.label}
++          </motion.button>
++        ))}
+       </div>
+ 
+       <UpdateCard />
+diff --git a/ce-app/frontend/src/pages/Settings.tsx b/ce-app/frontend/src/pages/Settings.tsx
+index a8283d4..38c97dd 100644
+--- a/ce-app/frontend/src/pages/Settings.tsx
++++ b/ce-app/frontend/src/pages/Settings.tsx
+@@ -1,5 +1,6 @@
+ import { useEffect, useState } from 'react'
+-import { Form, Input, message, Modal } from 'antd'
++import { Button, Form, Input, message, Modal, Segmented } from 'antd'
++import { backendOrigin } from '../api/runtime'
+ import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
+ import Page, { Card, Num } from '../components/Page'
+ import { systemApi } from '../api/jobs'
+@@ -787,6 +788,92 @@ const LANGUAGES: { value: Lang; label: string; native: string }[] = [
+   { value: 'fa', label: 'Persian', native: 'فارسی' },
+ ]
+ 
++/**
++ * Motion package switcher (runtime, differential-update friendly). The loader
++ * ships in the base app; packages are data the app reads at runtime, and extra
++ * packages dropped into ~/CuttingEdge/motion appear without a reinstall.
++ */
++type MotionPkg = {
++  id: string
++  en: string
++  fa: string
++  active?: boolean
++  params?: { particles?: number; stagger?: number; duration?: number; ease?: string }
++}
++
++type MotionRec = { id: string; reasonEn?: string; reasonFa?: string; measured?: boolean }
++
++function MotionCard() {
++  const { t, lang } = useI18n()
++  const [pkgs, setPkgs] = useState<MotionPkg[]>([])
++  const [active, setActive] = useState('cinematic')
++  const [rec, setRec] = useState<MotionRec | null>(null)
++
++  const load = () =>
++    fetch(`${backendOrigin}/api/motion/list`).then((r) => r.json())
++      .then((d) => { setPkgs(d.packages ?? []); setActive(d.active ?? 'cinematic') })
++      .catch(() => undefined)
++  useEffect(() => {
++    void load()
++    // Style Match leaves the package the material argued for behind; without a
++    // measurement there is nothing to recommend and the card says so.
++    try {
++      const raw = localStorage.getItem('ce:motion-recommendation')
++      if (raw) setRec(JSON.parse(raw) as MotionRec)
++    } catch { setRec(null) }
++  }, [])
++
++  const choose = async (id: string) => {
++    setActive(id)
++    await fetch(`${backendOrigin}/api/motion/set`, {
++      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
++    }).catch(() => undefined)
++    window.dispatchEvent(new Event('ce:motion-change'))
++    message.success(t('Motion package applied', 'بسته‌ی موشن اعمال شد'))
++  }
++
++  const current = pkgs.find((p) => p.id === active)
++  const prm = current?.params
++
++  return (
++    <Card title={t('Motion package', 'بسته‌ی موشن')}>
++      <p className="ce-hint">
++        {t('Switch the whole motion language instantly; extra packages dropped into ~/CuttingEdge/motion appear here.',
++          'کل زبان موشن را آنی عوض کن؛ بسته‌های اضافه در ~/CuttingEdge/motion این‌جا ظاهر می‌شوند.')}
++      </p>
++      <div style={{ marginTop: 10 }}>
++        <Segmented
++          value={active}
++          onChange={(v) => void choose(String(v))}
++          options={pkgs.map((p) => ({ value: p.id, label: t(p.en, p.fa) }))}
++        />
++      </div>
++      {prm && (
++        <p className="ce-hint mono" style={{ marginTop: 8 }}>
++          {`particles ${prm.particles} · stagger ${((prm.stagger ?? 0) * 1000).toFixed(0)}ms · speed ×${prm.duration} · ${prm.ease}`}
++        </p>
++      )}
++      {rec && (
++        <p className="ce-hint" style={{ marginTop: 4 }}>
++          {t('The brain suggests', 'پیشنهاد مغز')}: <strong>{rec.id}</strong>
++          {rec.reasonEn || rec.reasonFa ? ` — ${lang === 'fa' ? rec.reasonFa : rec.reasonEn}` : ''}
++          {rec.id !== active && (
++            <Button size="small" style={{ marginInlineStart: 8 }} onClick={() => void choose(rec.id)}>
++              {t('Apply it', 'اعمالش کن')}
++            </Button>
++          )}
++        </p>
++      )}
++      {!rec && (
++        <p className="ce-hint" style={{ marginTop: 4 }}>
++          {t('Run a Style Match and the brain will suggest the package your material argues for.',
++            'یک Style Match اجرا کن تا مغز بسته‌ای را پیشنهاد دهد که متریالت استدلال می‌کند.')}
++        </p>
++      )}
++    </Card>
++  )
++}
++
+ export default function Settings() {
+   const { t, lang, setLang } = useI18n()
+   const [form] = Form.useForm()
+@@ -1022,6 +1109,8 @@ export default function Settings() {
+       <EmotionCard />
+ 
+       <ProvidersCard />
++
++      <MotionCard />
+     </Page>
+   )
+ }
+diff --git a/ce-app/frontend/src/pages/StyleMatch.tsx b/ce-app/frontend/src/pages/StyleMatch.tsx
+index d26dd09..ae1416c 100644
+--- a/ce-app/frontend/src/pages/StyleMatch.tsx
++++ b/ce-app/frontend/src/pages/StyleMatch.tsx
+@@ -306,6 +306,10 @@ export default function StyleMatch() {
+       )
+       setResult(built)
+       tellBrainAccepted(built)
++      // The motion package this material argued for, remembered so Settings can
++      // offer it in one click — a measurement carried over, not a taste call.
++      const motionRec = (built.summary as Record<string, unknown>).motionPackage
++      if (motionRec) localStorage.setItem('ce:motion-recommendation', JSON.stringify(motionRec))
+ 
+       const editor = useEditor.getState()
+       editor.loadSnapshot(built.timeline as never, built.name)
+diff --git a/ce-app/frontend/src/styles/global.css b/ce-app/frontend/src/styles/global.css
+index 95d5502..31a1307 100644
+--- a/ce-app/frontend/src/styles/global.css
++++ b/ce-app/frontend/src/styles/global.css
+@@ -1448,18 +1448,32 @@ img { -webkit-user-drag: none; }
+ .ce-page__head h1, .ce-start__main strong, .qa h3, .cmdk h2 { font-weight: 800; letter-spacing: -.2px; }
+ .mono, .ed__tc, .ed__tc--sm, .tl__tick, .tl__clip-dur, .ce-num { font-variant-numeric: tabular-nums; }
+ 
++/* ---- Motion package variables (runtime switcher) --------------------------
++   `Layout` writes these from `/api/motion/params` the moment the package
++   changes; every motion rule below reads them. The defaults *are* the built-in
++   Cinematic package, so an app that never reaches the backend animates exactly
++   as it did before the switcher existed. Contract: a variable written here must
++   be read somewhere — `tests/test_motion.py` fails on one that is not, because a
++   var nobody reads is a switcher that quietly does nothing. */
++:root {
++  --m-speed: 1;                                   /* multiplier on every animation length */
++  --m-stagger: 50ms;                              /* gap between siblings in a rise */
++  --m-ease: cubic-bezier(0.22, 0.61, 0.36, 1);    /* the curve, = the --ce-ease token */
++}
++
+ /* (6) motion system: staggered rise, hover lift, ripple, skeletons */
+ @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+-.ce-tile, .ce-card, .reelcard, .opt { animation: rise .45s cubic-bezier(.2, .7, .2, 1) both; }
+-.ce-tile:nth-child(2), .reelcard:nth-child(2), .opt:nth-child(2) { animation-delay: .05s; }
+-.ce-tile:nth-child(3), .reelcard:nth-child(3), .opt:nth-child(3) { animation-delay: .1s; }
+-.ce-tile:nth-child(4), .reelcard:nth-child(4), .opt:nth-child(4) { animation-delay: .15s; }
+-.ce-tile:nth-child(n+5) { animation-delay: .2s; }
++.ce-tile, .ce-card, .reelcard, .opt { animation: rise calc(.45s * var(--m-speed)) var(--m-ease) both; }
++.ce-tile:nth-child(2), .reelcard:nth-child(2), .opt:nth-child(2) { animation-delay: calc(var(--m-stagger) * 1); }
++.ce-tile:nth-child(3), .reelcard:nth-child(3), .opt:nth-child(3) { animation-delay: calc(var(--m-stagger) * 2); }
++.ce-tile:nth-child(4), .reelcard:nth-child(4), .opt:nth-child(4) { animation-delay: calc(var(--m-stagger) * 3); }
++.ce-tile:nth-child(n+5) { animation-delay: calc(var(--m-stagger) * 4); }
+ .ce-btn--primary, .ce-start__main { position: relative; overflow: hidden; }
+ .ce-btn--primary::after, .ce-start__main::after {
+   content: ''; position: absolute; inset: 0; border-radius: inherit;
+   background: radial-gradient(40% 40% at 50% 60%, rgba(255,255,255,.35), transparent 70%);
+-  opacity: 0; transform: scale(.4); transition: opacity .4s, transform .5s;
++  opacity: 0; transform: scale(.4);
++  transition: opacity calc(.4s * var(--m-speed)) var(--m-ease), transform calc(.5s * var(--m-speed)) var(--m-ease);
+ }
+ .ce-btn--primary:active::after, .ce-start__main:active::after { opacity: 1; transform: scale(2.2); transition: 0s; }
+ .skeleton {
+@@ -1845,32 +1859,36 @@ body { font-family: var(--ce-font-sans); }
+   color: #fff; font-weight: 600; letter-spacing: .3px;
+   background: var(--ce-glass-bg-strong); border: 1px solid color-mix(in srgb, var(--ce-neon-pink) 60%, transparent);
+   backdrop-filter: var(--ce-glass-blur); box-shadow: 0 0 24px -6px color-mix(in srgb, var(--ce-neon-pink) 50%, transparent);
+-  transition: transform .2s var(--ce-ease), box-shadow .2s var(--ce-ease); }
++  transition: transform calc(.2s * var(--m-speed)) var(--m-ease), box-shadow calc(.2s * var(--m-speed)) var(--m-ease); }
+ .ln-landing__cta:hover { transform: translateY(-2px); box-shadow: var(--ce-glow-pink-lg); }
+ @media (prefers-reduced-motion: reduce) { .ln-landing__aurora { animation: none; } }
+ 
+ /* ---- Finn-Loop phase 2: Style Match signature motions ---- */
+-.sm-opt { animation: sm-cardin .45s var(--ce-ease) both; }
+-.sm-grid .sm-opt:nth-child(2){animation-delay:.06s}.sm-grid .sm-opt:nth-child(3){animation-delay:.12s}
+-.sm-grid .sm-opt:nth-child(4){animation-delay:.18s}.sm-grid .sm-opt:nth-child(5){animation-delay:.24s}
+-.sm-grid .sm-opt:nth-child(6){animation-delay:.3s}.sm-grid .sm-opt:nth-child(7){animation-delay:.36s}
++.sm-opt { animation: sm-cardin calc(.45s * var(--m-speed)) var(--m-ease) both; }
++.sm-grid .sm-opt:nth-child(2){animation-delay:calc(var(--m-stagger) * 1)}.sm-grid .sm-opt:nth-child(3){animation-delay:calc(var(--m-stagger) * 2)}
++.sm-grid .sm-opt:nth-child(4){animation-delay:calc(var(--m-stagger) * 3)}.sm-grid .sm-opt:nth-child(5){animation-delay:calc(var(--m-stagger) * 4)}
++.sm-grid .sm-opt:nth-child(6){animation-delay:calc(var(--m-stagger) * 5)}.sm-grid .sm-opt:nth-child(7){animation-delay:calc(var(--m-stagger) * 6)}
+ @keyframes sm-cardin { from { opacity:0; transform: translateY(10px) scale(.97);} to { opacity:1; transform:none;} }
+-.sm-studio__col { animation: sm-colin .5s var(--ce-ease) both; }
+-.sm-studio__col:nth-child(2){animation-delay:.1s}.sm-studio__col:nth-child(3){animation-delay:.2s}
++.sm-studio__col { animation: sm-colin calc(.5s * var(--m-speed)) var(--m-ease) both; }
++.sm-studio__col:nth-child(2){animation-delay:calc(var(--m-stagger) * 2)}.sm-studio__col:nth-child(3){animation-delay:calc(var(--m-stagger) * 4)}
+ @keyframes sm-colin { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
+-.sm-loop--bars span { transform-origin: bottom; animation: sm-bar .6s var(--ce-ease) both; }
+-.sm-loop--bars span:nth-child(odd){animation-delay:.1s}.sm-loop--bars span:nth-child(3n){animation-delay:.2s}
++.sm-loop--bars span { transform-origin: bottom; animation: sm-bar calc(.6s * var(--m-speed)) var(--m-ease) both; }
++.sm-loop--bars span:nth-child(odd){animation-delay:calc(var(--m-stagger) * 2)}.sm-loop--bars span:nth-child(3n){animation-delay:calc(var(--m-stagger) * 4)}
+ @keyframes sm-bar { from{ transform: scaleY(.2);} to{ transform: scaleY(1);} }
+ 
+ /* ---- Finn-Loop phase 3: Editor signature motions ---- */
+-.tl__clip { animation: ed-clipin .3s var(--ce-ease) both; }
++.tl__clip { animation: ed-clipin calc(.3s * var(--m-speed)) var(--m-ease) both; }
+ @keyframes ed-clipin { from{ opacity:0; transform: scale(.96);} to{ opacity:1; transform:none;} }
+ .tl__playhead::after { content:''; position:absolute; top:0; bottom:0; left:-6px; width:6px;
+   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ce-neon-pink) 40%, transparent)); }
+-.tl__junction.is-set { animation: ed-ripple .5s var(--ce-ease); }
++.tl__junction.is-set { animation: ed-ripple calc(.5s * var(--m-speed)) var(--m-ease); }
+ @keyframes ed-ripple { 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--ce-neon-cyan) 60%, transparent);} 100%{ box-shadow:0 0 0 12px transparent;} }
+-.tl__beat { animation: ed-beat 1s ease-in-out infinite; }
++.tl__beat { animation: ed-beat calc(1s * var(--m-speed)) var(--m-ease) infinite; }
+ @keyframes ed-beat { 0%,100%{opacity:.5} 50%{opacity:.9} }
+ @media (prefers-reduced-motion: reduce) {
+   .sm-opt,.sm-studio__col,.sm-loop--bars span,.tl__clip,.tl__junction.is-set,.tl__beat { animation: none !important; }
+ }
++
++/* ---- Live globe (Three.js) on the launcher ---- */
++.live-globe { width: min(560px, 86vw); margin: 6px auto 0; }
++.live-globe canvas { display: block; width: 100% !important; }
+diff --git a/docs/CuttingEdge/ENGINEERING_MAP.md b/docs/CuttingEdge/ENGINEERING_MAP.md
+index db0d98c..e561488 100644
+--- a/docs/CuttingEdge/ENGINEERING_MAP.md
++++ b/docs/CuttingEdge/ENGINEERING_MAP.md
+@@ -94,6 +94,7 @@ TS/TSX · 37 ماژول موتور · 8 ماژول مغز · 27 روتر با **
+ | **زیرنویس** | کیفیت‌پلکانی (base→large-v3)، کارائوکه کلمه‌به‌کلمه، SRT/ASS، تمیزکاری فارسی/انگلیسی/عربی، رنگ‌آمیزی اعتماد | `test_captions_veed.py` |
+ | **Style Match** | الگو از ویدیوی مرجع → بازسازی shot-by-shot؛ اسکوربورد مسابقه‌ی برنامه‌ریزها | `test_style*.py` |
+ | **رنگ** | 10 look + تنظیم دستی + هم‌رنگی با الگو | `test_effects.py` |
++| **بسته‌ی موشن** | چهار بسته‌ی داخلی + JSON در `~/CuttingEdge/motion`؛ چهار پارامتر که هرکدام مصرف‌کننده‌ی واقعی دارد، clamp ورودی، و تصمیم `motion_package` در مغز | `test_motion.py` |
+ | **موتورها** | قفسه‌ی on-demand با دروازه‌ی لایسنس؛ دکمه‌ی دانلود فقط وقتی می‌آید که برد ممکن است | `test_engines.py` |
+ | **B1 حالت کارگردان** | فرمان صوتی → برنامه‌ی دستیار، پیش از دست‌زدن به تایم‌لاین | `test_package_b.py` |
+ | **B2 برش روی واکنش** | cueهای crowd/voiced/whoosh → یک رأی سقف‌دار در هایلایت | `test_emotion.py` |
+diff --git a/docs/CuttingEdge/MANUAL.md b/docs/CuttingEdge/MANUAL.md
+index 668cebc..28a2970 100644
+--- a/docs/CuttingEdge/MANUAL.md
++++ b/docs/CuttingEdge/MANUAL.md
+@@ -39,6 +39,21 @@ English headings for the reviewers. Everything here is true of **0.9.30**.
+ 4. نتیجه که ساخته شد، «بازش کن در میز تدوین» می‌پذیردش و «این را نپسندیدم»
+    به حافظه‌ی سلیقه می‌سپارد (اثر محدود، هرگز جای اندازه‌گیری را نمی‌گیرد).
+ 
++## بسته‌ی موشن (Settings → Motion package)
++
++- چهار بسته‌ی آماده: **سینمایی** (پیش‌فرض)، **پرانرژی**، **آرام**، **جشن**. یکی را
++  که بزنید، کل زبان حرکتی برنامه همان لحظه عوض می‌شود — سرعت انیمیشن‌ها، فاصله‌ی
++  پلکانی کارت‌ها، منحنی حرکت و ذره‌های گوی صفحه‌ی اصلی.
++- بسته‌ی دلخواه خودتان: یک فایل JSON در `~/CuttingEdge/motion` بگذارید
++  (`{"id":"neon","en":"Neon","fa":"نئون","params":{...}}`)؛ بدون نصب مجدد در همین
++  فهرست ظاهر می‌شود. عددها محدود می‌شوند و `ease` تنها اگر واقعاً یک منحنی
++  معتبر باشد پذیرفته می‌شود.
++- **پیشنهاد مغز**: بعد از یک Style Match، همان‌جا بسته‌ای که متریال‌تان استدلال
++  می‌کند با دلیلش نوشته می‌شود و دکمه‌ی «اعمالش کن» دارد. چیزی سنجیده نشده باشد،
++  پیشنهادی هم در کار نیست — حدس نمی‌زند.
++- در حالت کاهش حرکت (`prefers-reduced-motion`) همه‌ی این انیمیشن‌ها خاموش‌اند؛
++  بسته‌ی موشن آن تنظیم را دور نمی‌زند.
++
+ ## موتورها (Settings → On-demand engines)
+ 
+ - هر ردیف لایسنسِ تأییدشده و وضعیت دانلودپذیری را نشان می‌دهد؛ دکمه‌ی Fetch
+diff --git a/docs/CuttingEdge/MOTION_PACKAGES.md b/docs/CuttingEdge/MOTION_PACKAGES.md
+new file mode 100644
+index 0000000..08320c1
+--- /dev/null
++++ b/docs/CuttingEdge/MOTION_PACKAGES.md
+@@ -0,0 +1,111 @@
++# Motion packages — the app's motion language as data
++
++**Read this next to `HYBRID_DESIGN_SYSTEM.md`.** The hybrid look (90 % Minimal
++Pro · 9 % Cyberpunk · 1 % Glass) is fixed; how fast and how eagerly that look
++*moves* is a package. A package is four numbers, and every one of them is read by
++something real.
++
++---
++
++## 1. Why a switcher and not four hard-coded styles
++
++The desktop app updates through a **differential (blockmap) update**, which can
++only patch files the already-installed app references. A new *animation file*
++would therefore never reach an installed app. The consequence is the whole
++design:
++
++* **the switcher ships in the base app** — the loader, the endpoints, the CSS
++  variables;
++* **the packages are data** — read at runtime from the built-ins and from
++  `~/CuttingEdge/motion/*.json`;
++* so a new package can be dropped in (or shipped as data) **without a
++  reinstall**, and the feature can grow through a differential update.
++
++## 2. The four parameters, and what reads each one
++
++| Parameter | Read by | Effect |
++|---|---|---|
++| `duration` | `--m-speed` (CSS) + `LiveGlobe.speed` | multiplier on every animation/transition length; the globe spins and its pulses travel at `1 / duration` |
++| `stagger` | `--m-stagger` (CSS) | gap between siblings in a staggered rise (`.ce-tile`, `.sm-opt`, `.sm-studio__col`, `.sm-loop--bars`) |
++| `ease` | `--m-ease` (CSS) + `LiveGlobe.makeEase` | the timing curve of those animations; the same curve is solved numerically so a globe pulse eases along its arc |
++| `particles` | `LiveGlobe` draw range | how many motes the globe field draws (allocated once, drawn range switched — no geometry rebuild) |
++
++The variables are written by `Layout` the moment `/api/motion/params` answers,
++and again on the `ce:motion-change` event, so a switch is instant and reversible.
++
++**The contract is tested, not assumed.** `tests/test_motion.py` fails if a
++variable the app writes is not read by any CSS rule — that is exactly the quiet
++bug (a switch that flips and changes nothing) this design is exposed to.
++
++## 3. The built-in packages
++
++`Cinematic` is the *reference*: its numbers are the CSS defaults, so an app that
++never reaches the backend animates exactly as it did before the switcher existed.
++
++| id | particles | stagger | duration | ease |
++|---|---|---|---|---|
++| `cinematic` | 8 | 50 ms | ×1.0 | `cubic-bezier(.22,.61,.36,1)` — the `--ce-ease` token |
++| `energetic` | 20 | 30 ms | ×0.8 | `cubic-bezier(.34,1.56,.64,1)` — slight overshoot |
++| `calm` | 4 | 90 ms | ×1.4 | `ease-in-out` |
++| `celebration` | 28 | 25 ms | ×0.9 | `cubic-bezier(.34,1.56,.64,1)` |
++
++## 4. Drop-in packages
++
++```json
++{ "id": "neon", "en": "Neon", "fa": "نئون",
++  "params": { "particles": 30, "stagger": 0.04, "duration": 0.7, "ease": "ease-out" } }
++```
++
++Saved as `~/CuttingEdge/motion/neon.json` it appears in Settings → *Motion
++package* on the next `/api/motion/list` — no restart, no reinstall.
++
++A drop-in is **user input**, so it is treated like input
++(`core/motion_packages._sanitise` / `_safe_ease`):
++
++* unknown keys are dropped;
++* `particles` 0–64, `stagger` 0–0.6 s, `duration` ×0.4–×2.5 (clamped, so a
++  `"particles": 999999` cannot hang the renderer);
++* `ease` is **parsed and rebuilt from its own numbers** — a keyword from a fixed
++  list or `cubic-bezier(a,b,c,d)` with `0 ≤ a,c ≤ 1`; anything else falls back to
++  the built-in curve, so a package cannot inject CSS into the DOM;
++* a file that does not parse is skipped, not fatal.
++
++## 5. The brain picks a package like it picks a tool
++
++Standing convention: every capability is registered in the brain. So
++`core/brain/editor_brain.py` owns a `motion_package` tool whose decision carries
++the recommendation, and Style Match shows it with its reason. The rule is
++measured, never a matter of taste (`motion_packages.recommend`):
++
++| measured signal | package |
++|---|---|
++| nothing measured | `cinematic` — and it says so |
++| reaction ≥ 0.25, or ≥ 128 BPM with action ≥ 0.6 | `celebration` |
++| action ≥ 0.45 or ≥ 110 BPM | `energetic` |
++| ≥ 45 % speech | `calm` |
++| otherwise | `cinematic` |
++
++Style Match writes the pick into `summary.motionPackage` and the renderer keeps
++it, so Settings can offer **Apply it** in one click. With no measurement there is
++no badge — an unmeasured recommendation would be a guess.
++
++## 6. Endpoints
++
++| Method | Path | Returns |
++|---|---|---|
++| `GET` | `/api/motion/list` | every package (built-ins + drop-ins) with `active` |
++| `GET` | `/api/motion/params` | the active package's parameters |
++| `POST` | `/api/motion/set` `{id}` | the new active package; persists to `~/CuttingEdge/config.json`; `400` on an unknown id |
++| `POST` | `/api/motion/recommend` `{bpm,action,emotion,speech_ratio}` | the recommended package, its reason, and whether it is already applied |
++
++## 7. Files
++
++| File | Role |
++|---|---|
++| `ce-app/backend/core/motion_packages.py` | built-ins, drop-in loader, clamping, `recommend()` |
++| `ce-app/backend/app/routers/motion.py` | the four endpoints |
++| `ce-app/frontend/src/components/Layout/index.tsx` | writes `--m-speed/--m-stagger/--m-ease`, exposes `window.__ceMotion` |
++| `ce-app/frontend/src/styles/global.css` | declares the variables and every rule that reads them |
++| `ce-app/frontend/src/components/LiveGlobe.tsx` | `particles` → draw range, `duration` → speed, `ease` → eased pulses |
++| `ce-app/frontend/src/pages/Settings.tsx` | the switcher, the live parameter read-out, the brain's suggestion |
++| `ce-app/backend/tests/test_motion.py` | the contract, the clamping, the brain decision |
+diff --git a/docs/CuttingEdge/STATE.md b/docs/CuttingEdge/STATE.md
+index 776dc22..afc5ce2 100644
+--- a/docs/CuttingEdge/STATE.md
++++ b/docs/CuttingEdge/STATE.md
+@@ -48,6 +48,8 @@ here to 1.0, each with the number that has to move. Read it after this file.
+ | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
+ | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
+ | **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
++| **Motion packages** | The app's motion language as data: four built-ins (`cinematic` `energetic` `calm` `celebration`) plus JSON drop-ins from `~/CuttingEdge/motion`, switched in Settings and served by `/api/motion/list|params|set|recommend`. Four parameters, each read by something real — `duration`→`--m-speed`, `stagger`→`--m-stagger`, `ease`→`--m-ease`, `particles`→the globe's mote field — and `tests/test_motion.py` fails on a variable the app writes that no CSS rule reads. The brain owns a `motion_package` decision that recommends one from measured tempo/action/reaction, and Style Match offers it in one click. See `MOTION_PACKAGES.md`. *On the branch, version not bumped* |
++| **Live globe** | `LiveGlobe.tsx` — the launcher's connections as luminous nodes on a slowly rotating three.js sphere, pulses travelling the arcs, speed/particle field/curve taken from the active motion package; reduced-motion renders one static frame. *On the branch, version not bumped* |
+ | **Languages** | English default + Persian, flips LTR/RTL instantly, persisted |
+ | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
+ | Auto-update | One button: check → differential download → install; silent check at startup |
+@@ -1191,6 +1193,31 @@ gate that stops a broken installer from being published.
+     filed as a refinement inside `reframe`'s measurement — documented, not
+     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+ 
++144. **Live 3D globe launcher + the motion-package switcher — and the audit that
++    found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the
++    launcher's connections as nodes on a slowly rotating three.js sphere with
++    pulses travelling the arcs. (b) The **motion-package switcher**: four built-ins
++    plus JSON drop-ins from `~/CuttingEdge/motion`, `/api/motion/list|params|set|
++    recommend`, a Settings switcher with a live parameter read-out, and
++    `summary.motionPackage` in Style Match. The audit found the real bug: `Layout`
++    wrote `--m-speed`/`--m-stagger` and **no stylesheet read either**, so the
++    switch flipped and nothing moved. Both variables are now declared in
++    `global.css` and consumed by the whole motion system (the rise and its stagger,
++    the Style-Match/Editor signature motions, the press ripple, the landing CTA),
++    and `tests/test_motion.py` fails on any variable the app writes that CSS does
++    not read. `particles` and `ease` were unused as well: the globe now sizes its
++    mote field from `particles` (allocated once, draw range switched) and eases
++    each pulse along its arc with the package's own curve, solved numerically.
++    Drop-ins are treated as input — numbers clamped to `PARAM_RANGES`, `ease`
++    parsed and **rebuilt from its own numbers** so no CSS can be injected, an
++    unparsable file skipped. The brain owns a `motion_package` tool whose decision
++    carries the recommendation, measured from tempo/action/reaction — and with
++    nothing measured it says so instead of guessing. Measured in a real browser
++    against the built app: cinematic `--m-stagger 50ms` / rise `0.45s`, celebration
++    `25ms` / `0.405s`, calm `90ms` / `0.63s`, zero page errors; ui-audit 7/7 routes
++    green. Backend **543 passed / 0 failed / 10 skipped** (533 before, +10 in `test_motion.py`); `verify` + `build` green. *Version not bumped —
++    bumping publishes a release.*
++
+ 143. **1.2.0 — the Finn-Loop ran autonomously to 97.8% and this commit closes the
+     loop (stage 14, publish).** Run 1 did the line-by-line audit (11 routes / 155
+     endpoints / 180 buttons; 13 dead exports; 202-edge cohesion graph) and shipped the
