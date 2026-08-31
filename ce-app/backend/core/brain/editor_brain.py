@@ -75,6 +75,10 @@ TOOLS: list[dict] = [
      "when": "sport or gym footage with action peaks", "signal": "action"},
     {"id": "agent_tools", "en": "expose the brain as an agent protocol", "fa": "برنامه‌ریز به‌صورت پروتکل ایجنت",
      "when": "an external agent should drive the real timeline", "signal": "always"},
+    {"id": "motion_package", "en": "pick the motion package that fits the material",
+     "fa": "انتخاب بسته‌ی موشنِ هم‌اندازه‌ی متریال",
+     "when": "always — but which one is decided by tempo, action and the room's reaction",
+     "signal": "bpm"},
 ]
 
 
@@ -111,6 +115,14 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
         t = next(x for x in TOOLS if x["id"] == tool)
         return {"tool": tool, "en": t["en"], "fa": t["fa"],
                 "use": use, "reasonEn": reason_en, "reasonFa": reason_fa}
+
+    # Which motion package the material argues for. Same rule as every other
+    # decision here: it keys off measured tempo/action/reaction, and with nothing
+    # measured it keeps the neutral package and says so.
+    from core import motion_packages  # noqa: PLC0415
+
+    rec = motion_packages.recommend({"bpm": bpm, "action": action, "emotion": emotion,
+                                     "speech_ratio": speech})
 
     out = [
         d("beat_cuts", bpm >= 60,
@@ -203,7 +215,13 @@ def assess(template: dict, footage: dict, intent: dict | None = None) -> list[di
         d("agent_tools", True,
           "the brain's tools are exposed as a protocol an agent can drive",
           "ابزارهای مغز به‌صورت پروتکلی که ایجنت می‌راند در دسترس‌اند"),
+        d("motion_package", True,
+          f"{rec['id']} — {rec['reasonEn']}",
+          f"{rec['id']} — {rec['reasonFa']}"),
     ]
+    # The decision carries its pick, so Style Match can offer a one-click apply
+    # instead of only talking about it.
+    next(x for x in out if x["tool"] == "motion_package")["recommend"] = rec
     return out
 
 

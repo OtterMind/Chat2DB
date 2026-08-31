@@ -48,6 +48,8 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
 | **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
+| **Motion packages** | The app's motion language as data: four built-ins (`cinematic` `energetic` `calm` `celebration`) plus JSON drop-ins from `~/CuttingEdge/motion`, switched in Settings and served by `/api/motion/list|params|set|recommend`. Four parameters, each read by something real — `duration`→`--m-speed`, `stagger`→`--m-stagger`, `ease`→`--m-ease`, `particles`→the globe's mote field — and `tests/test_motion.py` fails on a variable the app writes that no CSS rule reads. The brain owns a `motion_package` decision that recommends one from measured tempo/action/reaction, and Style Match offers it in one click. See `MOTION_PACKAGES.md`. *On the branch, version not bumped* |
+| **Live globe** | `LiveGlobe.tsx` — the launcher's connections as luminous nodes on a slowly rotating three.js sphere, pulses travelling the arcs, speed/particle field/curve taken from the active motion package; reduced-motion renders one static frame. *On the branch, version not bumped* |
 | **Languages** | English default + Persian, flips LTR/RTL instantly, persisted |
 | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
 | Auto-update | One button: check → differential download → install; silent check at startup |
@@ -1190,6 +1192,31 @@ gate that stops a broken installer from being published.
     can win. Per the §104 convention this was considered for the tool belt and
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
+
+144. **Live 3D globe launcher + the motion-package switcher — and the audit that
+    found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the
+    launcher's connections as nodes on a slowly rotating three.js sphere with
+    pulses travelling the arcs. (b) The **motion-package switcher**: four built-ins
+    plus JSON drop-ins from `~/CuttingEdge/motion`, `/api/motion/list|params|set|
+    recommend`, a Settings switcher with a live parameter read-out, and
+    `summary.motionPackage` in Style Match. The audit found the real bug: `Layout`
+    wrote `--m-speed`/`--m-stagger` and **no stylesheet read either**, so the
+    switch flipped and nothing moved. Both variables are now declared in
+    `global.css` and consumed by the whole motion system (the rise and its stagger,
+    the Style-Match/Editor signature motions, the press ripple, the landing CTA),
+    and `tests/test_motion.py` fails on any variable the app writes that CSS does
+    not read. `particles` and `ease` were unused as well: the globe now sizes its
+    mote field from `particles` (allocated once, draw range switched) and eases
+    each pulse along its arc with the package's own curve, solved numerically.
+    Drop-ins are treated as input — numbers clamped to `PARAM_RANGES`, `ease`
+    parsed and **rebuilt from its own numbers** so no CSS can be injected, an
+    unparsable file skipped. The brain owns a `motion_package` tool whose decision
+    carries the recommendation, measured from tempo/action/reaction — and with
+    nothing measured it says so instead of guessing. Measured in a real browser
+    against the built app: cinematic `--m-stagger 50ms` / rise `0.45s`, celebration
+    `25ms` / `0.405s`, calm `90ms` / `0.63s`, zero page errors; ui-audit 7/7 routes
+    green. Backend **543 passed / 0 failed / 10 skipped** (533 before, +10 in `test_motion.py`); `verify` + `build` green. *Version not bumped —
+    bumping publishes a release.*
 
 143. **1.2.0 — the Finn-Loop ran autonomously to 97.8% and this commit closes the
     loop (stage 14, publish).** Run 1 did the line-by-line audit (11 routes / 155

@@ -1448,18 +1448,32 @@ img { -webkit-user-drag: none; }
 .ce-page__head h1, .ce-start__main strong, .qa h3, .cmdk h2 { font-weight: 800; letter-spacing: -.2px; }
 .mono, .ed__tc, .ed__tc--sm, .tl__tick, .tl__clip-dur, .ce-num { font-variant-numeric: tabular-nums; }
 
+/* ---- Motion package variables (runtime switcher) --------------------------
+   `Layout` writes these from `/api/motion/params` the moment the package
+   changes; every motion rule below reads them. The defaults *are* the built-in
+   Cinematic package, so an app that never reaches the backend animates exactly
+   as it did before the switcher existed. Contract: a variable written here must
+   be read somewhere — `tests/test_motion.py` fails on one that is not, because a
+   var nobody reads is a switcher that quietly does nothing. */
+:root {
+  --m-speed: 1;                                   /* multiplier on every animation length */
+  --m-stagger: 50ms;                              /* gap between siblings in a rise */
+  --m-ease: cubic-bezier(0.22, 0.61, 0.36, 1);    /* the curve, = the --ce-ease token */
+}
+
 /* (6) motion system: staggered rise, hover lift, ripple, skeletons */
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-.ce-tile, .ce-card, .reelcard, .opt { animation: rise .45s cubic-bezier(.2, .7, .2, 1) both; }
-.ce-tile:nth-child(2), .reelcard:nth-child(2), .opt:nth-child(2) { animation-delay: .05s; }
-.ce-tile:nth-child(3), .reelcard:nth-child(3), .opt:nth-child(3) { animation-delay: .1s; }
-.ce-tile:nth-child(4), .reelcard:nth-child(4), .opt:nth-child(4) { animation-delay: .15s; }
-.ce-tile:nth-child(n+5) { animation-delay: .2s; }
+.ce-tile, .ce-card, .reelcard, .opt { animation: rise calc(.45s * var(--m-speed)) var(--m-ease) both; }
+.ce-tile:nth-child(2), .reelcard:nth-child(2), .opt:nth-child(2) { animation-delay: calc(var(--m-stagger) * 1); }
+.ce-tile:nth-child(3), .reelcard:nth-child(3), .opt:nth-child(3) { animation-delay: calc(var(--m-stagger) * 2); }
+.ce-tile:nth-child(4), .reelcard:nth-child(4), .opt:nth-child(4) { animation-delay: calc(var(--m-stagger) * 3); }
+.ce-tile:nth-child(n+5) { animation-delay: calc(var(--m-stagger) * 4); }
 .ce-btn--primary, .ce-start__main { position: relative; overflow: hidden; }
 .ce-btn--primary::after, .ce-start__main::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
   background: radial-gradient(40% 40% at 50% 60%, rgba(255,255,255,.35), transparent 70%);
-  opacity: 0; transform: scale(.4); transition: opacity .4s, transform .5s;
+  opacity: 0; transform: scale(.4);
+  transition: opacity calc(.4s * var(--m-speed)) var(--m-ease), transform calc(.5s * var(--m-speed)) var(--m-ease);
 }
 .ce-btn--primary:active::after, .ce-start__main:active::after { opacity: 1; transform: scale(2.2); transition: 0s; }
 .skeleton {
@@ -1845,31 +1859,31 @@ body { font-family: var(--ce-font-sans); }
   color: #fff; font-weight: 600; letter-spacing: .3px;
   background: var(--ce-glass-bg-strong); border: 1px solid color-mix(in srgb, var(--ce-neon-pink) 60%, transparent);
   backdrop-filter: var(--ce-glass-blur); box-shadow: 0 0 24px -6px color-mix(in srgb, var(--ce-neon-pink) 50%, transparent);
-  transition: transform .2s var(--ce-ease), box-shadow .2s var(--ce-ease); }
+  transition: transform calc(.2s * var(--m-speed)) var(--m-ease), box-shadow calc(.2s * var(--m-speed)) var(--m-ease); }
 .ln-landing__cta:hover { transform: translateY(-2px); box-shadow: var(--ce-glow-pink-lg); }
 @media (prefers-reduced-motion: reduce) { .ln-landing__aurora { animation: none; } }
 
 /* ---- Finn-Loop phase 2: Style Match signature motions ---- */
-.sm-opt { animation: sm-cardin .45s var(--ce-ease) both; }
-.sm-grid .sm-opt:nth-child(2){animation-delay:.06s}.sm-grid .sm-opt:nth-child(3){animation-delay:.12s}
-.sm-grid .sm-opt:nth-child(4){animation-delay:.18s}.sm-grid .sm-opt:nth-child(5){animation-delay:.24s}
-.sm-grid .sm-opt:nth-child(6){animation-delay:.3s}.sm-grid .sm-opt:nth-child(7){animation-delay:.36s}
+.sm-opt { animation: sm-cardin calc(.45s * var(--m-speed)) var(--m-ease) both; }
+.sm-grid .sm-opt:nth-child(2){animation-delay:calc(var(--m-stagger) * 1)}.sm-grid .sm-opt:nth-child(3){animation-delay:calc(var(--m-stagger) * 2)}
+.sm-grid .sm-opt:nth-child(4){animation-delay:calc(var(--m-stagger) * 3)}.sm-grid .sm-opt:nth-child(5){animation-delay:calc(var(--m-stagger) * 4)}
+.sm-grid .sm-opt:nth-child(6){animation-delay:calc(var(--m-stagger) * 5)}.sm-grid .sm-opt:nth-child(7){animation-delay:calc(var(--m-stagger) * 6)}
 @keyframes sm-cardin { from { opacity:0; transform: translateY(10px) scale(.97);} to { opacity:1; transform:none;} }
-.sm-studio__col { animation: sm-colin .5s var(--ce-ease) both; }
-.sm-studio__col:nth-child(2){animation-delay:.1s}.sm-studio__col:nth-child(3){animation-delay:.2s}
+.sm-studio__col { animation: sm-colin calc(.5s * var(--m-speed)) var(--m-ease) both; }
+.sm-studio__col:nth-child(2){animation-delay:calc(var(--m-stagger) * 2)}.sm-studio__col:nth-child(3){animation-delay:calc(var(--m-stagger) * 4)}
 @keyframes sm-colin { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:none;} }
-.sm-loop--bars span { transform-origin: bottom; animation: sm-bar .6s var(--ce-ease) both; }
-.sm-loop--bars span:nth-child(odd){animation-delay:.1s}.sm-loop--bars span:nth-child(3n){animation-delay:.2s}
+.sm-loop--bars span { transform-origin: bottom; animation: sm-bar calc(.6s * var(--m-speed)) var(--m-ease) both; }
+.sm-loop--bars span:nth-child(odd){animation-delay:calc(var(--m-stagger) * 2)}.sm-loop--bars span:nth-child(3n){animation-delay:calc(var(--m-stagger) * 4)}
 @keyframes sm-bar { from{ transform: scaleY(.2);} to{ transform: scaleY(1);} }
 
 /* ---- Finn-Loop phase 3: Editor signature motions ---- */
-.tl__clip { animation: ed-clipin .3s var(--ce-ease) both; }
+.tl__clip { animation: ed-clipin calc(.3s * var(--m-speed)) var(--m-ease) both; }
 @keyframes ed-clipin { from{ opacity:0; transform: scale(.96);} to{ opacity:1; transform:none;} }
 .tl__playhead::after { content:''; position:absolute; top:0; bottom:0; left:-6px; width:6px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ce-neon-pink) 40%, transparent)); }
-.tl__junction.is-set { animation: ed-ripple .5s var(--ce-ease); }
+.tl__junction.is-set { animation: ed-ripple calc(.5s * var(--m-speed)) var(--m-ease); }
 @keyframes ed-ripple { 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--ce-neon-cyan) 60%, transparent);} 100%{ box-shadow:0 0 0 12px transparent;} }
-.tl__beat { animation: ed-beat 1s ease-in-out infinite; }
+.tl__beat { animation: ed-beat calc(1s * var(--m-speed)) var(--m-ease) infinite; }
 @keyframes ed-beat { 0%,100%{opacity:.5} 50%{opacity:.9} }
 @media (prefers-reduced-motion: reduce) {
   .sm-opt,.sm-studio__col,.sm-loop--bars span,.tl__clip,.tl__junction.is-set,.tl__beat { animation: none !important; }

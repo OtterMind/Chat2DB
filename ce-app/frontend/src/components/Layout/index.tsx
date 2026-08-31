@@ -90,7 +90,8 @@ export default function AppLayout() {
         .then((p) => {
           const root = document.documentElement
           root.style.setProperty('--m-speed', String(p.duration ?? 1))
-          root.style.setProperty('--m-stagger', `${(p.stagger ?? 0.1) * 1000}ms`)
+          root.style.setProperty('--m-stagger', `${(p.stagger ?? 0.05) * 1000}ms`)
+          root.style.setProperty('--m-ease', String(p.ease ?? 'cubic-bezier(0.22, 0.61, 0.36, 1)'))
           ;(window as any).__ceMotion = p
           window.dispatchEvent(new Event('ce:motion'))
         })

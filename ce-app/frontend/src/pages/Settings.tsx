@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Form, Input, message, Modal, Segmented } from 'antd'
+import { Button, Form, Input, message, Modal, Segmented } from 'antd'
 import { backendOrigin } from '../api/runtime'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
@@ -793,16 +793,35 @@ const LANGUAGES: { value: Lang; label: string; native: string }[] = [
  * ships in the base app; packages are data the app reads at runtime, and extra
  * packages dropped into ~/CuttingEdge/motion appear without a reinstall.
  */
+type MotionPkg = {
+  id: string
+  en: string
+  fa: string
+  active?: boolean
+  params?: { particles?: number; stagger?: number; duration?: number; ease?: string }
+}
+
+type MotionRec = { id: string; reasonEn?: string; reasonFa?: string; measured?: boolean }
+
 function MotionCard() {
-  const { t } = useI18n()
-  const [pkgs, setPkgs] = useState<{ id: string; en: string; fa: string; active?: boolean }[]>([])
+  const { t, lang } = useI18n()
+  const [pkgs, setPkgs] = useState<MotionPkg[]>([])
   const [active, setActive] = useState('cinematic')
+  const [rec, setRec] = useState<MotionRec | null>(null)
 
   const load = () =>
     fetch(`${backendOrigin}/api/motion/list`).then((r) => r.json())
       .then((d) => { setPkgs(d.packages ?? []); setActive(d.active ?? 'cinematic') })
       .catch(() => undefined)
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    // Style Match leaves the package the material argued for behind; without a
+    // measurement there is nothing to recommend and the card says so.
+    try {
+      const raw = localStorage.getItem('ce:motion-recommendation')
+      if (raw) setRec(JSON.parse(raw) as MotionRec)
+    } catch { setRec(null) }
+  }, [])
 
   const choose = async (id: string) => {
     setActive(id)
@@ -812,6 +831,9 @@ function MotionCard() {
     window.dispatchEvent(new Event('ce:motion-change'))
     message.success(t('Motion package applied', 'بسته‌ی موشن اعمال شد'))
   }
+
+  const current = pkgs.find((p) => p.id === active)
+  const prm = current?.params
 
   return (
     <Card title={t('Motion package', 'بسته‌ی موشن')}>
@@ -826,6 +848,28 @@ function MotionCard() {
           options={pkgs.map((p) => ({ value: p.id, label: t(p.en, p.fa) }))}
         />
       </div>
+      {prm && (
+        <p className="ce-hint mono" style={{ marginTop: 8 }}>
+          {`particles ${prm.particles} · stagger ${((prm.stagger ?? 0) * 1000).toFixed(0)}ms · speed ×${prm.duration} · ${prm.ease}`}
+        </p>
+      )}
+      {rec && (
+        <p className="ce-hint" style={{ marginTop: 4 }}>
+          {t('The brain suggests', 'پیشنهاد مغز')}: <strong>{rec.id}</strong>
+          {rec.reasonEn || rec.reasonFa ? ` — ${lang === 'fa' ? rec.reasonFa : rec.reasonEn}` : ''}
+          {rec.id !== active && (
+            <Button size="small" style={{ marginInlineStart: 8 }} onClick={() => void choose(rec.id)}>
+              {t('Apply it', 'اعمالش کن')}
+            </Button>
+          )}
+        </p>
+      )}
+      {!rec && (
+        <p className="ce-hint" style={{ marginTop: 4 }}>
+          {t('Run a Style Match and the brain will suggest the package your material argues for.',
+            'یک Style Match اجرا کن تا مغز بسته‌ای را پیشنهاد دهد که متریالت استدلال می‌کند.')}
+        </p>
+      )}
     </Card>
   )
 }

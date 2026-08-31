@@ -31,6 +31,7 @@ from core.brain import meaning as brain_meaning
 from core.brain import objective
 from core.brain import race as brain_race
 from core.brain import editor_brain
+from core import motion_packages
 from core.engine import analyze as analysis
 from core.engine import intent as intent_model
 from core.engine import fillers as fillers_engine
@@ -1300,6 +1301,15 @@ def build_timeline(
             "intensity": round(max(0.0, min(1.0, float(intensity))), 2),
             "applied": applied,
             "skipped": skipped,
+            # Which motion package this material argues for, measured from the
+            # same signals as the brain's other decisions. Settings → *Motion
+            # package* applies it in one click; nothing is chosen by taste here.
+            "motionPackage": motion_packages.recommend({
+                "bpm": data.get("bpm", 0.0),
+                "action": _coarse_action(source, source_duration)[0],
+                "emotion": reaction,
+                "speech_ratio": speech_ratio,
+            }),
             # What the answers changed, said out loud: an answer with no visible
             # effect is an answer the user will not trust twice.
             "intent": wanted.as_dict(),

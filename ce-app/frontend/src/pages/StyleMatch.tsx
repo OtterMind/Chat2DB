@@ -306,6 +306,10 @@ export default function StyleMatch() {
       )
       setResult(built)
       tellBrainAccepted(built)
+      // The motion package this material argued for, remembered so Settings can
+      // offer it in one click — a measurement carried over, not a taste call.
+      const motionRec = (built.summary as Record<string, unknown>).motionPackage
+      if (motionRec) localStorage.setItem('ce:motion-recommendation', JSON.stringify(motionRec))
 
       const editor = useEditor.getState()
       editor.loadSnapshot(built.timeline as never, built.name)
