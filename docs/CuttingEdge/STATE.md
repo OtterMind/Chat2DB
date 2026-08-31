@@ -4,7 +4,7 @@
 code and the docs next to it are the only things that survive. Everything below is
 verified, not planned.
 
-Branch: `arena/01a032fb-chat2db` · App version: `1.2.0` (the number that
+Branch: `arena/01a032fb-chat2db` · App version: `1.3.0` (the number that
 publishes is `ce-app/frontend/package.json`; the backend reads it, with
 `CE_VERSION` in packaged builds) · Last released: `v0.9.5` (installer 323 MB) (installer **323 MB**; 458 → 305 by dropping ballast, +18 for shipping bytecode again)
 
@@ -44,12 +44,12 @@ here to 1.0, each with the number that has to move. Read it after this file.
 | **Text & captions** | Text clips rendered with libass (correct Persian shaping and bidi), four styles, three positions, colour and highlight, word-by-word karaoke; automatic captions from `faster-whisper` with pause-aware line breaking |
 | **Audio cleanup** | Spectral noise reduction and a voice-enhance chain (high-pass, presence, compression, -16 LUFS) |
 | **Assistant** | A **conversation**, not a one-shot command: history in, one reply out, with the steps it took and the milliseconds, and the provider named on every answer (`ollama:qwen2.5` or `offline` — never hidden). An editing request still comes back as a whitelisted dry run applied only on Apply and undoable in one step. Floating panel or full screen, RTL, animated, and **streamed**: `POST /api/assistant/chat/stream` sends each step as it happens and each word as it is written (NDJSON, so one `fetch` and a line split), because three bouncing dots are not evidence that anything is happening. The model is the user's choice (`auto`/`off`/ollama/openai/gemini/anthropic), stored in `~/CuttingEdge/config.json` and settable from the chat **or** Settings — one setting, two doors, and `auto` means *the stored choice* before it means *whatever is installed*; with none connected it answers from what was measured and says so. And it **knows what the video is for**: the Style Match answers ride along in the project document, so a question about a lesson is answered about a lesson |
-| **Style Match** | A reference video becomes a `.cetemplate` of numbers, and your footage is rebuilt in its shape. The intake card asks what the video *is* — kind, goal, focus, rhythm, phrases to keep or drop, and a target length — because a frame cannot say any of it. Measured effect: the edit drew from **14.4 %** of a 120 s file before, and **97.9 %** with a length asked for; candidate moments that used to span **0.002** on a 0..1 scale now span the full range. *Built on the branch, version not bumped yet — bumping publishes a release* |
+| **Style Match** | A reference video becomes a `.cetemplate` of numbers, and your footage is rebuilt in its shape. The intake card asks what the video *is* — kind, goal, focus, rhythm, phrases to keep or drop, and a target length — because a frame cannot say any of it. Measured effect: the edit drew from **14.4 %** of a 120 s file before, and **97.9 %** with a length asked for; candidate moments that used to span **0.002** on a 0..1 scale now span the full range. *Shipped — the studio redesign landed in 0.9.50 (`80d0df6`)* |
 | **Transitions** | 28 real `xfade` types with adjustable duration, created from the clip rail or the junction marker between two clips; audio crossfades with them |
 | **Shell** | No menu bar, no tabs, no heading band: the wordmark is centred on the launcher, docks top-left inside a section and is the way home. Fullscreen with **F11** |
 | **Home** | Update card (version, check, progress, install), two starting cards, recent projects including the unfinished autosave, each deletable |
-| **Motion packages** | The app's motion language as data: four built-ins (`cinematic` `energetic` `calm` `celebration`) plus JSON drop-ins from `~/CuttingEdge/motion`, switched in Settings and served by `/api/motion/list|params|set|recommend`. Four parameters, each read by something real — `duration`→`--m-speed`, `stagger`→`--m-stagger`, `ease`→`--m-ease`, `particles`→the globe's mote field — and `tests/test_motion.py` fails on a variable the app writes that no CSS rule reads. The brain owns a `motion_package` decision that recommends one from measured tempo/action/reaction, and Style Match offers it in one click. See `MOTION_PACKAGES.md`. *On the branch, version not bumped* |
-| **Live globe** | `LiveGlobe.tsx` — the launcher's connections as luminous nodes on a slowly rotating three.js sphere, pulses travelling the arcs, speed/particle field/curve taken from the active motion package; reduced-motion renders one static frame. *On the branch, version not bumped* |
+| **Motion packages** | The app's motion language as data: four built-ins (`cinematic` `energetic` `calm` `celebration`) plus JSON drop-ins from `~/CuttingEdge/motion`, switched in Settings and served by `/api/motion/list|params|set|recommend`. Four parameters, each read by something real — `duration`→`--m-speed`, `stagger`→`--m-stagger`, `ease`→`--m-ease`, `particles`→the globe's mote field — and `tests/test_motion.py` fails on a variable the app writes that no CSS rule reads. The brain owns a `motion_package` decision that recommends one from measured tempo/action/reaction, and Style Match offers it in one click. See `MOTION_PACKAGES.md`. *Released in 1.3.0* |
+| **Live globe** | `LiveGlobe.tsx` — the launcher's connections as luminous nodes on a slowly rotating three.js sphere, pulses travelling the arcs, speed/particle field/curve taken from the active motion package; reduced-motion renders one static frame. *Released in 1.3.0* |
 | **Languages** | English default + Persian, flips LTR/RTL instantly, persisted |
 | Packaging | NSIS installer, embeddable CPython 3.11, bundled FFmpeg + ffprobe |
 | Auto-update | One button: check → differential download → install; silent check at startup |
@@ -1193,7 +1193,7 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
-144. **Live 3D globe launcher + the motion-package switcher — and the audit that
+144. **1.3.0 — live 3D globe launcher + the motion-package switcher, and the audit that
     found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the
     launcher's connections as nodes on a slowly rotating three.js sphere with
     pulses travelling the arcs. (b) The **motion-package switcher**: four built-ins
@@ -1215,8 +1215,9 @@ gate that stops a broken installer from being published.
     nothing measured it says so instead of guessing. Measured in a real browser
     against the built app: cinematic `--m-stagger 50ms` / rise `0.45s`, celebration
     `25ms` / `0.405s`, calm `90ms` / `0.63s`, zero page errors; ui-audit 7/7 routes
-    green. Backend **543 passed / 0 failed / 10 skipped** (533 before, +10 in `test_motion.py`); `verify` + `build` green. *Version not bumped —
-    bumping publishes a release.*
+    green. Backend **543 passed / 0 failed / 10 skipped** (533 before, +10 in `test_motion.py`); `verify` + `build` green. This is the **1.3.0** release: `package.json` and this header moved together, and the whole
+    change set is also carried as `motion-package-update-client.patch` at the repo root — 18 files / +989 / −34 against v1.2.0, verified to apply clean on a
+    pristine v1.2.0 tree and to leave it byte-identical to this branch.
 
 143. **1.2.0 — the Finn-Loop ran autonomously to 97.8% and this commit closes the
     loop (stage 14, publish).** Run 1 did the line-by-line audit (11 routes / 155
