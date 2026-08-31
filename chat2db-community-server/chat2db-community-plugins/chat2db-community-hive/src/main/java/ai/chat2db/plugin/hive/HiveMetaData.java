@@ -19,7 +19,6 @@ import ai.chat2db.community.domain.api.model.sql.*;
 import ai.chat2db.spi.model.value.*;
 import ai.chat2db.community.domain.api.model.view.*;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import com.google.common.collect.Lists;
 import jakarta.validation.constraints.NotEmpty;
 import org.apache.commons.lang3.StringUtils;
 
@@ -38,25 +37,28 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public List<Database> databases(Connection connection) {
-        return Lists.newArrayList();
-    }
-
-    @Override
-    public List<Schema> schemas(Connection connection, String databaseName) {
-        List<Schema> schemas = new ArrayList<>();
-        return DefaultSQLExecutor.getInstance().execute(connection,SQL_SHOW_DATABASES, resultSet -> {
+        List<Database> databases = new ArrayList<>();
+        return DefaultSQLExecutor.getInstance().execute(connection, SQL_SHOW_DATABASES, resultSet -> {
             try {
                 while (resultSet.next()) {
-                    String schenaNane = resultSet.getString("database_name");
-                    Schema schema = new Schema();
-                    schema.setName(schenaNane);
-                    schemas.add(schema);
+                    String databaseName = resultSet.getString("database_name");
+                    if (StringUtils.isBlank(databaseName)) {
+                        continue;
+                    }
+                    Database database = new Database();
+                    database.setName(databaseName);
+                    databases.add(database);
                 }
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-            return schemas;
+            return databases;
         });
+    }
+
+    @Override
+    public List<Schema> schemas(Connection connection, String databaseName) {
+        return Collections.emptyList();
     }
 
     @Override
@@ -81,7 +83,7 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
 
     @Override
     public String getMetaDataName(String... names) {
-        return Arrays.stream(names).skip(1).filter(name -> StringUtils.isNotBlank(name))
+        return Arrays.stream(names).filter(name -> StringUtils.isNotBlank(name))
                 .map(HiveIdentifierProcessor.INSTANCE::quoteIdentifierAlways)
                 .collect(Collectors.joining("."));
     }

@@ -36,6 +36,10 @@ assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.MYSQL), {
   supportDatabase: true,
   supportSchema: false,
 });
+assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.HIVE), {
+  supportDatabase: true,
+  supportSchema: false,
+});
 assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.ORACLE), {
   supportDatabase: false,
   supportSchema: true,
