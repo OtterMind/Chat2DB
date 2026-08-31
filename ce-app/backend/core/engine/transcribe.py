@@ -138,6 +138,11 @@ class ModelNotDownloaded(RuntimeError):
     """Raised with the missing size so the UI can offer the right fetch."""
 
 
+class TranscriptionFailed(RuntimeError):
+    """The recogniser itself failed; the stage is in the message so a log
+    line is enough to point at the culprit (model, VAD, or decode)."""
+
+
 def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int = 42,
                        align: bool = False, quality: str = "auto", progress=None) -> dict:
     """quality: auto (best on disk) | fast | balanced | best.
@@ -157,14 +162,29 @@ def transcribe_to_cues(path: str, *, language: str | None = None, max_chars: int
         if not model_present(size):
             raise ModelNotDownloaded(size)
     say("model", 0.05, f"loading {size}")
-    model = _load(size)
+    try:
+        model = _load(size)
+    except Exception as error:  # noqa: BLE001
+        raise TranscriptionFailed(f"model load ({size}): {error}") from error
     beam = 5 if quality == "best" else 1
-    segments, info = model.transcribe(
-        path, language=language, word_timestamps=True, vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
-        beam_size=beam, best_of=1, condition_on_previous_text=False,
-    )
+    try:
+        segments, info = model.transcribe(
+            path, language=language, word_timestamps=True, vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 500},
+            beam_size=beam, best_of=1, condition_on_previous_text=False,
+        )
+    except Exception as error:  # noqa: BLE001
+        # A library-level failure (the VAD or the decoder) must say what stage
+        # died instead of surfacing as a bare "max() arg is an empty sequence".
+        raise TranscriptionFailed(f"recognise: {error}") from error
     duration = float(getattr(info, "duration", 0) or 0)
+
+    # A file with no speech is a *result*, not a crash: return empty cues so a
+    # downstream `max()` over words/segments can never blow up on silence.
+    if not segments:
+        return {"language": getattr(info, "language", language) or "unknown",
+                "quality": size, "duration": round(duration, 3), "text": "",
+                "words": [], "cues": [], "alignment": "off", "polishedBy": ""}
 
     words: list[dict] = []
     plain: list[str] = []

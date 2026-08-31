@@ -49,8 +49,8 @@ ENGINES: list[dict] = [
     {"id": "demucs", "name": "Demucs", "repo": "facebookresearch/demucs", "licence": "MIT",
      "role": "drums/vocals separation for beat-accurate ducking",
      "module": "demucs", "deps": ["demucs"], "heavy": "torch"},
-    {"id": "mediapipe", "name": "MediaPipe Pose", "repo": "google-ai-edge/mediapipe", "licence": "Apache-2.0",
-     "role": "33-point pose landmarks for sports reframe",
+    {"id": "mediapipe", "name": "MediaPipe Pose + Face", "repo": "google-ai-edge/mediapipe", "licence": "Apache-2.0",
+     "role": "BlazeFace face detection + 33-point pose for an accurate reframe",
      # 1.x publishes no win_amd64 cp311 wheel (verified against PyPI); 0.10.21
      # is the newest release that does.
      "module": "mediapipe", "deps": ["mediapipe==0.10.21"], "heavy": "own"},

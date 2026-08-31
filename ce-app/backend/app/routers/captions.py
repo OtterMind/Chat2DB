@@ -54,6 +54,9 @@ async def transcribe(payload: TranscribeRequest) -> dict:
         # The asked rung is not on disk: 409 + the size, so the UI offers its fetch.
         raise HTTPException(status_code=409,
                             detail=f"model {exc} not downloaded — fetch it in Settings") from exc
+    except engine.TranscriptionFailed as exc:
+        # The recogniser died mid-pass: the message already names the stage.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

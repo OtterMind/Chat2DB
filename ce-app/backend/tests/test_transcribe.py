@@ -95,3 +95,34 @@ def test_the_chosen_model_is_the_one_that_loads(monkeypatch):
 
     assert calls == ["cuda"]
     assert model.size == "small", "the engine loaded a different model than the card reports"
+
+
+def test_silence_is_a_result_not_a_crash(monkeypatch, tmp_path):
+    """No speech → empty cues, so a downstream `max()` can never blow up."""
+    class Info:
+        language = "en"
+        duration = 4.0
+
+    class Stub:
+        def transcribe(self, *a, **k):
+            return [], Info()
+
+    monkeypatch.setattr(transcribe, "model_present", lambda size: True)
+    monkeypatch.setattr(transcribe, "_load", lambda size: Stub())
+    out = transcribe.transcribe_to_cues(str(tmp_path / "silent.wav"), quality="fast")
+    assert out["cues"] == [] and out["words"] == [] and out["text"] == ""
+    assert out["duration"] == 4.0
+
+
+def test_recogniser_failure_names_the_stage(monkeypatch, tmp_path):
+    """The library dying mid-pass must say where, not surface as a bare error."""
+    class Stub:
+        def transcribe(self, *a, **k):
+            raise ValueError("max() arg is an empty sequence")
+
+    monkeypatch.setattr(transcribe, "model_present", lambda size: True)
+    monkeypatch.setattr(transcribe, "_load", lambda size: Stub())
+    with pytest.raises(transcribe.TranscriptionFailed) as exc:
+        transcribe.transcribe_to_cues(str(tmp_path / "x.wav"), quality="fast")
+    assert "recognise" in str(exc.value)
+    assert "max() arg is an empty sequence" in str(exc.value)

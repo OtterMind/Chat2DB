@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import BrandMark from '../BrandMark'
+import LoadingScreen, { type BootStep } from '../LoadingScreen'
+import Starfield from '../Starfield'
 import BackendBanner from '../BackendBanner'
 import FullscreenButton from '../FullscreenButton'
 import RunningStrip from '../RunningStrip'
@@ -70,7 +72,7 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const activeCount = useRuntime(selectActiveTasks).length
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const contentRef = useRef<HTMLElement>(null)
   const reduceMotion = useReducedMotion()
 
@@ -80,11 +82,17 @@ export default function AppLayout() {
    *  one-second brand breath on cold start (skipped for reduced motion). */
   const [splash, setSplash] = useState(true)
 
-  // Motion package switcher: the active package tunes the whole motion language
-  // via CSS vars + a window flag (LiveGlobe reads it). Runtime-switchable, so it
-  // grows through differential updates without a reinstall.
-  useEffect(() => {
-    const apply = () => {
+  /** Cold start: the big-bang loading screen, and the work it reports. */
+  const [loading, setLoading] = useState(true)
+  const [boot, setBoot] = useState<BootStep>({ progress: 0, stage: 0 })
+
+  /**
+   * The active motion package tunes the whole motion language through CSS vars
+   * plus a window flag the canvas components read. Runtime-switchable, so it
+   * grows through differential updates without a reinstall.
+   */
+  const applyMotion = useCallback(
+    () =>
       fetch(`${backendOrigin}/api/motion/params`)
         .then((r) => r.json())
         .then((p) => {
@@ -95,20 +103,65 @@ export default function AppLayout() {
           ;(window as any).__ceMotion = p
           window.dispatchEvent(new Event('ce:motion'))
         })
-        .catch(() => undefined)
+        .catch(() => undefined),
+    []
+  )
+
+  useEffect(() => {
+    void applyMotion()
+    const onChange = () => void applyMotion()
+    window.addEventListener('ce:motion-change', onChange)
+    return () => window.removeEventListener('ce:motion-change', onChange)
+  }, [applyMotion])
+
+  /**
+   * The ring reports the three requests that actually gate the app — the engine
+   * answering, the projects loading, the motion package arriving — not a timer
+   * pretending to be progress. A step that fails still counts as done (the app
+   * opens and says what is missing), and an 8 s cap means a dead backend can
+   * never trap anyone behind this screen.
+   */
+  useEffect(() => {
+    const started = performance.now()
+    const done = [false, false, false]
+    let closed = false
+    const bump = (index: number) => {
+      done[index] = true
+      const finished = done.filter(Boolean).length
+      setBoot({ progress: finished / done.length, stage: Math.min(finished, 2) })
+      if (finished === done.length && !closed) {
+        // The bang, the flight and the settle take ~2.6 s at the built-in
+        // package; cutting that short is what made the screen unreadable. The
+        // package's own duration scales it, reduced-motion skips straight past.
+        const sequence = 2650 * Number((window as any).__ceMotion?.duration || 1)
+        const hold = Math.max(0, Math.min(4200, reduceMotion ? 200 : sequence) - (performance.now() - started))
+        window.setTimeout(() => { if (!closed) setLoading(false) }, hold)
+      }
     }
-    apply()
-    window.addEventListener('ce:motion-change', apply)
-    return () => window.removeEventListener('ce:motion-change', apply)
-  }, [])
+    const step = (index: number, url: string, then?: () => Promise<unknown> | void) => {
+      fetch(`${backendOrigin}${url}`)
+        .then((r) => r.json())
+        .then((d) => { void then?.(); bump(index) })
+        .catch(() => { void then?.(); bump(index) })
+    }
+    step(0, '/api/health')
+    step(1, '/api/projects')
+    step(2, '/api/motion/params', applyMotion)
+    const cap = window.setTimeout(() => setLoading(false), 8000)
+    return () => { closed = true; window.clearTimeout(cap) }
+  }, [applyMotion, reduceMotion])
 
   useEffect(() => {
     const acc = localStorage.getItem('ce-accent')
     if (acc) document.documentElement.dataset.accent = acc
-    // The Landing owns its timing (CTA or ~2.6s); this is only a safety net.
-    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 4000)
+    // The Landing owns its timing (CTA or ~2.6 s); this is only a safety net.
+    // It is keyed on `loading` because the net used to start at shell mount —
+    // with the loading screen in front of the landing it fired 1.4 s into the
+    // landing and cut the brand beat in half.
+    if (loading) return
+    const timer = setTimeout(() => setSplash(false), reduceMotion ? 0 : 3600)
     return () => clearTimeout(timer)
-  }, [reduceMotion])
+  }, [reduceMotion, loading])
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 })
@@ -120,7 +173,14 @@ export default function AppLayout() {
 
   return (
     <div className={`ce-shell ${isLauncher ? 'is-launcher' : 'is-immersive'}`}>
-      {splash && <Landing onDone={() => setSplash(false)} />}
+      {/* The live backdrop: cheap 2D stars + drifting planets, behind every
+          screen, driven by the active motion package. */}
+      <Starfield />
+      {loading ? (
+        <LoadingScreen boot={boot} lang={lang} onDone={() => setLoading(false)} />
+      ) : (
+        splash && <Landing onDone={() => setSplash(false)} />
+      )}
       {/* One shared element: centred on the launcher, docked in a section. */}
       <motion.button
         layoutId="ce-wordmark"

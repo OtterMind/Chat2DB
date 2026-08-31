@@ -41,9 +41,9 @@ except Exception:  # pragma: no cover - a machine without the wheel
 
 #: Frames per second to look at. Faces do not move fast enough to need more, and
 #: this is the difference between two seconds of analysis and twenty.
-SAMPLE_FPS = 4.0
+SAMPLE_FPS = 6.0
 #: Width the frames are analysed at. Haar needs the face to be ≥ ~24 px.
-ANALYSIS_WIDTH = 480
+ANALYSIS_WIDTH = 640
 #: Movements smaller than this fraction of the width are not worth a camera move.
 DEADBAND = 0.02
 #: How fast the smoothed path may chase a new position (0..1 per sample).
@@ -107,13 +107,14 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
     One FFmpeg process for the whole file (the lesson from `style.sample_strip`:
     a process per frame costs more in startup than in decoding).
     """
-    classifier = _cascade()
-    if classifier is None:
-        return []
-
     from core.engine import pose as pose_engine  # noqa: PLC0415
+    from core.engine import face as face_engine  # noqa: PLC0415
 
     with_pose = pose_engine.available()
+    classifier = _cascade()
+    face_detector = face_engine.FaceDetector() if face_engine.available() else None
+    if classifier is None and not with_pose and face_detector is None:
+        return []
 
     info = probe_media(path)
     source_w = int(info.get("width") or 0)
@@ -122,52 +123,67 @@ def detect_faces(path: str, fps: float = SAMPLE_FPS, width: int = ANALYSIS_WIDTH
         return []
     height = max(2, int(round(width * source_h / source_w / 2)) * 2)
 
+    # -vf now decodes RGB so the MediaPipe bridges get what they need; the gray
+    # frame Haar and the motion centroid use is derived from it, once per frame.
     process = subprocess.run(
         [
             ffmpeg_binary(), "-hide_banner", "-loglevel", "error", "-i", str(path),
-            "-vf", f"fps={fps:.3f},scale={width}:{height},format=gray",
+            "-vf", f"fps={fps:.3f},scale={width}:{height},format=rgb24",
             "-f", "rawvideo", "-",
         ],
         capture_output=True,
     )
-    frame_bytes = width * height
+    frame_bytes = width * height * 3
     total = len(process.stdout) // frame_bytes
     detections: list[Detection] = []
     prev: np.ndarray | None = None
     for index in range(total):
-        frame = np.frombuffer(
+        rgb = np.frombuffer(
             process.stdout[index * frame_bytes : (index + 1) * frame_bytes], dtype=np.uint8
-        ).reshape(height, width)
-        faces = classifier.detectMultiScale(frame, scaleFactor=1.1, minNeighbors=5,
-                                            minSize=(max(24, width // 20), max(24, width // 20)))
+        ).reshape(height, width, 3)
+        gray = rgb.mean(axis=2).astype(np.uint8)
         moment = index / fps
-        if len(faces) == 0:
-            # No face — but a sport rarely shows one. A person still has a body:
-            # MediaPipe's torso landmarks (when fetched) name the subject; only
-            # when neither a face nor a person is found do we follow the moving
-            # region, so a rally or a rep still has a subject.
-            person = pose_engine.track_frame(frame) if with_pose else None
-            if person is not None:
+
+        # 1. BlazeFace: a face at any orientation beats a frontal-only cascade.
+        if face_detector is not None:
+            face = face_detector.detect(rgb)
+            if face is not None:
                 detections.append(
-                    Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
+                    Detection(t=moment, x=face[0], y=face[1], size=face[2], kind="face")
                 )
-                prev = frame
+                prev = gray
                 continue
-            centre = _motion_centre(prev, frame, width)
-            if centre is not None:
+
+        # 2. Haar — still the right call on a clear frontal face.
+        if classifier is not None:
+            faces = classifier.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=5,
+                minSize=(max(24, width // 20), max(24, width // 20)))
+            if len(faces):
+                fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
                 detections.append(
-                    Detection(t=moment, x=centre[0], y=centre[1], size=0.3, kind="motion")
+                    Detection(t=moment, x=(fx + fw / 2) / width, y=(fy + fh / 2) / height,
+                              size=fw / width, kind="face")
                 )
-            else:
-                detections.append(Detection(t=moment, x=None, kind="none"))
-            prev = frame
+                prev = gray
+                continue
+
+        # 3. A body when no face shows; 4. the moving region as the last resort.
+        person = pose_engine.track_frame(rgb) if with_pose else None
+        if person is not None:
+            detections.append(
+                Detection(t=moment, x=person[0], y=person[1], size=0.35, kind="pose")
+            )
+            prev = gray
             continue
-        prev = frame
-        # The biggest face is the subject; a face in the background is not the shot.
-        fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-        detections.append(
-            Detection(t=moment, x=(fx + fw / 2) / width, y=(fy + fh / 2) / height, size=fw / width)
-        )
+        centre = _motion_centre(prev, gray, width)
+        if centre is not None:
+            detections.append(
+                Detection(t=moment, x=centre[0], y=centre[1], size=0.3, kind="motion")
+            )
+        else:
+            detections.append(Detection(t=moment, x=None, kind="none"))
+        prev = gray
     return detections
 
 

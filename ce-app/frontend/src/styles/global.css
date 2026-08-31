@@ -1892,3 +1892,55 @@ body { font-family: var(--ce-font-sans); }
 /* ---- Live globe (Three.js) on the launcher ---- */
 .live-globe { width: min(560px, 86vw); margin: 6px auto 0; }
 .live-globe canvas { display: block; width: 100% !important; }
+
+/* ---- Big-bang loading screen + the live starfield backdrop ---------------
+   Both read the motion-package variables, so the package switches the cold
+   start too. Reduced-motion keeps a static frame (handled in the components)
+   and kills the caret here. */
+.ld-screen {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  overflow: hidden;  /* full-bleed intro: its glow must never widen the page */
+  background: radial-gradient(120% 90% at 50% 45%, #0b1220 0%, #070a12 58%, #05070d 100%);
+}
+.ld-screen__gl { position: absolute; inset: 0; }
+.ld-screen__gl canvas { display: block; width: 100% !important; height: 100% !important; }
+.ld-screen__ui { position: relative; display: grid; place-items: center; }
+.ld-ring { grid-area: 1 / 1; transform: rotate(-90deg); }
+.ld-ring__track { fill: none; stroke: color-mix(in srgb, var(--ce-neon-cyan) 14%, transparent); stroke-width: 3; }
+.ld-ring__bar {
+  fill: none; stroke: var(--ce-neon-cyan); stroke-width: 3; stroke-linecap: round;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--ce-neon-cyan) 55%, transparent));
+  transition: stroke-dashoffset calc(.3s * var(--m-speed)) var(--m-ease);
+}
+.ld-screen__pct { grid-area: 1 / 1; font-size: 13px; letter-spacing: .4px; color: var(--ce-text-dim); }
+.ld-screen__status {
+  grid-area: 2 / 1; margin-top: 18px; min-height: 20px; font-size: 13px;
+  color: color-mix(in srgb, var(--ce-text) 78%, transparent); letter-spacing: .2px;
+}
+.ld-screen__caret {
+  display: inline-block; width: 7px; height: 14px; margin-inline-start: 3px;
+  vertical-align: -2px; background: var(--ce-neon-pink);
+  animation: ld-caret calc(1s * var(--m-speed)) steps(1, end) infinite;
+}
+@keyframes ld-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.ld-screen__skip {
+  position: absolute; inset-block-end: 22px; inset-inline-end: 26px;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 12px;
+  color: var(--ce-text-dim); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ce-border) 80%, transparent);
+  transition: color calc(.2s * var(--m-speed)) var(--m-ease), border-color calc(.2s * var(--m-speed)) var(--m-ease);
+}
+.ld-screen__skip:hover { color: var(--ce-text); border-color: var(--ce-neon-cyan); }
+
+.ce-starfield { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .6; }
+/* Lift the real chrome above the starfield. (The loading screen and landing are
+   fixed overlays with their own z-index; a blanket `position: relative` here once
+   flattened both of them — so we name the structural children instead.) */
+/* Only the in-flow chrome needs lifting above the starfield; the wordmark and the
+   launcher actions are position:fixed (z-index 60) and must stay fixed. */
+.ce-content, .ce-running, .ce-offline { position: relative; z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-screen__caret { animation: none; opacity: .7; }
+  .ld-ring__bar { transition: none; }
+}

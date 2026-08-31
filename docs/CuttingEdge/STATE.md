@@ -1193,6 +1193,22 @@ gate that stops a broken installer from being published.
     filed as a refinement inside `reframe`'s measurement — documented, not
     skipped. Suite: **376 passed, 0 failed, 10 skipped**.
 
+145. **The cold start is now a big bang, every screen has a live backdrop, and the
+    reframe got a real face tracker.** The owner's animated designs existed only as
+    PNGs (`loadscreen-frame1/2.png`, the neural landing) — nothing was coded, which is
+    exactly why "no animation applied". Now: `LoadingScreen.tsx` — a singularity
+    detonates, ~1400 debris spread like stars/planets and settle into the launcher's
+    constellation; the ring reports real boot steps (health/projects/motion) and the
+    narration types each stage; `prefers-reduced-motion` gets the settled frame.
+    `Starfield.tsx` puts a cheap 2D-canvas star backdrop behind every screen, driven
+    by the motion package. Both use plain `three`/canvas (no new deps). Face tracking:
+    `core/engine/face.py` bridges MediaPipe **BlazeFace** (any orientation) ahead of the
+    Haar cascade, decoding RGB at 6 fps/640 px (was 4/480); degrade-safe like pose.
+    Captions: an empty transcription is now a result, not a crash, and a library failure
+    raises `TranscriptionFailed` naming the stage (the reported "max() arg" path).
+    Verified in-browser: bang/spread/settle screenshots committed, ui-audit 7/7 green.
+    Backend **548 passed / 0 failed / 11 skipped**. *On the branch, not published.*
+
 144. **1.3.0 — live 3D globe launcher + the motion-package switcher, and the audit that
     found the switcher was not switching anything.** (a) `LiveGlobe.tsx` draws the
     launcher's connections as nodes on a slowly rotating three.js sphere with
