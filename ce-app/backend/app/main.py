@@ -40,7 +40,7 @@ def _setup_structured_logging() -> None:
 _setup_structured_logging()
 from app.config import settings
 from app.database import db
-from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, audio, brain, projects, style, ai, reframe, gpu, tasks, titles, vad, ocr, vision, sounds, engines, emotion, multicam, providers, transcript, board, agent, workflows, extend
+from app.routers import jobs, clips, system, uploads, render, analyze, media, assistant, captions, audio, brain, projects, style, ai, reframe, gpu, tasks, titles, vad, ocr, vision, sounds, engines, emotion, multicam, providers, transcript, board, agent, workflows, extend, motion
 from app.websocket.job_events import ws_manager
 
 @asynccontextmanager
@@ -99,6 +99,7 @@ app.include_router(board.router)
 app.include_router(agent.router)
 app.include_router(workflows.router)
 app.include_router(extend.router)
+app.include_router(motion.router)
 app.include_router(ai.router)
 app.include_router(reframe.router)
 app.include_router(gpu.router)

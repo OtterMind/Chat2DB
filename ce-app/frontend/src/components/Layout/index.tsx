@@ -6,6 +6,7 @@ import BackendBanner from '../BackendBanner'
 import FullscreenButton from '../FullscreenButton'
 import RunningStrip from '../RunningStrip'
 import { useRuntime, selectActiveTasks } from '../../store/runtime'
+import { backendOrigin } from '../../api/runtime'
 import { useI18n } from '../../i18n'
 import { Bell, Menu } from 'lucide-react'
 
@@ -78,6 +79,28 @@ export default function AppLayout() {
   /** The saved accent repaints before first paint of content; the splash is a
    *  one-second brand breath on cold start (skipped for reduced motion). */
   const [splash, setSplash] = useState(true)
+
+  // Motion package switcher: the active package tunes the whole motion language
+  // via CSS vars + a window flag (LiveGlobe reads it). Runtime-switchable, so it
+  // grows through differential updates without a reinstall.
+  useEffect(() => {
+    const apply = () => {
+      fetch(`${backendOrigin}/api/motion/params`)
+        .then((r) => r.json())
+        .then((p) => {
+          const root = document.documentElement
+          root.style.setProperty('--m-speed', String(p.duration ?? 1))
+          root.style.setProperty('--m-stagger', `${(p.stagger ?? 0.1) * 1000}ms`)
+          ;(window as any).__ceMotion = p
+          window.dispatchEvent(new Event('ce:motion'))
+        })
+        .catch(() => undefined)
+    }
+    apply()
+    window.addEventListener('ce:motion-change', apply)
+    return () => window.removeEventListener('ce:motion-change', apply)
+  }, [])
+
   useEffect(() => {
     const acc = localStorage.getItem('ce-accent')
     if (acc) document.documentElement.dataset.accent = acc

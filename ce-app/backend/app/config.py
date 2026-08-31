@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     gateway_base_url: str = ""
     gateway_api_key: str = ""
     gateway_model: str = ""
+    #: Active motion package (cinematic/energetic/calm/celebration or a user drop-in).
+    motion_package: str = "cinematic"
     #: After each render, notify the user's own endpoint (e.g. their n8n webhook).
     #: Empty = off; a dead endpoint is reported, never fatal.
     publish_webhook_url: str = ""

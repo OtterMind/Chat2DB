@@ -18,6 +18,18 @@ const NODES = [
 
 export default function LiveGlobe({ height = 300 }: { height?: number }) {
   const mount = useRef<HTMLDivElement>(null)
+  const speed = useRef(1)
+
+  useEffect(() => {
+    const read = () => {
+      const m = (window as any).__ceMotion
+      // energetic packages spin/pulse faster; calm slower. duration<1 = faster.
+      speed.current = m?.duration ? 1 / m.duration : 1
+    }
+    read()
+    window.addEventListener('ce:motion', read)
+    return () => window.removeEventListener('ce:motion', read)
+  }, [])
 
   useEffect(() => {
     const el = mount.current
@@ -78,9 +90,9 @@ export default function LiveGlobe({ height = 300 }: { height?: number }) {
 
     let raf = 0
     const tick = () => {
-      if (!reduce) group.rotation.y += 0.0016
+      if (!reduce) group.rotation.y += 0.0016 * speed.current
       for (const p of pulses) {
-        p.t = (p.t + p.speed) % 1
+        p.t = (p.t + p.speed * speed.current) % 1
         p.mesh.position.copy(p.curve.getPoint(p.t))
       }
       renderer.render(scene, camera)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Form, Input, message, Modal } from 'antd'
+import { Form, Input, message, Modal, Segmented } from 'antd'
+import { backendOrigin } from '../api/runtime'
 import { RefreshCw, Download, CheckCircle2, Sparkles, Languages } from 'lucide-react'
 import Page, { Card, Num } from '../components/Page'
 import { systemApi } from '../api/jobs'
@@ -787,6 +788,48 @@ const LANGUAGES: { value: Lang; label: string; native: string }[] = [
   { value: 'fa', label: 'Persian', native: 'فارسی' },
 ]
 
+/**
+ * Motion package switcher (runtime, differential-update friendly). The loader
+ * ships in the base app; packages are data the app reads at runtime, and extra
+ * packages dropped into ~/CuttingEdge/motion appear without a reinstall.
+ */
+function MotionCard() {
+  const { t } = useI18n()
+  const [pkgs, setPkgs] = useState<{ id: string; en: string; fa: string; active?: boolean }[]>([])
+  const [active, setActive] = useState('cinematic')
+
+  const load = () =>
+    fetch(`${backendOrigin}/api/motion/list`).then((r) => r.json())
+      .then((d) => { setPkgs(d.packages ?? []); setActive(d.active ?? 'cinematic') })
+      .catch(() => undefined)
+  useEffect(() => { void load() }, [])
+
+  const choose = async (id: string) => {
+    setActive(id)
+    await fetch(`${backendOrigin}/api/motion/set`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+    }).catch(() => undefined)
+    window.dispatchEvent(new Event('ce:motion-change'))
+    message.success(t('Motion package applied', 'بسته‌ی موشن اعمال شد'))
+  }
+
+  return (
+    <Card title={t('Motion package', 'بسته‌ی موشن')}>
+      <p className="ce-hint">
+        {t('Switch the whole motion language instantly; extra packages dropped into ~/CuttingEdge/motion appear here.',
+          'کل زبان موشن را آنی عوض کن؛ بسته‌های اضافه در ~/CuttingEdge/motion این‌جا ظاهر می‌شوند.')}
+      </p>
+      <div style={{ marginTop: 10 }}>
+        <Segmented
+          value={active}
+          onChange={(v) => void choose(String(v))}
+          options={pkgs.map((p) => ({ value: p.id, label: t(p.en, p.fa) }))}
+        />
+      </div>
+    </Card>
+  )
+}
+
 export default function Settings() {
   const { t, lang, setLang } = useI18n()
   const [form] = Form.useForm()
@@ -1022,6 +1065,8 @@ export default function Settings() {
       <EmotionCard />
 
       <ProvidersCard />
+
+      <MotionCard />
     </Page>
   )
 }
