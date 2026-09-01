@@ -30,16 +30,22 @@ const createWorkerProxyUrl = (workerUrl: string) => {
 };
 
 export const isMonacoCancellationError = (reason: unknown) => {
-  if (reason === 'Canceled') {
-    return true;
+  if (typeof reason === 'string') {
+    return reason === 'Canceled' || reason === 'CanceledError';
   }
 
   if (!reason || typeof reason !== 'object') {
     return false;
   }
 
-  const error = reason as { name?: unknown; message?: unknown };
-  return error.name === 'Canceled' || error.message === 'Canceled';
+  const error = reason as { name?: unknown; message?: unknown; code?: unknown };
+  return (
+    error.name === 'Canceled' ||
+    error.name === 'CanceledError' ||
+    error.message === 'Canceled' ||
+    error.message === 'CanceledError' ||
+    error.code === 'ERR_CANCELED'
+  );
 };
 
 export const runMonacoDisposalSafely = (task: () => unknown) => {

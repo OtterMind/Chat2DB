@@ -7,7 +7,7 @@ import WorkspaceRight from './components/WorkspaceRight';
 import { useStyles } from './style';
 
 const workspacePage = memo(() => {
-  const { cx } = useStyles();
+  const { cx, styles } = useStyles();
   const { panelLeftWidth, setPanelLeftWidth } = useWorkspaceStore((state) => {
     return {
       panelLeftWidth: state.layout.panelLeftWidth,
@@ -23,7 +23,7 @@ const workspacePage = memo(() => {
   }, [panelLeftWidth]);
 
   return (
-    <>
+    <div className={styles.workspaceRoot} data-workspace-shortcut-surface="true">
       <SplitPane
         split="vertical"
         className={cx({ ['ResizerSizeIsZeroRight']: size === 0 })}
@@ -45,7 +45,7 @@ const workspacePage = memo(() => {
         <WorkspaceLeft />
         <WorkspaceRight />
       </SplitPane>
-    </>
+    </div>
   );
 });
 

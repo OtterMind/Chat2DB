@@ -6,6 +6,7 @@ import { MessageSquarePlus, Search } from 'lucide-react';
 
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuIntent } from '@/components/ContextMenu/core';
+import InlineRenameInput from '@/components/InlineRenameInput';
 import i18n from '@/i18n';
 import { IChatSession } from '@/service/aiStream';
 import MainSecondaryPanel from '../MainSecondaryPanel';
@@ -23,6 +24,7 @@ interface StreamSidebarProps {
   onNewChat: () => void;
   onSessionClick: (session: IChatSession) => void;
   onSessionDelete: (sessionId: string) => void;
+  onSessionRename: (sessionId: string, title: string) => Promise<void>;
 }
 
 interface StreamSessionContextSnapshot {
@@ -44,10 +46,16 @@ const StreamSidebar = ({
   onNewChat,
   onSessionClick,
   onSessionDelete,
+  onSessionRename,
 }: StreamSidebarProps) => {
   const { styles } = useStyles();
   const [contextMenu, setContextMenu] = useState<StreamSessionContextIntent | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [modal, modalContextHolder] = Modal.useModal();
+
+  const startRename = useCallback((session: IChatSession) => {
+    setEditingSessionId(session.id);
+  }, []);
 
   const formatSessionTime = useCallback((session: IChatSession) => {
     const time = session.gmtModified || session.gmtCreate;
@@ -81,6 +89,17 @@ const StreamSidebar = ({
     () => {
       return [
         {
+          id: 'rename',
+          label: i18n('common.text.rename'),
+          validateBeforeExecute: (intent) => sessions.some((session) => session.id === intent.targetSnapshot.sessionId),
+          execute: (intent) => {
+            const session = sessions.find((item) => item.id === intent.targetSnapshot.sessionId);
+            if (session) {
+              startRename(session);
+            }
+          },
+        },
+        {
           id: 'delete',
           label: i18n('common.button.delete'),
           danger: true,
@@ -97,7 +116,7 @@ const StreamSidebar = ({
         },
       ];
     },
-    [modal, onSessionDelete, sessions],
+    [modal, onSessionDelete, sessions, startRename],
   );
 
   const handleContextMenu = useCallback((event: React.MouseEvent, session: IChatSession) => {
@@ -181,8 +200,21 @@ const StreamSidebar = ({
             onClick={() => onSessionClick(session)}
             onContextMenu={(event) => handleContextMenu(event, session)}
           >
-            <div className={styles.sidebarSessionTitle}>{session.title || i18n('stream.sidebar.unnamed')}</div>
-            <div className={styles.sidebarSessionTime}>{formatSessionTime(session)}</div>
+            {editingSessionId === session.id ? (
+              <InlineRenameInput
+                key={session.id}
+                className={styles.sidebarSessionRenameInput}
+                initialValue={session.title || ''}
+                maxLength={50}
+                onCancel={() => setEditingSessionId(null)}
+                onSubmit={(title) => onSessionRename(session.id, title)}
+              />
+            ) : (
+              <>
+                <div className={styles.sidebarSessionTitle}>{session.title || i18n('stream.sidebar.unnamed')}</div>
+                <div className={styles.sidebarSessionTime}>{formatSessionTime(session)}</div>
+              </>
+            )}
           </div>
         ))}
       </div>

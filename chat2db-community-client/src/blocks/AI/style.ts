@@ -79,6 +79,12 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
         background-color: ${token.colorFillTertiary};
         color: ${token.colorText};
       }
+
+      &:disabled {
+        color: ${token.colorTextQuaternary};
+        background: none;
+        cursor: default;
+      }
     `,
 
     panelHistoryItem: css`
@@ -97,12 +103,18 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       text-overflow: ellipsis;
     `,
 
-    panelHistoryDeleteBtn: css`
+    panelHistoryRenameInput: css`
+      flex: 1;
+      min-width: 0;
+    `,
+
+    panelHistoryEditBtn: css`
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 22px;
       height: 22px;
+      padding: 0;
       border: none;
       border-radius: 5px;
       background: transparent;
@@ -119,8 +131,34 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       }
 
       &:hover {
+        background-color: ${token.colorFillSecondary};
+        color: ${token.colorText};
+      }
+    `,
+
+    panelHistoryDeleteBtn: css`
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: ${token.colorError};
+      cursor: pointer;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+
+      ${`.${prefixCls}-dropdown-menu-item-active &,
+      .${prefixCls}-dropdown-menu-item-selected &,
+      .${prefixCls}-dropdown-menu-item:hover &`} {
+        opacity: 1;
+      }
+
+      &:hover {
         background-color: ${token.colorErrorBg};
-        color: ${token.colorError};
       }
     `,
 
@@ -128,13 +166,18 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       flex-shrink: 0;
       position: relative;
       height: 36px;
-      line-height: 36px;
       padding: 0 16px;
       font-size: 14px;
       font-weight: 500;
       width: 100%;
       box-sizing: border-box;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `,
+
+    headerTitle: css`
+      max-width: calc(100% - 80px);
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -157,11 +200,18 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       padding: 0 0 14px;
     `,
 
-    messageList: css`
+    messageListShell: css`
       flex: 1;
       min-height: 0;
+      position: relative;
+    `,
+
+    messageList: css`
+      width: 100%;
+      height: 100%;
       overflow: auto;
       padding: 14px 0 10px;
+      box-sizing: border-box;
     `,
 
     contentWidth: css`
@@ -197,6 +247,25 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
         to {
           opacity: 1;
           transform: translateY(0);
+        }
+      }
+    `,
+
+    userRowHighlighted: css`
+      .ant-input,
+      > div:last-child {
+        animation: streamUserMessageHighlight 1.6s ease-out;
+      }
+
+      @keyframes streamUserMessageHighlight {
+        0%,
+        35% {
+          filter: drop-shadow(0 0 0 ${token.colorPrimary});
+          transform: translateX(-4px);
+        }
+        100% {
+          filter: drop-shadow(0 0 8px transparent);
+          transform: translateX(0);
         }
       }
     `,

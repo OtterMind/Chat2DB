@@ -66,9 +66,6 @@ export const useStyles = createStyles(({ css, token }) => {
       &:hover {
         background-color: ${token.colorFillTertiary};
       }
-      &:hover .sidebar-session-delete {
-        opacity: 1;
-      }
     `,
     sidebarSessionItemActive: css`
       background-color: ${token.colorPrimaryBg};
@@ -89,6 +86,10 @@ export const useStyles = createStyles(({ css, token }) => {
       color: ${token.colorTextTertiary};
       white-space: nowrap;
       flex-shrink: 0;
+    `,
+    sidebarSessionRenameInput: css`
+      flex: 1;
+      min-width: 0;
     `,
     sessionEmpty: css`
       font-size: 13px;

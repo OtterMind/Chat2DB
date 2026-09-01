@@ -53,6 +53,8 @@ assert.match(source, /window\.requestAnimationFrame/);
 assert.match(source, /requestTableKeyboardFocus\(currentRowKey, true\)/);
 assert.doesNotMatch(source, /keyboardActions\.indexOf/);
 assert.match(source, /onActivateRow\?\.\(index, rowData\)/);
+assert.match(source, /onRowClick\(sourceRowIndex, rowData\)/);
+assert.match(source, /pipeline\.appendRowPropsGetter/);
 assert.match(source, /event\.key === 'Escape' && onEscapeKey/);
 assert.match(
   source,

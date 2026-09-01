@@ -22,6 +22,8 @@ export interface IOptions {
   dynamicUrl?: boolean;
   contentType?: string; // Content-Type used to set request headers
   fullResponse?: boolean;
+  // Send parameters as a JSON request body even when the HTTP method normally uses the query string.
+  requestBody?: boolean;
 }
 
 const errorHandler = (error: ResponseError, errorLevel: IErrorLevel) => {
@@ -73,7 +75,7 @@ request.interceptors.response.use(async (response, _options) => {
 });
 
 export default function createRequest<P = void, R = void>(url: string, options?: IOptions) {
-  const { method = 'get', isFullPath, dynamicUrl, contentType, fullResponse = false } = options || {};
+  const { method = 'get', isFullPath, dynamicUrl, contentType, fullResponse = false, requestBody } = options || {};
   const { errorLevel: initialErrorLevel = 'notification', timeout = true, permissionError = 'apply' } = options || {};
   return function (
     params: P,
@@ -130,6 +132,9 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           default:
             dataName = 'params';
             break;
+        }
+        if (requestBody) {
+          dataName = 'data';
         }
 
         let eventualUrl = _url;

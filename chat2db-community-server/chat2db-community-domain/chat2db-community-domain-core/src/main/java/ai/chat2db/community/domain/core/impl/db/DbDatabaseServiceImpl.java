@@ -178,7 +178,8 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
         try {
             ulr = connection.getMetaData().getURL();
         } catch (SQLException e) {
-            throw new IllegalStateException("Failed to read JDBC URL while sorting schemas", e);
+            log.debug("JDBC driver does not expose its URL; skip schema ordering", e);
+            return;
         }
         int num = -1;
         for (int i = 0; i < schemas.size(); i++) {

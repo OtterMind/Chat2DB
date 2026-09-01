@@ -1,5 +1,7 @@
 package ai.chat2db.community.jcef.handler.biz;
 
+import ai.chat2db.community.jcef.utils.OSOperateUtil;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
@@ -167,6 +169,15 @@ final class SqlDirectoryTreeStore {
 
     static Map<String, Object> renameChild(String rootToken, String relativePath, String rawName)
             throws IOException {
+        Path operationPath = getOperationPath(getRoot(rootToken), relativePath);
+        return OSOperateUtil.withLocalFileOperationLock(
+                operationPath,
+                ignored -> renameChildLocked(rootToken, relativePath, rawName)
+        );
+    }
+
+    private static Map<String, Object> renameChildLocked(String rootToken, String relativePath, String rawName)
+            throws IOException {
         Path root = getRoot(rootToken);
         Path source = resolveInRoot(root, relativePath);
         if (source.equals(root)) {
@@ -214,6 +225,14 @@ final class SqlDirectoryTreeStore {
     }
 
     static Map<String, Object> deleteChild(String rootToken, String relativePath) throws IOException {
+        Path operationPath = getOperationPath(getRoot(rootToken), relativePath);
+        return OSOperateUtil.withLocalFileOperationLock(
+                operationPath,
+                ignored -> deleteChildLocked(rootToken, relativePath)
+        );
+    }
+
+    private static Map<String, Object> deleteChildLocked(String rootToken, String relativePath) throws IOException {
         Path root = getRoot(rootToken);
         Path target = resolveInRoot(root, relativePath);
         if (target.equals(root)) {
@@ -434,12 +453,17 @@ final class SqlDirectoryTreeStore {
         return root.relativize(target).toString();
     }
 
-    private static Path resolveInRoot(Path root, String relativePath) throws IOException {
+    private static Path getOperationPath(Path root, String relativePath) {
         String pathText = relativePath == null ? "" : relativePath;
         Path target = pathText.isEmpty() ? root : root.resolve(pathText).normalize();
         if (!target.startsWith(root)) {
             throw new IllegalArgumentException("Path is outside of the selected SQL directory");
         }
+        return target;
+    }
+
+    private static Path resolveInRoot(Path root, String relativePath) throws IOException {
+        Path target = getOperationPath(root, relativePath);
         Path current = root;
         Path relativeTarget = root.relativize(target);
         for (Path segment : relativeTarget) {

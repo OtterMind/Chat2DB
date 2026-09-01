@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown, Flex, Modal } from 'antd';
 import feedback from '@/utils/feedback';
 import {
@@ -52,6 +52,10 @@ import { toKnowledgeSelectionReferences } from './knowledgeSelection';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import type { IConnectionEnv } from '@/typings';
 import { resolveAIDataSourceContext } from './dataSourceContext';
+import { buildUserMessageNavigationItems } from './messageNavigation';
+import { Pencil } from 'lucide-react';
+import MessageNavigationRail from './components/MessageNavigationRail';
+import InlineRenameInput from '@/components/InlineRenameInput';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -534,6 +538,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     questionType?: QuestionType;
   } | null>(null);
   const [currentRoundUserMessageId, setCurrentRoundUserMessageId] = useState<string | null>(null);
+  const [highlightedUserMessageId, setHighlightedUserMessageId] = useState<string | null>(null);
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
 
   // Session management.
@@ -541,6 +546,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
   const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
 
   const streamingRef = useRef('');
@@ -570,6 +576,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const topAlignmentTimerRef = useRef<number | null>(null);
   const pendingInitialBottomSyncRef = useRef(false);
   const initialBottomSyncTimerRef = useRef<number | null>(null);
+  const messageHighlightTimerRef = useRef<number | null>(null);
+
+  const userMessageNavigationItems = useMemo(
+    () => buildUserMessageNavigationItems(messages, i18n('stream.messageNavigation.userMessage')),
+    [messages, language],
+  );
 
   const lockScrollTracking = useCallback((behavior: ScrollBehavior = 'auto') => {
     suppressScrollTrackingRef.current = true;
@@ -751,6 +763,22 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       messageElementMapRef.current.delete(id);
     },
     [scrollMessageToTop],
+  );
+
+  const handleNavigateToUserMessage = useCallback(
+    (messageId: string) => {
+      setAutoFollow(false);
+      scrollMessageToTop(messageId);
+      setHighlightedUserMessageId(messageId);
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+      }
+      messageHighlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedUserMessageId(null);
+        messageHighlightTimerRef.current = null;
+      }, 1600);
+    },
+    [scrollMessageToTop, setAutoFollow],
   );
 
   const flushPendingBuffer = useCallback(() => {
@@ -944,6 +972,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (initialBottomSyncTimerRef.current !== null) {
         window.clearTimeout(initialBottomSyncTimerRef.current);
         initialBottomSyncTimerRef.current = null;
+      }
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+        messageHighlightTimerRef.current = null;
       }
     };
   }, []);
@@ -1236,6 +1268,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     currentSessionTitleRef.current = '';
     setCurrentRoundUserMessageId(null);
     currentRoundUserMessageIdRef.current = null;
+    setHighlightedUserMessageId(null);
+    if (messageHighlightTimerRef.current !== null) {
+      window.clearTimeout(messageHighlightTimerRef.current);
+      messageHighlightTimerRef.current = null;
+    }
     currentRoundBlockRef.current = null;
     newSessionIdRef.current = null;
     inProgressSessionRef.current = null;
@@ -1244,6 +1281,30 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     onSessionChange?.();
   }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
+
+  const startPanelHistoryRename = useCallback((session: IChatSession) => {
+    setPanelRenamingSessionId(session.id);
+  }, []);
+
+  const renamePanelHistorySession = useCallback(async (sessionId: string, title: string) => {
+    try {
+      await aiStreamService.renameChatSession({ id: sessionId, title });
+      setSessionList((prev) => prev.map((item) => (item.id === sessionId ? { ...item, title } : item)));
+      if (currentSessionIdRef.current === sessionId) {
+        setCurrentSessionTitle(title);
+        currentSessionTitleRef.current = title;
+      }
+      window.dispatchEvent(
+        new CustomEvent('stream:sessionRenamed', {
+          detail: { sessionId, title },
+        }),
+      );
+      feedback.success(i18n('common.message.modifySuccessfully'));
+    } catch (error) {
+      feedback.error(i18n('stream.sidebar.renameFailed'));
+      throw error;
+    }
+  }, []);
 
   const handleDeleteHistorySession = useCallback(
     async (sessionId: string) => {
@@ -1334,6 +1395,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       currentSessionTitleRef.current = title || '';
       setCurrentRoundUserMessageId(null);
       currentRoundUserMessageIdRef.current = null;
+      setHighlightedUserMessageId(null);
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+        messageHighlightTimerRef.current = null;
+      }
       currentRoundBlockRef.current = null;
 
       const inProgressSession = inProgressSessionRef.current;
@@ -1456,6 +1522,23 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       window.removeEventListener('stream:loadSession', handleLoadEvent);
     };
   }, [isPanel, handleLoadSessionById]);
+
+  useEffect(() => {
+    const handleSessionRenamed = (event: Event) => {
+      const { sessionId, title } = (event as CustomEvent<{ sessionId: string; title: string }>).detail || {};
+      if (!sessionId || !title) {
+        return;
+      }
+      setSessionList((prev) => prev.map((session) => (session.id === sessionId ? { ...session, title } : session)));
+      if (currentSessionIdRef.current === sessionId) {
+        setCurrentSessionTitle(title);
+        currentSessionTitleRef.current = title;
+      }
+    };
+
+    window.addEventListener('stream:sessionRenamed', handleSessionRenamed);
+    return () => window.removeEventListener('stream:sessionRenamed', handleSessionRenamed);
+  }, []);
 
   // Send a message.
 
@@ -1891,7 +1974,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
               style={isLastRound && messageListContentHeight > 0 ? { minHeight: messageListContentHeight } : undefined}
             >
               {round.user && (
-                <div className={styles.userRow} ref={(node) => setMessageElement(round.user!.id, node)}>
+                <div
+                  className={cx(
+                    styles.userRow,
+                    highlightedUserMessageId === round.user.id && styles.userRowHighlighted,
+                  )}
+                  ref={(node) => setMessageElement(round.user!.id, node)}
+                >
                   <div className={styles.userBubbleWrap}>
                     {round.user.attachments?.length ? (
                       <div className={styles.userAttachmentList}>
@@ -2006,12 +2095,42 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 <div
                   className={styles.panelHistoryItem}
                   title={item.title || i18n('stream.session.title')}
-                  onClick={() => handleLoadSessionById(item.id, item.title)}
+                  onClick={() => {
+                    if (panelRenamingSessionId !== item.id) {
+                      handleLoadSessionById(item.id, item.title);
+                    }
+                  }}
                 >
-                  <span className={styles.panelHistoryTitle}>{item.title || i18n('stream.session.title')}</span>
+                  {panelRenamingSessionId === item.id ? (
+                    <InlineRenameInput
+                      key={item.id}
+                      className={styles.panelHistoryRenameInput}
+                      initialValue={item.title || ''}
+                      maxLength={50}
+                      onCancel={() => setPanelRenamingSessionId(null)}
+                      onSubmit={(title) => renamePanelHistorySession(item.id, title)}
+                    />
+                  ) : (
+                    <span className={styles.panelHistoryTitle}>{item.title || i18n('stream.session.title')}</span>
+                  )}
                   <button
+                    type="button"
+                    className={styles.panelHistoryEditBtn}
+                    title={i18n('common.text.rename')}
+                    aria-label={i18n('common.text.rename')}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      startPanelHistoryRename(item);
+                    }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
                     className={styles.panelHistoryDeleteBtn}
                     title={i18n('common.button.delete')}
+                    aria-label={i18n('common.button.delete')}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -2052,7 +2171,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         ? renderPanelHeader()
         : (!isEmptyState || sessionLoading) && (
             <div className={styles.header}>
-              {currentSessionTitle || i18n('stream.session.title')}
+              <span className={styles.headerTitle}>{currentSessionTitle || i18n('stream.session.title')}</span>
               {sessionLoading && <div className={styles.topLoadingBar} />}
             </div>
           )}
@@ -2060,10 +2179,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       {sessionLoading ? null : (
         <div className={isEmptyState && !isPanel ? styles.chatPanelCenter : styles.chatPanel}>
           {!isEmptyState && (
-            <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
-              <div className={styles.contentWidth} ref={messageContentRef}>
-                {renderMessages()}
-                <div ref={bottomSentinelRef} aria-hidden="true" />
+            <div className={styles.messageListShell}>
+              <MessageNavigationRail
+                items={userMessageNavigationItems}
+                onNavigate={handleNavigateToUserMessage}
+              />
+              <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
+                <div className={styles.contentWidth} ref={messageContentRef}>
+                  {renderMessages()}
+                  <div ref={bottomSentinelRef} aria-hidden="true" />
+                </div>
               </div>
             </div>
           )}

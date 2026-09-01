@@ -821,6 +821,8 @@ const WorkspaceTabs = memo(() => {
     });
   }, [measurePaneContentBounds]);
 
+  // The split box does not exist in an empty workspace. Re-run when the first
+  // tab mounts even if the normalized split layout remains null.
   useLayoutEffect(() => {
     const container = splitTabBoxRef.current;
     if (!container) {
@@ -838,7 +840,12 @@ const WorkspaceTabs = memo(() => {
         paneContentMeasureFrameRef.current = undefined;
       }
     };
-  }, [measurePaneContentBounds, schedulePaneContentMeasurement, workspaceTabSplitLayout]);
+  }, [
+    measurePaneContentBounds,
+    schedulePaneContentMeasurement,
+    workspaceTabSplitLayout,
+    workspaceTabList?.length,
+  ]);
 
   // Get the currently selected data source.
   const { zoerBoundInfo } = useZoerStore((state) => {

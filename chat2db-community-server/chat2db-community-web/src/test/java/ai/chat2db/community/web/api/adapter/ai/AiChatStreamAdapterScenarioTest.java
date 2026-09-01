@@ -134,6 +134,10 @@ class AiChatStreamAdapterScenarioTest {
         }
 
         @Override
+        public void renameSession(String sessionId, Long userId, String title) {
+        }
+
+        @Override
         public List<AiChatMessage> getMessages(String sessionId, Long userId) {
             return List.of();
         }

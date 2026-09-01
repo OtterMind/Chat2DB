@@ -11,6 +11,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import { WorkspaceTabType } from '@/constants/workspace';
 import {
   getDataSourceRuntimeAvailabilityGeneration,
   getSqlExecutionBlockReason,
@@ -52,6 +53,8 @@ import {
   ISQLEditorWithOperationRef,
   type SQLExecutionInvocation,
 } from '@/components/SQLEditor/editor/SQLEditorWithOperation';
+import { createLiveSqlEditorHandle } from './liveEditorHandle';
+import { mergeLatestLocalFileBoundInfo } from './liveEditorBoundInfo';
 import SplitPaneUnpack from '@/components/SplitPaneUnpack';
 import useSqlExecutor from '@/hooks/useSqlExecutor';
 import i18n from '@/i18n';
@@ -214,6 +217,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   } = props;
   const { styles, cx } = useStyles();
   const sqlEditorRef = useRef<ISQLEditorWithOperationRef>(null);
+  const liveSqlEditorHandle = useMemo(() => createLiveSqlEditorHandle(sqlEditorRef), []);
   const [boundInfo, setBoundInfo] = useState<IBoundInfo>(_boundInfo);
   const boundInfoRef = useRef<IBoundInfo>(_boundInfo);
   const editorId = boundInfo.workspaceTabId ?? boundInfo.consoleId;
@@ -724,14 +728,14 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
   useEffect(() => {
     if (editorId) {
-      setEditorToList(editorId, sqlEditorRef.current);
+      setEditorToList(editorId, liveSqlEditorHandle);
     }
     return () => {
       if (editorId) {
         deleteEditor(editorId);
       }
     };
-  }, [editorId]);
+  }, [editorId, liveSqlEditorHandle]);
 
   useUpdateEffect(() => {
     boundInfoRef.current = boundInfo;
@@ -749,6 +753,29 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     _boundInfo.watermarkEnabled,
     _boundInfo.watermarkContent,
     _boundInfo.connectable,
+  ]);
+
+  useUpdateEffect(() => {
+    if (type !== WorkspaceTabType.LocalSQLFile) {
+      return;
+    }
+    setBoundInfo((currentBoundInfo) => ({
+      ...currentBoundInfo,
+      filePath: _boundInfo.filePath,
+      fileExtension: _boundInfo.fileExtension,
+      fileCharset: _boundInfo.fileCharset,
+      fileBom: _boundInfo.fileBom,
+      fileRootToken: _boundInfo.fileRootToken,
+      fileRelativePath: _boundInfo.fileRelativePath,
+    }));
+  }, [
+    type,
+    _boundInfo.filePath,
+    _boundInfo.fileExtension,
+    _boundInfo.fileCharset,
+    _boundInfo.fileBom,
+    _boundInfo.fileRootToken,
+    _boundInfo.fileRelativePath,
   ]);
 
   useEffect(() => {
@@ -795,13 +822,26 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     [discardPendingResult],
   );
 
-  const handleChangeDBInfo = (newBoundInfo: IBoundInfo) => {
-    const { databaseType } = newBoundInfo;
-    setBoundInfo((currentBoundInfo) => ({
-      ...currentBoundInfo,
-      ...newBoundInfo,
-      ...getDatabaseSupport(databaseType),
-    }));
+  const handleChangeDBInfo = (newBoundInfo: Partial<IBoundInfo>) => {
+    setBoundInfo((currentBoundInfo) => {
+      const latestWorkspaceBoundInfo =
+        type === WorkspaceTabType.LocalSQLFile
+          ? useWorkspaceStore
+              .getState()
+              .workspaceTabList?.find((tab) => tab.id === currentBoundInfo.workspaceTabId)?.uniqueData
+          : undefined;
+      const nextBoundInfo = mergeLatestLocalFileBoundInfo(
+        currentBoundInfo,
+        newBoundInfo,
+        latestWorkspaceBoundInfo,
+      );
+      return newBoundInfo.databaseType === undefined
+        ? nextBoundInfo
+        : {
+            ...nextBoundInfo,
+            ...getDatabaseSupport(nextBoundInfo.databaseType),
+          };
+    });
   };
 
   const handleExecuteSQL = (params: IConsoleReturnExecuteSql | SQLExecutionInvocation): Promise<any> => {

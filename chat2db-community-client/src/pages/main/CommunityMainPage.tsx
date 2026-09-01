@@ -290,6 +290,23 @@ function CommunityMainPage() {
     [activeSessionId],
   );
 
+  const handleSidebarRenameSession = useCallback(
+    async (sessionId: string, title: string) => {
+      try {
+        await aiStreamService.renameChatSession({ id: sessionId, title });
+        setSidebarSessions((prev) =>
+          prev.map((session) => (session.id === sessionId ? { ...session, title } : session)),
+        );
+        window.dispatchEvent(new CustomEvent('stream:sessionRenamed', { detail: { sessionId, title } }));
+        feedback.success(i18n('common.message.modifySuccessfully'));
+      } catch (error) {
+        feedback.error(i18n('stream.sidebar.renameFailed'));
+        throw error;
+      }
+    },
+    [],
+  );
+
   const handleSidebarNewChat = useCallback(() => {
     setActiveSessionId(null);
     handleChangePageTab({ page: 'stream', navConfigTmp: navConfig, pathName: '/stream' });
@@ -441,7 +458,11 @@ function CommunityMainPage() {
           hideSettings={
             Boolean(isEmbedIframe) || clientExtension.mainPage.hiddenCoreActions?.includes('settings') === true
           }
-          extras={clientExtension.mainPage.slots?.actionBarFooter}
+          beforeTerminal={
+            clientExtension.mainPage.slots?.actionBarBeforeTerminal ??
+            clientExtension.mainPage.slots?.actionBarFooter
+          }
+          afterTerminal={clientExtension.mainPage.slots?.actionBarAfterTerminal}
           onNavigate={handleNavItemClick}
           onOpenSettings={handleOpenSettings}
         />
@@ -460,6 +481,7 @@ function CommunityMainPage() {
           onNewChat={handleSidebarNewChat}
           onSessionClick={handleSidebarSessionClick}
           onSessionDelete={handleSidebarDeleteSession}
+          onSessionRename={handleSidebarRenameSession}
         />
       )}
 

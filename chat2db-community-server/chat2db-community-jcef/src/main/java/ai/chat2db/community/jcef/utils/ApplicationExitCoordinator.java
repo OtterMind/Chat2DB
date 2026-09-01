@@ -114,6 +114,10 @@ public final class ApplicationExitCoordinator {
         FRONTEND_READY.set(true);
     }
 
+    public static boolean isFrontendReady() {
+        return FRONTEND_READY.get();
+    }
+
     public static void markFrontendUnavailable() {
         FRONTEND_READY.set(false);
     }

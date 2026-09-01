@@ -12,6 +12,11 @@ import type { LocalFileEncodingMetadata } from '@/utils/localFileEncoding';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import { getDownloadFilename } from './downloadFilename';
+import {
+  localFileSaveCoordinator,
+  type LocalFileSaveRequest,
+  type LocalFileSaveResult,
+} from './localFileSaveCoordinator';
 
 export type LargeCellDownloadFormat = 'raw' | 'text' | 'hex';
 
@@ -70,6 +75,19 @@ export async function downloadLargeCellValue(largeValueId: string, format: Large
 }
 
 // Update file content
+export function saveLocalFileContent(params: LocalFileSaveRequest): Promise<LocalFileSaveResult> {
+  return localFileSaveCoordinator.save(params, async (request) => {
+    const updated = await jcefApi.updateFileContent(request);
+    if (updated !== true) {
+      throw new Error('Failed to update local file');
+    }
+  });
+}
+
+export function waitForLocalFileSave(filePath: string) {
+  return localFileSaveCoordinator.waitForIdle(filePath);
+}
+
 export function updateFileContent({
   filePath,
   fileContent,
@@ -79,12 +97,7 @@ export function updateFileContent({
   filePath: string;
   fileContent: string;
 } & LocalFileEncodingMetadata) {
-  return jcefApi.updateFileContent({ filePath, fileContent, charset, bom }).then((updated) => {
-    if (updated !== true) {
-      throw new Error('Failed to update local file');
-    }
-    return updated;
-  });
+  return saveLocalFileContent({ filePath, fileContent, charset, bom }).then(() => true);
 }
 
 interface SavedDesktopFile {

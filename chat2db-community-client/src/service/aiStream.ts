@@ -50,6 +50,9 @@ const getChatMessages = createRequest<{ sessionId: string }, IChatMessage[]>('/a
 const deleteChatSession = createRequest<{ id: string }, void>('/api/v3/ai/chat/history/session/delete', {
   method: 'post',
 });
+const renameChatSession = createRequest<{ id: string; title: string }, void>('/api/v3/ai/chat/history/session/rename', {
+  method: 'post',
+});
 
 export default {
   getModelCatalog,
@@ -57,4 +60,5 @@ export default {
   getChatSessions,
   getChatMessages,
   deleteChatSession,
+  renameChatSession,
 };

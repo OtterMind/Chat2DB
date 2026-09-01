@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.service.ai.IAiChatStreamService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.web.api.model.request.ai.AiChatSessionDeleteRequest;
+import ai.chat2db.community.web.api.model.request.ai.AiChatSessionRenameRequest;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.web.api.model.request.ai.ParseLocalAttachmentRequest;
 import ai.chat2db.community.web.api.model.request.ai.ModelConfigDeleteRequest;
@@ -207,6 +208,19 @@ public class AiChatController {
         Long userId = identityService.currentUserId();
         List<AiChatMessage> messages = aiChatHistoryService.getMessages(sessionId, userId);
         return ListResult.of(chatConverter.message2response(messages));
+    }
+
+    /**
+     * Renames a session owned by the current user.
+     *
+     * @param request session identifier and new title.
+     * @return operation result for the request.
+     */
+    @PostMapping("/chat/history/session/rename")
+    public ActionResult renameSession(@RequestBody @Valid AiChatSessionRenameRequest request) {
+        Long userId = identityService.currentUserId();
+        aiChatHistoryService.renameSession(request.getId(), userId, request.getTitle());
+        return ActionResult.isSuccess();
     }
 
     /**

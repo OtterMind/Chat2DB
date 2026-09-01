@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  DENSE_WATERMARK_MIN_HEIGHT,
   getDataSourceWatermarkContent,
   getDataSourceWatermarkLayout,
   LARGE_WATERMARK_MIN_HEIGHT,
@@ -10,6 +11,16 @@ assert.deepEqual(getDataSourceWatermarkLayout(), { itemCount: 1, columns: 1, row
 assert.deepEqual(getDataSourceWatermarkLayout(480, 700), { itemCount: 1, columns: 1, rows: 1 });
 assert.deepEqual(getDataSourceWatermarkLayout(700, 240), { itemCount: 2, columns: 2, rows: 1 });
 assert.deepEqual(getDataSourceWatermarkLayout(LARGE_WATERMARK_MIN_WIDTH, LARGE_WATERMARK_MIN_HEIGHT), {
+  itemCount: 4,
+  columns: 2,
+  rows: 2,
+});
+assert.deepEqual(getDataSourceWatermarkLayout(LARGE_WATERMARK_MIN_WIDTH, DENSE_WATERMARK_MIN_HEIGHT), {
+  itemCount: 9,
+  columns: 3,
+  rows: 3,
+});
+assert.deepEqual(getDataSourceWatermarkLayout(LARGE_WATERMARK_MIN_WIDTH, DENSE_WATERMARK_MIN_HEIGHT - 1), {
   itemCount: 4,
   columns: 2,
   rows: 2,

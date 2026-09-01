@@ -37,6 +37,10 @@ import {
 } from './treeDataUpdate';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
 import {
+  mergeWorkspaceTreeSearchExpandedKeys,
+} from '@/pages/main/workspace/components/WorkspaceTreeSearch/lifecycle';
+import { refreshWorkspaceTreeData } from '@/pages/main/workspace/components/WorkspaceTreeSearch/refresh';
+import {
   transitionDataSourceRuntimeAvailability,
   type DataSourceRuntimeAvailability,
   type DataSourceRuntimeAvailabilityById,
@@ -208,7 +212,13 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     invalidateTreeRequests();
     set(initTreeState);
   },
-  refreshTreeData: () => get().getTreeData({ refresh: true }),
+  refreshTreeData: () =>
+    refreshWorkspaceTreeData({
+      findNode: (key, treeData) => findNode(key, treeData),
+      getState: () => get(),
+      refreshNode: (node) => get().handleLoadData(node, { refresh: true, preserveInteraction: true }),
+      refreshRoot: () => get().getTreeData({ refresh: true }),
+    }),
   refreshDataSourceAfterMutation: async (dataSourceId) => {
     await hydrateDataSourceAfterMutation(dataSourceId, {
       refreshTreeData: () => get().getTreeData({ refresh: true, throwOnError: true }),
@@ -262,7 +272,11 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
           set({ currentLoadingTreeNode: null });
         }
         const freshTreeData = neatenTreeData(result.items);
-        const treeData = resolveLoadedTreeData(freshTreeData, get().treeData, refresh);
+        const treeData = resolveLoadedTreeData(
+          freshTreeData,
+          get().treeData,
+          refresh && !get().searchBarValue,
+        );
         get().setTreeData(treeData);
         get().generateDataSourceList(treeData);
         if (refresh || force) {
@@ -361,7 +375,11 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         if (requestDataSourceId !== undefined) {
           get().setDataSourceRuntimeAvailability(requestDataSourceId, 'available');
         }
-        const children = resolveLoadedTreeData(loadResult.children, latestNode.children ?? null, refresh);
+        const children = resolveLoadedTreeData(
+          loadResult.children,
+          latestNode.children ?? null,
+          refresh && !get().searchBarValue,
+        );
         const currentTreeData = get().treeData;
         if (!currentTreeData) {
           return { children, committed: false };
@@ -476,7 +494,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         );
         get().setSearchResult(matchedNodes);
         get().setSearchResultKeys(matchedKeys);
-        get().setExpandedKeys([...get().expandedKeys, ...parentIdsWithMatches]);
+        get().setExpandedKeys(mergeWorkspaceTreeSearchExpandedKeys(get().expandedKeys, parentIdsWithMatches));
       }
     } else {
       set({ treeData });
@@ -490,7 +508,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         );
         get().setSearchResult(matchedNodes);
         get().setSearchResultKeys(matchedKeys);
-        get().setExpandedKeys(parentIdsWithMatches);
+        get().setExpandedKeys(mergeWorkspaceTreeSearchExpandedKeys(get().expandedKeys, parentIdsWithMatches));
       }
     }
   },

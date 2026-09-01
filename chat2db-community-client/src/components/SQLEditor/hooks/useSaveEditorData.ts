@@ -15,6 +15,7 @@ import {
   type SavedConsoleSaveMode,
 } from '@/store/workspace/utils/savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from '@/store/workspace/utils/savedConsolePersistence';
+import { hasUnsavedSavedConsoleChanges } from '@/utils/savedConsoleDirty';
 
 interface IProps {
   isActive?: boolean;
@@ -44,7 +45,7 @@ export const useSaveEditorData = (props: IProps) => {
   const timerRef = useRef<any>();
   const effectiveConsoleIdRef = useRef<number | undefined>(boundInfo?.consoleId);
   // Console data from the previous synchronization.
-  const lastSyncConsole = useRef<any>(defaultValue);
+  const lastSyncConsole = useRef(defaultValue ?? '');
   const storageId = boundInfo?.workspaceTabId ?? boundInfo?.consoleId;
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
@@ -93,7 +94,7 @@ export const useSaveEditorData = (props: IProps) => {
     }
 
     if (isReadOnly) {
-      lastSyncConsole.current = value;
+      lastSyncConsole.current = value ?? '';
       return Promise.resolve();
     }
 
@@ -106,7 +107,7 @@ export const useSaveEditorData = (props: IProps) => {
           userId: curUser?.id,
         })
         .then(() => {
-          lastSyncConsole.current = value;
+          lastSyncConsole.current = value ?? '';
         });
     }
 
@@ -139,7 +140,7 @@ export const useSaveEditorData = (props: IProps) => {
               userId: curUser?.id,
             })
             .then(() => {
-              lastSyncConsole.current = value;
+              lastSyncConsole.current = value ?? '';
             });
           return;
         }
@@ -163,7 +164,7 @@ export const useSaveEditorData = (props: IProps) => {
         getSavedConsoleList();
         emitSavedConsoleUpdated(savedBoundInfo);
         void indexDB.deleteValue(storageId);
-        lastSyncConsole.current = value;
+        lastSyncConsole.current = value ?? '';
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
         markWorkspaceTabConsoleSaved({
@@ -182,6 +183,9 @@ export const useSaveEditorData = (props: IProps) => {
   };
 
   const persistAutomaticValue = async (value = editorRef.current?.getValue()) => {
+    if (type === WorkspaceTabType.LocalSQLFile) {
+      return true;
+    }
     if (value === undefined || value === lastSyncConsole.current || isReadOnly) {
       return true;
     }
@@ -229,7 +233,6 @@ export const useSaveEditorData = (props: IProps) => {
       timingAutoSave();
     }
     return () => {
-      lastSyncConsole.current = null;
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -247,6 +250,10 @@ export const useSaveEditorData = (props: IProps) => {
   }, [boundInfo?.consoleId, boundInfo?.status]);
 
   useEffect(() => {
+    if (type === WorkspaceTabType.LocalSQLFile) {
+      editorRef?.current?.setValue(defaultValue || '', 'reset');
+      return;
+    }
     if (saveStatus === ConsoleStatus.RELEASE) {
       editorRef?.current?.setValue(defaultValue || '', 'reset');
     } else {
@@ -265,12 +272,7 @@ export const useSaveEditorData = (props: IProps) => {
   }, []);
 
   const hasUnsavedChanges = useCallback(
-    (value: string) => {
-      if (!value.trim()) {
-        return false;
-      }
-      return !hasSavedSqlRecord || value !== lastSyncConsole.current;
-    },
+    (value: string) => hasUnsavedSavedConsoleChanges(value, hasSavedSqlRecord, lastSyncConsole.current),
     [hasSavedSqlRecord],
   );
 

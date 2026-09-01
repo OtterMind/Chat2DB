@@ -76,6 +76,11 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         return listSessionsLocal(userId);
     }
 
+    @Override
+    public void renameSession(String sessionId, Long userId, String title) {
+        renameSessionLocal(sessionId, userId, title);
+    }
+
 
     @Override
     public List<AiChatMessage> getMessages(String sessionId, Long userId) {
@@ -150,6 +155,17 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
                 .sorted(Comparator.comparing(AiChatSession::getGmtModified,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
+    }
+
+    private synchronized void renameSessionLocal(String sessionId, Long userId, String title) {
+        List<AiChatSession> sessions = loadSessions(userId);
+        AiChatSession session = sessions.stream()
+                .filter(item -> Objects.equals(item.getId(), sessionId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        "ai.chat.history.sessionNotOwned", new Object[]{sessionId}));
+        session.setTitle(title.trim());
+        persistSessions(userId, sessions);
     }
 
     private synchronized List<AiChatMessage> getMessagesLocal(String sessionId, Long userId) {

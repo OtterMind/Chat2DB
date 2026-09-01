@@ -8,6 +8,7 @@ import {
   confirmDirtyEditorTabs,
   isEditorCloseConfirmationEnabled,
   prepareEditorsForApplicationExit,
+  waitForPendingEditorTabs,
   type EditorCloseDecision,
   type EditorCloseGuardMap,
   type EditorCloseGuardRef,
@@ -74,14 +75,18 @@ function requestEditorCloseDecision(tab: IWorkspaceTab, editor: EditorCloseGuard
 }
 
 export async function confirmDirtyWorkspaceEditors(tabs: IWorkspaceTab[], editorList: EditorCloseGuardMap) {
-  if (
-    isEditorCloseConfirmationEnabled(useGlobalStore.getState().editorSettings) &&
-    !(await confirmDirtyEditorTabs(tabs, editorList, requestEditorCloseDecision))
-  ) {
+  if (!isEditorCloseConfirmationEnabled(useGlobalStore.getState().editorSettings)) {
+    return waitForPendingEditorTabs(tabs, editorList);
+  }
+  if (!(await confirmDirtyEditorTabs(tabs, editorList, requestEditorCloseDecision))) {
     return false;
   }
 
   return true;
+}
+
+export function waitForPendingWorkspaceEditors(tabs: IWorkspaceTab[], editorList: EditorCloseGuardMap) {
+  return waitForPendingEditorTabs(tabs, editorList);
 }
 
 export async function prepareWorkspaceEditorsForApplicationExit(

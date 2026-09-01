@@ -17,6 +17,7 @@ import { hexToRgba } from '@/utils/color';
 import { debounce } from 'lodash';
 import { IconButton } from '@chat2db/ui';
 import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
+import { matchResultSearchValue } from './searchMatcher';
 
 interface IProps {
   className?: string;
@@ -56,6 +57,18 @@ const FESearch = forwardRef((props: IProps, ref: ForwardedRef<FESearchRef>) => {
       focuseHighlightCellStyle: {
         bgColor: focuseHighlightCellStyleBgColor,
       } as any,
+      queryMethod: (query, cellValue, context) =>
+        matchResultSearchValue(
+          query,
+          cellValue,
+          context
+            ? {
+                col: context.col,
+                row: context.row,
+                table: context.table as ITableInstance,
+              }
+            : undefined,
+        ),
     });
   }, [tableInstance]);
 

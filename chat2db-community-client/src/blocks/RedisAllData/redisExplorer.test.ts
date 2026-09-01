@@ -13,6 +13,7 @@ assert.match(redisAllDataSource, /clickArea: 'cell'/);
 assert.match(redisAllDataSource, /iconIndent: 0/);
 assert.match(redisAllDataSource, /iconGap: 2/);
 assert.match(redisAllDataSource, /onActivateRow=\{handleActivateRedisRow\}/);
+assert.match(redisAllDataSource, /onRowClick=\{handleActivateRedisRow\}/);
 assert.match(redisAllDataSource, /onEscapeKey=\{handleCloseEditPane\}/);
 assert.match(redisAllDataSource, /\.catch\(\(\) => \{/);
 assert.match(redisAllDataSource, /detailLoadStatus === 'failed'/);

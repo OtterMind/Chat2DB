@@ -59,6 +59,15 @@ class ApplicationExitCoordinatorTest {
         assertTrue(ApplicationExitCoordinator.cancel("acknowledged-test"));
     }
 
+    @Test
+    void exposesFrontendReadiness() {
+        ApplicationExitCoordinator.markFrontendUnavailable();
+        assertFalse(ApplicationExitCoordinator.isFrontendReady());
+
+        ApplicationExitCoordinator.markFrontendReady();
+        assertTrue(ApplicationExitCoordinator.isFrontendReady());
+    }
+
     private void setBrowser(CefBrowser browser) throws ReflectiveOperationException {
         java.lang.reflect.Field field = JcefContext.class.getDeclaredField("browser_");
         field.setAccessible(true);

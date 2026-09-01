@@ -139,6 +139,13 @@ public class Chat2DBContext {
         return new StatementGuardScope(previous);
     }
 
+    public static void guardStatement(String sql) {
+        Consumer<String> statementGuard = STATEMENT_GUARD_THREAD_LOCAL.get();
+        if (statementGuard != null) {
+            statementGuard.accept(sql);
+        }
+    }
+
 
     public static String getDbVersion() {
         ConnectInfo connectInfo = getConnectInfo();

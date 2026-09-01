@@ -124,8 +124,8 @@ export const databaseMap: {
     name: 'Hive',
     code: DatabaseTypeCode.HIVE,
     icon: 'icon-colourful-HIVE',
-    supportDatabase: false,
-    supportSchema: true,
+    supportDatabase: true,
+    supportSchema: false,
   },
   [DatabaseTypeCode.KINGBASE]: {
     name: 'Kingbase',

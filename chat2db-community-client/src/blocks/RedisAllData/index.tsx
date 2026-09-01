@@ -636,6 +636,7 @@ const RedisAllData = (props) => {
           selectedRows={selectedRows}
           onSelectedRowsChange={handleSelectedRowsChange}
           onActivateRow={handleActivateRedisRow}
+          onRowClick={handleActivateRedisRow}
           onEscapeKey={handleCloseEditPane}
           primaryKey={viewMode === 'tree' ? 'key' : undefined}
           treeMode={viewMode === 'tree' ? redisTreeMode : undefined}

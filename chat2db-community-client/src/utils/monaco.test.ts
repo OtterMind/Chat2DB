@@ -10,6 +10,8 @@ const run = async () => {
   assert.equal(isMonacoCancellationError('Canceled'), true);
   assert.equal(isMonacoCancellationError({ name: 'Canceled', message: 'Canceled' }), true);
   assert.equal(isMonacoCancellationError(new Error('Canceled')), true);
+  assert.equal(isMonacoCancellationError(Object.assign(new Error('Canceled'), { code: 'ERR_CANCELED' })), true);
+  assert.equal(isMonacoCancellationError({ name: 'CanceledError' }), true);
   assert.equal(isMonacoCancellationError(new Error('boom')), false);
   assert.equal(isSuggestWidgetVisible(null), false);
   assert.equal(isSuggestWidgetVisible({ getContribution: () => null }), false);

@@ -16,7 +16,8 @@ interface CommunityMainActionBarProps {
   activePage: string;
   settingsActive: boolean;
   hideSettings: boolean;
-  extras?: ReactNode;
+  beforeTerminal?: ReactNode;
+  afterTerminal?: ReactNode;
   onNavigate: (item: INavItem) => void;
   onOpenSettings: () => void;
 }
@@ -26,7 +27,8 @@ const CommunityMainActionBar = ({
   activePage,
   settingsActive,
   hideSettings,
-  extras,
+  beforeTerminal,
+  afterTerminal,
   onNavigate,
   onOpenSettings,
 }: CommunityMainActionBarProps) => {
@@ -38,7 +40,7 @@ const CommunityMainActionBar = ({
       onNavigate(workspaceItem);
     }
   };
-  const showBottomActions = Boolean(extras) || isDesktop || !hideSettings;
+  const showBottomActions = Boolean(beforeTerminal) || isDesktop || Boolean(afterTerminal) || !hideSettings;
 
   return (
     <aside className={styles.actionBar}>
@@ -59,7 +61,7 @@ const CommunityMainActionBar = ({
 
       {showBottomActions && (
         <div className={styles.bottomActions}>
-          {extras}
+          {beforeTerminal}
           {isDesktop && (
             <QuickTerminalButton
               size={COMMUNITY_MAIN_ACTION_BUTTON_SIZE}
@@ -67,6 +69,7 @@ const CommunityMainActionBar = ({
               onBeforeCreate={handleBeforeCreateTerminal}
             />
           )}
+          {afterTerminal}
           {!hideSettings && (
             <IconButton
               type="primary"

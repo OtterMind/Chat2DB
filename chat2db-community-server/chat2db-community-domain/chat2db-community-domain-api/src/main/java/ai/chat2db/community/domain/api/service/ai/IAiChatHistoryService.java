@@ -36,6 +36,15 @@ public interface IAiChatHistoryService {
     List<AiChatSession> listSessions(Long userId);
 
     /**
+     * Renames an AI chat session without changing its activity time.
+     *
+     * @param sessionId chat session identifier.
+     * @param userId user identifier that owns the session.
+     * @param title new session title.
+     */
+    void renameSession(String sessionId, Long userId, String title);
+
+    /**
      * Lists persisted messages for an AI chat session.
      *
      * @param sessionId chat session identifier.

@@ -52,6 +52,20 @@ for (const host of ['src/blocks/Setting/index.tsx', 'src/pages/main/CommunityMai
   assert.match(readFileSync(host, 'utf8'), /clientExtension/);
 }
 
+const actionBarSource = readFileSync('src/pages/main/components/CommunityMainActionBar/index.tsx', 'utf8');
+const beforeTerminalIndex = actionBarSource.indexOf('{beforeTerminal}');
+const terminalIndex = actionBarSource.indexOf('{isDesktop &&');
+const afterTerminalIndex = actionBarSource.indexOf('{afterTerminal}');
+const settingsIndex = actionBarSource.indexOf('{!hideSettings &&');
+assert.ok(beforeTerminalIndex >= 0);
+assert.ok(beforeTerminalIndex < terminalIndex);
+assert.ok(terminalIndex < afterTerminalIndex);
+assert.ok(afterTerminalIndex < settingsIndex);
+
+const mainPageSource = readFileSync('src/pages/main/CommunityMainPage.tsx', 'utf8');
+assert.match(mainPageSource, /actionBarBeforeTerminal\s*\?\?\s*\n\s*clientExtension\.mainPage\.slots\?\.actionBarFooter/);
+assert.match(mainPageSource, /afterTerminal=\{clientExtension\.mainPage\.slots\?\.actionBarAfterTerminal\}/);
+
 const configSource = readFileSync('.umirc.ts', 'utf8');
 assert.match(configSource, /'@client-extension':/);
 assert.match(configSource, /'@client-runtime':/);

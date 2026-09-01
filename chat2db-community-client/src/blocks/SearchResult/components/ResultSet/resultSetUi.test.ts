@@ -33,6 +33,7 @@ import {
   isResultHeaderContext,
   joinContextMenuGroups,
 } from '../ResultSetTable/event/onContextmenuCell/menuGroups';
+import { matchResultSearchValue } from '../FESearch/searchMatcher';
 
 const exportBarSource = readFileSync('src/blocks/SearchResult/components/ExportBar/index.tsx', 'utf8');
 const tabsSource = readFileSync('src/components/Tabs/index.tsx', 'utf8');
@@ -127,6 +128,18 @@ test('result search escape and close action use the same close lifecycle', () =>
   });
 
   assert.deepEqual(calls, ['close']);
+});
+
+test('result search matches custom-rendered field names and regular cell values', () => {
+  const table = {
+    columns: [{ field: '1', originalData: { name: 'record_primary_key' } }],
+    getHeaderField: (col: number) => (col === 1 ? '1' : undefined),
+    isHeader: (_col: number, row: number) => row === 0,
+  } as any;
+
+  assert.equal(matchResultSearchValue('primary', '', { col: 1, row: 0, table }), true);
+  assert.equal(matchResultSearchValue('missing', '', { col: 1, row: 0, table }), false);
+  assert.equal(matchResultSearchValue('customer', 'customer-001', { col: 1, row: 1, table }), true);
 });
 
 test('record field focus updates the cell used by the value inspector', () => {
