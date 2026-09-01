@@ -109,4 +109,6 @@ public class TableIndexColumn implements Serializable {
 
 
     private String editStatus;
+
+    private String expression;
 }

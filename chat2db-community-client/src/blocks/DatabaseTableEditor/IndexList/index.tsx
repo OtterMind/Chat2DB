@@ -25,6 +25,7 @@ import { Context } from '../index';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import { useStyles } from '../ColumnList/style';
+import { staticMessage } from '@chat2db/ui';
 
 interface IProps {}
 
@@ -272,7 +273,7 @@ const IndexList = forwardRef((props: IProps, ref: ForwardedRef<IIndexListRef>) =
           const editable = isEditing(record);
           const text = columnList
             ?.map((t) => {
-              return `${t.columnName}`;
+              return t.expression ? `(${t.expression})` : `${t.columnName}`;
             })
             .join(',');
           return editable ? (
@@ -356,9 +357,15 @@ const IndexList = forwardRef((props: IProps, ref: ForwardedRef<IIndexListRef>) =
   }, [isEditing]);
 
   const getIncludeColInfo = () => {
+    let columnList: IIndexIncludeColumnItem[] | undefined;
+    try {
+      columnList = includeColRef.current?.getIncludeColInfo();
+    } catch (error) {
+      staticMessage.error(error instanceof Error ? error.message : i18n('common.text.failure'));
+      return;
+    }
     setDataSource(
       dataSource.map((i) => {
-        const columnList = includeColRef.current?.getIncludeColInfo();
         // Compare the old and new IncludeColInfo values.
         if (i.key === editingData?.key && columnList) {
           i.columnList = columnList;
@@ -375,7 +382,6 @@ const IndexList = forwardRef((props: IProps, ref: ForwardedRef<IIndexListRef>) =
         return i;
       }),
     );
-
     setIncludeColModalOpen(false);
   };
 

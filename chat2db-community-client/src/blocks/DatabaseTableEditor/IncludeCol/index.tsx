@@ -12,23 +12,33 @@ import {
   useImperativeHandle,
 } from 'react';
 import classnames from 'classnames';
-import { Table, Form, Select, Button } from 'antd';
+import { Table, Form, Select, Button, Input, InputNumber } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { Context } from '../index';
 import { IColumnItemNew, IIndexIncludeColumnItem } from '@/typings';
 import { shouldShowSqliteIncludeCollation } from '@/utils/databaseJudgments';
 import i18n from '@/i18n';
-import lodash from 'lodash';
 import Iconfont from '@/components/Iconfont';
 import { useStyles } from '../ColumnList/style';
+import {
+  applyIndexColumnKind,
+  getEditableIndexColumns,
+  getIndexColumnKind,
+  IEditableIndexIncludeColumnItem,
+  IndexColumnKind,
+  normalizeIndexIncludeColumn,
+  supportsMysqlExpressionIndex,
+  validateMysqlExpressionIndexRows,
+} from './model';
 
 interface IProps {
   includedColumnList: IIndexIncludeColumnItem[];
 }
 
-const createInitialData = () => {
+const createInitialData = (): IEditableIndexIncludeColumnItem => {
   return {
     key: uuidv4(),
+    indexColumnKind: IndexColumnKind.COLUMN,
     ascOrDesc: null, // ascending or descending order
     cardinality: null, // base
     collation: null, // sorting rules
@@ -45,6 +55,8 @@ const createInitialData = () => {
 
     databaseName: null, // database name
     tableName: null, // table name
+    subPart: null,
+    expression: null,
   };
 };
 
@@ -57,9 +69,10 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
   const { styles } = useStyles();
   const {
     columnListRef,
-    databaseBaseInfo: { databaseType },
+    databaseBaseInfo: { databaseType, dbVersion },
+    tableDetails,
   } = useContext(Context);
-  const [dataSource, setDataSource] = useState<IIndexIncludeColumnItem[]>([createInitialData()]);
+  const [dataSource, setDataSource] = useState<IEditableIndexIncludeColumnItem[]>([createInitialData()]);
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const isEditing = (record: IIndexIncludeColumnItem) => record.key === editingKey;
@@ -72,6 +85,7 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
           return {
             ...t,
             key: uuidv4(),
+            indexColumnKind: getIndexColumnKind(t),
           };
         }),
       );
@@ -79,9 +93,11 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
   }, [includedColumnList]);
 
   const columnList: IColumnItemNew[] = useMemo(() => {
-    const columnListInfo = columnListRef.current?.getColumnListInfo()?.filter((i) => i.name !== null);
-    return columnListInfo || [];
-  }, []);
+    const columnListInfo = columnListRef.current?.getColumnListInfo() || tableDetails.columnList || [];
+    return getEditableIndexColumns(columnListInfo);
+  }, [columnListRef, tableDetails]);
+
+  const expressionIndexSupported = supportsMysqlExpressionIndex(databaseType, dbVersion || tableDetails.dbVersion);
 
   const edit = (record: any) => {
     form.setFieldsValue({ ...record });
@@ -109,16 +125,68 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
       dataIndex: 'index',
       width: '50px',
       align: 'center',
-      render: (text: string, record: IIndexIncludeColumnItem) => {
+      render: (text: string, record: IEditableIndexIncludeColumnItem) => {
         return dataSource.findIndex((i) => i.key === record.key) + 1;
       },
     },
+    ...(expressionIndexSupported
+      ? [
+          {
+            title: i18n('editTable.label.indexColumnKind'),
+            dataIndex: 'indexColumnKind',
+            width: '120px',
+            render: (text: IndexColumnKind, record: IEditableIndexIncludeColumnItem) => {
+              const editable = isEditing(record);
+              return editable ? (
+                <Form.Item name="indexColumnKind" style={{ margin: 0 }}>
+                  <Select
+                    options={[
+                      { label: i18n('editTable.label.columnName'), value: IndexColumnKind.COLUMN },
+                      { label: i18n('editTable.label.expression'), value: IndexColumnKind.EXPRESSION },
+                    ]}
+                  />
+                </Form.Item>
+              ) : (
+                <div className={styles.editableCell} onClick={() => edit(record)}>
+                  {text === IndexColumnKind.EXPRESSION
+                    ? i18n('editTable.label.expression')
+                    : i18n('editTable.label.columnName')}
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
     {
       title: i18n('editTable.label.columnName'),
       dataIndex: 'columnName',
       // width: '45%',
-      render: (text: string, record: IIndexIncludeColumnItem) => {
+      render: (text: string, record: IEditableIndexIncludeColumnItem) => {
         const editable = isEditing(record);
+        if (getIndexColumnKind(record) === IndexColumnKind.EXPRESSION) {
+          return editable ? (
+            <Form.Item
+              name="expression"
+              style={{ margin: 0 }}
+              rules={[
+                {
+                  validator: async (_, value) => {
+                    if (!value || !validateMysqlExpressionIndexRows([{ ...record, expression: value }])) {
+                      return;
+                    }
+                    throw new Error(i18n('editTable.validation.invalidMysqlExpressionIndex'));
+                  },
+                },
+              ]}
+            >
+              <Input autoComplete="off" placeholder="lower(`email`)" />
+            </Form.Item>
+          ) : (
+            <div className={styles.editableCell} onClick={() => edit(record)}>
+              {`(${record.expression})`}
+            </div>
+          );
+        }
         return editable ? (
           <Form.Item name="columnName" style={{ margin: 0 }}>
             <Select options={columnList.map((i) => ({ label: i.name, value: i.name }))} />
@@ -131,9 +199,29 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
       },
     },
     {
+      title: i18n('editTable.label.prefixLength'),
+      dataIndex: 'subPart',
+      width: '110px',
+      render: (text: number | null, record: IEditableIndexIncludeColumnItem) => {
+        const editable = isEditing(record);
+        if (getIndexColumnKind(record) === IndexColumnKind.EXPRESSION) {
+          return <div className={styles.editableCell} />;
+        }
+        return editable ? (
+          <Form.Item name="subPart" style={{ margin: 0 }}>
+            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+          </Form.Item>
+        ) : (
+          <div className={styles.editableCell} onClick={() => edit(record)}>
+            {text}
+          </div>
+        );
+      },
+    },
+    {
       title: i18n('editTable.label.order'),
       dataIndex: 'ascOrDesc',
-      render: (text: string, record: IIndexIncludeColumnItem) => {
+      render: (text: string, record: IEditableIndexIncludeColumnItem) => {
         const editable = isEditing(record);
         return editable ? (
           <Form.Item name="ascOrDesc" style={{ margin: 0 }}>
@@ -153,7 +241,7 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
     },
     {
       width: '40px',
-      render: (text: string, record: IIndexIncludeColumnItem) => {
+      render: (text: string, record: IEditableIndexIncludeColumnItem) => {
         return (
           <div
             className={styles.operationBar}
@@ -192,7 +280,7 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
     columns.splice(2, 0, {
       title: i18n('editTable.label.collation'),
       dataIndex: 'collation',
-      render: (text: string, record: IIndexIncludeColumnItem) => {
+      render: (text: string, record: IEditableIndexIncludeColumnItem) => {
         const editable = isEditing(record);
         return editable ? (
           <Form.Item name="collation" style={{ margin: 0 }}>
@@ -219,9 +307,16 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
     const name = nameList[0];
     const newData = dataSource.map((item) => {
       if (item.key === editingKey) {
-        return {
+        if (name === 'indexColumnKind') {
+          return applyIndexColumnKind(item, value);
+        }
+        const next = {
           ...item,
           [name]: value,
+        };
+        return {
+          ...next,
+          indexColumnKind: getIndexColumnKind(next),
         };
       }
       return item;
@@ -230,11 +325,14 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
   };
 
   const getIncludeColInfo = (): IIndexIncludeColumnItem[] => {
-    return dataSource
-      .map((t) => {
-        return lodash.omit(t, 'key');
-      })
-      .filter((t) => t.columnName);
+    const normalized = dataSource.map(normalizeIndexIncludeColumn).filter((t) => t.columnName || t.expression);
+    const invalidExpression = expressionIndexSupported
+      ? validateMysqlExpressionIndexRows(normalized)
+      : null;
+    if (invalidExpression) {
+      throw new Error(i18n('editTable.validation.invalidMysqlExpressionIndex'));
+    }
+    return normalized;
   };
 
   useImperativeHandle(ref, () => ({

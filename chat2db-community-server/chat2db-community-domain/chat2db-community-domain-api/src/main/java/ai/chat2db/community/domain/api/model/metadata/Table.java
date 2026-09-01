@@ -58,6 +58,9 @@ public class Table implements Serializable {
     private String dbType;
 
 
+    private String dbVersion;
+
+
 
 
     @JsonAlias("TABLE_CAT")

@@ -16,6 +16,8 @@ export default {
   'editTable.button.importTable': '테이블 내보내기',
   'editTable.label.index': '인덱스',
   'editTable.label.columnName': '열 이름',
+  'editTable.label.expression': '표현식',
+  'editTable.label.indexColumnKind': '항목 유형',
   'editTable.label.columnSize': '크기',
   'editTable.label.columnType': '유형',
   'editTable.label.nullable': 'NULL 허용',
@@ -37,4 +39,7 @@ export default {
   'editTable.button.addColumn': '열 추가',
   'editTable.button.addIndex': '인덱스 추가',
   'editTable.placeholder.aiModifyTable': '자연어로 테이블 구조 수정',
+  'editTable.validation.invalidMysqlExpressionIndex': 'MySQL에서 지원하는 표현식 인덱스 표현식을 입력하세요',
+  'editTable.warning.mysqlExpressionIndexRebuild':
+    '표현식 인덱스를 생성하거나 수정하면 테이블이 재구성되고 쓰기가 잠기며 큰 MySQL 테이블에서는 시간이 더 오래 걸릴 수 있습니다.',
 };

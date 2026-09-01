@@ -111,6 +111,7 @@ public class DbTableServiceImpl implements IDbTableService {
                         new ViewMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName()));
                 if (CollectionUtils.isNotEmpty(views)) {
                     Table table = views.get(0);
+                    table.setDbVersion(resolveDbVersion());
                     table.setColumnList(
                             metaSchema.columns(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
@@ -122,6 +123,7 @@ public class DbTableServiceImpl implements IDbTableService {
                         new TablesRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName()));
                 if (!CollectionUtils.isEmpty(tables)) {
                     Table table = tables.get(0);
+                    table.setDbVersion(resolveDbVersion());
                     table.setIndexList(
                             metaSchema.indexes(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
@@ -134,6 +136,15 @@ public class DbTableServiceImpl implements IDbTableService {
         }
         return null;
 
+    }
+
+    private String resolveDbVersion() {
+        try {
+            return Chat2DBContext.getDbVersion();
+        } catch (Exception e) {
+            log.warn("Resolve database version failed", e);
+            return null;
+        }
     }
 
     @Override

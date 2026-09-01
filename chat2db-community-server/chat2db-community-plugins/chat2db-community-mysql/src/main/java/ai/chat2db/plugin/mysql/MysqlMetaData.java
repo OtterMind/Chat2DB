@@ -233,31 +233,51 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         List<TableColumn> tableColumns = new ArrayList<>();
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             while (resultSet.next()) {
-                TableColumn column = new TableColumn();
-                column.setDatabaseName(databaseName);
-                column.setTableName(tableName);
-                column.setOldName(resultSet.getString(FIELD_COLUMN_NAME_UPPER));
-                column.setName(resultSet.getString(FIELD_COLUMN_NAME_UPPER));
-                column.setColumnType(resultSet.getString(FIELD_DATA_TYPE).toUpperCase());
-                column.setDefaultValue(resultSet.getString(FIELD_COLUMN_DEFAULT));
-                column.setAutoIncrement(resultSet.getString(FIELD_EXTRA).contains(SQL_AUTO_INCREMENT));
-                column.setOnUpdateCurrentTimestamp(resultSet.getString(FIELD_EXTRA).contains(SQL_ON_UPDATE_CURRENT_TIMESTAMP));
-                column.setComment(resultSet.getString(FIELD_COLUMN_COMMENT));
-                column.setPrimaryKey(SQL_PRIMARY_KEY_FLAG.equalsIgnoreCase(resultSet.getString(FIELD_COLUMN_KEY)));
-                column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);
-                column.setOrdinalPosition(resultSet.getInt(FIELD_ORDINAL_POSITION));
-                column.setDecimalDigits(resultSet.getInt(FIELD_NUMERIC_SCALE));
-                column.setCharSetName(resultSet.getString(FIELD_CHARACTER_SET_NAME));
-                column.setCollationName(resultSet.getString(FIELD_COLLATION_NAME));
-                setColumnSize(column, resultSet.getString(FIELD_COLUMN_TYPE));
-
-                tableColumns.add(column);
+                TableColumn column = toTableColumn(resultSet, databaseName, tableName);
+                if (column != null) {
+                    tableColumns.add(column);
+                }
             }
             return tableColumns;
         });
     }
 
-    private void setColumnSize(TableColumn column, String columnType) {
+    static TableColumn toTableColumn(ResultSet resultSet, String databaseName, String tableName) throws SQLException {
+        String columnName = resultSet.getString(FIELD_COLUMN_NAME_UPPER);
+        String extra = StringUtils.defaultString(resultSet.getString(FIELD_EXTRA));
+        String generationExpression = resultSet.getString(FIELD_GENERATION_EXPRESSION);
+        boolean generatedColumn = StringUtils.isNotBlank(generationExpression)
+                || StringUtils.containsIgnoreCase(extra, SQL_GENERATED);
+        if (isHiddenGeneratedFunctionalIndexColumn(columnName, generatedColumn)) {
+            return null;
+        }
+
+        TableColumn column = new TableColumn();
+        column.setDatabaseName(databaseName);
+        column.setTableName(tableName);
+        column.setOldName(columnName);
+        column.setName(columnName);
+        column.setColumnType(resultSet.getString(FIELD_DATA_TYPE).toUpperCase());
+        column.setDefaultValue(resultSet.getString(FIELD_COLUMN_DEFAULT));
+        column.setAutoIncrement(extra.contains(SQL_AUTO_INCREMENT));
+        column.setOnUpdateCurrentTimestamp(extra.contains(SQL_ON_UPDATE_CURRENT_TIMESTAMP));
+        column.setGeneratedColumn(generatedColumn);
+        column.setComment(resultSet.getString(FIELD_COLUMN_COMMENT));
+        column.setPrimaryKey(SQL_PRIMARY_KEY_FLAG.equalsIgnoreCase(resultSet.getString(FIELD_COLUMN_KEY)));
+        column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);
+        column.setOrdinalPosition(resultSet.getInt(FIELD_ORDINAL_POSITION));
+        column.setDecimalDigits(resultSet.getInt(FIELD_NUMERIC_SCALE));
+        column.setCharSetName(resultSet.getString(FIELD_CHARACTER_SET_NAME));
+        column.setCollationName(resultSet.getString(FIELD_COLLATION_NAME));
+        setColumnSize(column, resultSet.getString(FIELD_COLUMN_TYPE));
+        return column;
+    }
+
+    static boolean isHiddenGeneratedFunctionalIndexColumn(String columnName, boolean generatedColumn) {
+        return generatedColumn && StringUtils.containsIgnoreCase(columnName, SQL_HIDDEN_COLUMN_MARKER);
+    }
+
+    private static void setColumnSize(TableColumn column, String columnType) {
         try {
             String size = extractColumnTypeArguments(columnType);
             if (size != null) {
@@ -324,7 +344,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 TableIndex tableIndex = map.get(keyName);
                 if (tableIndex != null) {
                     List<TableIndexColumn> columnList = tableIndex.getColumnList();
-                    columnList.add(getTableIndexColumn(resultSet));
+                    columnList.add(toTableIndexColumn(resultSet));
                     columnList = columnList.stream().sorted(Comparator.comparing(TableIndexColumn::getOrdinalPosition))
                             .collect(Collectors.toList());
                     tableIndex.setColumnList(columnList);
@@ -345,7 +365,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                         index.setComment(resultSet.getString(FIELD_INDEX_COMMENT_FALLBACK));
                     }
                     List<TableIndexColumn> tableIndexColumns = new ArrayList<>();
-                    tableIndexColumns.add(getTableIndexColumn(resultSet));
+                    tableIndexColumns.add(toTableIndexColumn(resultSet));
                     index.setColumnList(tableIndexColumns);
                     if (SQL_PRIMARY_INDEX_NAME.equalsIgnoreCase(keyName)) {
                         index.setType(MysqlIndexTypeEnum.PRIMARY_KEY.getName());
@@ -366,13 +386,21 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
 
     }
 
-    private TableIndexColumn getTableIndexColumn(ResultSet resultSet) throws SQLException {
+    static TableIndexColumn toTableIndexColumn(ResultSet resultSet) throws SQLException {
         TableIndexColumn tableIndexColumn = new TableIndexColumn();
         tableIndexColumn.setColumnName(resultSet.getString(FIELD_COLUMN_NAME));
         tableIndexColumn.setOrdinalPosition(resultSet.getShort(FIELD_SEQ_IN_INDEX));
         tableIndexColumn.setCollation(resultSet.getString(FIELD_COLLATION));
         tableIndexColumn.setCardinality(resultSet.getLong(FIELD_CARDINALITY));
         tableIndexColumn.setSubPart(resultSet.getLong(FIELD_SUB_PART));
+        try {
+            String expression = resultSet.getString(FIELD_EXPRESSION);
+            if (StringUtils.isNotBlank(expression)) {
+                tableIndexColumn.setExpression(expression);
+            }
+        } catch (SQLException e) {
+            // MySQL 5.7 and 8.0.12 or earlier do not have the Expression column
+        }
         String collation = resultSet.getString(FIELD_COLLATION);
         if (INDEX_COLLATION_ASC.equalsIgnoreCase(collation)) {
             tableIndexColumn.setAscOrDesc(INDEX_ASC);

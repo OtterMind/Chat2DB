@@ -1,6 +1,16 @@
 package ai.chat2db.plugin.mysql;
 
+import ai.chat2db.mysql.parser.base.MySqlLexer;
+import ai.chat2db.mysql.parser.base.MySqlParser;
 import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
+import org.antlr.v4.runtime.BailErrorStrategy;
+import org.antlr.v4.runtime.BaseErrorListener;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Recognizer;
+import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -29,6 +39,19 @@ public final class MysqlSqlGuards {
             "^([A-Za-z0-9_$]+|" + DEFINER_QUOTED_PART + ")@([A-Za-z0-9_.%:$-]+|" + DEFINER_QUOTED_PART + ")$");
     private static final Pattern COLUMN_TYPE_PATTERN = Pattern.compile(
             "^[A-Za-z][A-Za-z0-9_]*(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?(?:\\s+[A-Za-z][A-Za-z0-9_]*)*$");
+    private static final Pattern FUNCTIONAL_INDEX_UNSAFE_TOKEN_PATTERN = Pattern.compile("(;|--|#|/\\*|\\*/)");
+    private static final Pattern BARE_IDENTIFIER_PATTERN = Pattern.compile("^`(?:``|[^`])+`$|^[A-Za-z_$][A-Za-z0-9_$]*$");
+    private static final Pattern NONDETERMINISTIC_FUNCTION_PATTERN = Pattern.compile(
+            "(^|[^A-Za-z0-9_$])(?:connection_id|current_date|current_time|current_timestamp|curdate|curtime|database|last_insert_id|localtime|localtimestamp|now|rand|sysdate|uuid|uuid_short|version)\\s*\\(",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern MYSQL_VERSION_PATTERN = Pattern.compile(".*?(\\d+)\\.(\\d+)\\.(\\d+).*");
+    private static final BaseErrorListener THROWING_ERROR_LISTENER = new BaseErrorListener() {
+        @Override
+        public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line,
+                                int charPositionInLine, String message, RecognitionException exception) {
+            throw new ParseCancellationException(message, exception);
+        }
+    };
 
     private MysqlSqlGuards() {
     }
@@ -117,6 +140,58 @@ public final class MysqlSqlGuards {
             return "DESC";
         }
         throw new IllegalArgumentException("Invalid MySQL index sort direction: " + value);
+    }
+
+    public static String requireFunctionalIndexExpression(String value) {
+        String expression = normalizeFunctionalIndexExpression(value);
+        if (!isFunctionalIndexExpressionSyntaxSupported(expression)) {
+            throw new IllegalArgumentException("Invalid MySQL functional index expression: " + value);
+        }
+        return expression;
+    }
+
+    public static boolean isFunctionalIndexExpressionSyntaxSupported(String value) {
+        String expression = normalizeFunctionalIndexExpression(value);
+        if (StringUtils.isBlank(expression)
+                || BARE_IDENTIFIER_PATTERN.matcher(expression).matches()
+                || FUNCTIONAL_INDEX_UNSAFE_TOKEN_PATTERN.matcher(expression).find()
+                || NONDETERMINISTIC_FUNCTION_PATTERN.matcher(expression).find()
+                || !hasBalancedExpressionDelimiters(expression)) {
+            return false;
+        }
+        try {
+            MySqlLexer lexer = new MySqlLexer(CharStreams.fromString(expression));
+            lexer.removeErrorListeners();
+            lexer.addErrorListener(THROWING_ERROR_LISTENER);
+            CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+            MySqlParser parser = new MySqlParser(tokenStream);
+            parser.removeErrorListeners();
+            parser.addErrorListener(THROWING_ERROR_LISTENER);
+            parser.setErrorHandler(new BailErrorStrategy());
+            parser.expression();
+            return tokenStream.LA(1) == Token.EOF;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    public static String normalizeFunctionalIndexExpression(String value) {
+        String expression = StringUtils.trimToEmpty(value);
+        while (hasOuterParentheses(expression)) {
+            expression = expression.substring(1, expression.length() - 1).trim();
+        }
+        return expression;
+    }
+
+    public static boolean supportsFunctionalIndex(String version) {
+        java.util.regex.Matcher matcher = MYSQL_VERSION_PATTERN.matcher(StringUtils.trimToEmpty(version));
+        if (!matcher.matches()) {
+            return false;
+        }
+        int major = Integer.parseInt(matcher.group(1));
+        int minor = Integer.parseInt(matcher.group(2));
+        int patch = Integer.parseInt(matcher.group(3));
+        return major > 8 || (major == 8 && (minor > 0 || patch >= 13));
     }
 
     /**
@@ -269,5 +344,61 @@ public final class MysqlSqlGuards {
 
     private static IllegalArgumentException invalidEnumValues(String raw) {
         return new IllegalArgumentException("Invalid MySQL ENUM/SET values: " + raw);
+    }
+
+    private static boolean hasOuterParentheses(String expression) {
+        if (expression.length() < 2 || expression.charAt(0) != '(' || expression.charAt(expression.length() - 1) != ')') {
+            return false;
+        }
+        int depth = 0;
+        for (int index = 0; index < expression.length(); index++) {
+            char character = expression.charAt(index);
+            if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth--;
+                if (depth == 0 && index < expression.length() - 1) {
+                    return false;
+                }
+            }
+            if (depth < 0) {
+                return false;
+            }
+        }
+        return depth == 0;
+    }
+
+    private static boolean hasBalancedExpressionDelimiters(String expression) {
+        int depth = 0;
+        Character quote = null;
+        for (int index = 0; index < expression.length(); index++) {
+            char character = expression.charAt(index);
+            if (quote != null) {
+                if (character == '\\') {
+                    index++;
+                    continue;
+                }
+                if (character == quote) {
+                    if ((quote == '`' || quote == '\'') && index + 1 < expression.length()
+                            && expression.charAt(index + 1) == quote) {
+                        index++;
+                    } else {
+                        quote = null;
+                    }
+                }
+                continue;
+            }
+            if (character == '\'' || character == '"' || character == '`') {
+                quote = character;
+            } else if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth--;
+                if (depth < 0) {
+                    return false;
+                }
+            }
+        }
+        return depth == 0 && quote == null;
     }
 }

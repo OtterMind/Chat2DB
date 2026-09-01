@@ -14,6 +14,7 @@ export interface IDatabaseBaseInfo {
   dataSourceId?: number;
   dataSourceName?: string;
   databaseType?: DatabaseTypeCode;
+  dbVersion?: string | null;
   databaseName?: string;
   schemaName?: string;
   tableName?: string;

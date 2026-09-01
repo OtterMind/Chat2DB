@@ -76,6 +76,7 @@ export interface IBoundInfo {
   watermarkEnabled?: boolean | null;
   watermarkContent?: string | null;
   databaseType?: DatabaseTypeCode;
+  dbVersion?: string | null;
   databaseName?: string;
   schemaName?: string;
   status?: ConsoleStatus;

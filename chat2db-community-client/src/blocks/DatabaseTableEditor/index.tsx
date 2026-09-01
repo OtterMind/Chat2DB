@@ -1,5 +1,5 @@
 import React, { memo, useRef, useState, createContext, useEffect, useMemo } from 'react';
-import { Button, Modal, Segmented } from 'antd';
+import { Alert, Button, Modal, Segmented } from 'antd';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import IndexList, { IIndexListRef } from './IndexList';
@@ -15,6 +15,7 @@ import { staticMessage } from '@chat2db/ui';
 import AIEntryButton from '@/components/AIEntryButton';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
+import { hasExpressionIndexMutation } from './IncludeCol/model';
 
 interface IProps {
   databaseBaseInfo: IDatabaseBaseInfo;
@@ -62,6 +63,7 @@ export default memo((props: IProps) => {
   const columnListRef = useRef<IColumnListRef>(null);
   const indexListRef = useRef<IIndexListRef>(null);
   const [appendValue, setAppendValue] = useState<string>('');
+  const [showExpressionIndexSqlWarning, setShowExpressionIndexSqlWarning] = useState(false);
   const aiEntryButtonRef = useRef<HTMLDivElement>(null);
 
   const contentList = [
@@ -122,6 +124,9 @@ export default memo((props: IProps) => {
 
   // Get database field type list
   const getDatabaseFieldTypeList = () => {
+    if (dataSourceId == null || !databaseName) {
+      return;
+    }
     sqlService
       .getDatabaseFieldTypeList({
         dataSourceId,
@@ -191,7 +196,7 @@ export default memo((props: IProps) => {
   const getTableDetails = (myParams?: { tableNameProps?: string }) => {
     const { tableNameProps } = myParams || {};
     const myTableName = tableNameProps || tableName;
-    if (myTableName) {
+    if (dataSourceId != null && myTableName) {
       const params = {
         databaseName,
         dataSourceId,
@@ -205,6 +210,15 @@ export default memo((props: IProps) => {
         .then((res) => {
           const newTableDetails = lodash.cloneDeep(res);
           setTableDetails(newTableDetails || {});
+          if (res?.dbVersion && !databaseBaseInfo.dbVersion) {
+            changeTabDetails({
+              ...tabDetails,
+              uniqueData: {
+                ...(tabDetails.uniqueData || {}),
+                dbVersion: res.dbVersion,
+              },
+            });
+          }
           setOldTableDetails(res);
         })
         .finally(() => {
@@ -215,12 +229,16 @@ export default memo((props: IProps) => {
 
   function submit() {
     if (baseInfoRef.current && columnListRef.current && indexListRef.current) {
+      if (dataSourceId == null || !databaseName) {
+        return;
+      }
       const newTable = {
         ...oldTableDetails,
         ...baseInfoRef.current.getBaseInfo(),
         columnList: columnListRef.current.getColumnListInfo()!,
         indexList: indexListRef.current.getIndexListInfo()!,
       };
+      setShowExpressionIndexSqlWarning(hasExpressionIndexMutation(newTable.indexList));
 
       const params: IModifyTableSqlParams = {
         databaseName,
@@ -320,6 +338,14 @@ export default memo((props: IProps) => {
         footer={false}
         destroyOnClose={true}
       >
+        {showExpressionIndexSqlWarning && (
+          <Alert
+            type="warning"
+            showIcon
+            message={i18n('editTable.warning.mysqlExpressionIndexRebuild')}
+            style={{ marginBottom: 12 }}
+          />
+        )}
         <ExecuteSQL
           initSql={appendValue}
           databaseBaseInfo={databaseBaseInfo}

@@ -16,6 +16,8 @@ export default {
   'editTable.button.importTable': 'テーブルをエクスポート',
   'editTable.label.index': 'インデックス',
   'editTable.label.columnName': '名前',
+  'editTable.label.expression': '式',
+  'editTable.label.indexColumnKind': '項目タイプ',
   'editTable.label.columnSize': 'サイズ',
   'editTable.label.columnType': 'タイプ',
   'editTable.label.nullable': 'Null許容',
@@ -37,4 +39,7 @@ export default {
   'editTable.button.addColumn': '列を追加',
   'editTable.button.addIndex': 'インデックスを追加',
   'editTable.placeholder.aiModifyTable': '自然言語でテーブル構造を変更',
+  'editTable.validation.invalidMysqlExpressionIndex': 'MySQL がサポートする式インデックス式を入力してください',
+  'editTable.warning.mysqlExpressionIndexRebuild':
+    '式インデックスの作成または変更ではテーブルが再構築され、書き込みがロックされ、大きな MySQL テーブルでは時間がかかる場合があります。',
 };

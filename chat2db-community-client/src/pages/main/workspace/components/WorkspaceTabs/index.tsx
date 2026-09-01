@@ -1768,6 +1768,7 @@ const WorkspaceTabs = memo(() => {
         databaseBaseInfo={{
           dataSourceId: uniqueData.dataSourceId!,
           databaseType: uniqueData.databaseType!,
+          dbVersion: uniqueData.dbVersion,
           databaseName: uniqueData.databaseName!,
           schemaName: uniqueData.schemaName,
           tableName: uniqueData.tableName,

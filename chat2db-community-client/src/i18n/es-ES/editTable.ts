@@ -16,6 +16,8 @@ export default {
   'editTable.button.importTable': 'Exportar tabla',
   'editTable.label.index': 'Índice',
   'editTable.label.columnName': 'Nombre de columna',
+  'editTable.label.expression': 'Expresión',
+  'editTable.label.indexColumnKind': 'Tipo de entrada',
   'editTable.label.columnSize': 'Tamaño',
   'editTable.label.columnType': 'Tipo',
   'editTable.label.nullable': 'Permite NULL',
@@ -37,4 +39,7 @@ export default {
   'editTable.button.addColumn': 'Añadir columna',
   'editTable.button.addIndex': 'Añadir índice',
   'editTable.placeholder.aiModifyTable': 'Modificar la estructura de la tabla mediante lenguaje natural',
+  'editTable.validation.invalidMysqlExpressionIndex': 'Introduce una expresión de índice de MySQL compatible',
+  'editTable.warning.mysqlExpressionIndexRebuild':
+    'Crear o modificar índices de expresión puede reconstruir la tabla, bloquear escrituras y tardar más en tablas MySQL grandes.',
 };

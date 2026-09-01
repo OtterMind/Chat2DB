@@ -37,7 +37,7 @@ export interface IColumnItemNew {
   charOctetLength: string | null; // Maximum length of string
   ordinalPosition: number | null; // location
   nullable: NullableType | null; //Is it empty
-  generatedColumn: string | null; // Whether to generate columns
+  generatedColumn: boolean | string | null; // Whether to generate columns
 
   charSetName: string | null; // Character set name
   collationName: string | null; // collation name
@@ -62,6 +62,8 @@ export interface IIndexIncludeColumnItem {
   tableName: string | null; // table name
   type: string | null; // Type
   pages: number | null; // Number of pages
+  subPart?: number | null; // Prefix length
+  expression?: string | null; // Functional index expression (MySQL 8.0.13+)
 }
 
 // Data structure of index when editing table
@@ -77,6 +79,7 @@ export interface IIndexItem {
 
 // The overall data structure when editing the table
 export interface IEditTableInfo extends IBaseInfo {
+  dbVersion?: string | null;
   columnList: IColumnItemNew[];
   indexList: IIndexItem[];
 }

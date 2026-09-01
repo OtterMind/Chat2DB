@@ -16,6 +16,8 @@ export default {
   'editTable.button.importTable': 'Export Table',
   'editTable.label.index': 'Index',
   'editTable.label.columnName': 'Column name',
+  'editTable.label.expression': 'Expression',
+  'editTable.label.indexColumnKind': 'Entry type',
   'editTable.label.columnSize': 'Size',
   'editTable.label.columnType': 'Type',
   'editTable.label.nullable': 'Nullable',
@@ -37,4 +39,7 @@ export default {
   'editTable.button.addColumn': 'Add column',
   'editTable.button.addIndex': 'Add Index',
   'editTable.placeholder.aiModifyTable': 'Modify table structure in natural language',
+  'editTable.validation.invalidMysqlExpressionIndex': 'Enter a supported MySQL expression index expression',
+  'editTable.warning.mysqlExpressionIndexRebuild':
+    'Creating or modifying expression indexes can rebuild the table, lock writes, and take longer on large MySQL tables.',
 };

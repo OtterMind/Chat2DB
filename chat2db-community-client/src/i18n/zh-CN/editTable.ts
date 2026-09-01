@@ -16,6 +16,8 @@ export default {
   'editTable.button.importTable': '导出表',
   'editTable.label.index': '序号',
   'editTable.label.columnName': '列名',
+  'editTable.label.expression': '表达式',
+  'editTable.label.indexColumnKind': '索引项类型',
   'editTable.label.columnSize': '长度',
   'editTable.label.columnType': '类型',
   'editTable.label.nullable': '可空',
@@ -37,4 +39,7 @@ export default {
   'editTable.button.addColumn': '添加列',
   'editTable.button.addIndex': '添加索引',
   'editTable.placeholder.aiModifyTable': '自然语言修改表结构',
+  'editTable.validation.invalidMysqlExpressionIndex': '请输入 MySQL 支持的表达式索引表达式',
+  'editTable.warning.mysqlExpressionIndexRebuild':
+    '创建或修改表达式索引可能会重建表、锁定写入，大型 MySQL 表耗时会更长。',
 };

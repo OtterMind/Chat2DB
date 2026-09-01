@@ -6,6 +6,8 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 
@@ -106,17 +108,55 @@ public enum MysqlIndexTypeEnum {
         StringBuilder script = new StringBuilder();
         script.append("(");
         for (TableIndexColumn column : tableIndex.getColumnList()) {
-            if(StringUtils.isNotBlank(column.getColumnName())) {
+            boolean hasColumnName = StringUtils.isNotBlank(column.getColumnName());
+            boolean hasExpression = StringUtils.isNotBlank(column.getExpression());
+            if (hasColumnName && hasExpression) {
+                throw new IllegalArgumentException("MySQL index key part cannot be both column and expression");
+            }
+            if(hasColumnName) {
                 script.append(MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(column.getColumnName()));
+                appendPrefixLength(script, column);
                 if (!StringUtils.isBlank(column.getAscOrDesc()) && !PRIMARY_KEY.equals(this)) {
+                    script.append(" ").append(MysqlSqlGuards.requireAscOrDesc(column.getAscOrDesc()));
+                }
+                script.append(",");
+            } else if (hasExpression) {
+                requireFunctionalIndexSupport();
+                script.append("(").append(MysqlSqlGuards.requireFunctionalIndexExpression(column.getExpression())).append(")");
+                if (!StringUtils.isBlank(column.getAscOrDesc())) {
                     script.append(" ").append(MysqlSqlGuards.requireAscOrDesc(column.getAscOrDesc()));
                 }
                 script.append(",");
             }
         }
+        if (script.length() == 1) {
+            throw new IllegalArgumentException("MySQL index must include at least one column or expression");
+        }
         script.deleteCharAt(script.length() - 1);
         script.append(")");
         return script.toString();
+    }
+
+    private void appendPrefixLength(StringBuilder script, TableIndexColumn column) {
+        Long subPart = column.getSubPart();
+        if (subPart == null || subPart <= 0) {
+            return;
+        }
+        script.append("(").append(subPart).append(")");
+    }
+
+    private void requireFunctionalIndexSupport() {
+        if (PRIMARY_KEY.equals(this) || FULLTEXT.equals(this) || SPATIAL.equals(this)) {
+            throw new IllegalArgumentException("MySQL functional indexes only support normal or unique indexes");
+        }
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null) {
+            return;
+        }
+        String dbVersion = Chat2DBContext.getDbVersion();
+        if (!MysqlSqlGuards.supportsFunctionalIndex(dbVersion)) {
+            throw new IllegalArgumentException("MySQL functional indexes require MySQL 8.0.13 or later: " + dbVersion);
+        }
     }
 
     private String buildIndexName(TableIndex tableIndex) {
