@@ -20,6 +20,7 @@ import aiService from '@/service/ai';
 import connectionService from '@/service/connection';
 import historyServer from '@/service/history';
 import sqlService from '@/service/sql';
+import viewService from '@/service/database/view';
 
 // ---- functions -----
 import { copyToClipboard, getParentNode } from '@/utils';
@@ -27,7 +28,15 @@ import { staticMessage, staticModal } from '@chat2db/ui';
 import { deleteTable } from '../functions/deleteTable';
 import { generateJavaClass } from '../functions/generateJavaClass';
 import { neatenMoveToGroup } from '../functions/moveToGroup';
-import { editView, openFunction, openProcedure, openTrigger, openView } from '../functions/openAsyncSql';
+import {
+  createView,
+  editView,
+  formatQuotedQualifiedName,
+  openFunction,
+  openProcedure,
+  openTrigger,
+  openView,
+} from '../functions/openAsyncSql';
 import { handelPinTable } from '../functions/pinTable';
 import { openSchemaSyncModal } from '../functions/schemaSync';
 import { viewDDL } from '../functions/viewDDL';
@@ -904,6 +913,53 @@ export const useCreateRightClickMenu = () => {
         icon: 'icon-edit',
         handle: () => {
           editView({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.CreateView]: {
+        text: i18n('workspace.menu.createView'),
+        icon: 'icon-table-view',
+        handle: () => {
+          createView({
+            treeNodeData,
+            addWorkspaceTab,
+            title: i18n('workspace.menu.createView'),
+            submitCallback: () => {
+              handleLoadData(treeNodeData, { refresh: true });
+            },
+          });
+        },
+      },
+
+      [OperationColumn.DropView]: {
+        text: i18n('workspace.menu.dropView'),
+        icon: 'icon-delete',
+        handle: () => {
+          const viewName = treeNodeData.originalTitle;
+          const ep = treeNodeData.extraParams;
+          staticModal.confirm({
+            title: i18n('workspace.menu.dropView'),
+            content: formatQuotedQualifiedName([ep.databaseName, viewName]),
+            okText: i18n('common.button.confirm'),
+            cancelText: i18n('common.button.cancel'),
+            okType: 'danger',
+            onOk: () => {
+              viewService
+                .dropView({
+                  dataSourceId: ep.dataSourceId,
+                  databaseName: ep.databaseName,
+                  schemaName: ep.schemaName,
+                  viewName,
+                })
+                .then(() => {
+                  const parentNode = getParentNode(treeNodeData.key, treeData);
+                  handleLoadData(parentNode || treeNodeData, { refresh: true });
+                })
+                .catch((error) => {
+                  staticMessage.error(error?.message || i18n('common.text.failure'));
+                });
+            },
+          });
         },
       },
 

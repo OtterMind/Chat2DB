@@ -41,7 +41,7 @@ assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.VIEW]), [
   [OperationColumn.OpenView, OperationColumn.EditView],
   [OperationColumn.CreateConsole],
   [OperationColumn.ChangeAiTableInfoNodataCollection],
-  [OperationColumn.CopyName],
+  [OperationColumn.CopyName, OperationColumn.DropView],
 ]);
 
 assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.DATABASE]), [

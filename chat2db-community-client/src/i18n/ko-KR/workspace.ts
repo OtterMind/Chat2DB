@@ -113,6 +113,8 @@ export default {
   'workspace.menu.openView': '뷰 열기',
   'workspace.menu.annotationDatabaseTable': '데이터 주석(AI)',
   'workspace.menu.editView': '뷰 편집',
+  'workspace.menu.createView': '뷰 생성',
+  'workspace.menu.dropView': '뷰 삭제',
   'workspace.menu.openConsole': '콘솔 열기',
   'workspace.menu.removeConsole': '콘솔 제거',
   'workspace.menu.runSqlFile': 'SQL 파일 실행',

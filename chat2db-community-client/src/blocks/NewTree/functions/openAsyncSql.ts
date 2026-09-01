@@ -13,6 +13,41 @@ function getObjectTabId(prefix: WorkspaceTabType, extraParams: any, objectName: 
   ].join(':');
 }
 
+function quoteMysqlIdentifier(value: string) {
+  return `\`${value.replaceAll('`', '``')}\``;
+}
+
+export function formatQuotedQualifiedName(parts: Array<string | null | undefined>) {
+  return parts
+    .filter((part): part is string => Boolean(part))
+    .map((part) => `"${part.replaceAll('"', '""')}"`)
+    .join('.');
+}
+
+export const createView = (props: {
+  treeNodeData: any;
+  addWorkspaceTab: any;
+  submitCallback?: () => void;
+  title?: string;
+}) => {
+  const { treeNodeData, addWorkspaceTab, submitCallback, title = 'Create view' } = props;
+  const { extraParams } = treeNodeData;
+  const databasePrefix = extraParams.databaseName
+    ? `${quoteMysqlIdentifier(extraParams.databaseName)}.`
+    : '';
+  addWorkspaceTab({
+    id: randomLargeLong(),
+    type: WorkspaceTabType.VIEW,
+    title,
+    uniqueData: {
+      ...extraParams,
+      ddl: `CREATE VIEW ${databasePrefix}${quoteMysqlIdentifier('new_view')}\nAS\nSELECT 1;`,
+      submitCallback,
+      popoverContent: title,
+    },
+  });
+};
+
 export const openView = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
   const { treeNodeData, addWorkspaceTab } = props;
   const { extraParams, originalTitle } = treeNodeData;

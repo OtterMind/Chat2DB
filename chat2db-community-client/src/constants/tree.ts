@@ -70,6 +70,8 @@ export enum OperationColumn {
   EditTable = 'editTable', // edit table
   EditTableData = 'editTableData', // Edit table data
   EditView = 'editView', // Edit view
+  CreateView = 'createView', // Create new view
+  DropView = 'dropView', // Drop view
   OpenView = 'openView', // open view
   OpenFunction = 'openFunction', // open function
   OpenProcedure = 'openProcedure', // Open stored procedure
