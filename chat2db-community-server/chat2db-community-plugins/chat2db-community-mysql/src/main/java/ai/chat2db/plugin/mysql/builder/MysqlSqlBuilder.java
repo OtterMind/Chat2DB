@@ -52,6 +52,38 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
+    private static final long MYISAM_MAX_INDEX_BYTES = 1000L;
+    private static final long INNODB_COMPACT_MAX_INDEX_BYTES = 767L;
+    private static final long INNODB_MAX_POSSIBLE_INDEX_BYTES = 3072L;
+
+    private static final Set<String> INDEX_PREFIX_LENGTH_TYPES = Set.of(
+            "CHAR", "VARCHAR", "BINARY", "VARBINARY",
+            "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT",
+            "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB");
+    private static final Set<String> BINARY_PREFIX_LENGTH_TYPES = Set.of(
+            "BINARY", "VARBINARY", "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB");
+    private static final Set<String> LENGTH_DECLARED_TYPES = Set.of("CHAR", "VARCHAR", "BINARY", "VARBINARY");
+    private static final Map<String, Integer> MYSQL_CHARSET_MAX_BYTES = Map.ofEntries(
+            Map.entry("armscii8", 1), Map.entry("ascii", 1), Map.entry("binary", 1), Map.entry("cp1250", 1),
+            Map.entry("cp1251", 1), Map.entry("cp1256", 1), Map.entry("cp1257", 1), Map.entry("cp850", 1),
+            Map.entry("cp852", 1), Map.entry("cp866", 1), Map.entry("dec8", 1), Map.entry("geostd8", 1),
+            Map.entry("greek", 1), Map.entry("hebrew", 1), Map.entry("hp8", 1), Map.entry("keybcs2", 1),
+            Map.entry("koi8r", 1), Map.entry("koi8u", 1), Map.entry("latin1", 1), Map.entry("latin2", 1),
+            Map.entry("latin5", 1), Map.entry("latin7", 1), Map.entry("macce", 1), Map.entry("macroman", 1),
+            Map.entry("swe7", 1), Map.entry("tis620", 1),
+            Map.entry("big5", 2), Map.entry("cp932", 2), Map.entry("eucjpms", 2), Map.entry("euckr", 2),
+            Map.entry("gb2312", 2), Map.entry("gbk", 2), Map.entry("sjis", 2), Map.entry("ucs2", 2),
+            Map.entry("ujis", 2),
+            Map.entry("utf8", 3), Map.entry("utf8mb3", 3),
+            Map.entry("gb18030", 4), Map.entry("utf16", 4), Map.entry("utf16le", 4), Map.entry("utf32", 4),
+            Map.entry("utf8mb4", 4));
+    private static final Map<String, Long> BINARY_TYPE_MAX_BYTES = Map.of(
+            "TINYBLOB", 255L,
+            "BLOB", 65535L,
+            "MEDIUMBLOB", 16777215L,
+            "LONGBLOB", 4294967295L);
+
+
     @Override
     public String quoteIdentifier(String identifier) {
         return quoteMysqlIdentifier(identifier);
@@ -100,6 +132,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             if (mysqlIndexTypeEnum == null) {
                 continue;
             }
+            validateIndexPrefixLengths(table, tableIndex);
             script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -202,6 +235,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                 if (mysqlIndexTypeEnum == null) {
                     continue;
                 }
+                validateIndexPrefixLengths(newTable, tableIndex);
                 script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
             }
         }
@@ -227,6 +261,194 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             }
         }
         return PREVIOUS_COLUMN_NOT_FOUND;
+    }
+
+    private void validateIndexPrefixLengths(Table table, TableIndex tableIndex) {
+        if (table == null || CollectionUtils.isEmpty(table.getColumnList())
+                || CollectionUtils.isEmpty(tableIndex.getColumnList())) {
+            return;
+        }
+        long totalIndexBytes = 0L;
+        boolean totalIndexBytesKnown = true;
+        Long maxIndexBytes = maxIndexBytes(table);
+        for (TableIndexColumn indexColumn : tableIndex.getColumnList()) {
+            Long prefixLength = indexColumn.getSubPart();
+            if (prefixLength == null) {
+                continue;
+            }
+            if (prefixLength <= 0) {
+                throw new IllegalArgumentException("Invalid MySQL index prefix length for column "
+                        + indexColumn.getColumnName() + ": length must be greater than 0");
+            }
+            TableColumn column = findColumn(table.getColumnList(), indexColumn.getColumnName());
+            if (column == null) {
+                throw new IllegalArgumentException("Invalid MySQL index prefix length: column not found "
+                        + indexColumn.getColumnName());
+            }
+            String columnType = baseColumnType(column.getColumnType());
+            if (!INDEX_PREFIX_LENGTH_TYPES.contains(columnType)) {
+                throw new IllegalArgumentException("Invalid MySQL index prefix length for column "
+                        + indexColumn.getColumnName() + " type " + column.getColumnType());
+            }
+            Long maxPrefixLength = maxPrefixLength(table, column, columnType);
+            if (maxPrefixLength != null && prefixLength > maxPrefixLength) {
+                throw new IllegalArgumentException("Invalid MySQL index prefix length for column "
+                        + indexColumn.getColumnName() + ": " + prefixLength + " exceeds column maximum "
+                        + maxPrefixLength);
+            }
+            Integer bytesPerUnit = prefixBytesPerUnit(table, column, columnType);
+            if (bytesPerUnit == null) {
+                totalIndexBytesKnown = false;
+                continue;
+            }
+            long prefixBytes = multiplySaturated(prefixLength, bytesPerUnit);
+            if (maxIndexBytes != null && prefixBytes > maxIndexBytes) {
+                throw new IllegalArgumentException("Invalid MySQL index prefix length for column "
+                        + indexColumn.getColumnName() + ": " + prefixLength + " uses " + prefixBytes
+                        + " bytes, exceeding the MySQL " + indexLimitContext(table)
+                        + " index key prefix limit of " + maxIndexBytes + " bytes");
+            }
+            totalIndexBytes = addSaturated(totalIndexBytes, prefixBytes);
+        }
+        if (totalIndexBytesKnown && maxIndexBytes != null && totalIndexBytes > maxIndexBytes) {
+            throw new IllegalArgumentException("Invalid MySQL index prefix length for index "
+                    + tableIndex.getName() + ": composite prefix uses " + totalIndexBytes
+                    + " bytes, exceeding the MySQL " + indexLimitContext(table)
+                    + " index key prefix limit of " + maxIndexBytes + " bytes");
+        }
+    }
+
+    private Long maxPrefixLength(Table table, TableColumn column, String columnType) {
+        if (LENGTH_DECLARED_TYPES.contains(columnType) && column.getColumnSize() != null) {
+            return column.getColumnSize().longValue();
+        }
+        if (BINARY_TYPE_MAX_BYTES.containsKey(columnType)) {
+            return BINARY_TYPE_MAX_BYTES.get(columnType);
+        }
+        Integer charOctetLength = column.getCharOctetLength();
+        Integer bytesPerUnit = prefixBytesPerUnit(table, column, columnType);
+        if (charOctetLength != null && charOctetLength > 0 && bytesPerUnit != null && bytesPerUnit > 0) {
+            return (long) charOctetLength / bytesPerUnit;
+        }
+        return null;
+    }
+
+    private Integer prefixBytesPerUnit(Table table, TableColumn column, String columnType) {
+        if (BINARY_PREFIX_LENGTH_TYPES.contains(columnType)) {
+            return 1;
+        }
+        Integer charOctetLength = column.getCharOctetLength();
+        Integer columnSize = column.getColumnSize();
+        if (charOctetLength != null && charOctetLength > 0 && columnSize != null && columnSize > 0) {
+            return Math.max(1, (charOctetLength + columnSize - 1) / columnSize);
+        }
+        String charset = resolveCharset(table, column);
+        if (StringUtils.isBlank(charset)) {
+            return null;
+        }
+        return MYSQL_CHARSET_MAX_BYTES.get(charset.toLowerCase(Locale.ROOT));
+    }
+
+    private String resolveCharset(Table table, TableColumn column) {
+        String charset = StringUtils.defaultIfBlank(column.getCharSetName(), null);
+        if (charset == null) {
+            charset = charsetFromCollation(column.getCollationName());
+        }
+        if (charset == null && table != null) {
+            charset = StringUtils.defaultIfBlank(table.getCharset(), null);
+        }
+        if (charset == null && table != null) {
+            charset = charsetFromCollation(table.getCollate());
+        }
+        return charset;
+    }
+
+    private String charsetFromCollation(String collation) {
+        String normalized = StringUtils.trimToNull(collation);
+        if (normalized == null) {
+            return null;
+        }
+        int separator = normalized.indexOf('_');
+        return separator < 0 ? normalized : normalized.substring(0, separator);
+    }
+
+    private Long maxIndexBytes(Table table) {
+        String engine = StringUtils.trimToEmpty(table.getEngine());
+        if ("MyISAM".equalsIgnoreCase(engine)) {
+            return MYISAM_MAX_INDEX_BYTES;
+        }
+        if (!"InnoDB".equalsIgnoreCase(engine)) {
+            return null;
+        }
+        String rowFormat = rowFormat(table);
+        if ("REDUNDANT".equals(rowFormat) || "COMPACT".equals(rowFormat)) {
+            return INNODB_COMPACT_MAX_INDEX_BYTES;
+        }
+        return INNODB_MAX_POSSIBLE_INDEX_BYTES;
+    }
+
+    private String rowFormat(Table table) {
+        String rowFormat = StringUtils.trimToEmpty(table.getRowFormat()).toUpperCase(Locale.ROOT);
+        if (StringUtils.isNotBlank(rowFormat)) {
+            return rowFormat;
+        }
+        String ddl = table.getDdl();
+        if (StringUtils.isBlank(ddl)) {
+            return StringUtils.EMPTY;
+        }
+        String normalized = ddl.toUpperCase(Locale.ROOT);
+        for (String candidate : List.of("REDUNDANT", "COMPACT", "DYNAMIC", "COMPRESSED")) {
+            if (normalized.contains("ROW_FORMAT=" + candidate) || normalized.contains("ROW_FORMAT = " + candidate)) {
+                return candidate;
+            }
+        }
+        return StringUtils.EMPTY;
+    }
+
+    private String indexLimitContext(Table table) {
+        String engine = StringUtils.defaultIfBlank(table.getEngine(), "storage engine");
+        String rowFormat = rowFormat(table);
+        if (StringUtils.isNotBlank(rowFormat)) {
+            return engine + " " + rowFormat;
+        }
+        return engine;
+    }
+
+    private long multiplySaturated(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException e) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private long addSaturated(long left, long right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException e) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private TableColumn findColumn(List<TableColumn> columnList, String columnName) {
+        return columnList.stream()
+                .filter(column -> StringUtils.equalsIgnoreCase(column.getName(), columnName)
+                        || StringUtils.equalsIgnoreCase(column.getOldName(), columnName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String baseColumnType(String columnType) {
+        String normalized = StringUtils.trimToEmpty(columnType).toUpperCase(Locale.ROOT);
+        int lengthStart = normalized.indexOf('(');
+        if (lengthStart >= 0) {
+            normalized = normalized.substring(0, lengthStart);
+        }
+        int spaceStart = normalized.indexOf(' ');
+        if (spaceStart >= 0) {
+            normalized = normalized.substring(0, spaceStart);
+        }
+        return normalized.trim();
     }
 
     @Override

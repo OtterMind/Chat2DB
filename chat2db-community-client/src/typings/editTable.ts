@@ -59,6 +59,7 @@ export interface IIndexIncludeColumnItem {
   nonUnique: boolean | null; // Is it unique?
   ordinalPosition: number | null; // location
   schemaName: string | null; // Schema name
+  subPart?: number | null; // Index prefix length
   tableName: string | null; // table name
   type: string | null; // Type
   pages: number | null; // Number of pages

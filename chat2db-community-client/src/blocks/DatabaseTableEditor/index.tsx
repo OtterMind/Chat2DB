@@ -1,5 +1,5 @@
 import React, { memo, useRef, useState, createContext, useEffect, useMemo } from 'react';
-import { Button, Modal, Segmented } from 'antd';
+import { Alert, Button, Modal, Segmented } from 'antd';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import IndexList, { IIndexListRef } from './IndexList';
@@ -241,6 +241,10 @@ export default memo((props: IProps) => {
     }
   }
 
+  const showRebuildIndexWarning =
+    /\bDROP\s+(?:PRIMARY\s+KEY|INDEX)\b/i.test(appendValue) &&
+    /\bADD\s+(?:UNIQUE\s+|FULLTEXT\s+|SPATIAL\s+)?(?:INDEX|PRIMARY\s+KEY)\b/i.test(appendValue);
+
   const executeSuccessCallBack = (res) => {
     setViewSqlModal(false);
     staticMessage.success(i18n('common.text.successfulExecution'));
@@ -320,6 +324,14 @@ export default memo((props: IProps) => {
         footer={false}
         destroyOnClose={true}
       >
+        {showRebuildIndexWarning && (
+          <Alert
+            showIcon
+            type="warning"
+            message={i18n('editTable.tips.rebuildIndexWarning')}
+            style={{ marginBottom: 12 }}
+          />
+        )}
         <ExecuteSQL
           initSql={appendValue}
           databaseBaseInfo={databaseBaseInfo}

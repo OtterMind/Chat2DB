@@ -13,4 +13,11 @@ class MysqlMetaDataColumnTypeTest {
         assertEquals("10,2", MysqlMetaData.extractColumnTypeArguments("decimal(10,2) unsigned"));
         assertNull(MysqlMetaData.extractColumnTypeArguments("varchar"));
     }
+
+    @Test
+    void boundsUnsignedLongTextOctetLengthWithoutOverflowingMetadata() {
+        assertEquals(Integer.MAX_VALUE, MysqlMetaData.boundedCharOctetLength(4_294_967_295L, false));
+        assertEquals(1024, MysqlMetaData.boundedCharOctetLength(1024L, false));
+        assertNull(MysqlMetaData.boundedCharOctetLength(0L, true));
+    }
 }

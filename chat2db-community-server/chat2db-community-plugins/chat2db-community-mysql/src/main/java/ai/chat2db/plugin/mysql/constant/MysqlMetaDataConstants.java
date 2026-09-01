@@ -52,6 +52,7 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_AUTO_INCREMENT = "AUTO_INCREMENT";
     public static final String FIELD_CARDINALITY = "Cardinality";
     public static final String FIELD_CHARACTER_SET_NAME = "CHARACTER_SET_NAME";
+    public static final String FIELD_CHARACTER_OCTET_LENGTH = "CHARACTER_OCTET_LENGTH";
     public static final String FIELD_COLLATION_NAME = "COLLATION_NAME";
     public static final String FIELD_COLUMN_COMMENT = "COLUMN_COMMENT";
     public static final String FIELD_COLUMN_DEFAULT = "COLUMN_DEFAULT";
@@ -78,6 +79,7 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_NUMERIC_SCALE = "NUMERIC_SCALE";
     public static final String FIELD_ORDINAL_POSITION = "ORDINAL_POSITION";
     public static final String FIELD_ROUTINE_COMMENT = "ROUTINE_COMMENT";
+    public static final String FIELD_ROW_FORMAT = "ROW_FORMAT";
     public static final String FIELD_SEQ_IN_INDEX = "Seq_in_index";
     public static final String FIELD_SPECIFIC_NAME = "SPECIFIC_NAME";
     public static final String FIELD_SQL_ORIGINAL_STATEMENT = "SQL Original Statement";
@@ -149,7 +151,7 @@ public final class MysqlMetaDataConstants {
             Types.TIMESTAMP, ResultSetEditorTypeEnum.TIMESTAMP
     );
     public static final String TABLE_STATUS = "select * FROM information_schema.collation_character_set_applicability limit 10000";
-    public static final String TABLES_SQL = "SELECT TABLE_SCHEMA, TABLE_NAME, `ENGINE`, `VERSION`, TABLE_ROWS, DATA_LENGTH, `AUTO_INCREMENT`, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE in ('BASE TABLE','SYSTEM VIEW') AND TABLE_SCHEMA = '%s'";
+    public static final String TABLES_SQL = "SELECT TABLE_SCHEMA, TABLE_NAME, `ENGINE`, `VERSION`, ROW_FORMAT, TABLE_ROWS, DATA_LENGTH, `AUTO_INCREMENT`, CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE in ('BASE TABLE','SYSTEM VIEW') AND TABLE_SCHEMA = '%s'";
     public static final String ROUTINES_SQL = "SELECT SPECIFIC_NAME, ROUTINE_COMMENT, ROUTINE_DEFINITION FROM information_schema.routines WHERE routine_type = '%s' AND ROUTINE_SCHEMA ='%s'  AND routine_name = '%s';";
     public static final String TRIGGER_SQL = "show create trigger %s.%s";
     public static final String TRIGGER_SQL_LIST = "SELECT TRIGGER_NAME FROM INFORMATION_SCHEMA.TRIGGERS where TRIGGER_SCHEMA = '%s';";

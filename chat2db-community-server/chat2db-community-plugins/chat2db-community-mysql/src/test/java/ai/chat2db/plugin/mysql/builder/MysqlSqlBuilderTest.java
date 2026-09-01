@@ -21,6 +21,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MysqlSqlBuilderTest {
@@ -214,6 +215,275 @@ class MysqlSqlBuilderTest {
     }
 
     @Test
+    void shouldRejectIndexPrefixLengthLongerThanColumnLength() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)));
+        Table newTable = Table.builder()
+                .databaseName("test_db")
+                .name("sample_table")
+                .columnList(List.of(mysqlVarcharColumn("name", "name", null)))
+                .indexList(List.of(TableIndex.builder()
+                        .name("idx_name")
+                        .oldName("idx_name")
+                        .type("Normal")
+                        .editStatus(EditStatusEnum.ADD.name())
+                        .columnList(List.of(TableIndexColumn.builder()
+                                .columnName("name")
+                                .subPart(256L)
+                                .build()))
+                        .build()))
+                .build();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+        assertTrue(error.getMessage().contains("prefix length"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectIndexPrefixLengthForUnsupportedColumnType() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        TableColumn idColumn = TableColumn.builder()
+                .name("id")
+                .oldName("id")
+                .columnType("INT")
+                .editStatus(null)
+                .build();
+        Table oldTable = mysqlTable(List.of(idColumn));
+        Table newTable = Table.builder()
+                .databaseName("test_db")
+                .name("sample_table")
+                .columnList(List.of(idColumn))
+                .indexList(List.of(TableIndex.builder()
+                        .name("idx_id")
+                        .oldName("idx_id")
+                        .type("Normal")
+                        .editStatus(EditStatusEnum.ADD.name())
+                        .columnList(List.of(TableIndexColumn.builder()
+                                .columnName("id")
+                                .subPart(1L)
+                                .build()))
+                        .build()))
+                .build();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+        assertTrue(error.getMessage().contains("prefix length"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectNonPositiveIndexPrefixLength() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table table = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)));
+        table.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("name")
+                        .subPart(0L)
+                        .build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(mysqlTable(List.of()), table));
+
+        assertTrue(error.getMessage().contains("greater than 0"), error.getMessage());
+    }
+
+    @Test
+    void shouldBuildCompositeIndexPrefixLengths() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null),
+                mysqlVarcharColumn("code", "code", null)), "InnoDB", "DYNAMIC", "utf8mb4");
+        Table newTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null),
+                mysqlVarcharColumn("code", "code", null)), "InnoDB", "DYNAMIC", "utf8mb4");
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name_code")
+                .type("Normal")
+                .method("BTREE")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(
+                        TableIndexColumn.builder().columnName("name").subPart(10L).ascOrDesc("ASC").build(),
+                        TableIndexColumn.builder().columnName("code").subPart(5L).ascOrDesc("DESC").build()))
+                .build()));
+
+        String sql = builder.ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`sample_table`\n"
+                + "\tADD INDEX `idx_name_code` (`name`(10) ASC,`code`(5) DESC) USING BTREE;", sql);
+    }
+
+    @Test
+    void shouldRejectInnoDbCompactPrefixByCharsetByteLimit() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)));
+        Table newTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)),
+                "InnoDB", "COMPACT", "utf8mb4");
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("name")
+                        .subPart(192L)
+                        .build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertTrue(error.getMessage().contains("uses 768 bytes"), error.getMessage());
+        assertTrue(error.getMessage().contains("InnoDB COMPACT"), error.getMessage());
+        assertTrue(error.getMessage().contains("767 bytes"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectInnoDbCompactPrefixFromDdlRowFormat() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)));
+        Table newTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)),
+                "InnoDB", null, "utf8mb4");
+        newTable.setDdl("CREATE TABLE `sample_table` (`name` varchar(255)) ENGINE=InnoDB ROW_FORMAT=COMPACT");
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("name")
+                        .subPart(192L)
+                        .build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertTrue(error.getMessage().contains("InnoDB COMPACT"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectMyisamCompositePrefixByTotalByteLimit() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlSizedColumn("name", "VARCHAR", 255, null),
+                mysqlSizedColumn("code", "VARCHAR", 255, null)));
+        Table newTable = mysqlTable(List.of(mysqlSizedColumn("name", "VARCHAR", 255, null),
+                mysqlSizedColumn("code", "VARCHAR", 255, null)), "MyISAM", null, "utf8mb4");
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name_code")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(
+                        TableIndexColumn.builder().columnName("name").subPart(126L).build(),
+                        TableIndexColumn.builder().columnName("code").subPart(125L).build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertTrue(error.getMessage().contains("composite prefix uses 1004 bytes"), error.getMessage());
+        assertTrue(error.getMessage().contains("MyISAM"), error.getMessage());
+        assertTrue(error.getMessage().contains("1000 bytes"), error.getMessage());
+    }
+
+    @Test
+    void shouldUseColumnCollationBeforeTableCharsetWhenCalculatingPrefixBytes() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        TableColumn column = mysqlSizedColumn("name", "VARCHAR", 300, null);
+        column.setCharSetName(null);
+        column.setCharOctetLength(null);
+        column.setCollationName("utf8mb4_0900_ai_ci");
+        Table oldTable = mysqlTable(List.of(column));
+        Table newTable = mysqlTable(List.of(column), "MyISAM", null, "latin1");
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("name")
+                        .subPart(251L)
+                        .build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertTrue(error.getMessage().contains("uses 1004 bytes"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectBlobPrefixByMyisamByteLimit() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        TableColumn dataColumn = mysqlSizedColumn("data", "BLOB", null, null);
+        Table oldTable = mysqlTable(List.of(dataColumn));
+        Table newTable = mysqlTable(List.of(dataColumn), "MyISAM", null, null);
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_data")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("data")
+                        .subPart(1001L)
+                        .build()))
+                .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertTrue(error.getMessage().contains("uses 1001 bytes"), error.getMessage());
+    }
+
+    @Test
+    void shouldLeaveUnknownCharsetLimitToMysql() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        TableColumn column = mysqlSizedColumn("name", "VARCHAR", 300, null);
+        column.setCharSetName("future_charset");
+        column.setCharOctetLength(null);
+        Table oldTable = mysqlTable(List.of(column));
+        Table newTable = mysqlTable(List.of(column), "InnoDB", "COMPACT", null);
+        newTable.setIndexList(List.of(TableIndex.builder()
+                .name("idx_name")
+                .type("Normal")
+                .editStatus(EditStatusEnum.ADD.name())
+                .columnList(List.of(TableIndexColumn.builder()
+                        .columnName("name")
+                        .subPart(255L)
+                        .build()))
+                .build()));
+
+        String sql = builder.ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertTrue(sql.contains("ADD INDEX `idx_name` (`name`(255))"), sql);
+    }
+
+    @Test
+    void shouldClearIndexPrefixLengthWhenSubPartIsNull() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = mysqlTable(List.of(mysqlVarcharColumn("name", "name", null)));
+        Table newTable = Table.builder()
+                .databaseName("test_db")
+                .name("sample_table")
+                .columnList(List.of(mysqlVarcharColumn("name", "name", null)))
+                .indexList(List.of(TableIndex.builder()
+                        .name("idx_name")
+                        .oldName("idx_name")
+                        .type("Normal")
+                        .method("BTREE")
+                        .editStatus(EditStatusEnum.MODIFY.name())
+                        .columnList(List.of(TableIndexColumn.builder()
+                                .columnName("name")
+                                .ascOrDesc("ASC")
+                                .subPart(null)
+                                .build()))
+                        .build()))
+                .build();
+
+        String sql = builder.ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`sample_table`\n"
+                + "\tDROP INDEX `idx_name`,\n"
+                + "ADD INDEX `idx_name` (`name` ASC) USING BTREE;", sql);
+    }
+
+    @Test
     void shouldKeepTargetPositionWhenRenamingAndMovingColumn() {
         MysqlSqlBuilder builder = new MysqlSqlBuilder();
         Table oldTable = mysqlTable(List.of(
@@ -269,20 +539,38 @@ class MysqlSqlBuilderTest {
     }
 
     private static Table mysqlTable(List<TableColumn> columns) {
+        return mysqlTable(columns, null, null, null);
+    }
+
+    private static Table mysqlTable(List<TableColumn> columns, String engine, String rowFormat, String charset) {
         return Table.builder()
                 .databaseName("test_db")
                 .name("sample_table")
+                .engine(engine)
+                .rowFormat(rowFormat)
+                .charset(charset)
                 .columnList(columns)
                 .indexList(List.of())
                 .build();
     }
 
     private static TableColumn mysqlVarcharColumn(String name, String oldName, String editStatus) {
+        return mysqlSizedColumn(name, oldName, "VARCHAR", 255, editStatus);
+    }
+
+    private static TableColumn mysqlSizedColumn(String name, String columnType, Integer columnSize, String editStatus) {
+        return mysqlSizedColumn(name, name, columnType, columnSize, editStatus);
+    }
+
+    private static TableColumn mysqlSizedColumn(String name, String oldName, String columnType, Integer columnSize,
+                                               String editStatus) {
         return TableColumn.builder()
                 .name(name)
                 .oldName(oldName)
-                .columnType("VARCHAR")
-                .columnSize(255)
+                .columnType(columnType)
+                .columnSize(columnSize)
+                .charOctetLength(columnSize == null ? null : columnSize * 4)
+                .charSetName("utf8mb4")
                 .editStatus(editStatus)
                 .build();
     }

@@ -91,6 +91,8 @@ public class Table implements Serializable {
 
     private String collate;
 
+    private String rowFormat;
+
 
     private Long incrementValue;
 

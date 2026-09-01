@@ -75,6 +75,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 table.setSchemaName(schemaName);
                 table.setName(resultSet.getString(FIELD_TABLE_NAME));
                 table.setEngine(resultSet.getString(FIELD_ENGINE_UPPER));
+                table.setRowFormat(resultSet.getString(FIELD_ROW_FORMAT));
                 table.setRows(resultSet.getLong(FIELD_TABLE_ROWS));
                 table.setDataLength(resultSet.getLong(FIELD_DATA_LENGTH));
                 table.setCreateTime(resultSet.getString(FIELD_CREATE_TIME));
@@ -247,6 +248,8 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);
                 column.setOrdinalPosition(resultSet.getInt(FIELD_ORDINAL_POSITION));
                 column.setDecimalDigits(resultSet.getInt(FIELD_NUMERIC_SCALE));
+                long charOctetLength = resultSet.getLong(FIELD_CHARACTER_OCTET_LENGTH);
+                column.setCharOctetLength(boundedCharOctetLength(charOctetLength, resultSet.wasNull()));
                 column.setCharSetName(resultSet.getString(FIELD_CHARACTER_SET_NAME));
                 column.setCollationName(resultSet.getString(FIELD_COLLATION_NAME));
                 setColumnSize(column, resultSet.getString(FIELD_COLUMN_TYPE));
@@ -292,6 +295,13 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
             return null;
         }
         return columnType.substring(openingParenthesis + 1, closingParenthesis);
+    }
+
+    static Integer boundedCharOctetLength(long value, boolean wasNull) {
+        if (wasNull) {
+            return null;
+        }
+        return (int) Math.min(Math.max(value, 0L), Integer.MAX_VALUE);
     }
 
     @Override
@@ -372,7 +382,8 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         tableIndexColumn.setOrdinalPosition(resultSet.getShort(FIELD_SEQ_IN_INDEX));
         tableIndexColumn.setCollation(resultSet.getString(FIELD_COLLATION));
         tableIndexColumn.setCardinality(resultSet.getLong(FIELD_CARDINALITY));
-        tableIndexColumn.setSubPart(resultSet.getLong(FIELD_SUB_PART));
+        Long subPart = resultSet.getLong(FIELD_SUB_PART);
+        tableIndexColumn.setSubPart(resultSet.wasNull() ? null : subPart);
         String collation = resultSet.getString(FIELD_COLLATION);
         if (INDEX_COLLATION_ASC.equalsIgnoreCase(collation)) {
             tableIndexColumn.setAscOrDesc(INDEX_ASC);
