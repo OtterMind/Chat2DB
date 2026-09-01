@@ -2,6 +2,7 @@ export default {
   'editTable.tab.basicInfo': '基本信息',
   'editTable.tab.columnInfo': '列信息',
   'editTable.tab.indexInfo': '索引信息',
+  'editTable.tab.foreignKeyInfo': '外键信息',
   'editTable.label.tableName': '表名',
   'editTable.label.comment': '注释',
   'editTable.button.add': '新增',
@@ -33,8 +34,23 @@ export default {
   'editTable.label.incrementValue': '自增值',
   'editTable.label.order': '排序',
   'editTable.label.primaryKey': '键',
+  'editTable.label.foreignKeyName': '外键名称',
+  'editTable.label.localColumns': '本表列',
+  'editTable.label.referencedTable': '引用表',
+  'editTable.label.referencedColumns': '引用列',
+  'editTable.label.onDelete': '删除时',
+  'editTable.label.onUpdate': '更新时',
+  'editTable.label.foreignKeyColumns': '外键列',
   'editTable.title.sqlPreview': 'sql预览',
   'editTable.button.addColumn': '添加列',
   'editTable.button.addIndex': '添加索引',
+  'editTable.button.addForeignKey': '添加外键',
+  'editTable.foreignKey.integrityWarning':
+    '删除或修改外键会移除引用完整性约束。',
+  'editTable.foreignKey.actionCascadeHint': '会传播数据变更',
+  'editTable.foreignKey.validationIncomplete':
+    '请补全外键名称、引用表和列映射，或删除未完成的行。',
+  'editTable.foreignKey.rebuildWarning':
+    '外键变更会先删除旧约束再重新创建。如果 ADD 失败，旧约束不会自动恢复。',
   'editTable.placeholder.aiModifyTable': '自然语言修改表结构',
 };

@@ -152,6 +152,10 @@ export const shouldShowMysqlIndexMethod = (databaseType?: DatabaseTypeInput): bo
   return containsStrict(databaseCapabilities.tableEditorMysqlIndexMethodSupported, databaseType);
 };
 
+export const shouldShowMysqlForeignKeyEditor = (databaseType?: DatabaseTypeInput): boolean => {
+  return containsStrict(databaseCapabilities.tableEditorMysqlForeignKeySupported, databaseType);
+};
+
 export const shouldHideOracleIndexColumn = (databaseType?: DatabaseTypeInput): boolean => {
   return containsStrict(databaseCapabilities.tableEditorOracleIndexColumnHidden, databaseType);
 };

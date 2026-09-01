@@ -2,6 +2,7 @@ export default {
   'editTable.tab.basicInfo': '基本',
   'editTable.tab.columnInfo': '列',
   'editTable.tab.indexInfo': 'インデックス',
+  'editTable.tab.foreignKeyInfo': '外部キー',
   'editTable.label.tableName': 'テーブル名',
   'editTable.label.comment': 'コメント',
   'editTable.button.add': '追加',
@@ -33,8 +34,23 @@ export default {
   'editTable.label.incrementValue': '増分値',
   'editTable.label.order': '順序',
   'editTable.label.primaryKey': 'キー',
+  'editTable.label.foreignKeyName': '名前',
+  'editTable.label.localColumns': 'ローカル列',
+  'editTable.label.referencedTable': '参照先テーブル',
+  'editTable.label.referencedColumns': '参照先列',
+  'editTable.label.onDelete': '削除時',
+  'editTable.label.onUpdate': '更新時',
+  'editTable.label.foreignKeyColumns': '外部キー列',
   'editTable.title.sqlPreview': 'SQLプレビュー',
   'editTable.button.addColumn': '列を追加',
   'editTable.button.addIndex': 'インデックスを追加',
+  'editTable.button.addForeignKey': '外部キーを追加',
+  'editTable.foreignKey.integrityWarning':
+    '外部キーを削除または変更すると、参照整合性の制約が失われます。',
+  'editTable.foreignKey.actionCascadeHint': 'データ変更を伝播します',
+  'editTable.foreignKey.validationIncomplete':
+    '外部キー名、参照先テーブル、列の対応をすべて入力するか、不完全な行を削除してください。',
+  'editTable.foreignKey.rebuildWarning':
+    '外部キーの変更では、再作成前に古い制約を削除します。ADD が失敗しても、古い制約は自動的に復元されません。',
   'editTable.placeholder.aiModifyTable': '自然言語でテーブル構造を変更',
 };

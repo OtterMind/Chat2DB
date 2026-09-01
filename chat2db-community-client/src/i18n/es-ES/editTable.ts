@@ -2,6 +2,7 @@ export default {
   'editTable.tab.basicInfo': 'Información básica',
   'editTable.tab.columnInfo': 'Columna',
   'editTable.tab.indexInfo': 'Índice',
+  'editTable.tab.foreignKeyInfo': 'Clave externa',
   'editTable.label.tableName': 'Nombre de la tabla',
   'editTable.label.comment': 'Comentario',
   'editTable.button.add': 'Añadir',
@@ -33,8 +34,23 @@ export default {
   'editTable.label.incrementValue': 'Valor de incremento',
   'editTable.label.order': 'Orden',
   'editTable.label.primaryKey': 'Clave',
+  'editTable.label.foreignKeyName': 'Nombre',
+  'editTable.label.localColumns': 'Columnas locales',
+  'editTable.label.referencedTable': 'Tabla referenciada',
+  'editTable.label.referencedColumns': 'Columnas referenciadas',
+  'editTable.label.onDelete': 'Al eliminar',
+  'editTable.label.onUpdate': 'Al actualizar',
+  'editTable.label.foreignKeyColumns': 'Columnas de clave externa',
   'editTable.title.sqlPreview': 'Vista previa de SQL',
   'editTable.button.addColumn': 'Añadir columna',
   'editTable.button.addIndex': 'Añadir índice',
+  'editTable.button.addForeignKey': 'Añadir clave externa',
+  'editTable.foreignKey.integrityWarning':
+    'Eliminar o modificar claves externas quita la aplicación de la integridad referencial.',
+  'editTable.foreignKey.actionCascadeHint': 'propaga cambios de datos',
+  'editTable.foreignKey.validationIncomplete':
+    'Complete el nombre de la clave externa, la tabla referenciada y las asignaciones de columnas, o elimine la fila incompleta.',
+  'editTable.foreignKey.rebuildWarning':
+    'Los cambios de claves externas eliminan la restricción anterior antes de volver a crearla. Si ADD falla, la restricción anterior no se restaura automáticamente.',
   'editTable.placeholder.aiModifyTable': 'Modificar la estructura de la tabla mediante lenguaje natural',
 };

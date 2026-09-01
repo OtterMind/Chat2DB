@@ -69,6 +69,7 @@
     "test:sql-execution-request-tracker": "tsx src/service/sqlExecutionRequestTracker.test.ts",
     "test:sql-execution-stream": "tsx src/service/sqlExecutionStream.test.ts && tsx src/pages/main/workspace/components/SQLExecute/streamResultExecutionParams.test.ts",
     "test:result-set-editor": "tsx src/blocks/SearchResult/components/ResultSetTable/utils/editorType.test.ts && tsx src/blocks/CanvasTable/editor/SelectIEditor/index.test.ts && tsx src/blocks/CanvasTable/editor/MultiSelectIEditor/index.test.ts && tsx src/blocks/CanvasTable/editor/SelectIEditor/index.dom.test.ts",
+    "test:table-editor-foreign-keys": "tsx src/blocks/DatabaseTableEditor/ForeignKeyList/foreignKeyEditor.test.ts",
     "test:local-file-tab-title": "tsx src/pages/main/workspace/utils/localTextFile.test.ts",
     "test:local-file-tab-refresh": "tsx src/store/workspace/utils/localFileWorkspaceTab.test.ts",
     "test:local-file-encoding": "tsx src/utils/localFileEncoding.test.ts && yarn test:local-file-tab-refresh && tsx src/store/workspace/utils/workspaceTabPersistence.test.ts",

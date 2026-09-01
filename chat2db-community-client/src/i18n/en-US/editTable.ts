@@ -2,6 +2,7 @@ export default {
   'editTable.tab.basicInfo': 'Basic',
   'editTable.tab.columnInfo': 'Column',
   'editTable.tab.indexInfo': 'Index',
+  'editTable.tab.foreignKeyInfo': 'Foreign key',
   'editTable.label.tableName': 'Table name',
   'editTable.label.comment': 'Comment',
   'editTable.button.add': 'Add',
@@ -33,8 +34,23 @@ export default {
   'editTable.label.incrementValue': 'Increment value',
   'editTable.label.order': 'Order',
   'editTable.label.primaryKey': 'Key',
+  'editTable.label.foreignKeyName': 'Name',
+  'editTable.label.localColumns': 'Local columns',
+  'editTable.label.referencedTable': 'Referenced table',
+  'editTable.label.referencedColumns': 'Referenced columns',
+  'editTable.label.onDelete': 'On delete',
+  'editTable.label.onUpdate': 'On update',
+  'editTable.label.foreignKeyColumns': 'Foreign key columns',
   'editTable.title.sqlPreview': 'SQL preview',
   'editTable.button.addColumn': 'Add column',
   'editTable.button.addIndex': 'Add Index',
+  'editTable.button.addForeignKey': 'Add foreign key',
+  'editTable.foreignKey.integrityWarning':
+    'Deleting or modifying foreign keys removes referential integrity enforcement.',
+  'editTable.foreignKey.actionCascadeHint': 'propagates data changes',
+  'editTable.foreignKey.validationIncomplete':
+    'Complete the foreign key name, referenced table, and column mappings, or delete the incomplete row.',
+  'editTable.foreignKey.rebuildWarning':
+    'Foreign key changes drop the old constraint before recreating it. If the ADD fails, the old constraint is not restored automatically.',
   'editTable.placeholder.aiModifyTable': 'Modify table structure in natural language',
 };

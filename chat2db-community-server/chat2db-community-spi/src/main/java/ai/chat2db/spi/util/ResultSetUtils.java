@@ -70,6 +70,9 @@ public class ResultSetUtils {
      */
     private static Object readMetadataValue(ResultSet rs, int index) throws SQLException {
         Object value = rs.getObject(index);
+        if (rs.wasNull()) {
+            return null;
+        }
         if (value == null
                 || value instanceof String
                 || value instanceof Number

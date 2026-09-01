@@ -2,6 +2,7 @@ export default {
   'editTable.tab.basicInfo': '기본 정보',
   'editTable.tab.columnInfo': '열',
   'editTable.tab.indexInfo': '인덱스',
+  'editTable.tab.foreignKeyInfo': '외래 키',
   'editTable.label.tableName': '테이블 이름',
   'editTable.label.comment': '설명',
   'editTable.button.add': '추가',
@@ -33,8 +34,23 @@ export default {
   'editTable.label.incrementValue': '증가 값',
   'editTable.label.order': '순서',
   'editTable.label.primaryKey': '키',
+  'editTable.label.foreignKeyName': '이름',
+  'editTable.label.localColumns': '로컬 열',
+  'editTable.label.referencedTable': '참조 테이블',
+  'editTable.label.referencedColumns': '참조 열',
+  'editTable.label.onDelete': '삭제 시',
+  'editTable.label.onUpdate': '업데이트 시',
+  'editTable.label.foreignKeyColumns': '외래 키 열',
   'editTable.title.sqlPreview': 'SQL 미리 보기',
   'editTable.button.addColumn': '열 추가',
   'editTable.button.addIndex': '인덱스 추가',
+  'editTable.button.addForeignKey': '외래 키 추가',
+  'editTable.foreignKey.integrityWarning':
+    '외래 키를 삭제하거나 수정하면 참조 무결성 적용이 제거됩니다.',
+  'editTable.foreignKey.actionCascadeHint': '데이터 변경을 전파합니다',
+  'editTable.foreignKey.validationIncomplete':
+    '외래 키 이름, 참조 테이블 및 열 매핑을 완성하거나 미완성 행을 삭제하세요.',
+  'editTable.foreignKey.rebuildWarning':
+    '외래 키 변경은 이전 제약 조건을 삭제한 뒤 다시 생성합니다. ADD가 실패하면 이전 제약 조건은 자동 복원되지 않습니다.',
   'editTable.placeholder.aiModifyTable': '자연어로 테이블 구조 수정',
 };

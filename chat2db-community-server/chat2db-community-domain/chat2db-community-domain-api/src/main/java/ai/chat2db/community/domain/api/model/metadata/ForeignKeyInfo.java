@@ -37,18 +37,22 @@ public class ForeignKeyInfo implements Serializable {
     private short keySeq;
 
     @JsonAlias("UPDATE_RULE")
-    private short updateRule;
+    private Short updateRule;
 
     @JsonAlias("DELETE_RULE")
-    private short deleteRule;
+    private Short deleteRule;
 
     @JsonAlias("FK_NAME")
     private String fkName;
+
+    private String oldName;
 
     @JsonAlias("PK_NAME")
     private String pkName;
 
     @JsonAlias("DEFERRABILITY")
     private short deferrability;
+
+    private String editStatus;
 
 }

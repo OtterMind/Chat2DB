@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import ai.chat2db.community.domain.api.enums.plugin.DataTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
@@ -24,6 +25,91 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MysqlSqlBuilderTest {
+
+    @Test
+    void shouldBuildCompositeForeignKeyOnceAndUseRestrictForMissingActions() {
+        ForeignKeyInfo first = foreignKey("child_a", "parent_a", (short) 1);
+        ForeignKeyInfo second = foreignKey("child_b", "parent_b", (short) 2);
+        Table oldTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of()).build();
+        Table newTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of())
+                .foreignKeyList(List.of(second, first)).build();
+
+        String sql = new MysqlSqlBuilder().ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`child`\n"
+                + "\tADD CONSTRAINT `fk_child_parent` FOREIGN KEY (`child_a`, `child_b`) REFERENCES `parent`(`parent_a`, `parent_b`) ON DELETE RESTRICT ON UPDATE RESTRICT;", sql);
+    }
+
+    @Test
+    void shouldRoundTripCompositeForeignKeyOnceWhenBuildingCreateTable() {
+        ForeignKeyInfo first = foreignKey("child_a", "parent_a", (short) 1, (short) 3, (short) 2);
+        ForeignKeyInfo second = foreignKey("child_b", "parent_b", (short) 2, (short) 3, (short) 2);
+        Table table = Table.builder()
+                .databaseName("test_db")
+                .name("child")
+                .columnList(List.of(
+                        mysqlBigintColumn("child_a"),
+                        mysqlBigintColumn("child_b")))
+                .indexList(List.of())
+                .foreignKeyList(List.of(second, first))
+                .build();
+
+        String sql = new MysqlSqlBuilder().ddl().table().buildCreateTable(table, TableBuilderConfig.defaultConfig());
+
+        assertEquals(1, sql.split("CONSTRAINT `fk_child_parent`", -1).length - 1, sql);
+        assertTrue(sql.contains("\tCONSTRAINT `fk_child_parent` FOREIGN KEY (`child_a`, `child_b`) "
+                + "REFERENCES `parent`(`parent_a`, `parent_b`) ON DELETE SET NULL ON UPDATE NO ACTION"), sql);
+    }
+
+    @Test
+    void shouldDropOldForeignKeyNameWhenRenamingModifiedConstraint() {
+        ForeignKeyInfo foreignKey = foreignKey("child_id", "id", (short) 1, (short) 0, (short) 1);
+        foreignKey.setOldName("fk_child_parent_old");
+        foreignKey.setFkName("fk_child_parent_new");
+        foreignKey.setEditStatus(EditStatusEnum.MODIFY.name());
+        Table oldTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of()).build();
+        Table newTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of())
+                .foreignKeyList(List.of(foreignKey)).build();
+
+        String sql = new MysqlSqlBuilder().ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`child`\n"
+                + "\tDROP FOREIGN KEY `fk_child_parent_old`,\n"
+                + "\tADD CONSTRAINT `fk_child_parent_new` FOREIGN KEY (`child_id`) REFERENCES `parent`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;", sql);
+    }
+
+    @Test
+    void shouldPreserveMixedForeignKeyActionsWhenModifyingConstraint() {
+        ForeignKeyInfo foreignKey = foreignKey("parent_id", "id", (short) 1, (short) 3, (short) 2);
+        foreignKey.setEditStatus(EditStatusEnum.MODIFY.name());
+        Table oldTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of()).build();
+        Table newTable = Table.builder().databaseName("test_db").name("child").columnList(List.of()).indexList(List.of())
+                .foreignKeyList(List.of(foreignKey)).build();
+
+        String sql = new MysqlSqlBuilder().ddl().table().buildAlterTable(oldTable, newTable);
+
+        assertEquals("ALTER TABLE `test_db`.`child`\n"
+                + "\tDROP FOREIGN KEY `fk_child_parent`,\n"
+                + "\tADD CONSTRAINT `fk_child_parent` FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;", sql);
+    }
+
+    private static ForeignKeyInfo foreignKey(String fkColumn, String pkColumn, short keySeq) {
+        return foreignKey(fkColumn, pkColumn, keySeq, null, null);
+    }
+
+    private static ForeignKeyInfo foreignKey(String fkColumn, String pkColumn, short keySeq,
+                                             Short updateRule, Short deleteRule) {
+        ForeignKeyInfo foreignKey = new ForeignKeyInfo();
+        foreignKey.setFkName("fk_child_parent");
+        foreignKey.setFkColumnName(fkColumn);
+        foreignKey.setPkTableName("parent");
+        foreignKey.setPkColumnName(pkColumn);
+        foreignKey.setKeySeq(keySeq);
+        foreignKey.setUpdateRule(updateRule);
+        foreignKey.setDeleteRule(deleteRule);
+        foreignKey.setEditStatus(EditStatusEnum.ADD.name());
+        return foreignKey;
+    }
 
     @Test
     void shouldUseEnumExtentInsteadOfColumnComment() {
@@ -284,6 +370,13 @@ class MysqlSqlBuilderTest {
                 .columnType("VARCHAR")
                 .columnSize(255)
                 .editStatus(editStatus)
+                .build();
+    }
+
+    private static TableColumn mysqlBigintColumn(String name) {
+        return TableColumn.builder()
+                .name(name)
+                .columnType("BIGINT")
                 .build();
     }
 

@@ -75,8 +75,47 @@ export interface IIndexItem {
   editStatus: EditColumnOperationType | null; // Operation type
 }
 
+export interface IForeignKeyColumnMappingItem {
+  key?: string;
+  fkColumnName: string | null;
+  pkColumnName: string | null;
+  keySeq: number;
+}
+
+export interface IForeignKeyInfo {
+  key?: string;
+  oldName?: string | null;
+  pkTableCat?: string | null;
+  pkTableSchem?: string | null;
+  pkTableName: string | null;
+  pkColumnName: string | null;
+  fkTableCat?: string | null;
+  fkTableSchem?: string | null;
+  fkTableName: string | null;
+  fkColumnName: string | null;
+  keySeq: number;
+  updateRule: number | null;
+  deleteRule: number | null;
+  fkName: string | null;
+  pkName?: string | null;
+  deferrability?: number | null;
+  editStatus: EditColumnOperationType | null;
+}
+
+export interface IForeignKeyItem {
+  key?: string;
+  oldName?: string | null;
+  fkName: string | null;
+  pkTableName: string | null;
+  updateRule: number | null;
+  deleteRule: number | null;
+  columnList: IForeignKeyColumnMappingItem[];
+  editStatus: EditColumnOperationType | null;
+}
+
 // The overall data structure when editing the table
 export interface IEditTableInfo extends IBaseInfo {
   columnList: IColumnItemNew[];
   indexList: IIndexItem[];
+  foreignKeyList?: IForeignKeyInfo[];
 }

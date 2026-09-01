@@ -3,6 +3,7 @@ import { Button, Modal, Segmented } from 'antd';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import IndexList, { IIndexListRef } from './IndexList';
+import ForeignKeyList, { IForeignKeyListRef } from './ForeignKeyList';
 import ColumnList, { IColumnListRef } from './ColumnList';
 import BaseInfo, { IBaseInfoRef } from './BaseInfo';
 import sqlService, { IModifyTableSqlParams } from '@/service/sql';
@@ -15,6 +16,8 @@ import { staticMessage } from '@chat2db/ui';
 import AIEntryButton from '@/components/AIEntryButton';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
+import { shouldShowMysqlForeignKeyEditor } from '@/utils/databaseJudgments';
+import { ForeignKeySubmitValidationError, hasForeignKeyRebuild } from './ForeignKeyList/foreignKeyEditor';
 
 interface IProps {
   databaseBaseInfo: IDatabaseBaseInfo;
@@ -28,6 +31,7 @@ interface IContext extends IProps {
   baseInfoRef: React.RefObject<IBaseInfoRef>;
   columnListRef: React.RefObject<IColumnListRef>;
   indexListRef: React.RefObject<IIndexListRef>;
+  foreignKeyListRef: React.RefObject<IForeignKeyListRef>;
   databaseSupportField: IDatabaseSupportField;
 }
 
@@ -61,26 +65,37 @@ export default memo((props: IProps) => {
   const baseInfoRef = useRef<IBaseInfoRef>(null);
   const columnListRef = useRef<IColumnListRef>(null);
   const indexListRef = useRef<IIndexListRef>(null);
+  const foreignKeyListRef = useRef<IForeignKeyListRef>(null);
   const [appendValue, setAppendValue] = useState<string>('');
   const aiEntryButtonRef = useRef<HTMLDivElement>(null);
 
-  const contentList = [
-    {
-      key: 'basic',
-      label: i18n('editTable.tab.basicInfo'),
-      content: <BaseInfo ref={baseInfoRef} />,
-    },
-    {
-      key: 'column',
-      label: i18n('editTable.tab.columnInfo'),
-      content: <ColumnList ref={columnListRef} />,
-    },
-    {
-      key: 'index',
-      label: i18n('editTable.tab.indexInfo'),
-      content: <IndexList ref={indexListRef} />,
-    },
-  ];
+  const contentList = useMemo(() => {
+    const list = [
+      {
+        key: 'basic',
+        label: i18n('editTable.tab.basicInfo'),
+        content: <BaseInfo ref={baseInfoRef} />,
+      },
+      {
+        key: 'column',
+        label: i18n('editTable.tab.columnInfo'),
+        content: <ColumnList ref={columnListRef} />,
+      },
+      {
+        key: 'index',
+        label: i18n('editTable.tab.indexInfo'),
+        content: <IndexList ref={indexListRef} />,
+      },
+    ];
+    if (shouldShowMysqlForeignKeyEditor(databaseBaseInfo.databaseType)) {
+      list.push({
+        key: 'foreignKey',
+        label: i18n('editTable.tab.foreignKeyInfo'),
+        content: <ForeignKeyList ref={foreignKeyListRef} />,
+      });
+    }
+    return list;
+  }, [databaseBaseInfo.databaseType, tableDetails]);
 
   const segmentedOptions = useMemo(() => {
     return contentList.map((item) => {
@@ -122,6 +137,10 @@ export default memo((props: IProps) => {
 
   // Get database field type list
   const getDatabaseFieldTypeList = () => {
+    if (!dataSourceId || !databaseName) {
+      return;
+    }
+
     sqlService
       .getDatabaseFieldTypeList({
         dataSourceId,
@@ -191,7 +210,7 @@ export default memo((props: IProps) => {
   const getTableDetails = (myParams?: { tableNameProps?: string }) => {
     const { tableNameProps } = myParams || {};
     const myTableName = tableNameProps || tableName;
-    if (myTableName) {
+    if (dataSourceId && myTableName) {
       const params = {
         databaseName,
         dataSourceId,
@@ -214,12 +233,28 @@ export default memo((props: IProps) => {
   };
 
   function submit() {
+    if (!dataSourceId || !databaseName) {
+      return;
+    }
+
     if (baseInfoRef.current && columnListRef.current && indexListRef.current) {
+      let foreignKeyList = oldTableDetails.foreignKeyList || [];
+      try {
+        foreignKeyList = foreignKeyListRef.current?.getForeignKeyListInfo() || foreignKeyList;
+      } catch (error) {
+        if (error instanceof ForeignKeySubmitValidationError) {
+          staticMessage.error(i18n(error.messageKey));
+          return;
+        }
+        throw error;
+      }
+
       const newTable = {
         ...oldTableDetails,
         ...baseInfoRef.current.getBaseInfo(),
         columnList: columnListRef.current.getColumnListInfo()!,
         indexList: indexListRef.current.getIndexListInfo()!,
+        foreignKeyList,
       };
 
       const params: IModifyTableSqlParams = {
@@ -270,6 +305,7 @@ export default memo((props: IProps) => {
     baseInfoRef,
     columnListRef,
     indexListRef,
+    foreignKeyListRef,
     databaseSupportField,
   }), [databaseBaseInfo, changeTabDetails, tabDetails, submitCallback, tableDetails, databaseSupportField]);
 
@@ -320,6 +356,11 @@ export default memo((props: IProps) => {
         footer={false}
         destroyOnClose={true}
       >
+        {hasForeignKeyRebuild(appendValue) && (
+          <div style={{ marginBottom: 12 }}>
+            <span>{i18n('editTable.foreignKey.rebuildWarning')}</span>
+          </div>
+        )}
         <ExecuteSQL
           initSql={appendValue}
           databaseBaseInfo={databaseBaseInfo}
