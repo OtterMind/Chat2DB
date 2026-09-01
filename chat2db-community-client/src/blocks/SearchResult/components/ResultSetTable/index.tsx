@@ -37,7 +37,7 @@ import {
 } from './columnState';
 import { resolveResultSelectionActiveCell, ResultSelectionCause } from './selectionState';
 import { RESULT_TABLE_CONTENT_LAYOUT_OPTIONS } from './layoutOptions';
-import { capResultTableAutoRowHeights } from './rowHeight';
+import { resetResultTableLayout, updateResultTableRowExpansion } from './rowHeight';
 
 interface IProps {
   className?: string;
@@ -164,9 +164,9 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     if (!tableInstance) {
       return;
     }
-    const capAutoRowHeights = () => capResultTableAutoRowHeights(tableInstance);
-    const eventId = tableInstance.on('after_render', capAutoRowHeights);
-    capAutoRowHeights();
+    const eventId = tableInstance.on('resize_row_end', ({ row, rowHeight }) => {
+      updateResultTableRowExpansion(tableInstance, row, rowHeight);
+    });
     return () => tableInstance.off(eventId);
   }, [tableInstance]);
 
@@ -406,12 +406,17 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     interactionRevisionRef.current += 1;
   }, []);
 
+  const handleBeforeRecordsChange = useCallback((table: ITableInstance) => {
+    resetResultTableLayout(table);
+  }, []);
+
   return (
     <>
       <CanvasTable
         columns={columns}
         records={records}
         onInit={onInit}
+        onBeforeRecordsChange={handleBeforeRecordsChange}
         className={styles.canvasTable}
         onCopy={onCopy}
         onPaste={onPaste}
