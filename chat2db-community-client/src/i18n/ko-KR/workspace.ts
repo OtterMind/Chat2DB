@@ -293,6 +293,26 @@ export default {
   'workspace.databaseAccount.grantPrivilege': '권한 부여',
   'workspace.databaseAccount.revokePrivilege': '권한 회수',
   'workspace.databaseAccount.lockUnsupported': '이 MySQL 버전 또는 현재 계정 권한에서는 계정 잠금을 지원하지 않습니다',
+  'workspace.databaseAccount.passwordExpiration': '비밀번호 만료',
+  'workspace.databaseAccount.passwordExpirationUnsupported':
+    '이 MySQL 버전 또는 현재 계정 권한에서는 비밀번호 만료 설정을 지원하지 않습니다',
+  'workspace.databaseAccount.passwordExpirePolicy': '비밀번호 만료 정책',
+  'workspace.databaseAccount.passwordExpirePolicyHint':
+    '기존 기본값, 만료 안 함, 기간, 즉시 만료 상태는 mysql.user에서 읽습니다.',
+  'workspace.databaseAccount.passwordExpireDefault': '기본값',
+  'workspace.databaseAccount.passwordExpireNever': '만료 안 함',
+  'workspace.databaseAccount.passwordExpireImmediate': '즉시 만료',
+  'workspace.databaseAccount.passwordExpireInterval': '일수 후 만료',
+  'workspace.databaseAccount.passwordExpireDays': '일수',
+  'workspace.databaseAccount.resourceLimits': '리소스 제한',
+  'workspace.databaseAccount.resourceLimitsUnsupported':
+    '이 MySQL 버전 또는 현재 계정 권한에서는 리소스 제한 설정을 지원하지 않습니다',
+  'workspace.databaseAccount.maxQueriesPerHour': '시간당 최대 쿼리',
+  'workspace.databaseAccount.maxUpdatesPerHour': '시간당 최대 업데이트',
+  'workspace.databaseAccount.maxConnectionsPerHour': '시간당 최대 연결',
+  'workspace.databaseAccount.maxUserConnections': '최대 사용자 연결',
+  'workspace.databaseAccount.resourceLimitZeroHint':
+    '0은 해당 리소스 제한을 제거하며, 변경하지 않은 값은 유지됩니다.',
   'workspace.routine.button.invoke': '루틴 호출',
   'workspace.routine.button.apply': '변경 사항 적용',
   'workspace.routine.button.refresh': 'DDL 다시 불러오기',

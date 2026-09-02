@@ -9,6 +9,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MysqlAccountSqlBuilderTest {
 
@@ -81,6 +82,85 @@ class MysqlAccountSqlBuilderTest {
                 "SHOW GRANTS FOR 'alice''s'@'10.0.%'",
                 MysqlAccountSqlBuilder.showGrantsSql("alice's", "10.0.%")
         );
+    }
+
+    @Test
+    void grantRoleUsesRoleAccountSyntaxIncludingHost() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.GRANT_ROLE);
+        command.setRoleName("reporting_role");
+        command.setRoleHost("10.%");
+        command.setWithAdminOption(Boolean.TRUE);
+
+        assertEquals(
+                "GRANT 'reporting_role'@'10.%' TO 'alice''s'@'10.0.%' WITH ADMIN OPTION",
+                MysqlAccountSqlBuilder.buildSql(command));
+    }
+
+    @Test
+    void passwordExpirationPolicyBuildsIntervalAlterUserSql() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_PASSWORD_POLICY);
+        command.setPasswordExpirePolicy("INTERVAL");
+        command.setPasswordExpireDays(90);
+
+        assertEquals(
+                "ALTER USER 'alice''s'@'10.0.%' PASSWORD EXPIRE INTERVAL 90 DAY",
+                MysqlAccountSqlBuilder.buildSql(command)
+        );
+    }
+
+    @Test
+    void passwordExpirationPolicyBuildsAllReadbackModes() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_PASSWORD_POLICY);
+
+        command.setPasswordExpirePolicy("DEFAULT");
+        assertEquals("ALTER USER 'alice''s'@'10.0.%' PASSWORD EXPIRE DEFAULT", MysqlAccountSqlBuilder.buildSql(command));
+
+        command.setPasswordExpirePolicy("NEVER");
+        assertEquals("ALTER USER 'alice''s'@'10.0.%' PASSWORD EXPIRE NEVER", MysqlAccountSqlBuilder.buildSql(command));
+
+        command.setPasswordExpirePolicy("IMMEDIATE");
+        assertEquals("ALTER USER 'alice''s'@'10.0.%' PASSWORD EXPIRE", MysqlAccountSqlBuilder.buildSql(command));
+    }
+
+    @Test
+    void passwordExpirationPolicyRejectsUnsupportedDaysBeforeSubmission() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_PASSWORD_POLICY);
+        command.setPasswordExpirePolicy("INTERVAL");
+
+        command.setPasswordExpireDays(0);
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(command));
+
+        command.setPasswordExpireDays(65536);
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(command));
+    }
+
+    @Test
+    void resourceLimitsBuildsCompleteAlterUserSqlIncludingZeroLimits() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_RESOURCE_LIMITS);
+        command.setMaxQueriesPerHour(100);
+        command.setMaxUpdatesPerHour(0);
+        command.setMaxConnectionsPerHour(20);
+        command.setMaxUserConnections(3);
+
+        assertEquals(
+                "ALTER USER 'alice''s'@'10.0.%' WITH MAX_QUERIES_PER_HOUR 100 MAX_UPDATES_PER_HOUR 0"
+                        + " MAX_CONNECTIONS_PER_HOUR 20 MAX_USER_CONNECTIONS 3",
+                MysqlAccountSqlBuilder.buildSql(command)
+        );
+    }
+
+    @Test
+    void resourceLimitsPreservesOnlyProvidedValuesAndRejectsNegativeValues() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.ALTER_RESOURCE_LIMITS);
+        command.setMaxQueriesPerHour(200);
+
+        assertEquals(
+                "ALTER USER 'alice''s'@'10.0.%' WITH MAX_QUERIES_PER_HOUR 200",
+                MysqlAccountSqlBuilder.buildSql(command)
+        );
+
+        command.setMaxUpdatesPerHour(-1);
+        assertThrows(RuntimeException.class, () -> MysqlAccountSqlBuilder.buildSql(command));
     }
 
     private AccountOperationRequest base(AccountActionTypeEnum actionType) {

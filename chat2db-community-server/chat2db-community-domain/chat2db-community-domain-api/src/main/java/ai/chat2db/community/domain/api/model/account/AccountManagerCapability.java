@@ -13,6 +13,9 @@ public class AccountManagerCapability {
     private String connectionUser;
     private Boolean accountListReadable;
     private Boolean accountLockSupported;
+    private Boolean passwordExpirationSupported;
+    private Boolean resourceLimitsSupported;
+    private Boolean roleManagementSupported;
     private List<String> editablePrivileges;
     private String message;
 }

@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.model.request.db;
 
 import ai.chat2db.community.domain.api.enums.plugin.AccountActionTypeEnum;
+import ai.chat2db.community.domain.api.enums.plugin.PasswordExpirePolicyEnum;
 import ai.chat2db.community.domain.api.enums.plugin.PrivilegeScopeEnum;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,4 +19,15 @@ public class AccountCommandRequest extends AccountRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private PasswordExpirePolicyEnum passwordExpirePolicy;
+    private Integer passwordExpireDays;
+    private Integer maxQueriesPerHour;
+    private Integer maxUpdatesPerHour;
+    private Integer maxConnectionsPerHour;
+    private Integer maxUserConnections;
+    private String roleName;
+    private String roleHost;
+    private List<String> roleList;
+    private Boolean withAdminOption;
+    private String defaultRoleMode;
 }

@@ -1,14 +1,38 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tooltip, theme } from 'antd';
-import { DeleteOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  ConfigProvider,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Space,
+  Spin,
+  Tooltip,
+  theme,
+} from 'antd';
+import {
+  DeleteOutlined,
+  FieldTimeOutlined,
+  KeyOutlined,
+  LockOutlined,
+  ThunderboltOutlined,
+  UnlockOutlined,
+} from '@ant-design/icons';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import SQLPreview from '@/components/SQLPreview';
 import accountAdminService, {
   AccountActionType,
+  AccountPasswordExpirePolicy,
   AccountPrivilege,
   AccountPrivilegeScope,
   formatAccountExecuteMessage,
+  type Account,
   type AccountCapability,
   type AccountCommand,
   type AccountExecute,
@@ -18,6 +42,11 @@ import sqlService from '@/service/sql';
 import { DatabaseTypeCode, TreeNodeType } from '@/constants';
 import { useTreeStore } from '@/store/tree';
 import { IBoundInfo } from '@/typings';
+import {
+  buildAccountSettingsCommand,
+  getAccountSettingsInitialValues,
+  isAccountSettingsActionSupported,
+} from './accountSettings';
 import styles from './index.less';
 
 interface IProps {
@@ -79,12 +108,22 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const watchedPrivileges = Form.useWatch('privileges', form);
   const watchedGrantOption = Form.useWatch('grantOption', form);
   const watchedActionType = Form.useWatch('actionType', form);
+  const watchedPasswordExpirePolicy = Form.useWatch('passwordExpirePolicy', accountForm);
 
-  const selectedAccount =
+  const selectedAccount: Account | null =
     uniqueData?.user && uniqueData?.host
       ? {
           user: uniqueData.user,
           host: uniqueData.host,
+          displayName: uniqueData.popoverContent || `${uniqueData.user}@${uniqueData.host}`,
+          passwordExpired: uniqueData.passwordExpired,
+          passwordExpirePolicy: uniqueData.passwordExpirePolicy,
+          passwordLastChanged: uniqueData.passwordLastChanged,
+          passwordLifetime: uniqueData.passwordLifetime,
+          maxQueriesPerHour: uniqueData.maxQueriesPerHour,
+          maxUpdatesPerHour: uniqueData.maxUpdatesPerHour,
+          maxConnectionsPerHour: uniqueData.maxConnectionsPerHour,
+          maxUserConnections: uniqueData.maxUserConnections,
         }
       : null;
 
@@ -374,9 +413,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       return;
     }
     accountForm.setFieldsValue({
-      user: selectedAccount?.user,
-      host: selectedAccount?.host,
-      password: '',
+      ...(selectedAccount ? getAccountSettingsInitialValues(selectedAccount) : {}),
     });
   }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
 
@@ -386,13 +423,14 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     }
     return accountForm.validateFields().then((values) => {
       resetConfirmState();
-      return previewAndConfirm({
-        dataSourceId: dataSourceId!,
-        user: values.user,
-        host: values.host,
-        password: values.password,
-        actionType: accountActionType,
-      }).then(() => {
+      return previewAndConfirm(
+        buildAccountSettingsCommand({
+          dataSourceId: dataSourceId!,
+          account: selectedAccount!,
+          actionType: accountActionType,
+          values,
+        }),
+      ).then(() => {
         setAccountModalOpen(false);
       });
     });
@@ -448,6 +486,38 @@ const AccountPrivilegePanel = memo((props: IProps) => {
               >
                 {i18n('workspace.databaseAccount.changePassword')}
               </Button>
+              <Tooltip
+                title={
+                  isAccountSettingsActionSupported(AccountActionType.ALTER_PASSWORD_POLICY, capability)
+                    ? i18n('workspace.databaseAccount.passwordExpiration')
+                    : i18n('workspace.databaseAccount.passwordExpirationUnsupported')
+                }
+              >
+                <Button
+                  disabled={
+                    !selectedAccount ||
+                    !isAccountSettingsActionSupported(AccountActionType.ALTER_PASSWORD_POLICY, capability)
+                  }
+                  icon={<FieldTimeOutlined />}
+                  onClick={() => openAccountModal(AccountActionType.ALTER_PASSWORD_POLICY)}
+                />
+              </Tooltip>
+              <Tooltip
+                title={
+                  isAccountSettingsActionSupported(AccountActionType.ALTER_RESOURCE_LIMITS, capability)
+                    ? i18n('workspace.databaseAccount.resourceLimits')
+                    : i18n('workspace.databaseAccount.resourceLimitsUnsupported')
+                }
+              >
+                <Button
+                  disabled={
+                    !selectedAccount ||
+                    !isAccountSettingsActionSupported(AccountActionType.ALTER_RESOURCE_LIMITS, capability)
+                  }
+                  icon={<ThunderboltOutlined />}
+                  onClick={() => openAccountModal(AccountActionType.ALTER_RESOURCE_LIMITS)}
+                />
+              </Tooltip>
               <Tooltip
                 title={
                   accountLockSupported
@@ -603,6 +673,75 @@ const AccountPrivilegePanel = memo((props: IProps) => {
               <Input.Password />
             </Form.Item>
           )}
+          {accountActionType === AccountActionType.ALTER_PASSWORD_POLICY && (
+            <>
+              <Form.Item
+                name="passwordExpirePolicy"
+                label={i18n('workspace.databaseAccount.passwordExpirePolicy')}
+                extra={i18n('workspace.databaseAccount.passwordExpirePolicyHint')}
+                rules={[{ required: true }]}
+              >
+                <Select
+                  options={[
+                    {
+                      label: i18n('workspace.databaseAccount.passwordExpireDefault'),
+                      value: AccountPasswordExpirePolicy.DEFAULT,
+                    },
+                    { label: i18n('workspace.databaseAccount.passwordExpireNever'), value: AccountPasswordExpirePolicy.NEVER },
+                    {
+                      label: i18n('workspace.databaseAccount.passwordExpireImmediate'),
+                      value: AccountPasswordExpirePolicy.IMMEDIATE,
+                    },
+                    {
+                      label: i18n('workspace.databaseAccount.passwordExpireInterval'),
+                      value: AccountPasswordExpirePolicy.INTERVAL,
+                    },
+                  ]}
+                />
+              </Form.Item>
+              {watchedPasswordExpirePolicy === AccountPasswordExpirePolicy.INTERVAL && (
+                <Form.Item
+                  name="passwordExpireDays"
+                  label={i18n('workspace.databaseAccount.passwordExpireDays')}
+                  rules={[{ required: true }]}
+                >
+                  <InputNumber min={1} max={65535} precision={0} className={styles.fullWidthControl} />
+                </Form.Item>
+              )}
+            </>
+          )}
+          {accountActionType === AccountActionType.ALTER_RESOURCE_LIMITS && (
+            <>
+              <Form.Item
+                name="maxQueriesPerHour"
+                label={i18n('workspace.databaseAccount.maxQueriesPerHour')}
+                extra={i18n('workspace.databaseAccount.resourceLimitZeroHint')}
+              >
+                <InputNumber min={0} precision={0} className={styles.fullWidthControl} placeholder="0" />
+              </Form.Item>
+              <Form.Item
+                name="maxUpdatesPerHour"
+                label={i18n('workspace.databaseAccount.maxUpdatesPerHour')}
+                extra={i18n('workspace.databaseAccount.resourceLimitZeroHint')}
+              >
+                <InputNumber min={0} precision={0} className={styles.fullWidthControl} placeholder="0" />
+              </Form.Item>
+              <Form.Item
+                name="maxConnectionsPerHour"
+                label={i18n('workspace.databaseAccount.maxConnectionsPerHour')}
+                extra={i18n('workspace.databaseAccount.resourceLimitZeroHint')}
+              >
+                <InputNumber min={0} precision={0} className={styles.fullWidthControl} placeholder="0" />
+              </Form.Item>
+              <Form.Item
+                name="maxUserConnections"
+                label={i18n('workspace.databaseAccount.maxUserConnections')}
+                extra={i18n('workspace.databaseAccount.resourceLimitZeroHint')}
+              >
+                <InputNumber min={0} precision={0} className={styles.fullWidthControl} placeholder="0" />
+              </Form.Item>
+            </>
+          )}
         </Form>
       </Modal>
       <Modal
@@ -652,6 +791,10 @@ function accountActionTitle(actionType: AccountActionType) {
   switch (actionType) {
     case AccountActionType.ALTER_PASSWORD:
       return i18n('workspace.databaseAccount.changePassword');
+    case AccountActionType.ALTER_PASSWORD_POLICY:
+      return i18n('workspace.databaseAccount.passwordExpiration');
+    case AccountActionType.ALTER_RESOURCE_LIMITS:
+      return i18n('workspace.databaseAccount.resourceLimits');
     case AccountActionType.LOCK_ACCOUNT:
       return i18n('workspace.databaseAccount.lockAccount');
     case AccountActionType.UNLOCK_ACCOUNT:

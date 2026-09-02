@@ -19,4 +19,15 @@ public class AccountOperationRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private String passwordExpirePolicy;
+    private Integer passwordExpireDays;
+    private Integer maxQueriesPerHour;
+    private Integer maxUpdatesPerHour;
+    private Integer maxConnectionsPerHour;
+    private Integer maxUserConnections;
+    private String roleName;
+    private String roleHost;
+    private List<String> roleList;
+    private Boolean withAdminOption;
+    private String defaultRoleMode;
 }
