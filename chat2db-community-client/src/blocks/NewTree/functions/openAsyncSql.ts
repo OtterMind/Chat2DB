@@ -42,8 +42,7 @@ export const editView = (props: { treeNodeData: any; addWorkspaceTab: any }) => 
       tableName: originalTitle,
       viewName: originalTitle,
       loadSQL: () => {
-        return new Promise((resolve) => {
-          sqlService
+        return sqlService
             .getViewDetail({
               dataSourceId: treeNodeData.extraParams!.dataSourceId!,
               databaseType: treeNodeData.extraParams!.databaseType!,
@@ -51,11 +50,7 @@ export const editView = (props: { treeNodeData: any; addWorkspaceTab: any }) => 
               schemaName: treeNodeData.extraParams?.schemaName,
               tableName: treeNodeData.originalTitle,
             } as any)
-            .then((res) => {
-              // Update the DDL.
-              resolve(res.ddl);
-            });
-        });
+            .then((res) => res.ddl);
       },
       popoverContent: title,
     },
@@ -75,8 +70,7 @@ export const openFunction = (props: { treeNodeData: any; addWorkspaceTab: any })
       ...extraParams,
       functionName: originalTitle,
       loadSQL: () => {
-        return new Promise((resolve) => {
-          sqlService
+        return sqlService
             .getFunctionDetail({
               dataSourceId: treeNodeData.extraParams!.dataSourceId!,
               databaseType: treeNodeData.extraParams!.databaseType!,
@@ -84,11 +78,7 @@ export const openFunction = (props: { treeNodeData: any; addWorkspaceTab: any })
               schemaName: treeNodeData.extraParams?.schemaName,
               functionName: treeNodeData.originalTitle,
             } as any)
-            .then((res) => {
-              // Update the DDL.
-              resolve(res.functionBody);
-            });
-        });
+            .then((res) => res.functionBody);
       },
       popoverContent: title,
     },
@@ -108,8 +98,7 @@ export const openProcedure = (props: { treeNodeData: any; addWorkspaceTab: any }
       ...extraParams,
       procedureName: originalTitle,
       loadSQL: () => {
-        return new Promise((resolve) => {
-          sqlService
+        return sqlService
             .getProcedureDetail({
               dataSourceId: treeNodeData.extraParams!.dataSourceId!,
               databaseType: treeNodeData.extraParams!.databaseType!,
@@ -117,11 +106,7 @@ export const openProcedure = (props: { treeNodeData: any; addWorkspaceTab: any }
               schemaName: treeNodeData.extraParams?.schemaName,
               procedureName: treeNodeData.originalTitle,
             } as any)
-            .then((res) => {
-              // Update the DDL.
-              resolve(res.procedureBody);
-            });
-        });
+            .then((res) => res.procedureBody);
       },
       popoverContent: title,
     },
@@ -141,8 +126,7 @@ export const openTrigger = (props: { treeNodeData: any; addWorkspaceTab: any }) 
       ...extraParams,
       triggerName: originalTitle,
       loadSQL: () => {
-        return new Promise((resolve) => {
-          sqlService
+        return sqlService
             .getTriggerDetail({
               dataSourceId: treeNodeData.extraParams!.dataSourceId!,
               databaseType: treeNodeData.extraParams!.databaseType!,
@@ -150,11 +134,7 @@ export const openTrigger = (props: { treeNodeData: any; addWorkspaceTab: any }) 
               schemaName: treeNodeData.extraParams?.schemaName,
               triggerName: treeNodeData.originalTitle,
             } as any)
-            .then((res) => {
-              // Update the DDL.
-              resolve(res.triggerBody);
-            });
-        });
+            .then((res) => res.triggerBody);
       },
       popoverContent: title,
     },
