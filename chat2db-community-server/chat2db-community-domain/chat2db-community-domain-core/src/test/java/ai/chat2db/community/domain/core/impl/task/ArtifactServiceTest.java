@@ -1,7 +1,10 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.TaskArtifact;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
@@ -39,8 +42,10 @@ class ArtifactServiceTest {
     @Test
     void concurrentDraftsReserveDifferentTargetsAndPublishIndependently() throws IOException {
         ArtifactService service = new ArtifactService();
-        var first = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
-        var second = service.createDraft(2L, tempDirectory.toString(), "export.csv", "text/csv");
+        var first = service.createDraft(1L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
+                "text/csv");
+        var second = service.createDraft(2L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
+                "text/csv");
         assertNotEquals(first.getTargetFile(), second.getTargetFile());
         Files.writeString(first.getTemporaryFile().toPath(), "first");
         Files.writeString(second.getTemporaryFile().toPath(), "second");
@@ -58,11 +63,13 @@ class ArtifactServiceTest {
     @Test
     void failedPublicationReleasesReservedTarget() {
         ArtifactService service = new ArtifactService();
-        var failed = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
+        var failed = service.createDraft(1L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
+                "text/csv");
 
         assertThrows(IllegalStateException.class, () -> service.publish(failed));
 
-        var replacement = service.createDraft(2L, tempDirectory.toString(), "export.csv", "text/csv");
+        var replacement = service.createDraft(2L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
+                "text/csv");
         assertEquals(failed.getTargetFile(), replacement.getTargetFile());
         service.deleteDraft(replacement);
     }
@@ -282,6 +289,41 @@ class ArtifactServiceTest {
 
         @Override
         public List<Task> listNonTerminalTasks() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<TaskArtifact> listArtifacts(Long taskId) {
+            return List.of();
+        }
+
+        @Override
+        public void saveArtifact(Long taskId, TaskArtifact artifact) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void deleteArtifact(Long taskId, String artifactId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<Task> listResumableTasks() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void saveResumeState(Long taskId, ResumeState state) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<ResumeState> listResumeStates(Long taskId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void clearResumeStates(Long taskId) {
             throw new UnsupportedOperationException();
         }
     }

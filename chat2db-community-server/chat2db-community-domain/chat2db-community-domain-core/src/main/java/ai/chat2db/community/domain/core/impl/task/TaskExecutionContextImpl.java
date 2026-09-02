@@ -1,6 +1,8 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -17,7 +19,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.Statement;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class TaskExecutionContextImpl implements TaskExecutionContext {
@@ -34,9 +41,12 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     private final AtomicReference<StatementRegistration> activeStatement = new AtomicReference<>();
 
-    private ArtifactDraft artifactDraft;
+    // Insertion order is the publish order, and the OUTPUT role stays the task's primary download.
+    private final Map<String, ArtifactDraft> draftsByRole = new LinkedHashMap<>();
 
-    private BufferedWriter artifactWriter;
+    private final Map<String, BufferedWriter> writersByRole = new LinkedHashMap<>();
+
+    private final Set<String> appendingRoles = new java.util.HashSet<>();
 
     TaskExecutionContextImpl(Long taskId, RunningTask runningTask, TaskStorage taskStorage,
             ArtifactService artifactService) {
@@ -44,6 +54,22 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
         this.runningTask = runningTask;
         this.taskStorage = taskStorage;
         this.artifactService = artifactService;
+    }
+
+    @Override
+    public Long taskId() {
+        return taskId;
+    }
+
+    @Override
+    public List<ResumeState> resumeStates() {
+        return taskStorage.listResumeStates(taskId);
+    }
+
+    @Override
+    public void checkpoint(ResumeState state) {
+        checkCancelled();
+        taskStorage.saveResumeState(taskId, state);
     }
 
     @Override
@@ -91,20 +117,27 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
     }
 
     @Override
-    public synchronized ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
+    public synchronized ArtifactDraft createArtifact(String role, String outputDirectory, String fileName,
+            String mediaType) {
         checkCancelled();
-        if (artifactDraft != null) {
-            throw new IllegalStateException("A task can create at most one artifact");
+        if (draftsByRole.containsKey(role)) {
+            throw new IllegalStateException("Artifact role " + role + " is already created for this task");
         }
-        ArtifactDraft draft = artifactService.createDraft(taskId, outputDirectory, fileName, mediaType);
+        ArtifactDraft draft = resumedDraft(role, outputDirectory, fileName, mediaType);
+        if (draft == null) {
+            draft = artifactService.createDraft(taskId, role, outputDirectory, fileName, mediaType);
+        } else {
+            appendingRoles.add(role);
+        }
         try {
             appendEvent(TaskEventLevel.INFO.name(), TaskEventCode.ARTIFACT_PREPARED.name(),
                     "Artifact prepared", Map.of(
                             TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY,
                             draft.getTemporaryFile().getAbsolutePath(),
                             TaskConstants.ARTIFACT_TARGET_PATH_DETAIL_KEY,
-                            draft.getTargetFile().getAbsolutePath()));
-            artifactDraft = draft;
+                            draft.getTargetFile().getAbsolutePath(),
+                            TaskConstants.ARTIFACT_ROLE_DETAIL_KEY, role));
+            draftsByRole.put(role, draft);
             return draft;
         } catch (RuntimeException e) {
             artifactService.deleteDraft(draft);
@@ -112,19 +145,54 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
         }
     }
 
+    /**
+     * The draft file of an interrupted run, if this task carries resume checkpoints and the file
+     * survived; the exporter then appends instead of restarting.
+     */
+    private ArtifactDraft resumedDraft(String role, String outputDirectory, String fileName, String mediaType) {
+        if (taskStorage.listResumeStates(taskId).isEmpty()) {
+            return null;
+        }
+        String temporaryPath = null;
+        for (TaskEvent prepared : taskStorage.listEvents(taskId, 0L, TaskConstants.MAX_EVENT_LIMIT)) {
+            if (TaskEventCode.ARTIFACT_PREPARED.name().equals(prepared.getCode())
+                    && role.equals(detailOf(prepared, TaskConstants.ARTIFACT_ROLE_DETAIL_KEY))) {
+                temporaryPath = detailOf(prepared, TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY);
+            }
+        }
+        if (temporaryPath == null) {
+            return null;
+        }
+        java.io.File existing = new java.io.File(temporaryPath);
+        if (!ArtifactService.isInterruptedDraft(taskId, existing)) {
+            return null;
+        }
+        return artifactService.resumeDraft(taskId, role, outputDirectory, fileName, mediaType, existing);
+    }
+
+    private static String detailOf(TaskEvent event, String key) {
+        Object value = event.getDetails() == null ? null : event.getDetails().get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
     @Override
     public synchronized void write(String content) {
         checkCancelled();
-        if (artifactDraft == null) {
+        ArtifactDraft draft = draftsByRole.get(TaskArtifactRole.OUTPUT);
+        if (draft == null) {
             throw new IllegalStateException("Create an artifact before writing content");
         }
+        BufferedWriter writer = writersByRole.get(TaskArtifactRole.OUTPUT);
         try {
-            if (artifactWriter == null) {
-                artifactWriter = Files.newBufferedWriter(artifactDraft.getTemporaryFile().toPath(),
-                        StandardCharsets.UTF_8);
+            if (writer == null) {
+                writer = appendingRoles.contains(TaskArtifactRole.OUTPUT)
+                        ? Files.newBufferedWriter(draft.getTemporaryFile().toPath(), StandardCharsets.UTF_8,
+                                java.nio.file.StandardOpenOption.APPEND)
+                        : Files.newBufferedWriter(draft.getTemporaryFile().toPath(), StandardCharsets.UTF_8);
+                writersByRole.put(TaskArtifactRole.OUTPUT, writer);
             }
-            artifactWriter.write(content);
-            artifactWriter.newLine();
+            writer.write(content);
+            writer.newLine();
         } catch (IOException e) {
             throw new IllegalStateException("Could not write task artifact", e);
         }
@@ -156,34 +224,34 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
         }
     }
 
+    synchronized List<ArtifactDraft> artifactDrafts() {
+        return List.copyOf(draftsByRole.values());
+    }
+
     synchronized void finishArtifactWrites() {
-        if (artifactWriter == null) {
-            return;
-        }
-        try {
-            artifactWriter.flush();
-            artifactWriter.close();
-            artifactWriter = null;
-        } catch (IOException e) {
-            throw new IllegalStateException("Could not close task artifact", e);
+        Iterator<Map.Entry<String, BufferedWriter>> entries = writersByRole.entrySet().iterator();
+        while (entries.hasNext()) {
+            Map.Entry<String, BufferedWriter> entry = entries.next();
+            try {
+                entry.getValue().flush();
+                entry.getValue().close();
+            } catch (IOException e) {
+                throw new IllegalStateException("Could not close task artifact", e);
+            } finally {
+                entries.remove();
+            }
         }
     }
 
     synchronized void closeQuietly() {
-        if (artifactWriter == null) {
-            return;
+        for (BufferedWriter writer : writersByRole.values()) {
+            try {
+                writer.close();
+            } catch (IOException ignored) {
+                // The task result has already been decided.
+            }
         }
-        try {
-            artifactWriter.close();
-        } catch (IOException ignored) {
-            // The task result has already been decided.
-        } finally {
-            artifactWriter = null;
-        }
-    }
-
-    ArtifactDraft artifactDraft() {
-        return artifactDraft;
+        writersByRole.clear();
     }
 
     private void appendEvent(String level, String code, String message, Map<String, Object> details) {

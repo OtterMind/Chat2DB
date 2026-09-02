@@ -1,7 +1,9 @@
 package ai.chat2db.community.storage.large;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
@@ -10,6 +12,7 @@ import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.storage.IdUtil;
+import ai.chat2db.community.storage.TaskLifecyclePolicy;
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
 import lombok.AllArgsConstructor;
@@ -17,7 +20,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -34,28 +36,27 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 @Slf4j
-@Component
 public class FileTaskStorage implements TaskStorage {
 
-    static final String TASK_STORAGE_DIRECTORY = "task-v2";
+    public static final String TASK_STORAGE_DIRECTORY = "task-v2";
 
-    static final String TASK_INDEX_NAME = "task";
+    public static final String TASK_INDEX_NAME = "task";
 
-    static final String TASK_EVENT_FILE_SUFFIX = "-events.json";
+    public static final String TASK_EVENT_FILE_SUFFIX = "-events.json";
 
     static final String TASK_TRANSITION_FILE_SUFFIX = "-transition.json";
 
     static final String DELETING_FILE_SUFFIX = ".deleting";
-
-    private static final String LEGACY_CANCELLING_STATUS = "CANCELLING";
 
     static final int NO_FILE_LIMIT = 0;
 
@@ -68,7 +69,7 @@ public class FileTaskStorage implements TaskStorage {
         this(new TaskSnapshotStorage());
     }
 
-    FileTaskStorage(String storageBasePath) {
+    public FileTaskStorage(String storageBasePath) {
         this(new TaskSnapshotStorage(storageBasePath));
     }
 
@@ -137,7 +138,7 @@ public class FileTaskStorage implements TaskStorage {
             TaskStatusPatch patch, TaskEvent lifecycleEvent) {
         Task current = snapshots.find(taskId);
         if (current == null || !expectedStatus.equals(current.getStatus())
-                || !isLegalTransition(expectedStatus, targetStatus)) {
+                || !TaskLifecyclePolicy.isLegalTransition(expectedStatus, targetStatus)) {
             return false;
         }
         if (lifecycleEvent == null) {
@@ -145,7 +146,7 @@ public class FileTaskStorage implements TaskStorage {
         }
 
         Task updated = copy(current);
-        applyPatch(updated, targetStatus, patch);
+        TaskLifecyclePolicy.applyStatusPatch(updated, targetStatus, patch);
         TaskTransition transition = new TaskTransition(updated, prepareEvent(taskId, lifecycleEvent));
         writeTransition(transition);
         commitTransition(transition, false);
@@ -159,8 +160,7 @@ public class FileTaskStorage implements TaskStorage {
                 || progress == null || progress.getProgress() == null) {
             return false;
         }
-        int requested = Math.max(TaskConstants.STARTED_PROGRESS,
-                Math.min(TaskConstants.MAX_RUNNING_PROGRESS, progress.getProgress()));
+        int requested = TaskLifecyclePolicy.runningProgress(progress.getProgress());
         int current = currentTask.getProgress() == null ? TaskConstants.PENDING_PROGRESS : currentTask.getProgress();
         if (requested < current) {
             return false;
@@ -186,7 +186,7 @@ public class FileTaskStorage implements TaskStorage {
 
     @Override
     public synchronized List<TaskEvent> listEvents(Long taskId, long afterSequence, int limit) {
-        int resultLimit = eventLimit(limit);
+        int resultLimit = TaskLifecyclePolicy.eventLimit(limit);
         File file = eventsFile(taskId);
         repairIncompleteTrailingEvent(file, taskId);
         if (!file.isFile()) {
@@ -244,7 +244,7 @@ public class FileTaskStorage implements TaskStorage {
 
     @Override
     public synchronized List<TaskEvent> listEventsBefore(Long taskId, Long beforeSequence, int limit) {
-        int resultLimit = eventLimit(limit);
+        int resultLimit = TaskLifecyclePolicy.eventLimit(limit);
         File file = eventsFile(taskId);
         repairIncompleteTrailingEvent(file, taskId);
         if (!file.isFile()) {
@@ -380,6 +380,91 @@ public class FileTaskStorage implements TaskStorage {
             throw e instanceof RuntimeException runtimeException
                     ? runtimeException : new RuntimeException(e);
         }
+    }
+
+    @Override
+    public synchronized List<TaskArtifact> listArtifacts(Long taskId) {
+        Task task = taskId == null ? null : snapshots.find(taskId);
+        return task == null || task.getArtifacts() == null ? List.of() : List.copyOf(task.getArtifacts());
+    }
+
+    @Override
+    public synchronized void saveArtifact(Long taskId, TaskArtifact artifact) {
+        if (taskId == null || artifact == null || artifact.getArtifactId() == null || artifact.getRole() == null) {
+            throw new IllegalArgumentException("artifact must reference an existing task");
+        }
+        mutateTask(taskId, "artifact", updated -> {
+            List<TaskArtifact> artifacts = new ArrayList<>(
+                    updated.getArtifacts() == null ? List.of() : updated.getArtifacts());
+            artifacts.removeIf(existing -> artifact.getArtifactId().equals(existing.getArtifactId()));
+            artifacts.add(JSON.parseObject(JSON.toJSONString(artifact), TaskArtifact.class));
+            updated.setArtifacts(artifacts);
+        });
+    }
+
+    @Override
+    public synchronized void deleteArtifact(Long taskId, String artifactId) {
+        if (taskId == null || artifactId == null || snapshots.find(taskId) == null) {
+            return;
+        }
+        mutateTask(taskId, "artifact", updated -> {
+            List<TaskArtifact> artifacts = new ArrayList<>(
+                    updated.getArtifacts() == null ? List.of() : updated.getArtifacts());
+            artifacts.removeIf(existing -> artifactId.equals(existing.getArtifactId()));
+            updated.setArtifacts(artifacts);
+        });
+    }
+
+    @Override
+    public synchronized List<Task> listResumableTasks() {
+        return snapshots.all().stream()
+                .filter(task -> task.getStatus() != null && !TaskStatus.isTerminal(task.getStatus()))
+                .filter(task -> task.getResumeStates() != null && !task.getResumeStates().isEmpty())
+                .map(this::copy)
+                .toList();
+    }
+
+    @Override
+    public synchronized void saveResumeState(Long taskId, ResumeState state) {
+        if (taskId == null || state == null || state.getShardNo() == null || state.getKind() == null) {
+            throw new IllegalArgumentException("resume state must reference an existing task");
+        }
+        mutateTask(taskId, "resume state", updated -> {
+            List<ResumeState> states = new ArrayList<>(
+                    updated.getResumeStates() == null ? List.of() : updated.getResumeStates());
+            states.removeIf(existing -> state.getShardNo().equals(existing.getShardNo()));
+            states.add(JSON.parseObject(JSON.toJSONString(state), ResumeState.class));
+            states.sort(Comparator.comparing(ResumeState::getShardNo));
+            updated.setResumeStates(states);
+        });
+    }
+
+    @Override
+    public synchronized List<ResumeState> listResumeStates(Long taskId) {
+        Task task = taskId == null ? null : snapshots.find(taskId);
+        return task == null || task.getResumeStates() == null ? List.of() : List.copyOf(task.getResumeStates());
+    }
+
+    @Override
+    public synchronized void clearResumeStates(Long taskId) {
+        if (taskId == null || snapshots.find(taskId) == null) {
+            return;
+        }
+        mutateTask(taskId, "resume state", updated -> updated.setResumeStates(null));
+    }
+
+    /**
+     * Rewrites the stored snapshot with {@code change} applied to a copy, so artifact and resume
+     * data share the task snapshot's single-writer semantics and its deletion rollback.
+     */
+    private void mutateTask(Long taskId, String subject, Consumer<Task> change) {
+        Task current = snapshots.find(taskId);
+        if (current == null) {
+            throw new IllegalArgumentException(subject + " must reference an existing task");
+        }
+        Task updated = copy(current);
+        change.accept(updated);
+        snapshots.replaceStrict(taskId, updated);
     }
 
     private void commitTransition(TaskTransition transition, boolean recovery) {
@@ -628,51 +713,6 @@ public class FileTaskStorage implements TaskStorage {
         }
     }
 
-    private int eventLimit(int limit) {
-        return Math.max(1, Math.min(TaskConstants.MAX_EVENT_LIMIT, limit));
-    }
-
-    private void applyPatch(Task task, String targetStatus, TaskStatusPatch patch) {
-        TaskStatusPatch effectivePatch = patch == null ? new TaskStatusPatch() : patch;
-        int previousProgress = task.getProgress() == null ? TaskConstants.PENDING_PROGRESS : task.getProgress();
-        task.setStatus(targetStatus);
-        if (TaskStatus.SUCCESS.name().equals(targetStatus)) {
-            task.setProgress(TaskConstants.COMPLETED_PROGRESS);
-        } else if (!TaskStatus.isTerminal(targetStatus) && effectivePatch.getProgress() != null) {
-            task.setProgress(Math.max(previousProgress, Math.min(TaskConstants.MAX_RUNNING_PROGRESS,
-                    effectivePatch.getProgress())));
-        } else {
-            task.setProgress(previousProgress);
-        }
-        if (effectivePatch.getStage() != null) {
-            task.setStage(effectivePatch.getStage());
-        }
-        task.setProgressMessage(effectivePatch.getProgressMessage());
-        task.setErrorCode(TaskStatus.FAILED.name().equals(targetStatus) ? effectivePatch.getErrorCode() : null);
-        task.setErrorMessage(TaskStatus.FAILED.name().equals(targetStatus) ? effectivePatch.getErrorMessage() : null);
-        task.setArtifactId(TaskStatus.SUCCESS.name().equals(targetStatus) ? effectivePatch.getArtifactId() : null);
-        if (effectivePatch.getStartedAt() != null) {
-            task.setStartedAt(effectivePatch.getStartedAt());
-        }
-        if (effectivePatch.getFinishedAt() != null) {
-            task.setFinishedAt(effectivePatch.getFinishedAt());
-        }
-        task.setUpdatedAt(effectivePatch.getUpdatedAt() == null ? new Date() : effectivePatch.getUpdatedAt());
-    }
-
-    private boolean isLegalTransition(String source, String target) {
-        if (TaskStatus.PENDING.name().equals(source)) {
-            return TaskStatus.RUNNING.name().equals(target) || TaskStatus.FAILED.name().equals(target);
-        }
-        if (TaskStatus.RUNNING.name().equals(source)) {
-            return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target);
-        }
-        if (LEGACY_CANCELLING_STATUS.equals(source)) {
-            return TaskStatus.FAILED.name().equals(target);
-        }
-        return false;
-    }
-
     private File eventsFile(Long taskId) {
         return new File(snapshots.storageDirectory(), taskId + TASK_EVENT_FILE_SUFFIX);
     }
@@ -712,6 +752,7 @@ public class FileTaskStorage implements TaskStorage {
         target.setStage(copy.getStage());
         target.setProgressMessage(copy.getProgressMessage());
         target.setTarget(copy.getTarget());
+        target.setSpecJson(copy.getSpecJson());
         target.setErrorCode(copy.getErrorCode());
         target.setErrorMessage(copy.getErrorMessage());
         target.setArtifactId(copy.getArtifactId());

@@ -261,6 +261,87 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
     }
 
     @Override
+    public String buildKeysetPageLimit(KeysetPageLimitRequest request) {
+        List<String> keyColumns = request.getKeyColumns();
+        if (CollectionUtils.isEmpty(keyColumns)) {
+            throw new IllegalArgumentException("Keyset pagination requires at least one key column");
+        }
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append(SQLConstants.SELECT_SQL_PREFIX);
+        sqlBuilder.append(CollectionUtils.isEmpty(request.getColumnList()) ? SQLConstants.ALL_COLUMNS
+                : String.join(SQLConstants.COMMA, request.getColumnList()));
+        sqlBuilder.append(SQLConstants.FROM_SQL_PREFIX);
+        buildTableName(request.getDatabaseName(), request.getSchemaName(), request.getTableName(), sqlBuilder);
+        appendKeysetBounds(sqlBuilder, request.getBounds(), keyColumns);
+        sqlBuilder.append(SQLConstants.ORDER_BY_SQL_PREFIX);
+        for (int index = 0; index < keyColumns.size(); index++) {
+            if (index > 0) {
+                sqlBuilder.append(SQLConstants.COMMA);
+            }
+            sqlBuilder.append(keyColumns.get(index));
+            sqlBuilder.append(descendingAt(request.getBounds(), index)
+                    ? SQLConstants.DESCENDING_SQL : SQLConstants.ASCENDING_SQL);
+        }
+        // The page suffix comes from the dialect's own paging, so every buildPageLimit override
+        // (ROWNUM, OFFSET/FETCH, LIMIT ...) keeps working for keyset reads without a second override.
+        return buildPageLimit(PageLimitRequest.builder()
+                .sql(sqlBuilder.toString())
+                .offset(0)
+                .pageNo(1)
+                .pageSize(Math.max(1, request.getFetchSize()))
+                .build());
+    }
+
+    @Override
+    public String buildSelectKeyRange(SelectKeyRangeSqlRequest request) {
+        if (StringUtils.isBlank(request.getKeyColumn())) {
+            throw new IllegalArgumentException("Key range query requires a key column");
+        }
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append(SQLConstants.SELECT_SQL_PREFIX)
+                .append("MIN(").append(request.getKeyColumn()).append(")")
+                .append(SQLConstants.COMMA)
+                .append("MAX(").append(request.getKeyColumn()).append(")")
+                .append(SQLConstants.FROM_SQL_PREFIX);
+        buildTableName(request.getDatabaseName(), request.getSchemaName(), request.getTableName(), sqlBuilder);
+        return sqlBuilder.toString();
+    }
+
+    /**
+     * Exclusive composite cursor as an OR expansion:
+     * {@code (k1 > v1) OR (k1 = v1 AND k2 > v2) ...}, avoiding row-value syntax that older
+     * dialects do not parse.
+     */
+    private void appendKeysetBounds(StringBuilder sqlBuilder, List<KeyBound> bounds, List<String> keyColumns) {
+        if (CollectionUtils.isEmpty(bounds)) {
+            return;
+        }
+        List<KeyBound> effective = bounds.subList(0, Math.min(bounds.size(), keyColumns.size()));
+        sqlBuilder.append(SQLConstants.WHERE_SQL);
+        for (int index = 0; index < effective.size(); index++) {
+            if (index > 0) {
+                sqlBuilder.append(SQLConstants.SQL_OR);
+            }
+            sqlBuilder.append(SQLConstants.OPEN_PARENTHESIS);
+            for (int equal = 0; equal < index; equal++) {
+                KeyBound prefix = effective.get(equal);
+                sqlBuilder.append(prefix.getColumn()).append(SQLConstants.EQUAL_SQL)
+                        .append(prefix.getValueLiteral()).append(SQLConstants.SQL_AND);
+            }
+            KeyBound bound = effective.get(index);
+            sqlBuilder.append(bound.getColumn())
+                    .append(bound.isAscending() ? SQLConstants.GREATER_THAN_SQL : SQLConstants.LESS_THAN_SQL)
+                    .append(bound.getValueLiteral())
+                    .append(SQLConstants.CLOSE_PARENTHESIS);
+        }
+    }
+
+    private boolean descendingAt(List<KeyBound> bounds, int index) {
+        return CollectionUtils.isNotEmpty(bounds) && index < bounds.size()
+                && !bounds.get(index).isAscending();
+    }
+
+    @Override
     public String buildCreateDatabase(Database database) {
         return SQLConstants.CREATE_DATABASE_SQL_PREFIX + database.getName();
     }

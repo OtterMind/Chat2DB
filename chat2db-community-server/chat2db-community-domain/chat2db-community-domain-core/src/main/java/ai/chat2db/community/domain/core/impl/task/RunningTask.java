@@ -3,13 +3,14 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
@@ -28,7 +29,8 @@ final class RunningTask {
 
     private final CancellationToken cancellationToken = new CancellationToken();
 
-    private final AtomicReference<TaskCancelable> cancelable = new AtomicReference<>();
+    // Several shard workers register statements concurrently; cancellation must reach all of them.
+    private final Set<TaskCancelable> cancelables = ConcurrentHashMap.newKeySet();
 
     private final ReentrantLock completionLock = new ReentrantLock();
 
@@ -69,19 +71,24 @@ final class RunningTask {
         if (currentFuture != null) {
             currentFuture.cancel(mayInterruptIfRunning);
         }
-        cancelRegisteredResourceAsync(cancelable.get());
+        for (TaskCancelable resource : cancelables) {
+            cancelRegisteredResourceAsync(resource);
+        }
         return true;
     }
 
     void registerCancelable(TaskCancelable resource) {
-        cancelable.set(resource);
-        if (resource != null && cancellationToken.isCancelled()) {
+        if (resource == null) {
+            return;
+        }
+        cancelables.add(resource);
+        if (cancellationToken.isCancelled()) {
             cancelRegisteredResourceAsync(resource);
         }
     }
 
     void clearCancelable(TaskCancelable resource) {
-        cancelable.compareAndSet(resource, null);
+        cancelables.remove(resource);
     }
 
     boolean isClosed() {
@@ -90,7 +97,7 @@ final class RunningTask {
 
     void close() {
         closed = true;
-        cancelable.set(null);
+        cancelables.clear();
     }
 
     void markFinished() {

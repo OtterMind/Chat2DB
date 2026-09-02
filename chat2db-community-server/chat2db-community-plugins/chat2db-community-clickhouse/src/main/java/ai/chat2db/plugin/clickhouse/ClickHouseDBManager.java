@@ -17,6 +17,11 @@ import java.util.Objects;
 
 import static ai.chat2db.plugin.clickhouse.constant.ClickHouseDBManagerConstants.*;
 public class ClickHouseDBManager extends DefaultDBManager implements IDbManager {
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.STREAMING_ONLY;
+    }
+
 
 
 

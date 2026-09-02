@@ -1730,6 +1730,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         return false;
     }
 
+    /**
+     * Statements per JDBC batch executed by {@link #executeBatchInsert}.
+     */
+    public static final int BATCH_INSERT_CHUNK_SIZE = 500;
+
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList) {
         executeBatchInsert(connection, sqlCacheList, null, null);
     }
@@ -1737,21 +1742,61 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList,
                                    ISqlExecutionStatementListener statementListener,
                                    Runnable cancellationChecker) {
+        if (sqlCacheList == null || sqlCacheList.isEmpty()) {
+            return;
+        }
+        boolean restoreAutoCommit = false;
         try {
-            for (String sql : sqlCacheList) {
+            if (connection.getAutoCommit()) {
+                // Chunked commits keep the per-batch transactional meaning while turning one round
+                // trip per row into one round trip per batch.
+                connection.setAutoCommit(false);
+                restoreAutoCommit = true;
+            }
+            for (int start = 0; start < sqlCacheList.size(); start += BATCH_INSERT_CHUNK_SIZE) {
                 checkTaskCancellation(cancellationChecker);
-                PreparedStatement stmt = connection.prepareStatement(sql);
-                try (stmt) {
-                    notifyStatementCreated(statementListener, stmt);
-                    checkTaskCancellation(cancellationChecker);
-                    stmt.executeUpdate();
-                } finally {
-                    notifyStatementClosed(statementListener, stmt);
-                }
+                List<String> chunk = sqlCacheList.subList(start,
+                        Math.min(sqlCacheList.size(), start + BATCH_INSERT_CHUNK_SIZE));
+                executeInsertChunk(connection, chunk, statementListener, cancellationChecker);
+                connection.commit();
             }
         } catch (SQLException e) {
             checkTaskCancellation(cancellationChecker);
+            rollbackQuietly(connection);
             throw new RuntimeException(e);
+        } finally {
+            if (restoreAutoCommit) {
+                try {
+                    connection.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                    // The caller sees the connection state problem on its next operation.
+                }
+            }
+        }
+    }
+
+    private void executeInsertChunk(Connection connection, List<String> chunk,
+                                    ISqlExecutionStatementListener statementListener,
+                                    Runnable cancellationChecker) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            notifyStatementCreated(statementListener, statement);
+            try {
+                checkTaskCancellation(cancellationChecker);
+                for (String sql : chunk) {
+                    statement.addBatch(sql);
+                }
+                statement.executeBatch();
+            } finally {
+                notifyStatementClosed(statementListener, statement);
+            }
+        }
+    }
+
+    private void rollbackQuietly(Connection connection) {
+        try {
+            connection.rollback();
+        } catch (SQLException ignored) {
+            // The original failure is what the caller must see.
         }
     }
 

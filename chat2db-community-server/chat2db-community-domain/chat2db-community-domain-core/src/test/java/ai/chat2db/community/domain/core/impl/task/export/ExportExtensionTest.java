@@ -127,7 +127,7 @@ class ExportExtensionTest {
         SqlExecutionPolicyManager policyManager = new SqlExecutionPolicyManager(List.of(new ISqlExecutionPolicy() {
             @Override
             public Integer maxRows(SqlExecutionContext context, String sql) {
-                return BaseExporter.BATCH_SIZE * 2;
+                return BaseExporter.EXPORT_BATCH_ROWS * 2;
             }
 
             @Override
@@ -142,8 +142,8 @@ class ExportExtensionTest {
         ResultSet resultSet = alwaysHasNextResultSet(nextCalls);
 
         assertTrue(exporter.next(resultSet, plan, 0));
-        assertTrue(exporter.next(resultSet, plan, BaseExporter.BATCH_SIZE));
-        assertFalse(exporter.next(resultSet, plan, BaseExporter.BATCH_SIZE * 2));
+        assertTrue(exporter.next(resultSet, plan, BaseExporter.EXPORT_BATCH_ROWS));
+        assertFalse(exporter.next(resultSet, plan, BaseExporter.EXPORT_BATCH_ROWS * 2));
 
         assertEquals(1, checkpointCalls.get());
         assertEquals(2, nextCalls.get());
@@ -352,7 +352,7 @@ class ExportExtensionTest {
         }
 
         private List<Integer> included(ResultSetMetaData metadata, SqlExecutionPlan plan) throws Exception {
-            return includedColumnIndexes(metadata, plan);
+            return includedJdbcColumns(metadata, plan);
         }
 
         @Override
@@ -361,7 +361,8 @@ class ExportExtensionTest {
         }
 
         @Override
-        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
+        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
+                java.io.OutputStream output, boolean resuming) {
         }
     }
 
@@ -396,7 +397,7 @@ class ExportExtensionTest {
         }
 
         @Override
-        public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
+        public ArtifactDraft createArtifact(String role, String outputDirectory, String fileName, String mediaType) {
             throw new UnsupportedOperationException();
         }
 

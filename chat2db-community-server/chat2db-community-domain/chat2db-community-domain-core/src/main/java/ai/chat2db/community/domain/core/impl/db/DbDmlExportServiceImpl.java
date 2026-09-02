@@ -13,21 +13,27 @@ import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.extension.ExportCell;
 import ai.chat2db.community.domain.api.model.task.extension.ExportCellContext;
+import ai.chat2db.community.domain.api.model.task.pipeline.ExportSchema;
+import ai.chat2db.community.domain.api.model.task.pipeline.FormatSink;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
 import ai.chat2db.community.domain.api.service.db.IDbDmlExportService;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
+import ai.chat2db.community.domain.core.impl.task.export.SqlValueSerializer;
 import ai.chat2db.community.domain.core.impl.task.export.excel.MultiSheetExcelWriter;
+import ai.chat2db.community.domain.core.impl.task.export.sink.CsvSink;
+import ai.chat2db.community.domain.core.impl.task.export.sink.JsonSink;
+import ai.chat2db.community.domain.core.impl.task.export.sink.MarkdownSink;
+import ai.chat2db.community.domain.core.impl.task.export.sink.NdjsonSink;
+import ai.chat2db.community.domain.core.impl.task.export.sink.SqlSink;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.exception.ParamBusinessException;
 import ai.chat2db.community.tools.util.EasyCollectionUtils;
 import ai.chat2db.community.tools.util.EasyEnumUtils;
 import ai.chat2db.spi.DefaultSQLExecutor;
-import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
-import ai.chat2db.spi.model.request.SingleInsertSqlRequest;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.JdbcUtils;
@@ -41,7 +47,6 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.support.ExcelTypeEnum;
 import com.alibaba.excel.write.builder.ExcelWriterBuilder;
-import com.alibaba.excel.write.metadata.WriteSheet;
 import com.google.common.collect.Lists;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
@@ -50,18 +55,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.lang.reflect.Array;
+import java.io.UncheckedIOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -118,18 +117,86 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
                 "fileFinalizationListener");
         SqlExecutionPlan plan = authorizeExport(param);
         ExportTypeEnum exportType = ExportTypeEnum.from(param.getExportType());
-        if (ExportTypeEnum.CSV == exportType) {
-            exportCsv(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
-                    rowListener, finalizationListener);
-            return;
-        }
         if (ExportTypeEnum.EXCEL == exportType) {
             exportExcel(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
                     rowListener, finalizationListener);
             return;
         }
-        exportInsert(param, plan, outputStream, statementListener, cancellationChecker, rowListener,
-                finalizationListener);
+        exportWithSink(param, plan, exportType, outputStream, statementListener, cancellationChecker,
+                rowListener, finalizationListener);
+    }
+
+    private void exportWithSink(DbDmlExportRequest param, SqlExecutionPlan plan, ExportTypeEnum exportType,
+            OutputStream outputStream, ISqlExecutionStatementListener statementListener,
+            Runnable cancellationChecker, LongConsumer exportedRowsListener,
+            Runnable fileFinalizationListener) throws IOException {
+        boolean sqlLiteral = exportType == ExportTypeEnum.INSERT;
+        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
+        String parsedInsertTable = sqlLiteral ? defaultInsertTable(param, plan) : null;
+        AtomicReference<FormatSink> sinkReference = new AtomicReference<>();
+        List<Integer> includedIndexes = new ArrayList<>();
+        try {
+            DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
+                includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
+                List<Header> includedHeaders = selectByListIndex(headerList, includedIndexes);
+                if (sqlLiteral && includedHeaders.isEmpty()) {
+                    throw new IllegalStateException("SQL export has no authorized columns");
+                }
+                List<String> names = includedHeaders.stream().map(Header::getName).toList();
+                try {
+                    FormatSink sink = createSink(exportType, outputStream, includedHeaders);
+                    sink.writeSchema(new ExportSchema(names), sqlLiteral
+                            ? firstHeaderOr(includedHeaders, Header::getTableName, parsedInsertTable) : "");
+                    sinkReference.set(sink);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }, dataList -> {
+                try {
+                    sinkReference.get().writeRows(
+                            List.of(new ArrayList<>(selectByListIndex(dataList, includedIndexes))));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                exportedRowsListener.accept(1L);
+            }, exportValueFormatter(plan, valueProcessor, sqlLiteral), false, param.getResultSetId(),
+                    statementListener, cancellationChecker, plan.getMaxRows());
+            fileFinalizationListener.run();
+            FormatSink sink = sinkReference.get();
+            if (sink != null) {
+                sink.finishTable(null);
+                sink.close();
+            }
+        } catch (UncheckedIOException e) {
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
+                    "Could not write export file", e.getCause());
+        }
+    }
+
+    private FormatSink createSink(ExportTypeEnum exportType, OutputStream outputStream,
+            List<Header> includedHeaders) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        return switch (exportType) {
+            case CSV -> new CsvSink(outputStream, true);
+            case JSON -> new JsonSink(outputStream);
+            case NDJSON -> new NdjsonSink(outputStream);
+            case MARKDOWN -> new MarkdownSink(outputStream);
+            case INSERT -> new SqlSink(outputStream, Chat2DBContext.getSqlBuilder(),
+                    firstHeaderOr(includedHeaders, Header::getDatabaseName, connectInfo.getDatabaseName()),
+                    firstHeaderOr(includedHeaders, Header::getSchemaName, connectInfo.getSchemaName()));
+            default -> throw new ParamBusinessException("exportType");
+        };
+    }
+
+    private String defaultInsertTable(DbDmlExportRequest param, SqlExecutionPlan plan) {
+        DbType dbType = currentDruidDbType();
+        return dbType == null
+                ? StringUtils.join(Lists.newArrayList(param.getDatabaseName(), param.getSchemaName()), "_")
+                : requireSelectTableName(plan.getSql(), dbType);
+    }
+
+    private String firstHeaderOr(List<Header> headers, Function<Header, String> accessor, String fallback) {
+        return headers.stream().map(accessor).filter(StringUtils::isNotBlank).findFirst().orElse(fallback);
     }
 
     private SqlExecutionPlan authorizeExport(DbDmlExportRequest param) {
@@ -168,36 +235,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
                 .replaceAll("\\+", "%20");
     }
 
-    private void exportCsv(SqlExecutionPlan plan, OutputStream outputStream, Integer resultSetId,
-            ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
-            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) {
-        ExcelWrapper excelWrapper = new ExcelWrapper();
-        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-        try {
-            ExcelWriterBuilder excelWriterBuilder = EasyExcel.write(outputStream)
-                    .charset(StandardCharsets.UTF_8)
-                    .excelType(ExcelTypeEnum.CSV);
-            List<Integer> includedIndexes = new ArrayList<>();
-            DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
-                includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
-                excelWriterBuilder.head(EasyCollectionUtils.toList(select(headerList, includedIndexes),
-                        header -> Lists.newArrayList(header.getName())));
-                excelWrapper.setExcelWriter(excelWriterBuilder.build());
-                excelWrapper.setWriteSheet(EasyExcel.writerSheet(0).build());
-            }, dataList -> {
-                excelWrapper.getExcelWriter().write(List.of(select(dataList, includedIndexes)),
-                        excelWrapper.getWriteSheet());
-                exportedRowsListener.accept(1L);
-            }, exportValueFormatter(plan, valueProcessor, false), false, resultSetId, statementListener,
-                    cancellationChecker, plan.getMaxRows());
-            fileFinalizationListener.run();
-        } finally {
-            if (excelWrapper.getExcelWriter() != null) {
-                excelWrapper.getExcelWriter().finish();
-            }
-        }
-    }
-
     private void exportExcel(SqlExecutionPlan plan, OutputStream outputStream, Integer resultSetId,
             ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
             LongConsumer exportedRowsListener, Runnable fileFinalizationListener) {
@@ -210,14 +247,14 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
             List<Integer> includedIndexes = new ArrayList<>();
             DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
                 includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
-                List<List<String>> head = EasyCollectionUtils.toList(select(headerList, includedIndexes),
+                List<List<String>> head = EasyCollectionUtils.toList(selectByListIndex(headerList, includedIndexes),
                         header -> Lists.newArrayList(header.getName()));
                 excelWrapper.setExcelWriter(excelWriterBuilder.build());
                 excelWrapper.setMultiSheetExcelWriter(new MultiSheetExcelWriter(excelWrapper.getExcelWriter(), head,
                         SpreadsheetVersion.EXCEL2007, "Data"));
                 excelWrapper.getMultiSheetExcelWriter().initialize();
             }, dataList -> {
-                excelWrapper.getMultiSheetExcelWriter().writeRow(select(dataList, includedIndexes));
+                excelWrapper.getMultiSheetExcelWriter().writeRow(selectByListIndex(dataList, includedIndexes));
                 exportedRowsListener.accept(1L);
             }, exportValueFormatter(plan, valueProcessor, false), false, resultSetId, statementListener,
                     cancellationChecker, plan.getMaxRows());
@@ -225,57 +262,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         } finally {
             if (excelWrapper.getExcelWriter() != null) {
                 excelWrapper.getExcelWriter().finish();
-            }
-        }
-    }
-
-    private void exportInsert(DbDmlExportRequest param, SqlExecutionPlan plan, OutputStream outputStream,
-            ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
-            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) throws IOException {
-        DbType dbType = currentDruidDbType();
-        String tableName = dbType == null
-                ? StringUtils.join(Lists.newArrayList(param.getDatabaseName(), param.getSchemaName()), "_")
-                : requireSelectTableName(plan.getSql(), dbType);
-        try (PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8))) {
-            AtomicReference<String> databaseName =
-                    new AtomicReference<>(Chat2DBContext.getConnectInfo().getDatabaseName());
-            AtomicReference<String> schemaName =
-                    new AtomicReference<>(Chat2DBContext.getConnectInfo().getSchemaName());
-            AtomicReference<String> resultTableName = new AtomicReference<>(tableName);
-            List<String> headerColumns = Lists.newArrayList();
-            ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
-            IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-            List<Integer> includedIndexes = new ArrayList<>();
-            DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
-                includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
-                List<Header> includedHeaders = select(headerList, includedIndexes);
-                if (includedHeaders.isEmpty()) {
-                    throw new IllegalStateException("SQL export has no authorized columns");
-                }
-                includedHeaders.stream().map(Header::getDatabaseName).filter(StringUtils::isNotBlank)
-                        .findFirst().ifPresent(databaseName::set);
-                includedHeaders.stream().map(Header::getSchemaName).filter(StringUtils::isNotBlank)
-                        .findFirst().ifPresent(schemaName::set);
-                includedHeaders.stream().map(Header::getTableName).filter(StringUtils::isNotBlank)
-                        .findFirst().ifPresent(resultTableName::set);
-                includedHeaders.forEach(header -> headerColumns.add(header.getName()));
-            }, dataList -> {
-                String insertSql = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
-                        .databaseName(databaseName.get())
-                        .schemaName(schemaName.get())
-                        .tableName(resultTableName.get())
-                        .columnList(headerColumns)
-                        .valueList(select(dataList, includedIndexes))
-                        .build());
-                printWriter.println(insertSql + ";");
-                exportedRowsListener.accept(1L);
-            }, exportValueFormatter(plan, valueProcessor, true), false, param.getResultSetId(), statementListener,
-                    cancellationChecker, plan.getMaxRows());
-            fileFinalizationListener.run();
-            printWriter.flush();
-            if (printWriter.checkError()) {
-                throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
-                        "Could not write SQL export");
             }
         }
     }
@@ -338,40 +324,11 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         dataType.setScale(cell.getScale());
         SQLDataValue sqlDataValue = new SQLDataValue();
         sqlDataValue.setDataType(dataType);
-        sqlDataValue.setValue(toSqlValue(cell.getValue()));
+        sqlDataValue.setValue(SqlValueSerializer.toSqlLiteral(cell.getValue()));
         return valueProcessor.getSqlValueString(sqlDataValue);
     }
 
-    private String toSqlValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof byte[] bytes) {
-            return "0x" + HexFormat.of().withUpperCase().formatHex(bytes);
-        }
-        if (value instanceof char[] chars) {
-            return new String(chars);
-        }
-        if (value.getClass().isArray()) {
-            int length = Array.getLength(value);
-            List<String> values = new ArrayList<>(length);
-            for (int index = 0; index < length; index++) {
-                values.add(toSqlValue(Array.get(value, index)));
-            }
-            return values.toString();
-        }
-        if (value instanceof Collection<?> values) {
-            return values.stream().map(this::toSqlValue).toList().toString();
-        }
-        if (value instanceof Map<?, ?> values) {
-            Map<String, String> serialized = new LinkedHashMap<>(values.size());
-            values.forEach((key, mapValue) -> serialized.put(toSqlValue(key), toSqlValue(mapValue)));
-            return serialized.toString();
-        }
-        return String.valueOf(value);
-    }
-
-    private <T> List<T> select(List<T> values, List<Integer> includedIndexes) {
+    private <T> List<T> selectByListIndex(List<T> values, List<Integer> includedIndexes) {
         List<T> selected = new ArrayList<>(includedIndexes.size());
         for (Integer index : includedIndexes) {
             if (index != null && index >= 0 && index < values.size()) {
@@ -399,7 +356,6 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
     @Data
     private static class ExcelWrapper {
         private ExcelWriter excelWriter;
-        private WriteSheet writeSheet;
         private MultiSheetExcelWriter multiSheetExcelWriter;
     }
 }

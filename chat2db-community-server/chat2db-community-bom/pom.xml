@@ -23,6 +23,7 @@
         <context-propagation.version>1.2.0</context-propagation.version>
         <antlr4.version>4.13.1</antlr4.version>
         <commons-collections4.version>4.4</commons-collections4.version>
+        <commons-csv.version>1.10.0</commons-csv.version>
         <guava.version>32.0.1-jre</guava.version>
         <hutool.version>5.8.20</hutool.version>
         <fastjson2.version>2.0.49</fastjson2.version>
@@ -375,6 +376,11 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-collections4</artifactId>
                 <version>${commons-collections4.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>${commons-csv.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>

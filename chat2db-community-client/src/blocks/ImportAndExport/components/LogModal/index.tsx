@@ -9,6 +9,7 @@ import { useImportExportStore } from '@/store/importExport';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
 import { ImportExportTaskStatus } from '@/constants/importExport';
+import importExportServices, { artifactDownloadUrl } from '@/service/importExport';
 import { Download, FolderOpen } from 'lucide-react';
 
 interface IProps {
@@ -28,13 +29,20 @@ const LogModal = (_props: IProps) => {
     setTaskDetails(undefined);
   }, [logModalTaskId]);
 
-  const handleOpenFile = () => {
+  const handleOpenFile = (artifactId?: string) => {
     if (!taskDetails) return;
-    if (isDesktop && taskDetails.artifactId) {
-      jcefApi?.revealInExplorer(taskDetails.artifactId);
+    if (isDesktop && (artifactId || taskDetails.artifactId)) {
+      jcefApi?.revealInExplorer(artifactId || taskDetails.artifactId);
       return;
     }
-    window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
+    window.open(artifactDownloadUrl({ taskId: taskDetails.id, artifactId }), '_blank');
+  };
+
+  const handleResume = () => {
+    if (!taskDetails) return;
+    importExportServices.resumeTask({ taskId: taskDetails.id }).then(() => {
+      openLogModal(taskDetails.id);
+    });
   };
 
   const renderFooter = (
@@ -48,15 +56,32 @@ const LogModal = (_props: IProps) => {
           >
             {i18n('common.button.close')}
           </Button>
-          {taskDetails?.status === ImportExportTaskStatus.SUCCESS && taskDetails.artifactId && (
-            <Button
-              type="primary"
-              icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
-              onClick={handleOpenFile}
-            >
-              {i18n('workspace.text.openFile')}
+          {taskDetails?.status === ImportExportTaskStatus.PENDING && taskDetails?.stage === 'RESUMING' && (
+            <Button type="primary" onClick={handleResume}>
+              {i18n('workspace.task.action.resume')}
             </Button>
           )}
+          {taskDetails?.status === ImportExportTaskStatus.SUCCESS &&
+            (taskDetails.artifacts?.length
+              ? taskDetails.artifacts.map((artifact) => (
+                  <Button
+                    key={artifact.artifactId}
+                    type={artifact.role === 'OUTPUT' ? 'primary' : 'default'}
+                    icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+                    onClick={() => handleOpenFile(artifact.artifactId)}
+                  >
+                    {artifact.artifactId.split(/[\\/]/).pop()}
+                  </Button>
+                ))
+              : taskDetails.artifactId && (
+                  <Button
+                    type="primary"
+                    icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+                    onClick={() => handleOpenFile()}
+                  >
+                    {i18n('workspace.text.openFile')}
+                  </Button>
+                ))}
         </>
       }
     />

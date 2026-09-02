@@ -137,7 +137,7 @@ public class SqlExecutionPolicyManager {
         List<Integer> includedIndexes = includedColumnIndexes(plan, headers);
         boolean columnsFiltered = includedIndexes.size() != headers.size();
         if (columnsFiltered) {
-            result.setHeaderList(select(headers, includedIndexes));
+            result.setHeaderList(selectByListIndex(headers, includedIndexes));
             if (result.getDataList() != null) {
                 result.setDataList(selectRows(result.getDataList(), includedIndexes));
             }
@@ -186,7 +186,7 @@ public class SqlExecutionPolicyManager {
         return true;
     }
 
-    private <T> List<T> select(List<T> values, List<Integer> includedIndexes) {
+    private <T> List<T> selectByListIndex(List<T> values, List<Integer> includedIndexes) {
         List<T> selected = new ArrayList<>(includedIndexes.size());
         for (Integer index : includedIndexes) {
             if (index < values.size()) {
@@ -199,7 +199,7 @@ public class SqlExecutionPolicyManager {
     private List<List<ResultCell>> selectRows(List<List<ResultCell>> rows, List<Integer> includedIndexes) {
         List<List<ResultCell>> filteredRows = new ArrayList<>(rows.size());
         for (List<ResultCell> row : rows) {
-            filteredRows.add(row == null ? null : select(row, includedIndexes));
+            filteredRows.add(row == null ? null : selectByListIndex(row, includedIndexes));
         }
         return filteredRows;
     }
@@ -239,7 +239,7 @@ public class SqlExecutionPolicyManager {
         public void resultStarted(ExecuteResponse result) {
             StreamingResultState state = stateFor(result);
             if (state.columnsFiltered) {
-                result.setHeaderList(select(result.getHeaderList(), state.includedIndexes));
+                result.setHeaderList(selectByListIndex(result.getHeaderList(), state.includedIndexes));
             }
             result.setCanEdit(state.canEdit);
             delegate.resultStarted(result);

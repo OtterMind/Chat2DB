@@ -49,7 +49,26 @@ public abstract class BaseImporter implements IImportStrategy {
 
 
     protected abstract void doImportData(ImportTaskSpec spec, TaskExecutionContext context,
-            List<TableColumn> tableColumns);
+            List<TableColumn> tableColumns) throws Exception;
+
+    /**
+     * One warning event describing how file columns resolved against table columns; unmatched file
+     * columns are dropped and missing table columns import as NULL, but never silently.
+     */
+    protected static void reportResolution(TaskExecutionContext context,
+            ImportColumnResolver.Resolution resolution) {
+        List<String> extraFileColumns = resolution.matches().stream()
+                .filter(match -> !match.isMatched())
+                .map(match -> match.getFileColumn())
+                .filter(name -> name != null)
+                .toList();
+        if (!extraFileColumns.isEmpty() || !resolution.missingTableColumns().isEmpty()) {
+            context.logWarn("IMPORT_COLUMN_MAPPING", "Import column mapping applied with warnings",
+                    java.util.Map.of(
+                            "unmatchedFileColumns", extraFileColumns,
+                            "missingTableColumns", resolution.missingTableColumns()));
+        }
+    }
 
 
     protected SQLDataValue getSQLDataValue(String value, TableColumn column) {

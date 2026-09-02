@@ -210,6 +210,8 @@ class TaskExecutorRegistryTest {
         private final AtomicLong ids = new AtomicLong();
         private final Map<Long, Task> tasks = new LinkedHashMap<>();
         private final Map<Long, List<TaskEvent>> events = new LinkedHashMap<>();
+        private final Map<Long, List<ai.chat2db.community.domain.api.model.task.TaskArtifact>> artifacts =
+                new LinkedHashMap<>();
         private final List<String> statusTransitions = new ArrayList<>();
         private int createCount;
 
@@ -312,8 +314,56 @@ class TaskExecutorRegistryTest {
             }
             tasks.remove(taskId);
             events.remove(taskId);
+            artifacts.remove(taskId);
             commitAction.run();
             return true;
+        }
+
+        @Override
+        public synchronized List<ai.chat2db.community.domain.api.model.task.TaskArtifact> listArtifacts(Long taskId) {
+            return new ArrayList<>(artifacts.getOrDefault(taskId, List.of()));
+        }
+
+        @Override
+        public synchronized void saveArtifact(Long taskId,
+                ai.chat2db.community.domain.api.model.task.TaskArtifact artifact) {
+            if (!tasks.containsKey(taskId)) {
+                throw new IllegalArgumentException("artifact must reference an existing task");
+            }
+            List<ai.chat2db.community.domain.api.model.task.TaskArtifact> stored =
+                    artifacts.computeIfAbsent(taskId, ignored -> new ArrayList<>());
+            stored.removeIf(existing -> existing.getArtifactId().equals(artifact.getArtifactId()));
+            stored.add(artifact);
+        }
+
+        @Override
+        public synchronized void deleteArtifact(Long taskId, String artifactId) {
+            List<ai.chat2db.community.domain.api.model.task.TaskArtifact> stored = artifacts.get(taskId);
+            if (stored != null) {
+                stored.removeIf(existing -> existing.getArtifactId().equals(artifactId));
+            }
+        }
+
+        @Override
+        public synchronized List<Task> listResumableTasks() {
+            return List.of();
+        }
+
+        @Override
+        public synchronized void saveResumeState(Long taskId,
+                ai.chat2db.community.domain.api.model.task.ResumeState state) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public synchronized List<ai.chat2db.community.domain.api.model.task.ResumeState> listResumeStates(
+                Long taskId) {
+            return List.of();
+        }
+
+        @Override
+        public synchronized void clearResumeStates(Long taskId) {
+            throw new UnsupportedOperationException();
         }
 
         synchronized int createCount() {

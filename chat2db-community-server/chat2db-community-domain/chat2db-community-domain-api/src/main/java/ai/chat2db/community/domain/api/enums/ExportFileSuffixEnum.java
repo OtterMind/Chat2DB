@@ -5,10 +5,9 @@ import lombok.Getter;
 
 @Getter
 public enum ExportFileSuffixEnum {
-    WORD(".docx"),
     EXCEL(".xlsx"),
+
     MARKDOWN(".md"),
-    HTML(".html"),
 
     CSV(".csv"),
 
@@ -17,17 +16,11 @@ public enum ExportFileSuffixEnum {
     XLS(".xls"),
 
     JSON(".json"),
-    SQL(".sql"),
-    PDF(".pdf");
+    SQL(".sql");
 
-
-    private String suffix;
+    private final String suffix;
 
     ExportFileSuffixEnum(String suffix) {
-        this.suffix = suffix;
-    }
-
-    public void setSuffix(String suffix) {
         this.suffix = suffix;
     }
 }

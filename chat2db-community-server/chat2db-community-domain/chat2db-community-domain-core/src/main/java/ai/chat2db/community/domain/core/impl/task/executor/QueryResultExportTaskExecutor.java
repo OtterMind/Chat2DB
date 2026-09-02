@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbDmlExportRequest;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
+import ai.chat2db.community.domain.api.model.task.TaskCompression;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
@@ -19,9 +20,11 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.zip.GZIPOutputStream;
 
 @Component
 public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpec> {
@@ -46,18 +49,22 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
     public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
         try {
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
+            String compression = TaskExecutorSupport.requireCompression(spec.getCompression());
             DbDmlExportRequest request = request(spec, format);
             context.reportProgress(5, TaskStage.QUERYING.name(), "Preparing query export");
             DbDmlExportPlan plan = dbDmlExportService.prepareExport(request);
             String fileName = TaskExecutorSupport.artifactFileName(spec,
-                    spec.getSuggestedFileName() == null ? plan.getFileName() : spec.getSuggestedFileName(), format);
+                    spec.getSuggestedFileName() == null ? plan.getFileName() : spec.getSuggestedFileName(),
+                    format, compression);
             ArtifactDraft draft = context.createArtifact(spec.getExportPath(), fileName,
                     TaskExecutorSupport.mediaType(format));
             ExportProgressLogger progressLogger = new ExportProgressLogger(context, format);
             context.logInfo(TaskEventCode.EXPORT_STARTED.name(), "Query result export started",
                     Map.of(TaskConstants.FILE_FORMAT_DETAIL_KEY, format));
             progressLogger.queryStarted("Reading query result");
-            try (OutputStream outputStream = Files.newOutputStream(draft.getTemporaryFile().toPath())) {
+            try (OutputStream file = Files.newOutputStream(draft.getTemporaryFile().toPath());
+                    OutputStream outputStream = TaskCompression.GZIP.equals(compression)
+                            ? new GZIPOutputStream(new BufferedOutputStream(file)) : file) {
                 dbDmlExportService.export(plan.getExportRequest(), outputStream, context, context::checkCancelled,
                         progressLogger::recordExportedRows,
                         () -> beginFileFinalization(context, progressLogger, format));
@@ -92,6 +99,9 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
             case XLS -> throw new TaskExecutionException(TaskErrorCode.EXPORT_FAILED.name(),
                     "XLS query export is not supported; use XLSX instead");
             case SQL -> ExportTypeEnum.INSERT.name();
+            case JSON -> ExportTypeEnum.JSON.name();
+            case NDJSON -> ExportTypeEnum.NDJSON.name();
+            case MARKDOWN -> ExportTypeEnum.MARKDOWN.name();
             default -> throw new TaskExecutionException(TaskErrorCode.EXPORT_FAILED.name(),
                     "Unsupported query export format");
         });

@@ -14,6 +14,11 @@ import org.apache.commons.lang3.StringUtils;
 
 import static ai.chat2db.plugin.sundb.constant.SUNDBDBManagerConstants.*;
 public class SUNDBDBManager extends DefaultDBManager implements IDbManager {
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.STREAMING_ONLY;
+    }
+
 
 
 

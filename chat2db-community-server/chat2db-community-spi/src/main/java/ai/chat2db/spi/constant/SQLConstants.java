@@ -78,6 +78,13 @@ public final class SQLConstants {
     public static final String WHERE_SQL_PREFIX = "WHERE ";
     public static final String WHERE_SQL_LOWER = " where ";
     public static final String WHERE_KEYWORD = "WHERE";
+    public static final String FROM_SQL_PREFIX = " FROM ";
+    public static final String ORDER_BY_SQL_PREFIX = " ORDER BY ";
+    public static final String ALL_COLUMNS = "*";
+    public static final String GREATER_THAN_SQL = " > ";
+    public static final String LESS_THAN_SQL = " < ";
+    public static final String ASCENDING_SQL = " ASC";
+    public static final String DESCENDING_SQL = " DESC";
     public static final String FROM_WHERE_SQL = " FROM where";
     public static final String EQUAL_SQL = " = ";
     public static final String NULL_SQL = " NULL";

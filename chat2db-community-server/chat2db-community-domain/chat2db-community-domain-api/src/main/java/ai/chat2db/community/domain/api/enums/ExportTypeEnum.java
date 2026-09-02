@@ -11,22 +11,19 @@ public enum ExportTypeEnum implements IBaseEnum<String> {
     CSV("CSV"),
 
 
+    JSON("JSON"),
+
+
+    NDJSON("NDJSON"),
+
+
     INSERT("INSERT"),
-
-
-    WORD("WORD"),
 
 
     EXCEL("EXCEL"),
 
 
-    HTML("HTML"),
-
-
-    MARKDOWN("MARKDOWN"),
-
-
-    PDF("PDF");
+    MARKDOWN("MARKDOWN");
 
     final String description;
 

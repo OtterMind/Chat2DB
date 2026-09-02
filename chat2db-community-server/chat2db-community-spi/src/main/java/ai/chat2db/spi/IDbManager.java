@@ -3,6 +3,7 @@ package ai.chat2db.spi;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.export.ExportCapability;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -11,6 +12,13 @@ import java.sql.SQLException;
  * Entry point for dialect-specific database management operations.
  */
 public interface IDbManager {
+
+    /**
+     * Export abilities of this database; plugins that cannot shard or stream a table override it.
+     */
+    default ExportCapability getExportCapability() {
+        return ExportCapability.RELATIONAL_DEFAULT;
+    }
 
     default Connection openConnection(ConnectInfo connectInfo) {
         return getConnection(connectInfo);

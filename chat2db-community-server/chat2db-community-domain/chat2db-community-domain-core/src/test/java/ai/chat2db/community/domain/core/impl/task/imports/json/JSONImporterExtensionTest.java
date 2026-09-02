@@ -138,7 +138,7 @@ class JSONImporterExtensionTest {
         }
 
         @Override
-        public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
+        public ArtifactDraft createArtifact(String role, String outputDirectory, String fileName, String mediaType) {
             throw new UnsupportedOperationException();
         }
 

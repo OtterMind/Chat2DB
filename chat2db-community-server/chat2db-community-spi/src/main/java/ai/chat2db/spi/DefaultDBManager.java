@@ -1,9 +1,11 @@
 package ai.chat2db.spi;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +56,12 @@ public class DefaultDBManager implements IDbManager {
     private static final int DEFAULT_EXPORT_BATCH_SIZE = 100000;
     private static final int FIRST_PAGE = 1;
     private static final int FIRST_OFFSET = 0;
+
+    /**
+     * Bounds of one multi-value {@code INSERT} emitted by the keyset export path.
+     */
+    private static final int SQL_STATEMENT_MAX_ROWS = 800;
+    private static final long SQL_STATEMENT_MAX_BYTES = 1024L * 1024L;
 
     private static final String SQL_COPY_TABLE_DATA = "CREATE TABLE %s AS SELECT * FROM %s";
     private static final String SQL_COPY_TABLE_STRUCTURE = "CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0";
@@ -322,19 +330,151 @@ public class DefaultDBManager implements IDbManager {
     @Override
     public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
             TaskExecutionContext context) {
-        ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
-        String tableQuerySql = sqlBuilder.dql().buildSelectTable(databaseName, schemaName, tableName);
         int batchSize = DEFAULT_EXPORT_BATCH_SIZE;
-        int page = FIRST_PAGE;
-        int offset = FIRST_OFFSET;
-        AtomicReference<Boolean> finish = new AtomicReference<>(false);
-        AtomicLong exportedRows = new AtomicLong();
         context.write(String.format(RECORD_TITLE, tableName));
         logTableQueryStarted(context, tableName);
+        AtomicLong exportedRows = new AtomicLong();
+        List<String> keyColumns = exportKeyColumns(connection, databaseName, schemaName, tableName);
+        if (!keyColumns.isEmpty() && !exportTableDataByKeyset(connection, databaseName, schemaName, tableName,
+                keyColumns, batchSize, context, exportedRows)) {
+            // Keyset could not continue (for example a key column vanished from the result set);
+            // finish the table with the offset path from exactly the row count exported so far.
+            exportTableDataByOffset(connection, databaseName, schemaName, tableName, batchSize,
+                    exportedRows.get(), context, exportedRows);
+        } else if (keyColumns.isEmpty()) {
+            exportTableDataByOffset(connection, databaseName, schemaName, tableName, batchSize, FIRST_OFFSET,
+                    context, exportedRows);
+        }
+        logTableQueryCompleted(context, tableName, exportedRows.get());
+    }
+
+    /**
+     * Single ordered key usable for seek pagination, or empty when the table must use offset paging.
+     */
+    private List<String> exportKeyColumns(Connection connection, String databaseName, String schemaName,
+            String tableName) {
+        try {
+            List<PrimaryKey> primaryKeys = DefaultSQLExecutor.getInstance()
+                    .getPrimaryKeys(connection, databaseName, schemaName, tableName);
+            if (primaryKeys == null || primaryKeys.isEmpty()) {
+                return List.of();
+            }
+            List<PrimaryKey> ordered = new ArrayList<>(primaryKeys);
+            ordered.sort(Comparator.comparing(
+                    (PrimaryKey key) -> key.getKeySeq() == null ? 0 : key.getKeySeq()));
+            return ordered.stream().map(PrimaryKey::getColumnName).filter(StringUtils::isNotBlank).toList();
+        } catch (Exception e) {
+            log.warn("Could not read primary keys for export of {}", tableName, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * @return {@code true} when the whole table was exported by keyset pages; {@code false} when the
+     *         caller must resume with offset paging from the rows exported so far
+     */
+    private boolean exportTableDataByKeyset(Connection connection, String databaseName, String schemaName,
+            String tableName, List<String> keyColumns, int batchSize, TaskExecutionContext context,
+            AtomicLong exportedRows) {
+        ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
+        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
+        List<KeyBound> bounds = List.of();
+        while (true) {
+            String pageSql = sqlBuilder.dql().buildKeysetPageLimit(KeysetPageLimitRequest.builder()
+                    .databaseName(databaseName)
+                    .schemaName(schemaName)
+                    .tableName(tableName)
+                    .keyColumns(keyColumns)
+                    .bounds(bounds)
+                    .fetchSize(batchSize)
+                    .build());
+            KeysetPage page = new KeysetPage(keyColumns);
+            try {
+                DefaultSQLExecutor.getInstance().fetchAllTableRecords(FetchAllTableRecordsRequest.builder()
+                        .connection(connection)
+                        .sql(pageSql)
+                        .batchSize(batchSize)
+                        .statementListener(context)
+                        .cancellationChecker(context::checkCancelled)
+                        .consumer(resultSet -> readKeysetPage(resultSet, page, sqlBuilder, valueProcessor,
+                                tableName, context, exportedRows)).build());
+            } catch (Exception e) {
+                if (page.rowCount == 0 && bounds.isEmpty()) {
+                    log.warn("Keyset export failed for {} before any row; falling back to offset paging",
+                            tableName, e);
+                    return false;
+                }
+                throw e instanceof RuntimeException runtime ? runtime : new RuntimeException(e);
+            }
+            if (page.rowCount == 0) {
+                return true;
+            }
+            if (!page.keysFound) {
+                return page.rowCount < batchSize;
+            }
+            bounds = page.cursorBounds();
+            if (page.rowCount < batchSize) {
+                return true;
+            }
+        }
+    }
+
+    private void readKeysetPage(ResultSet resultSet, KeysetPage page, ISqlBuilder sqlBuilder,
+            IValueProcessor valueProcessor, String tableName, TaskExecutionContext context,
+            AtomicLong exportedRows) throws SQLException {
+        ResultSetMetaData metaData = resultSet.getMetaData();
+        List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
+        page.resolveKeyIndexes(columnList);
+        List<List<String>> rows = new ArrayList<>();
+        long rowsBytes = 0;
+        while (resultSet.next()) {
+            context.checkCancelled();
+            page.rowCount++;
+            exportedRows.incrementAndGet();
+            List<String> values = new ArrayList<>(metaData.getColumnCount());
+            for (int index = 1; index <= metaData.getColumnCount(); index++) {
+                JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, index, false);
+                values.add(valueProcessor.getJdbcSqlValueString(jdbcDataValue));
+            }
+            page.rememberCursor(values);
+            rows.add(values);
+            rowsBytes += values.stream().mapToInt(value -> value == null ? 4 : value.length() + 2).sum();
+            if (rows.size() >= SQL_STATEMENT_MAX_ROWS || rowsBytes >= SQL_STATEMENT_MAX_BYTES) {
+                writeInsertStatement(sqlBuilder, tableName, columnList, rows, context);
+                rows.clear();
+                rowsBytes = 0;
+            }
+            if (exportedRows.get() % TaskConstants.EXPORT_LOG_ROW_INTERVAL == 0) {
+                logRowsExported(context, tableName, exportedRows.get());
+            }
+        }
+        if (!rows.isEmpty()) {
+            writeInsertStatement(sqlBuilder, tableName, columnList, rows, context);
+        }
+    }
+
+    private void writeInsertStatement(ISqlBuilder sqlBuilder, String tableName, List<String> columnList,
+            List<List<String>> rows, TaskExecutionContext context) {
+        context.write(sqlBuilder.dml().buildBatchInsert(MultiInsertSqlRequest.builder()
+                .tableName(tableName)
+                .columnList(columnList)
+                .valueLists(rows)
+                .build()) + SQLConstants.SEMICOLON);
+    }
+
+    private void exportTableDataByOffset(Connection connection, String databaseName, String schemaName,
+            String tableName, int batchSize, long startOffset, TaskExecutionContext context,
+            AtomicLong exportedRows) {
+        ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
+        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
+        String tableQuerySql = sqlBuilder.dql().buildSelectTable(databaseName, schemaName, tableName);
+        AtomicReference<Boolean> finish = new AtomicReference<>(false);
+        long offset = startOffset;
+        int page = (int) (startOffset / batchSize) + FIRST_PAGE;
         while (!finish.get()) {
             String pageSql = sqlBuilder.dql().buildPageLimit(PageLimitRequest.builder()
                     .sql(tableQuerySql)
-                    .offset(offset)
+                    .offset((int) offset)
                     .pageNo(page)
                     .pageSize(batchSize)
                     .build());
@@ -353,7 +493,6 @@ public class DefaultDBManager implements IDbManager {
                     n++;
                     long currentExportedRows = exportedRows.incrementAndGet();
                     for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
                         JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
                         String valueString = valueProcessor.getJdbcSqlValueString(jdbcDataValue);
                         valueList.add(valueString);
@@ -376,7 +515,67 @@ public class DefaultDBManager implements IDbManager {
             page++;
             offset = offset + batchSize;
         }
-        logTableQueryCompleted(context, tableName, exportedRows.get());
+    }
+
+    /**
+     * Per-page cursor state for the keyset export path.
+     */
+    private static final class KeysetPage {
+
+        private final List<String> keyColumns;
+
+        private final List<String> cursorValues;
+
+        private final int[] keyIndexes;
+
+        private long rowCount;
+
+        private boolean keysFound = true;
+
+        private KeysetPage(List<String> keyColumns) {
+            this.keyColumns = keyColumns;
+            this.cursorValues = new ArrayList<>(keyColumns.size());
+            this.keyIndexes = new int[keyColumns.size()];
+            for (int index = 0; index < keyIndexes.length; index++) {
+                keyIndexes[index] = -1;
+            }
+        }
+
+        private void resolveKeyIndexes(List<String> columnList) {
+            if (keyIndexes[0] >= 0) {
+                return;
+            }
+            for (int key = 0; key < keyColumns.size(); key++) {
+                for (int column = 0; column < columnList.size(); column++) {
+                    if (keyColumns.get(key).equalsIgnoreCase(columnList.get(column))) {
+                        keyIndexes[key] = column;
+                        break;
+                    }
+                }
+                if (keyIndexes[key] < 0) {
+                    keysFound = false;
+                    return;
+                }
+            }
+        }
+
+        private void rememberCursor(List<String> values) {
+            if (!keysFound) {
+                return;
+            }
+            cursorValues.clear();
+            for (int key = 0; key < keyIndexes.length; key++) {
+                cursorValues.add(values.get(keyIndexes[key]));
+            }
+        }
+
+        private List<KeyBound> cursorBounds() {
+            List<KeyBound> bounds = new ArrayList<>(keyColumns.size());
+            for (int key = 0; key < keyColumns.size(); key++) {
+                bounds.add(new KeyBound(keyColumns.get(key), cursorValues.get(key), true));
+            }
+            return bounds;
+        }
     }
 
     protected void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,

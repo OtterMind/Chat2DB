@@ -10,6 +10,11 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 public class RedisDBManager extends DefaultDBManager implements IDbManager {
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.NONE;
+    }
+
 
     @Override
     public void connectDatabase(Connection connection, String database) {

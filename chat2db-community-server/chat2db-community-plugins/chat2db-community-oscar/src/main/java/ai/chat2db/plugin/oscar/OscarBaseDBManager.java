@@ -11,6 +11,11 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 public abstract class OscarBaseDBManager extends DefaultDBManager {
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.STREAMING_ONLY;
+    }
+
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {

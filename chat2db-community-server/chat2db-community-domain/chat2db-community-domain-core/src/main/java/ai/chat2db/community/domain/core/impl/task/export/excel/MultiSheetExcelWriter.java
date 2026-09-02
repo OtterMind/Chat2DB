@@ -55,13 +55,24 @@ public final class MultiSheetExcelWriter {
 
     public void writeRow(List<?> row) {
         Objects.requireNonNull(row, "row");
-        initialize();
-        if (rowsInCurrentSheet >= maxDataRowsPerSheet) {
-            createNextSheet();
+        writeRows(Collections.singletonList(row));
+    }
+
+    public void writeRows(List<? extends List<?>> rows) {
+        Objects.requireNonNull(rows, "rows");
+        int offset = 0;
+        while (offset < rows.size()) {
+            initialize();
+            if (rowsInCurrentSheet >= maxDataRowsPerSheet) {
+                createNextSheet();
+            }
+            int capacity = maxDataRowsPerSheet - rowsInCurrentSheet;
+            int end = Math.min(rows.size(), offset + capacity);
+            excelWriter.write(rows.subList(offset, end), currentSheet);
+            rowsInCurrentSheet += end - offset;
+            totalRows += end - offset;
+            offset = end;
         }
-        excelWriter.write(Collections.singletonList(row), currentSheet);
-        rowsInCurrentSheet++;
-        totalRows++;
     }
 
     public void initialize() {

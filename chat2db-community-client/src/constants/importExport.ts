@@ -9,7 +9,19 @@ export enum ImportExportFileType {
   XLS = 'XLS',
   XLSX = 'XLSX',
   JSON = 'JSON',
+  NDJSON = 'NDJSON',
+  MARKDOWN = 'MARKDOWN',
   SQL = 'SQL',
+}
+
+export enum ImportExportCompression {
+  NONE = 'NONE',
+  GZIP = 'GZIP',
+}
+
+export enum ImportOnError {
+  ABORT = 'ABORT',
+  SKIP = 'SKIP',
 }
 
 export enum ImportExportTaskType {

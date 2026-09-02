@@ -11,6 +11,11 @@ import org.springframework.util.StringUtils;
 
 import static ai.chat2db.plugin.hive.constant.HiveDBManagerConstants.*;
 public class HiveDBManager extends DefaultDBManager implements IDbManager {
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.STREAMING_ONLY;
+    }
+
 
 
 

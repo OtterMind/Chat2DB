@@ -124,6 +124,16 @@ public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuil
     }
 
     @Override
+    public String buildKeysetPageLimit(ai.chat2db.spi.model.request.KeysetPageLimitRequest request) {
+        throw unsupported(RedisConstants.METHOD_BUILD_PAGE_LIMIT);
+    }
+
+    @Override
+    public String buildSelectKeyRange(ai.chat2db.spi.model.request.SelectKeyRangeSqlRequest request) {
+        throw unsupported(RedisConstants.METHOD_BUILD_PAGE_LIMIT);
+    }
+
+    @Override
     public String buildCreateDatabase(Database database) {
         throw unsupported(RedisConstants.METHOD_BUILD_CREATE_DATABASE);
     }

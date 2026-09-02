@@ -173,8 +173,9 @@ class SqlExportTaskExecutorTest {
         }
 
         @Override
-        public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
+        public ArtifactDraft createArtifact(String role, String outputDirectory, String fileName, String mediaType) {
             createdArtifact = ArtifactDraft.builder()
+                    .role(role)
                     .temporaryFile(tempDirectory.resolve("dump.sql.part").toFile())
                     .targetFile(tempDirectory.resolve("dump.sql").toFile())
                     .mediaType(mediaType)
