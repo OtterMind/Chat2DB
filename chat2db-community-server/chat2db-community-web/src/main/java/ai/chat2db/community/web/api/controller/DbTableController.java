@@ -1,10 +1,15 @@
 package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.enums.plugin.TableMaintenanceTypeEnum;
 import ai.chat2db.community.domain.api.model.request.db.*;
 import ai.chat2db.community.domain.api.service.db.IDbTableService;
 import ai.chat2db.community.domain.api.service.db.IDbMybatisGenerateService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.domain.api.model.task.TableMaintenanceTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
+import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
@@ -16,6 +21,7 @@ import ai.chat2db.community.web.api.model.response.db.ColumnResponse;
 import ai.chat2db.community.web.api.model.response.db.IndexResponse;
 import ai.chat2db.community.web.api.model.response.db.SqlResponse;
 import ai.chat2db.community.web.api.model.response.db.TableResponse;
+import ai.chat2db.community.web.api.model.response.task.TaskSubmitResponse;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import jakarta.validation.Valid;
@@ -43,6 +49,9 @@ public class DbTableController {
 
     @Autowired
     private DbWebConverter dbWebConverter;
+
+    @Autowired
+    private TaskService taskService;
 
     private final IIdentityService identityService;
 
@@ -282,6 +291,52 @@ public class DbTableController {
         DbTableQueryRequest param = dbWebConverter.tableRequest2param(request);
         tableService.truncateTable(param);
         return ActionResult.isSuccess();
+    }
+
+    /**
+     * Generates maintenance SQL for a table operation.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/table/maintenance/sql}.
+     *
+     * @param request request payload containing table info.
+     * @return data result containing the generated SQL.
+     */
+    @PostMapping("/maintenance/sql")
+    public DataResult<String> maintenanceSql(@RequestBody TableDetailQueryRequest request) {
+        DbTableQueryRequest param = dbWebConverter.tableRequest2param(request);
+        return DataResult.of(tableService.maintenanceSql(param, request.getOperationType()));
+    }
+
+    /**
+     * Submits table maintenance as a cancellable task.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/table/maintenance/execute}.
+     *
+     * @param request request payload containing table info.
+     * @return submitted task id.
+     */
+    @PostMapping("/maintenance/execute")
+    public DataResult<TaskSubmitResponse> executeMaintenance(@RequestBody TableDetailQueryRequest request) {
+        TableMaintenanceTypeEnum operation = TableMaintenanceTypeEnum.from(request.getOperationType());
+        TableMaintenanceTaskSpec spec = TableMaintenanceTaskSpec.builder()
+                .taskType(TaskType.TABLE_MAINTENANCE.name())
+                .taskName(operation.name() + " TABLE - " + qualifiedTableName(request))
+                .operationType(operation.name())
+                .target(TaskTargetSnapshot.builder()
+                        .dataSourceId(request.getDataSourceId())
+                        .databaseName(request.getDatabaseName())
+                        .schemaName(request.getSchemaName())
+                        .tableName(request.getTableName())
+                        .build())
+                .build();
+        return DataResult.of(new TaskSubmitResponse(taskService.submitTableMaintenance(spec)));
+    }
+
+    private String qualifiedTableName(TableDetailQueryRequest request) {
+        if (request.getDatabaseName() == null || request.getDatabaseName().isBlank()) {
+            return request.getTableName();
+        }
+        return request.getDatabaseName() + "." + request.getTableName();
     }
 
     /**

@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TableMaintenanceTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
@@ -131,6 +132,40 @@ public class LocalTaskManager {
         return (int) taskStorage.listNonTerminalTasks().stream()
                 .filter(task -> belongsTo(task, userId, organizationId))
                 .count();
+    }
+
+    void cancel(Long taskId) {
+        lifecycleLock.lock();
+        try {
+            Task task = taskStorage.get(taskId).orElse(null);
+            if (task == null || TaskStatus.isTerminal(task.getStatus())) {
+                return;
+            }
+            RunningTask runningTask = runningTaskRegistry.get(taskId);
+            if (runningTask == null) {
+                cancelPersistedTask(task);
+                return;
+            }
+            runningTask.completionLock().lock();
+            try {
+                Task currentTask = taskStorage.get(taskId).orElse(task);
+                if (TaskStatus.isTerminal(currentTask.getStatus())) {
+                    return;
+                }
+                boolean wasRunning = TaskStatus.RUNNING.name().equals(currentTask.getStatus());
+                runningTask.requestCancellation(wasRunning);
+                cancelPersistedTask(currentTask);
+                if (!wasRunning) {
+                    runningTask.close();
+                    runningTask.markFinished();
+                    runningTaskRegistry.remove(taskId, runningTask);
+                }
+            } finally {
+                runningTask.completionLock().unlock();
+            }
+        } finally {
+            lifecycleLock.unlock();
+        }
     }
 
     void prepareForUserExit(Long userId, Long organizationId) {
@@ -298,6 +333,7 @@ public class LocalTaskManager {
         TaskOperation operation = switch (taskType) {
             case QUERY_RESULT_EXPORT, SQL_EXPORT, TABLE_DATA_EXPORT -> TaskOperation.EXPORT;
             case DATA_FILE_IMPORT, SQL_FILE_IMPORT -> TaskOperation.IMPORT;
+            case TABLE_MAINTENANCE -> TaskOperation.MAINTENANCE;
         };
         return new TaskSubmissionContext(task.getId(), taskType,
                 connectionContextConverter.connectInfo2profile(connectInfo),
@@ -310,6 +346,9 @@ public class LocalTaskManager {
             return exportSpec.getTableNames();
         }
         if (spec instanceof ImportTaskSpec && target != null && target.getTableName() != null) {
+            return List.of(target.getTableName());
+        }
+        if (spec instanceof TableMaintenanceTaskSpec && target != null && target.getTableName() != null) {
             return List.of(target.getTableName());
         }
         return List.of();
@@ -354,6 +393,19 @@ public class LocalTaskManager {
                 .message(message)
                 .details(Collections.emptyMap())
                 .build();
+    }
+
+    private boolean cancelPersistedTask(Task task) {
+        Date now = new Date();
+        return taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task was cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.WARN.name(),
+                        "Task was cancelled"));
     }
 
     private static final class TaskThreadFactory implements ThreadFactory {

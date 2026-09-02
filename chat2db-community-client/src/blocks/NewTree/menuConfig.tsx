@@ -231,6 +231,12 @@ export const dropMenuConfig = {
       OperationColumn.Divider,
       OperationColumn.ChangeAiTableInfoNodataCollection,
       OperationColumn.Divider,
+      // Maintenance
+      OperationColumn.AnalyzeTable,
+      OperationColumn.OptimizeTable,
+      OperationColumn.CheckTable,
+      OperationColumn.RepairTable,
+      OperationColumn.Divider,
       // Dangerous operation
       OperationColumn.TruncateTable,
       OperationColumn.DeleteTable,

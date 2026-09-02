@@ -114,6 +114,12 @@ export default {
   'workspace.menu.openView': 'Open view',
   'workspace.menu.annotationDatabaseTable': 'Data annotation(AI)',
   'workspace.menu.editView': 'Edit view',
+  'workspace.menu.analyzeTable': 'Analyze table',
+  'workspace.menu.optimizeTable': 'Optimize table',
+  'workspace.menu.checkTable': 'Check table',
+  'workspace.menu.repairTable': 'Repair table',
+  'workspace.tableMaintenance.optimizeInnoDBWarning':
+    'OPTIMIZE TABLE on InnoDB may rebuild the table and block writes while it runs.',
   'workspace.menu.openConsole': 'Open console',
   'workspace.menu.removeConsole': 'Remove console',
   'workspace.menu.runSqlFile': 'Run SQL file',

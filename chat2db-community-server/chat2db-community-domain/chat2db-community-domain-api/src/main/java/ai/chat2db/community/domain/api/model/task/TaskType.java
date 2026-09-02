@@ -5,5 +5,6 @@ public enum TaskType {
     SQL_EXPORT,
     TABLE_DATA_EXPORT,
     DATA_FILE_IMPORT,
-    SQL_FILE_IMPORT
+    SQL_FILE_IMPORT,
+    TABLE_MAINTENANCE
 }

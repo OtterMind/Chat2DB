@@ -12,4 +12,6 @@ public class TableDetailQueryRequest extends DataSourceBaseRequest {
     @NotNull
     private String tableName;
 
+    private String operationType;
+
 }

@@ -1,0 +1,21 @@
+package ai.chat2db.community.domain.api.model.task;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class TableMaintenanceTaskSpec implements TaskSpec {
+
+    private String taskType;
+
+    private String taskName;
+
+    private TaskTargetSnapshot target;
+
+    private String operationType;
+}

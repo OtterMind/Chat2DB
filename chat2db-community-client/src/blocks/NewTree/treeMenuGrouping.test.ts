@@ -27,6 +27,12 @@ assert.deepEqual(splitGroups(defaultTableMenu), [
     OperationColumn.ExportSqlFile,
   ],
   [OperationColumn.ChangeAiTableInfoNodataCollection],
+  [
+    OperationColumn.AnalyzeTable,
+    OperationColumn.OptimizeTable,
+    OperationColumn.CheckTable,
+    OperationColumn.RepairTable,
+  ],
   [OperationColumn.TruncateTable, OperationColumn.DeleteTable],
 ]);
 

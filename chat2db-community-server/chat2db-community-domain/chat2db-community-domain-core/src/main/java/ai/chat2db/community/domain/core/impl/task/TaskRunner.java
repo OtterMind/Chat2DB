@@ -244,6 +244,21 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
 
     private void completeCancelledLocked(ArtifactDraft draft) {
         artifactService.deleteDraft(draft);
+        Date now = new Date();
+        taskStorage.compareAndSetStatus(submission.taskId(), TaskStatus.RUNNING.name(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task was cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                TaskEvent.builder()
+                        .level(TaskEventLevel.WARN.name())
+                        .code(TaskEventCode.TASK_CANCELLED.name())
+                        .stage(TaskStage.CANCELLED.name())
+                        .message("Task was cancelled")
+                        .details(Collections.emptyMap())
+                        .build());
     }
 
     private TaskEvent lifecycleEvent(String code, String level, String message) {

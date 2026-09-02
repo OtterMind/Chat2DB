@@ -125,6 +125,10 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
     });
   };
 
+  const handleCancelTask = (task: ImportExportTaskDetails) => {
+    return importExportServices.cancelTask({ taskId: task.id }).then(() => getTaskList());
+  };
+
   return (
     <div className={styles.wrapper}>
       <PanelToolbar
@@ -230,7 +234,20 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         <span className={styles.taskProgressValue}>{progress}%</span>
                       </div>
                     )}
-                    {!isActive && (
+                    {isActive ? (
+                      <div className={styles.taskActions}>
+                        <IconButton
+                          icon={CircleX}
+                          title={i18n('common.button.cancel')}
+                          tooltipPlacement="left"
+                          size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleCancelTask(item);
+                          }}
+                        />
+                      </div>
+                    ) : (
                       <div className={styles.taskActions}>
                         {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
                           <IconButton

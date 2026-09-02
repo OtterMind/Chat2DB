@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TableMaintenanceTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskDownload;
@@ -55,6 +56,11 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Long submitImport(ImportTaskSpec spec) {
+        return submit(spec);
+    }
+
+    @Override
+    public Long submitTableMaintenance(TableMaintenanceTaskSpec spec) {
         return submit(spec);
     }
 
@@ -119,6 +125,18 @@ public class TaskServiceImpl implements TaskService {
         } finally {
             deletionLock.unlock();
         }
+    }
+
+    @Override
+    public void cancel(Long taskId) {
+        Task task = get(taskId);
+        if (task == null) {
+            throw new DataNotFoundException();
+        }
+        if (TaskStatus.isTerminal(task.getStatus())) {
+            return;
+        }
+        localTaskManager.cancel(taskId);
     }
 
     @Override

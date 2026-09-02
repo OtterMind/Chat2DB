@@ -46,6 +46,7 @@ import {
 import { dropMenuConfig } from '../menuConfig';
 
 import { handleExportSqlFile } from '@/blocks/ImportAndExport/functions/exportSqlFile';
+import importExportServices from '@/service/importExport';
 import { useOrgStore } from '@/store/workspaceContext';
 import { ILoadDataOptions, treeConfig } from '../treeConfig';
 
@@ -61,6 +62,7 @@ import clientExtension from '@client-extension';
 import { DataSourceIdentityColorRequestRegistry } from '../dataSourceIdentityColorRequest';
 import DataSourceColorMenuItem from '../components/DataSourceColorMenuItem';
 import { withDataSourceColorMenuOption } from '../dataSourceColorMenu';
+import { canShowTableMaintenanceOperation, refreshAfterTableMaintenanceTaskCompletes } from '../tableMaintenance';
 import { isDangerousTreeOperation } from '../treeMenuDanger';
 
 export interface MenuLabelRenderContext {
@@ -99,6 +101,8 @@ interface IRightClickMenu {
   };
   children?: IRightClickMenu[];
 }
+
+type TableMaintenanceOperationType = 'ANALYZE' | 'OPTIMIZE' | 'CHECK' | 'REPAIR';
 
 type CreateRightClickMenu = (
   treeNodeData: TreeNodeData,
@@ -198,6 +202,7 @@ export const useCreateRightClickMenu = () => {
       databaseName,
       schemaName,
       tableName,
+      tableEngine,
       environmentId,
       environment,
       identityColor,
@@ -278,6 +283,46 @@ export const useCreateRightClickMenu = () => {
           {i18n('workspace.deleteDatabaseSchema.inputConfirmSuffix')}
         </>
       );
+    };
+
+    const tableMaintenanceRequest = (operationType: TableMaintenanceOperationType) => ({
+      dataSourceId: dataSourceId!,
+      databaseName: databaseName!,
+      schemaName,
+      tableName: tableName!,
+      operationType,
+    });
+
+    const tableMaintenanceConfirmContent = (sql: string, operationType: TableMaintenanceOperationType) => (
+      <div>
+        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{sql}</pre>
+        {operationType === 'OPTIMIZE' && tableEngine?.trim().toUpperCase() === 'INNODB' && (
+          <div style={{ marginTop: 12 }}>{i18n('workspace.tableMaintenance.optimizeInnoDBWarning')}</div>
+        )}
+      </div>
+    );
+
+    const openTableMaintenanceModal = (operationType: TableMaintenanceOperationType, titleKey: string) => {
+      sqlService.maintenanceSql(tableMaintenanceRequest(operationType)).then((sql: string) => {
+        staticModal.confirm({
+          title: i18n(titleKey as any),
+          content: tableMaintenanceConfirmContent(sql, operationType),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+          onOk: () => {
+            return sqlService.submitTableMaintenance(tableMaintenanceRequest(operationType)).then((result) => {
+              getTaskList();
+              openLogModal(result.taskId);
+              void refreshAfterTableMaintenanceTaskCompletes(
+                result.taskId,
+                importExportServices.getTaskDetails,
+                () => handleLoadData(treeNodeData, { refresh: true }),
+              );
+              return result;
+            });
+          },
+        });
+      });
     };
 
     const openDeleteDatabaseModal = () => {
@@ -1164,6 +1209,42 @@ export const useCreateRightClickMenu = () => {
           });
         },
         requiredOperations: ['TRUNCATE'],
+      },
+
+      [OperationColumn.AnalyzeTable]: {
+        text: i18n('workspace.menu.analyzeTable'),
+        icon: 'icon-table',
+        discard: !canShowTableMaintenanceOperation(OperationColumn.AnalyzeTable, databaseType, tableEngine),
+        handle: () => {
+          openTableMaintenanceModal('ANALYZE', 'workspace.menu.analyzeTable');
+        },
+      },
+
+      [OperationColumn.OptimizeTable]: {
+        text: i18n('workspace.menu.optimizeTable'),
+        icon: 'icon-table',
+        discard: !canShowTableMaintenanceOperation(OperationColumn.OptimizeTable, databaseType, tableEngine),
+        handle: () => {
+          openTableMaintenanceModal('OPTIMIZE', 'workspace.menu.optimizeTable');
+        },
+      },
+
+      [OperationColumn.CheckTable]: {
+        text: i18n('workspace.menu.checkTable'),
+        icon: 'icon-table',
+        discard: !canShowTableMaintenanceOperation(OperationColumn.CheckTable, databaseType, tableEngine),
+        handle: () => {
+          openTableMaintenanceModal('CHECK', 'workspace.menu.checkTable');
+        },
+      },
+
+      [OperationColumn.RepairTable]: {
+        text: i18n('workspace.menu.repairTable'),
+        icon: 'icon-table',
+        discard: !canShowTableMaintenanceOperation(OperationColumn.RepairTable, databaseType, tableEngine),
+        handle: () => {
+          openTableMaintenanceModal('REPAIR', 'workspace.menu.repairTable');
+        },
       },
 
       // Copy the table.

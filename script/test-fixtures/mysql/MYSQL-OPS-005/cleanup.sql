@@ -1,0 +1,4 @@
+-- MYSQL-OPS-005: Cleanup
+
+DROP TABLE IF EXISTS `ops005_innodb`;
+DROP TABLE IF EXISTS `ops005_myisam`;

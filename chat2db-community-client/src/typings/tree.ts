@@ -17,6 +17,7 @@ export interface IExtraParams {
   databaseName?: string;
   schemaName?: string;
   tableName?: string;
+  tableEngine?: string;
   viewName?: string;
   functionName?: string;
   procedureName?: string;
@@ -94,6 +95,7 @@ export interface ITable {
    */
   name: string;
   tableType: 'TABLE' | 'VIEW';
+  engine?: string;
   /**
    * Whether it has been fixed
    */

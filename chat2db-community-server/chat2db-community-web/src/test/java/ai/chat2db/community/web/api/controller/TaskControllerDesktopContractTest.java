@@ -3,15 +3,18 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.tools.console.ConsoleResult;
 import ai.chat2db.community.web.api.config.console.ConsoleHelper;
+import ai.chat2db.community.web.api.model.request.task.TaskIdRequest;
 import ai.chat2db.community.web.api.model.request.task.TaskEventQueryRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +31,7 @@ class TaskControllerDesktopContractTest {
                 .flatMap(mapping -> Arrays.stream(mapping.path()))
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of("/export", "/import", "/list", "/get", "/events", "/delete",
+        assertEquals(Set.of("/export", "/import", "/list", "/get", "/events", "/delete", "/cancel",
                 "/artifact", "/active-count", "/prepare-user-exit", "/abort-user-exit"), paths);
 
         Arrays.stream(TaskController.class.getDeclaredMethods())
@@ -62,6 +65,29 @@ class TaskControllerDesktopContractTest {
         assertEquals(42L, request.getTaskId());
         assertEquals(10L, request.getAfterSequence());
         assertEquals(20, request.effectiveLimit());
+    }
+
+    @Test
+    void cancelCallsTaskServiceWithRequestTaskId() {
+        AtomicLong cancelledTaskId = new AtomicLong();
+        ai.chat2db.community.domain.api.service.task.TaskService taskService =
+                (ai.chat2db.community.domain.api.service.task.TaskService) Proxy.newProxyInstance(
+                        getClass().getClassLoader(),
+                        new Class<?>[] {ai.chat2db.community.domain.api.service.task.TaskService.class},
+                        (proxy, method, args) -> {
+                            if ("cancel".equals(method.getName())) {
+                                cancelledTaskId.set((Long) args[0]);
+                                return null;
+                            }
+                            throw new UnsupportedOperationException(method.getName());
+                        });
+        TaskController controller = new TaskController(taskService, null, null);
+        TaskIdRequest request = new TaskIdRequest();
+        request.setTaskId(42L);
+
+        controller.cancel(request);
+
+        assertEquals(42L, cancelledTaskId.get());
     }
 
     private RequestMapping requestMapping(Method method) {

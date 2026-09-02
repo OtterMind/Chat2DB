@@ -109,6 +109,12 @@ export default {
   'workspace.menu.openView': '打开视图',
   'workspace.menu.annotationDatabaseTable': '数据标注(AI)',
   'workspace.menu.editView': '编辑视图',
+  'workspace.menu.analyzeTable': '分析表',
+  'workspace.menu.optimizeTable': '优化表',
+  'workspace.menu.checkTable': '检查表',
+  'workspace.menu.repairTable': '修复表',
+  'workspace.tableMaintenance.optimizeInnoDBWarning':
+    'InnoDB 执行 OPTIMIZE TABLE 可能会重建表，并在执行期间阻塞写入。',
   'workspace.menu.openConsole': '打开控制台',
   'workspace.menu.removeConsole': '删除',
   'workspace.menu.runSqlFile': '运行SQL文件',

@@ -113,6 +113,12 @@ export default {
   'workspace.menu.openView': '뷰 열기',
   'workspace.menu.annotationDatabaseTable': '데이터 주석(AI)',
   'workspace.menu.editView': '뷰 편집',
+  'workspace.menu.analyzeTable': '테이블 분석',
+  'workspace.menu.optimizeTable': '테이블 최적화',
+  'workspace.menu.checkTable': '테이블 확인',
+  'workspace.menu.repairTable': '테이블 수리',
+  'workspace.tableMaintenance.optimizeInnoDBWarning':
+    'InnoDB에서 OPTIMIZE TABLE을 실행하면 테이블이 재구성되고 실행 중 쓰기가 차단될 수 있습니다.',
   'workspace.menu.openConsole': '콘솔 열기',
   'workspace.menu.removeConsole': '콘솔 제거',
   'workspace.menu.runSqlFile': 'SQL 파일 실행',

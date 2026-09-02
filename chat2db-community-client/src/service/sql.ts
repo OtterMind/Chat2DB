@@ -165,6 +165,10 @@ export interface IDatabaseObjectDeletePrepareVO {
   dbType: string;
 }
 
+export interface ITaskSubmitResponse {
+  taskId: number;
+}
+
 const deleteTable = createRequest<ITableParams, void>('/api/rdb/ddl/delete', { method: 'post' });
 
 const prepareDeleteDatabase = createRequest<IDatabaseDeletePrepareParams, IDatabaseObjectDeletePrepareVO>(
@@ -422,6 +426,17 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// Table maintenance SQL preview
+const maintenanceSql = createRequest<ITableParams & { operationType: string }, string>(
+  '/api/rdb/table/maintenance/sql',
+  { method: 'post' },
+);
+
+const submitTableMaintenance = createRequest<ITableParams & { operationType: string }, ITaskSubmitResponse>(
+  '/api/rdb/table/maintenance/execute',
+  { method: 'post', errorLevel: 'toast' },
+);
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -443,6 +458,8 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  maintenanceSql,
+  submitTableMaintenance,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,

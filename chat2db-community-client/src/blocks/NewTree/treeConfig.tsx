@@ -762,6 +762,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                   extraParams: {
                     ...extraParams,
                     tableName: t.name,
+                    tableEngine: t.engine,
                   },
                   decorativeParams: {
                     pinned: t.pinned,

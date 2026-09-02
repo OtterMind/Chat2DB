@@ -4,7 +4,9 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.config.TableBuilderConfig;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.request.db.*;
+import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.sql.Sql;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 
 import java.util.List;
 
@@ -152,6 +154,26 @@ public interface IDbTableService {
      * @param dbTableQueryRequest table query parameters.
      */
     void truncateTable(DbTableQueryRequest dbTableQueryRequest);
+
+    /**
+     * Generates maintenance SQL for a table operation.
+     *
+     * @param dbTableQueryRequest table query parameters.
+     * @param operationType maintenance operation: ANALYZE, OPTIMIZE, CHECK, or REPAIR.
+     * @return generated SQL string.
+     */
+    String maintenanceSql(DbTableQueryRequest dbTableQueryRequest, String operationType);
+
+    /**
+     * Executes a table maintenance operation and returns the server result rows.
+     *
+     * @param dbTableQueryRequest table query parameters.
+     * @param operationType maintenance operation: ANALYZE, OPTIMIZE, CHECK, or REPAIR.
+     * @param taskContext task execution context for cancellation-aware statements.
+     * @return execution results.
+     */
+    List<ExecuteResponse> executeMaintenance(DbTableQueryRequest dbTableQueryRequest, String operationType,
+            TaskExecutionContext taskContext);
 
     /**
      * Copies a table in the current connection scope.

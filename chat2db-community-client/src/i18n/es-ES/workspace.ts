@@ -114,6 +114,12 @@ export default {
   'workspace.menu.openView': 'Abrir vista',
   'workspace.menu.annotationDatabaseTable': 'Anotación de datos (IA)',
   'workspace.menu.editView': 'Editar vista',
+  'workspace.menu.analyzeTable': 'Analizar tabla',
+  'workspace.menu.optimizeTable': 'Optimizar tabla',
+  'workspace.menu.checkTable': 'Comprobar tabla',
+  'workspace.menu.repairTable': 'Reparar tabla',
+  'workspace.tableMaintenance.optimizeInnoDBWarning':
+    'OPTIMIZE TABLE en InnoDB puede reconstruir la tabla y bloquear las escrituras mientras se ejecuta.',
   'workspace.menu.openConsole': 'Abrir consola',
   'workspace.menu.removeConsole': 'Quitar consola',
   'workspace.menu.runSqlFile': 'Ejecutar archivo SQL',
