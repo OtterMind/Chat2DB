@@ -2,14 +2,20 @@ package ai.chat2db.plugin.mysql.value;
 
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.value.factory.MysqlValueProcessorFactory;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.spi.DefaultValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;
 
@@ -17,6 +23,7 @@ import java.util.Set;
 public class MysqlValueProcessor extends DefaultValueProcessor {
     public static final Set<String> FUNCTION_SET = Set.of("now()", "default");
     private static final Logger log = LoggerFactory.getLogger(MysqlValueProcessor.class);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
 
     @Override
@@ -54,6 +61,33 @@ public class MysqlValueProcessor extends DefaultValueProcessor {
             }
         }
         return convertJDBCValueStrByType(dataValue);
+    }
+
+    @Override
+    public String getSqlValueString(SQLDataValue dataValue) {
+        String value = dataValue.getValue();
+        if (value != null && !FUNCTION_SET.contains(value.toLowerCase())) {
+            String dataTypeName = dataValue.getDataType() != null
+                    ? dataValue.getDataType().getDataTypeName() : null;
+            if (MysqlColumnTypeEnum.JSON.name().equalsIgnoreCase(dataTypeName)) {
+                validateJsonValue(value);
+            }
+        }
+        return super.getSqlValueString(dataValue);
+    }
+
+    static void validateJsonValue(String value) {
+        // MySQL accepts a single JSON scalar, object, array, or null, but not empty input or a value followed by another token.
+        try (JsonParser parser = JSON_MAPPER.createParser(value)) {
+            JsonNode node = JSON_MAPPER.readTree(parser);
+            if (node == null || parser.nextToken() != null) {
+                throw new BusinessException("mysql.json.invalid", new Object[]{"Expected exactly one JSON value"});
+            }
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException("mysql.json.invalid", new Object[]{exception.getMessage()}, exception);
+        } catch (IOException exception) {
+            throw new BusinessException("mysql.json.invalid", new Object[]{exception.getMessage()}, exception);
+        }
     }
 
     @Override

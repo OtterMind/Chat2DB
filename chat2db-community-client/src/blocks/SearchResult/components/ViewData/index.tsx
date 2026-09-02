@@ -38,6 +38,7 @@ import {
 } from './largeCellValue';
 import { getLargeCellDisplayMessage, getLargeCellErrorMessage } from './largeCellValueMessage';
 import JsonAwareMonacoEditor from './JsonAwareMonacoEditor';
+import { isJsonResultCell, isValidJsonValue } from './jsonValueValidation';
 import { getResultFieldAtTableColumn } from '../ResultSetTable/columnState';
 
 interface IProps {
@@ -411,7 +412,9 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
 
   const handleEditorValueChange = (value: string) => {
     setEditorContent(value);
-    applyEditorValue(value);
+    if (!isJsonResultCell(activeViewDataRef.current?.cellMeta) || isValidJsonValue(value)) {
+      applyEditorValue(value);
+    }
   };
 
   const formatJson = () => {

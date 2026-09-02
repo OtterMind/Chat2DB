@@ -49,7 +49,7 @@ const JsonAwareMonacoEditor = ({ id, value, readOnly, onChange, onJsonChange }: 
       ]);
       isJson =
         diagnostics.length === 0 &&
-        (document?.root?.type === 'object' || document?.root?.type === 'array');
+        document?.root != null;
     } catch {
       isJson = false;
     }
