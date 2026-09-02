@@ -38,6 +38,7 @@ import {
 import { resolveResultSelectionActiveCell, ResultSelectionCause } from './selectionState';
 import { RESULT_TABLE_CONTENT_LAYOUT_OPTIONS } from './layoutOptions';
 import { resetResultTableLayout, updateResultTableRowExpansion } from './rowHeight';
+import { hasActiveResultEditorChange } from '../ResultSet/resultEditActions';
 
 interface IProps {
   className?: string;
@@ -50,6 +51,7 @@ interface IProps {
   setTableInstance: (tableInstance: ITableInstance) => void;
   setOrderByText?: (orderByText: string) => void;
   onFilterCountChange?: (count: number) => void;
+  onActiveEditChange?: (hasChange: boolean) => void;
   onSelectionChange?: (selection: IResultSetSelection) => void;
 }
 
@@ -127,6 +129,40 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     tableInstance,
     theme,
   });
+
+  useEffect(() => {
+    if (!tableInstance || !props.onActiveEditChange) {
+      return;
+    }
+    let frameId: number | null = null;
+    const syncActiveEditState = () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      frameId = requestAnimationFrame(() => {
+        frameId = null;
+        props.onActiveEditChange?.(hasActiveResultEditorChange(tableInstance));
+      });
+    };
+    const eventIds = [
+      tableInstance.on('click_cell', syncActiveEditState),
+      tableInstance.on('dblclick_cell', syncActiveEditState),
+      tableInstance.on('keydown', syncActiveEditState),
+      tableInstance.on('change_cell_value', syncActiveEditState),
+    ];
+    const tableElement = tableInstance.getElement();
+    tableElement.addEventListener('input', syncActiveEditState, true);
+    tableElement.addEventListener('change', syncActiveEditState, true);
+    syncActiveEditState();
+    return () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      eventIds.forEach((eventId) => tableInstance.off(eventId));
+      tableElement.removeEventListener('input', syncActiveEditState, true);
+      tableElement.removeEventListener('change', syncActiveEditState, true);
+    };
+  }, [props.onActiveEditChange, tableInstance]);
 
   // Filter and sort
   const { activeFilterCount, clearAllFilters } = useFilterAndSort({

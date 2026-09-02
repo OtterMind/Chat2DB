@@ -3,7 +3,8 @@ import classnames from 'classnames';
 import { Form, Input } from 'antd';
 import { Context } from '../index';
 import { IBaseInfo } from '@/typings';
-import { shouldShowMysqlTableBaseInfo } from '@/utils/databaseJudgments';
+import { DatabaseCapability } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import i18n from '@/i18n';
 import CustomSelect from '@/components/CustomSelect';
 import { useStyles } from './style';
@@ -54,7 +55,7 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
           <Form.Item label={`${i18n('editTable.label.comment')}:`} name="comment">
             <Input autoComplete="off" />
           </Form.Item>
-          {shouldShowMysqlTableBaseInfo(databaseType) && (
+          {isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_BASE_INFO) && (
             <>
               <Form.Item label={`${i18n('editTable.label.characterSet')}:`} name="charset">
                 <CustomSelect options={databaseSupportField.charsets} />

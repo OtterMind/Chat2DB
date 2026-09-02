@@ -35,6 +35,14 @@ const OSCAR_JDBC_URL_PREFIX = 'jdbc:oscar://';
 const OSCAR_DRIVER_CLASS = 'com.oscar.Driver';
 
 const connectionFormTranslations: Partial<Record<LangType, Record<string, string>>> = {
+  [LangType.ZH_CN]: {
+    'User&Password': '用户名和密码',
+    NONE: '无',
+  },
+  [LangType.JA_JP]: {
+    'User&Password': 'ユーザー名とパスワード',
+    NONE: 'なし',
+  },
   [LangType.ES_ES]: {
     'USE SSH': 'Usar SSH',
     'SSH Hostname': 'Host SSH',
@@ -67,6 +75,7 @@ const connectionFormTranslations: Partial<Record<LangType, Record<string, string
     Datatset: 'Conjunto de datos',
     'Google Service Account': 'Cuenta de servicio de Google',
     'User&Password': 'Usuario y contraseña',
+    NONE: 'Ninguno',
     LocalFile: 'Archivo local',
     Service: 'Servicio',
   },
@@ -102,6 +111,7 @@ const connectionFormTranslations: Partial<Record<LangType, Record<string, string
     Datatset: '데이터 세트',
     'Google Service Account': 'Google 서비스 계정',
     'User&Password': '사용자 및 비밀번호',
+    NONE: '없음',
     LocalFile: '로컬 파일',
     Service: '서비스',
   },

@@ -43,9 +43,6 @@ public final class TerminalSessionManager {
     private static final TerminalEventPublisher JCEF_EVENT_PUBLISHER = TerminalSessionManager::publishToJcef;
     private static volatile TerminalEventPublisher eventPublisher = JCEF_EVENT_PUBLISHER;
 
-    static final String DEFAULT_SHELL_PROPERTY = "chat2db.community.terminal.default-shell";
-    private static volatile TerminalProcessFactory processFactory = TerminalSessionManager::defaultProcessFactory;
-
     private TerminalSessionManager() {
     }
 
@@ -54,22 +51,29 @@ public final class TerminalSessionManager {
     }
 
     public static Map<String, Object> create(Path directory, int columns, int rows, String shellId) throws IOException {
-        return create(directory, columns, rows, resolveShellCandidates(shellId));
+        return create(
+                directory,
+                columns,
+                rows,
+                resolveShellCandidates(shellId),
+                TerminalSessionManager::defaultProcessFactory
+        );
     }
 
-    static Map<String, Object> create(Path directory, int columns, int rows, List<ShellCommand> candidates) throws IOException {
+    static Map<String, Object> create(Path directory, int columns, int rows, List<ShellCommand> candidates,
+                                      TerminalProcessFactory processFactory) throws IOException {
+        Path cwd = resolveTerminalDirectory(directory);
         IOException lastFailure = null;
         for (ShellCommand shell : candidates) {
             try {
-                return create(directory, columns, rows, shell);
+                return createSession(cwd, columns, rows, shell, processFactory);
             } catch (IOException failure) {
                 // Some corporate security suites (e.g. QiAnXin) deny process creation for
                 // powershell.exe even though the binary is present in PATH. Treat a spawn-time
                 // failure as "this shell cannot be invoked" and try the next candidate so the
                 // terminal still opens via, for example, cmd.exe.
                 lastFailure = failure;
-                log.warn("Unable to start terminal shell [{}], trying the next available shell",
-                        shell.command(), failure);
+                log.warn("Unable to start terminal shell [{}]", shell.displayName(), failure);
             }
         }
         throw lastFailure != null
@@ -89,11 +93,25 @@ public final class TerminalSessionManager {
     }
 
     private static Map<String, Object> create(Path directory, int columns, int rows, ShellCommand shell) throws IOException {
+        return createSession(
+                resolveTerminalDirectory(directory),
+                columns,
+                rows,
+                shell,
+                TerminalSessionManager::defaultProcessFactory
+        );
+    }
+
+    private static Path resolveTerminalDirectory(Path directory) throws IOException {
         Path cwd = directory.toRealPath();
         if (!Files.isDirectory(cwd)) {
             throw new IllegalArgumentException("Terminal working directory is not available");
         }
+        return cwd;
+    }
 
+    private static Map<String, Object> createSession(Path cwd, int columns, int rows, ShellCommand shell,
+                                                     TerminalProcessFactory processFactory) throws IOException {
         Map<String, String> environment = new HashMap<>(System.getenv());
         environment.put("TERM", "xterm-256color");
         environment.put("COLORTERM", "truecolor");
@@ -103,8 +121,13 @@ public final class TerminalSessionManager {
             applyShellColorEnvironment(environment, shell);
         }
 
-        PtyProcess process = startProcess(shell.command().toArray(String[]::new), cwd.toString(), environment,
-                Math.max(columns, 20), Math.max(rows, 5));
+        PtyProcess process = processFactory.create(
+                shell.command().toArray(String[]::new),
+                cwd.toString(),
+                environment,
+                Math.max(columns, 20),
+                Math.max(rows, 5)
+        );
 
         String sessionId = UUID.randomUUID().toString();
         TerminalSession session = new TerminalSession(sessionId, cwd, shell, process);
@@ -117,11 +140,6 @@ public final class TerminalSessionManager {
         result.put("shell", shell.displayName());
         result.put("shellId", shell.id());
         return result;
-    }
-
-    private static PtyProcess startProcess(String[] command, String directory, Map<String, String> environment,
-                                           int columns, int rows) throws IOException {
-        return processFactory.create(command, directory, environment, columns, rows);
     }
 
     static PtyProcess defaultProcessFactory(String[] command, String directory, Map<String, String> environment,
@@ -304,65 +322,26 @@ public final class TerminalSessionManager {
     }
 
     static List<ShellCommand> resolveSystemShellCandidates(String os, CommandResolver resolver) {
-        List<ShellCommand> candidates = new ArrayList<>();
-        Set<String> seenCommands = new HashSet<>();
-        String configuredShell = configuredDefaultShell();
-        if (configuredShell != null) {
-            ShellCommand leading = resolveConfiguredShell(configuredShell);
-            if (leading != null) {
-                candidates.add(leading);
-                seenCommands.add(leading.command().get(0));
-            }
-        }
         if (isWindows(os)) {
+            List<ShellCommand> candidates = new ArrayList<>();
             String pwsh = resolver.find(os, "pwsh.exe", "pwsh");
             if (pwsh != null) {
-                addCandidate(candidates, seenCommands, powerShell("system", "PowerShell 7", pwsh));
+                candidates.add(powerShell("system", "PowerShell 7", pwsh));
             }
             String powerShell = resolver.find(os, "powershell.exe");
             if (powerShell != null) {
-                addCandidate(candidates, seenCommands, powerShell("system", "Windows PowerShell", powerShell));
+                candidates.add(powerShell("system", "Windows PowerShell", powerShell));
             }
             // Keep cmd.exe as the last resort so a blocked PowerShell still yields a usable shell.
             String cmd = resolver.find(os, resolveCommandPrompt());
-            addCandidate(candidates, seenCommands, commandPrompt("system", cmd == null ? resolveCommandPrompt() : cmd));
+            candidates.add(commandPrompt("system", cmd == null ? resolveCommandPrompt() : cmd));
             return candidates;
         }
-        ShellCommand systemShell = resolveNonWindowsSystemShell(os);
-        if (seenCommands.add(systemShell.command().get(0))) {
-            candidates.add(systemShell);
-        }
-        return candidates;
+        return List.of(resolveNonWindowsSystemShell(os));
     }
 
-    static ShellCommand commandPrompt(String id, String command) {
-        // /K keeps cmd.exe resident after launch, matching pwsh's -NoExit behaviour.
-        return new ShellCommand(id, List.of(command, "/K"), "Command Prompt", ShellFamily.CMD);
-    }
-
-    static String configuredDefaultShell() {
-        String configured = System.getProperty(DEFAULT_SHELL_PROPERTY);
-        if (configured == null || configured.isBlank()) {
-            return null;
-        }
-        String normalized = configured.trim().toLowerCase(Locale.ROOT);
-        // "system" means auto resolution; treating it as a configured default would loop back here.
-        return "system".equals(normalized) ? null : normalized;
-    }
-
-    private static ShellCommand resolveConfiguredShell(String shellId) {
-        try {
-            return resolveShell(shellId);
-        } catch (IllegalArgumentException exception) {
-            log.warn("Ignoring configured default terminal shell [{}]: {}", shellId, exception.getMessage());
-            return null;
-        }
-    }
-
-    private static void addCandidate(List<ShellCommand> candidates, Set<String> seenCommands, ShellCommand shell) {
-        if (seenCommands.add(shell.command().get(0))) {
-            candidates.add(shell);
-        }
+    private static ShellCommand commandPrompt(String id, String command) {
+        return new ShellCommand(id, List.of(command), "Command Prompt", ShellFamily.CMD);
     }
 
     private static ShellCommand resolveNonWindowsSystemShell(String os) {
@@ -374,7 +353,7 @@ public final class TerminalSessionManager {
         return unixShell("system", fallbackName, requireCommand(os, fallbackName, fallbackName));
     }
 
-    static void applyShellColorEnvironment(Map<String, String> environment, ShellCommand shell) {
+    private static void applyShellColorEnvironment(Map<String, String> environment, ShellCommand shell) {
         switch (shell.family()) {
             case BASH -> environment.put("PS1", "\\[\\033[34m\\]\\u@\\h\\[\\033[0m\\]:"
                     + "\\[\\033[32m\\]\\w\\[\\033[0m\\]\\$ ");
@@ -386,7 +365,7 @@ public final class TerminalSessionManager {
         }
     }
 
-    static ShellCommand unixShell(String id, String displayName, String command) {
+    private static ShellCommand unixShell(String id, String displayName, String command) {
         String executableName = Path.of(command).getFileName().toString().toLowerCase(Locale.ROOT);
         ShellFamily family = executableName.contains("zsh")
                 ? ShellFamily.ZSH
@@ -394,7 +373,7 @@ public final class TerminalSessionManager {
         return new ShellCommand(id, List.of(command, "-l"), displayName, family);
     }
 
-    static ShellCommand powerShell(String id, String displayName, String command) {
+    private static ShellCommand powerShell(String id, String displayName, String command) {
         String colorSetup = "if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) { "
                 + "Set-PSReadLineOption -Colors @{ "
                 + "Command = 'Blue'; Parameter = 'Cyan'; String = 'Green'; "
@@ -481,14 +460,6 @@ public final class TerminalSessionManager {
 
     static void resetEventPublisherForTests() {
         eventPublisher = JCEF_EVENT_PUBLISHER;
-    }
-
-    static void setProcessFactoryForTests(TerminalProcessFactory factory) {
-        processFactory = factory == null ? TerminalSessionManager::defaultProcessFactory : factory;
-    }
-
-    static void resetProcessFactoryForTests() {
-        processFactory = TerminalSessionManager::defaultProcessFactory;
     }
 
     @FunctionalInterface

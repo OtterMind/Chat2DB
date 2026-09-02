@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { EditorType, SQLOptType } from '../../type';
 import { useStyles } from './style';
-import { isRoutineOperationSupportedDatabaseType, WorkspaceTabType } from '@/constants';
+import { DatabaseCapability, WorkspaceTabType } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import SelectBoundInfo from '@/components/SelectBoundInfo';
 import { IBoundInfo as IDBInfo } from '@/typings/workspace';
 import historyService from '@/service/history';
@@ -44,8 +45,10 @@ const OperationLine = ({
   }, [type]);
 
   const showRoutineButtons = useMemo(() => {
-    return isRoutineOperationSupportedDatabaseType(dbInfo.databaseType)
-      && [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type);
+    return (
+      isDatabaseCapabilitySupported(dbInfo.databaseType, DatabaseCapability.ROUTINE_OPERATION) &&
+      [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type)
+    );
   }, [dbInfo.databaseType, type]);
 
   const showSettingButton = useMemo(() => {

@@ -4,18 +4,18 @@ import classnames from 'classnames';
 import MonacoEditor, { IExportRefFunction } from '@/components/MonacoEditor';
 import { v4 as uuid } from 'uuid';
 import { createSingleFileShortcutController } from './shortcut';
+import {
+  createSingleFileMonacoEditorRef,
+  ISingleFileMonacoEditorRefFunction,
+} from './refAdapter';
+
+export type { ISingleFileMonacoEditorRefFunction } from './refAdapter';
 
 interface IProps {
   className?: string;
   handelEnter?: (value: string) => void;
   focusChange?: (isActive: boolean) => void;
   ref: any; // TODO: Move this ref to the appropriate owner.
-}
-
-export interface ISingleFileMonacoEditorRefFunction {
-  getAllContent?: () => string;
-  setValue?: (value: string) => void;
-  onSearch?: () => void;
 }
 
 const options = {
@@ -77,15 +77,9 @@ const SingleFileMonacoEditor = memo<IProps>(
       [shortcutController],
     );
 
-    const getAllContent = () => {
-      return monacoEditorRef.current?.getAllContent() || '';
-    };
-
-    useImperativeHandle(ref, () => ({
-      getAllContent,
-      setValue: (value) => monacoEditorRef.current?.setValue(value),
-      onSearch: handleEnterSearch,
-    }));
+    useImperativeHandle(ref, () =>
+      createSingleFileMonacoEditorRef(() => monacoEditorRef.current, handleEnterSearch),
+    );
 
     return (
       <div ref={ref as any} className={classnames(styles.singleFileMonacoEditor, className)}>

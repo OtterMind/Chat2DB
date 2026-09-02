@@ -81,10 +81,14 @@ export function replaceViewTableResult(
   current: IManageResultData[] | undefined,
   pagedResult: IManageResultData,
 ) {
+  const currentResult = current?.[0];
+  const baseQuerySql = currentResult?.originalSql || currentResult?.sql || currentResult?.executeSqlParams?.sql;
+
   return [
     {
       ...pagedResult,
-      uuid: current?.[0]?.uuid || pagedResult.uuid,
+      uuid: currentResult?.uuid || pagedResult.uuid,
+      originalSql: baseQuerySql || pagedResult.originalSql,
     },
   ];
 }

@@ -67,6 +67,20 @@ async function run() {
     'a focused scope owns its binding before the workspace save fallback',
   );
 
+  const resultSetConfig = getEffectiveShortcutConfigMap({
+    [ShortcutAction.SqlSave]: { binding: 'Ctrl + S' },
+    [ShortcutAction.ResultSubmit]: { binding: 'Ctrl + S' },
+  });
+  assert.equal(
+    resolveShortcutDispatch(event, resultSetConfig, {
+      activeScope: ShortcutScope.ResultSet,
+      editableTarget: false,
+      workspaceSaveAllowed: true,
+    }),
+    undefined,
+    'the result set submit shortcut must not fall through to workspace console save',
+  );
+
   console.log('shortcut dispatch tests passed');
 }
 

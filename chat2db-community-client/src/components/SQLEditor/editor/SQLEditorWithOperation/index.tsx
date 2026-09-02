@@ -20,10 +20,11 @@ import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useAIStore } from '@/store/ai';
 import sqlService, { type IRoutineMigrationParams } from '@/service/sql';
-import { isRoutineOperationSupportedDatabaseType, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
+import { DatabaseCapability, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { EditorTableIdentifier } from '../../helper/tableIdentifier';
 import { useTreeStore } from '@/store/tree';
 import { isTemporaryId } from '@/utils';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import { readClipboard } from '@/utils/clipboard';
 import executeSql from '@/service/executeSql';
 import { parseClipboardTextToSqlInTokens } from '@/utils/sqlInClipboard';
@@ -139,7 +140,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   } = props;
   const isReadOnly = !!dbInfo.readOnly;
   const isSupportedRoutineEditor =
-    isRoutineOperationSupportedDatabaseType(dbInfo.databaseType) &&
+    isDatabaseCapabilitySupported(dbInfo.databaseType, DatabaseCapability.ROUTINE_OPERATION) &&
     [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type as WorkspaceTabType);
   const { styles } = useStyles();
   const [modal, modalContextHolder] = Modal.useModal();

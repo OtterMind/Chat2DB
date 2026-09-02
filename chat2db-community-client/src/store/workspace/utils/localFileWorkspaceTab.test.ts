@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { WorkspaceTabType } from '@/constants/workspace';
 import type { IBoundInfo, IWorkspaceTab } from '@/typings/workspace';
-import { refreshLocalFileWorkspaceTab } from './localFileWorkspaceTab';
+import { getRestoredLocalFileReadRequest, refreshLocalFileWorkspaceTab } from './localFileWorkspaceTab';
 
 const originalUniqueData = Object.freeze({
   filePath: '/tmp/report.pdf',
@@ -63,6 +63,43 @@ assert.equal(
   refreshLocalFileWorkspaceTab(duplicateTabs, '/tmp/report.pdf', nextUniqueData, 'closed-tab'),
   undefined,
   'a closed target tab must not fall back to another tab with the same path',
+);
+
+const restoredReadRequest = getRestoredLocalFileReadRequest({
+  id: 'restored-sql',
+  type: WorkspaceTabType.LocalSQLFile,
+  title: 'restored.sql',
+  uniqueData: {
+    filePath: '/tmp/root/restored.sql',
+    fileExtension: 'sql',
+    fileRootToken: 'root-token',
+    fileRelativePath: 'nested/restored.sql',
+    fileCharset: 'GB18030',
+  },
+});
+assert.deepEqual(
+  restoredReadRequest,
+  {
+    filePath: '/tmp/root/restored.sql',
+    fileExtension: 'sql',
+    context: {
+      rootToken: 'root-token',
+      relativePath: 'nested/restored.sql',
+      charset: 'GB18030',
+      workspaceTabId: 'restored-sql',
+    },
+  },
+  'restored local files must preserve directory access and encoding context',
+);
+assert.equal(
+  getRestoredLocalFileReadRequest({
+    id: 'live-sql',
+    type: WorkspaceTabType.LocalSQLFile,
+    title: 'live.sql',
+    uniqueData: { filePath: '/tmp/live.sql', ddl: 'select 1' },
+  }),
+  undefined,
+  'live local files with content must not be reloaded from disk',
 );
 
 console.log('local file workspace tab tests passed');

@@ -29,6 +29,7 @@ import { ITableInstance } from '@/blocks/CanvasTable/typings';
 import {
   ShortcutAction,
   ShortcutOverrides,
+  ShortcutScope,
   getEffectiveShortcutConfigMap,
   isShortcutEventMatch,
 } from '@/constants/shortcut';
@@ -63,6 +64,7 @@ import {
 import { resolveResultInspectorActiveCell } from '../ResultSetTable/selectionState';
 import { areResultCellValuesEquivalent } from './inspectorState';
 import SqlExecutionLoading from '@/components/SqlExecutionLoading';
+import { hasPendingResultEdit, resolvePendingResultEditOperations } from './resultEditActions';
 
 interface IProps {
   resultData: IManageResultData;
@@ -89,6 +91,7 @@ export default memo<IProps>(
     const screenResultRef = useRef<IScreeningResultRef>(null);
     const resultSetTableRef = useRef<ResultSetTableRef>(null);
     const [hasOperationRecord, setHasOperationRecord] = useState(false);
+    const [hasActiveEditorChange, setHasActiveEditorChange] = useState(false);
     const sqlPreviewExecuteRef = useRef<SQLPreviewExecuteRef>(null);
     const sidebarViewDataRef = useRef<ViewDataRef>(null);
     const modalViewDataRef = useRef<ViewDataRef>(null);
@@ -121,6 +124,7 @@ export default memo<IProps>(
     const currentWorkspaceExtend = useWorkspaceStore((state) => state.currentWorkspaceExtend);
     const inspectorExtendCode = useMemo(() => getWorkspaceResultInspectorCode(searchAreaId), [searchAreaId]);
     const inspectorSidebarOpen = currentWorkspaceExtend === inspectorExtendCode;
+    const hasPendingChanges = hasPendingResultEdit(hasOperationRecord, hasActiveEditorChange);
     const inspectorOpen = inspectorSidebarOpen || inspectorModalOpen;
     const shortcutOverrides = useGlobalStore((s) => s.shortcutOverrides);
     const shortcutConfig = useMemo(
@@ -145,6 +149,7 @@ export default memo<IProps>(
 
     useEffect(() => {
       setResultData(props.resultData);
+      setHasActiveEditorChange(false);
     }, [props.resultData]);
 
     useEffect(() => {
@@ -294,18 +299,29 @@ export default memo<IProps>(
     const completeActiveEditor = useCallback(async () => {
       await Promise.resolve(resultSetTableRef.current?.tableInstance?.completeEditCell?.());
       await new Promise((resolve) => setTimeout(resolve, 0));
+      setHasActiveEditorChange(false);
     }, []);
 
-    const handleUpdateSubmit = useCallback(() => {
-      completeActiveEditor().then(() => {
-        const operations = resultSetTableRef.current?.operationRecordUtils?.getOperationChangeDetail();
-        sqlPreviewExecuteRef.current?.handleExecuteSql({
-          operations: transformOperations(operations, resultData.headerList),
-          resultData,
-          callback: setSubmitLoading,
-        });
+    const getPendingEditOperations = useCallback(
+      () =>
+        resolvePendingResultEditOperations({
+          completeActiveEditor,
+          getOperations: () => resultSetTableRef.current?.operationRecordUtils?.getOperationChangeDetail(),
+        }),
+      [completeActiveEditor],
+    );
+
+    const handleUpdateSubmit = useCallback(async () => {
+      const operations = await getPendingEditOperations();
+      if (!operations.length) {
+        return;
+      }
+      sqlPreviewExecuteRef.current?.handleExecuteSql({
+        operations: transformOperations(operations, resultData.headerList),
+        resultData,
+        callback: setSubmitLoading,
       });
-    }, [completeActiveEditor, resultData]);
+    }, [getPendingEditOperations, resultData]);
 
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
@@ -334,7 +350,7 @@ export default memo<IProps>(
         }
         if (isShortcutEventMatch(e, shortcutConfig[ShortcutAction.ResultSubmit].binding)) {
           e.preventDefault();
-          if (hasOperationRecord) {
+          if (hasPendingChanges || resultSetTableRef.current?.tableInstance?.editorManager?.editingEditor) {
             handleUpdateSubmit();
           }
         }
@@ -348,7 +364,7 @@ export default memo<IProps>(
       return () => {
         resultSetContent?.removeEventListener('keydown', handleKeyDown);
       };
-    }, [hasOperationRecord, handleSearch, handleUpdateSubmit, shortcutConfig]);
+    }, [handleSearch, handleUpdateSubmit, hasPendingChanges, shortcutConfig]);
 
     // SQL execution successful
     const handleExecuteSuccess = useCallback(() => {
@@ -384,21 +400,23 @@ export default memo<IProps>(
       resultSetTableRef.current?.operationRecordUtils?.handleDeleteRow();
     }, []);
 
-    const handleRevocation = useCallback(() => {
+    const handleRevocation = useCallback(async () => {
+      await completeActiveEditor();
       resultSetTableRef.current?.operationRecordUtils?.handleRevocation();
-    }, []);
+    }, [completeActiveEditor]);
 
     const handleOperationChange = useCallback((_hasOperationRecord) => {
       setHasOperationRecord(_hasOperationRecord);
     }, []);
 
-    const handleViewSQl = () => {
-      completeActiveEditor().then(() => {
-        const operations = resultSetTableRef.current?.operationRecordUtils?.getOperationChangeDetail();
-        sqlPreviewExecuteRef.current?.handleViewSQL({
-          operations: transformOperations(operations, resultData.headerList),
-          resultData,
-        });
+    const handleViewSQl = async () => {
+      const operations = await getPendingEditOperations();
+      if (!operations.length) {
+        return;
+      }
+      sqlPreviewExecuteRef.current?.handleViewSQL({
+        operations: transformOperations(operations, resultData.headerList),
+        resultData,
       });
     };
 
@@ -814,14 +832,20 @@ export default memo<IProps>(
 
     return (
       <>
-        <div tabIndex={0} className={cx(styles.container)} ref={resultSetRef} id={searchAreaId}>
+        <div
+          tabIndex={0}
+          data-shortcut-scope={ShortcutScope.ResultSet}
+          className={cx(styles.container)}
+          ref={resultSetRef}
+          id={searchAreaId}
+        >
           {(executing || submitLoading) && (
             <SqlExecutionLoading onCancel={executing ? stopExecuteSQL : undefined} />
           )}
           <>
             <ResultSetToolbar
               handleToolbarOperation={handleToolbarOperation}
-              hasOperationRecord={hasOperationRecord}
+              hasPendingChanges={hasPendingChanges}
               resultData={resultData}
               activeFilterCount={activeFilterCount}
               onClearAllFilters={handleClearAllFilters}
@@ -854,6 +878,7 @@ export default memo<IProps>(
                   resultData={resultData}
                   setOrderByText={setOrderByText}
                   onOperationChange={handleOperationChange}
+                  onActiveEditChange={setHasActiveEditorChange}
                   onTableOperationUtils={onTableOperationUtils}
                   onFilterCountChange={setActiveFilterCount}
                   onSelectionChange={handleSelectionChange}

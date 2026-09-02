@@ -1,36 +1,26 @@
 import assert from 'node:assert/strict';
 import { DatabaseTypeCode } from '@/constants/common';
-import { IdentifierQuoteMode } from '@/constants/databaseCapabilities';
-import { EditColumnOperationType } from '@/constants/editTable';
+import { DatabaseCapability, IdentifierQuoteMode } from '@/constants/databaseCapabilities';
 import {
-  canCreateDatabase,
-  canCreateSchema,
-  canSetCreateDatabaseCharset,
-  canSetCreateDatabaseCollation,
-  canDeleteDatabase,
-  canDeleteSchema,
-  canExportData,
-  canExportSqlFile,
-  canGenerateJavaClass,
-  canImportData,
-  canRunSqlFile,
-  canUseAccountManage,
-  canUseBackendCompletion,
-  canUseRoutineOperation,
   getDatabaseSupport,
   getOpenTableIdentifierQuoteMode,
   getSqlCompletionIdentifierQuoteMode,
-  isMongodbTreeDataSource,
-  isRedisTreeDataSource,
-  isSqliteExistingColumnReadonly,
+  isDatabaseCapabilitySupported,
   quoteOpenTableIdentifier,
   quoteSqlCompletionIdentifier,
-  shouldHideOracleIndexColumn,
-  shouldShowMysqlIndexMethod,
-  shouldShowMysqlTableBaseInfo,
-  shouldShowSqliteIncludeCollation,
-  shouldShowSqlServerSparse,
 } from './databaseJudgments';
+
+const assertCapability = (
+  databaseType: DatabaseTypeCode | string | null | undefined,
+  capability: DatabaseCapability,
+  expected: boolean,
+) => {
+  assert.equal(
+    isDatabaseCapabilitySupported(databaseType, capability),
+    expected,
+    `${String(databaseType)} ${capability}`,
+  );
+};
 
 assert.deepEqual(getDatabaseSupport(DatabaseTypeCode.MYSQL), {
   supportDatabase: true,
@@ -53,30 +43,30 @@ assert.deepEqual(getDatabaseSupport('oscar_db'), {
   supportSchema: true,
 });
 
-assert.equal(canUseRoutineOperation(DatabaseTypeCode.MYSQL), true);
-assert.equal(canUseRoutineOperation('mysql'), true);
-assert.equal(canUseRoutineOperation(DatabaseTypeCode.POSTGRESQL), false);
-assert.equal(canUseAccountManage(DatabaseTypeCode.MYSQL), true);
-assert.equal(canUseAccountManage(DatabaseTypeCode.ORACLE), false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ROUTINE_OPERATION, true);
+assertCapability('mysql', DatabaseCapability.ROUTINE_OPERATION, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.ROUTINE_OPERATION, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ACCOUNT_MANAGEMENT, true);
+assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.ACCOUNT_MANAGEMENT, false);
 
-assert.equal(canDeleteDatabase(DatabaseTypeCode.MYSQL), true);
-assert.equal(canDeleteDatabase(DatabaseTypeCode.POSTGRESQL), true);
-assert.equal(canDeleteDatabase(DatabaseTypeCode.ORACLE), false);
-assert.equal(canDeleteSchema(DatabaseTypeCode.POSTGRESQL), true);
-assert.equal(canDeleteSchema(DatabaseTypeCode.MYSQL), false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_DELETE, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_DELETE, true);
+assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.DATABASE_DELETE, false);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.SCHEMA_DELETE, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.SCHEMA_DELETE, false);
 
-assert.equal(canCreateDatabase(DatabaseTypeCode.H2), false);
-assert.equal(canCreateDatabase(DatabaseTypeCode.MYSQL), true);
-assert.equal(canSetCreateDatabaseCharset(DatabaseTypeCode.MYSQL), true);
-assert.equal(canSetCreateDatabaseCharset(DatabaseTypeCode.POSTGRESQL), false);
-assert.equal(canSetCreateDatabaseCharset(DatabaseTypeCode.SQLITE), false);
-assert.equal(canSetCreateDatabaseCollation(DatabaseTypeCode.MYSQL), true);
-assert.equal(canSetCreateDatabaseCollation(DatabaseTypeCode.POSTGRESQL), false);
-assert.equal(canSetCreateDatabaseCollation(DatabaseTypeCode.SQLITE), false);
-assert.equal(canCreateSchema(DatabaseTypeCode.ORACLE), false);
-assert.equal(canCreateSchema(DatabaseTypeCode.OSCAR), false);
-assert.equal(canCreateSchema(DatabaseTypeCode.POSTGRESQL), true);
-assert.equal(canCreateSchema('oscar_db'), true);
+assertCapability(DatabaseTypeCode.H2, DatabaseCapability.DATABASE_CREATE, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_CREATE, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_CREATE_CHARSET, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_CREATE_CHARSET, false);
+assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.DATABASE_CREATE_CHARSET, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_CREATE_COLLATION, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_CREATE_COLLATION, false);
+assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.DATABASE_CREATE_COLLATION, false);
+assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.SCHEMA_CREATE, false);
+assertCapability(DatabaseTypeCode.OSCAR, DatabaseCapability.SCHEMA_CREATE, false);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.SCHEMA_CREATE, true);
+assertCapability('oscar_db', DatabaseCapability.SCHEMA_CREATE, true);
 
 for (const databaseType of [
   DatabaseTypeCode.REDIS,
@@ -88,22 +78,41 @@ for (const databaseType of [
   DatabaseTypeCode.KINGBASE,
   DatabaseTypeCode.HIVE,
 ]) {
-  assert.equal(canRunSqlFile(databaseType), false, `${databaseType} cannot run SQL files`);
-  assert.equal(canExportSqlFile(databaseType), false, `${databaseType} cannot export SQL files`);
-  assert.equal(canExportData(databaseType), false, `${databaseType} cannot export data`);
-  assert.equal(canImportData(databaseType), false, `${databaseType} cannot import data`);
+  assertCapability(databaseType, DatabaseCapability.IMPORT_EXPORT, false);
 }
-assert.equal(canRunSqlFile(DatabaseTypeCode.MYSQL), true);
-assert.equal(canExportSqlFile(DatabaseTypeCode.MYSQL), true);
-assert.equal(canExportData(DatabaseTypeCode.MYSQL), true);
-assert.equal(canImportData(DatabaseTypeCode.MYSQL), true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.IMPORT_EXPORT, true);
 
-assert.equal(canGenerateJavaClass(DatabaseTypeCode.MYSQL), true);
-assert.equal(canGenerateJavaClass(DatabaseTypeCode.ORACLE), true);
-assert.equal(canGenerateJavaClass(DatabaseTypeCode.REDIS), false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.JAVA_CLASS_GENERATION, true);
+assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.JAVA_CLASS_GENERATION, true);
+assertCapability(DatabaseTypeCode.REDIS, DatabaseCapability.JAVA_CLASS_GENERATION, false);
 
-assert.equal(canUseBackendCompletion(DatabaseTypeCode.MYSQL), true);
-assert.equal(canUseBackendCompletion(DatabaseTypeCode.POSTGRESQL), false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.BACKEND_COMPLETION, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.BACKEND_COMPLETION, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.BACKEND_EDITOR_HINTS, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.BACKEND_EDITOR_HINTS, true);
+assertCapability(DatabaseTypeCode.GAUSSDB, DatabaseCapability.BACKEND_EDITOR_HINTS, true);
+assertCapability(DatabaseTypeCode.SQLSERVER, DatabaseCapability.BACKEND_EDITOR_HINTS, false);
+
+assertCapability(DatabaseTypeCode.REDIS, DatabaseCapability.REDIS_TREE, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.REDIS_TREE, false);
+assertCapability(DatabaseTypeCode.MONGODB, DatabaseCapability.MONGODB_TREE, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.MONGODB_TREE, false);
+
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_BASE_INFO, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.TABLE_EDITOR_BASE_INFO, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_INDEX_METHOD, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_COLUMN_VISIBILITY, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.TABLE_EDITOR_COLUMN_VISIBILITY, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_INDEX_VISIBILITY, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.TABLE_EDITOR_INDEX_VISIBILITY, false);
+assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.TABLE_EDITOR_INDEX_COLUMN, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_INDEX_COLUMN, true);
+assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.TABLE_EDITOR_INCLUDE_COLLATION, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_INCLUDE_COLLATION, false);
+assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT, true);
+assertCapability(DatabaseTypeCode.SQLSERVER, DatabaseCapability.TABLE_EDITOR_SPARSE_COLUMN, true);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_SPARSE_COLUMN, false);
 
 assert.equal(getOpenTableIdentifierQuoteMode(DatabaseTypeCode.POSTGRESQL), IdentifierQuoteMode.DOUBLE_QUOTE);
 assert.equal(getOpenTableIdentifierQuoteMode(DatabaseTypeCode.SQLSERVER), IdentifierQuoteMode.SQUARE_BRACKET);
@@ -118,21 +127,5 @@ assert.equal(getSqlCompletionIdentifierQuoteMode(DatabaseTypeCode.OCEANBASE_ORAC
 assert.equal(getSqlCompletionIdentifierQuoteMode(DatabaseTypeCode.OCEANBASE), IdentifierQuoteMode.BACKTICK);
 assert.equal(quoteSqlCompletionIdentifier('User Table', DatabaseTypeCode.OCEANBASE_ORACLE), '"User Table"');
 assert.equal(quoteSqlCompletionIdentifier('User Table', DatabaseTypeCode.OCEANBASE), '`User Table`');
-
-assert.equal(isRedisTreeDataSource(DatabaseTypeCode.REDIS), true);
-assert.equal(isRedisTreeDataSource(DatabaseTypeCode.MYSQL), false);
-assert.equal(isMongodbTreeDataSource(DatabaseTypeCode.MONGODB), true);
-assert.equal(isMongodbTreeDataSource(DatabaseTypeCode.MYSQL), false);
-
-assert.equal(shouldShowMysqlTableBaseInfo(DatabaseTypeCode.MYSQL), true);
-assert.equal(shouldShowMysqlTableBaseInfo(DatabaseTypeCode.POSTGRESQL), false);
-assert.equal(shouldShowMysqlIndexMethod(DatabaseTypeCode.MYSQL), true);
-assert.equal(shouldHideOracleIndexColumn(DatabaseTypeCode.ORACLE), true);
-assert.equal(shouldShowSqliteIncludeCollation(DatabaseTypeCode.SQLITE), true);
-assert.equal(isSqliteExistingColumnReadonly(DatabaseTypeCode.SQLITE, EditColumnOperationType.Modify), true);
-assert.equal(isSqliteExistingColumnReadonly(DatabaseTypeCode.SQLITE, EditColumnOperationType.Add), false);
-assert.equal(isSqliteExistingColumnReadonly(DatabaseTypeCode.MYSQL, EditColumnOperationType.Modify), false);
-assert.equal(shouldShowSqlServerSparse(DatabaseTypeCode.SQLSERVER), true);
-assert.equal(shouldShowSqlServerSparse(DatabaseTypeCode.MYSQL), false);
 
 console.log('databaseJudgments.test.ts: all assertions passed');

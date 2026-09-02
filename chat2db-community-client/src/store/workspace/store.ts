@@ -1,5 +1,5 @@
 import { clientRuntime } from '@client-runtime';
-import { PersistOptions, devtools, persist } from 'zustand/middleware';
+import { createJSONStorage, PersistOptions, devtools, persist } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 import { StateCreator } from 'zustand/vanilla';
@@ -13,6 +13,8 @@ import {
   getHydratedWorkspaceLayout,
   getPersistableWorkspaceLayout,
   getPersistableWorkspaceTabList,
+  createSafeWorkspaceStorage,
+  sanitizePersistedWorkspaceTabsState,
 } from './utils/workspaceTabPersistence';
 
 type WorkspaceAction = CommonAction & ConfigAction & ConsoleAction & ModalAction;
@@ -39,6 +41,8 @@ type GlobalPersist = Pick<
 // local-storage Options
 const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
   name: clientRuntime.workspaceStoreName,
+  version: 1,
+  storage: createJSONStorage<GlobalPersist>(() => createSafeWorkspaceStorage(localStorage)),
   partialize: (state) => {
     const workspaceTabList = getPersistableWorkspaceTabList(state.workspaceTabList);
     return {
@@ -53,8 +57,9 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
       recentlyClosedWorkspaceTabs: getPersistableWorkspaceTabList(state.recentlyClosedWorkspaceTabs) || [],
     };
   },
+  migrate: (persistedState) => sanitizePersistedWorkspaceTabsState((persistedState || {}) as GlobalPersist),
   merge: (persistedState, currentState) => {
-    const storedState = (persistedState || {}) as Partial<GlobalPersist>;
+    const storedState = sanitizePersistedWorkspaceTabsState((persistedState || {}) as Partial<GlobalPersist>);
     return {
       ...currentState,
       ...storedState,

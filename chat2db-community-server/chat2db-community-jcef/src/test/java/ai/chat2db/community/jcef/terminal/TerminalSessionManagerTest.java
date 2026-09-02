@@ -3,6 +3,9 @@ package ai.chat2db.community.jcef.terminal;
 import ai.chat2db.community.jcef.enums.ActionTypeEnum;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -18,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,8 +31,6 @@ class TerminalSessionManagerTest {
     @AfterEach
     void resetAfterEach() {
         TerminalSessionManager.resetEventPublisherForTests();
-        TerminalSessionManager.resetProcessFactoryForTests();
-        System.clearProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY);
     }
 
     @Test
@@ -51,10 +51,8 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     void reportsRunningChildProcessAsBusy() throws Exception {
-        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            return;
-        }
         Map<String, Object> session = TerminalSessionManager.create(directory, 80, 24);
         String sessionId = (String) session.get("sessionId");
         try {
@@ -141,10 +139,8 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     void batchesLargeOutputAndWaitsForAcknowledgement() throws Exception {
-        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            return;
-        }
         List<String> batches = new CopyOnWriteArrayList<>();
         List<Long> sequences = new CopyOnWriteArrayList<>();
         TerminalSessionManager.setEventPublisherForTests((sessionId, actionType, message) -> {
@@ -182,72 +178,7 @@ class TerminalSessionManagerTest {
     }
 
     @Test
-    void powershellShellsConfigureNoLogoNoExitAndCommandArgs() {
-        TerminalSessionManager.ShellCommand pwsh =
-                TerminalSessionManager.powerShell("pwsh", "PowerShell 7", "pwsh.exe");
-        assertEquals(TerminalSessionManager.ShellFamily.POWERSHELL, pwsh.family());
-        assertEquals("pwsh.exe", pwsh.command().get(0));
-        assertTrue(pwsh.command().contains("-NoLogo"));
-        assertTrue(pwsh.command().contains("-NoExit"));
-        assertTrue(pwsh.command().contains("-Command"));
-        assertTrue(pwsh.command().stream().anyMatch(arg -> arg.contains("Set-PSReadLineOption")));
-
-        TerminalSessionManager.ShellCommand windowsPowerShell =
-                TerminalSessionManager.powerShell("powershell", "Windows PowerShell", "powershell.exe");
-        assertEquals(TerminalSessionManager.ShellFamily.POWERSHELL, windowsPowerShell.family());
-        assertTrue(windowsPowerShell.command().contains("-NoExit"));
-        assertTrue(windowsPowerShell.command().contains("-Command"));
-    }
-
-    @Test
-    void cmdUsesExplicitStayAliveArgument() {
-        TerminalSessionManager.ShellCommand cmd = TerminalSessionManager.commandPrompt("cmd", "cmd.exe");
-        assertEquals(TerminalSessionManager.ShellFamily.CMD, cmd.family());
-        assertEquals(List.of("cmd.exe", "/K"), cmd.command());
-        assertFalse(cmd.command().contains("-NoLogo"));
-        assertFalse(cmd.command().contains("-NoExit"));
-        assertFalse(cmd.command().contains("-Command"));
-    }
-
-    @Test
-    void bashSetsColoredPs1Prompt() {
-        Map<String, String> environment = new HashMap<>();
-        TerminalSessionManager.applyShellColorEnvironment(environment,
-                TerminalSessionManager.unixShell("system", "Bash", "bash"));
-        assertTrue(environment.containsKey("PS1"));
-        assertFalse(environment.containsKey("PROMPT"));
-    }
-
-    @Test
-    void cmdSetsColoredPromptWhilePowershellUsesCommandColors() {
-        Map<String, String> cmdEnvironment = new HashMap<>();
-        TerminalSessionManager.applyShellColorEnvironment(cmdEnvironment,
-                new TerminalSessionManager.ShellCommand(
-                        "cmd", List.of("cmd.exe"), "Command Prompt", TerminalSessionManager.ShellFamily.CMD));
-        assertEquals("$E[34m$P$E[0m$G$S", cmdEnvironment.get("PROMPT"));
-
-        Map<String, String> powershellEnvironment = new HashMap<>();
-        TerminalSessionManager.applyShellColorEnvironment(powershellEnvironment,
-                TerminalSessionManager.powerShell("system", "PowerShell 7", "pwsh.exe"));
-        assertFalse(powershellEnvironment.containsKey("PS1"));
-        assertFalse(powershellEnvironment.containsKey("PROMPT"));
-    }
-
-    @Test
-    void configuredDefaultShellNormalizesProperty() {
-        System.clearProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY);
-        assertNull(TerminalSessionManager.configuredDefaultShell());
-
-        System.setProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY, "  system  ");
-        assertNull(TerminalSessionManager.configuredDefaultShell());
-
-        System.setProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY, "  PWSH  ");
-        assertEquals("pwsh", TerminalSessionManager.configuredDefaultShell());
-    }
-
-    @Test
     void windowsSystemShellsFallBackPwshThenPowerShellThenCmd() {
-        System.clearProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY);
         List<TerminalSessionManager.ShellCommand> candidates =
                 TerminalSessionManager.resolveSystemShellCandidates("windows 11", (os, names) -> {
                     for (String name : names) {
@@ -267,69 +198,86 @@ class TerminalSessionManagerTest {
                 List.of("PowerShell 7", "Windows PowerShell", "Command Prompt"),
                 candidates.stream().map(TerminalSessionManager.ShellCommand::displayName)
                         .collect(java.util.stream.Collectors.toList()));
+        assertTrue(candidates.stream().allMatch(candidate -> "system".equals(candidate.id())));
         assertEquals(TerminalSessionManager.ShellFamily.CMD,
                 candidates.get(candidates.size() - 1).family());
     }
 
     @Test
-    void zshSetsColoredPrompt() {
-        Map<String, String> environment = new HashMap<>();
-        TerminalSessionManager.applyShellColorEnvironment(environment,
-                TerminalSessionManager.unixShell("system", "Zsh", "zsh"));
-        assertTrue(environment.containsKey("PROMPT"));
-        assertFalse(environment.containsKey("PS1"));
+    void windowsSystemShellsKeepCmdWhenPowershellIsUnavailable() {
+        List<TerminalSessionManager.ShellCommand> candidates =
+                TerminalSessionManager.resolveSystemShellCandidates("windows 11", (os, names) -> null);
+
+        assertEquals(1, candidates.size());
+        assertEquals("system", candidates.get(0).id());
+        assertEquals("Command Prompt", candidates.get(0).displayName());
+        assertEquals(TerminalSessionManager.ShellFamily.CMD, candidates.get(0).family());
     }
 
     @Test
+    @EnabledOnOs(OS.WINDOWS)
     void windowsSystemShellFallsBackToCmdWhenPowershellSpawnBlocked() throws Exception {
-        if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            return;
-        }
-        System.clearProperty(TerminalSessionManager.DEFAULT_SHELL_PROPERTY);
         AtomicInteger attempts = new AtomicInteger();
-        TerminalSessionManager.setProcessFactoryForTests((command, dir, env, columns, rows) -> {
-            attempts.incrementAndGet();
-            if (!command[0].toLowerCase(Locale.ROOT).contains("cmd")) {
-                throw new IOException("blocked");
-            }
-            return TerminalSessionManager.defaultProcessFactory(command, dir, env, columns, rows);
-        });
-        Path cwd = Path.of(System.getProperty("java.io.tmpdir"));
+        TerminalSessionManager.ShellCommand blocked = new TerminalSessionManager.ShellCommand(
+                "system",
+                List.of("powershell.exe"),
+                "Windows PowerShell",
+                TerminalSessionManager.ShellFamily.POWERSHELL
+        );
+        TerminalSessionManager.ShellCommand fallback = new TerminalSessionManager.ShellCommand(
+                "system",
+                List.of(System.getenv().getOrDefault("ComSpec", "cmd.exe")),
+                "Command Prompt",
+                TerminalSessionManager.ShellFamily.CMD
+        );
+        Map<String, Object> session = TerminalSessionManager.create(
+                directory,
+                80,
+                24,
+                List.of(blocked, fallback),
+                (command, dir, env, columns, rows) -> {
+                    attempts.incrementAndGet();
+                    if (!command[0].toLowerCase(Locale.ROOT).contains("cmd")) {
+                        throw new IOException("blocked");
+                    }
+                    return TerminalSessionManager.defaultProcessFactory(command, dir, env, columns, rows);
+                }
+        );
+        String sessionId = (String) session.get("sessionId");
         try {
-            Map<String, Object> session = TerminalSessionManager.create(cwd, 80, 24, "system");
-            String sessionId = (String) session.get("sessionId");
-            try {
-                assertNotNull(sessionId);
-                assertTrue(attempts.get() >= 2);
-                assertTrue((Boolean) TerminalSessionManager.status(sessionId).get("alive"));
-            } finally {
-                TerminalSessionManager.kill(sessionId);
-            }
+            assertNotNull(sessionId);
+            assertEquals(2, attempts.get());
+            assertEquals("Command Prompt", session.get("shell"));
+            assertEquals("system", session.get("shellId"));
+            assertTrue((Boolean) TerminalSessionManager.status(sessionId).get("alive"));
         } finally {
-            TerminalSessionManager.resetProcessFactoryForTests();
+            TerminalSessionManager.kill(sessionId);
         }
     }
 
     @Test
     void fallsBackToNextShellWhenSpawnFails() throws Exception {
-        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            return;
-        }
         AtomicInteger attempts = new AtomicInteger();
-        TerminalSessionManager.setProcessFactoryForTests((command, dir, env, columns, rows) -> {
-            if (attempts.getAndIncrement() == 0) {
-                throw new IOException("powershell blocked by security software");
-            }
-            return TerminalSessionManager.defaultProcessFactory(command, dir, env, columns, rows);
-        });
         TerminalSessionManager.ShellCommand blocked = new TerminalSessionManager.ShellCommand(
                 "blocked", List.of("powershell.exe"), "Windows PowerShell", TerminalSessionManager.ShellFamily.POWERSHELL);
-        TerminalSessionManager.ShellCommand fallback = TerminalSessionManager.unixShell("bash", "Bash", "bash");
-        Map<String, Object> session = TerminalSessionManager.create(directory, 80, 24, List.of(blocked, fallback));
+        TerminalSessionManager.ShellCommand fallback =
+                TerminalSessionManager.resolveShellCandidates("system").get(0);
+        Map<String, Object> session = TerminalSessionManager.create(
+                directory,
+                80,
+                24,
+                List.of(blocked, fallback),
+                (command, dir, env, columns, rows) -> {
+                    if (attempts.getAndIncrement() == 0) {
+                        throw new IOException("powershell blocked by security software");
+                    }
+                    return TerminalSessionManager.defaultProcessFactory(command, dir, env, columns, rows);
+                }
+        );
         String sessionId = (String) session.get("sessionId");
         try {
             assertNotNull(sessionId);
-            assertEquals("bash", session.get("shellId"));
+            assertEquals("system", session.get("shellId"));
             assertEquals(2, attempts.get());
             assertTrue((Boolean) TerminalSessionManager.status(sessionId).get("alive"));
         } finally {
@@ -340,17 +288,42 @@ class TerminalSessionManagerTest {
     @Test
     void throwsWhenNoCandidateCanStart() {
         AtomicInteger attempts = new AtomicInteger();
-        TerminalSessionManager.setProcessFactoryForTests((command, dir, env, columns, rows) -> {
-            attempts.incrementAndGet();
-            throw new IOException("blocked");
-        });
         TerminalSessionManager.ShellCommand blocked = new TerminalSessionManager.ShellCommand(
                 "blocked", List.of("powershell.exe"), "Windows PowerShell", TerminalSessionManager.ShellFamily.POWERSHELL);
         TerminalSessionManager.ShellCommand cmd = new TerminalSessionManager.ShellCommand(
                 "cmd", List.of("cmd.exe"), "Command Prompt", TerminalSessionManager.ShellFamily.CMD);
         IOException exception = assertThrows(IOException.class,
-                () -> TerminalSessionManager.create(directory, 80, 24, List.of(blocked, cmd)));
+                () -> TerminalSessionManager.create(
+                        directory,
+                        80,
+                        24,
+                        List.of(blocked, cmd),
+                        (command, dir, env, columns, rows) -> {
+                            attempts.incrementAndGet();
+                            throw new IOException("blocked");
+                        }
+                ));
         assertEquals("blocked", exception.getMessage());
         assertEquals(2, attempts.get());
+    }
+
+    @Test
+    void doesNotRetryShellsWhenWorkingDirectoryIsUnavailable() {
+        AtomicInteger attempts = new AtomicInteger();
+        TerminalSessionManager.ShellCommand shell = new TerminalSessionManager.ShellCommand(
+                "shell", List.of("shell"), "Shell", TerminalSessionManager.ShellFamily.OTHER);
+
+        assertThrows(IOException.class,
+                () -> TerminalSessionManager.create(
+                        directory.resolve("missing"),
+                        80,
+                        24,
+                        List.of(shell, shell),
+                        (command, dir, env, columns, rows) -> {
+                            attempts.incrementAndGet();
+                            throw new IOException("should not start");
+                        }
+                ));
+        assertEquals(0, attempts.get());
     }
 }

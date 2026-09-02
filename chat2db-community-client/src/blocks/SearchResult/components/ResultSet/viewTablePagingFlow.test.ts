@@ -155,16 +155,18 @@ test('table browse flows from the initial response through filtered 50000-row st
 
   const replacedResults = replaceViewTableResult([initialResult], transition.completedResult!);
   assert.equal(replacedResults[0].uuid, initialUuid, 'completion preserves the mounted result identity');
+  assert.equal(replacedResults[0].originalSql, BASE_SQL, 'completion preserves the original table query');
+  const nextSortedSql = composeResultQuery({
+    databaseType: DatabaseTypeCode.MYSQL,
+    orderByValue: 'status ASC',
+    originalSql: replacedResults[0].originalSql,
+  });
   assert.equal(
-    composeResultQuery({
-      databaseType: DatabaseTypeCode.MYSQL,
-      filterValue: "status = 'ACTIVE'",
-      orderByValue: 'id DESC',
-      originalSql: initialResult.originalSql,
-    }),
-    filteredSql,
-    'later searches continue composing from the stable base query instead of nesting prior filters',
+    nextSortedSql,
+    `${BASE_SQL} ORDER BY status ASC`,
+    'later searches compose from the stable base query instead of nesting the previous sort',
   );
+  assert.equal(nextSortedSql.match(/\bORDER\s+BY\b/gi)?.length, 1, 'consecutive grid sorts emit one ORDER BY clause');
 });
 
 test('table browse SQL normalization follows originalSql, sql, then request SQL', () => {

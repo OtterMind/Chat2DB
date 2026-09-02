@@ -72,8 +72,7 @@ public class TableIndex implements Serializable {
 
     private String method;
 
-
-
+    private Boolean visible;
 
 
     private String foreignSchemaName;

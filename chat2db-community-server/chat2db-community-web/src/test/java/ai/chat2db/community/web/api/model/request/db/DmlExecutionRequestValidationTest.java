@@ -1,11 +1,13 @@
 package ai.chat2db.community.web.api.model.request.db;
 
+import ai.chat2db.community.domain.api.model.request.db.SelectResultOperation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -64,6 +66,15 @@ class DmlExecutionRequestValidationTest {
         TableEditExecuteRequest request = new TableEditExecuteRequest();
         request.setDataSourceId(1L);
         request.setSql("update sms_attendance set status = 'present' where id = 1");
+
+        assertValid(request);
+    }
+
+    @Test
+    void resultEditPreviewDoesNotRequireConsoleContext() {
+        SelectResultUpdateRequest request = new SelectResultUpdateRequest();
+        request.setDataSourceId(1L);
+        request.setOperations(List.of(new SelectResultOperation()));
 
         assertValid(request);
     }

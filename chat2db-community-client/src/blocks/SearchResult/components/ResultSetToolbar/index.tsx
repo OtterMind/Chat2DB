@@ -35,7 +35,7 @@ const RESULT_TOOLBAR_BUTTON_SIZE = {
 interface IProps {
   resultData: IManageResultData;
   handleToolbarOperation: (type: ToolbarOperationType, paging?: ResultPaging) => void;
-  hasOperationRecord: boolean;
+  hasPendingChanges: boolean;
   activeFilterCount?: number;
   onClearAllFilters?: () => void;
   onManageColumns: () => void;
@@ -44,7 +44,7 @@ interface IProps {
 const ResultSetToolbar = (props: IProps) => {
   const {
     resultData,
-    hasOperationRecord,
+    hasPendingChanges,
     handleToolbarOperation,
     activeFilterCount = 0,
     onClearAllFilters,
@@ -176,8 +176,8 @@ const ResultSetToolbar = (props: IProps) => {
           />
           {/* Undo. */}
           <IconButton
-            className={styles.toolbarAction}
-            // disabled={revokeDisableBarState}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.revert')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.REVOKE);
@@ -187,8 +187,8 @@ const ResultSetToolbar = (props: IProps) => {
           />
           {/* View SQL. */}
           <IconButton
-            className={styles.toolbarAction}
-            disabled={!hasOperationRecord}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.previewPendingChanges')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.VIEW_SQL);
@@ -198,8 +198,8 @@ const ResultSetToolbar = (props: IProps) => {
           />
           {/* Submit for execution. */}
           <IconButton
-            className={styles.toolbarAction}
-            disabled={!hasOperationRecord}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.submit') + `${keyboardKey.command} + S`}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.UPDATE_SUBMIT);
@@ -250,7 +250,7 @@ const ResultSetToolbar = (props: IProps) => {
 export default memo(ResultSetToolbar, (prevProps, nextProps) => {
   return isEqualMemo(
     [prevProps.resultData, nextProps.resultData],
-    [prevProps.hasOperationRecord, nextProps.hasOperationRecord],
+    [prevProps.hasPendingChanges, nextProps.hasPendingChanges],
     [prevProps.handleToolbarOperation, nextProps.handleToolbarOperation],
     [prevProps.activeFilterCount, nextProps.activeFilterCount],
     [prevProps.onClearAllFilters, nextProps.onClearAllFilters],

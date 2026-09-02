@@ -1,9 +1,156 @@
 import { DatabaseTypeCode } from '@/constants/common';
-import { databaseCapabilities, IdentifierQuoteMode } from '@/constants/databaseCapabilities';
+import { DatabaseCapability, IdentifierQuoteMode } from '@/constants/databaseCapabilities';
 import { getDatabaseInfo, normalizeDatabaseType } from '@/constants/database';
-import { EditColumnOperationType } from '@/constants/editTable';
 
 type DatabaseTypeInput = DatabaseTypeCode | string | null | undefined;
+
+type DatabaseCapabilityJudgment = (
+  | {
+      implementedBy: readonly DatabaseTypeCode[];
+      implementedByDefaultExcept?: never;
+    }
+  | {
+      implementedBy?: never;
+      implementedByDefaultExcept: readonly DatabaseTypeCode[];
+    }
+) & {
+  normalizeDatabaseType?: boolean;
+};
+
+const databaseJudgments: Record<DatabaseCapability, DatabaseCapabilityJudgment> = {
+  [DatabaseCapability.ROUTINE_OPERATION]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+    normalizeDatabaseType: true,
+  },
+  [DatabaseCapability.ACCOUNT_MANAGEMENT]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+    normalizeDatabaseType: true,
+  },
+  [DatabaseCapability.DATABASE_DELETE]: {
+    implementedBy: [DatabaseTypeCode.MYSQL, DatabaseTypeCode.POSTGRESQL],
+  },
+  [DatabaseCapability.SCHEMA_DELETE]: {
+    implementedBy: [DatabaseTypeCode.POSTGRESQL],
+  },
+  [DatabaseCapability.DATABASE_CREATE]: {
+    implementedByDefaultExcept: [DatabaseTypeCode.H2],
+  },
+  [DatabaseCapability.DATABASE_CREATE_CHARSET]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.DATABASE_CREATE_COLLATION]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.SCHEMA_CREATE]: {
+    implementedByDefaultExcept: [DatabaseTypeCode.ORACLE, DatabaseTypeCode.OSCAR],
+  },
+  [DatabaseCapability.IMPORT_EXPORT]: {
+    implementedByDefaultExcept: [
+      DatabaseTypeCode.REDIS,
+      DatabaseTypeCode.H2,
+      DatabaseTypeCode.PRESTO,
+      DatabaseTypeCode.MONGODB,
+      DatabaseTypeCode.SNOWFLAKE,
+      DatabaseTypeCode.KYLIN,
+      DatabaseTypeCode.KINGBASE,
+      DatabaseTypeCode.HIVE,
+    ],
+  },
+  [DatabaseCapability.JAVA_CLASS_GENERATION]: {
+    implementedBy: [
+      DatabaseTypeCode.CLICKHOUSE,
+      DatabaseTypeCode.DB2,
+      DatabaseTypeCode.DM,
+      DatabaseTypeCode.KINGBASE,
+      DatabaseTypeCode.POSTGRESQL,
+      DatabaseTypeCode.SQLITE,
+      DatabaseTypeCode.SQLSERVER,
+      DatabaseTypeCode.MYSQL,
+      DatabaseTypeCode.ORACLE,
+    ],
+  },
+  [DatabaseCapability.BACKEND_COMPLETION]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.BACKEND_EDITOR_HINTS]: {
+    implementedBy: [DatabaseTypeCode.MYSQL, DatabaseTypeCode.POSTGRESQL, DatabaseTypeCode.GAUSSDB],
+  },
+  [DatabaseCapability.TABLE_EDITOR_BASE_INFO]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.TABLE_EDITOR_INDEX_METHOD]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.TABLE_EDITOR_COLUMN_VISIBILITY]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.TABLE_EDITOR_INDEX_VISIBILITY]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
+  [DatabaseCapability.TABLE_EDITOR_INDEX_COLUMN]: {
+    implementedByDefaultExcept: [DatabaseTypeCode.ORACLE],
+  },
+  [DatabaseCapability.TABLE_EDITOR_INCLUDE_COLLATION]: {
+    implementedBy: [DatabaseTypeCode.SQLITE],
+  },
+  [DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT]: {
+    implementedByDefaultExcept: [DatabaseTypeCode.SQLITE],
+  },
+  [DatabaseCapability.TABLE_EDITOR_SPARSE_COLUMN]: {
+    implementedBy: [DatabaseTypeCode.SQLSERVER],
+  },
+  [DatabaseCapability.REDIS_TREE]: {
+    implementedBy: [DatabaseTypeCode.REDIS],
+  },
+  [DatabaseCapability.MONGODB_TREE]: {
+    implementedBy: [DatabaseTypeCode.MONGODB],
+  },
+};
+
+const openTableIdentifierQuoteJudgments: Partial<Record<IdentifierQuoteMode, readonly DatabaseTypeCode[]>> = {
+  [IdentifierQuoteMode.DOUBLE_QUOTE]: [
+    DatabaseTypeCode.ORACLE,
+    DatabaseTypeCode.OSCAR,
+    DatabaseTypeCode.SQLITE,
+    DatabaseTypeCode.POSTGRESQL,
+    DatabaseTypeCode.H2,
+    DatabaseTypeCode.DB2,
+    DatabaseTypeCode.KINGBASE,
+    DatabaseTypeCode.DM,
+  ],
+  [IdentifierQuoteMode.SQUARE_BRACKET]: [DatabaseTypeCode.SQLSERVER],
+  [IdentifierQuoteMode.BACKTICK]: [DatabaseTypeCode.MYSQL, DatabaseTypeCode.CLICKHOUSE, DatabaseTypeCode.MARIADB],
+};
+
+const sqlCompletionIdentifierQuoteJudgments: Partial<Record<IdentifierQuoteMode, readonly DatabaseTypeCode[]>> = {
+  [IdentifierQuoteMode.DOUBLE_QUOTE]: [
+    DatabaseTypeCode.POSTGRESQL,
+    DatabaseTypeCode.ORACLE,
+    DatabaseTypeCode.OSCAR,
+    DatabaseTypeCode.DB2,
+    DatabaseTypeCode.DM,
+    DatabaseTypeCode.H2,
+    DatabaseTypeCode.SQLITE,
+    DatabaseTypeCode.OCEANBASE_ORACLE,
+    DatabaseTypeCode.KINGBASE,
+    DatabaseTypeCode.SNOWFLAKE,
+    DatabaseTypeCode.OPENGAUSS,
+    DatabaseTypeCode.SUNDB,
+    DatabaseTypeCode.COCKROACHDB,
+    DatabaseTypeCode.KYLIN,
+    DatabaseTypeCode.XUGUDB,
+    DatabaseTypeCode.PRESTO,
+  ],
+  [IdentifierQuoteMode.SQUARE_BRACKET]: [DatabaseTypeCode.SQLSERVER],
+  [IdentifierQuoteMode.BACKTICK]: [
+    DatabaseTypeCode.MYSQL,
+    DatabaseTypeCode.MARIADB,
+    DatabaseTypeCode.TIDB,
+    DatabaseTypeCode.CLICKHOUSE,
+    DatabaseTypeCode.OCEANBASE,
+    DatabaseTypeCode.HIVE,
+  ],
+};
 
 const normalize = (databaseType?: DatabaseTypeInput): DatabaseTypeCode | undefined => {
   return normalizeDatabaseType(databaseType) as DatabaseTypeCode | undefined;
@@ -16,6 +163,19 @@ const containsStrict = (databaseTypes: readonly DatabaseTypeCode[], databaseType
 const containsNormalized = (databaseTypes: readonly DatabaseTypeCode[], databaseType?: DatabaseTypeInput): boolean => {
   const normalizedType = normalize(databaseType);
   return !!normalizedType && databaseTypes.includes(normalizedType);
+};
+
+export const isDatabaseCapabilitySupported = (
+  databaseType: DatabaseTypeInput,
+  capability: DatabaseCapability,
+): boolean => {
+  const judgment = databaseJudgments[capability];
+  const usesAllowList = judgment.implementedBy !== undefined;
+  const databaseTypes = usesAllowList ? judgment.implementedBy : judgment.implementedByDefaultExcept;
+  const matches = judgment.normalizeDatabaseType
+    ? containsNormalized(databaseTypes, databaseType)
+    : containsStrict(databaseTypes, databaseType);
+  return usesAllowList ? matches : !matches;
 };
 
 const getIdentifierQuoteModeFromConfig = (
@@ -47,72 +207,12 @@ export const getDatabaseSupport = (databaseType?: DatabaseTypeInput) => {
   };
 };
 
-export const canUseRoutineOperation = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsNormalized(databaseCapabilities.routineOperationSupported, databaseType);
-};
-
-export const canUseAccountManage = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsNormalized(databaseCapabilities.accountManageSupported, databaseType);
-};
-
-export const canDeleteDatabase = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.databaseDeleteSupported, databaseType);
-};
-
-export const canDeleteSchema = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.schemaDeleteSupported, databaseType);
-};
-
-export const canCreateDatabase = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.createDatabaseUnsupported, databaseType);
-};
-
-export const canSetCreateDatabaseCharset = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.createDatabaseCharsetSupported, databaseType);
-};
-
-export const canSetCreateDatabaseCollation = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.createDatabaseCollationSupported, databaseType);
-};
-
-export const canCreateSchema = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.createSchemaUnsupported, databaseType);
-};
-
-export const canRunSqlFile = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.importExportUnsupported, databaseType);
-};
-
-export const canExportSqlFile = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.importExportUnsupported, databaseType);
-};
-
-export const canExportData = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.importExportUnsupported, databaseType);
-};
-
-export const canImportData = (databaseType?: DatabaseTypeInput): boolean => {
-  return !containsStrict(databaseCapabilities.importExportUnsupported, databaseType);
-};
-
-export const canGenerateJavaClass = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.generateJavaClassSupported, databaseType);
-};
-
-export const canUseBackendCompletion = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.backendCompletionSupported, databaseType);
-};
-
-export const canUseBackendEditorHints = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.backendEditorHintsSupported, databaseType);
-};
-
 export const getOpenTableIdentifierQuoteMode = (databaseType?: DatabaseTypeInput): IdentifierQuoteMode => {
-  return getIdentifierQuoteModeFromConfig(databaseCapabilities.openTableIdentifierQuote, databaseType);
+  return getIdentifierQuoteModeFromConfig(openTableIdentifierQuoteJudgments, databaseType);
 };
 
 export const getSqlCompletionIdentifierQuoteMode = (databaseType?: DatabaseTypeInput): IdentifierQuoteMode => {
-  return getIdentifierQuoteModeFromConfig(databaseCapabilities.sqlCompletionIdentifierQuote, databaseType);
+  return getIdentifierQuoteModeFromConfig(sqlCompletionIdentifierQuoteJudgments, databaseType);
 };
 
 export const quoteIdentifierByMode = (name: string, quoteMode: IdentifierQuoteMode): string => {
@@ -134,42 +234,4 @@ export const quoteOpenTableIdentifier = (name: string, databaseType?: DatabaseTy
 
 export const quoteSqlCompletionIdentifier = (name: string, databaseType?: DatabaseTypeInput): string => {
   return quoteIdentifierByMode(name, getSqlCompletionIdentifierQuoteMode(databaseType));
-};
-
-export const isRedisTreeDataSource = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.redisTreeDataSourceTypes, databaseType);
-};
-
-export const isMongodbTreeDataSource = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.mongodbTreeDataSourceTypes, databaseType);
-};
-
-export const shouldShowMysqlTableBaseInfo = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.tableEditorMysqlBaseInfoSupported, databaseType);
-};
-
-export const shouldShowMysqlIndexMethod = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.tableEditorMysqlIndexMethodSupported, databaseType);
-};
-
-export const shouldHideOracleIndexColumn = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.tableEditorOracleIndexColumnHidden, databaseType);
-};
-
-export const shouldShowSqliteIncludeCollation = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.tableEditorSqliteIncludeCollationSupported, databaseType);
-};
-
-export const isSqliteExistingColumnReadonly = (
-  databaseType?: DatabaseTypeInput,
-  editStatus?: EditColumnOperationType | null,
-): boolean => {
-  return (
-    containsStrict(databaseCapabilities.tableEditorSqliteExistingColumnReadonly, databaseType) &&
-    editStatus !== EditColumnOperationType.Add
-  );
-};
-
-export const shouldShowSqlServerSparse = (databaseType?: DatabaseTypeInput): boolean => {
-  return containsStrict(databaseCapabilities.tableEditorSqlServerSparseSupported, databaseType);
 };

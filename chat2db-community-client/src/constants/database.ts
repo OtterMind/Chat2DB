@@ -1,6 +1,5 @@
 import { IDatabase } from '@/typings';
 import { DatabaseTypeCode } from './common';
-import { databaseCapabilities } from './databaseCapabilities';
 
 export enum ConnectionEnvType {
   DAILY = 'DAILY',
@@ -285,29 +284,6 @@ const databaseTypeAliasMap: Record<string, DatabaseTypeCode> = {
   SHENTONGDB: DatabaseTypeCode.OSCAR,
 };
 
-interface RoutineOperationDatabaseConfig {
-  enabled: boolean;
-}
-
-const buildEnabledDatabaseConfig = <T extends { enabled: boolean }>(
-  databaseTypes: readonly DatabaseTypeCode[],
-): Partial<Record<DatabaseTypeCode, T>> => {
-  return databaseTypes.reduce<Partial<Record<DatabaseTypeCode, T>>>((config, databaseType) => {
-    config[databaseType] = { enabled: true } as T;
-    return config;
-  }, {});
-};
-
-export const routineOperationDatabaseConfig: Partial<Record<DatabaseTypeCode, RoutineOperationDatabaseConfig>> =
-  buildEnabledDatabaseConfig(databaseCapabilities.routineOperationSupported);
-
-interface AccountManageDatabaseConfig {
-  enabled: boolean;
-}
-
-export const accountManageDatabaseConfig: Partial<Record<DatabaseTypeCode, AccountManageDatabaseConfig>> =
-  buildEnabledDatabaseConfig(databaseCapabilities.accountManageSupported);
-
 export const normalizeDatabaseType = (databaseType?: string | null) => {
   if (!databaseType) {
     return undefined;
@@ -331,14 +307,4 @@ export const normalizeDatabaseType = (databaseType?: string | null) => {
 export const getDatabaseInfo = (databaseType?: string | null) => {
   const normalizedType = normalizeDatabaseType(databaseType);
   return normalizedType ? databaseMap[normalizedType] : undefined;
-};
-
-export const isRoutineOperationSupportedDatabaseType = (databaseType?: string | null) => {
-  const normalizedType = normalizeDatabaseType(databaseType);
-  return !!normalizedType && !!routineOperationDatabaseConfig[normalizedType as DatabaseTypeCode]?.enabled;
-};
-
-export const isAccountManageSupportedDatabaseType = (databaseType?: string | null) => {
-  const normalizedType = normalizeDatabaseType(databaseType);
-  return !!normalizedType && !!accountManageDatabaseConfig[normalizedType as DatabaseTypeCode]?.enabled;
 };

@@ -1,49 +1,58 @@
 import assert from 'node:assert/strict';
-import { DatabaseTypeCode } from '../../../constants/common';
-import {
-  isBackendCompletionDatabaseType,
-  isBackendEditorHintsDatabaseType,
-  isBackendCompletionModel,
-  setBackendCompletionModel,
-} from './sqlCompletionModelMode';
+import { DatabaseTypeCode } from '@/constants/common';
+import { DatabaseCapability } from '@/constants/databaseCapabilities';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
+import { isBackendCompletionModel, setBackendCompletionModel } from './sqlCompletionModelMode';
 
 const model = {} as any;
 
-assert.equal(isBackendCompletionDatabaseType(DatabaseTypeCode.MYSQL), true, 'MySQL uses backend completion mode');
 assert.equal(
-  isBackendCompletionDatabaseType(DatabaseTypeCode.POSTGRESQL),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.MYSQL, DatabaseCapability.BACKEND_COMPLETION),
+  true,
+  'MySQL uses backend completion mode',
+);
+assert.equal(
+  isDatabaseCapabilitySupported(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.BACKEND_COMPLETION),
   false,
   'non-configured databases keep legacy completion mode',
 );
 assert.equal(
-  isBackendCompletionDatabaseType(DatabaseTypeCode.GAUSSDB),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.GAUSSDB, DatabaseCapability.BACKEND_COMPLETION),
   false,
   'GaussDB keeps legacy completion mode while using backend editor hints',
 );
-assert.equal(isBackendCompletionDatabaseType(undefined), false, 'missing database type keeps legacy completion mode');
-assert.equal(isBackendEditorHintsDatabaseType(DatabaseTypeCode.MYSQL), true, 'MySQL supports backend editor hints');
 assert.equal(
-  isBackendEditorHintsDatabaseType(DatabaseTypeCode.POSTGRESQL),
+  isDatabaseCapabilitySupported(undefined, DatabaseCapability.BACKEND_COMPLETION),
+  false,
+  'missing database type keeps legacy completion mode',
+);
+assert.equal(
+  isDatabaseCapabilitySupported(DatabaseTypeCode.MYSQL, DatabaseCapability.BACKEND_EDITOR_HINTS),
+  true,
+  'MySQL supports backend editor hints',
+);
+assert.equal(
+  isDatabaseCapabilitySupported(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.BACKEND_EDITOR_HINTS),
   true,
   'PostgreSQL supports backend editor hints without switching completion mode',
 );
 assert.equal(
-  isBackendEditorHintsDatabaseType(DatabaseTypeCode.GAUSSDB),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.GAUSSDB, DatabaseCapability.BACKEND_EDITOR_HINTS),
   true,
   'GaussDB supports PostgreSQL-compatible backend editor hints',
 );
 assert.equal(
-  isBackendEditorHintsDatabaseType(DatabaseTypeCode.SQLSERVER),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.SQLSERVER, DatabaseCapability.BACKEND_EDITOR_HINTS),
   false,
   'unvalidated SQL dialects do not request INSERT editor hints',
 );
 assert.equal(
-  isBackendEditorHintsDatabaseType(DatabaseTypeCode.MONGODB),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.MONGODB, DatabaseCapability.BACKEND_EDITOR_HINTS),
   false,
   'non-relational databases do not request SQL INSERT editor hints',
 );
 assert.equal(
-  isBackendEditorHintsDatabaseType(DatabaseTypeCode.GBASE8S),
+  isDatabaseCapabilitySupported(DatabaseTypeCode.GBASE8S, DatabaseCapability.BACKEND_EDITOR_HINTS),
   false,
   'databases without a SQL syntax plugin do not advertise backend editor hints',
 );

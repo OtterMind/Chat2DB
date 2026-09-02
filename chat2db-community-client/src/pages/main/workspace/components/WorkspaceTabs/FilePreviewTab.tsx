@@ -268,6 +268,39 @@ const FilePreviewTab = memo(({ file, workspaceTabId }: FilePreviewTabProps) => {
   markdownContentRef.current = markdownContent;
   markdownPersistedContentRef.current = markdownPersistedContent;
 
+  useEffect(() => {
+    if (!isMarkdown || file.ddl !== undefined || !file.filePath) {
+      return;
+    }
+    void useWorkspaceStore
+      .getState()
+      .readFile(file.filePath, file.fileExtension, {
+        rootToken: file.fileRootToken,
+        relativePath: file.fileRelativePath,
+        charset: file.fileCharset,
+        workspaceTabId,
+      })
+      .catch((error) => console.error('Failed to restore local file content', error));
+  }, [
+    file.ddl,
+    file.fileCharset,
+    file.fileExtension,
+    file.filePath,
+    file.fileRelativePath,
+    file.fileRootToken,
+    isMarkdown,
+    workspaceTabId,
+  ]);
+
+  useEffect(() => {
+    if (!isMarkdown || file.ddl === undefined) {
+      return;
+    }
+    setMarkdownContent(file.ddl);
+    setMarkdownPreviewContent(file.ddl);
+    setMarkdownPersistedContent(file.ddl);
+  }, [file.ddl, file.filePath, isMarkdown]);
+
   const markdownSaveKeybinding = useMemo(() => {
     const shortcutConfig = getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides);
     return shortcutBindingToMonacoKeybinding(shortcutConfig[ShortcutAction.SqlSave].binding, monaco) || undefined;

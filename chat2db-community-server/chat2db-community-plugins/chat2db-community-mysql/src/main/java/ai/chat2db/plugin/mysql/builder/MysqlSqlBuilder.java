@@ -1,6 +1,7 @@
 package ai.chat2db.plugin.mysql.builder;
 
 import ai.chat2db.plugin.mysql.MysqlSqlGuards;
+import ai.chat2db.plugin.mysql.MysqlVersionSupport;
 import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
 import ai.chat2db.plugin.mysql.enums.MysqlViewAlgorithmOptionEnum;
 import ai.chat2db.plugin.mysql.enums.MysqlViewCheckOptionEnum;
@@ -52,6 +53,11 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
+    private static final String INVISIBLE_COLUMN_UNSUPPORTED_MESSAGE =
+            "MySQL invisible columns require MySQL 8.0.23 or later";
+    private static final String INVISIBLE_INDEX_UNSUPPORTED_MESSAGE =
+            "MySQL invisible indexes require MySQL 8.0 or later";
+
     @Override
     public String quoteIdentifier(String identifier) {
         return quoteMysqlIdentifier(identifier);
@@ -86,6 +92,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             if (typeEnum == null) {
                 continue;
             }
+            rejectInvisibleColumnIfUnsupported(null, column);
             script.append(SQLConstants.TAB).append(typeEnum.buildCreateColumnSql(column)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
         List<TableIndex> indexList = table.getIndexList();
@@ -100,6 +107,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             if (mysqlIndexTypeEnum == null) {
                 continue;
             }
+            rejectInvisibleIndexIfUnsupported(null, tableIndex, mysqlIndexTypeEnum);
             script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
 
@@ -188,11 +196,14 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                 if (typeEnum == null) {
                     continue;
                 }
+                boolean forceVisibleKeyword = isColumnVisibilityChangedToVisible(oldTable, tableColumn);
+                rejectInvisibleColumnIfUnsupported(oldTable, tableColumn);
                 if (moved || added) {
-                    script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn, true, findPrevious(tableColumn, newTable)))
+                    script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn, true,
+                                    findPrevious(tableColumn, newTable), forceVisibleKeyword))
                             .append(SQLConstants.COMMA_LINE_SEPARATOR);
                 } else {
-                    script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn)).append(SQLConstants.COMMA_LINE_SEPARATOR);
+                    script.append(SQLConstants.TAB).append(typeEnum.buildModifyColumn(tableColumn, forceVisibleKeyword)).append(SQLConstants.COMMA_LINE_SEPARATOR);
                 }
             }
         }
@@ -202,7 +213,19 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
                 if (mysqlIndexTypeEnum == null) {
                     continue;
                 }
-                script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
+                rejectInvisibleIndexIfUnsupported(oldTable, tableIndex, mysqlIndexTypeEnum);
+                if (EditStatusEnum.MODIFY.name().equals(tableIndex.getEditStatus())
+                        && !MysqlIndexTypeEnum.PRIMARY_KEY.equals(mysqlIndexTypeEnum)
+                        && onlyIndexVisibilityChanged(oldTable, tableIndex)) {
+                    // Visibility-only change: use the lightweight ALTER INDEX ... VISIBLE/INVISIBLE
+                    // instead of dropping and rebuilding the whole index. The primary key can
+                    // never be invisible, so it is excluded above.
+                    script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildAlterIndexVisibility(tableIndex))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else {
+                    script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildModifyIndex(tableIndex))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                }
             }
         }
 
@@ -216,6 +239,82 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
     }
 
+    /**
+     * Returns true when the modified index differs from the stored one only in visibility,
+     * so the lightweight {@code ALTER INDEX ... VISIBLE/INVISIBLE} can be used instead of
+     * dropping and rebuilding the index.
+     */
+    private static boolean onlyIndexVisibilityChanged(Table oldTable, TableIndex newIndex) {
+        TableIndex oldIndex = oldTable.getIndexList() == null ? null : oldTable.getIndexList().stream()
+                .filter(idx -> StringUtils.equals(idx.getName(), newIndex.getName()))
+                .findFirst()
+                .orElse(null);
+        if (oldIndex == null) {
+            return false;
+        }
+        if (Objects.equals(oldIndex.getVisible(), newIndex.getVisible())) {
+            return false;
+        }
+        return indexDefinitionsMatchExceptVisibility(oldIndex, newIndex);
+    }
+
+    private static void rejectInvisibleIndexIfUnsupported(Table oldTable, TableIndex newIndex,
+            MysqlIndexTypeEnum indexType) {
+        if (MysqlIndexTypeEnum.PRIMARY_KEY.equals(indexType)) {
+            return;
+        }
+        if (!usesInvisibleIndexFeature(oldTable, newIndex)) {
+            return;
+        }
+        if (MysqlVersionSupport.currentVersionDisallowsInvisibleIndexes()) {
+            throw new IllegalArgumentException(INVISIBLE_INDEX_UNSUPPORTED_MESSAGE);
+        }
+    }
+
+    private static boolean usesInvisibleIndexFeature(Table oldTable, TableIndex newIndex) {
+        if (Boolean.FALSE.equals(newIndex.getVisible())) {
+            return true;
+        }
+        TableIndex oldIndex = findOldIndex(oldTable, newIndex);
+        return oldIndex != null
+                && newIndex.getVisible() != null
+                && !Objects.equals(oldIndex.getVisible(), newIndex.getVisible());
+    }
+
+    private static TableIndex findOldIndex(Table oldTable, TableIndex newIndex) {
+        if (oldTable == null || oldTable.getIndexList() == null) {
+            return null;
+        }
+        String sourceName = StringUtils.defaultIfBlank(newIndex.getOldName(), newIndex.getName());
+        return oldTable.getIndexList().stream()
+                .filter(idx -> StringUtils.equals(idx.getName(), sourceName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static boolean indexDefinitionsMatchExceptVisibility(TableIndex oldIndex, TableIndex newIndex) {
+        return StringUtils.equalsIgnoreCase(oldIndex.getType(), newIndex.getType())
+                && StringUtils.equals(oldIndex.getComment(), newIndex.getComment())
+                && StringUtils.equalsIgnoreCase(StringUtils.trimToEmpty(oldIndex.getMethod()),
+                        StringUtils.trimToEmpty(newIndex.getMethod()))
+                && indexColumnDefinitions(oldIndex).equals(indexColumnDefinitions(newIndex));
+    }
+
+    private static List<IndexColumnDefinition> indexColumnDefinitions(TableIndex tableIndex) {
+        if (tableIndex.getColumnList() == null) {
+            return Collections.emptyList();
+        }
+        return tableIndex.getColumnList().stream()
+                .map(column -> new IndexColumnDefinition(
+                        column.getColumnName(),
+                        StringUtils.trimToEmpty(column.getAscOrDesc()).toUpperCase(Locale.ROOT),
+                        column.getSubPart()))
+                .collect(Collectors.toList());
+    }
+
+    private record IndexColumnDefinition(String columnName, String ascOrDesc, Long subPart) {
+    }
+
     private String findPrevious(TableColumn tableColumn, Table newTable) {
         int index = newTable.getColumnList().indexOf(tableColumn);
         if (index == 0) {
@@ -227,6 +326,43 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             }
         }
         return PREVIOUS_COLUMN_NOT_FOUND;
+    }
+
+    private static void rejectInvisibleColumnIfUnsupported(Table oldTable, TableColumn newColumn) {
+        if (!usesInvisibleColumnFeature(oldTable, newColumn)) {
+            return;
+        }
+        if (MysqlVersionSupport.currentVersionDisallowsInvisibleColumns()) {
+            throw new IllegalArgumentException(INVISIBLE_COLUMN_UNSUPPORTED_MESSAGE);
+        }
+    }
+
+    private static boolean usesInvisibleColumnFeature(Table oldTable, TableColumn newColumn) {
+        if (Boolean.FALSE.equals(newColumn.getVisible())) {
+            return true;
+        }
+        TableColumn oldColumn = findOldColumn(oldTable, newColumn);
+        return oldColumn != null
+                && newColumn.getVisible() != null
+                && !Objects.equals(oldColumn.getVisible(), newColumn.getVisible());
+    }
+
+    private static boolean isColumnVisibilityChangedToVisible(Table oldTable, TableColumn newColumn) {
+        TableColumn oldColumn = findOldColumn(oldTable, newColumn);
+        return oldColumn != null
+                && Boolean.FALSE.equals(oldColumn.getVisible())
+                && Boolean.TRUE.equals(newColumn.getVisible());
+    }
+
+    private static TableColumn findOldColumn(Table oldTable, TableColumn newColumn) {
+        if (oldTable == null || oldTable.getColumnList() == null) {
+            return null;
+        }
+        String sourceName = StringUtils.defaultIfBlank(newColumn.getOldName(), newColumn.getName());
+        return oldTable.getColumnList().stream()
+                .filter(column -> StringUtils.equals(column.getName(), sourceName))
+                .findFirst()
+                .orElse(null);
     }
 
     @Override
