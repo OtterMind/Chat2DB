@@ -111,6 +111,8 @@ export default {
   'workspace.menu.sortDatabaseObjects': '데이터베이스 객체를 이름순으로 정렬',
   'workspace.menu.followActiveWorkspaceTab': '현재 탭 자동 추적',
   'workspace.menu.openView': '뷰 열기',
+  'workspace.menu.createTrigger': '트리거 생성',
+  'workspace.menu.dropTrigger': '트리거 삭제',
   'workspace.menu.annotationDatabaseTable': '데이터 주석(AI)',
   'workspace.menu.editView': '뷰 편집',
   'workspace.menu.openConsole': '콘솔 열기',

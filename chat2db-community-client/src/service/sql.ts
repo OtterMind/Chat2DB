@@ -99,6 +99,13 @@ export interface ITableParams {
   schemaName?: string;
 }
 
+export interface ITriggerDeleteParams {
+  triggerName: string;
+  dataSourceId: number;
+  databaseName: string;
+  schemaName?: string;
+}
+
 export interface IColumn {
   name: string;
   dataType: string;
@@ -422,6 +429,9 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+// Delete trigger
+const deleteTrigger = createRequest<ITriggerDeleteParams, void>('/api/rdb/trigger/delete', { method: 'post' });
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -443,6 +453,7 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  deleteTrigger,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,

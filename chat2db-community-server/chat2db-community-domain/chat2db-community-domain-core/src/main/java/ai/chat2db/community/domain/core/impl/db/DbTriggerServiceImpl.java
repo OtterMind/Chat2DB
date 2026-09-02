@@ -13,6 +13,8 @@ import java.util.List;
 public class DbTriggerServiceImpl implements IDbTriggerService {
     @Override
     public List<Trigger> triggers(String databaseName, String schemaName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
         List<Trigger> triggers = Chat2DBContext.getDbMetaData().triggers(Chat2DBContext.getConnection(), databaseName, schemaName);
         ListSorter.sortByKey(triggers, Trigger::getTriggerName);
         return triggers;
@@ -20,7 +22,19 @@ public class DbTriggerServiceImpl implements IDbTriggerService {
 
     @Override
     public Trigger detail(String databaseName, String schemaName, String triggerName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        triggerName = SqlObjectIdentifierGuard.required(triggerName);
         return Chat2DBContext.getDbMetaData().trigger(Chat2DBContext.getConnection(),
                 new TriggerMetadataRequest(databaseName, schemaName, triggerName));
+    }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String triggerName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        triggerName = SqlObjectIdentifierGuard.required(triggerName);
+        Chat2DBContext.getDbManager().dropTrigger(Chat2DBContext.getConnection(),
+                databaseName, schemaName, triggerName);
     }
 }
