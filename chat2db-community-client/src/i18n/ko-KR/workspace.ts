@@ -267,6 +267,20 @@ export default {
   'workspace.databaseAccount.lockAccount': '계정 잠금',
   'workspace.databaseAccount.unlockAccount': '계정 잠금 해제',
   'workspace.databaseAccount.deleteUser': '사용자 삭제',
+  'workspace.databaseAccount.renameUser': '사용자 이름 변경',
+  'workspace.databaseAccount.newUser': '새 사용자',
+  'workspace.databaseAccount.newHost': '새 호스트',
+  'workspace.databaseAccount.renameImpactWarning': '계정 이름 변경 영향',
+  'workspace.databaseAccount.renameAccountChange': '계정',
+  'workspace.databaseAccount.definerObjects': '이전 계정을 DEFINER로 사용하는 객체',
+  'workspace.databaseAccount.noDefinerObjects': '이 계정을 사용하는 표시 가능한 DEFINER 객체가 없습니다.',
+  'workspace.databaseAccount.renameDefinerWarning':
+    'RENAME USER는 뷰, 함수, 프로시저, 트리거 또는 이벤트의 DEFINER 절을 다시 쓰지 않으며 기존 세션을 종료하지 않습니다.',
+  'mysql.account.renameImpactWarning': 'RENAME USER는 DEFINER 절을 다시 쓰지 않으며 기존 세션을 종료하지 않습니다.',
+  'mysql.account.definerEnumerationIncomplete':
+    '현재 연결이 모든 MySQL 메타데이터를 읽을 수 없어 일부 DEFINER 객체를 열거하지 못했습니다.',
+  'mysql.account.renameTargetExists': '대상 사용자와 호스트가 이미 존재합니다.',
+  'mysql.account.renameReadbackFailed': '이름 변경은 실행되었지만 mysql.user에서 변경된 계정을 확인할 수 없습니다.',
   'workspace.databaseAccount.selectUserFromTree': '왼쪽 트리의 사용자 아래에서 계정을 선택하세요',
   'workspace.databaseAccount.accountListUnreadable':
     '현재 연결에서 mysql.user를 읽을 수 없어 사용자 목록을 불러오지 못할 수 있습니다. 관리자 계정으로 연결하세요.',

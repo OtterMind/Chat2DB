@@ -1,5 +1,10 @@
 import createRequest from './base';
 import i18n from '@/i18n';
+import {
+  formatAccountDefinerImpact,
+  type AccountDefinerImpact,
+  type AccountPreview,
+} from './accountAdminPreview';
 
 export enum AccountActionType {
   CREATE_USER = 'CREATE_USER',
@@ -9,6 +14,7 @@ export enum AccountActionType {
   DROP_USER = 'DROP_USER',
   GRANT_PRIVILEGE = 'GRANT_PRIVILEGE',
   REVOKE_PRIVILEGE = 'REVOKE_PRIVILEGE',
+  RENAME_USER = 'RENAME_USER',
 }
 
 export enum AccountPrivilegeScope {
@@ -69,12 +75,8 @@ export interface AccountCommand extends AccountBaseParams {
   grantOption?: boolean;
   password?: string;
   previewToken?: string;
-}
-
-export interface AccountPreview {
-  actionType: AccountActionType;
-  sql: string;
-  previewToken: string;
+  newUser?: string;
+  newHost?: string;
 }
 
 export interface AccountExecute extends AccountPreview {
@@ -108,6 +110,8 @@ function localizeAccountMessage(rawMessage?: string) {
   }
   return rawMessage;
 }
+
+export { formatAccountDefinerImpact, type AccountDefinerImpact, type AccountPreview };
 
 const capability = createRequest<AccountBaseParams, AccountCapability>('/api/rdb/account/capability', {
   method: 'get',

@@ -1,16 +1,18 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tooltip, theme } from 'antd';
-import { DeleteOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import SQLPreview from '@/components/SQLPreview';
 import accountAdminService, {
   AccountActionType,
+  formatAccountDefinerImpact,
   AccountPrivilege,
   AccountPrivilegeScope,
   formatAccountExecuteMessage,
   type AccountCapability,
   type AccountCommand,
+  type AccountDefinerImpact,
   type AccountExecute,
 } from '@/service/accountAdmin';
 import connectionService from '@/service/connection';
@@ -28,6 +30,11 @@ interface PreviewState {
   sql: string;
   command: AccountCommand;
   previewToken: string;
+  oldAccountSql?: string;
+  newAccountSql?: string;
+  definerEnumerationComplete?: boolean;
+  warningCodes?: string[];
+  definerImpacts?: AccountDefinerImpact[];
 }
 
 const defaultPrivileges = Object.values(AccountPrivilege);
@@ -288,6 +295,11 @@ const AccountPrivilegePanel = memo((props: IProps) => {
             sql: preview.sql,
             command: readyCommand,
             previewToken: preview.previewToken,
+            oldAccountSql: preview.oldAccountSql,
+            newAccountSql: preview.newAccountSql,
+            definerEnumerationComplete: preview.definerEnumerationComplete,
+            warningCodes: preview.warningCodes,
+            definerImpacts: preview.definerImpacts,
           });
         })
         .catch(() => {
@@ -323,6 +335,11 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         sql: preview.sql,
         command,
         previewToken: preview.previewToken,
+        oldAccountSql: preview.oldAccountSql,
+        newAccountSql: preview.newAccountSql,
+        definerEnumerationComplete: preview.definerEnumerationComplete,
+        warningCodes: preview.warningCodes,
+        definerImpacts: preview.definerImpacts,
       });
       setExecuteModalOpen(true);
     });
@@ -376,6 +393,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     accountForm.setFieldsValue({
       user: selectedAccount?.user,
       host: selectedAccount?.host,
+      newUser: selectedAccount?.user,
+      newHost: selectedAccount?.host,
       password: '',
     });
   }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
@@ -391,6 +410,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         user: values.user,
         host: values.host,
         password: values.password,
+        newUser: values.newUser,
+        newHost: values.newHost,
         actionType: accountActionType,
       }).then(() => {
         setAccountModalOpen(false);
@@ -480,6 +501,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                   disabled={!selectedAccount}
                   icon={<DeleteOutlined />}
                   onClick={() => handleSelectedAccountCommand(AccountActionType.DROP_USER)}
+                />
+              </Tooltip>
+              <Tooltip title={i18n('workspace.databaseAccount.renameUser')}>
+                <Button
+                  disabled={!selectedAccount}
+                  icon={<EditOutlined />}
+                  onClick={() => openAccountModal(AccountActionType.RENAME_USER)}
                 />
               </Tooltip>
             </Space>
@@ -598,6 +626,16 @@ const AccountPrivilegePanel = memo((props: IProps) => {
           <Form.Item name="host" label={i18n('workspace.databaseAccount.host')} rules={[{ required: true }]}>
             <Input disabled />
           </Form.Item>
+          {accountActionType === AccountActionType.RENAME_USER && (
+            <>
+              <Form.Item name="newUser" label={i18n('workspace.databaseAccount.newUser')} rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="newHost" label={i18n('workspace.databaseAccount.newHost')} rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+            </>
+          )}
           {accountActionType === AccountActionType.ALTER_PASSWORD && (
             <Form.Item name="password" label={i18n('workspace.databaseAccount.password')} rules={[{ required: true }]}>
               <Input.Password />
@@ -615,6 +653,9 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         onCancel={() => setExecuteModalOpen(false)}
       >
         <SqlPreview sql={confirmPreviewState?.sql || ''} />
+        {confirmPreviewState?.command.actionType === AccountActionType.RENAME_USER && (
+          <RenameImpactPreview preview={confirmPreviewState} />
+        )}
       </Modal>
     </div>
   );
@@ -635,6 +676,52 @@ function showExecutionMessage(result: AccountExecute) {
   staticMessage.success(content);
 }
 
+function RenameImpactPreview({ preview }: { preview: PreviewState | null }) {
+  const definerImpacts = preview?.definerImpacts || [];
+  const incomplete = preview?.definerEnumerationComplete === false;
+  return (
+    <div className={styles.renameImpact}>
+      <Alert
+        type="warning"
+        showIcon
+        message={i18n('workspace.databaseAccount.renameImpactWarning')}
+        description={
+          <div className={styles.renameImpactDescription}>
+            {preview?.oldAccountSql && preview?.newAccountSql && (
+              <div>
+                {i18n('workspace.databaseAccount.renameAccountChange')} {preview.oldAccountSql} {'->'} {preview.newAccountSql}
+              </div>
+            )}
+            <div>{i18n('workspace.databaseAccount.renameDefinerWarning')}</div>
+          </div>
+        }
+      />
+      {incomplete && (
+        <Alert
+          type="warning"
+          showIcon
+          message={i18n('mysql.account.definerEnumerationIncomplete')}
+        />
+      )}
+      <div className={styles.definerSectionTitle}>{i18n('workspace.databaseAccount.definerObjects')}</div>
+      {definerImpacts.length ? (
+        <ul className={styles.definerList}>
+          {definerImpacts.map((impact) => (
+            <li key={`${impact.objectType}:${impact.schemaName}.${impact.objectName}`}>
+              {formatAccountDefinerImpact(impact)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={i18n('workspace.databaseAccount.noDefinerObjects')}
+        />
+      )}
+    </div>
+  );
+}
+
 function isPreviewReady(command: AccountCommand | null): command is AccountCommand {
   if (!command?.actionType || !command.user || !command.host || !command.scope || !command.privileges?.length) {
     return false;
@@ -652,6 +739,8 @@ function accountActionTitle(actionType: AccountActionType) {
   switch (actionType) {
     case AccountActionType.ALTER_PASSWORD:
       return i18n('workspace.databaseAccount.changePassword');
+    case AccountActionType.RENAME_USER:
+      return i18n('workspace.databaseAccount.renameUser');
     case AccountActionType.LOCK_ACCOUNT:
       return i18n('workspace.databaseAccount.lockAccount');
     case AccountActionType.UNLOCK_ACCOUNT:

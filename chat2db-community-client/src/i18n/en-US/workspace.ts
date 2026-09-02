@@ -268,6 +268,21 @@ export default {
   'workspace.databaseAccount.lockAccount': 'Lock Account',
   'workspace.databaseAccount.unlockAccount': 'Unlock Account',
   'workspace.databaseAccount.deleteUser': 'Delete User',
+  'workspace.databaseAccount.renameUser': 'Rename User',
+  'workspace.databaseAccount.newUser': 'New User',
+  'workspace.databaseAccount.newHost': 'New Host',
+  'workspace.databaseAccount.renameImpactWarning': 'Account rename impact',
+  'workspace.databaseAccount.renameAccountChange': 'Account',
+  'workspace.databaseAccount.definerObjects': 'Objects using the old account as DEFINER',
+  'workspace.databaseAccount.noDefinerObjects': 'No visible DEFINER objects use this account.',
+  'workspace.databaseAccount.renameDefinerWarning':
+    'RENAME USER does not rewrite View, Function, Procedure, Trigger, or Event DEFINER clauses and does not terminate existing sessions.',
+  'mysql.account.renameImpactWarning':
+    'RENAME USER does not rewrite DEFINER clauses and does not terminate existing sessions.',
+  'mysql.account.definerEnumerationIncomplete':
+    'Some DEFINER objects could not be enumerated because the current connection cannot read all MySQL metadata.',
+  'mysql.account.renameTargetExists': 'The target user and host already exist.',
+  'mysql.account.renameReadbackFailed': 'Rename executed, but the renamed account could not be verified in mysql.user.',
   'workspace.databaseAccount.selectUserFromTree': 'Select an account under Users in the left tree',
   'workspace.databaseAccount.accountListUnreadable':
     'The current connection cannot read mysql.user, so the user list may not load. Connect with an admin account.',

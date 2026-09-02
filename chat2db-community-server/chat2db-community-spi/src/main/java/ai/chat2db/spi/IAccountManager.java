@@ -18,7 +18,7 @@ public interface IAccountManager {
 
     List<String> showGrants(Connection connection, String user, String host);
 
-    AccountPreview preview(AccountOperationRequest accountOperationRequest);
+    AccountPreview preview(Connection connection, AccountOperationRequest accountOperationRequest);
 
     AccountExecuteResponse execute(Connection connection, AccountOperationRequest accountOperationRequest);
 }

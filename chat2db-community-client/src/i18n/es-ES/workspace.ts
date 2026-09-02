@@ -269,6 +269,22 @@ export default {
   'workspace.databaseAccount.lockAccount': 'Bloquear cuenta',
   'workspace.databaseAccount.unlockAccount': 'Desbloquear cuenta',
   'workspace.databaseAccount.deleteUser': 'Eliminar usuario',
+  'workspace.databaseAccount.renameUser': 'Cambiar nombre de usuario',
+  'workspace.databaseAccount.newUser': 'Nuevo usuario',
+  'workspace.databaseAccount.newHost': 'Nuevo host',
+  'workspace.databaseAccount.renameImpactWarning': 'Impacto del cambio de nombre de la cuenta',
+  'workspace.databaseAccount.renameAccountChange': 'Cuenta',
+  'workspace.databaseAccount.definerObjects': 'Objetos que usan la cuenta anterior como DEFINER',
+  'workspace.databaseAccount.noDefinerObjects': 'Ningún objeto DEFINER visible usa esta cuenta.',
+  'workspace.databaseAccount.renameDefinerWarning':
+    'RENAME USER no reescribe cláusulas DEFINER de vistas, funciones, procedimientos, disparadores o eventos, y no finaliza sesiones existentes.',
+  'mysql.account.renameImpactWarning':
+    'RENAME USER no reescribe cláusulas DEFINER y no finaliza sesiones existentes.',
+  'mysql.account.definerEnumerationIncomplete':
+    'No se pudieron enumerar algunos objetos DEFINER porque la conexión actual no puede leer todos los metadatos de MySQL.',
+  'mysql.account.renameTargetExists': 'El usuario y host de destino ya existen.',
+  'mysql.account.renameReadbackFailed':
+    'El cambio de nombre se ejecutó, pero no se pudo verificar la cuenta renombrada en mysql.user.',
   'workspace.databaseAccount.selectUserFromTree': 'Seleccione una cuenta en Usuarios, en el árbol de la izquierda',
   'workspace.databaseAccount.accountListUnreadable':
     'La conexión actual no puede leer mysql.user, por lo que quizá no se cargue la lista de usuarios. Conéctese con una cuenta de administrador.',

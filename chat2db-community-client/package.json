@@ -68,6 +68,7 @@
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
     "test:sql-execution-batch": "tsx src/service/sqlExecutionBatch.test.ts",
     "test:data-source-execution-snapshot": "tsx src/service/dataSourceExecutionSnapshot.test.ts",
+    "test:account-admin": "tsx src/service/accountAdmin.test.ts",
     "test:sql-execution-request-tracker": "tsx src/service/sqlExecutionRequestTracker.test.ts",
     "test:sql-execution-stream": "tsx src/service/sqlExecutionStream.test.ts && tsx src/pages/main/workspace/components/SQLExecute/streamResultExecutionParams.test.ts",
     "test:result-set-editor": "tsx src/blocks/SearchResult/components/ResultSetTable/utils/editorType.test.ts && tsx src/blocks/CanvasTable/editor/SelectIEditor/index.test.ts && tsx src/blocks/CanvasTable/editor/MultiSelectIEditor/index.test.ts && tsx src/blocks/CanvasTable/editor/SelectIEditor/index.dom.test.ts",
