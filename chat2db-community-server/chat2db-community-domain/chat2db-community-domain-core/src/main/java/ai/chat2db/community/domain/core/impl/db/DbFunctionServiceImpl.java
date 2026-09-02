@@ -13,6 +13,8 @@ import java.util.List;
 public class DbFunctionServiceImpl implements IDbFunctionService {
     @Override
     public List<Function> functions(String databaseName, String schemaName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
         List<Function> functions = Chat2DBContext.getDbMetaData().functions(Chat2DBContext.getConnection(), databaseName, schemaName);
         ListSorter.sortByKey(functions, Function::getFunctionName);
         return functions;
@@ -20,7 +22,19 @@ public class DbFunctionServiceImpl implements IDbFunctionService {
 
     @Override
     public Function detail(String databaseName, String schemaName, String functionName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        functionName = SqlObjectIdentifierGuard.required(functionName);
         return Chat2DBContext.getDbMetaData().function(Chat2DBContext.getConnection(),
                 new FunctionMetadataRequest(databaseName, schemaName, functionName));
+    }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String functionName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        functionName = SqlObjectIdentifierGuard.required(functionName);
+        Chat2DBContext.getDbManager().dropFunction(Chat2DBContext.getConnection(),
+                databaseName, schemaName, functionName);
     }
 }

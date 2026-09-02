@@ -14,6 +14,8 @@ public class DbProcedureServiceImpl implements IDbProcedureService {
 
     @Override
     public List<Procedure> procedures(String databaseName, String schemaName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
         List<Procedure> procedures = Chat2DBContext.getDbMetaData().procedures(Chat2DBContext.getConnection(), databaseName, schemaName);
         ListSorter.sortByKey(procedures, Procedure::getProcedureName);
         return procedures;
@@ -21,7 +23,19 @@ public class DbProcedureServiceImpl implements IDbProcedureService {
 
     @Override
     public Procedure detail(String databaseName, String schemaName, String procedureName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        procedureName = SqlObjectIdentifierGuard.required(procedureName);
         return Chat2DBContext.getDbMetaData().procedure(Chat2DBContext.getConnection(),
                 new ProcedureMetadataRequest(databaseName, schemaName, procedureName));
+    }
+
+    @Override
+    public void drop(String databaseName, String schemaName, String procedureName) {
+        databaseName = SqlObjectIdentifierGuard.required(databaseName);
+        schemaName = SqlObjectIdentifierGuard.optional(schemaName);
+        procedureName = SqlObjectIdentifierGuard.required(procedureName);
+        Chat2DBContext.getDbManager().dropProcedure(Chat2DBContext.getConnection(),
+                databaseName, schemaName, procedureName);
     }
 }

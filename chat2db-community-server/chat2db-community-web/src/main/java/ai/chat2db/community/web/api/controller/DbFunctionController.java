@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.service.db.IDbFunctionService;
+import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.web.WebPageResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
@@ -10,6 +11,8 @@ import ai.chat2db.community.domain.api.model.metadata.Function;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -57,5 +60,19 @@ public class DbFunctionController {
     public DataResult<Function> detail(@Valid FunctionDetailRequest request) {
         return DataResult.of(
                 functionService.detail(request.getDatabaseName(), request.getSchemaName(), request.getFunctionName()));
+    }
+
+    /**
+     * Deletes a database function.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/function/delete}.
+     *
+     * @param request request payload containing function info.
+     * @return operation result for the request.
+     */
+    @PostMapping("/delete")
+    public ActionResult delete(@RequestBody @Valid FunctionDetailRequest request) {
+        functionService.drop(request.getDatabaseName(), request.getSchemaName(), request.getFunctionName());
+        return ActionResult.isSuccess();
     }
 }
