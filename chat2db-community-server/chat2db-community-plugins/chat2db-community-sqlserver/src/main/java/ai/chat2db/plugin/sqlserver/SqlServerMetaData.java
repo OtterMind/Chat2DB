@@ -506,7 +506,10 @@ public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData
                 int columnSize = resultSet.getInt("COLUMN_SIZE");
                 if (StringUtils.equalsAny(dataType, SqlServerColumnTypeEnum.NCHAR.name(), SqlServerColumnTypeEnum.NVARCHAR.name())) {
                     if (columnSize == -1) {
-                        column.setColumnSize(2147483647);
+                        // Only NVARCHAR supports MAX; keeping its -1 sentinel renders NVARCHAR(MAX).
+                        if (StringUtils.equals(dataType, SqlServerColumnTypeEnum.NVARCHAR.name())) {
+                            column.setColumnSize(columnSize);
+                        }
                     } else if (columnSize > 0) {
                         if (columnSize == 1) {
                             column.setColumnSize(columnSize);
