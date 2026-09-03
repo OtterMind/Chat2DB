@@ -44,7 +44,7 @@ public final class SUNDBMetaDataConstants {
     public static final String SQL_SELECT_TC_TABLE_SCHEMA_TC = "SELECT\r\nTC.TABLE_SCHEMA,\r\nTC.TABLE_NAME,\r\nTC.CONSTRAINT_NAME,\r\nTC.CONSTRAINT_TYPE,\r\nUCC.COLUMN_NAME\r\nFROM TABLE_CONSTRAINTS TC\r\nJOIN USER_CONS_COLUMNS UCC ON TC.TABLE_NAME = UCC.TABLE_NAME\r\nWHERE TC.TABLE_NAME = '";
     public static final String SQL_SELECT_UT_TABLE_SCHEMA_UT = "SELECT \r\nUT.TABLE_SCHEMA, \r\nUT.TABLE_NAME,\r\nUT.TABLESPACE_NAME,\r\nUT.PCT_FREE,\r\nUT.PCT_USED,\r\nUT.INI_TRANS,\r\nUT.MAX_TRANS,\r\nUT.INITIAL_EXTENT*TBS.EXTENT_SIZE,\r\nUT.NEXT_EXTENT*TBS.EXTENT_SIZE,\r\nUT.MIN_EXTENTS*TBS.EXTENT_SIZE,\r\nUT.MAX_EXTENTS*TBS.EXTENT_SIZE\r\nFROM ALL_TABLES UT \r\nJOIN V$TABLESPACE TBS ON TBS.TBS_NAME = UT.TABLESPACE_NAME \r\nWHERE UT.TABLE_NAME = '";
     public static final String ALL_PROCEDURES_SQL = "select OBJECT_NAME from ALL_PROCEDURES where owner = '%s' and schema_name = '%s' and OBJECT_TYPE = '%s' order by OBJECT_NAME";
-    public static final String ALL_SOURCE_SQL = "select text from all_source where TYPE = '%s' and owner = '%s' and schema_name = '%s' and name = '%s'";
+    public static final String ALL_SOURCE_SQL = "select text from all_source where TYPE = '%s' and owner = '%s' and schema_name = '%s' and name = '%s' ORDER BY LINE";
     public static final String TRIGGER_SQL = "SELECT OWNER, TRIGGER_NAME, TABLE_OWNER, TABLE_NAME, TRIGGERING_TYPE, TRIGGERING_EVENT, STATUS, TRIGGER_BODY "
             + "FROM ALL_TRIGGERS WHERE OWNER = '%s' AND TRIGGER_NAME = '%s'";
     public static final String TRIGGER_SQL_LIST = "SELECT OWNER, TRIGGER_NAME FROM ALL_TRIGGERS WHERE OWNER = '%s'";
