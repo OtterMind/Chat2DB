@@ -295,6 +295,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.databaseAccount.scopeColumn': '列 (db.table.col)',
+  'workspace.databaseAccount.columns': '列',
+  'workspace.databaseAccount.selectColumns': '列を選択',
+  'workspace.databaseAccount.columnsRequired': '少なくとも1つの列が必要です',
   'workspace.ops.activeTransactions': 'アクティブなトランザクション',
   'workspace.ops.monitor': '監視',
   'workspace.ops.transactionId': 'トランザクション ID',
@@ -337,4 +341,13 @@ export default {
   'workspace.routine.tips.onlyMysqlRoutine': '現在は MySQL の関数とストアドプロシージャのみ対応しています',
   'workspace.routine.tips.refreshSuccess': 'サーバー DDL を再読み込みしました',
   'workspace.routine.tips.revertSuccess': '読み込み済みの状態に戻しました',
+  'workspace.databaseAccount.directColumnGrant': '列への直接権限',
+  'workspace.databaseAccount.inheritedPrivilege': 'より広い範囲の権限も適用されています',
+  'workspace.databaseAccount.inheritedFromGLOBAL': 'グローバル権限',
+  'workspace.databaseAccount.inheritedFromDATABASE': 'データベース権限',
+  'workspace.databaseAccount.inheritedFromTABLE': 'テーブル権限',
+  'workspace.databaseAccount.noColumnDeny':
+    '列への直接権限を取り消しても、より広い範囲から継承したアクセスは拒否されません。',
+  'workspace.databaseAccount.inheritedOnlyRevokeBlocked':
+    '選択したアクセスは列への直接権限ではないため、列スコープでは取り消せません。',
 };

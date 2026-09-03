@@ -295,6 +295,10 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revoke privileges',
   'workspace.databaseAccount.lockUnsupported':
     'Account lock is not supported by this MySQL version or current account privileges',
+  'workspace.databaseAccount.scopeColumn': 'Column (db.table.col)',
+  'workspace.databaseAccount.columns': 'Columns',
+  'workspace.databaseAccount.selectColumns': 'Select columns',
+  'workspace.databaseAccount.columnsRequired': 'At least one column is required',
   'workspace.ops.activeTransactions': 'Active Transactions',
   'workspace.ops.monitor': 'Monitor',
   'workspace.ops.transactionId': 'Transaction ID',
@@ -337,4 +341,13 @@ export default {
   'workspace.routine.tips.onlyMysqlRoutine': 'Only MySQL functions and procedures are supported for now',
   'workspace.routine.tips.refreshSuccess': 'Reloaded server DDL',
   'workspace.routine.tips.revertSuccess': 'Reverted to the loaded version',
+  'workspace.databaseAccount.directColumnGrant': 'Direct column grant',
+  'workspace.databaseAccount.inheritedPrivilege': 'Broader access also applies',
+  'workspace.databaseAccount.inheritedFromGLOBAL': 'Global grant',
+  'workspace.databaseAccount.inheritedFromDATABASE': 'Database grant',
+  'workspace.databaseAccount.inheritedFromTABLE': 'Table grant',
+  'workspace.databaseAccount.noColumnDeny':
+    'Revoking a direct column grant does not deny access inherited from a broader grant.',
+  'workspace.databaseAccount.inheritedOnlyRevokeBlocked':
+    'The selected access is not a direct column grant and cannot be revoked at column scope.',
 };

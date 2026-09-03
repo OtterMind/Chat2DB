@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tooltip, theme } from 'antd';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tag, Tooltip, theme } from 'antd';
 import { DeleteOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
@@ -19,6 +19,13 @@ import { DatabaseTypeCode, TreeNodeType } from '@/constants';
 import { useTreeStore } from '@/store/tree';
 import { IBoundInfo } from '@/typings';
 import styles from './index.less';
+import {
+  canRevokeDirectColumnGrant,
+  directColumnsFor,
+  inheritedSourcesFor,
+  parseAccountGrantState,
+  type AccountGrantState,
+} from './accountGrantState';
 
 interface IProps {
   uniqueData?: IBoundInfo;
@@ -31,6 +38,7 @@ interface PreviewState {
 }
 
 const defaultPrivileges = Object.values(AccountPrivilege);
+const emptyGrantState: AccountGrantState = { directColumnGrants: [], inheritedPrivilegeGrants: [] };
 
 function createPrivilegeOptions(privileges: AccountPrivilege[] = defaultPrivileges) {
   return privileges.map((privilege) => ({
@@ -54,6 +62,10 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const [tableOptions, setTableOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [databaseLoading, setDatabaseLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
+  const [columnOptions, setColumnOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [columnLoading, setColumnLoading] = useState(false);
+  const [grantState, setGrantState] = useState<AccountGrantState>(emptyGrantState);
+  const [grantStateLoading, setGrantStateLoading] = useState(false);
   const [form] = Form.useForm();
   const [accountForm] = Form.useForm();
   const previewRequestRef = useRef(0);
@@ -76,6 +88,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const watchedScope = Form.useWatch('scope', form);
   const watchedDatabaseName = Form.useWatch('databaseName', form);
   const watchedTableName = Form.useWatch('tableName', form);
+  const watchedColumnList = Form.useWatch('columnList', form);
   const watchedPrivileges = Form.useWatch('privileges', form);
   const watchedGrantOption = Form.useWatch('grantOption', form);
   const watchedActionType = Form.useWatch('actionType', form);
@@ -87,6 +100,22 @@ const AccountPrivilegePanel = memo((props: IProps) => {
           host: uniqueData.host,
         }
       : null;
+  const singlePrivilege = watchedPrivileges?.length === 1 ? watchedPrivileges[0] : undefined;
+  const directColumns = useMemo(
+    () => directColumnsFor(grantState, watchedDatabaseName, watchedTableName, singlePrivilege),
+    [grantState, singlePrivilege, watchedDatabaseName, watchedTableName],
+  );
+  const inheritedSources = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (watchedPrivileges || []).flatMap((privilege) =>
+            inheritedSourcesFor(grantState, watchedDatabaseName, watchedTableName, privilege),
+          ),
+        ),
+      ),
+    [grantState, watchedDatabaseName, watchedPrivileges, watchedTableName],
+  );
 
   const resetPreview = () => {
     setPreviewState(null);
@@ -160,6 +189,30 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       });
   };
 
+  const loadColumns = (databaseName?: string, tableName?: string) => {
+    setColumnOptions([]);
+    if (!dataSourceId || !databaseName || !tableName) {
+      return;
+    }
+    setColumnLoading(true);
+    sqlService
+      .getColumnList({ dataSourceId, databaseName, tableName, pageNo: 1, pageSize: 1000 } as never)
+      .then((res) => {
+        setColumnOptions(
+          (res?.data || []).map((item: any) => ({
+            label: item.name,
+            value: item.name,
+          })),
+        );
+      })
+      .catch(() => {
+        setColumnOptions([]);
+      })
+      .finally(() => {
+        setColumnLoading(false);
+      });
+  };
+
   const loadCapability = () => {
     if (!dataSourceId) {
       return Promise.resolve(null);
@@ -169,6 +222,26 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       return nextCapability;
     });
   };
+
+  const loadGrantState = useCallback(() => {
+    if (!dataSourceId || !selectedAccount) {
+      setGrantState(emptyGrantState);
+      return Promise.resolve(emptyGrantState);
+    }
+    setGrantStateLoading(true);
+    return accountAdminService
+      .grants({ dataSourceId, user: selectedAccount.user, host: selectedAccount.host })
+      .then((lines) => {
+        const nextState = parseAccountGrantState(lines || []);
+        setGrantState(nextState);
+        return nextState;
+      })
+      .catch(() => {
+        setGrantState(emptyGrantState);
+        return emptyGrantState;
+      })
+      .finally(() => setGrantStateLoading(false));
+  }, [dataSourceId, selectedAccount?.host, selectedAccount?.user]);
 
   useEffect(() => {
     if (!dataSourceId) {
@@ -194,7 +267,8 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     setExecuteModalOpen(false);
     setAccountModalOpen(false);
     setAccountActionType(null);
-  }, [dataSourceId, uniqueData?.user, uniqueData?.host]);
+    void loadGrantState();
+  }, [dataSourceId, loadGrantState, uniqueData?.host, uniqueData?.user]);
 
   useEffect(() => {
     if (!dataSourceId) {
@@ -213,7 +287,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     if (!dataSourceId) {
       return;
     }
-    if (watchedScope !== AccountPrivilegeScope.TABLE) {
+    if (watchedScope !== AccountPrivilegeScope.TABLE && watchedScope !== AccountPrivilegeScope.COLUMN) {
       form.setFieldsValue({ tableName: undefined });
       setTableOptions([]);
       return;
@@ -236,6 +310,13 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   }, [watchedScope, watchedTableName, tableOptions]);
 
   useEffect(() => {
+    if (watchedScope === AccountPrivilegeScope.COLUMN && watchedTableName) {
+      form.setFieldsValue({ columnList: undefined });
+      loadColumns(watchedDatabaseName, watchedTableName);
+    }
+  }, [watchedScope, watchedTableName]);
+
+  useEffect(() => {
     if (!dataSourceId) {
       return;
     }
@@ -243,6 +324,17 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       form.setFieldsValue({ grantOption: false });
     }
   }, [watchedActionType]);
+
+  useEffect(() => {
+    if (
+      watchedScope === AccountPrivilegeScope.COLUMN &&
+      watchedActionType === AccountActionType.REVOKE_PRIVILEGE &&
+      singlePrivilege &&
+      directColumns.length
+    ) {
+      form.setFieldsValue({ columnList: directColumns });
+    }
+  }, [directColumns, singlePrivilege, watchedActionType, watchedScope]);
 
   const buildPrivilegeCommand = (): AccountCommand | null => {
     if (!dataSourceId || !selectedAccount) {
@@ -258,13 +350,24 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       databaseName: values.databaseName,
       tableName: values.tableName,
       privileges: values.privileges,
+      columnList: values.columnList,
       grantOption: values.actionType === AccountActionType.GRANT_PRIVILEGE ? values.grantOption : false,
     };
   };
 
   useEffect(() => {
     const command = buildPrivilegeCommand();
-    if (!isPreviewReady(command)) {
+    const revokeDirectAllowed =
+      command?.actionType !== AccountActionType.REVOKE_PRIVILEGE ||
+      command.scope !== AccountPrivilegeScope.COLUMN ||
+      canRevokeDirectColumnGrant(
+        grantState,
+        command.databaseName,
+        command.tableName,
+        command.privileges,
+        command.columnList,
+      );
+    if (!isPreviewReady(command) || !revokeDirectAllowed) {
       previewRequestRef.current += 1;
       resetPreview();
       setPreviewLoading(false);
@@ -313,8 +416,10 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     watchedScope,
     watchedDatabaseName,
     watchedTableName,
+    watchedColumnList,
     watchedPrivileges,
     watchedGrantOption,
+    grantState,
   ]);
 
   const previewAndConfirm = (command: AccountCommand) => {
@@ -342,6 +447,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         showExecutionMessage(result);
         if (result.success && dataSourceId) {
           refreshUserTree();
+          void loadGrantState();
         }
         return result;
       })
@@ -504,6 +610,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     { label: i18n('workspace.databaseAccount.scopeGlobal'), value: AccountPrivilegeScope.GLOBAL },
                     { label: i18n('workspace.databaseAccount.scopeDatabase'), value: AccountPrivilegeScope.DATABASE },
                     { label: i18n('workspace.databaseAccount.scopeTable'), value: AccountPrivilegeScope.TABLE },
+                    { label: i18n('workspace.databaseAccount.scopeColumn'), value: AccountPrivilegeScope.COLUMN },
                   ]}
                 />
               </Form.Item>
@@ -522,7 +629,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                   />
                 </Form.Item>
               )}
-              {watchedScope === AccountPrivilegeScope.TABLE && (
+              {(watchedScope === AccountPrivilegeScope.TABLE || watchedScope === AccountPrivilegeScope.COLUMN) && (
                 <Form.Item name="tableName" label={i18n('workspace.databaseAccount.table')} rules={[{ required: true }]}>
                   <Select
                     showSearch
@@ -532,6 +639,73 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                     placeholder={i18n('workspace.databaseAccount.selectTable')}
                   />
                 </Form.Item>
+              )}
+              {watchedScope === AccountPrivilegeScope.COLUMN && (
+                <>
+                  <Form.Item
+                    name="columnList"
+                    label={i18n('workspace.databaseAccount.columns')}
+                    rules={[{ required: true, message: i18n('workspace.databaseAccount.columnsRequired') }]}
+                  >
+                    <Select
+                      mode="multiple"
+                      showSearch
+                      loading={columnLoading || grantStateLoading}
+                      options={columnOptions}
+                      optionFilterProp="label"
+                      placeholder={i18n('workspace.databaseAccount.selectColumns')}
+                    />
+                  </Form.Item>
+                  {singlePrivilege && directColumns.length > 0 && (
+                    <Alert
+                      className={styles.alert}
+                      type="info"
+                      showIcon
+                      message={i18n('workspace.databaseAccount.directColumnGrant')}
+                      description={
+                        <Space wrap>
+                          <Tag>{singlePrivilege}</Tag>
+                          {directColumns.map((column) => <Tag key={column}>{column}</Tag>)}
+                        </Space>
+                      }
+                    />
+                  )}
+                  {inheritedSources.length > 0 && (
+                    <Alert
+                      className={styles.alert}
+                      type="warning"
+                      showIcon
+                      message={i18n('workspace.databaseAccount.inheritedPrivilege')}
+                      description={
+                        <Space direction="vertical" size={4}>
+                          <Space wrap>
+                            {inheritedSources.map((source) => (
+                              <Tag key={source}>{i18n(`workspace.databaseAccount.inheritedFrom${source}` as any)}</Tag>
+                            ))}
+                          </Space>
+                          <span>{i18n('workspace.databaseAccount.noColumnDeny')}</span>
+                        </Space>
+                      }
+                    />
+                  )}
+                  {watchedActionType === AccountActionType.REVOKE_PRIVILEGE &&
+                    watchedPrivileges?.length > 0 &&
+                    watchedColumnList?.length > 0 &&
+                    !canRevokeDirectColumnGrant(
+                      grantState,
+                      watchedDatabaseName,
+                      watchedTableName,
+                      watchedPrivileges,
+                      watchedColumnList,
+                    ) && (
+                      <Alert
+                        className={styles.alert}
+                        type="error"
+                        showIcon
+                        message={i18n('workspace.databaseAccount.inheritedOnlyRevokeBlocked')}
+                      />
+                    )}
+                </>
               )}
               <Form.Item name="privileges" label={i18n('workspace.databaseAccount.privileges')} rules={[{ required: true }]}>
                 <Select
@@ -642,7 +816,13 @@ function isPreviewReady(command: AccountCommand | null): command is AccountComma
   if (command.scope !== AccountPrivilegeScope.GLOBAL && !command.databaseName) {
     return false;
   }
-  if (command.scope === AccountPrivilegeScope.TABLE && !command.tableName) {
+  if (
+    (command.scope === AccountPrivilegeScope.TABLE || command.scope === AccountPrivilegeScope.COLUMN) &&
+    !command.tableName
+  ) {
+    return false;
+  }
+  if (command.scope === AccountPrivilegeScope.COLUMN && !command.columnList?.length) {
     return false;
   }
   return true;

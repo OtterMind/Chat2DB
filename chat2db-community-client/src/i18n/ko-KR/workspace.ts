@@ -293,6 +293,10 @@ export default {
   'workspace.databaseAccount.grantPrivilege': '권한 부여',
   'workspace.databaseAccount.revokePrivilege': '권한 회수',
   'workspace.databaseAccount.lockUnsupported': '이 MySQL 버전 또는 현재 계정 권한에서는 계정 잠금을 지원하지 않습니다',
+  'workspace.databaseAccount.scopeColumn': '열 (db.table.col)',
+  'workspace.databaseAccount.columns': '열',
+  'workspace.databaseAccount.selectColumns': '열 선택',
+  'workspace.databaseAccount.columnsRequired': '열을 하나 이상 선택해야 합니다',
   'workspace.ops.activeTransactions': '활성 트랜잭션',
   'workspace.ops.monitor': '모니터링',
   'workspace.ops.transactionId': '트랜잭션 ID',
@@ -335,4 +339,13 @@ export default {
   'workspace.routine.tips.onlyMysqlRoutine': '현재 MySQL 함수와 프로시저만 지원합니다',
   'workspace.routine.tips.refreshSuccess': '서버 DDL을 다시 불러왔습니다',
   'workspace.routine.tips.revertSuccess': '불러온 버전으로 되돌렸습니다',
+  'workspace.databaseAccount.directColumnGrant': '직접 열 권한',
+  'workspace.databaseAccount.inheritedPrivilege': '더 넓은 범위의 권한도 적용됨',
+  'workspace.databaseAccount.inheritedFromGLOBAL': '전역 권한',
+  'workspace.databaseAccount.inheritedFromDATABASE': '데이터베이스 권한',
+  'workspace.databaseAccount.inheritedFromTABLE': '테이블 권한',
+  'workspace.databaseAccount.noColumnDeny':
+    '직접 열 권한을 회수해도 더 넓은 범위에서 상속된 접근은 거부되지 않습니다.',
+  'workspace.databaseAccount.inheritedOnlyRevokeBlocked':
+    '선택한 접근은 직접 열 권한이 아니므로 열 범위에서 회수할 수 없습니다.',
 };
