@@ -56,6 +56,7 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
+import { AiSessionRequestCoordinator, type AiSessionRequestOwner } from './sessionRequestCoordinator';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -558,6 +559,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const currentSessionIdRef = useRef<string | null>(null);
   const currentSessionTitleRef = useRef('');
   const messagesRef = useRef<IChatItem[]>([]);
+  const sessionRequestCoordinatorRef = useRef(new AiSessionRequestCoordinator());
   const currentRoundUserMessageIdRef = useRef<string | null>(null);
   const statusRef = useRef<SSERequestStatus>(SSERequestStatus.IDLE);
   const inProgressSessionRef = useRef<IInProgressSessionSnapshot | null>(null);
@@ -1235,7 +1237,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Start a new conversation.
 
   const handleNewChat = useCallback(() => {
+    const newSessionOwner = sessionRequestCoordinatorRef.current.beginNewSession();
     stop();
+    setSessionLoading(false);
     setAutoFollow(true);
     chatInputRef.current?.resetAttachments();
     pendingViewportAnchorRef.current = null;
@@ -1280,6 +1284,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       clearChatIdFromPath();
     }
     onSessionChange?.();
+    return newSessionOwner;
   }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
 
   const startPanelHistoryRename = useCallback((session: IChatSession) => {
@@ -1342,6 +1347,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const handleLoadSessionById = useCallback(
     async (sessionId: string, title?: string) => {
+      const loadOwner = sessionRequestCoordinatorRef.current.beginSessionLoad(sessionId);
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1417,12 +1423,18 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           currentSessionTitleRef.current = inProgressSession.title;
         }
         inProgressSessionRef.current = null;
+        if (sessionRequestCoordinatorRef.current.finishSessionLoad(loadOwner)) {
+          setSessionLoading(false);
+        }
         return;
       }
 
       setSessionLoading(true);
       try {
         const msgs = (await aiStreamService.getChatMessages({ sessionId })) || [];
+        if (!sessionRequestCoordinatorRef.current.isCurrent(loadOwner)) {
+          return;
+        }
         const chatItems: IChatItem[] = msgs.map((m: IChatMessage) => ({
           id: m.id,
           role: m.role as ChatRole,
@@ -1465,6 +1477,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         if (!title) {
           try {
             const sessions = (await aiStreamService.getChatSessions(undefined as void)) || [];
+            if (!sessionRequestCoordinatorRef.current.isCurrent(loadOwner)) {
+              return;
+            }
             const found = sessions.find((s) => s.id === sessionId);
             setCurrentSessionTitle(found?.title || '');
             currentSessionTitleRef.current = found?.title || '';
@@ -1473,9 +1488,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           }
         }
       } catch {
-        feedback.error(i18n('stream.error.loadSessionMessages'));
+        if (sessionRequestCoordinatorRef.current.isCurrent(loadOwner)) {
+          feedback.error(i18n('stream.error.loadSessionMessages'));
+        }
       } finally {
-        setSessionLoading(false);
+        if (sessionRequestCoordinatorRef.current.finishSessionLoad(loadOwner)) {
+          setSessionLoading(false);
+        }
       }
     },
     [onSessionChange, stop],
@@ -1543,7 +1562,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Send a message.
 
   const handleSend = useCallback(
-    async (params: SendParams) => {
+    async (params: SendParams, sessionOwner?: AiSessionRequestOwner) => {
       const content = (params.input || '').trim();
       if (!content) return;
 
@@ -1555,6 +1574,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const selectedOption = modelOptionMap[selectedValue];
       if (!selectedOption) {
         feedback.warning(i18n('stream.warning.invalidModel'));
+        return;
+      }
+      const sessionContext = sessionRequestCoordinatorRef.current.resolveSendContext(
+        sessionOwner,
+        currentSessionIdRef.current,
+        messagesRef.current,
+      );
+      if (!sessionContext) {
         return;
       }
 
@@ -1601,9 +1628,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       });
 
       // Let the backend load history for an existing session; otherwise send local history.
-      const historyPayload = currentSessionId
+      const historyPayload = sessionContext.sessionId
         ? []
-        : messages
+        : sessionContext.history
             .slice(-MAX_HISTORY_ROUNDS * 2)
             .filter((item) => item.content?.trim())
             .map((item) => ({ role: item.role, content: item.content }));
@@ -1613,10 +1640,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         feedback.warning(i18n('stream.warning.invalidModel'));
         return;
       }
+      if (sessionOwner && !sessionRequestCoordinatorRef.current.isCurrent(sessionOwner)) {
+        return;
+      }
 
       console.log('[AI stream] sending request', {
         inputPreview: content.slice(0, 200),
-        sessionId: currentSessionId || undefined,
+        sessionId: sessionContext.sessionId,
         dataSourceId: params.dataSourceId,
         databaseName: params.databaseName,
         schemaName: params.schemaName,
@@ -1631,10 +1661,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         })),
       });
 
-      const isNewSession = !currentSessionId;
+      const isNewSession = !sessionContext.sessionId;
       const requestPromise = request({
         input: content,
-        sessionId: currentSessionId || undefined,
+        sessionId: sessionContext.sessionId,
         history: historyPayload,
         enableTools: true,
         ...modelRequestPayload,
@@ -1658,9 +1688,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       await requestPromise;
     },
     [
-      currentSessionId,
       isCurrentRoundOverflowingViewport,
-      messages,
       modelOptionMap,
       selectedModel?.value,
       request,
@@ -1678,10 +1706,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const params = (e as CustomEvent).detail as SendParams;
       if (params) {
         // Start a new conversation before sending to avoid mixing old context.
-        handleNewChat();
+        const newSessionOwner = handleNewChat();
         // Wait for handleNewChat state cleanup before sending.
         setTimeout(() => {
-          handleSend(params);
+          handleSend(params, newSessionOwner);
         }, 0);
       }
     };
