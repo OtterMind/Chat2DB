@@ -33,6 +33,14 @@ class MysqlVersionSupportTest {
     }
 
     @Test
+    void shouldGatePersistedVariablesAtMysqlEight() {
+        assertFalse(MysqlVersionSupport.supportsPersistedVariables("5.7.44-log"));
+        assertTrue(MysqlVersionSupport.supportsPersistedVariables("8.0.11"));
+        assertFalse(MysqlVersionSupport.supportsPersistedVariables("10.6.0-MariaDB"));
+        assertFalse(MysqlVersionSupport.supportsPersistedVariables(null));
+    }
+
+    @Test
     void shouldDisallowInvisibleIndexesWhenVersionIsUnknown() {
         assertTrue(MysqlVersionSupport.currentVersionDisallowsInvisibleIndexes());
     }

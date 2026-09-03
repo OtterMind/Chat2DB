@@ -299,6 +299,25 @@ public class ConnectionPool {
         });
     }
 
+    public static void removeConnection(ConnectInfo target) {
+        if (target == null || target.getDataSourceId() == null) {
+            return;
+        }
+        Long datasourceId = target.getDataSourceId();
+        String connectionKey = target.getKey();
+        CONNECTION_MAP.computeIfPresent(datasourceId, (key, keyMap) -> {
+            LinkedBlockingQueue<ConnectInfo> queue = keyMap.remove(connectionKey);
+            if (queue != null) {
+                ConnectInfo connectInfo = queue.poll();
+                while (connectInfo != null) {
+                    closeQuietly(connectInfo);
+                    connectInfo = queue.poll();
+                }
+            }
+            return keyMap.isEmpty() ? null : keyMap;
+        });
+    }
+
 
     private static void closeQuietly(ConnectInfo connectInfo) {
         if (connectInfo == null) {

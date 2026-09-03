@@ -52,6 +52,22 @@ assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.DATABASE]), [
   [OperationColumn.DeleteDatabase],
 ]);
 
+assert.equal(
+  dropMenuConfig.DEFAULT[TreeNodeType.DATA_SOURCE].includes(OperationColumn.VariablesStatus),
+  true,
+  'MySQL datasources use the default menu and must expose Variables & Status',
+);
+assert.equal(
+  dropMenuConfig.REDIS[TreeNodeType.DATA_SOURCE].includes(OperationColumn.VariablesStatus),
+  false,
+  'Redis datasources must not expose MySQL Variables & Status',
+);
+assert.equal(
+  dropMenuConfig.REDIS[TreeNodeType.DATA_SOURCE].includes(OperationColumn.ActiveTransactions),
+  false,
+  'Redis datasources must not expose MySQL Active Transactions',
+);
+
 assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.SAVE_CONSOLE]), [
   [OperationColumn.OpenConsole, OperationColumn.Rename],
   [OperationColumn.RemoveConsole],

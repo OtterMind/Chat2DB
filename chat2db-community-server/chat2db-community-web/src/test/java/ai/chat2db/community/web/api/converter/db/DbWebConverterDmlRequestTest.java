@@ -102,6 +102,7 @@ class DbWebConverterDmlRequestTest {
         request.setDataSourceId(1L);
         request.setDatabaseName("app");
         request.setSchemaName("public");
+        request.setConsoleId(42L);
         request.setSql("alter table sms_attendance add column note varchar(255)");
         request.setTableName("sms_attendance");
 
@@ -112,7 +113,7 @@ class DbWebConverterDmlRequestTest {
         assertEquals(request.getSchemaName(), result.getSchemaName());
         assertEquals(request.getSql(), result.getSql());
         assertEquals(request.getTableName(), result.getTableName());
-        assertNull(result.getConsoleId());
+        assertEquals(request.getConsoleId(), result.getConsoleId());
         assertNull(result.getApplyId());
         assertNull(result.getPageNo());
         assertNull(result.getPageSize());

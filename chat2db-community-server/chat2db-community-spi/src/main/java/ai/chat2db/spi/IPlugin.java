@@ -118,6 +118,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional variable and status manager for this plugin.
+     *
+     * @return variable manager when supported; otherwise {@code null}.
+     */
+    default IVariableManager getVariableManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.

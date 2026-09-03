@@ -30,7 +30,7 @@ class DmlExecutionRequestValidationTest {
         assertRequestFields(TableEditExecuteRequest.class,
                 "dataSourceId", "databaseName", "schemaName", "sql");
         assertRequestFields(DdlExecuteRequest.class,
-                "dataSourceId", "databaseName", "schemaName", "sql", "tableName");
+                "dataSourceId", "databaseName", "schemaName", "consoleId", "sql", "tableName");
     }
 
     @Test

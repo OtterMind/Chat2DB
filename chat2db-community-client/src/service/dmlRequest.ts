@@ -28,5 +28,6 @@ export interface ITableEditExecuteRequest extends IDataSourceExecutionContext {
 
 export interface IDdlExecuteRequest extends IDataSourceExecutionContext {
   sql: string;
+  consoleId?: number;
   tableName?: string;
 }

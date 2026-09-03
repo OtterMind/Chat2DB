@@ -248,6 +248,33 @@ class ConnectionPoolTest {
         assertTrue(replacementClosed.get());
     }
 
+    @Test
+    void removeConnectionByContextShouldOnlyCloseTheMatchingSession() {
+        long datasourceId = -1926L;
+        AtomicBoolean firstClosed = new AtomicBoolean();
+        AtomicBoolean secondClosed = new AtomicBoolean();
+        ConnectInfo first = connectInfo(connection(true, firstClosed));
+        first.setDataSourceId(datasourceId);
+        first.setConsoleId(101L);
+        ConnectInfo second = connectInfo(connection(true, secondClosed));
+        second.setDataSourceId(datasourceId);
+        second.setConsoleId(202L);
+        LinkedBlockingQueue<ConnectInfo> firstQueue =
+                ConnectionPool.getOrCreateConnectionQueue(datasourceId, first.getKey());
+        LinkedBlockingQueue<ConnectInfo> secondQueue =
+                ConnectionPool.getOrCreateConnectionQueue(datasourceId, second.getKey());
+        assertTrue(firstQueue.offer(first));
+        assertTrue(secondQueue.offer(second));
+
+        ConnectionPool.removeConnection(first);
+
+        assertTrue(firstClosed.get());
+        assertTrue(firstQueue.isEmpty());
+        assertFalse(secondClosed.get());
+        assertSame(second, secondQueue.peek());
+        ConnectionPool.removeConnection(datasourceId);
+    }
+
     private static ConnectInfo connectInfo(Connection connection) {
         ConnectInfo connectInfo = new ConnectInfo();
         connectInfo.setConnection(connection);

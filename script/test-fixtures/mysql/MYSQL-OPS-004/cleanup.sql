@@ -1,0 +1,4 @@
+-- MYSQL-OPS-004: Cleanup
+DROP DATABASE IF EXISTS `ops004_test`;
+DROP USER IF EXISTS 'ops004_admin'@'%';
+DROP USER IF EXISTS 'ops004_user'@'%';

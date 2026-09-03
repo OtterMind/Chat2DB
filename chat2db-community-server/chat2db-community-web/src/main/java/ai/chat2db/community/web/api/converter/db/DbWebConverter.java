@@ -85,7 +85,6 @@ public abstract class DbWebConverter {
     public abstract DbDlExecuteRequest request2param(TableEditExecuteRequest request);
 
     @Mappings({
-            @Mapping(target = "consoleId", ignore = true),
             @Mapping(target = "applyId", ignore = true),
             @Mapping(target = "pageNo", ignore = true),
             @Mapping(target = "pageSize", ignore = true),

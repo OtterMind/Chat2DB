@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 
 import {
   ConsoleOpenedStatus,
+  DatabaseTypeCode,
   DatabaseCapability,
   OperationColumn,
   TreeNodeType,
@@ -53,6 +54,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import VariablesStatusContent from '../components/VariablesStatusContent';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
 import type { ResourceOperation, ResourceOperationCapabilities } from '@/client-extension/types';
@@ -83,6 +85,8 @@ interface IOperationColumnConfigItem {
   renderLabel?: (context: MenuLabelRenderContext) => ReactNode;
   children?: IOperationColumnConfigItem[];
 }
+
+let variablesSessionId = -Math.max(1, Math.floor(Math.random() * (Number.MAX_SAFE_INTEGER / 2)));
 
 interface IRightClickMenu {
   key: number | string;
@@ -401,6 +405,25 @@ export const useCreateRightClickMenu = () => {
             title,
             uniqueData: {
               ...extraParams,
+            },
+          });
+        },
+      },
+
+      [OperationColumn.VariablesStatus]: {
+        text: i18n('workspace.ops.variablesStatus'),
+        icon: 'icon-setting',
+        discard: databaseType !== DatabaseTypeCode.MYSQL,
+        handle: () => {
+          const consoleId = variablesSessionId--;
+          staticModal.confirm({
+            title: i18n('workspace.ops.variablesStatus'),
+            content: <VariablesStatusContent dataSourceId={dataSourceId!} consoleId={consoleId} />,
+            footer: null,
+            width: 1000,
+            closable: true,
+            afterClose: () => {
+              void sqlService.closeVariableSession({ dataSourceId: dataSourceId!, consoleId });
             },
           });
         },

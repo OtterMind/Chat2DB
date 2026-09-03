@@ -7,6 +7,7 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.IRoutineManager;
 import ai.chat2db.spi.ISqlBuilder;
+import ai.chat2db.spi.IVariableManager;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
@@ -132,6 +133,15 @@ public class Chat2DBContext {
         }
         IPlugin plugin = PLUGIN_MAP.get(connectInfo.getDbType());
         return plugin == null ? null : plugin.getActiveTransactionManager();
+    }
+
+    public static IVariableManager getVariableManager() {
+        ConnectInfo connectInfo = getConnectInfo();
+        if (connectInfo == null || StringUtils.isBlank(connectInfo.getDbType())) {
+            return null;
+        }
+        IPlugin plugin = PLUGIN_MAP.get(connectInfo.getDbType());
+        return plugin == null ? null : plugin.getVariableManager();
     }
 
     public static Connection getConnection() {

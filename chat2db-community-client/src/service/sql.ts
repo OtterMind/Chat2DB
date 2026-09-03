@@ -436,6 +436,52 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Variables / status (MYSQL-OPS-004). */
+export interface IVariableItem {
+  name: string;
+  value: string | null;
+  source?: string | null;
+  path?: string | null;
+  minValue?: string | null;
+  maxValue?: string | null;
+}
+
+export interface IVariableEditMeta {
+  name: string;
+  type: 'STRING' | 'NUMBER' | 'ONOFF';
+  dynamicScopes: Array<'SESSION' | 'GLOBAL'>;
+  persistScopes: Array<'PERSIST' | 'PERSIST_ONLY'>;
+  highRisk: boolean;
+  source?: string | null;
+  path?: string | null;
+  minValue?: string | null;
+  maxValue?: string | null;
+}
+
+interface IVariableSessionContext {
+  dataSourceId: number;
+  consoleId: number;
+}
+
+const getVariableList = createRequest<IVariableSessionContext & { scope: string; kind: string }, IVariableItem[]>(
+  '/api/rdb/variable/list',
+  { method: 'get' },
+);
+
+const getVariableEditable = createRequest<IVariableSessionContext & { name: string }, IVariableEditMeta | null>(
+  '/api/rdb/variable/editable',
+  { method: 'get' },
+);
+
+const previewSetVariableSql = createRequest<
+  IVariableSessionContext & { variableName: string; value: string; scope: string },
+  string
+>('/api/rdb/variable/set_preview', { method: 'post' });
+const closeVariableSession = createRequest<IVariableSessionContext, boolean>('/api/rdb/variable/session/close', {
+  method: 'post',
+  errorLevel: false,
+});
+
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +599,10 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getVariableList,
+  getVariableEditable,
+  previewSetVariableSql,
+  closeVariableSession,
   getActiveTransactionList,
   getDataSourceList,
 };

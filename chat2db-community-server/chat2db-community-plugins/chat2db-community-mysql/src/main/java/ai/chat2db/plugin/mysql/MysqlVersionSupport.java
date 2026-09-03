@@ -33,6 +33,11 @@ public final class MysqlVersionSupport {
         return version != null && version.major() >= 8;
     }
 
+    public static boolean supportsPersistedVariables(String dbVersion) {
+        MysqlVersion version = parseMysqlVersion(dbVersion);
+        return version != null && version.major() >= 8;
+    }
+
     public static boolean currentVersionDisallowsInvisibleIndexes() {
         String dbVersion = getCurrentDbVersion();
         return !supportsInvisibleIndexes(dbVersion);

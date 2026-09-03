@@ -34,7 +34,22 @@ public class ConnectionInfoHandler {
             if (params != null && params.length > 0) {
                 for (int i = 0; i < params.length; i++) {
                     Object param = params[i];
-                    if (param instanceof DataSourceBaseRequest) {
+                    if (param instanceof IDataSourceConsoleRequestInfo) {
+                        Long dataSourceId = ((IDataSourceConsoleRequestInfo) param).getDataSourceId();
+                        Long consoleId = ((IDataSourceConsoleRequestInfo) param).getConsoleId();
+                        String database = ((IDataSourceConsoleRequestInfo) param).getDatabaseName();
+                        String schemaName = null;
+                        if (param instanceof IDataSourceSchemaRequestInfo) {
+                            schemaName = ((IDataSourceSchemaRequestInfo) param).getSchemaName();
+                        } else if (param instanceof DataSourceBaseRequest) {
+                            schemaName = ((DataSourceBaseRequest) param).getSchemaName();
+                        }
+                        if (dataSourceId != null && dataSourceId > 1L) {
+                            bind(dataSourceId, database, consoleId, schemaName);
+                        } else {
+                            customConnectionInfo(dataSourceId, database, consoleId, schemaName);
+                        }
+                    } else if (param instanceof DataSourceBaseRequest) {
                         Long dataSourceId = ((DataSourceBaseRequest) param).getDataSourceId();
                         String schemaName = ((DataSourceBaseRequest) param).getSchemaName();
                         String database = ((DataSourceBaseRequest) param).getDatabaseName();
@@ -51,15 +66,6 @@ public class ConnectionInfoHandler {
                             bind(dataSourceId, database, null, schemaName);
                         } else {
                             customConnectionInfo(dataSourceId, database, null, schemaName);
-                        }
-                    } else if (param instanceof IDataSourceConsoleRequestInfo) {
-                        Long dataSourceId = ((IDataSourceConsoleRequestInfo) param).getDataSourceId();
-                        Long consoleId = ((IDataSourceConsoleRequestInfo) param).getConsoleId();
-                        String database = ((IDataSourceConsoleRequestInfo) param).getDatabaseName();
-                        if (dataSourceId != null && dataSourceId >1L) {
-                            bind(dataSourceId, database, consoleId, null);
-                        }else {
-                            customConnectionInfo(dataSourceId, database, consoleId,null);
                         }
                     } else if (param instanceof IDataSourceBaseRequestInfo) {
                         Long dataSourceId = ((IDataSourceBaseRequestInfo) param).getDataSourceId();

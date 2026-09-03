@@ -17,6 +17,7 @@ import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.model.request.TablesRequest;
 import ai.chat2db.spi.model.request.ViewMetadataRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.spi.sql.ConnectionPool;
 import ai.chat2db.community.domain.api.enums.plugin.ObjectTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -89,6 +90,7 @@ public class DbConnectionContextServiceImpl implements IDbConnectionContextServi
 
     @Override
     public void close() {
+        ConnectionPool.removeConnection(Chat2DBContext.getConnectInfo());
         Chat2DBContext.close();
     }
 
