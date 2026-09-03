@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,7 +82,9 @@ class CliDatasourceServiceTest {
     @Test
     void createKeepsEmptyPasswordWhenPreConnectFails() {
         CapturingDataSourceService dataSourceService = new CapturingDataSourceService();
-        dataSourceService.nextPreConnectFailure = new IllegalStateException("using password: NO");
+        String sensitiveMessage =
+                "java.lang.IllegalStateException: jdbc:mysql://db.internal/app?pass" + "word=DO_NOT_EXPOSE";
+        dataSourceService.nextPreConnectFailure = new IllegalStateException(sensitiveMessage);
         CliDataSourceServiceImpl service = newService(dataSourceService);
         CliDataSourceCreateRequest request = baseCreateRequest();
         request.setPassword("");
@@ -90,11 +93,37 @@ class CliDatasourceServiceTest {
                 () -> service.create(request));
 
         assertEquals("datasource_connection_failed", exception.getCode());
-        assertEquals("using password: NO", exception.getMessage());
+        assertEquals("Datasource connection test failed.", exception.getMessage());
         assertEquals("", dataSourceService.capturedParam.getPassword());
-        assertEquals("datasource_connection_failed", exception.getDetails().get("errorCode"));
-        assertEquals("", exception.getDetails().get("errorDetail"));
-        assertTrue((Long) exception.getDetails().get("durationMs") >= 0L);
+        assertTrue(exception.getDetails().isEmpty());
+        assertFalse(exception.getMessage().contains(sensitiveMessage));
+        assertFalse(exception.getMessage().contains("password"));
+        assertFalse(exception.getMessage().contains("secret"));
+    }
+
+    @Test
+    void connectionTestFailureUsesStablePublicMessageOnly() {
+        CapturingDataSourceService dataSourceService = new CapturingDataSourceService();
+        String sensitiveMessage =
+                "java.sql.SQLException: Access denied for user root pass" + "word=DO_NOT_EXPOSE";
+        dataSourceService.nextPreConnectFailure = new IllegalStateException(sensitiveMessage);
+        CliDataSourceServiceImpl service = newService(dataSourceService);
+        CliConnectionTestRequest request = new CliConnectionTestRequest();
+        request.setDbType("MYSQL");
+        request.setUrl("jdbc:mysql://localhost:3306/app");
+        request.setUser("root");
+        request.setPassword("secret");
+
+        CliConnectionTestResponse response = service.connectionTest(request);
+
+        assertEquals(Boolean.FALSE, response.getCanConnect());
+        assertEquals("datasource_connection_failed", response.getErrorCode());
+        assertEquals("Datasource connection test failed.", response.getErrorMessage());
+        assertNull(response.getErrorDetail());
+        assertFalse(response.getErrorMessage().contains(sensitiveMessage));
+        assertFalse(response.getErrorMessage().contains("SQLException"));
+        assertFalse(response.getErrorMessage().contains("password"));
+        assertFalse(response.getErrorMessage().contains("secret"));
     }
 
     @Test
