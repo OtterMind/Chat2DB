@@ -26,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.io.File;
 import java.util.List;
-import java.util.Objects;
 
 
 @Slf4j
@@ -58,6 +57,9 @@ public class JSONImporter extends BaseImporter implements IImportStrategy {
                 }
                 context.checkCancelled();
                 JsonNode recordNode = objectMapper.readTree(parser);
+                if (!recordNode.isObject()) {
+                    throw new BusinessException("jsonFile.parse.error");
+                }
                 List<String> tableColumnList = columns.stream().map(TableColumn::getName).toList();
                 List<String> values = getValues(columns, spec.getDataTimeFormat(), recordNode, valueProcessor);
                 String sql = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
@@ -98,7 +100,7 @@ public class JSONImporter extends BaseImporter implements IImportStrategy {
         List<String> values = new ArrayList<>();
         for (TableColumn c : fileColumns) {
             JsonNode columnValueNode = recordNode.get(c.getName());
-            if (Objects.isNull(columnValueNode)) {
+            if (columnValueNode == null || columnValueNode.isNull()) {
                 values.add(null);
             } else {
                 SQLDataValue sqlDataValue = getSQLDataValue(columnValueNode.asText(), c);

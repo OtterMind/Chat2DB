@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
@@ -28,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class JSONImporterExtensionTest {
 
@@ -45,7 +48,8 @@ class JSONImporterExtensionTest {
         try (Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS shop CASCADE");
             statement.execute("CREATE SCHEMA shop");
-            statement.execute("CREATE TABLE shop.orders (id INT PRIMARY KEY)");
+            statement.execute("CREATE TABLE shop.orders (id INT PRIMARY KEY, note VARCHAR(255))");
+            statement.execute("CREATE TABLE shop.nullable_orders (id INT)");
         }
         ConnectInfo connectInfo = new ConnectInfo();
         connectInfo.setDataSourceId(7L);
@@ -86,6 +90,46 @@ class JSONImporterExtensionTest {
                 ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM shop.orders")) {
             resultSet.next();
             assertEquals(2, resultSet.getInt(1));
+        }
+    }
+
+    @Test
+    void explicitJsonNullIsImportedAsSqlNull(@TempDir Path directory) throws Exception {
+        Path input = directory.resolve("orders.json");
+        Files.writeString(input, "[{\"id\":1,\"note\":null}]");
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .build();
+        TableColumn id = TableColumn.builder().name("id").columnType("INTEGER").build();
+        TableColumn note = TableColumn.builder().name("note").columnType("VARCHAR").build();
+
+        new JSONImporter().doImportData(spec, new NoOpTaskExecutionContext(), List.of(id, note));
+
+        try (Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT note FROM shop.orders WHERE id = 1")) {
+            resultSet.next();
+            assertNull(resultSet.getString(1));
+        }
+    }
+
+    @Test
+    void nonObjectArrayRecordFailsWithoutInsertingRows(@TempDir Path directory) throws Exception {
+        Path input = directory.resolve("orders.json");
+        Files.writeString(input, "[1]");
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("nullable_orders").build())
+                .build();
+        TableColumn id = TableColumn.builder().name("id").columnType("INTEGER").build();
+
+        assertThrows(TaskExecutionException.class,
+                () -> new JSONImporter().doImportData(spec, new NoOpTaskExecutionContext(), List.of(id)));
+
+        try (Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM shop.nullable_orders")) {
+            resultSet.next();
+            assertEquals(0, resultSet.getInt(1));
         }
     }
 
