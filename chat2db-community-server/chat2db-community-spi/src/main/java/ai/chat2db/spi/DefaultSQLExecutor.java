@@ -431,7 +431,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
         for (int i = 0; i < headerList.size(); i++) {
             Header header = headerList.get(i);
-            if ("CAHT2DB_AUTO_ROW_ID".equals(header.getName())) {
+            // Match both the legacy typo "CAHT2DB_AUTO_ROW_ID" (Oracle/DB2/SQLServer)
+            // and the correct "CHAT2DB_AUTO_ROW_ID" (Oscar) so the synthetic column
+            // is stripped from the result set regardless of which plugin emitted it.
+            String headerName = header.getName();
+            if ("CAHT2DB_AUTO_ROW_ID".equals(headerName) || "CHAT2DB_AUTO_ROW_ID".equals(headerName)) {
                 headerList.remove(i);
                 return i + 1;
             }

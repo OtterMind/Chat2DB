@@ -25,6 +25,7 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Types;
+import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -157,6 +158,44 @@ class DefaultSQLExecutorLargeCellTest {
             assertEquals("TENANT_B", header.getSchemaName());
             assertEquals("USERS", header.getTableName());
             assertEquals("EMAIL", header.getColumnName());
+        }
+    }
+
+    @Test
+    void queryResultStripsLegacyTypoAutoRowIdColumn() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:sql_executor_legacy_auto_row_id;DB_CLOSE_DELAY=-1")) {
+            putContext(connection);
+
+            ExecuteResponse result = DefaultSQLExecutor.getInstance().execute(SqlStatementExecuteRequest.builder()
+                    .sql("SELECT 7 AS CAHT2DB_AUTO_ROW_ID, 'visible' AS name")
+                    .connection(connection)
+                    .limitRowSize(true)
+                    .offset(0)
+                    .count(1)
+                    .build());
+
+            assertEquals(List.of("NAME"), result.getHeaderList().stream().map(Header::getName).toList());
+            assertEquals(List.of(List.of("visible")), result.getDisplayDataList());
+        }
+    }
+
+    @Test
+    void queryResultStripsCorrectAutoRowIdColumn() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:sql_executor_correct_auto_row_id;DB_CLOSE_DELAY=-1")) {
+            putContext(connection);
+
+            ExecuteResponse result = DefaultSQLExecutor.getInstance().execute(SqlStatementExecuteRequest.builder()
+                    .sql("SELECT 7 AS CHAT2DB_AUTO_ROW_ID, 'visible' AS name")
+                    .connection(connection)
+                    .limitRowSize(true)
+                    .offset(0)
+                    .count(1)
+                    .build());
+
+            assertEquals(List.of("NAME"), result.getHeaderList().stream().map(Header::getName).toList());
+            assertEquals(List.of(List.of("visible")), result.getDisplayDataList());
         }
     }
 
