@@ -21,6 +21,8 @@ public class DbDatabaseCreateRequest {
     @NotBlank
     private String name;
 
+    private String newName;
+
     private String comment;
 
     private String charset;
