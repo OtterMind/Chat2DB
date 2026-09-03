@@ -12,6 +12,9 @@ import {
 import i18n from '@/i18n';
 import { staticMessage } from '@chat2db/ui';
 import { filterSchemaByChartIds } from '@/utils/dashboard';
+import { DashboardDetailRequestOwner } from './dashboardDetailRequest';
+
+const dashboardDetailRequestOwner = new DashboardDetailRequestOwner();
 
 export interface CommonAction {
   /** Set up Dashboard list */
@@ -74,6 +77,7 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
     }
   },
   setCurrentDashboard: async (dashboard) => {
+    dashboardDetailRequestOwner.invalidate();
     set({ currentDashboard: dashboard });
   },
   updateDashboard: (dashboard) => {
@@ -127,9 +131,10 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
     //   history.pushState(null, '', `/dashboard/${id}`);
     // }
     // set({ currentDashboard: null });
-    return getDashboardById({ id }).then((res) => {
-      set({ currentDashboard: res });
-    });
+    return dashboardDetailRequestOwner.run(
+      () => getDashboardById({ id }),
+      (dashboard) => set({ currentDashboard: dashboard }),
+    );
   },
   refreshCurrentDashboard: () => {
     const currentDashboardId = get().currentDashboard?.id;
