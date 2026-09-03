@@ -42,6 +42,8 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
     private final int limit;
 
+    private final Class<T> clazz;
+
     protected LargeDataStorage(String name, Class<T> clazz, int limit) {
         this(name, clazz, limit, DB_STORAGE_PATH);
     }
@@ -59,6 +61,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
         this.storageDir = storageBasePath + File.separator + storageDirectoryName;
         this.filePath = storageDir + File.separator + indexName + ".json";
         this.limit = limit;
+        this.clazz = clazz;
         if (!FileUtil.exist(filePath)) {
             FileUtil.writeUtf8String("", filePath);
         } else {
@@ -103,21 +106,48 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return null;
         }
         try {
-            if (limit > 0 && dataMap.size() >= limit) {
-                Map.Entry<Long, T> entry = dataMap.pollFirstEntry();
-                if (entry != null) {
-                    saveDataList();
-                    deleteDetailData(entry.getKey());
-                }
-            }
             Long id = LocalStorageConverter.ensureId(data, this::generateId);
-
+            T previous = dataMap.get(id);
             saveDetailData(id, data);
-            if (!dataMap.containsKey(id)) {
-                FileUtil.appendUtf8String(id + "\n", filePath);
+            if (previous != null) {
+                dataMap.put(id, data);
+                return id;
+            }
+
+            ConcurrentSkipListMap<Long, T> nextDataMap = new ConcurrentSkipListMap<>(dataMap);
+            Map.Entry<Long, T> evicted = null;
+            if (limit > 0 && nextDataMap.size() >= limit) {
+                evicted = nextDataMap.pollFirstEntry();
+            }
+            nextDataMap.put(id, data);
+
+            boolean indexPersisted = false;
+            try {
+                saveDataListOrThrow(nextDataMap);
+                indexPersisted = true;
+                if (evicted != null) {
+                    deleteDetailData(evicted.getKey());
+                }
+            } catch (RuntimeException e) {
+                if (indexPersisted) {
+                    try {
+                        saveDataListOrThrow(dataMap);
+                    } catch (RuntimeException rollbackFailure) {
+                        e.addSuppressed(rollbackFailure);
+                    }
+                }
+                try {
+                    deleteDetailData(id);
+                } catch (RuntimeException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+                throw e;
+            }
+
+            if (evicted != null) {
+                dataMap.remove(evicted.getKey());
             }
             dataMap.put(id, data);
-
             return id;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -153,9 +183,9 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             if (before == null) {
                 return;
             }
-            before = getAfterSave(before, data);
-            dataMap.put(id, before);
-            saveDetailData(id, before);
+            T replacement = getAfterSave(copy(before), data);
+            saveDetailData(id, replacement);
+            dataMap.put(id, replacement);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -166,9 +196,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
         if (id == null) {
             return;
         }
-        dataMap.remove(id);
-        saveDataList();
-        deleteDetailData(id);
+        removeDataStrict(id);
     }
 
     protected void deleteDetailData(Long id) {
@@ -176,9 +204,9 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             return;
         }
         try {
-            FileUtil.del(detailFilePath(id));
-        } catch (Exception e) {
-            log.error("deleteDetailData error", e);
+            Files.deleteIfExists(Path.of(detailFilePath(id)));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete detail file: " + detailFilePath(id), e);
         }
     }
 
@@ -191,7 +219,11 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
     }
 
     protected void saveDataListOrThrow() {
-        List<Long> dataList = dataMap.keySet().stream().toList();
+        saveDataListOrThrow(dataMap);
+    }
+
+    protected void saveDataListOrThrow(Map<Long, T> values) {
+        List<Long> dataList = values.keySet().stream().toList();
         String data = CollectionUtils.isNotEmpty(dataList)
                 ? dataList.stream().map(String::valueOf).collect(Collectors.joining("\n")) + "\n"
                 : "";
@@ -228,7 +260,11 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
             saveDataListOrThrow();
         } catch (RuntimeException e) {
             dataMap.remove(id);
-            deleteDetailData(id);
+            try {
+                deleteDetailData(id);
+            } catch (RuntimeException cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
             throw e;
         }
     }
@@ -243,7 +279,7 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
         }
         try {
             saveDataListOrThrow();
-            Files.deleteIfExists(Path.of(detailFilePath(id)));
+            deleteDetailData(id);
             return removed;
         } catch (Exception e) {
             dataMap.put(id, removed);
@@ -285,5 +321,9 @@ public class LargeDataStorage<T> implements IWorkspaceLocalStorage<T> {
         } finally {
             Files.deleteIfExists(temporary);
         }
+    }
+
+    private T copy(T data) {
+        return JSON.parseObject(JSON.toJSONString(data), clazz);
     }
 }

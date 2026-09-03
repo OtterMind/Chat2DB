@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -86,6 +88,44 @@ class LargeDataStorageTest {
                 throw new RuntimeException(e);
             }
             return super.getAfterSave(before, update);
+        }
+    }
+
+    static class FailingDeleteStorage extends TestStorage {
+        private boolean failIndexWrites;
+        private boolean failCandidateIndexWrites;
+        private boolean candidateDetailExistedAtFailure;
+        private Long failedDetailDeleteId;
+
+        FailingDeleteStorage(String name, int limit, File baseDir) {
+            super(name, limit, baseDir);
+        }
+
+        @Override
+        protected void saveDataListOrThrow() {
+            if (failIndexWrites) {
+                throw new IllegalStateException("simulated index write failure");
+            }
+            super.saveDataListOrThrow();
+        }
+
+        @Override
+        protected void saveDataListOrThrow(Map<Long, Item> values) {
+            if (failCandidateIndexWrites) {
+                candidateDetailExistedAtFailure = values.keySet().stream()
+                        .filter(id -> !dataMap.containsKey(id))
+                        .anyMatch(id -> new File(detailFilePath(id)).isFile());
+                throw new IllegalStateException("simulated candidate index write failure");
+            }
+            super.saveDataListOrThrow(values);
+        }
+
+        @Override
+        protected void deleteDetailData(Long id) {
+            if (id.equals(failedDetailDeleteId)) {
+                throw new IllegalStateException("simulated detail delete failure");
+            }
+            super.deleteDetailData(id);
         }
     }
 
@@ -163,6 +203,127 @@ class LargeDataStorageTest {
         assertNull(storage.getById(1L));
         assertTrue(storage.getDataList().isEmpty());
         assertEquals("", FileUtil.readUtf8String(indexFile()));
+    }
+
+    @Test
+    void failedDetailWriteAtLimitKeepsExistingRecords() {
+        FailingDetailStorage storage = new FailingDetailStorage(name, 2, baseDir);
+        storage.save(item("first", 1L));
+        storage.save(item("second", 2L));
+        storage.failWrites = true;
+
+        assertThrows(RuntimeException.class, () -> storage.save(item("third", 3L)));
+
+        assertEquals(List.of(1L, 2L), storage.getDataList().stream().map(Item::getId).toList());
+        assertTrue(detailFile(1L).isFile());
+        assertTrue(detailFile(2L).isFile());
+        assertFalse(detailFile(3L).exists());
+        assertEquals(List.of("1", "2"), FileUtil.readLines(indexFile(), "UTF-8"));
+        assertEquals(List.of(1L, 2L), new TestStorage(name, 2, baseDir).getDataList().stream()
+                .map(Item::getId).toList());
+    }
+
+    @Test
+    void savingExistingRecordAtLimitDoesNotEvictAnotherRecord() {
+        TestStorage storage = new TestStorage(name, 2, baseDir);
+        storage.save(item("first", 1L));
+        storage.save(item("second", 2L));
+
+        storage.save(item("updated", 2L));
+
+        assertEquals(List.of(1L, 2L), storage.getDataList().stream().map(Item::getId).toList());
+        assertTrue(detailFile(1L).isFile());
+        assertEquals("updated", storage.getById(2L).getValue());
+        TestStorage reloaded = new TestStorage(name, 2, baseDir);
+        assertEquals(List.of(1L, 2L), reloaded.getDataList().stream().map(Item::getId).toList());
+        assertEquals("updated", reloaded.getById(2L).getValue());
+    }
+
+    @Test
+    void failedCandidateIndexWriteCleansNewDetailAndKeepsExistingState() {
+        FailingDeleteStorage storage = new FailingDeleteStorage(name, 10, baseDir);
+        storage.save(item("before", 1L));
+        String originalIndex = FileUtil.readUtf8String(indexFile());
+        String originalDetail = FileUtil.readUtf8String(detailFile(1L));
+        storage.failCandidateIndexWrites = true;
+
+        assertThrows(RuntimeException.class, () -> storage.save(item("new", 2L)));
+
+        assertTrue(storage.candidateDetailExistedAtFailure);
+        assertEquals(List.of(1L), storage.getDataList().stream().map(Item::getId).toList());
+        assertEquals(originalIndex, FileUtil.readUtf8String(indexFile()));
+        assertEquals(originalDetail, FileUtil.readUtf8String(detailFile(1L)));
+        assertFalse(detailFile(2L).exists());
+        TestStorage reloaded = new TestStorage(name, 10, baseDir);
+        assertEquals(List.of(1L), reloaded.getDataList().stream().map(Item::getId).toList());
+        assertEquals("before", reloaded.getById(1L).getValue());
+    }
+
+    @Test
+    void failedEvictionDetailDeleteRestoresExistingRecords() {
+        FailingDeleteStorage storage = new FailingDeleteStorage(name, 2, baseDir);
+        storage.save(item("first", 1L));
+        storage.save(item("second", 2L));
+        storage.failedDetailDeleteId = 1L;
+
+        assertThrows(RuntimeException.class, () -> storage.save(item("third", 3L)));
+
+        assertEquals(List.of(1L, 2L), storage.getDataList().stream().map(Item::getId).toList());
+        assertTrue(detailFile(1L).isFile());
+        assertTrue(detailFile(2L).isFile());
+        assertFalse(detailFile(3L).exists());
+        assertEquals(List.of("1", "2"), FileUtil.readLines(indexFile(), "UTF-8"));
+        assertEquals(List.of(1L, 2L), new TestStorage(name, 2, baseDir).getDataList().stream()
+                .map(Item::getId).toList());
+    }
+
+    @Test
+    void failedUpdateKeepsMemoryDetailAndReloadState() {
+        FailingDetailStorage storage = new FailingDetailStorage(name, 10, baseDir);
+        storage.save(item("before", 1L));
+        String originalDetail = FileUtil.readUtf8String(detailFile(1L));
+        storage.failWrites = true;
+
+        assertThrows(RuntimeException.class, () -> storage.update(item("after", 1L)));
+
+        assertNotNull(storage.getById(1L));
+        assertEquals("before", storage.getById(1L).getValue());
+        assertEquals(originalDetail, FileUtil.readUtf8String(detailFile(1L)));
+        assertEquals("before", new TestStorage(name, 10, baseDir).getById(1L).getValue());
+    }
+
+    @Test
+    void failedDeleteIndexWriteRestoresMemoryDiskAndReloadState() {
+        FailingDeleteStorage storage = new FailingDeleteStorage(name, 10, baseDir);
+        storage.save(item("before", 1L));
+        String originalIndex = FileUtil.readUtf8String(indexFile());
+        String originalDetail = FileUtil.readUtf8String(detailFile(1L));
+        storage.failIndexWrites = true;
+
+        assertThrows(RuntimeException.class, () -> storage.delete(1L));
+
+        assertNotNull(storage.getById(1L));
+        assertEquals("before", storage.getById(1L).getValue());
+        assertEquals(originalIndex, FileUtil.readUtf8String(indexFile()));
+        assertEquals(originalDetail, FileUtil.readUtf8String(detailFile(1L)));
+        assertEquals("before", new TestStorage(name, 10, baseDir).getById(1L).getValue());
+    }
+
+    @Test
+    void failedDeleteDetailRestoresMemoryIndexAndReloadState() {
+        FailingDeleteStorage storage = new FailingDeleteStorage(name, 10, baseDir);
+        storage.save(item("before", 1L));
+        String originalIndex = FileUtil.readUtf8String(indexFile());
+        String originalDetail = FileUtil.readUtf8String(detailFile(1L));
+        storage.failedDetailDeleteId = 1L;
+
+        assertThrows(RuntimeException.class, () -> storage.delete(1L));
+
+        assertNotNull(storage.getById(1L));
+        assertEquals("before", storage.getById(1L).getValue());
+        assertEquals(originalIndex, FileUtil.readUtf8String(indexFile()));
+        assertEquals(originalDetail, FileUtil.readUtf8String(detailFile(1L)));
+        assertEquals("before", new TestStorage(name, 10, baseDir).getById(1L).getValue());
     }
 
     @Test
