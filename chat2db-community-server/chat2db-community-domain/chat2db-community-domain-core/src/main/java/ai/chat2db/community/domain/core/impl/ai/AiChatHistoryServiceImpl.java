@@ -192,17 +192,25 @@ public class AiChatHistoryServiceImpl implements IAiChatHistoryService {
         List<AiChatSession> sessions = loadSessions(userId);
         // Only delete the message file when the session was actually owned by
         // this user; otherwise a caller could delete another user's file by id.
-        boolean removed = sessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
-        persistSessions(userId, sessions);
+        List<AiChatSession> remainingSessions = new ArrayList<>(sessions);
+        boolean removed = remainingSessions.removeIf(s -> Objects.equals(s.getId(), sessionId));
         if (!removed) {
             return;
         }
+        persistSessions(userId, remainingSessions);
 
         Path msgFile = messagesPath(sessionId);
         try {
             Files.deleteIfExists(msgFile);
         } catch (IOException e) {
-            throw new BusinessException("ai.chat.history.deleteMessagesFailed", new Object[]{msgFile, e.getMessage()}, e);
+            BusinessException failure = new BusinessException("ai.chat.history.deleteMessagesFailed",
+                    new Object[]{msgFile, e.getMessage()}, e);
+            try {
+                persistSessions(userId, sessions);
+            } catch (RuntimeException rollbackFailure) {
+                failure.addSuppressed(rollbackFailure);
+            }
+            throw failure;
         }
     }
 
