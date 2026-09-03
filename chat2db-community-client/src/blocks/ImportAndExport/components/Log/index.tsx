@@ -16,6 +16,7 @@ import importExportServices from '@/service/importExport';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/importExport';
 import i18n from '@/i18n';
+import { staticMessage } from '@chat2db/ui';
 import { useImportExportStore } from '@/store/importExport';
 import {
   mergeTaskEvents,
@@ -54,6 +55,7 @@ const Log = (props: IProps) => {
   const eventsRef = useRef<ImportExportTaskEvent[]>([]);
   const hasOlderEventsRef = useRef(false);
   const loadingOlderRef = useRef(false);
+  const taskDetailsFailureNotifiedRef = useRef(false);
   const taskGenerationRef = useRef(0);
   const scrollRestoreRef = useRef<ScrollRestore>();
   const viewportSize = useSize(viewportContainerRef);
@@ -96,12 +98,18 @@ const Log = (props: IProps) => {
       let details: ImportExportTaskDetails;
       try {
         details = await importExportServices.getTaskDetails({ taskId });
-      } catch {
+      } catch (error) {
+        if (!active) return;
+        if (!taskDetailsFailureNotifiedRef.current) {
+          taskDetailsFailureNotifiedRef.current = true;
+          staticMessage.error((error as any)?.message || i18n('common.text.failure'));
+        }
         if (active) timer = setTimeout(poll, 1500);
         return;
       }
       if (!active) return;
 
+      taskDetailsFailureNotifiedRef.current = false;
       setTaskDetails(details);
       onTaskChangeRef.current?.(details);
 
@@ -154,6 +162,7 @@ const Log = (props: IProps) => {
       } catch {
         if (!active) return;
         setEventsLoadFailed(true);
+        taskDetailsFailureNotifiedRef.current = false;
         timer = setTimeout(initialize, 1500);
       }
     };
