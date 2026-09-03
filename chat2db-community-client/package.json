@@ -68,6 +68,7 @@
     "test:shortcut": "tsx src/constants/shortcut.test.ts && tsx src/utils/appTitleBarAction.test.ts && tsx src/layouts/GlobalLayout/AppTitleBar/platform.test.ts && tsx src/utils/jcefZoom.test.ts && tsx src/utils/shortcutDispatch.test.ts",
     "test:sql-execution-log": "tsx src/service/sqlExecutionLog.test.ts",
     "test:sql-execution-batch": "tsx src/service/sqlExecutionBatch.test.ts",
+    "test:sql-format": "tsx src/utils/sql/formatSqlRequest.test.ts",
     "test:data-source-execution-snapshot": "tsx src/service/dataSourceExecutionSnapshot.test.ts",
     "test:sql-execution-request-tracker": "tsx src/service/sqlExecutionRequestTracker.test.ts",
     "test:sql-execution-stream": "tsx src/service/sqlExecutionStream.test.ts && tsx src/pages/main/workspace/components/SQLExecute/streamResultExecutionParams.test.ts",
