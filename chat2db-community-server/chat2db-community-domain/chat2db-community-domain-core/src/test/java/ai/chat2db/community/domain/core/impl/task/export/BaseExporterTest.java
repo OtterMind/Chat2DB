@@ -10,14 +10,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BaseExporterTest {
@@ -54,6 +60,96 @@ class BaseExporterTest {
 
         try (var files = Files.list(temporaryDirectory)) {
             assertFalse(files.anyMatch(path -> path.getFileName().toString().startsWith(".task-export-")));
+        }
+    }
+
+    @Test
+    void duplicateSanitizedTableNamesProduceUniqueZipEntries() throws Exception {
+        // multiExport strips path separators from intermediate file names, so
+        // distinct table names sharing the same last segment would otherwise
+        // collide into one zip entry name and throw ZipException.
+        BaseExporter exporter = new BaseExporter(new ExportCellProcessorChain(List.of()),
+                new SqlExecutionPolicyManager(List.of())) {
+            {
+                suffix = ".sql";
+            }
+
+            @Override
+            protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
+                    File file) throws Exception {
+                Files.write(file.toPath(), tableName.getBytes(StandardCharsets.UTF_8));
+            }
+
+            @Override
+            public String type() {
+                return "sql";
+            }
+        };
+        ExportTaskSpec spec = ExportTaskSpec.builder()
+                .tableNames(List.of("db1/users", "db2/users", "db3/users"))
+                .build();
+        File output = temporaryDirectory.resolve("tables.zip").toFile();
+
+        exporter.run(spec, new NoopContext(), output);
+
+        try (ZipFile zip = new ZipFile(output)) {
+            assertEquals("db1/users", zipEntryContent(zip, "users.sql"));
+            assertEquals("db2/users", zipEntryContent(zip, "users-2.sql"));
+            assertEquals("db3/users", zipEntryContent(zip, "users-3.sql"));
+        }
+    }
+
+    private static String zipEntryContent(ZipFile zip, String entryName) throws IOException {
+        ZipEntry entry = zip.getEntry(entryName);
+        assertNotNull(entry, "missing zip entry: " + entryName);
+        return new String(zip.getInputStream(entry).readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private static final class NoopContext implements TaskExecutionContext {
+        @Override
+        public void checkCancelled() {
+        }
+
+        @Override
+        public void reportProgress(int progress, String stage, String message) {
+        }
+
+        @Override
+        public void logInfo(String code, String message) {
+        }
+
+        @Override
+        public void logInfo(String code, String message, Map<String, Object> details) {
+        }
+
+        @Override
+        public void logWarn(String code, String message, Map<String, Object> details) {
+        }
+
+        @Override
+        public void logError(String code, String message, Map<String, Object> details) {
+        }
+
+        @Override
+        public void registerCancelable(TaskCancelable resource) {
+        }
+
+        @Override
+        public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void write(String content) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void onStatementCreated(Statement statement) {
+        }
+
+        @Override
+        public void onStatementClosed(Statement statement) {
         }
     }
 

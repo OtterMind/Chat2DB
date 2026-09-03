@@ -15,6 +15,7 @@ import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
+import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
@@ -276,7 +277,17 @@ public class DefaultDBManager implements IDbManager {
         }
         List<Table> tables = Chat2DBContext.getDbMetaData().tables(connection, new TablesRequest(databaseName, schemaName, null));
         for (Table table : tables) {
-            exportTable(connection, databaseName, schemaName, table.getName(), containData, context);
+            String tableName = table.getName();
+            try {
+                exportTable(connection, databaseName, schemaName, tableName, containData, context);
+            } catch (TaskCancelledException cancellation) {
+                throw cancellation;
+            } catch (Exception failure) {
+                log.warn("Skip table '{}' during database export: {}", tableName, failure.getMessage());
+                context.logWarn(TaskEventCode.OBJECT_SKIPPED.name(),
+                        String.format("Skipped table '%s' during database export: %s", tableName, failure.getMessage()),
+                        Map.of(TaskConstants.TABLE_NAME_DETAIL_KEY, tableName));
+            }
         }
         if (foreignKeyChecks) {
             context.write(SQL_SET_FOREIGN_KEY_CHECKS_ENABLED);

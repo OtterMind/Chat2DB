@@ -28,6 +28,8 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashSet;
+import java.util.Set;
 import java.nio.file.Files;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -97,6 +99,7 @@ public abstract class BaseExporter implements IExportStrategy {
         File temporaryDirectory = Files.createTempDirectory(parent.toPath(), ".task-export-").toFile();
         int n = spec.getTableNames().size();
         List<File> intermediateFiles = new ArrayList<>(n);
+        Set<String> usedFileBaseNames = new HashSet<>();
         try {
             for (int i = 0; i < n; i++) {
                 context.checkCancelled();
@@ -104,7 +107,7 @@ public abstract class BaseExporter implements IExportStrategy {
                 if (StringUtils.isEmpty(tableName)) {
                     throw new IllegalArgumentException("tableName should not be null or empty");
                 }
-                String safeTableName = new File(tableName).getName();
+                String safeTableName = uniqueFileBaseName(new File(tableName).getName(), usedFileBaseNames);
                 File file = new File(temporaryDirectory, safeTableName + suffix);
                 intermediateFiles.add(file);
                 logTableEvent(context, TaskEventCode.TABLE_EXPORT_STARTED.name(),
@@ -147,6 +150,22 @@ public abstract class BaseExporter implements IExportStrategy {
                 }
             }
         }
+    }
+
+    /**
+     * Distinct table names can sanitize to the same path-safe base name (for
+     * example "db1/users" and "db2/users" both become "users"), which would
+     * make every intermediate file overwrite the previous one and collapse
+     * the zip into duplicate entries. Append a sequence suffix on collision.
+     */
+    private static String uniqueFileBaseName(String baseName, Set<String> usedBaseNames) {
+        String candidate = baseName;
+        int sequence = 2;
+        while (!usedBaseNames.add(candidate)) {
+            candidate = baseName + "-" + sequence;
+            sequence++;
+        }
+        return candidate;
     }
 
     protected String getQuerySql(ExportTaskSpec spec, String tableName) {
