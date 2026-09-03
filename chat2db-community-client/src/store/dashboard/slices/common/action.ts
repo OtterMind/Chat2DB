@@ -1,3 +1,9 @@
+import {
+  captureDashboardChartDeleteMutation,
+  isDashboardMutationCurrent,
+  resolveDashboardChartDeleteTarget,
+  resolveDashboardMutationState,
+} from './dashboardMutation';
 import { StateCreator } from 'zustand';
 import { DashboardStore } from '../../store';
 import { CommonState } from './initialState';
@@ -79,14 +85,11 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
   updateDashboard: (dashboard) => {
     if (!dashboard) return;
     updateDashboard(dashboard).then(() => {
-      set({
-        currentDashboard: {
-          ...(get().currentDashboard || {}),
-          ...dashboard,
-        },
-        dashboardList: get().dashboardList.map((item) => (item.id === dashboard.id ? dashboard : item)),
-      });
-      get().setSettingDashboard(undefined);
+      const currentDashboard = get().currentDashboard;
+      set(resolveDashboardMutationState(currentDashboard, get().dashboardList, dashboard));
+      if (isDashboardMutationCurrent(currentDashboard, dashboard)) {
+        get().setSettingDashboard(undefined);
+      }
     });
   },
   deleteDashboard: async (id) => {
@@ -109,16 +112,16 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
     get().updateDashboard({ ...currentDashboard, schema: JSON.stringify(layout) });
   },
   deleteChart: (id) => {
+    const mutation = captureDashboardChartDeleteMutation(get().currentDashboard, id);
     return deleteChart({ id }).then(() => {
-      if (!get().currentDashboard?.id) return;
-      const newChartIds = get().currentDashboard?.chartIds?.filter((t) => t !== id);
-      const newDashboardDetail: any = {
-        ...get().currentDashboard,
-        chartIds: newChartIds,
-        schema: filterSchemaByChartIds(newChartIds, get().currentDashboard?.schema),
-      };
-      set({ currentDashboard: newDashboardDetail });
-      get().updateDashboard(newDashboardDetail);
+      const updatedDashboard = resolveDashboardChartDeleteTarget(
+        mutation,
+        get().currentDashboard,
+        filterSchemaByChartIds,
+      );
+      if (!updatedDashboard) return;
+      set(resolveDashboardMutationState(get().currentDashboard, get().dashboardList, updatedDashboard));
+      get().updateDashboard(updatedDashboard);
     });
   },
   getDashboardById: (id) => {
