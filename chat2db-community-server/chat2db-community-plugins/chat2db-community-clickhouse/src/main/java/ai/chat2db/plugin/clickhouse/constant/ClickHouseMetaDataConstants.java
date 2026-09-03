@@ -38,6 +38,7 @@ public final class ClickHouseMetaDataConstants {
     public static final String SQL_SELECT_NAME_SYSTEM_TABLES_DATABASE = "SELECT name FROM system.tables WHERE database = ?";
     public static final String SQL_SHOW_DATABASES = "SHOW databases";
     public static final String FUNCTION_SQL = "SELECT name,create_query as ddl from system.functions where origin='SQLUserDefined'";
+    public static final String FUNCTION_DETAIL_SQL = FUNCTION_SQL + SQL_NAME;
     public static final String ROUTINES_SQL = "SELECT SPECIFIC_NAME, ROUTINE_COMMENT, ROUTINE_DEFINITION FROM information_schema.routines WHERE "
                     + "routine_type = '%s' AND ROUTINE_SCHEMA ='%s'  AND "
                     + "routine_name = '%s';";
