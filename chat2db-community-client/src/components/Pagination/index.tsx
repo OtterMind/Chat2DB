@@ -11,6 +11,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } f
 import { MAX_RESULT_PAGE_SIZE, RESULT_PAGE_SIZE_OPTIONS } from '@/constants/pagination';
 import { useGlobalStore } from '@/store/global';
 import { settingSelectors } from '@/store/global/selectors';
+import { isPaginationNavigationDisabled, type PaginationNavigationType } from './paginationState';
 
 interface IProps {
   onPageSizeChange?: (pageSize: number) => void;
@@ -19,7 +20,7 @@ interface IProps {
   paginationConfig: IResultConfig;
 }
 
-type IIconType = 'pre' | 'next' | 'first' | 'last';
+type IIconType = PaginationNavigationType;
 
 export default function Pagination(props: IProps) {
   const { onPageNoChange, onPageSizeChange, paginationConfig } = props;
@@ -104,26 +105,7 @@ export default function Pagination(props: IProps) {
   };
 
   const handleIsDisabled = (type: IIconType) => {
-    if (!paginationConfig) {
-      return false;
-    }
-    if (type === 'first') {
-      return paginationConfig?.pageNo === 1;
-    }
-    if (type === 'pre') {
-      return paginationConfig?.pageNo === 1;
-    }
-
-    const isNumber = _.isNumber(paginationConfig.total);
-    const totalShow = paginationConfig.pageNo * paginationConfig.pageSize;
-    if (type === 'next' || type === 'last') {
-      if (isNumber) {
-        return totalShow > (paginationConfig.total as number);
-      }
-      return !paginationConfig?.hasNextPage;
-    }
-
-    return true;
+    return isPaginationNavigationDisabled(paginationConfig, type);
   };
 
   const isPresetDefaultPageSize = RESULT_PAGE_SIZE_OPTIONS.some((pageSize) => pageSize === defaultPageSize);
