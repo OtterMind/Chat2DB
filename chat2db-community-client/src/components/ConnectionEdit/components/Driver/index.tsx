@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect } from 'react';
+import React, { memo, useState, useEffect, useMemo, useRef } from 'react';
 import styles from './index.less';
 import classnames from 'classnames';
 import { i18n } from '@/i18n';
@@ -10,6 +10,7 @@ import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
 import feedback from '@/utils/feedback';
 import { canSaveDriverDraft, resolveDriverSavePayload, type IDriverSaveDraft } from './driverUpload';
+import { DriverListRequestOwner } from './driverListRequest';
 const { Option } = Select;
 
 interface IProps {
@@ -34,12 +35,29 @@ export default memo<IProps>((props) => {
   const [uploadDriverModal, setUploadDriverModal] = useState(false);
   const [driverSaved, setDriverSaved] = useState<IDriverSaveDraft>({ dbType: backfillData?.type });
   const [desktopLoading, setDesktopLoading] = useState(false);
+  const driverListRequestOwnerRef = useRef<DriverListRequestOwner>();
+  if (!driverListRequestOwnerRef.current) {
+    driverListRequestOwnerRef.current = new DriverListRequestOwner();
+  }
+  const driverListRequestOwner = driverListRequestOwnerRef.current;
+  const driverListScope = useMemo(
+    () => driverListRequestOwner.createScope(),
+    [
+      backfillData?.id,
+      backfillData?.type,
+      backfillData?.driverConfig?.jdbcDriver,
+      backfillData?.driverConfig?.jdbcDriverClass,
+    ],
+  );
 
   useEffect(() => {
+    const dbType = backfillData?.type;
+    driverListRequestOwner.activate(driverListScope);
     if (backfillData) {
-      getDriverList();
+      void getDriverList(driverListScope, dbType);
     }
-  }, [backfillData?.type]);
+    return () => driverListRequestOwner.dispose(driverListScope);
+  }, [driverListScope]);
 
   useEffect(() => {
     if (backfillData) {
@@ -52,24 +70,31 @@ export default memo<IProps>((props) => {
     }
   }, [backfillData?.driverConfig, backfillData?.id]);
 
-  function getDriverList() {
-    connectionService.getDriverList({ dbType: backfillData.type }).then((res) => {
-      if (!res) {
-        return;
-      }
-      setDriverObj({
-        ...res,
-        driverConfigList: res.driverConfigList || [],
-      });
-      if (res.driverConfigList?.length && !backfillData?.driverConfig?.jdbcDriver) {
-        const data = {
-          jdbcDriverClass: res.driverConfigList[0]?.jdbcDriverClass,
-          jdbcDriver: res.driverConfigList[0]?.jdbcDriver,
-        };
-        driverForm.setFieldsValue(data);
-        onChange(data);
-      }
-    });
+  function getDriverList(expectedScope = driverListScope, expectedDbType = backfillData.type) {
+    return driverListRequestOwner.run(
+      expectedScope,
+      () => connectionService.getDriverList({ dbType: expectedDbType }),
+      {
+        onSuccess: (res) => {
+          if (!res) {
+            return;
+          }
+          setDriverObj({
+            ...res,
+            driverConfigList: res.driverConfigList || [],
+          });
+          if (res.driverConfigList?.length && !backfillData?.driverConfig?.jdbcDriver) {
+            const data = {
+              jdbcDriverClass: res.driverConfigList[0]?.jdbcDriverClass,
+              jdbcDriver: res.driverConfigList[0]?.jdbcDriver,
+            };
+            driverForm.setFieldsValue(data);
+            onChange(data);
+          }
+        },
+        onError: (error) => console.error('get driver list error', error),
+      },
+    );
   }
 
   function formChange(data: any) {
