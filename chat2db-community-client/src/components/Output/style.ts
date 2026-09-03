@@ -16,6 +16,12 @@ export const useStyles = createStyles(({ css, token }) => {
       flex: 1;
       height: 0px;
     `,
+    outputFilters: css`
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border-bottom: 1px solid ${token.colorBorderSecondary};
+      background: ${token.colorBgContainer};
+    `,
     outputItem: css`
       position: relative;
       display: flex;
@@ -28,9 +34,7 @@ export const useStyles = createStyles(({ css, token }) => {
       border-radius: 6px;
       background: ${token.colorFillQuaternary};
       cursor: pointer;
-      transition:
-        border-color 0.16s ease,
-        background-color 0.16s ease;
+      transition: border-color 0.16s ease, background-color 0.16s ease;
 
       &:hover {
         border-color: ${token.colorPrimaryBorder};

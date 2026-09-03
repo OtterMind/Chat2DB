@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.core.converter;
 
+import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.operation.SqlOperationLogRecord;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
@@ -23,5 +24,19 @@ class SqlOperationLogConverterTest {
                 result, "test", new ConnectionProfile(), new Context());
 
         assertEquals(17L, record.getUseTime());
+    }
+
+    @Test
+    void tagsRecordedExecutionsAsSqlExecute() {
+        SqlOperationLogRecord record = SqlOperationLogRecord.builder()
+                .sql("select 1")
+                .status("success")
+                .connectionProfile(new ConnectionProfile())
+                .context(new Context())
+                .build();
+
+        OperationLog operationLog = new SqlOperationLogConverter().sqlRecord2operationLog(record);
+
+        assertEquals("SQL_EXECUTE", operationLog.getOperationType());
     }
 }

@@ -2,6 +2,7 @@ package ai.chat2db.community.storage;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
+import ai.chat2db.community.domain.api.enums.operation.OperationTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceNamespace;
@@ -28,10 +29,12 @@ import ai.chat2db.community.tools.exception.DataNotFoundException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.core.date.DateUtil;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class LocalWorkspaceStorage implements IWorkspaceStorage {
@@ -161,12 +164,16 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
     public Long createOperationLog(OperationLog request) {
         request.setGmtCreate(DateUtil.format(new Date(), DatePattern.NORM_DATETIME_PATTERN));
         request.setGmtModified(DateUtil.format(new Date(), DatePattern.NORM_DATETIME_PATTERN));
+        request.setOperationType(StringUtils.defaultIfBlank(request.getOperationType(),
+                OperationTypeEnum.SQL_EXECUTE.name()));
         return OperationLogStorage.INSTANCE.save(request);
     }
 
     @Override
     public PageResponse<OperationLog> operationLogList(OpsOperationLogPageQueryRequest operationLogPageQueryRequest) {
-        List<OperationLog> logs = OperationLogStorage.INSTANCE.getDataList();
+        List<OperationLog> logs = OperationLogStorage.INSTANCE.getDataList().stream()
+                .filter(operationLog -> matchesOperationLog(operationLog, operationLogPageQueryRequest))
+                .toList();
         return page(logs, operationLogPageQueryRequest.getPageNo(), operationLogPageQueryRequest.getPageSize());
     }
 
@@ -217,6 +224,35 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
             return password;
         }
         return AesGcmUtil.configured().encrypt(password);
+    }
+
+    private boolean matchesOperationLog(OperationLog operationLog, OpsOperationLogPageQueryRequest request) {
+        if (operationLog == null) {
+            return false;
+        }
+        if (request.getDataSourceId() != null
+                && !Objects.equals(request.getDataSourceId(), operationLog.getDataSourceId())) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(request.getDatabaseName())
+                && !Objects.equals(request.getDatabaseName(), operationLog.getDatabaseName())) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(request.getSchemaName())
+                && !Objects.equals(request.getSchemaName(), operationLog.getSchemaName())) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(request.getOperationType())) {
+            // Logs saved before operationType existed all come from the execution pipeline,
+            // so default them to SQL_EXECUTE instead of hiding them from the execution panel.
+            String operationType = StringUtils.defaultIfBlank(operationLog.getOperationType(),
+                    OperationTypeEnum.SQL_EXECUTE.name());
+            if (!Objects.equals(request.getOperationType(), operationType)) {
+                return false;
+            }
+        }
+        String searchKey = StringUtils.trimToNull(request.getSearchKey());
+        return searchKey == null || StringUtils.containsIgnoreCase(operationLog.getDdl(), searchKey);
     }
 
     private int normalizePageNo(Integer pageNo) {

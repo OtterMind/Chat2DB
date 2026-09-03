@@ -38,6 +38,9 @@ public class OperationLog {
     private String type;
 
 
+    private String operationType;
+
+
     private String ddl;
 
     private Boolean more = false;

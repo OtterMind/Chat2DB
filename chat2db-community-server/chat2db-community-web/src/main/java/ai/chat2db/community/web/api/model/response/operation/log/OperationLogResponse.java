@@ -36,6 +36,9 @@ public class OperationLogResponse {
     private String type;
 
 
+    private String operationType;
+
+
     private String ddl;
 
 

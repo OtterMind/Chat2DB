@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.converter;
 
 import java.util.Map;
 
+import ai.chat2db.community.domain.api.enums.operation.OperationTypeEnum;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogStatusEnum;
 import ai.chat2db.community.domain.api.model.operation.OperationLog;
 import ai.chat2db.community.domain.api.model.operation.SqlOperationLogRecord;
@@ -55,6 +56,8 @@ public class SqlOperationLogConverter {
         operationLog.setSchemaName(connectionProfile.getSchemaName());
         operationLog.setUseTime(record.getUseTime());
         operationLog.setType(connectionProfile.getDbType());
+        // The recording pipeline only logs executions; audit entries enter through the create endpoint.
+        operationLog.setOperationType(OperationTypeEnum.SQL_EXECUTE.name());
         operationLog.setOperationRows(record.getOperationRows());
         operationLog.setExtendInfo(JSON.toJSONString(Map.of(
                 "source", StringUtils.defaultString(record.getSource()),
