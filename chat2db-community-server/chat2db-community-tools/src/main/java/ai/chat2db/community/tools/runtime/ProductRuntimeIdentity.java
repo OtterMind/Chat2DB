@@ -29,6 +29,24 @@ public interface ProductRuntimeIdentity {
         return "community";
     }
 
+    /**
+     * Config file name used by releases that predate
+     * {@link #runtimeConfigFileName(String)}; used only to migrate existing
+     * installations once, so a product whose legacy name differs can override.
+     */
+    default String legacyRuntimeConfigFileName(String environment) {
+        return "enterprise_config_" + environment + ".json";
+    }
+
+    /**
+     * Client id file name used by releases that predate
+     * {@link #clientIdFileName()}; used only to migrate existing
+     * installations once.
+     */
+    default String legacyClientIdFileName() {
+        return "enterprise_client_uuid";
+    }
+
     String displayName();
 
     String protocolScheme();

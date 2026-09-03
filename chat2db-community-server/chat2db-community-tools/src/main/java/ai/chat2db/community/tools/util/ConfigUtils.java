@@ -15,6 +15,8 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,19 +54,75 @@ public class ConfigUtils {
                 versionFile = null;
             }
         }
-        configFile = new File(getBasePath() + File.separator + "config" + File.separator
-                + ProductRuntimeIdentityProvider.current().runtimeConfigFileName(environment));
+        File configDirectory = new File(getBasePath(), "config");
+        configFile = new File(configDirectory,
+                ProductRuntimeIdentityProvider.current().runtimeConfigFileName(environment));
+        File legacyConfigFile = new File(configDirectory,
+                ProductRuntimeIdentityProvider.current().legacyRuntimeConfigFileName(environment));
+        migrateLegacyFile(legacyConfigFile, configFile, "runtime config");
         if (!configFile.exists()) {
             FileUtil.writeUtf8String(JSON.toJSONString(new ConfigJson()), configFile);
         }
 
-        clientIdFile = new File(getBasePath() + File.separator + "config" + File.separator
-                + ProductRuntimeIdentityProvider.current().clientIdFileName());
+        clientIdFile = new File(configDirectory, ProductRuntimeIdentityProvider.current().clientIdFileName());
+        File legacyClientIdFile = new File(configDirectory,
+                ProductRuntimeIdentityProvider.current().legacyClientIdFileName());
+        migrateLegacyFile(legacyClientIdFile, clientIdFile, "client id");
         if (!clientIdFile.exists()) {
             String uuid = UUID.fastUUID().toString(true);
             FileUtil.writeUtf8String(uuid, clientIdFile);
             clientId = uuid;
         }
+    }
+
+    /**
+     * Upgrades from releases that stored the same data under the legacy file
+     * name would otherwise silently reset the runtime config (systemUuid,
+     * network status, latest startup version) and mint a new client id. Copy
+     * the legacy file once so the current name resolves to the existing data;
+     * the legacy file is kept untouched as a backup.
+     */
+    static void migrateLegacyFile(File legacyFile, File currentFile, String description) {
+        migrateLegacyFile(legacyFile, currentFile, description,
+                (source, staging) -> Files.copy(source, staging));
+    }
+
+    static void migrateLegacyFile(File legacyFile, File currentFile, String description,
+            LegacyFileCopier copier) {
+        Path staging = null;
+        try {
+            if (currentFile.exists() || !legacyFile.isFile()) {
+                return;
+            }
+            Path current = currentFile.toPath().toAbsolutePath().normalize();
+            Path parent = current.getParent();
+            if (parent == null) {
+                throw new IOException("Legacy file migration target has no parent");
+            }
+            Files.createDirectories(parent);
+            staging = parent.resolve("." + current.getFileName() + ".migrating-"
+                    + UUID.fastUUID().toString(true) + ".tmp");
+            copier.copy(legacyFile.toPath(), staging);
+            Files.move(staging, current);
+            staging = null;
+            log.info("Migrated legacy {} file {} to {}", description, legacyFile, currentFile);
+        } catch (IOException e) {
+            log.warn("Could not migrate legacy {} file {} to {}", description, legacyFile, currentFile, e);
+        } finally {
+            if (staging != null) {
+                try {
+                    Files.deleteIfExists(staging);
+                } catch (IOException cleanupError) {
+                    log.warn("Could not clean temporary legacy {} migration file {}", description, staging,
+                            cleanupError);
+                }
+            }
+        }
+    }
+
+    @FunctionalInterface
+    interface LegacyFileCopier {
+        void copy(Path source, Path target) throws IOException;
     }
 
     public static String getEnv() {
