@@ -27,7 +27,7 @@
     "test:community-boundary": "node ./scripts/verify-community-boundary.cjs",
     "test:database-capabilities": "tsx src/utils/databaseJudgments.test.ts",
     "test:table-editor": "tsx src/blocks/DatabaseTableEditor/ColumnList/normalizeColumn.test.ts",
-    "test:retired-ai": "tsx src/blocks/AI/retiredAiSurface.test.ts && tsx src/blocks/AI/components/AIChatInput/mentionSelection.test.ts && tsx src/blocks/AI/knowledgeSelection.test.ts && tsx src/blocks/AI/messageNavigation.test.ts",
+    "test:retired-ai": "tsx src/blocks/AI/retiredAiSurface.test.ts && tsx src/blocks/AI/components/AIChatInput/mentionSelection.test.ts && tsx src/blocks/AI/components/AIChatInput/mentionTableRequestCoordinator.test.ts && tsx src/blocks/AI/knowledgeSelection.test.ts && tsx src/blocks/AI/messageNavigation.test.ts",
     "test:hot-update": "tsx src/store/global/slices/hotUpdate/action.test.ts",
     "test:active-transactions": "tsx src/blocks/NewTree/components/ActiveTransactionsContent/activeTransactionUtils.test.ts && tsx src/blocks/NewTree/treeMenuGrouping.test.ts",
     "test:result-pagination": "tsx src/blocks/SearchResult/components/ResultSet/pagination.test.ts",
