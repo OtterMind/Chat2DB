@@ -56,7 +56,7 @@ public class ConfigOnlyDatabaseApiFlowTest extends BaseTest {
             Path m2Jar = Path.of(originalHome, ".m2", "repository", "org", "hsqldb", "hsqldb",
                     "2.7.3", "hsqldb-2.7.3.jar");
             if (Files.isRegularFile(m2Jar)) {
-                Path libDir = Path.of(JdbcDriverConstants.DRIVER_LIB_PATH).toAbsolutePath().normalize();
+                Path libDir = Path.of(JdbcDriverConstants.getDriverLibPath()).toAbsolutePath().normalize();
                 if (!libDir.startsWith(home.toAbsolutePath().normalize())) {
                     throw new IOException("test JDBC directory escaped the temporary user home: " + libDir);
                 }

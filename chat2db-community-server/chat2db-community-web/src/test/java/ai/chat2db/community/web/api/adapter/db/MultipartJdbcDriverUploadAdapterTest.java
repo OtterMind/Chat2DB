@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.adapter.db;
 
+import ai.chat2db.community.tools.constant.JdbcDriverConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MultipartJdbcDriverUploadAdapterTest {
@@ -72,6 +74,41 @@ class MultipartJdbcDriverUploadAdapterTest {
         try (var remaining = Files.list(driverDirectory)) {
             assertEquals(List.of(freshUpload, unrelated).stream().sorted().toList(),
                     remaining.sorted().toList());
+        }
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void uploadStagingUsesTheCurrentRuntimeHomeAfterClassInitialization() throws Exception {
+        String originalHome = System.getProperty("user.home");
+        String originalRuntimeMode = System.getProperty("chat2db.runtime.mode");
+        Path initializedHome = driverDirectory.resolve("initialized-home");
+        Path activeHome = driverDirectory.resolve("active-home");
+        try {
+            System.setProperty("chat2db.runtime.mode", "community");
+            System.setProperty("user.home", initializedHome.toString());
+            String ignoredStaticPath = JdbcDriverConstants.DRIVER_UPLOAD_PATH;
+
+            System.setProperty("user.home", activeHome.toString());
+            List<String> tokens = new MultipartJdbcDriverUploadAdapter().upload(
+                    new MultipartFile[]{file("driver.jar", "driver")});
+            String uploadId = tokens.get(0).split(":", 2)[0];
+            Path activeStaging = activeHome.resolve(".chat2db-community").resolve("jdbc-lib")
+                    .resolve(".uploads").resolve(uploadId + ".upload");
+
+            assertEquals("driver", Files.readString(activeStaging));
+            assertFalse(Files.exists(Path.of(ignoredStaticPath).resolve(uploadId + ".upload")));
+        } finally {
+            restoreProperty("user.home", originalHome);
+            restoreProperty("chat2db.runtime.mode", originalRuntimeMode);
+        }
+    }
+
+    private void restoreProperty(String name, String value) {
+        if (value == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, value);
         }
     }
 

@@ -1,9 +1,11 @@
 
 package ai.chat2db.spi.sql;
 
-import ai.chat2db.community.tools.exception.ConnectionException;
+import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
+import ai.chat2db.community.tools.exception.ConnectionException;
 import ai.chat2db.spi.model.datasource.DriverEntry;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +33,7 @@ public class JdbcDriverManager {
 
     public static Connection getConnection(String url, DriverConfig driver) throws SQLException {
         Properties info = new Properties();
-        return getConnection(url, info, driver);
+        return getConnection(url, info, driver.getDbType(), driver);
     }
 
     public static Connection getConnection(String url, String user, String password, DriverConfig driver)
@@ -45,11 +47,17 @@ public class JdbcDriverManager {
             info.put("password", password);
         }
 
-        return getConnection(url, info, driver);
+        return getConnection(url, info, driver.getDbType(), driver);
     }
 
     public static Connection getConnection(String url, String user, String password, DriverConfig driver,
                                            Map<String, Object> properties)
+            throws SQLException {
+        return getConnection(url, user, password, driver.getDbType(), driver, properties);
+    }
+
+    public static Connection getConnection(String url, String user, String password, String dbType,
+                                           DriverConfig driver, Map<String, Object> properties)
             throws SQLException {
         Properties info = new Properties();
         if (StringUtils.isNotEmpty(user)) {
@@ -66,10 +74,15 @@ public class JdbcDriverManager {
                 }
             }
         }
-        return getConnection(url, info, driver);
+        return getConnection(url, info, dbType, driver);
     }
 
     public static Connection getConnection(String url, Properties info, DriverConfig driver)
+            throws SQLException {
+        return getConnection(url, info, driver.getDbType(), driver);
+    }
+
+    private static Connection getConnection(String url, Properties info, String dbType, DriverConfig driver)
             throws SQLException {
         if (Objects.isNull(url)) {
             throw new SQLException("The url cannot be null", SQL_STATE_CODE);
@@ -77,7 +90,7 @@ public class JdbcDriverManager {
 
         DriverEntry driverEntry = DRIVER_ENTRY_MAP.get(driver.getJdbcDriver());
         if (Objects.isNull(driverEntry)) {
-            driverEntry = getJDBCDriver(driver);
+            driverEntry = getJDBCDriver(dbType, driver);
         }
         Connection connection;
         try {
@@ -107,7 +120,7 @@ public class JdbcDriverManager {
         DriverEntry driverEntry = DRIVER_ENTRY_MAP.get(driver.getJdbcDriver());
         try {
             if (driverEntry == null) {
-                driverEntry = getJDBCDriver(driver);
+                driverEntry = getJDBCDriver(driver.getDbType(), driver);
             }
             String url = Objects.isNull(driver.getUrl()) ? "" : driver.getUrl();
             return driverEntry.getDriver().getPropertyInfo(url, null);
@@ -128,14 +141,14 @@ public class JdbcDriverManager {
         return null;
     }
 
-    private static DriverEntry getJDBCDriver(DriverConfig driver)
+    private static DriverEntry getJDBCDriver(String dbType, DriverConfig driver)
             throws SQLException {
         synchronized (driver) {
             try {
                 if (DRIVER_ENTRY_MAP.containsKey(driver.getJdbcDriver())) {
                     return DRIVER_ENTRY_MAP.get(driver.getJdbcDriver());
                 }
-                ClassLoader cl = getClassLoader(driver);
+                ClassLoader cl = getClassLoader(dbType, driver);
                 Driver d = (Driver) cl.loadClass(driver.getJdbcDriverClass()).newInstance();
                 DriverEntry driverEntry = DriverEntry.builder().driverConfig(driver).driver(d).build();
                 DRIVER_ENTRY_MAP.put(driver.getJdbcDriver(), driverEntry);
@@ -148,6 +161,11 @@ public class JdbcDriverManager {
     }
 
     public static ClassLoader getClassLoader(DriverConfig driverConfig) throws IOException, ClassNotFoundException {
+        return getClassLoader(driverConfig.getDbType(), driverConfig);
+    }
+
+    public static ClassLoader getClassLoader(String dbType, DriverConfig driverConfig)
+            throws IOException, ClassNotFoundException {
         String jarPath = driverConfig.getJdbcDriver();
         if (CLASS_LOADER_MAP.containsKey(jarPath)) {
             return CLASS_LOADER_MAP.get(jarPath);
@@ -158,9 +176,9 @@ public class JdbcDriverManager {
                 }
                 URLClassLoader cl;
                 try {
-                    cl = getURLClassLoader(jarPath, driverConfig.getJdbcDriverClass(), false);
+                    cl = getURLClassLoader(dbType, driverConfig, false);
                 } catch (Exception e) {
-                    cl = getURLClassLoader(jarPath, driverConfig.getJdbcDriverClass(), true);
+                    cl = getURLClassLoader(dbType, driverConfig, true);
                 }
                 CLASS_LOADER_MAP.put(jarPath, cl);
                 return cl;
@@ -168,13 +186,14 @@ public class JdbcDriverManager {
         }
     }
 
-    private static String getFilePath(String jarPath, boolean clean) {
-        return clean ? getNewFullPath(jarPath) : getFullPath(jarPath);
+    private static String getFilePath(String jarPath, boolean clean, List<String> downloadUrls) {
+        return clean ? getNewFullPath(jarPath, downloadUrls) : getFullPath(jarPath, downloadUrls);
     }
 
-    private static List<URL> getJarUrlsFromZip(String zipFilePath, boolean clean) throws IOException {
+    private static List<URL> getJarUrlsFromZip(String zipFilePath, boolean clean,
+                                               List<String> downloadUrls) throws IOException {
         List<URL> jarUrls = new ArrayList<>();
-        String file = getFilePath(zipFilePath, clean);
+        String file = getFilePath(zipFilePath, clean, downloadUrls);
         File unzipFile = new File(file);
         File[] files = unzipFile.listFiles();
         for (File f : files) {
@@ -185,10 +204,11 @@ public class JdbcDriverManager {
         return jarUrls;
     }
 
-    private static List<URL> getJarUrlsFromPaths(String[] jarPaths, boolean clean) throws IOException {
+    private static List<URL> getJarUrlsFromPaths(String[] jarPaths, boolean clean,
+                                                 List<String> downloadUrls) throws IOException {
         List<URL> jarUrls = new ArrayList<>();
         for (String jarPath : jarPaths) {
-            String file = getFilePath(jarPath, clean);
+            String file = getFilePath(jarPath, clean, downloadUrls);
             File driverFile = new File(file);
             if (!driverFile.exists()) {
                 throw new IOException("Driver jar file not found: " + jarPath
@@ -215,19 +235,48 @@ public class JdbcDriverManager {
         }
     }
 
-    private static URLClassLoader getURLClassLoader(String jarPath, String clazz, boolean clean) throws IOException, ClassNotFoundException {
+    private static URLClassLoader getURLClassLoader(String dbType, DriverConfig driverConfig, boolean clean)
+            throws IOException, ClassNotFoundException {
+        String jarPath = driverConfig.getJdbcDriver();
+        List<String> downloadUrls = resolveTrustedDownloadUrls(dbType, driverConfig);
         String[] jarPaths = jarPath.split(",");
         List<URL> jarUrls;
         if (jarPath.endsWith(".zip")) {
-            jarUrls = getJarUrlsFromZip(jarPath, clean);
+            jarUrls = getJarUrlsFromZip(jarPath, clean, downloadUrls);
         } else {
-            jarUrls = getJarUrlsFromPaths(jarPaths, clean);
+            jarUrls = getJarUrlsFromPaths(jarPaths, clean, downloadUrls);
         }
         URL[] urls = jarUrls.toArray(new URL[0]);
         URLClassLoader classLoader = new URLClassLoader(urls, ClassLoader.getSystemClassLoader());
-        classLoader.loadClass(clazz);
+        classLoader.loadClass(driverConfig.getJdbcDriverClass());
 
         return classLoader;
+    }
+
+    static List<String> resolveTrustedDownloadUrls(String dbType, DriverConfig requestedDriver) {
+        if (StringUtils.isBlank(dbType) || requestedDriver == null
+                || StringUtils.isBlank(requestedDriver.getJdbcDriver())
+                || StringUtils.isBlank(requestedDriver.getJdbcDriverClass())) {
+            return List.of();
+        }
+        DBConfig dbConfig;
+        try {
+            dbConfig = Chat2DBContext.getDBConfig(dbType);
+        } catch (IllegalArgumentException e) {
+            return List.of();
+        }
+        if (dbConfig == null || CollectionUtils.isEmpty(dbConfig.getDriverConfigList())) {
+            return List.of();
+        }
+        for (DriverConfig trustedDriver : dbConfig.getDriverConfigList()) {
+            if (trustedDriver != null
+                    && StringUtils.equals(requestedDriver.getJdbcDriver(), trustedDriver.getJdbcDriver())
+                    && StringUtils.equals(requestedDriver.getJdbcDriverClass(), trustedDriver.getJdbcDriverClass())) {
+                List<String> trustedUrls = trustedDriver.getDownloadJdbcDriverUrls();
+                return CollectionUtils.isEmpty(trustedUrls) ? List.of() : List.copyOf(trustedUrls);
+            }
+        }
+        return List.of();
     }
 
 }

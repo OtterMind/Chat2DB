@@ -146,7 +146,7 @@ public class DefaultDBManager implements IDbManager {
                 driverConfig = Chat2DBContext.getDefaultDriverConfig(connectInfo.getDbType());
             }
             connection = JdbcDriverManager.getConnection(url, connectInfo.getUser(), connectInfo.getPassword(),
-                    driverConfig, connectInfo.getExtendMap());
+                    connectInfo.getDbType(), driverConfig, connectInfo.getExtendMap());
 
         } catch (Exception e1) {
             close(connection, session, ssh);

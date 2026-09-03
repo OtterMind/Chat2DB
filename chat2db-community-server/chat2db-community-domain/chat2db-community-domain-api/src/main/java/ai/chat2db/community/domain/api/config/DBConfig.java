@@ -142,6 +142,10 @@ public class DBConfig {
 
     public void setDbType(String dbType) {
         this.dbType = dbType;
+        applyDbType(defaultDriverConfig);
+        if (!CollectionUtils.isEmpty(driverConfigList)) {
+            driverConfigList.forEach(this::applyDbType);
+        }
     }
 
     public String getName() {
@@ -202,6 +206,7 @@ public class DBConfig {
 
     public void setDefaultDriverConfig(DriverConfig defaultDriverConfig) {
         this.defaultDriverConfig = defaultDriverConfig;
+        applyDbType(defaultDriverConfig);
     }
 
     public List<DriverConfig> getDriverConfigList() {
@@ -211,12 +216,22 @@ public class DBConfig {
     public void setDriverConfigList(List<DriverConfig> driverConfigList) {
         this.driverConfigList = driverConfigList;
         if (!CollectionUtils.isEmpty(driverConfigList)) {
+            DriverConfig selectedDefault = null;
             for (DriverConfig driverConfig : driverConfigList) {
-                if (driverConfig.isDefaultDriver()) {
-                    this.defaultDriverConfig = driverConfig;
-                    break;
+                applyDbType(driverConfig);
+                if (driverConfig.isDefaultDriver() && selectedDefault == null) {
+                    selectedDefault = driverConfig;
                 }
             }
+            if (selectedDefault != null) {
+                this.defaultDriverConfig = selectedDefault;
+            }
+        }
+    }
+
+    private void applyDbType(DriverConfig driverConfig) {
+        if (driverConfig != null && StringUtils.isBlank(driverConfig.getDbType())) {
+            driverConfig.setDbType(dbType);
         }
     }
 

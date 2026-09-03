@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -181,8 +182,8 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         JdbcDriverManagementPolicy.PromotedDrivers promotedDrivers = ConfigUtils.isDesktop()
                 ? null
                 : JdbcDriverManagementPolicy.promoteUploadedDrivers(sourceDriverPaths,
-                        Path.of(JdbcDriverConstants.DRIVER_UPLOAD_PATH),
-                        Path.of(JdbcDriverConstants.DRIVER_LIB_PATH));
+                        Path.of(JdbcDriverConstants.getDriverUploadPath()),
+                        Path.of(JdbcDriverConstants.getDriverLibPath()));
         String jdbcDriver = promotedDrivers == null ? copyDrivers(sourceDriverPaths) : promotedDrivers.jdbcDriver();
         driverConfig.setJdbcDriver(jdbcDriver);
         try {
@@ -206,7 +207,12 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
                 exists = false;
                 break;
             }
-            File target = new File(JdbcDriverConstants.DRIVER_LIB_PATH + file.getName());
+            File target;
+            try {
+                target = new File(JdbcDriverConstants.createDriverLibDirectory(), file.getName());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Unable to create JDBC driver directory", e);
+            }
             FileUtil.copyFile(file, target, StandardCopyOption.REPLACE_EXISTING);
             driverNames.append(file.getName()).append(",");
         }
@@ -274,7 +280,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
             if (StringUtils.isBlank(jar) || isJarReferenced(jar)) {
                 continue;
             }
-            File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH + jar);
+            File file = new File(JdbcDriverConstants.getDriverLibPath() + jar);
             if (file.exists()) {
                 try {
                     FileUtil.del(file);
@@ -351,7 +357,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
             return false;
         }
         for (String jarPath : driverConfig.getJdbcDriver().split(",")) {
-            File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH + jarPath);
+            File file = new File(JdbcDriverConstants.getDriverLibPath() + jarPath);
             if (!file.exists()) {
                 return false;
             }

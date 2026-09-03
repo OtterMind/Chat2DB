@@ -34,13 +34,6 @@ public class JdbcJarUtils {
 
     private static final OkHttpClient client = new OkHttpClient();
 
-    static {
-        File file = new File(JdbcDriverConstants.DRIVER_LIB_PATH);
-        if (!file.exists()) {
-            file.mkdirs();
-        }
-    }
-
     public static void asyncDownload(List<String> urls) throws Exception {
         for (String url : urls) {
             File file = outputFile(url);
@@ -101,10 +94,6 @@ public class JdbcJarUtils {
     }
 
     public static void download(String url) throws IOException {
-        File pathfile = new File(JdbcDriverConstants.DRIVER_LIB_PATH);
-        if (!pathfile.exists()) {
-            pathfile.mkdirs();
-        }
         File file = outputFile(url);
         deleteIfExists(file);
         String safeUrl = sanitizeUrl(url);
@@ -163,7 +152,7 @@ public class JdbcJarUtils {
             if (fileName.isBlank()) {
                 throw downloadFailure(sanitizeUrl(url), "missing file name");
             }
-            return new File(JdbcDriverConstants.DRIVER_LIB_PATH, fileName);
+            return new File(JdbcDriverConstants.createDriverLibDirectory(), fileName);
         } catch (URISyntaxException e) {
             throw downloadFailure(sanitizeUrl(url), e.getClass().getSimpleName());
         }
@@ -198,22 +187,28 @@ public class JdbcJarUtils {
     }
 
     public static String getNewFullPath(String jarPath) {
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+        return getNewFullPath(jarPath, null);
+    }
+
+    public static String getNewFullPath(String jarPath, List<String> downloadUrls) {
+        File file = driverFile(jarPath);
         if (file.exists()) {
             file.delete();
         }
-        return getFullPath(jarPath);
+        return getFullPath(jarPath, downloadUrls);
     }
 
     public static String getFullPath(String jarPath) {
+        return getFullPath(jarPath, null);
+    }
+
+    public static String getFullPath(String jarPath, List<String> downloadUrls) {
         if(jarPath.endsWith(".zip")){
-            return getFullPathZip(jarPath);
+            return getFullPathZip(jarPath, downloadUrls);
         }
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+        File file = driverFile(jarPath);
         if (!file.exists()) {
-            String url = getDownloadUrl(jarPath);
+            String url = getDownloadUrl(jarPath, downloadUrls);
             try {
                 download(url);
             } catch (IOException e) {
@@ -224,15 +219,14 @@ public class JdbcJarUtils {
                 }
             }
         }
-        return path;
+        return file.getPath();
     }
 
-    private static String getFullPathZip(String jarPath) {
-        String path = JdbcDriverConstants.DRIVER_LIB_PATH + jarPath;
-        File file = new File(path);
+    private static String getFullPathZip(String jarPath, List<String> downloadUrls) {
+        File file = driverFile(jarPath);
         File destDir = FileUtil.file(file.getParentFile(), FileUtil.mainName(file));
         if (!file.exists()) {
-            String url = getDownloadUrl(jarPath);
+            String url = getDownloadUrl(jarPath, downloadUrls);
             try {
                 download(url);
                 return ZipUtil.unzip(file,destDir).getAbsolutePath();
@@ -252,5 +246,29 @@ public class JdbcJarUtils {
 
     private static String getDownloadUrl(String jarPath) {
         return JdbcDriverConstants.DOWNLOAD_URL_HOST + jarPath;
+    }
+
+    static String getDownloadUrl(String jarPath, List<String> downloadUrls) {
+        if (downloadUrls != null) {
+            for (String downloadUrl : downloadUrls) {
+                if (jarPath.equals(fileName(downloadUrl))) {
+                    return downloadUrl;
+                }
+            }
+        }
+        return getDownloadUrl(jarPath);
+    }
+
+    private static String fileName(String url) {
+        try {
+            String path = new URI(url).getPath();
+            return path == null ? null : new File(path).getName();
+        } catch (URISyntaxException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static File driverFile(String jarPath) {
+        return new File(JdbcDriverConstants.getDriverLibPath(), jarPath);
     }
 }

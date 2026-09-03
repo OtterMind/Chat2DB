@@ -31,7 +31,7 @@ public class MultipartJdbcDriverUploadAdapter implements IDbJdbcDriverUploadServ
     @Override
     public List<String> upload(MultipartFile[] files) throws IOException {
         cleanupExpiredUploads();
-        return store(files, Path.of(JdbcDriverConstants.DRIVER_UPLOAD_PATH), MAX_DRIVER_FILE_SIZE_BYTES);
+        return store(files, Path.of(JdbcDriverConstants.getDriverUploadPath()), MAX_DRIVER_FILE_SIZE_BYTES);
     }
 
     @PostConstruct
@@ -43,7 +43,7 @@ public class MultipartJdbcDriverUploadAdapter implements IDbJdbcDriverUploadServ
     void cleanupExpiredUploads() {
         try {
             cleanupExpiredUploads(
-                    Path.of(JdbcDriverConstants.DRIVER_UPLOAD_PATH),
+                    Path.of(JdbcDriverConstants.getDriverUploadPath()),
                     Instant.now().minus(STAGED_UPLOAD_RETENTION));
         } catch (IOException exception) {
             log.warn("Unable to clean expired JDBC driver uploads", exception);
