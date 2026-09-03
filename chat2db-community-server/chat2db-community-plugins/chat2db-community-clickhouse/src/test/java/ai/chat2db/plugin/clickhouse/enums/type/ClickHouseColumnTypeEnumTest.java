@@ -27,6 +27,15 @@ class ClickHouseColumnTypeEnumTest {
         assertEquals("`amount` Decimal(10,2)", buildDecimal(10, 2));
     }
 
+    @Test
+    void buildsBareFixedStringWhenColumnSizeIsMissing() {
+        TableColumn column = new TableColumn();
+        column.setName("code");
+        column.setColumnType("FixedString");
+
+        assertEquals("`code` FixedString", ClickHouseColumnTypeEnum.FixedString.buildCreateColumnSql(column).trim());
+    }
+
     private String buildDecimal(Integer precision, Integer scale) {
         TableColumn column = new TableColumn();
         column.setName("amount");
