@@ -93,6 +93,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                 runningTaskRegistry.remove(submission.taskId(), runningTask);
                 unbindExecutionContext();
             } finally {
+                runningTask.cleanupInput();
                 runningTask.markFinished();
             }
         }

@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
-import UploadLocalFile from '@/components/UploadLocalFile';
+import UploadLocalFile, { FileUrl } from '@/components/UploadLocalFile';
 import { Form, Input, Select } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
@@ -9,6 +9,7 @@ import { ImportExportType, ImportExportFileType, ImportExportTaskType } from '@/
 import { ExportTaskParams, ImportTaskParams } from '@/service/importExport';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import jcefApi from '@/jcef';
+import { resolveLocalImportSource } from '@/utils/localImportFile';
 
 interface IProps {
   className?: string;
@@ -37,7 +38,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   const { setIsReady } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [fileUrlList, setFileUrlList] = useState<FileUrl[]>([]);
   const [exportLocation, setExportLocation] = useState<string>('');
   const [formValue, setFormValue] = useState<ImportExportFormValue>({
     exportType: ImportExportFileType.CSV,
@@ -81,8 +82,8 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
     }
   }, [exportLocation, formValue]);
 
-  const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+  const handleFileUrlListChange = (_fileUrlList: FileUrl[]) => {
+    setFileUrlList(_fileUrlList);
   };
 
   useImperativeHandle(ref, () => ({
@@ -104,6 +105,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
           exportPath: exportLocation || formValue.fileUrl,
         };
       }
+      const importSource = resolveLocalImportSource(fileUrlList[0], formValue.fileUrl || '');
       return {
         ...commonValues,
         taskType:
@@ -111,7 +113,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
             ? ImportExportTaskType.SQL_FILE_IMPORT
             : ImportExportTaskType.DATA_FILE_IMPORT,
         tableName,
-        sourceFile: fileUrlList[0] || formValue.fileUrl || '',
+        ...importSource,
       };
     },
   }));

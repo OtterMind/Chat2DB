@@ -147,8 +147,9 @@ class TaskExecutorRegistryTest {
                         (spec, context) -> {}),
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
         taskManager = new LocalTaskManager(storage, registry, new ArtifactService(),
-                new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new ArtifactService());
+                new ConnectionContextConverter(), emptyExtensionManager(),
+                new TaskInputCleanup(Path.of("target", "test-task-inputs")), 1, 1);
+        return new TaskServiceImpl(storage, taskManager, new ArtifactService(), taskManager);
     }
 
     private TaskExtensionManager emptyExtensionManager() {
@@ -214,15 +215,17 @@ class TaskExecutorRegistryTest {
         private int createCount;
 
         @Override
-        public synchronized Task create(Task task, TaskEvent createdEvent) {
+        public synchronized Task create(Task task, List<TaskEvent> initialEvents) {
             createCount++;
             task.setId(ids.incrementAndGet());
             task.setStatus(TaskStatus.PENDING.name());
             task.setProgress(0);
             task.setCreatedAt(new Date());
             tasks.put(task.getId(), task);
-            createdEvent.setTaskId(task.getId());
-            appendEvent(createdEvent);
+            for (TaskEvent initialEvent : initialEvents) {
+                initialEvent.setTaskId(task.getId());
+                appendEvent(initialEvent);
+            }
             return task;
         }
 

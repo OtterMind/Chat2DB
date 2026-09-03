@@ -8,14 +8,14 @@ import { customRequestOSS } from '@/utils/file';
 import { UploadTypeEnum } from '@/typings/upload';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
+import {
+  LocalImportFileSelection,
+  toWebLocalFileSelection,
+} from '@/utils/localImportFile';
 
 type FileType = Parameters<GetProp<UploadProps, 'beforeUpload'>>[0];
 
-export interface FileUrl {
-  fileName?: string;
-  filePath?: string;
-  file?: File;
-}
+export type FileUrl = LocalImportFileSelection;
 
 interface IProps extends UploadProps {
   className?: string;
@@ -90,12 +90,7 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
 
   const fileUploadOnChange = ({ file }) => {
     if (isWebLocalUpload) {
-      const selectedFile = file.originFileObj || file;
-      const selection = {
-        file: selectedFile,
-        filePath: selectedFile?.path,
-        fileName: file.name,
-      };
+      const selection = toWebLocalFileSelection(file);
       setFileList((current) => (multiple ? [...current, selection] : [selection]));
       return;
     }

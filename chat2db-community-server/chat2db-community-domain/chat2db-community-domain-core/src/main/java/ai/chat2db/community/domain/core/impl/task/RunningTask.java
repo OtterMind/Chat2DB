@@ -30,6 +30,8 @@ final class RunningTask {
 
     private final AtomicReference<TaskCancelable> cancelable = new AtomicReference<>();
 
+    private final AtomicReference<Runnable> inputCleanup;
+
     private final ReentrantLock completionLock = new ReentrantLock();
 
     private final CountDownLatch executionFinished = new CountDownLatch(1);
@@ -39,7 +41,12 @@ final class RunningTask {
     private volatile boolean closed;
 
     RunningTask(Long taskId) {
+        this(taskId, null);
+    }
+
+    RunningTask(Long taskId, Runnable inputCleanup) {
         this.taskId = taskId;
+        this.inputCleanup = new AtomicReference<>(inputCleanup);
     }
 
     Long taskId() {
@@ -95,6 +102,18 @@ final class RunningTask {
 
     void markFinished() {
         executionFinished.countDown();
+    }
+
+    void cleanupInput() {
+        Runnable cleanup = inputCleanup.get();
+        if (cleanup != null) {
+            try {
+                cleanup.run();
+                inputCleanup.compareAndSet(cleanup, null);
+            } catch (RuntimeException e) {
+                log.warn("Failed to clean task input for task {}", taskId, e);
+            }
+        }
     }
 
     boolean awaitFinished(long timeout, TimeUnit unit) throws InterruptedException {

@@ -40,6 +40,10 @@ public final class TaskConstants {
 
     public static final String ARTIFACT_TARGET_PATH_DETAIL_KEY = "targetPath";
 
+    public static final String TEMPORARY_INPUT_PATH_DETAIL_KEY = "temporaryInputPath";
+
+    public static final String TEMPORARY_INPUT_TOKEN_DETAIL_KEY = "temporaryInputToken";
+
     public static final String EXPORT_SCOPE_DETAIL_KEY = "scope";
 
     public static final String ERROR_CODE_DETAIL_KEY = "errorCode";
@@ -49,6 +53,8 @@ public final class TaskConstants {
     public static final String DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE = "task.delete.activeForbidden";
 
     public static final String DELETE_ARTIFACT_FAILED_MESSAGE_CODE = "task.delete.artifactFailed";
+
+    public static final String DELETE_INPUT_FAILED_MESSAGE_CODE = "task.delete.inputFailed";
 
     private TaskConstants() {
     }

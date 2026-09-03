@@ -3,6 +3,8 @@ import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
+import { isDesktop } from '@/utils/env';
+import { resolveImportTaskTransport } from './importTaskTransport';
 
 export interface GenerateJavaClassParams extends IDatabaseBaseInfo {
   exportPath: string;
@@ -61,12 +63,29 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   tableName?: string;
   sourceFile: string;
   displayFileName?: string;
+  file?: File;
   format: ImportExportFileType;
   dataTimeFormat?: string;
 }
 
 const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });
-const submitImport = createRequest<ImportTaskParams, TaskSubmissionResponse>('/api/tasks/import', { method: 'post' });
+const submitImportByPath = createRequest<ImportTaskParams, TaskSubmissionResponse>('/api/tasks/import', {
+  method: 'post',
+});
+const submitImportUpload = createRequest<{ file: File; request: Blob }, TaskSubmissionResponse>(
+  '/api/tasks/import/upload',
+  {
+    method: 'post',
+    contentType: 'formData',
+  },
+);
+
+const submitImport = (params: ImportTaskParams) => {
+  const transport = resolveImportTaskTransport(params, isDesktop);
+  return transport.kind === 'upload'
+    ? submitImportUpload(transport.params)
+    : submitImportByPath(transport.params as ImportTaskParams);
+};
 
 const getTaskList = createRequest<TaskListParams, IPageResponse<ImportExportTaskDetails>>('/api/tasks/list', {
   method: 'get',

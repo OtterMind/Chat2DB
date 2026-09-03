@@ -11,6 +11,7 @@ import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
+import { createPendingSubmissionGuard } from '../../submissionGuard';
 
 interface IProps {
   className?: string;
@@ -21,6 +22,8 @@ export default memo<IProps>((_props) => {
   const importExportFileRef = useRef<ImportExportFileRef>(null);
   const [taskId, setTaskId] = useState<number>();
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionGuard = useRef(createPendingSubmissionGuard()).current;
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
     return {
@@ -40,12 +43,20 @@ export default memo<IProps>((_props) => {
   const handleRunSQl = () => {
     const params = importExportFileRef.current?.getValues();
     if (!params) return;
-    const request =
-      'sourceFile' in params ? importExportServices.submitImport(params) : importExportServices.submitExport(params);
-    request.then((res) => {
-      setTaskId(res.taskId);
-      getTaskList();
+    const submission = submissionGuard.run(async () => {
+      setIsSubmitting(true);
+      try {
+        const response =
+          'sourceFile' in params
+            ? await importExportServices.submitImport(params)
+            : await importExportServices.submitExport(params);
+        setTaskId(response.taskId);
+        getTaskList();
+      } finally {
+        setIsSubmitting(false);
+      }
     });
+    void submission?.catch(() => undefined);
   };
 
   const renderFooter = () => {
@@ -54,13 +65,14 @@ export default memo<IProps>((_props) => {
         footerRight={
           <>
             <Button
+              disabled={isSubmitting}
               onClick={() => {
                 setImportExportDataBoundInfo(null);
               }}
             >
               {i18n('common.button.cancel')}
             </Button>
-            <Button type="primary" disabled={!isReady} onClick={handleRunSQl}>
+            <Button type="primary" loading={isSubmitting} disabled={!isReady || isSubmitting} onClick={handleRunSQl}>
               {i18n('common.button.start')}
             </Button>
           </>
@@ -124,7 +136,9 @@ export default memo<IProps>((_props) => {
       footer={taskId ? logRenderFooter() : renderFooter()}
       maskClosable={false}
       onCancel={() => {
-        setImportExportDataBoundInfo(null);
+        if (!isSubmitting) {
+          setImportExportDataBoundInfo(null);
+        }
       }}
     >
       {taskId ? (

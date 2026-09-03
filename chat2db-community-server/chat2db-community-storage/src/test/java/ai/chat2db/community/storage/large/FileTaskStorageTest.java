@@ -130,6 +130,24 @@ class FileTaskStorageTest {
     }
 
     @Test
+    void taskCreationPersistsAllInitialEventsBeforePublishingTheSnapshot() {
+        FileTaskStorage storage = storage();
+        TaskEvent createdEvent = event(TaskEventCode.TASK_CREATED.name());
+        TaskEvent inputEvent = event(TaskEventCode.TASK_INPUT_STAGED.name());
+        inputEvent.setDetails(Map.of(
+                TaskConstants.TEMPORARY_INPUT_PATH_DETAIL_KEY, "managed-input",
+                TaskConstants.TEMPORARY_INPUT_TOKEN_DETAIL_KEY, "cleanup-token"));
+
+        Task created = storage.create(task("import"), List.of(createdEvent, inputEvent));
+
+        assertEquals(List.of(1L, 2L), sequences(storage.listEvents(created.getId(), 0, 10)));
+        FileTaskStorage reloaded = storage();
+        assertTrue(reloaded.get(created.getId()).isPresent());
+        assertEquals(List.of(TaskEventCode.TASK_CREATED.name(), TaskEventCode.TASK_INPUT_STAGED.name()),
+                reloaded.listEvents(created.getId(), 0, 10).stream().map(TaskEvent::getCode).toList());
+    }
+
+    @Test
     void compareAndSetEnforcesLegalTransitionsAndTerminalImmutability() {
         FileTaskStorage storage = storage();
         Task created = create(storage, "task");

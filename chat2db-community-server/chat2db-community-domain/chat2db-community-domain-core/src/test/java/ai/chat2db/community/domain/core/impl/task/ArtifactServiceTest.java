@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -76,11 +77,55 @@ class ArtifactServiceTest {
                 .artifactId(artifact.toString())
                 .build());
 
-        new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L);
+        service(storage, new ArtifactService()).delete(1L);
 
         assertFalse(Files.exists(artifact));
         assertTrue(storage.deleted);
         assertTrue(storage.get(1L).isEmpty());
+    }
+
+    @Test
+    void taskInputCleanupRunsBeforeArtifactAndTaskDeletion() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("ordered.csv"), "value");
+        RecordingTaskStorage storage = new RecordingTaskStorage(Task.builder()
+                .id(1L)
+                .status(TaskStatus.SUCCESS.name())
+                .artifactId(artifact.toString())
+                .build());
+        List<String> actions = new ArrayList<>();
+        ArtifactService artifactService = new ArtifactService() {
+            @Override
+            PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
+                actions.add("artifact");
+                return super.stagePublishedDeletion(artifactId);
+            }
+        };
+
+        service(storage, artifactService, taskId -> {
+            actions.add("input");
+            return true;
+        }).delete(1L);
+
+        assertEquals(List.of("input", "artifact"), actions);
+        assertTrue(storage.get(1L).isEmpty());
+    }
+
+    @Test
+    void taskInputCleanupFailurePreservesTaskAndPublishedArtifact() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("input-cleanup-failure.csv"), "value");
+        RecordingTaskStorage storage = new RecordingTaskStorage(Task.builder()
+                .id(1L)
+                .status(TaskStatus.SUCCESS.name())
+                .artifactId(artifact.toString())
+                .build());
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> service(storage, new ArtifactService(), taskId -> false).delete(1L));
+
+        assertEquals(TaskConstants.DELETE_INPUT_FAILED_MESSAGE_CODE, exception.getCode());
+        assertTrue(Files.exists(artifact));
+        assertTrue(storage.get(1L).isPresent());
+        assertFalse(storage.deleted);
     }
 
     @Test
@@ -94,7 +139,7 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> service(storage, new ArtifactService()).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE, exception.getCode());
         assertFalse(storage.deleted);
@@ -112,7 +157,7 @@ class ArtifactServiceTest {
         storage.failDeletion = true;
 
         assertThrows(IllegalStateException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> service(storage, new ArtifactService()).delete(1L));
 
         assertEquals("value", Files.readString(artifact));
         assertTrue(storage.get(1L).isPresent());
@@ -134,7 +179,7 @@ class ArtifactServiceTest {
         };
 
         assertThrows(IllegalStateException.class,
-                () -> new TaskServiceImpl(storage, null, artifactService).delete(1L));
+                () -> service(storage, artifactService).delete(1L));
 
         assertEquals("value", Files.readString(artifact));
         assertTrue(storage.get(1L).isPresent());
@@ -148,7 +193,7 @@ class ArtifactServiceTest {
                 .status(TaskStatus.SUCCESS.name())
                 .artifactId(artifact.toString())
                 .build());
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = service(storage, new ArtifactService());
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger deleted = new AtomicInteger();
@@ -200,11 +245,20 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> service(storage, new ArtifactService()).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE, exception.getCode());
         assertTrue(Files.exists(artifact));
         assertFalse(storage.deleted);
+    }
+
+    private TaskServiceImpl service(RecordingTaskStorage storage, ArtifactService artifactService) {
+        return service(storage, artifactService, taskId -> true);
+    }
+
+    private TaskServiceImpl service(RecordingTaskStorage storage, ArtifactService artifactService,
+            TaskInputCleanupCoordinator cleanupCoordinator) {
+        return new TaskServiceImpl(storage, null, artifactService, cleanupCoordinator);
     }
 
     private static final class RecordingTaskStorage implements TaskStorage {
@@ -245,7 +299,7 @@ class ArtifactServiceTest {
         }
 
         @Override
-        public Task create(Task task, TaskEvent createdEvent) {
+        public Task create(Task task, List<TaskEvent> initialEvents) {
             throw new UnsupportedOperationException();
         }
 

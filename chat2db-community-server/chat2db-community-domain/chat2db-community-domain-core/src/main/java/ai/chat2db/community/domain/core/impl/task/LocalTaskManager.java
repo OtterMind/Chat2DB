@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Component
-public class LocalTaskManager {
+public class LocalTaskManager implements TaskInputCleanupCoordinator {
 
     private static final long EXIT_TASK_WAIT_MILLIS = 2000L;
 
@@ -58,6 +58,8 @@ public class LocalTaskManager {
 
     private final TaskExtensionManager taskExtensionManager;
 
+    private final TaskInputCleanup taskInputCleanup;
+
     private final RunningTaskRegistry runningTaskRegistry = new RunningTaskRegistry();
 
     private final ThreadPoolExecutor executor;
@@ -68,7 +70,7 @@ public class LocalTaskManager {
 
     public LocalTaskManager(TaskStorage taskStorage, TaskExecutorRegistry taskExecutorRegistry,
             ArtifactService artifactService, ConnectionContextConverter connectionContextConverter,
-            TaskExtensionManager taskExtensionManager,
+            TaskExtensionManager taskExtensionManager, TaskInputCleanup taskInputCleanup,
             @Value("${chat2db.task.max-concurrency:4}") int maxConcurrency,
             @Value("${chat2db.task.queue-capacity:100}") int queueCapacity) {
         this.taskStorage = taskStorage;
@@ -76,6 +78,7 @@ public class LocalTaskManager {
         this.artifactService = artifactService;
         this.connectionContextConverter = connectionContextConverter;
         this.taskExtensionManager = taskExtensionManager;
+        this.taskInputCleanup = taskInputCleanup;
         int concurrency = Math.max(1, maxConcurrency);
         int capacity = Math.max(1, queueCapacity);
         this.executor = new ThreadPoolExecutor(concurrency, concurrency, 0L, TimeUnit.MILLISECONDS,
@@ -94,6 +97,7 @@ public class LocalTaskManager {
                     && isTerminationError(task.getErrorCode())) {
                 cleanupInterruptedArtifacts(task.getId());
             }
+            cleanupTaskInput(task.getId());
         }
     }
 
@@ -104,7 +108,13 @@ public class LocalTaskManager {
             if (preparingForExit) {
                 throw new RejectedExecutionException("The application is preparing to exit");
             }
-            Task persistedTask = taskStorage.create(task, createdEvent);
+            List<TaskEvent> initialEvents = new ArrayList<>();
+            initialEvents.add(createdEvent);
+            TaskEvent inputStagedEvent = temporaryInputStagedEvent(spec);
+            if (inputStagedEvent != null) {
+                initialEvents.add(inputStagedEvent);
+            }
+            Task persistedTask = taskStorage.create(task, initialEvents);
             TaskSubmissionContext extensionContext = extensionContext(persistedTask, spec, connectInfo);
             try {
                 taskExtensionManager.capture(extensionContext);
@@ -192,6 +202,7 @@ public class LocalTaskManager {
                         tasksToAwait.add(runningTask);
                     } else {
                         runningTask.close();
+                        runningTask.cleanupInput();
                         runningTask.markFinished();
                         runningTaskRegistry.remove(task.getId(), runningTask);
                     }
@@ -279,6 +290,70 @@ public class LocalTaskManager {
         }
     }
 
+    @Override
+    public boolean cleanupTaskInput(Long taskId) {
+        long afterSequence = 0L;
+        String sourceFile = null;
+        String cleanupToken = null;
+        boolean cleanupCompleted = false;
+        while (true) {
+            List<TaskEvent> events = taskStorage.listEvents(taskId, afterSequence, TaskConstants.MAX_EVENT_LIMIT);
+            if (events.isEmpty()) {
+                break;
+            }
+            for (TaskEvent event : events) {
+                if (TaskEventCode.TASK_INPUT_STAGED.name().equals(event.getCode())) {
+                    sourceFile = detail(event.getDetails(), TaskConstants.TEMPORARY_INPUT_PATH_DETAIL_KEY);
+                    cleanupToken = detail(event.getDetails(), TaskConstants.TEMPORARY_INPUT_TOKEN_DETAIL_KEY);
+                    cleanupCompleted = false;
+                } else if (TaskEventCode.TASK_INPUT_CLEANUP_COMPLETED.name().equals(event.getCode())) {
+                    cleanupCompleted = true;
+                }
+            }
+            long nextSequence = events.get(events.size() - 1).getSequence();
+            if (nextSequence <= afterSequence || events.size() < TaskConstants.MAX_EVENT_LIMIT) {
+                break;
+            }
+            afterSequence = nextSequence;
+        }
+        if (sourceFile == null) {
+            return true;
+        }
+        TaskInputCleanup.InputReference reference = new TaskInputCleanup.InputReference(sourceFile, cleanupToken);
+        if (taskInputCleanup.delete(reference)) {
+            if (!cleanupCompleted) {
+                appendInputCleanupCompleted(taskId);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private TaskEvent temporaryInputStagedEvent(TaskSpec spec) {
+        TaskInputCleanup.InputReference reference = taskInputCleanup.reference(spec);
+        if (reference == null) {
+            return null;
+        }
+        return TaskEvent.builder()
+                .level(TaskEventLevel.INFO.name())
+                .code(TaskEventCode.TASK_INPUT_STAGED.name())
+                .message("Temporary task input staged")
+                .details(Map.of(
+                        TaskConstants.TEMPORARY_INPUT_PATH_DETAIL_KEY, reference.sourceFile(),
+                        TaskConstants.TEMPORARY_INPUT_TOKEN_DETAIL_KEY, reference.cleanupToken()))
+                .build();
+    }
+
+    private void appendInputCleanupCompleted(Long taskId) {
+        taskStorage.appendEvent(TaskEvent.builder()
+                .taskId(taskId)
+                .level(TaskEventLevel.INFO.name())
+                .code(TaskEventCode.TASK_INPUT_CLEANUP_COMPLETED.name())
+                .message("Temporary task input cleaned")
+                .details(Collections.emptyMap())
+                .build());
+    }
+
     private String detail(Map<String, Object> details, String key) {
         if (details == null || details.get(key) == null) {
             return null;
@@ -318,7 +393,8 @@ public class LocalTaskManager {
     private <S extends TaskSpec> void schedule(Task task, S spec, Context context, ConnectInfo connectInfo,
             TaskExecutionContext extensionContext) {
         TaskExecutor<S> taskExecutor = taskExecutorRegistry.require(spec);
-        RunningTask runningTask = new RunningTask(task.getId());
+        RunningTask runningTask = new RunningTask(task.getId(),
+                taskInputCleanup.forSpec(spec, () -> appendInputCleanupCompleted(task.getId())));
         TaskSubmission<S> submission = new TaskSubmission<>(task.getId(), spec, context,
                 connectInfo == null ? null : connectInfo.copy(), extensionContext);
         TaskRunner<S> taskRunner = new TaskRunner<>(submission, runningTask, runningTaskRegistry, taskStorage,
@@ -331,6 +407,7 @@ public class LocalTaskManager {
         } catch (RejectedExecutionException e) {
             runningTaskRegistry.remove(task.getId(), runningTask);
             runningTask.close();
+            runningTask.cleanupInput();
             runningTask.markFinished();
             Date now = new Date();
             taskStorage.compareAndSetStatus(task.getId(), TaskStatus.PENDING.name(), TaskStatus.FAILED.name(),

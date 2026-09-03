@@ -13,7 +13,11 @@ import java.util.Optional;
 
 public interface TaskStorage {
 
-    Task create(Task task, TaskEvent createdEvent);
+    Task create(Task task, List<TaskEvent> initialEvents);
+
+    default Task create(Task task, TaskEvent createdEvent) {
+        return create(task, List.of(createdEvent));
+    }
 
     Optional<Task> get(Long taskId);
 

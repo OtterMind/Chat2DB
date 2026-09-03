@@ -64,6 +64,16 @@ public class TaskWebConverter {
                 .build();
     }
 
+    public ImportTaskSpec importUploadRequest2spec(TaskImportRequest request, String sourceFile,
+            String cleanupToken, String displayFileName) {
+        ImportTaskSpec spec = importRequest2spec(request);
+        spec.setSourceFile(sourceFile);
+        spec.setDisplayFileName(StringUtils.defaultIfBlank(displayFileName, spec.getDisplayFileName()));
+        spec.setTemporarySourceFile(true);
+        spec.setTemporarySourceToken(cleanupToken);
+        return spec;
+    }
+
     private String resolveExportTaskType(TaskExportRequest request) {
         if (StringUtils.isNotBlank(request.getTaskType())) {
             TaskType taskType = TaskType.valueOf(normalize(request.getTaskType()));

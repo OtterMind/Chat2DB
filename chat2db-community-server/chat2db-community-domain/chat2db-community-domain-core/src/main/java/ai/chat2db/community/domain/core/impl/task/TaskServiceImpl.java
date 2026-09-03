@@ -42,10 +42,15 @@ public class TaskServiceImpl implements TaskService {
 
     private final ArtifactService artifactService;
 
-    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService) {
+    private final TaskInputCleanupCoordinator taskInputCleanupCoordinator;
+
+    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService,
+            TaskInputCleanupCoordinator taskInputCleanupCoordinator) {
         this.taskStorage = taskStorage;
         this.localTaskManager = localTaskManager;
         this.artifactService = artifactService;
+        this.taskInputCleanupCoordinator = Objects.requireNonNull(
+                taskInputCleanupCoordinator, "taskInputCleanupCoordinator");
     }
 
     @Override
@@ -100,6 +105,9 @@ public class TaskServiceImpl implements TaskService {
             }
             if (!TaskStatus.isTerminal(task.getStatus())) {
                 throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
+            }
+            if (!taskInputCleanupCoordinator.cleanupTaskInput(taskId)) {
+                throw new BusinessException(TaskConstants.DELETE_INPUT_FAILED_MESSAGE_CODE);
             }
             ArtifactService.PublishedArtifactDeletion deletion =
                     artifactService.stagePublishedDeletion(task.getArtifactId());

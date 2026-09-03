@@ -1,12 +1,13 @@
 import { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
-import UploadLocalFile from '@/components/UploadLocalFile';
+import UploadLocalFile, { FileUrl } from '@/components/UploadLocalFile';
 import { Form, Input } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
 import { isDevelopment } from '@/utils/env';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 import { ImportTaskParams } from '@/service/importExport';
+import { resolveLocalImportSource } from '@/utils/localImportFile';
 
 interface IProps {
   className?: string;
@@ -32,7 +33,7 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   const { setIsReady } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [fileUrlList, setFileUrlList] = useState<FileUrl[]>([]);
   const [formValues, setFormValues] = useState<any>({});
 
   useEffect(() => {
@@ -65,19 +66,20 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
     getValues: () => {
       if (!runSqlBoundInfo) return null;
       const { dataSourceId, databaseName, schemaName } = runSqlBoundInfo;
+      const importSource = resolveLocalImportSource(fileUrlList[0], formValues.fileUrl || '');
       return {
         dataSourceId,
         databaseName,
         schemaName,
         taskType: ImportExportTaskType.SQL_FILE_IMPORT,
-        sourceFile: fileUrlList[0] || formValues.fileUrl,
+        ...importSource,
         format: ImportExportFileType.SQL,
       };
     },
   }));
 
-  const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+  const handleFileUrlListChange = (_fileUrlList: FileUrl[]) => {
+    setFileUrlList(_fileUrlList);
   };
 
   return (
