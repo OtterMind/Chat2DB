@@ -16,6 +16,33 @@ export interface TaskNotificationCursor {
   taskId: number;
 }
 
+export interface TaskListLoadMoreRequest {
+  stateGeneration: number;
+  requestGeneration: number;
+}
+
+export const createTaskListRequestCoordinator = () => {
+  let stateGeneration = 0;
+  let loadMoreRequestGeneration = 0;
+
+  return {
+    invalidateState: () => {
+      stateGeneration += 1;
+    },
+    beginLoadMoreRequest: (): TaskListLoadMoreRequest => {
+      loadMoreRequestGeneration += 1;
+      return {
+        stateGeneration,
+        requestGeneration: loadMoreRequestGeneration,
+      };
+    },
+    canApplyLoadMoreResponse: (request: TaskListLoadMoreRequest) =>
+      request.stateGeneration === stateGeneration && request.requestGeneration === loadMoreRequestGeneration,
+    isLatestLoadMoreRequest: (request: TaskListLoadMoreRequest) =>
+      request.requestGeneration === loadMoreRequestGeneration,
+  };
+};
+
 const TERMINAL_TASK_STATUSES = new Set([
   ImportExportTaskStatus.SUCCESS,
   ImportExportTaskStatus.FAILED,

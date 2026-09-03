@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import {
+  createTaskListRequestCoordinator,
   FAILED_TASK_POLL_INTERVAL,
   getTaskPollingDelay,
   listAllTasksByStatus,
@@ -37,6 +38,14 @@ const task = (
   progress,
   createdAt,
 });
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
 
 async function testActiveTaskPagination() {
   const requestedPages: number[] = [];
@@ -171,8 +180,57 @@ function testCompletedTaskNotifications() {
   assert.deepEqual(afterDeletion.newlyCompletedTaskIds, []);
 }
 
+async function testStaleLoadMoreCannotResurrectDeletedTask() {
+  const coordinator = createTaskListRequestCoordinator();
+  const deletedTask = task(1, ImportExportTaskStatus.SUCCESS, '2026-08-06T10:00:00Z', 100);
+  const response = deferred<ImportExportTaskDetails[]>();
+  const request = coordinator.beginLoadMoreRequest();
+  let tasks: ImportExportTaskDetails[] = [deletedTask];
+  const loadMore = response.promise.then((incomingTasks) => {
+    if (coordinator.canApplyLoadMoreResponse(request)) {
+      tasks = mergeTasks(incomingTasks);
+    }
+  });
+
+  coordinator.invalidateState();
+  tasks = [];
+  response.resolve([deletedTask]);
+  await loadMore;
+
+  assert.deepEqual(tasks, []);
+  assert.equal(coordinator.isLatestLoadMoreRequest(request), true);
+}
+
+async function testStaleLoadMoreCannotOverwriteNewerPollingState() {
+  const coordinator = createTaskListRequestCoordinator();
+  const runningTask = task(1, ImportExportTaskStatus.RUNNING, '2026-08-06T10:00:00Z', 75);
+  const completedTask = { ...runningTask, status: ImportExportTaskStatus.SUCCESS, progress: 100 };
+  const response = deferred<ImportExportTaskDetails[]>();
+  const staleRequest = coordinator.beginLoadMoreRequest();
+  let tasks: ImportExportTaskDetails[] = [runningTask];
+  const loadMore = response.promise.then((incomingTasks) => {
+    if (coordinator.canApplyLoadMoreResponse(staleRequest)) {
+      tasks = mergeTasks(incomingTasks);
+    }
+  });
+
+  coordinator.invalidateState();
+  tasks = [completedTask];
+  response.resolve([runningTask]);
+  await loadMore;
+
+  assert.equal(tasks[0].status, ImportExportTaskStatus.SUCCESS);
+
+  const olderRequest = coordinator.beginLoadMoreRequest();
+  const latestRequest = coordinator.beginLoadMoreRequest();
+  assert.equal(coordinator.canApplyLoadMoreResponse(olderRequest), false);
+  assert.equal(coordinator.canApplyLoadMoreResponse(latestRequest), true);
+}
+
 void testActiveTaskPagination().then(async () => {
   await testCompletedTrackedTaskOutsideRecentPage();
+  await testStaleLoadMoreCannotResurrectDeletedTask();
+  await testStaleLoadMoreCannotOverwriteNewerPollingState();
   testTaskMerge();
   testEventMerge();
   testPollingDelay();

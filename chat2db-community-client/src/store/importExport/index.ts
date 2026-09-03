@@ -7,6 +7,7 @@ import { ImportExportDataBoundInfo, ImportExportTaskDetails } from '@/typings/im
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import importExportServices from '@/service/importExport';
 import {
+  createTaskListRequestCoordinator,
   getTaskPollingDelay,
   listAllTasksByStatus,
   loadMissingTrackedTasks,
@@ -20,6 +21,7 @@ import {
 } from './taskCenterUtils';
 
 let taskListRequestGeneration = 0;
+const taskListRequestCoordinator = createTaskListRequestCoordinator();
 
 interface ImportExportState {
   runSqlBoundInfo: IDatabaseBaseInfo | null;
@@ -90,6 +92,7 @@ export const createImportExportAction: StateCreator<
   },
   getTaskList: () => {
     const requestGeneration = ++taskListRequestGeneration;
+    taskListRequestCoordinator.invalidateState();
     const previousActiveTaskIds = get().activeTaskIds;
     // clear timer
     const { getTaskListTimer } = get();
@@ -113,6 +116,7 @@ export const createImportExportAction: StateCreator<
           importExportServices.getTaskDetails,
         );
         if (requestGeneration !== taskListRequestGeneration) return;
+        taskListRequestCoordinator.invalidateState();
         const taskList = mergeTasks(visibleTasks, recovered.tasks);
         const recoveredActiveTaskIds = recovered.tasks
           .filter((task) => [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING].includes(task.status))
@@ -169,10 +173,12 @@ export const createImportExportAction: StateCreator<
       return Promise.resolve();
     }
     const nextPageSize = taskListPageSize + TASK_CENTER_PAGE_SIZE;
+    const loadMoreRequest = taskListRequestCoordinator.beginLoadMoreRequest();
     set({ taskListLoadingMore: true });
     return importExportServices
       .getTaskList({ pageNo: 1, pageSize: nextPageSize })
       .then((page) => {
+        if (!taskListRequestCoordinator.canApplyLoadMoreResponse(loadMoreRequest)) return;
         const activeStatuses = new Set<ImportExportTaskStatus>([
           ImportExportTaskStatus.PENDING,
           ImportExportTaskStatus.RUNNING,
@@ -184,10 +190,15 @@ export const createImportExportAction: StateCreator<
           taskListHasNextPage: page.hasNextPage === true,
         });
       })
-      .finally(() => set({ taskListLoadingMore: false }));
+      .finally(() => {
+        if (taskListRequestCoordinator.isLatestLoadMoreRequest(loadMoreRequest)) {
+          set({ taskListLoadingMore: false });
+        }
+      });
   },
   stopTaskListPolling: () => {
     taskListRequestGeneration += 1;
+    taskListRequestCoordinator.invalidateState();
     const { getTaskListTimer } = get();
     if (getTaskListTimer) {
       clearTimeout(getTaskListTimer);
@@ -195,6 +206,7 @@ export const createImportExportAction: StateCreator<
     }
   },
   removeTask: (taskId) => {
+    taskListRequestCoordinator.invalidateState();
     const state = get();
     const taskStatusById = { ...state.taskStatusById };
     delete taskStatusById[String(taskId)];
@@ -213,6 +225,9 @@ export const createImportExportAction: StateCreator<
   },
   setTaskCenterOpen: (open) => {
     const state = get();
+    if (!open) {
+      taskListRequestCoordinator.invalidateState();
+    }
     if (!open && state.activeTaskIds.length === 0) {
       taskListRequestGeneration += 1;
       if (state.getTaskListTimer) {
