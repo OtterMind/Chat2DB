@@ -161,42 +161,51 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     public synchronized AiModelConfigResponse saveCurrentUserConfig(AiModelConfigSaveRequest request) {
         Long userId = identityService.currentUserId();
-        List<AiModelConfig> configs = userConfigMap.computeIfAbsent(userId, key -> new ArrayList<>());
+        boolean hadUserConfigs = userConfigMap.containsKey(userId);
+        List<AiModelConfig> previousConfigs = copyConfigs(userConfigMap.get(userId));
+        AiModelConfig config;
+        try {
+            List<AiModelConfig> configs = userConfigMap.computeIfAbsent(userId, key -> new ArrayList<>());
 
-        AiModelConfig config = findById(configs, request.getId());
-        boolean isNew = Objects.isNull(config);
-        if (isNew) {
-            config = new AiModelConfig();
-            config.setId(StringUtils.defaultIfBlank(request.getId(), UUID.randomUUID().toString()));
-            config.setUserId(userId);
-            config.setGmtCreate(LocalDateTime.now());
-            configs.add(config);
+            config = findById(configs, request.getId());
+            boolean isNew = Objects.isNull(config);
+            if (isNew) {
+                config = new AiModelConfig();
+                config.setId(StringUtils.defaultIfBlank(request.getId(), UUID.randomUUID().toString()));
+                config.setUserId(userId);
+                config.setGmtCreate(LocalDateTime.now());
+                configs.add(config);
+            }
+
+            String originalApiKey = config.getApiKey();
+            updateModelConfig(request, config);
+            config.setEnabled(defaultBoolean(config.getEnabled(), Boolean.TRUE));
+            config.setDefaultConfig(defaultBoolean(config.getDefaultConfig(), Boolean.FALSE));
+            config.setGmtModified(LocalDateTime.now());
+
+            if (StringUtils.isBlank(request.getApiKey()) && StringUtils.isNotBlank(originalApiKey)) {
+                config.setApiKey(originalApiKey);
+            } else if (StringUtils.isNotBlank(request.getApiKey())) {
+                config.setApiKey(request.getApiKey().trim());
+            }
+
+            if (Boolean.TRUE.equals(config.getDefaultConfig())) {
+                String currentId = config.getId();
+                configs.forEach(item -> {
+                    if (!Objects.equals(currentId, item.getId())) {
+                        item.setDefaultConfig(Boolean.FALSE);
+                    }
+                });
+            } else if (CollectionUtils.isNotEmpty(configs)
+                    && configs.stream().noneMatch(c -> Boolean.TRUE.equals(c.getDefaultConfig()))) {
+                configs.get(0).setDefaultConfig(Boolean.TRUE);
+            }
+
+            persistToDisk();
+        } catch (RuntimeException e) {
+            restoreUserConfigs(userId, hadUserConfigs, previousConfigs);
+            throw e;
         }
-
-        String originalApiKey = config.getApiKey();
-        updateModelConfig(request, config);
-        config.setEnabled(defaultBoolean(config.getEnabled(), Boolean.TRUE));
-        config.setDefaultConfig(defaultBoolean(config.getDefaultConfig(), Boolean.FALSE));
-        config.setGmtModified(LocalDateTime.now());
-
-        if (StringUtils.isBlank(request.getApiKey()) && StringUtils.isNotBlank(originalApiKey)) {
-            config.setApiKey(originalApiKey);
-        } else if (StringUtils.isNotBlank(request.getApiKey())) {
-            config.setApiKey(request.getApiKey().trim());
-        }
-
-        if (Boolean.TRUE.equals(config.getDefaultConfig())) {
-            String currentId = config.getId();
-            configs.forEach(item -> {
-                if (!Objects.equals(currentId, item.getId())) {
-                    item.setDefaultConfig(Boolean.FALSE);
-                }
-            });
-        } else if (CollectionUtils.isNotEmpty(configs) && configs.stream().noneMatch(c -> Boolean.TRUE.equals(c.getDefaultConfig()))) {
-            configs.get(0).setDefaultConfig(Boolean.TRUE);
-        }
-
-        persistToDisk();
         return aiModelConfigConverter.toMaskedResponse(config);
     }
 
@@ -206,12 +215,40 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         if (CollectionUtils.isEmpty(configs)) {
             return;
         }
-        boolean removedDefault = configs.stream().anyMatch(c -> Objects.equals(c.getId(), id) && Boolean.TRUE.equals(c.getDefaultConfig()));
-        configs.removeIf(c -> Objects.equals(c.getId(), id));
-        if (removedDefault && CollectionUtils.isNotEmpty(configs)) {
-            configs.get(0).setDefaultConfig(Boolean.TRUE);
+        List<AiModelConfig> previousConfigs = copyConfigs(configs);
+        try {
+            boolean removedDefault = configs.stream()
+                    .anyMatch(c -> Objects.equals(c.getId(), id) && Boolean.TRUE.equals(c.getDefaultConfig()));
+            configs.removeIf(c -> Objects.equals(c.getId(), id));
+            if (removedDefault && CollectionUtils.isNotEmpty(configs)) {
+                configs.get(0).setDefaultConfig(Boolean.TRUE);
+            }
+            persistToDisk();
+        } catch (RuntimeException e) {
+            userConfigMap.put(userId, previousConfigs);
+            throw e;
         }
-        persistToDisk();
+    }
+
+    private List<AiModelConfig> copyConfigs(List<AiModelConfig> configs) {
+        if (configs == null) {
+            return null;
+        }
+        return configs.stream().map(this::copyConfig).collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private AiModelConfig copyConfig(AiModelConfig config) {
+        AiModelConfig copy = new AiModelConfig();
+        BeanUtils.copyProperties(config, copy);
+        return copy;
+    }
+
+    private void restoreUserConfigs(Long userId, boolean hadUserConfigs, List<AiModelConfig> previousConfigs) {
+        if (hadUserConfigs) {
+            userConfigMap.put(userId, previousConfigs);
+        } else {
+            userConfigMap.remove(userId);
+        }
     }
 
     public ModelConfigTestResponse testModelConfig(AiModelConfigSaveRequest request) {
