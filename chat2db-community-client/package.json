@@ -177,7 +177,7 @@
     "@typescript-eslint/parser": "^6.7.2",
     "@umijs/plugins": "^4.0.55",
     "concurrently": "^8.1.0",
-    "cross-env": "^7.0.3",
+    "cross-env": "^10.1.0",
     "eslint": "^8.49.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-prettier": "^9.0.0",
