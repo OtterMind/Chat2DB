@@ -1,7 +1,7 @@
 import { produce } from 'immer';
 import type { StateCreator } from 'zustand/vanilla';
 import { WorkspaceStore } from '../../store';
-import { ConfigState, initConfigState } from './initialState';
+import { ConfigState, nextPanelLeftLayout } from './initialState';
 
 export interface ConfigAction {
   togglePanelRight: (show?: boolean) => void;
@@ -23,9 +23,10 @@ export const createConfigAction: StateCreator<WorkspaceStore, [['zustand/devtool
   togglePanelLeft: () => {
     set(
       produce((state: ConfigState) => {
-        const show = state.layout.panelLeftWidth === 0;
-        state.layout.panelLeft = show;
-        state.layout.panelLeftWidth = show ? initConfigState.layout.panelLeftWidth : 0;
+        const next = nextPanelLeftLayout(state.layout);
+        state.layout.panelLeft = next.panelLeft;
+        state.layout.panelLeftWidth = next.panelLeftWidth;
+        state.layout.lastPanelLeftWidth = next.lastPanelLeftWidth;
       }),
     );
   },
@@ -34,6 +35,9 @@ export const createConfigAction: StateCreator<WorkspaceStore, [['zustand/devtool
       produce((state: ConfigState) => {
         state.layout.panelLeftWidth = width;
         state.layout.panelLeft = width > 0;
+        if (width > 0) {
+          state.layout.lastPanelLeftWidth = width;
+        }
       }),
     );
   },
