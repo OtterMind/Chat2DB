@@ -56,6 +56,7 @@ export default defineConfig({
             { path: '/dashboard/share/:dashboardId', component: mainComponent },
             { path: '/dashboard/:dashboardId', component: mainComponent },
             { path: '/dashboard', component: mainComponent },
+            { path: '/sessions', component: mainComponent },
             { path: '/stream/:chatId', component: mainComponent },
             { path: '/stream', component: mainComponent },
             { path: '/workspace', component: mainComponent },

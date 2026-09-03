@@ -1,12 +1,10 @@
 package ai.chat2db.plugin.mysql.enums.type;
 
 import ai.chat2db.community.domain.api.model.metadata.EngineType;
-import lombok.Getter;
 
 import java.util.Arrays;
 import java.util.List;
 
-@Getter
 public enum MysqlEngineTypeEnum {
 
     INNODB("InnoDB"),
@@ -23,6 +21,10 @@ public enum MysqlEngineTypeEnum {
 
     MysqlEngineTypeEnum(String name) {
         this.engineType = new EngineType(name, false, false, false, false, false, false, false, false);
+    }
+
+    public EngineType getEngineType() {
+        return engineType;
     }
 
     public static List<EngineType> getEngineTypes() {

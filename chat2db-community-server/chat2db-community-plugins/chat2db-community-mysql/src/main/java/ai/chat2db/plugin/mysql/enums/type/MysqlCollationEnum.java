@@ -1,12 +1,10 @@
 package ai.chat2db.plugin.mysql.enums.type;
 
 import ai.chat2db.community.domain.api.model.metadata.Collation;
-import lombok.Getter;
 
 import java.util.Arrays;
 import java.util.List;
 
-@Getter
 public enum MysqlCollationEnum {
 
     UTF8_GENERAL_CI("utf8_general_ci"),
@@ -60,6 +58,9 @@ public enum MysqlCollationEnum {
         this.collation = new Collation(collationName);
     }
 
+    public Collation getCollation() {
+        return collation;
+    }
 
     public static List<Collation> getCollations() {
         return Arrays.stream(MysqlCollationEnum.values()).map(MysqlCollationEnum::getCollation).collect(java.util.stream.Collectors.toList());

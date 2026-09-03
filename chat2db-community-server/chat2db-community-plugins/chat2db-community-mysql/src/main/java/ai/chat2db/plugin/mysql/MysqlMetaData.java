@@ -27,8 +27,9 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.IResultSetFunction;
 import jakarta.validation.constraints.NotEmpty;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -48,8 +49,9 @@ import static ai.chat2db.plugin.mysql.constant.MysqlRoutineManageConstants.PROCE
 import static ai.chat2db.spi.util.SortUtils.sortDatabase;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlMetaDataConstants.*;
-@Slf4j
 public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
+
+    private static final Logger log = LoggerFactory.getLogger(MysqlMetaData.class);
 
     public static final ISQLIdentifierProcessor MYSQL_IDENTIFIER_PROCESSOR = MysqlIdentifierProcessor.INSTANCE;
 

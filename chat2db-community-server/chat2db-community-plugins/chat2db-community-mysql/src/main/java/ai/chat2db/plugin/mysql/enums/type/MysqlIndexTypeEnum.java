@@ -6,7 +6,6 @@ import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.IndexType;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
-import lombok.Getter;
 import ai.chat2db.spi.constant.SQLConstants;
 import org.apache.commons.lang3.StringUtils;
 
@@ -20,7 +19,6 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_INVISIBLE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_INDEX;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_VISIBLE;
 
-@Getter
 public enum MysqlIndexTypeEnum {
 
     PRIMARY_KEY("Primary", "PRIMARY KEY"),
@@ -51,6 +49,17 @@ public enum MysqlIndexTypeEnum {
         this.indexType = new IndexType(name);
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public String getKeyword() {
+        return keyword;
+    }
+
+    public IndexType getIndexType() {
+        return indexType;
+    }
 
     public static MysqlIndexTypeEnum getByType(String type) {
         for (MysqlIndexTypeEnum value : MysqlIndexTypeEnum.values()) {

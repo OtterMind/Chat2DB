@@ -9,6 +9,7 @@ import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.IRoutineManager;
+import ai.chat2db.spi.ISessionManager;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.spi.util.FileUtils;
 
@@ -48,6 +49,11 @@ public class MysqlPlugin extends MysqlSyntaxPlugin implements IPlugin {
     @Override
     public IActiveTransactionManager getActiveTransactionManager() {
         return new MysqlActiveTransactionManager();
+    }
+
+    @Override
+    public ISessionManager getSessionManager() {
+        return new MysqlSessionManager();
     }
 
     private static final class NativeMysqlMetaData extends MysqlMetaData {

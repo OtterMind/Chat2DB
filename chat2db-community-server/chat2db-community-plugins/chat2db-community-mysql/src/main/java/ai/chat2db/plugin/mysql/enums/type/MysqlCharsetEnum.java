@@ -1,12 +1,10 @@
 package ai.chat2db.plugin.mysql.enums.type;
 
 import ai.chat2db.community.domain.api.model.metadata.Charset;
-import lombok.Getter;
 
 import java.util.Arrays;
 import java.util.List;
 
-@Getter
 public enum MysqlCharsetEnum {
 
     UTF8("utf8", "utf8_general_ci"),
@@ -57,6 +55,9 @@ public enum MysqlCharsetEnum {
         this.charset = new Charset(charsetName, defaultCollationName);
     }
 
+    public Charset getCharset() {
+        return charset;
+    }
 
     public static List<Charset> getCharsets() {
         return Arrays.stream(MysqlCharsetEnum.values()).map(MysqlCharsetEnum::getCharset).collect(java.util.stream.Collectors.toList());

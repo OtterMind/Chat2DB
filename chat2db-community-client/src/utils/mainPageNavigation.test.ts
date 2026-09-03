@@ -29,6 +29,11 @@ assert.equal(
   'the persisted main page should be read from the Zustand storage payload',
 );
 assert.equal(
+  readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"sessions"}}'),
+  'sessions',
+  'the session monitor should be restorable as a main page',
+);
+assert.equal(
   readPersistedMainPageActiveTab('{"state":{"mainPageActiveTab":"settings"}}'),
   undefined,
   'non-navigation values should not be restored as a main page',
@@ -92,6 +97,11 @@ assert.deepEqual(
   resolveDesktopInitialMainPage('/settings/terminal', 'dashboard'),
   { page: 'settings', pathName: '/settings/terminal' },
   'a non-main explicit route should keep its full deep-link path',
+);
+assert.deepEqual(
+  resolveDesktopInitialMainPage('/sessions', 'workspace'),
+  { page: 'workspace', pathName: '/workspace' },
+  'a shallow session monitor route should restore the last selected desktop page',
 );
 assert.deepEqual(
   createMainRootRoute(true, '@/pages/main/CommunityMainPage'),

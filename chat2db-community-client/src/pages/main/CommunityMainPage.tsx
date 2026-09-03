@@ -22,6 +22,7 @@ import StreamSidebar from './components/StreamSidebar';
 import Dashboard from './dashboard';
 import { mergeNavigationItems } from '@/client-extension/merge';
 import { createCoreMainNavItems } from './navigationItems';
+import SessionMonitor from './sessions';
 import Workspace from './workspace';
 import Stream from '../stream';
 
@@ -53,6 +54,7 @@ function CommunityMainPage() {
         createCoreMainNavItems({
           stream: { component: <Stream />, name: i18n('stream.nav.title') },
           workspace: { component: <Workspace />, name: i18n('workspace.title') },
+          sessions: { component: <SessionMonitor />, name: i18n('sessionMonitor.nav.title') },
           dashboard: { component: <Dashboard />, name: i18n('dashboard.title') },
         }),
         clientExtension.navigationItems ?? [],

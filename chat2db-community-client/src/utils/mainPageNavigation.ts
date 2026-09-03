@@ -1,6 +1,6 @@
 export const DEFAULT_MAIN_PAGE_ACTIVE_TAB = 'workspace';
 
-const RESTORABLE_MAIN_PAGE_TABS = ['stream', 'workspace', 'dashboard'] as const;
+const RESTORABLE_MAIN_PAGE_TABS = ['stream', 'workspace', 'sessions', 'dashboard'] as const;
 const RESTORABLE_MAIN_PAGE_TAB_SET = new Set<string>(RESTORABLE_MAIN_PAGE_TABS);
 
 const normalizeMainPagePath = (routePath?: string) => {

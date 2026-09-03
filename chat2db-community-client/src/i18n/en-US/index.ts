@@ -18,6 +18,7 @@ import feedback from './feedback';
 import notification from './notification';
 import redis from './redis';
 import plugin from './plugin';
+import sessionMonitor from './sessionMonitor';
 
 export default {
   lang: LangType.EN_US,
@@ -40,4 +41,5 @@ export default {
   ...notification,
   ...redis,
   ...plugin,
+  ...sessionMonitor,
 };
