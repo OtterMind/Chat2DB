@@ -5,6 +5,11 @@ import { ErrorCodesWithoutToast } from '@/constants/request';
 import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
+import {
+  cleanupTrackedCommandLineRequest,
+  rejectTrackedCommandLineRequest,
+  settleTrackedCommandLineResponse,
+} from './requestSettlement';
 
 export interface ICommandLineRequest {
   requestUrl: string;
@@ -49,6 +54,15 @@ export const TIMEOUT = 300000;
 // TODO: must be deleted
 // window._PRINT_LOGS = true;
 
+const commandLineRequestRegistry = {
+  get: (id: string) => useGlobalStore.getState().commandLineRequestList[id],
+  remove: (id: string) => useGlobalStore.getState().removeCommandLineRequestListItem(id),
+  clearTimer: (timer: unknown) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+};
+
+export const rejectCommandLineRequest = (id: string, reason: unknown) =>
+  rejectTrackedCommandLineRequest(id, reason, commandLineRequestRegistry);
+
 // JCEF request requestJCEF
 export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptions) => {
   const language = useGlobalStore.getState().baseSetting.language;
@@ -84,7 +98,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       requestTimeoutTimer = setTimeout(() => {
         const item = useGlobalStore.getState().commandLineRequestList[id];
         if (item) {
-          useGlobalStore.getState().removeCommandLineRequestListItem(id);
+          cleanupTrackedCommandLineRequest(id, commandLineRequestRegistry);
           reject?.(`timeout_error:${item.requestData.requestUrl}`);
         }
       }, TIMEOUT);
@@ -100,20 +114,29 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
     };
     useGlobalStore.getState().addCommandLineRequestListItem(commandLineRequestListItem);
     if (typeof window.javaQuery === 'function') {
-      window.javaQuery({
-        request: JSON.stringify(res),
-        onSuccess: function (_data) {
-          // console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', _data);
-          pushMessageFlow(_data);
-        },
-        onFailure: function (error_code, error_message) {
-          alert(error_message);
-          console.log('error', error_message);
-          reject(error_message);
-        },
-      });
+      try {
+        window.javaQuery({
+          request: JSON.stringify(res),
+          onSuccess: function (_data) {
+            // console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', _data);
+            pushMessageFlow(_data);
+          },
+          onFailure: function (error_code, error_message) {
+            try {
+              alert(error_message);
+              console.log('error', error_code, error_message);
+            } finally {
+              rejectCommandLineRequest(id, error_message);
+            }
+          },
+        });
+      } catch (error) {
+        rejectCommandLineRequest(id, error);
+      }
     } else {
-      console.error("JCEF's javaQuery is not available!");
+      const error = new Error("JCEF's javaQuery is not available");
+      console.error(error.message);
+      rejectCommandLineRequest(id, error);
     }
   });
 };
@@ -124,7 +147,7 @@ export const pushMessageFlow = (_data) => {
   if (__PRINT_LOGS__ || window._PRINT_LOGS) {
     console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), data);
   }
-  const { setServiceStatus, commandLineRequestList, removeCommandLineRequestListItem } = useGlobalStore.getState();
+  const { setServiceStatus } = useGlobalStore.getState();
 
   // Special handling application startup
   if (data === 'CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS') {
@@ -133,52 +156,34 @@ export const pushMessageFlow = (_data) => {
   }
 
   // Only process logged requests
-  if (data?.uuid && commandLineRequestList?.[data.uuid]) {
+  if (data?.uuid) {
     const { message: messageData, uuid } = data;
-
-    const { errorCode, success, errorMessage, errorDetail, solutionLink, eventualUrl } = messageData || {};
-
-    const { resolve, reject, options, requestData, requestTimeoutTimer } = commandLineRequestList[uuid];
-
-    // Clear timeout timer
-    if (requestTimeoutTimer) {
-      clearTimeout(requestTimeoutTimer);
-    }
-
-    // response interception
-    responseInterceptor(messageData, requestData, options);
-    // Process request results
-    if (success) {
-      resolve?.(options.fullResponse ? messageData : messageData?.data);
-    } else {
-      reject({
-        errorCode: errorCode,
-        errorMessage: errorMessage,
-      });
-      // If there is no need to pop up the toast error code
-      if (ErrorCodesWithoutToast.includes(errorCode)) {
-        return;
-      }
-      switch (options.errorLevel) {
-        case 'toast':
-          staticMessage.error(errorMessage);
-          break;
-        case 'notification':
-          useGlobalStore?.getState()?.systemErrorMessageApi?.({
-            errorCode,
-            errorMessage,
-            errorDetail,
-            solutionLink,
-            requestUrl: eventualUrl,
-            requestParams: JSON.stringify(requestData),
-          });
-          break;
-        default:
-          break;
-      }
-    }
-    // Remove request record
-    removeCommandLineRequestListItem(uuid);
+    settleTrackedCommandLineResponse({
+      requestId: uuid,
+      message: messageData || {},
+      registry: commandLineRequestRegistry,
+      beforeSettle: (request, message) => responseInterceptor(message, request.requestData, request.options),
+      suppressErrorReport: (errorCode) => ErrorCodesWithoutToast.includes(errorCode as any),
+      reportError: (request, message) => {
+        switch (request.options.errorLevel) {
+          case 'toast':
+            staticMessage.error(message.errorMessage);
+            break;
+          case 'notification':
+            useGlobalStore?.getState()?.systemErrorMessageApi?.({
+              errorCode: message.errorCode,
+              errorMessage: message.errorMessage,
+              errorDetail: message.errorDetail,
+              solutionLink: message.solutionLink,
+              requestUrl: message.eventualUrl,
+              requestParams: JSON.stringify(request.requestData),
+            });
+            break;
+          default:
+            break;
+        }
+      },
+    });
   }
 };
 

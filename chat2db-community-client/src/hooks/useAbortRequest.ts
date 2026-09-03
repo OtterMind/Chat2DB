@@ -4,8 +4,11 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { isDesktop } from '@/utils/env';
-import { DesktopRequestOptions, DesktopAbortControllerSignalParams } from '@/service/commandLine/commandLine';
-import { useGlobalStore } from '@/store/global';
+import {
+  DesktopRequestOptions,
+  DesktopAbortControllerSignalParams,
+  rejectCommandLineRequest,
+} from '@/service/commandLine/commandLine';
 
 type UseDiscardRequestReturnType = [(() => AbortSignal) | (() => DesktopRequestOptions['signal']), () => void];
 
@@ -20,10 +23,7 @@ const useAbortRequest: UseDiscardRequestType = () => {
   const abortRequest = useCallback(() => {
     if (isDesktop) {
       if (!desktopController) return;
-      // Remove the request id so that a later backend response is ignored by the frontend.
-      useGlobalStore.getState().removeCommandLineRequestListItem(desktopController.id);
-      // Promise requested by the terminal
-      desktopController.reject({ message: 'signal is aborted without reason' });
+      rejectCommandLineRequest(desktopController.id, { message: 'signal is aborted without reason' });
       return;
     }
 
