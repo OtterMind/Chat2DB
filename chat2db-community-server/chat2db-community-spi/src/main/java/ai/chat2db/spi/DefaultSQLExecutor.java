@@ -1737,7 +1737,22 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     public void executeBatchInsert(Connection connection, List<String> sqlCacheList,
                                    ISqlExecutionStatementListener statementListener,
                                    Runnable cancellationChecker) {
+        final boolean manageTransaction;
         try {
+            manageTransaction = connection.getAutoCommit();
+        } catch (SQLException ex) {
+            throw new RuntimeException("Failed to read original autoCommit", ex);
+        }
+        boolean transactionStarted = false;
+        boolean transactionResolved = false;
+        boolean discardRequired = false;
+        boolean commitAttempted = false;
+        Exception failure = null;
+        try {
+            if (manageTransaction) {
+                connection.setAutoCommit(false);
+                transactionStarted = true;
+            }
             for (String sql : sqlCacheList) {
                 checkTaskCancellation(cancellationChecker);
                 PreparedStatement stmt = connection.prepareStatement(sql);
@@ -1749,9 +1764,57 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     notifyStatementClosed(statementListener, stmt);
                 }
             }
-        } catch (SQLException e) {
             checkTaskCancellation(cancellationChecker);
-            throw new RuntimeException(e);
+            if (transactionStarted) {
+                commitAttempted = true;
+                connection.commit();
+                transactionResolved = true;
+            }
+        } catch (Exception e) {
+            failure = e;
+            discardRequired = commitAttempted;
+        }
+
+        if (failure != null && transactionStarted && !transactionResolved) {
+            try {
+                connection.rollback();
+                transactionResolved = true;
+            } catch (Exception rollbackEx) {
+                failure.addSuppressed(rollbackEx);
+                discardRequired = true;
+            }
+        }
+
+        if (transactionStarted && !discardRequired) {
+            try {
+                connection.setAutoCommit(true);
+            } catch (Exception restoreEx) {
+                if (failure == null) {
+                    failure = restoreEx;
+                } else {
+                    failure.addSuppressed(restoreEx);
+                }
+                discardRequired = true;
+            }
+        }
+
+        if (discardRequired) {
+            discardConnection(connection, failure);
+        }
+        if (failure != null) {
+            if (failure instanceof SQLException) {
+                try {
+                    checkTaskCancellation(cancellationChecker);
+                } catch (RuntimeException cancellation) {
+                    cancellation.addSuppressed(failure);
+                    throw cancellation;
+                }
+                throw new RuntimeException(failure);
+            }
+            if (failure instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new RuntimeException(failure);
         }
     }
 
