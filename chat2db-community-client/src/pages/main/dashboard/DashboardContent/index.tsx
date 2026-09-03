@@ -79,7 +79,9 @@ export default memo<IProps>((props) => {
   const refreshChartList = () => {
     if (currentDashboard?.id) {
       setRefreshLoading(true);
-      refreshCurrentDashboard().then(() => {
+      // `refreshCurrentDashboard` settles with `false` on failure, and `finally`
+      // keeps the refresh button spinning state settled either way.
+      refreshCurrentDashboard().finally(() => {
         setRefreshLoading(false);
       });
     }

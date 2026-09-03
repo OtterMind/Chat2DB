@@ -1,6 +1,7 @@
 import { StateCreator } from 'zustand';
 import { DashboardStore } from '../../store';
 import { CommonState } from './initialState';
+import { runDashboardRefresh } from './refreshCurrentDashboard';
 import {
   createDashboard,
   deleteDashboard,
@@ -133,16 +134,6 @@ export const createCommonAction: StateCreator<DashboardStore, [['zustand/devtool
   },
   refreshCurrentDashboard: () => {
     const currentDashboardId = get().currentDashboard?.id;
-    return new Promise((resolve) => {
-      if (!currentDashboardId) {
-        resolve(false);
-        return;
-      }
-      get()
-        .getDashboardById(currentDashboardId)
-        .then(() => {
-          resolve(true);
-        });
-    });
+    return runDashboardRefresh(currentDashboardId, (dashboardId) => get().getDashboardById(dashboardId));
   },
 });
