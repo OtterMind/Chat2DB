@@ -3,10 +3,14 @@ package ai.chat2db.community.storage.small;
 import ai.chat2db.community.domain.api.enums.NodeTypeEnum;
 import ai.chat2db.community.domain.api.model.workspace.Namespace;
 import ai.chat2db.community.domain.api.model.workspace.Node;
+import com.alibaba.fastjson2.JSON;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class NamespaceStorage extends SmallDataStorage<Namespace> {
 
@@ -16,21 +20,14 @@ public class NamespaceStorage extends SmallDataStorage<Namespace> {
         super("namespace", Namespace.class);
     }
 
-
-    public void deleteDataSourcePosition(Long dataSourceId) {
-        for (Namespace namespace : getDataList()) {
-            List<Long> dataSourceIds = namespace.getDatasourceIds();
-            if (!CollectionUtils.isEmpty(dataSourceIds)) {
-                if (dataSourceIds.contains(dataSourceId)) {
-                    dataSourceIds.remove(dataSourceId);
-                }
-            }
-        }
-        saveDataList();
+    NamespaceStorage(File storageFile) {
+        super(storageFile, Namespace.class);
     }
 
-    public void updateDataSourcePosition(Long namespaceId, Long dataSourceId) {
-        for (Namespace namespace : getDataList()) {
+
+    public synchronized void deleteDataSourcePosition(Long dataSourceId) {
+        Map<Long, Namespace> candidateDataMap = copyDataMap();
+        for (Namespace namespace : candidateDataMap.values()) {
             List<Long> dataSourceIds = namespace.getDatasourceIds();
             if (!CollectionUtils.isEmpty(dataSourceIds)) {
                 if (dataSourceIds.contains(dataSourceId)) {
@@ -38,7 +35,20 @@ public class NamespaceStorage extends SmallDataStorage<Namespace> {
                 }
             }
         }
-        Namespace namespace = getById(namespaceId);
+        persistPositions(candidateDataMap);
+    }
+
+    public synchronized void updateDataSourcePosition(Long namespaceId, Long dataSourceId) {
+        Map<Long, Namespace> candidateDataMap = copyDataMap();
+        for (Namespace namespace : candidateDataMap.values()) {
+            List<Long> dataSourceIds = namespace.getDatasourceIds();
+            if (!CollectionUtils.isEmpty(dataSourceIds)) {
+                if (dataSourceIds.contains(dataSourceId)) {
+                    dataSourceIds.remove(dataSourceId);
+                }
+            }
+        }
+        Namespace namespace = namespaceId == null ? null : candidateDataMap.get(namespaceId);
         if (namespace != null) {
             List<Long> dataSourceIds = namespace.getDatasourceIds();
             if (CollectionUtils.isEmpty(dataSourceIds)) {
@@ -51,7 +61,19 @@ public class NamespaceStorage extends SmallDataStorage<Namespace> {
                 }
             }
         }
-        saveDataList();
+        persistPositions(candidateDataMap);
+    }
+
+    private Map<Long, Namespace> copyDataMap() {
+        Map<Long, Namespace> candidateDataMap = new ConcurrentSkipListMap<>();
+        dataMap.forEach((id, namespace) -> candidateDataMap.put(id,
+                JSON.parseObject(JSON.toJSONString(namespace), Namespace.class)));
+        return candidateDataMap;
+    }
+
+    private void persistPositions(Map<Long, Namespace> candidateDataMap) {
+        saveDataList(new ArrayList<>(candidateDataMap.values()));
+        dataMap = candidateDataMap;
     }
 
     public Long save(Namespace namespace){
