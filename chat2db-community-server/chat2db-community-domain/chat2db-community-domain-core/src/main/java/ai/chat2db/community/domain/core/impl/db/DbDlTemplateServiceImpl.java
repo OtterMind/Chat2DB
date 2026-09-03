@@ -159,8 +159,12 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
                 param.getDatabaseName(), connectInfo == null ? null : connectInfo.getSchemaName(),
                 param.getTableName(), sql));
         sql = executionPlan.getSql();
-        String dataBaseType = Chat2DBContext.getConnectInfo().getDbType();
-        if (DataSourceTypeEnum.MONGODB.getCode().equals(dataBaseType)) {
+        sqlExecutionPolicyManager.beforeExecute(executionPlan);
+        String dataBaseType = connectInfo.getDbType();
+        if (DataSourceTypeEnum.MONGODB.getCode().equalsIgnoreCase(dataBaseType)) {
+            if (!Objects.equals(param.getSql(), sql)) {
+                throw new IllegalStateException("SQL rewrite is not supported for MONGODB counts");
+            }
             ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
             return sqlExecutionPolicyManager.limitCount(executionPlan,
                     getCountOfMongodb(param.getTableName(), executor));

@@ -489,23 +489,41 @@ public class DbTableServiceImpl implements IDbTableService {
     }
 
     private PageResponse<Table> pageQueryForRedis(DbTablePageQueryRequest param, TableSelector selector) {
-        Connection connection = Chat2DBContext.getConnection();
-        IDbMetaData metaData = Chat2DBContext.getDbMetaData();
-        TablesPageResponse page = metaData.tables(connection,
-                new TablesPageRequest(param.getDatabaseName(), param.getSchemaName(), param.getSearchKey(),
-                        param.getPageNo(), param.getPageSize()));
-        return filterExternalPage(param,
-                PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize()));
+        return pageQueryForExternalMetadata(param);
     }
 
     private PageResponse<Table> pageQueryForMongodb(DbTablePageQueryRequest param) {
+        return pageQueryForExternalMetadata(param);
+    }
+
+    private PageResponse<Table> pageQueryForExternalMetadata(DbTablePageQueryRequest param) {
         Connection connection = Chat2DBContext.getConnection();
         IDbMetaData metaData = Chat2DBContext.getDbMetaData();
+        if (!metadataAccessPolicyManager.isEmpty()) {
+            List<Table> candidates = metaData.tables(connection,
+                    new TablesRequest(param.getDatabaseName(), param.getSchemaName(), param.getSearchKey()));
+            if (CollectionUtils.isEmpty(candidates)) {
+                return PageResponse.empty(param.getPageNo(), param.getPageSize());
+            }
+            candidates = new ArrayList<>(getQueryTables(candidates, param));
+            candidates.sort(Comparator.comparing(Table::getName, String.CASE_INSENSITIVE_ORDER));
+            return paginateVisibleTables(param, visibleTables(param, candidates));
+        }
         TablesPageResponse page = metaData.tables(connection,
                 new TablesPageRequest(param.getDatabaseName(), param.getSchemaName(), param.getSearchKey(),
                         param.getPageNo(), param.getPageSize()));
-        return filterExternalPage(param,
-                PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize()));
+        return PageResponse.of(page.getData(), page.getTotal(), page.getPageNo(), page.getPageSize());
+    }
+
+    private PageResponse<Table> paginateVisibleTables(DbTablePageQueryRequest request, List<Table> visible) {
+        long total = visible.size();
+        long start = (long) (request.getPageNo() - 1) * request.getPageSize();
+        if (start >= total) {
+            return PageResponse.of(List.of(), total, request.getPageNo(), request.getPageSize());
+        }
+        int fromIndex = Math.toIntExact(start);
+        int toIndex = (int) Math.min(start + request.getPageSize(), total);
+        return PageResponse.of(visible.subList(fromIndex, toIndex), total, request.getPageNo(), request.getPageSize());
     }
 
     private List<Table> getAllTables(DbTablePageQueryRequest param) {
@@ -633,13 +651,6 @@ public class DbTableServiceImpl implements IDbTableService {
 
     }
 
-    private PageResponse<Table> filterExternalPage(DbTablePageQueryRequest request, PageResponse<Table> page) {
-        List<Table> original = page.getData();
-        List<Table> visible = visibleTables(request, original);
-        long safeTotal = visible.size() == original.size() ? page.getTotal() : visible.size();
-        return PageResponse.of(visible, safeTotal, page.getPageNo(), page.getPageSize());
-    }
-
     private List<Table> visibleTables(DbTablePageQueryRequest request, List<Table> tables) {
         return metadataAccessPolicyManager.filter(tables,
                 table -> resource(request.getDataSourceId(), request.getDatabaseName(), request.getSchemaName(),
@@ -728,16 +739,15 @@ public class DbTableServiceImpl implements IDbTableService {
             if (index == null || CollectionUtils.isEmpty(index.getColumnList())) {
                 continue;
             }
-            List<TableIndexColumn> columns = index.getColumnList().stream()
-                    .filter(Objects::nonNull)
-                    .filter(column -> StringUtils.isNotBlank(column.getColumnName()))
-                    .filter(column -> visibleColumnNames.contains(column.getColumnName().toLowerCase(Locale.ROOT)))
-                    .toList();
-            if (columns.isEmpty()) {
+            boolean allColumnsVisible = index.getColumnList().stream()
+                    .allMatch(column -> column != null
+                            && StringUtils.isNotBlank(column.getColumnName())
+                            && visibleColumnNames.contains(column.getColumnName().toLowerCase(Locale.ROOT)));
+            if (!allColumnsVisible) {
                 continue;
             }
             TableIndex copy = copyIndex(index);
-            copy.setColumnList(columns);
+            copy.setColumnList(List.copyOf(index.getColumnList()));
             copy.setForeignColumnNamelist(List.of());
             visible.add(copy);
         }

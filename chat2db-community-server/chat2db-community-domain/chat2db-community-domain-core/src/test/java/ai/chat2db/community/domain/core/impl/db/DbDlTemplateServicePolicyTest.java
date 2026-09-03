@@ -39,6 +39,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DbDlTemplateServicePolicyTest {
@@ -164,6 +166,50 @@ class DbDlTemplateServicePolicyTest {
 
         assertEquals(2L, count);
         assertTrue(capturedDirectSql.get().contains("tenant_id = 7"));
+    }
+
+    @Test
+    void countRunsTheAuthorizationHookBeforeAccessingTheDatabase() {
+        AtomicInteger beforeExecuteCalls = new AtomicInteger();
+        DbDlTemplateServiceImpl service = service(new ISqlExecutionPolicy() {
+            @Override
+            public void beforeExecute(SqlExecutionPlan plan) {
+                beforeExecuteCalls.incrementAndGet();
+                throw new IllegalStateException("count denied");
+            }
+        });
+        DbDlCountRequest request = new DbDlCountRequest();
+        request.setSql("SELECT * FROM orders");
+        request.setDataSourceId(7L);
+        request.setDatabaseName("shop");
+        request.setTableName("orders");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.count(request));
+
+        assertEquals("count denied", error.getMessage());
+        assertEquals(1, beforeExecuteCalls.get());
+        assertNull(capturedDirectSql.get());
+    }
+
+    @Test
+    void countRejectsMongoRewritesThatTheLegacyCountPathCannotApply() {
+        Chat2DBContext.getConnectInfo().setDbType("MONGODB");
+        DbDlTemplateServiceImpl service = service(new ISqlExecutionPolicy() {
+            @Override
+            public String rewriteSql(SqlExecutionContext context, String sql) {
+                return sql + ".filter({tenantId: 7})";
+            }
+        });
+        DbDlCountRequest request = new DbDlCountRequest();
+        request.setSql("db.orders.find({})");
+        request.setDataSourceId(7L);
+        request.setDatabaseName("shop");
+        request.setTableName("orders");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.count(request));
+
+        assertEquals("SQL rewrite is not supported for MONGODB counts", error.getMessage());
+        assertNull(capturedDirectSql.get());
     }
 
     @Test

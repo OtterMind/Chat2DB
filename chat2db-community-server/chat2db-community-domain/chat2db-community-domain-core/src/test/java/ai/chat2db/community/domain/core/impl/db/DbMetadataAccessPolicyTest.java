@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import ai.chat2db.community.domain.api.config.DBConfig;
@@ -13,6 +14,8 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.community.domain.api.model.metadata.TableIndex;
+import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
 import ai.chat2db.community.domain.api.model.request.db.DbTablePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbTableQueryRequest;
 import ai.chat2db.community.domain.core.cache.MemoryCacheManage;
@@ -22,6 +25,7 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
+import ai.chat2db.spi.model.request.TablesRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +39,8 @@ class DbMetadataAccessPolicyTest {
     private static final String SCHEMA = "public";
 
     private IPlugin previousPlugin;
+    private List<Table> externalTables = List.of();
+    private List<TableIndex> tableIndexes = List.of();
 
     @BeforeEach
     void setUp() {
@@ -45,6 +51,16 @@ class DbMetadataAccessPolicyTest {
             @Override
             public List<TableColumn> columns(Connection connection, TableMetadataRequest request) {
                 return List.of(column("id"), column("secret_value"));
+            }
+
+            @Override
+            public List<Table> tables(Connection connection, TablesRequest request) {
+                return externalTables;
+            }
+
+            @Override
+            public List<TableIndex> indexes(Connection connection, TableMetadataRequest request) {
+                return new ArrayList<>(tableIndexes);
             }
         };
         previousPlugin = Chat2DBContext.PLUGIN_MAP.put(DB_TYPE, new IPlugin() {
@@ -103,6 +119,57 @@ class DbMetadataAccessPolicyTest {
         assertEquals(List.of("id"), columns.stream().map(TableColumn::getName).toList());
     }
 
+    @Test
+    void externalMetadataFiltersBeforePaginationAndReportsTheAuthorizedTotal() {
+        externalTables = List.of(table("restricted"), table("orders"), table("forbidden"));
+
+        for (String dbType : List.of("REDIS", "MONGODB")) {
+            assertExternalMetadataPage(dbType);
+        }
+    }
+
+    @Test
+    void compositeIndexWithAHiddenColumnIsHiddenInsteadOfBeingShrunk() {
+        tableIndexes = List.of(
+                index("idx_orders_id", false, "id"),
+                index("uq_orders_id_secret", true, "id", "secret_value"));
+        DbTableQueryRequest request = DbTableQueryRequest.builder()
+                .dataSourceId(DATA_SOURCE_ID).databaseName(DATABASE).schemaName(SCHEMA)
+                .tableName("orders").refresh(true).build();
+
+        List<TableIndex> indexes = service().queryIndexes(request);
+
+        assertEquals(List.of("idx_orders_id"), indexes.stream().map(TableIndex::getName).toList());
+        assertEquals(List.of("id"), indexes.get(0).getColumnList().stream()
+                .map(TableIndexColumn::getColumnName).toList());
+    }
+
+    private void assertExternalMetadataPage(String dbType) {
+        IPlugin plugin = Chat2DBContext.PLUGIN_MAP.get(DB_TYPE);
+        IPlugin previousExternalPlugin = Chat2DBContext.PLUGIN_MAP.put(dbType, plugin);
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        String previousDbType = connectInfo.getDbType();
+        connectInfo.setDbType(dbType);
+        try {
+            DbTablePageQueryRequest request = DbTablePageQueryRequest.builder()
+                    .dataSourceId(DATA_SOURCE_ID).databaseName(DATABASE).schemaName(SCHEMA)
+                    .searchKey("r").pageNo(1).pageSize(1).build();
+
+            PageResponse<Table> page = service().pageQuery(request, null);
+
+            assertEquals(1L, page.getTotal(), dbType);
+            assertEquals(List.of("orders"), page.getData().stream().map(Table::getName).toList(), dbType);
+            assertEquals(false, page.getHasNextPage(), dbType);
+        } finally {
+            connectInfo.setDbType(previousDbType);
+            if (previousExternalPlugin == null) {
+                Chat2DBContext.PLUGIN_MAP.remove(dbType);
+            } else {
+                Chat2DBContext.PLUGIN_MAP.put(dbType, previousExternalPlugin);
+            }
+        }
+    }
+
     private DbTableServiceImpl service() {
         MetadataAccessPolicyManager manager = new MetadataAccessPolicyManager(List.of(resources -> resources.stream()
                 .map(resource -> resource.getColumnName() == null
@@ -119,6 +186,16 @@ class DbMetadataAccessPolicyTest {
     private TableColumn column(String name) {
         return TableColumn.builder().name(name).tableName("orders").databaseName(DATABASE)
                 .schemaName(SCHEMA).build();
+    }
+
+    private TableIndex index(String name, boolean unique, String... columnNames) {
+        List<TableIndexColumn> columns = Arrays.stream(columnNames).map(columnName -> {
+            TableIndexColumn column = new TableIndexColumn();
+            column.setColumnName(columnName);
+            return column;
+        }).toList();
+        return TableIndex.builder().name(name).tableName("orders").databaseName(DATABASE).schemaName(SCHEMA)
+                .unique(unique).columnList(columns).build();
     }
 
     private Connection connection() {
