@@ -6,7 +6,6 @@ import lombok.Data;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 
@@ -58,10 +57,10 @@ public class Operation {
             return Lists.newArrayList();
         }
         List<Operation> result = new ArrayList<>();
-        Collections.reverse(operations);
-        int start = (pageNo - 1) * pageSize;
-        int n = 0;
-        for (Operation o : operations) {
+        long start = ((long) pageNo - 1L) * pageSize;
+        long n = 0L;
+        for (int index = operations.size() - 1; index >= 0; index--) {
+            Operation o = operations.get(index);
             if (select(o)) {
                 if (n >= start) {
                     result.add(o);
