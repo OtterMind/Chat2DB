@@ -93,6 +93,20 @@ class DbMetadataAccessPolicyTest {
     }
 
     @Test
+    void tablePaginationTreatsOverflowedOffsetAsOutOfRange() {
+        MemoryCacheManage.put(getTableKey(DATA_SOURCE_ID, DATABASE, SCHEMA),
+                new ArrayList<>(List.of(table("orders"))));
+        DbTablePageQueryRequest request = DbTablePageQueryRequest.builder()
+                .dataSourceId(DATA_SOURCE_ID).databaseName(DATABASE).schemaName(SCHEMA)
+                .pageNo(Integer.MAX_VALUE).pageSize(100_000).build();
+
+        PageResponse<Table> page = service().pageQuery(request, null);
+
+        assertEquals(1L, page.getTotal());
+        assertEquals(List.of(), page.getData());
+    }
+
+    @Test
     void columnListReturnsOnlyAuthorizedColumns() {
         DbTableQueryRequest request = DbTableQueryRequest.builder()
                 .dataSourceId(DATA_SOURCE_ID).databaseName(DATABASE).schemaName(SCHEMA)

@@ -171,12 +171,13 @@ public class DbTableServiceImpl implements IDbTableService {
             return PageResponse.of(new ArrayList<>(), 0L, param.getPageNo(), param.getPageSize());
         }
         long total = tables.size();
-        int start = (param.getPageNo() - 1) * param.getPageSize();
-        if (start >= total) {
+        long start = ((long) param.getPageNo() - 1L) * param.getPageSize();
+        if (start < 0L || start >= total) {
             return PageResponse.of(Lists.newArrayList(), total, param.getPageNo(), param.getPageSize());
         }
-        int end = Math.min(start + param.getPageSize(), tables.size());
-        List<Table> subList = tables.subList(start, end);
+        int startIndex = (int) start;
+        int end = (int) Math.min(start + param.getPageSize(), total);
+        List<Table> subList = tables.subList(startIndex, end);
         return PageResponse.of(subList, total, param.getPageNo(), param.getPageSize());
     }
 
