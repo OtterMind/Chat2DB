@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { normalizeTreeNodeLoadResult, treeConfig } from '@/blocks/NewTree/treeConfig';
 import { DatabaseTypeCode } from '@/constants';
 import { databaseMap } from '@/constants/database';
 import { getDatabaseSupport } from '@/utils/database';
+import { createSelectDatabaseRequestCoordinator } from './selectDatabaseRequest';
 
 export type ISelectDatabase = {
   dataSourceId?: number;
@@ -33,16 +34,16 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
         databaseType: DatabaseTypeCode;
       }[]
     | null
-    >([]);
-  
+  >([]);
+
   const [databaseList, setDatabaseList] = useState<
     | {
         value: string;
         label: string;
       }[]
     | null
-    >([]);
-  
+  >([]);
+
   const [schemaList, setSchemaList] = useState<
     | {
         value: string;
@@ -52,8 +53,11 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
   >([]);
 
   const [selectDatabase, setSelectDatabase] = useState<ISelectDatabase>();
+  const requestCoordinatorRef = useRef(createSelectDatabaseRequestCoordinator());
 
   useEffect(() => {
+    requestCoordinatorRef.current.invalidate('database');
+    requestCoordinatorRef.current.invalidate('schema');
     setDatabaseList([]);
     setSchemaList([]);
 
@@ -81,17 +85,24 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
 
   useEffect(() => {
     getDataSourceList();
+    return () => {
+      requestCoordinatorRef.current.invalidateAll();
+    };
   }, []);
 
   const getDataSourceList = () => {
+    requestCoordinatorRef.current.invalidate('database');
+    requestCoordinatorRef.current.invalidate('schema');
     setDataSourceList(null);
     setDatabaseList([]);
     setSchemaList([]);
-    treeConfig['dataSources']
-      .getChildren?.({
-        refresh: true,
-      })
-      .then((res) => {
+    void requestCoordinatorRef.current.run(
+      'dataSource',
+      () =>
+        treeConfig['dataSources'].getChildren!({
+          refresh: true,
+        }),
+      (res) => {
         const _dataSourceList = normalizeTreeNodeLoadResult(res).children.map((item) => {
           return {
             value: item.extraParams.dataSourceId!,
@@ -100,21 +111,22 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
           };
         });
         setDataSourceList(_dataSourceList);
-      })
-      .catch(() => {
-        setDataSourceList([]);
-      });
+      },
+      () => setDataSourceList([]),
+    );
   };
 
   const getDatabaseList = (params: { dataSourceId: number; databaseType: DatabaseTypeCode }) => {
     setDatabaseList(null);
     setSchemaList([]);
-    treeConfig['dataSource']
-      .getChildren?.({
-        ...params,
-        refresh: true,
-      })
-      .then((res) => {
+    void requestCoordinatorRef.current.run(
+      'database',
+      () =>
+        treeConfig['dataSource'].getChildren!({
+          ...params,
+          refresh: true,
+        }),
+      (res) => {
         const _databaseList = normalizeTreeNodeLoadResult(res).children.map((item) => {
           return {
             value: item.extraParams.databaseName!,
@@ -122,20 +134,21 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
           };
         });
         setDatabaseList(_databaseList);
-      })
-      .catch(() => {
-        setDatabaseList([]);
-      });
+      },
+      () => setDatabaseList([]),
+    );
   };
 
   const getSchemaList = (params) => {
     setSchemaList(null);
-    treeConfig['database']
-      .getChildren?.({
-        ...params,
-        refresh: true,
-      })
-      .then((res) => {
+    void requestCoordinatorRef.current.run(
+      'schema',
+      () =>
+        treeConfig['database'].getChildren!({
+          ...params,
+          refresh: true,
+        }),
+      (res) => {
         const _schemaList = normalizeTreeNodeLoadResult(res).children.map((item) => {
           return {
             value: item.extraParams.schemaName!,
@@ -144,10 +157,9 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
         });
 
         setSchemaList(_schemaList);
-      })
-      .catch(() => {
-        setSchemaList([]);
-      });
+      },
+      () => setSchemaList([]),
+    );
   };
 
   const isSelectDone = (params: ISelectDatabase) => {
@@ -173,6 +185,8 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
     };
 
     if ('dataSourceId' in changedValues) {
+      requestCoordinatorRef.current.invalidate('database');
+      requestCoordinatorRef.current.invalidate('schema');
       const dataSource = astrictDataSourceList?.find((item) => item.value === changedValues?.dataSourceId);
 
       if (!dataSource) {
@@ -201,12 +215,11 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
       } else {
         getSchemaList({
           dataSourceId: dataSource.value,
-          databaseType: dataSource.databaseType
+          databaseType: dataSource.databaseType,
         });
       }
-
     }
-    
+
     if ('databaseName' in changedValues) {
       newSelectDatabase = {
         ...newSelectDatabase,
@@ -219,7 +232,7 @@ const useSelectDatabase = (props: IUseSelectDatabaseProps) => {
       }
       getSchemaList(newSelectDatabase);
     }
-    
+
     if ('schemaName' in changedValues) {
       newSelectDatabase = {
         ...newSelectDatabase,
