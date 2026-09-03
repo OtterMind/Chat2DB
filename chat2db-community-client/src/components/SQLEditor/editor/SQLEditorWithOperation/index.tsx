@@ -56,6 +56,11 @@ import {
   createDataSourceExecutionSnapshot,
   type DataSourceExecutionSnapshot,
 } from '@/service/dataSourceExecutionSnapshot';
+import { runAfterCommittedSqlParserWithSnapshot } from '../../core/sqlParserRequestCoordinator';
+import {
+  createSqlExecutionTargetSnapshot,
+  resolveSqlExecutionTarget,
+} from '../../core/sqlExecutionTargetSnapshot';
 
 export interface SQLExecutionInvocation extends IConsoleReturnExecuteSql {
   executionTarget: DataSourceExecutionSnapshot;
@@ -201,10 +206,11 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     },
     getSelectedContent: () => sqlEditorRef.current?.getSelectedContent() ?? '',
     getCursorSQL: () => sqlEditorRef.current?.getCursorSQL() ?? '',
-    getCursorCurLineNearestSQL: () => sqlEditorRef.current?.getCursorCurLineNearestSQL() ?? '',
-    handleSQLParser: (sql: string, _dbInfo: IBoundInfo) => sqlEditorRef.current?.handleSQLParser(sql, _dbInfo),
+    getCursorCurLineNearestSQL: (position) => sqlEditorRef.current?.getCursorCurLineNearestSQL(position) ?? '',
+    handleSQLParser: (sql: string, _dbInfo: IBoundInfo) =>
+      sqlEditorRef.current?.handleSQLParser(sql, _dbInfo) ?? Promise.resolve('stale'),
     handleQuickSQLParser: (sql: string, _dbInfo: IBoundInfo) =>
-      sqlEditorRef.current?.handleQuickSQLParser(sql, _dbInfo),
+      sqlEditorRef.current?.handleQuickSQLParser(sql, _dbInfo) ?? Promise.resolve('stale'),
     getTableIdentifierAtPosition: (position) => sqlEditorRef.current?.getTableIdentifierAtPosition(position) ?? null,
     executeSQL: handleExecuteSQL,
     hasUnsavedChangesBeforeClose,
@@ -379,10 +385,10 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         handleRevertRoutineDDL();
         break;
       case SQLOptType.EXECUTE_SINGLE_SQL:
-        handleExecuteSingleSQL();
+        void handleExecuteSingleSQL(typeof params === 'string' ? params : undefined);
         break;
       case SQLOptType.EXECUTE_SHORTCUT_SQL:
-        handleShortCutExecuteSQL();
+        void handleShortCutExecuteSQL();
         break;
       case SQLOptType.EXECUTE_TABLE:
         break;
@@ -868,62 +874,101 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   /**
    * Execute one SQL statement.
    */
-  const handleExecuteSingleSQL = () => {
-    const selectSQL = sqlEditorRef.current?.getSelectedContent() || '';
-    const cursorSQL = sqlEditorRef.current?.getCursorCurLineNearestSQL() || '';
-    const sql = selectSQL || cursorSQL;
-    if (!sql) {
-      staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+  const handleExecuteSingleSQL = async (committedSql?: string) => {
+    const editor = sqlEditorRef.current;
+    if (!editor) {
+      return;
+    }
+    const executionBoundInfo = createDataSourceExecutionBoundInfo(dbInfo);
+    const executionTarget = createDataSourceExecutionSnapshot(executionBoundInfo);
+    const executionDataSourceState = dataSourceState;
+    const sqlSnapshot = editor.getValue();
+    const execute = (sql: string) => {
+      if (!sql) {
+        staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+        return;
+      }
+
+      return props
+        .onExecuteSQL({
+          sql,
+          single: true,
+          executionTarget,
+          dataSourceState: executionDataSourceState,
+        })
+        .then(() => {
+          setErrorMessage(null);
+        })
+        .catch((error) => {
+          setErrorMessage(error.errorMessage || '');
+        });
+    };
+
+    if (committedSql !== undefined) {
+      await execute(committedSql);
       return;
     }
 
-    const executeSqlParams = {
-      sql,
-      single: true,
-    };
-
-    props
-      ?.onExecuteSQL(createExecutionInvocation(executeSqlParams))
-      .then(() => {
-        setErrorMessage(null);
-      })
-      .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
-      });
+    await runAfterCommittedSqlParserWithSnapshot(
+      () =>
+        createSqlExecutionTargetSnapshot(
+          editor.getSelectedContent(),
+          editor.getInstance()?.getPosition(),
+        ),
+      () => editor.handleQuickSQLParser(sqlSnapshot, executionBoundInfo),
+      (targetSnapshot) => {
+        const target = resolveSqlExecutionTarget(targetSnapshot, (position) =>
+          editor.getCursorCurLineNearestSQL(position),
+        );
+        return execute(target.sql);
+      },
+    );
   };
 
   /**
    * Execute SQL via shortcut.
    */
   const handleShortCutExecuteSQL = useCallback(async () => {
+    const editor = sqlEditorRef.current;
+    if (!editor) {
+      return;
+    }
     const executionBoundInfo = createDataSourceExecutionBoundInfo(dbInfo);
     const executionTarget = createDataSourceExecutionSnapshot(executionBoundInfo);
     const executionDataSourceState = dataSourceState;
-    await sqlEditorRef.current?.handleQuickSQLParser(sqlEditorRef.current?.getValue() || '', executionBoundInfo);
-    // await sqlEditorRef.current?.handleSQLParser(sqlEditorRef.current?.getValue() || '', dbInfo);
+    const sqlSnapshot = editor.getValue();
 
-    const selectSQL = sqlEditorRef.current?.getSelectedContent() || '';
-    const cursorSQL = sqlEditorRef.current?.getCursorCurLineNearestSQL() || '';
-    const isSingle = selectSQL ? false : true;
-    const sql = selectSQL || cursorSQL;
-    if (!sql) {
-      staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
-      return;
-    }
+    await runAfterCommittedSqlParserWithSnapshot(
+      () =>
+        createSqlExecutionTargetSnapshot(
+          editor.getSelectedContent(),
+          editor.getInstance()?.getPosition(),
+        ),
+      () => editor.handleQuickSQLParser(sqlSnapshot, executionBoundInfo),
+      (targetSnapshot) => {
+        const target = resolveSqlExecutionTarget(targetSnapshot, (position) =>
+          editor.getCursorCurLineNearestSQL(position),
+        );
+        if (!target.sql) {
+          staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+          return;
+        }
 
-    props
-      ?.onExecuteSQL({
-        sql,
-        single: isSingle,
-        executionTarget,
-        dataSourceState: executionDataSourceState,
-      })
-      .then(() => {
-        setErrorMessage(null);
-      })
-      .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
-      });
+        return props
+          ?.onExecuteSQL({
+            sql: target.sql,
+            single: target.single,
+            executionTarget,
+            dataSourceState: executionDataSourceState,
+          })
+          .then(() => {
+            setErrorMessage(null);
+          })
+          .catch((error) => {
+            setErrorMessage(error.errorMessage || '');
+          });
+      },
+    );
   }, [props?.onExecuteSQL, dbInfo, dataSourceState]);
 
   /** Save current editor data. */
