@@ -11,8 +11,7 @@ import { dataSourceTreeService } from '@/database';
 import connectionService from '@/service/connection';
 import { IConnectionDetails, IUserConfigTree, TreeNodeData } from '@/typings';
 import { GetTreeNodeKeyParams, UpdatePositionInTree } from '@/typings/tree';
-import { findNode, getParentNode, removeSubkeys, searchTreeNodes } from '@/utils';
-import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
+import { findNode, getParentNode, removeSubkeys } from '@/utils';
 import React from 'react';
 import { PersistOptions, devtools, persist } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
@@ -32,12 +31,16 @@ import { LatestLoadCoordinator, loadNamespaceTree } from './loadNamespaceTree';
 import {
   appendExpandedTreeKey,
   isDataSourceTreeNodeKey,
+  mergeLoadedTreeDataForSearchRefresh,
   removeTreeNodeByKey,
   resolveLoadedTreeData,
+  updateInvalidatedTreeNodeKeys,
 } from './treeDataUpdate';
 import { neatenDataSourceTreeNode, neatenDataSourcesList, neatenTreeData } from './utils';
 import {
-  mergeWorkspaceTreeSearchExpandedKeys,
+  collectExpandedWorkspaceTreeNodeKeys,
+  createWorkspaceTreeSearchQueryState,
+  resolveWorkspaceTreeSearch,
 } from '@/pages/main/workspace/components/WorkspaceTreeSearch/lifecycle';
 import { refreshWorkspaceTreeData } from '@/pages/main/workspace/components/WorkspaceTreeSearch/refresh';
 import {
@@ -74,7 +77,10 @@ export interface TreeState {
   isModalVisible: boolean;
   dataList: { key: React.Key; title: string }[];
   expandedKeys: React.Key[];
+  searchRequiredExpandedKeys: React.Key[];
+  invalidatedTreeNodeKeys: React.Key[];
   searchBarValue: string;
+  searchRevision: number;
   // This value is escaped before tree search so brackets and other special characters remain valid.
   regularSearchBarValue: string;
   searchResultKeys: string[] | null;
@@ -103,7 +109,10 @@ export const initTreeState = {
   isModalVisible: false,
   dataList: [],
   expandedKeys: [],
+  searchRequiredExpandedKeys: [],
+  invalidatedTreeNodeKeys: [],
   searchBarValue: '',
+  searchRevision: 0,
   regularSearchBarValue: '',
   searchResultKeys: null,
   // Search results
@@ -137,6 +146,7 @@ export interface TreeAction {
   setConnectionDetail: (connectionDetail: TreeState['connectionDetail']) => void;
   handleLoadData: (nodeData: TreeNodeData, options?: ILoadDataOptions) => Promise<ILoadDataResult>;
   setExpandedKeys: (expandedKeys: React.Key[]) => void;
+  setSearchRequiredExpandedKeys: (expandedKeys: React.Key[]) => void;
   toggleExpandedKeys: (key: React.Key) => void;
   deleteDataSource: (dataSource: any) => Promise<void>;
   setSearchBarValue: (searchBarValue: string) => void;
@@ -200,6 +210,30 @@ const invalidateTreeRequests = () => {
 };
 
 export type TreeStore = TreeState & TreeAction;
+
+const resolveCurrentSearchRequiredKeys = (state: TreeState, treeData = state.treeData || []) =>
+  resolveWorkspaceTreeSearch(
+    treeData,
+    state.regularSearchBarValue,
+    state.hiddenTreeNodeIds,
+    state.invalidatedTreeNodeKeys,
+  ).requiredExpandedKeys;
+
+const collectSubtreeKeys = (nodes: TreeNodeData[] | undefined): React.Key[] => {
+  const keys: React.Key[] = [];
+  const visit = (currentNodes: TreeNodeData[]) => {
+    currentNodes.forEach((node) => {
+      keys.push(node.key);
+      if (node.children) {
+        visit(node.children);
+      }
+    });
+  };
+  if (nodes) {
+    visit(nodes);
+  }
+  return keys;
+};
 
 export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', never]], [], TreeAction> = (set, get) => ({
   setEditingTreeNode: (editingTreeNode) => {
@@ -272,11 +306,36 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
           set({ currentLoadingTreeNode: null });
         }
         const freshTreeData = neatenTreeData(result.items);
-        const treeData = resolveLoadedTreeData(
-          freshTreeData,
-          get().treeData,
-          refresh && !get().searchBarValue,
-        );
+        const currentState = get();
+        const searchRefresh = refresh && Boolean(currentState.searchBarValue);
+        const searchRequiredExpandedKeys = searchRefresh
+          ? resolveCurrentSearchRequiredKeys(currentState)
+          : [];
+        const preservedKeys = searchRefresh
+          ? new Set(
+              collectExpandedWorkspaceTreeNodeKeys(
+                currentState.treeData || [],
+                currentState.expandedKeys,
+                searchRequiredExpandedKeys,
+                currentState.invalidatedTreeNodeKeys,
+              ),
+            )
+          : undefined;
+        const searchMerge = preservedKeys
+          ? mergeLoadedTreeDataForSearchRefresh(freshTreeData, currentState.treeData, preservedKeys)
+          : null;
+        const treeData = searchMerge?.treeData ||
+          resolveLoadedTreeData(freshTreeData, currentState.treeData, refresh);
+        const invalidatedTreeNodeKeys = searchMerge
+          ? updateInvalidatedTreeNodeKeys(
+              currentState.invalidatedTreeNodeKeys,
+              treeData,
+              searchMerge.invalidatedKeys,
+            )
+          : refresh
+            ? []
+            : updateInvalidatedTreeNodeKeys(currentState.invalidatedTreeNodeKeys, treeData, []);
+        set({ invalidatedTreeNodeKeys });
         get().setTreeData(treeData);
         get().generateDataSourceList(treeData);
         if (refresh || force) {
@@ -307,6 +366,8 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
   handleLoadData: (nodeData, config) => {
     const { refresh = false, closeExpandTreeNode, preserveInteraction = false } = config || {};
     const { key, treeNodeType } = nodeData;
+    const invalidatedCache = get().invalidatedTreeNodeKeys.includes(key);
+    const refreshRequest = refresh || invalidatedCache;
     const currentNode = findNode(key, get().treeData) || nodeData;
     const rootDataSourceId =
       currentNode.treeNodeType === TreeNodeType.DATA_SOURCE
@@ -314,13 +375,13 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         : undefined;
     const shouldReuseCurrentChildren = shouldReuseTreeNodeChildren({
       children: currentNode.children,
-      refresh,
+      refresh: refreshRequest,
       isDataSourceRoot: rootDataSourceId !== undefined,
       runtimeAvailability:
         rootDataSourceId === undefined ? undefined : get().runtimeAvailabilityByDataSourceId[rootDataSourceId],
     });
     if (shouldReuseCurrentChildren && !treeNodeLoadCoordinator.hasPending(key)) {
-      if (closeExpandTreeNode !== true) {
+      if (!preserveInteraction && closeExpandTreeNode !== true) {
         const expandedKeys = appendExpandedTreeKey(get().expandedKeys, key);
         if (expandedKeys !== get().expandedKeys) {
           get().setExpandedKeys(expandedKeys);
@@ -329,13 +390,13 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       return Promise.resolve({ children: currentNode.children || [], committed: true });
     }
 
-    const interactionTreeData = preserveInteraction ? null : get().treeData;
+    const interactionTreeData = preserveInteraction || invalidatedCache ? null : get().treeData;
     if (!preserveInteraction) {
       get().setCurrentTreeNode(currentNode);
       get().setSelectedKeys([key]);
     }
 
-    return treeNodeLoadCoordinator.run(key, { supersede: refresh }, async (isCurrent) => {
+    return treeNodeLoadCoordinator.run(key, { supersede: refreshRequest }, async (isCurrent) => {
       const requestNode = findNode(key, get().treeData) || nodeData;
       const requestDataSourceId =
         requestNode.treeNodeType === TreeNodeType.DATA_SOURCE
@@ -343,7 +404,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
           : undefined;
       const shouldReuseRequestChildren = shouldReuseTreeNodeChildren({
         children: requestNode.children,
-        refresh,
+        refresh: refreshRequest,
         isDataSourceRoot: requestDataSourceId !== undefined,
         runtimeAvailability:
           requestDataSourceId === undefined
@@ -362,7 +423,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       get().setCurrentLoadingTreeNode(requestNode);
 
       try {
-        const response = await getChildren({ ...requestNode.extraParams, refresh });
+        const response = await getChildren({ ...requestNode.extraParams, refresh: refreshRequest });
         const loadResult = normalizeTreeNodeLoadResult(response);
         if (!isCurrent()) {
           return { children: loadResult.children, committed: false };
@@ -375,15 +436,36 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         if (requestDataSourceId !== undefined) {
           get().setDataSourceRuntimeAvailability(requestDataSourceId, 'available');
         }
-        const children = resolveLoadedTreeData(
-          loadResult.children,
-          latestNode.children ?? null,
-          refresh && !get().searchBarValue,
-        );
         const currentTreeData = get().treeData;
         if (!currentTreeData) {
-          return { children, committed: false };
+          return { children: loadResult.children, committed: false };
         }
+        const currentState = get();
+        const searchRefresh = refreshRequest && Boolean(currentState.searchBarValue);
+        const searchRequiredExpandedKeys = searchRefresh
+          ? resolveCurrentSearchRequiredKeys(currentState, currentTreeData)
+          : currentState.searchRequiredExpandedKeys;
+        const preservedKeys = invalidatedCache
+          ? new Set([key])
+          : searchRefresh
+            ? new Set(
+              collectExpandedWorkspaceTreeNodeKeys(
+                currentTreeData,
+                currentState.expandedKeys,
+                searchRequiredExpandedKeys,
+                currentState.invalidatedTreeNodeKeys,
+              ),
+            )
+            : undefined;
+        const searchMerge = preservedKeys
+          ? mergeLoadedTreeDataForSearchRefresh(
+              loadResult.children,
+              latestNode.children ?? null,
+              preservedKeys,
+            )
+          : null;
+        const children = searchMerge?.treeData ||
+          resolveLoadedTreeData(loadResult.children, latestNode.children ?? null, refreshRequest);
         const nextTreeData = applyExistingTreeNodeRefresh(currentTreeData, key, {
           children,
           total: loadResult.total,
@@ -391,7 +473,25 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         if (nextTreeData === currentTreeData) {
           return { children, committed: false };
         }
+        const invalidatedTreeNodeKeys = updateInvalidatedTreeNodeKeys(
+          currentState.invalidatedTreeNodeKeys,
+          nextTreeData,
+          searchMerge?.invalidatedKeys || [],
+          [key, ...collectSubtreeKeys(latestNode.children)],
+        );
+        set({ invalidatedTreeNodeKeys });
         get().setTreeData(nextTreeData);
+        if (invalidatedCache) {
+          set(
+            reconcileTreeStateAfterRefresh(
+              nextTreeData,
+              currentState.selectedKeys,
+              currentState.currentTreeNode,
+              currentState.expandedKeys,
+              currentState.scrollTargetKey,
+            ),
+          );
+        }
         return { children, committed: true };
       } catch (error) {
         if (isCurrent() && requestDataSourceId !== undefined) {
@@ -419,7 +519,7 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
         if (interactionTreeData) {
           expandedKeys = removeSubkeys(expandedKeys, interactionTreeData, key);
         }
-        if (closeExpandTreeNode !== true) {
+        if (!preserveInteraction && closeExpandTreeNode !== true) {
           expandedKeys = appendExpandedTreeKey(expandedKeys, key);
         }
         get().setExpandedKeys(expandedKeys);
@@ -485,30 +585,32 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
       const _treeData = treeData(get().treeData);
       set({ treeData: _treeData });
       if (get().searchBarValue && _treeData) {
-        const visibleTreeData = filterTreeNodesForDisplay(_treeData, {
-          hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-        });
-        const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
-          visibleTreeData,
+        const searchState = resolveWorkspaceTreeSearch(
+          _treeData,
           get().regularSearchBarValue,
+          get().hiddenTreeNodeIds,
+          get().invalidatedTreeNodeKeys,
         );
-        get().setSearchResult(matchedNodes);
-        get().setSearchResultKeys(matchedKeys);
-        get().setExpandedKeys(mergeWorkspaceTreeSearchExpandedKeys(get().expandedKeys, parentIdsWithMatches));
+        set({
+          searchResult: searchState.matchedNodes,
+          searchResultKeys: searchState.matchedKeys,
+          searchRequiredExpandedKeys: searchState.requiredExpandedKeys,
+        });
       }
     } else {
       set({ treeData });
       if (get().searchBarValue && treeData) {
-        const visibleTreeData = filterTreeNodesForDisplay(treeData, {
-          hiddenTreeNodeIds: get().hiddenTreeNodeIds,
-        });
-        const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(
-          visibleTreeData,
+        const searchState = resolveWorkspaceTreeSearch(
+          treeData,
           get().regularSearchBarValue,
+          get().hiddenTreeNodeIds,
+          get().invalidatedTreeNodeKeys,
         );
-        get().setSearchResult(matchedNodes);
-        get().setSearchResultKeys(matchedKeys);
-        get().setExpandedKeys(mergeWorkspaceTreeSearchExpandedKeys(get().expandedKeys, parentIdsWithMatches));
+        set({
+          searchResult: searchState.matchedNodes,
+          searchResultKeys: searchState.matchedKeys,
+          searchRequiredExpandedKeys: searchState.requiredExpandedKeys,
+        });
       }
     }
   },
@@ -635,25 +737,24 @@ export const createTreeAction: StateCreator<TreeStore, [['zustand/devtools', nev
     const uniqueKeys = Array.from(new Set(expandedKeys));
     set({ expandedKeys: uniqueKeys });
   },
+  setSearchRequiredExpandedKeys: (searchRequiredExpandedKeys) => {
+    set({ searchRequiredExpandedKeys: Array.from(new Set(searchRequiredExpandedKeys)) });
+  },
   // Remove an existing expanded key, or add it when absent.
   toggleExpandedKeys: (key) => {
     const expandedKeys = get().expandedKeys;
-    if (expandedKeys.includes(key)) {
-      set({ expandedKeys: expandedKeys.filter((item) => item !== key) });
+    const searchRequiredExpandedKeys = get().searchRequiredExpandedKeys;
+    if (expandedKeys.includes(key) || searchRequiredExpandedKeys.includes(key)) {
+      set({
+        expandedKeys: expandedKeys.filter((item) => item !== key),
+        searchRequiredExpandedKeys: searchRequiredExpandedKeys.filter((item) => item !== key),
+      });
     } else {
       set({ expandedKeys: [...expandedKeys, key] });
     }
   },
   setSearchBarValue: (searchBarValue) => {
-    function escapeRegExp(string) {
-      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& represents the matched substring
-    }
-    set({
-      searchBarValue,
-      regularSearchBarValue: escapeRegExp(searchBarValue),
-      searchResultKeys: null,
-      searchResult: null,
-    });
+    set(createWorkspaceTreeSearchQueryState(searchBarValue, get().searchRevision));
   },
   setSearchResultKeys: (searchResultKeys) => {
     set({ searchResultKeys });
