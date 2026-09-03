@@ -198,7 +198,7 @@
     "stylelint-config-standard": "38.0.0",
     "stylelint-config-standard-less": "3.0.1",
     "tailwindcss": "^3",
-    "typescript": "^5.4.3"
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "antd": "~5.24.1",
