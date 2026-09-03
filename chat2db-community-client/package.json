@@ -187,7 +187,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-unused-imports": "3.2.0",
+    "eslint-plugin-unused-imports": "4.4.1",
     "jsdom": "26.1.0",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "postcss-less": "6.0.0",
