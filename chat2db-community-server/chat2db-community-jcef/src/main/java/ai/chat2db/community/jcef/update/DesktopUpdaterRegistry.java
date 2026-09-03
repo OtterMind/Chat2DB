@@ -6,10 +6,10 @@ import java.util.Objects;
 
 public final class DesktopUpdaterRegistry {
 
-    private static final IDesktopUpdater LEGACY_COMMUNITY_UPDATER = new LegacyDesktopUpdater();
     private static final IDesktopUpdater NO_OP_UPDATER = new NoOpDesktopUpdater();
 
     private static volatile IDesktopUpdater registeredUpdater;
+    private static volatile IDesktopUpdater communityUpdater;
 
     private DesktopUpdaterRegistry() {
     }
@@ -19,8 +19,17 @@ public final class DesktopUpdaterRegistry {
         if (updater != null) {
             return updater;
         }
-        if (ConfigUtils.isCommunity() && ConfigUtils.isDesktop() && ConfigUtils.isShowGUI()) {
-            return LEGACY_COMMUNITY_UPDATER;
+        return defaultUpdater(
+                ConfigUtils.isCommunity(),
+                ConfigUtils.isDesktop(),
+                ConfigUtils.isShowGUI(),
+                System.getProperty("os.name", "")
+        );
+    }
+
+    static IDesktopUpdater defaultUpdater(boolean community, boolean desktop, boolean gui, String osName) {
+        if (community && desktop && gui && supportsCommunityUpdater(osName)) {
+            return communityUpdater();
         }
         return NO_OP_UPDATER;
     }
@@ -31,5 +40,24 @@ public final class DesktopUpdaterRegistry {
 
     static void resetForTests() {
         registeredUpdater = null;
+        communityUpdater = null;
+    }
+
+    static boolean supportsCommunityUpdater(String osName) {
+        return osName != null && osName.toLowerCase(java.util.Locale.ROOT).contains("mac");
+    }
+
+    private static IDesktopUpdater communityUpdater() {
+        IDesktopUpdater updater = communityUpdater;
+        if (updater == null) {
+            synchronized (DesktopUpdaterRegistry.class) {
+                updater = communityUpdater;
+                if (updater == null) {
+                    updater = new GitHubReleaseDesktopUpdater();
+                    communityUpdater = updater;
+                }
+            }
+        }
+        return updater;
     }
 }

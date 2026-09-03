@@ -126,6 +126,9 @@ const UpdateDetection = () => {
       case UpdatedStatus.Installed:
         openNotificationAuto();
         break;
+      case UpdatedStatus.UpdateFailed:
+        openUpdateFailedNotification();
+        break;
       default:
         break;
     }
@@ -161,6 +164,27 @@ const UpdateDetection = () => {
         </div>
       ),
       description: btn,
+      key,
+    });
+  };
+
+  const openUpdateFailedNotification = () => {
+    const key = 'update-operation-failed';
+    notificationApi.error({
+      className: styles.notification,
+      duration: null,
+      message: i18n('common.text.failure'),
+      description: (
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            jcefApi.openUpdateRecoveryLog().catch(() => undefined);
+          }}
+        >
+          {i18n('setting.button.openUpdateLog')}
+        </Button>
+      ),
       key,
     });
   };

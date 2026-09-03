@@ -1,4 +1,5 @@
 import { APP_URL_CONFIG_COMMUNITY } from '@/constants/appConfig';
+import { Platform } from '@/constants/os';
 import { COMMUNITY_IDENTITY, COMMUNITY_WORKSPACE_CONTEXT } from '@/constants/community';
 import type { ClientIdentity, ClientWorkspaceContext } from '@/client-context/types';
 import type { GlobalAppConfig } from '@/typings/settings';
@@ -61,6 +62,9 @@ export interface ClientRuntime {
   localAppUrlConfig?: typeof APP_URL_CONFIG_COMMUNITY;
 }
 
+export const supportsAutomaticUpdates = (desktopRuntime: boolean, platform: Platform) =>
+  desktopRuntime && platform === Platform.Mac;
+
 export const clientRuntime: ClientRuntime = {
   runtimeKey: 'community',
   usesFixedIdentity: true,
@@ -77,7 +81,7 @@ export const clientRuntime: ClientRuntime = {
   showAccountCenter: false,
   showUpgradeEntry: false,
   showDownloadEntry: false,
-  enableAutoUpdate: false,
+  enableAutoUpdate: supportsAutomaticUpdates(isDesktop, navigator.os_type),
   showMcpSetting: isDesktop,
   showNetworkProxySetting: isDesktop,
   showLicenseSetting: false,
