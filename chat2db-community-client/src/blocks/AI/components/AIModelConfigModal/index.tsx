@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Tag } from 'antd';
+import { AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Tag } from 'antd';
 import i18n from '@/i18n';
 import feedback from '@/utils/feedback';
 import {
@@ -11,7 +11,11 @@ import {
   saveAIModelConfig,
   testAIModelConfig,
 } from '@/service/aiModelConfig';
-import { resolveBaseUrlOnProviderChange, resolveProviderBaseUrl } from './modelConfigDefaults';
+import {
+  MINIMAX_BASE_URL_PRESETS,
+  resolveBaseUrlOnProviderChange,
+  resolveProviderBaseUrl,
+} from './modelConfigDefaults';
 import { useStyles } from './style';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
@@ -320,7 +324,14 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               />
             </Form.Item>
             <Form.Item name="baseUrl" label={i18n('setting.modelConfig.baseUrl')}>
-              <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.baseUrl')} />
+              {currentProvider === 'MINIMAX' ? (
+                <AutoComplete
+                  options={MINIMAX_BASE_URL_PRESETS}
+                  placeholder={i18n('setting.modelConfig.placeholder.baseUrl')}
+                />
+              ) : (
+                <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.baseUrl')} />
+              )}
             </Form.Item>
             <Form.Item name="projectId" label={i18n('setting.modelConfig.projectId')}>
               <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.projectId')} />
