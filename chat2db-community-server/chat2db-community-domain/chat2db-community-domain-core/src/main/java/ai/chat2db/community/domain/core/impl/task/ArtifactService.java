@@ -4,6 +4,9 @@ import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
+import cn.hutool.core.io.FileUtil;
+import com.alibaba.fastjson2.JSON;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
@@ -13,11 +16,14 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
+@Slf4j
 public class ArtifactService {
 
     private static final String DRAFT_FILE_SUFFIX = ".part";
@@ -25,6 +31,19 @@ public class ArtifactService {
     private static final String DELETION_FILE_MARKER = ".task-delete-";
 
     private final Set<Path> reservedTargets = ConcurrentHashMap.newKeySet();
+
+    private final File deletionJournalFile;
+
+    private final List<StagedArtifactDeletion> deletionJournal = new ArrayList<>();
+
+    public ArtifactService() {
+        this(new File(ConfigUtils.getEnvBasePath(), "task-artifact-deletions.json"));
+    }
+
+    ArtifactService(File deletionJournalFile) {
+        this.deletionJournalFile = deletionJournalFile;
+        loadDeletionJournal();
+    }
 
     ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType) {
         File directory = resolveDirectory(outputDirectory);
@@ -94,7 +113,7 @@ public class ArtifactService {
         }
     }
 
-    PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
+    PublishedArtifactDeletion stagePublishedDeletion(Long taskId, String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return PublishedArtifactDeletion.empty();
         }
@@ -107,8 +126,23 @@ public class ArtifactService {
         }
         Path staged = original.resolveSibling("." + original.getFileName()
                 + DELETION_FILE_MARKER + UUID.randomUUID());
+        StagedArtifactDeletion journalEntry = new StagedArtifactDeletion(taskId,
+                original.toString(), staged.toString());
         try {
-            move(original, staged);
+            // Publish the recovery intent before moving the artifact. A crash
+            // can then leave either an untouched artifact plus a harmless
+            // journal entry, or a staged artifact that startup can recover.
+            recordStagedDeletion(journalEntry);
+            try {
+                move(original, staged);
+            } catch (Exception moveFailure) {
+                try {
+                    forgetStagedDeletion(staged);
+                } catch (Exception journalFailure) {
+                    moveFailure.addSuppressed(journalFailure);
+                }
+                throw moveFailure;
+            }
             return new PublishedArtifactDeletion(original, staged);
         } catch (Exception e) {
             throw artifactDeletionFailure(artifactId, e);
@@ -121,20 +155,110 @@ public class ArtifactService {
         }
         try {
             Files.deleteIfExists(deletion.stagedPath());
+            forgetStagedDeletion(deletion.stagedPath());
         } catch (Exception e) {
             throw artifactDeletionFailure(deletion.originalPath().toString(), e);
         }
     }
 
     void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
-        if (deletion == null || deletion.stagedPath() == null || !Files.exists(deletion.stagedPath())) {
+        if (deletion == null || deletion.stagedPath() == null) {
             return;
         }
         try {
-            move(deletion.stagedPath(), deletion.originalPath());
+            if (Files.exists(deletion.stagedPath())) {
+                move(deletion.stagedPath(), deletion.originalPath());
+            }
+            forgetStagedDeletion(deletion.stagedPath());
         } catch (Exception e) {
             throw artifactDeletionFailure(deletion.originalPath().toString(), e);
         }
+    }
+
+    /**
+     * Startup replay of staged deletions left behind by a crash: when the task
+     * record survived, the artifact must be moved back to its published name;
+     * when the task record is gone the deletion had committed, so the staged
+     * file is removed. The journal entry is cleared once applied.
+     */
+    void recoverStagedDeletion(StagedArtifactDeletion staged, boolean taskExists) {
+        Path stagedPath = Path.of(staged.stagedPath());
+        try {
+            if (Files.exists(stagedPath)) {
+                if (taskExists) {
+                    move(stagedPath, Path.of(staged.originalPath()));
+                } else {
+                    Files.deleteIfExists(stagedPath);
+                }
+            }
+            forgetStagedDeletion(stagedPath);
+        } catch (Exception e) {
+            throw artifactDeletionFailure(staged.originalPath(), e);
+        }
+    }
+
+    private void recordStagedDeletion(StagedArtifactDeletion staged) throws IOException {
+        synchronized (deletionJournal) {
+            deletionJournal.add(staged);
+            try {
+                writeDeletionJournal();
+            } catch (IOException e) {
+                deletionJournal.remove(staged);
+                throw e;
+            }
+        }
+    }
+
+    private void forgetStagedDeletion(Path stagedPath) throws IOException {
+        synchronized (deletionJournal) {
+            if (deletionJournal.removeIf(
+                    staged -> Path.of(staged.stagedPath()).equals(stagedPath.toAbsolutePath().normalize()))) {
+                writeDeletionJournal();
+            }
+        }
+    }
+
+    List<StagedArtifactDeletion> loadStagedDeletions() {
+        synchronized (deletionJournal) {
+            return List.copyOf(deletionJournal);
+        }
+    }
+
+    private void loadDeletionJournal() {
+        if (!deletionJournalFile.isFile()) {
+            return;
+        }
+        try {
+            for (String line : FileUtil.readUtf8Lines(deletionJournalFile)) {
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                }
+                try {
+                    StagedArtifactDeletion staged = JSON.parseObject(line, StagedArtifactDeletion.class);
+                    if (staged != null && StringUtils.isNotBlank(staged.stagedPath())) {
+                        deletionJournal.add(staged);
+                    }
+                } catch (Exception malformed) {
+                    // One corrupt line must not orphan the staged deletions
+                    // recorded after it.
+                    log.warn("Skipping malformed task artifact deletion journal entry: {}", line, malformed);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Could not load task artifact deletion journal {}", deletionJournalFile, e);
+        }
+    }
+
+    private void writeDeletionJournal() throws IOException {
+        StringBuilder content = new StringBuilder();
+        for (StagedArtifactDeletion staged : deletionJournal) {
+            content.append(JSON.toJSONString(staged)).append(System.lineSeparator());
+        }
+        FileUtil.mkParentDirs(deletionJournalFile);
+        File temporary = new File(deletionJournalFile.getParentFile(),
+                deletionJournalFile.getName() + DRAFT_FILE_SUFFIX);
+        FileUtil.writeUtf8String(content.toString(), temporary);
+        move(temporary.toPath(), deletionJournalFile.toPath());
     }
 
     boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
@@ -232,5 +356,12 @@ public class ArtifactService {
         private static PublishedArtifactDeletion empty() {
             return new PublishedArtifactDeletion(null, null);
         }
+    }
+
+    /**
+     * Journal entry for a staged artifact deletion; survives the crash window
+     * between the rename and the commit/restore so startup can finish it.
+     */
+    record StagedArtifactDeletion(Long taskId, String originalPath, String stagedPath) {
     }
 }

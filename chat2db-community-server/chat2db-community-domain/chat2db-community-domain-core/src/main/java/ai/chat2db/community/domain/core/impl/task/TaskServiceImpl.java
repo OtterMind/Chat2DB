@@ -22,6 +22,8 @@ import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import com.google.common.util.concurrent.Striped;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 
+@Slf4j
 @Service
 public class TaskServiceImpl implements TaskService {
 
@@ -46,6 +49,18 @@ public class TaskServiceImpl implements TaskService {
         this.taskStorage = taskStorage;
         this.localTaskManager = localTaskManager;
         this.artifactService = artifactService;
+    }
+
+    @PostConstruct
+    void recoverInterruptedArtifactDeletions() {
+        for (ArtifactService.StagedArtifactDeletion staged : artifactService.loadStagedDeletions()) {
+            try {
+                boolean taskExists = taskStorage.get(staged.taskId()).isPresent();
+                artifactService.recoverStagedDeletion(staged, taskExists);
+            } catch (Exception e) {
+                log.error("Could not recover staged artifact deletion {} at startup", staged, e);
+            }
+        }
     }
 
     @Override
@@ -102,7 +117,7 @@ public class TaskServiceImpl implements TaskService {
                 throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
             }
             ArtifactService.PublishedArtifactDeletion deletion =
-                    artifactService.stagePublishedDeletion(task.getArtifactId());
+                    artifactService.stagePublishedDeletion(taskId, task.getArtifactId());
             try {
                 if (!taskStorage.deleteTerminalTask(taskId,
                         () -> artifactService.commitPublishedDeletion(deletion))) {

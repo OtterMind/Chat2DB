@@ -14,6 +14,7 @@ import ai.chat2db.community.tools.exception.DataNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,9 +37,13 @@ class ArtifactServiceTest {
     @TempDir
     Path tempDirectory;
 
+    private File journalFile() {
+        return tempDirectory.resolve("artifact-deletions.json").toFile();
+    }
+
     @Test
     void concurrentDraftsReserveDifferentTargetsAndPublishIndependently() throws IOException {
-        ArtifactService service = new ArtifactService();
+        ArtifactService service = new ArtifactService(journalFile());
         var first = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
         var second = service.createDraft(2L, tempDirectory.toString(), "export.csv", "text/csv");
         assertNotEquals(first.getTargetFile(), second.getTargetFile());
@@ -57,7 +62,7 @@ class ArtifactServiceTest {
 
     @Test
     void failedPublicationReleasesReservedTarget() {
-        ArtifactService service = new ArtifactService();
+        ArtifactService service = new ArtifactService(journalFile());
         var failed = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
 
         assertThrows(IllegalStateException.class, () -> service.publish(failed));
@@ -76,7 +81,7 @@ class ArtifactServiceTest {
                 .artifactId(artifact.toString())
                 .build());
 
-        new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L);
+        new TaskServiceImpl(storage, null, new ArtifactService(journalFile())).delete(1L);
 
         assertFalse(Files.exists(artifact));
         assertTrue(storage.deleted);
@@ -94,7 +99,7 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactService(journalFile())).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE, exception.getCode());
         assertFalse(storage.deleted);
@@ -112,7 +117,7 @@ class ArtifactServiceTest {
         storage.failDeletion = true;
 
         assertThrows(IllegalStateException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactService(journalFile())).delete(1L));
 
         assertEquals("value", Files.readString(artifact));
         assertTrue(storage.get(1L).isPresent());
@@ -126,7 +131,7 @@ class ArtifactServiceTest {
                 .status(TaskStatus.SUCCESS.name())
                 .artifactId(artifact.toString())
                 .build());
-        ArtifactService artifactService = new ArtifactService() {
+        ArtifactService artifactService = new ArtifactService(journalFile()) {
             @Override
             void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
                 throw new IllegalStateException("Could not commit artifact deletion");
@@ -148,7 +153,7 @@ class ArtifactServiceTest {
                 .status(TaskStatus.SUCCESS.name())
                 .artifactId(artifact.toString())
                 .build());
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService(journalFile()));
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger deleted = new AtomicInteger();
@@ -200,11 +205,92 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactService(journalFile())).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE, exception.getCode());
         assertTrue(Files.exists(artifact));
         assertFalse(storage.deleted);
+    }
+
+    @Test
+    void stagedDeletionSurvivesRestartAndIsRestoredWhenTaskSurvives() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("restart-restore.csv"), "value");
+        ArtifactService crashed = new ArtifactService(journalFile());
+        ArtifactService.PublishedArtifactDeletion staged =
+                crashed.stagePublishedDeletion(7L, artifact.toString());
+
+        ArtifactService restarted = new ArtifactService(journalFile());
+        assertEquals(1, restarted.loadStagedDeletions().size());
+        restarted.recoverStagedDeletion(restarted.loadStagedDeletions().get(0), true);
+
+        assertEquals("value", Files.readString(artifact));
+        assertFalse(Files.exists(staged.stagedPath()));
+        assertTrue(restarted.loadStagedDeletions().isEmpty(),
+                "applied recovery must clear the journal entry");
+    }
+
+    @Test
+    void journalWriteFailureNeverMovesThePublishedArtifact() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("journal-failure.csv"), "value");
+        File unusableJournal = Files.createDirectory(tempDirectory.resolve("journal-directory")).toFile();
+        ArtifactService service = new ArtifactService(unusableJournal);
+
+        assertThrows(BusinessException.class,
+                () -> service.stagePublishedDeletion(7L, artifact.toString()));
+
+        assertEquals("value", Files.readString(artifact));
+        try (var files = Files.list(tempDirectory)) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().contains(".task-delete-")));
+        }
+    }
+
+    @Test
+    void stagedDeletionSurvivesRestartAndIsSweptWhenTaskRecordIsGone() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("restart-sweep.csv"), "value");
+        ArtifactService crashed = new ArtifactService(journalFile());
+        ArtifactService.PublishedArtifactDeletion staged =
+                crashed.stagePublishedDeletion(8L, artifact.toString());
+
+        ArtifactService restarted = new ArtifactService(journalFile());
+        restarted.recoverStagedDeletion(restarted.loadStagedDeletions().get(0), false);
+
+        assertFalse(Files.exists(staged.stagedPath()));
+        assertFalse(Files.exists(artifact), "committed deletion must keep the artifact removed");
+        assertTrue(restarted.loadStagedDeletions().isEmpty());
+    }
+
+    @Test
+    void missingStagedFileAtRecoveryClearsJournalWithoutThrowing() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("already-gone.csv"), "value");
+        ArtifactService crashed = new ArtifactService(journalFile());
+        ArtifactService.PublishedArtifactDeletion staged =
+                crashed.stagePublishedDeletion(9L, artifact.toString());
+        Files.delete(staged.stagedPath());
+
+        ArtifactService restarted = new ArtifactService(journalFile());
+        restarted.recoverStagedDeletion(restarted.loadStagedDeletions().get(0), true);
+
+        assertFalse(Files.exists(staged.stagedPath()), "staged file stays gone; nothing to restore");
+        assertTrue(restarted.loadStagedDeletions().isEmpty());
+    }
+
+    @Test
+    void commitAndRestoreClearJournalEntries() throws IOException {
+        Path committed = Files.writeString(tempDirectory.resolve("committed.csv"), "value");
+        Path restored = Files.writeString(tempDirectory.resolve("restored.csv"), "value");
+        ArtifactService service = new ArtifactService(journalFile());
+        ArtifactService.PublishedArtifactDeletion commitDeletion =
+                service.stagePublishedDeletion(11L, committed.toString());
+        ArtifactService.PublishedArtifactDeletion restoreDeletion =
+                service.stagePublishedDeletion(12L, restored.toString());
+        assertEquals(2, service.loadStagedDeletions().size());
+
+        service.commitPublishedDeletion(commitDeletion);
+        assertEquals(1, service.loadStagedDeletions().size());
+
+        service.restorePublishedDeletion(restoreDeletion);
+        assertTrue(service.loadStagedDeletions().isEmpty());
+        assertEquals("value", Files.readString(restored));
     }
 
     private static final class RecordingTaskStorage implements TaskStorage {
