@@ -4,6 +4,7 @@ import { useStyles } from './style';
 import { Dropdown, type MenuProps } from 'antd';
 import { refreshPage } from '@/utils';
 import { history } from 'umi';
+import i18n from '@/i18n';
 import jcefApi from '@/jcef';
 import { useGlobalStore } from '@/store/global';
 import { isCommunityEnv, isDesktop } from '@/utils/env';
@@ -187,8 +188,8 @@ const AppBar = memo<AppBarProps>(({ className }) => {
           <button
             type="button"
             className={styles.windowsAction}
-            aria-label="Minimize window"
-            title="Minimize"
+            aria-label={i18n('common.window.minimize')}
+            title={i18n('common.window.minimize')}
             onClick={handleMinimizeWindow}
           >
             <Minus size={16} strokeWidth={1.75} />
@@ -196,8 +197,8 @@ const AppBar = memo<AppBarProps>(({ className }) => {
           <button
             type="button"
             className={styles.windowsAction}
-            aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-            title={isMaximized ? 'Restore' : 'Maximize'}
+            aria-label={isMaximized ? i18n('common.window.restore') : i18n('common.window.maximize')}
+            title={isMaximized ? i18n('common.window.restore') : i18n('common.window.maximize')}
             onClick={handleToggleMaximizeWindow}
           >
             {isMaximized ? <Copy size={14} strokeWidth={1.75} /> : <Square size={13} strokeWidth={1.75} />}
@@ -205,8 +206,8 @@ const AppBar = memo<AppBarProps>(({ className }) => {
           <button
             type="button"
             className={cx(styles.windowsAction, styles.closeAction)}
-            aria-label="Close window"
-            title="Close"
+            aria-label={i18n('common.window.close')}
+            title={i18n('common.window.close')}
             onClick={handleCloseWindow}
           >
             <X size={16} strokeWidth={1.75} />

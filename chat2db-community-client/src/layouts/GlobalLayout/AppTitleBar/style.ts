@@ -19,7 +19,12 @@ export const useStyles = createStyles(({ css, token }) => {
       border-bottom: 1px solid ${token.colorBorderLayout};
       user-select: none;
       -webkit-app-region: drag;
-      z-index: 10001;
+      /* Stay above workspace content (max in-flow z-index is 100) but below the
+         antd popup layer (modals/masks render at z-index 1000), so window
+         controls cannot float above confirmation dialogs. Dropdown menus
+         opened from the bar are unaffected: they portal to document.body and
+         global.ts forces .ant-dropdown to z-index 11000. */
+      z-index: 999;
     `,
     windowsAppBar: css`
       height: 34px;
