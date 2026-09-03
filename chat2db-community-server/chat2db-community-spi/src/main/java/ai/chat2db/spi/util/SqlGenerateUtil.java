@@ -6,6 +6,7 @@ import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
+import com.alibaba.druid.sql.ast.statement.SQLSelect;
 import com.alibaba.druid.sql.ast.statement.SQLSelectQueryBlock;
 import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -34,6 +35,17 @@ public class SqlGenerateUtil {
                     return handleDistinct(originalSql);
                 }
 
+                // If the query has a GROUP BY, in-place rewrite to COUNT(*) would
+                // return one row per group. Wrap in a subquery instead.
+                if (selectBody instanceof PlainSelect plainSelect
+                        && plainSelect.getGroupBy() != null) {
+                    plainSelect.setOrderByElements(null);
+                    plainSelect.setLimit(null);
+                    plainSelect.setOffset(null);
+                    plainSelect.setFetch(null);
+                    return buildSubQuery(select.toString());
+                }
+
                 SelectCountVisitor visitor = new SelectCountVisitor();
                 selectBody.accept(visitor);
                 return select.toString();
@@ -56,20 +68,33 @@ public class SqlGenerateUtil {
         if (!(stmt instanceof SQLSelectStatement)) {
             throw new IllegalArgumentException("Not a SELECT statement");
         }
-        SQLSelectQueryBlock query = ((SQLSelectStatement) stmt).getSelect().getQueryBlock();
+        SQLSelect select = ((SQLSelectStatement) stmt).getSelect();
+        SQLSelectQueryBlock query = select.getQueryBlock();
         if (query.getDistionOption() != 0) {
             return handleDistinct(originalSql);
+        }
+        // If the query has a GROUP BY, in-place rewrite to COUNT(*) would
+        // return one row per group. Wrap in a subquery instead.
+        if (query.getGroupBy() != null) {
+            clearDruidPaging(select, query);
+            return buildSubQuery(SQLUtils.toSQLString(stmt, dbType));
         }
         query.getSelectList().clear();
         SQLAggregateExpr countExpr = new SQLAggregateExpr("COUNT");
         countExpr.addArgument(new SQLAllColumnExpr());
         query.addSelectItem(countExpr);
-        query.setOrderBy(null);
-        query.setLimit(null);
-        query.setOffset(null);
+        clearDruidPaging(select, query);
         return SQLUtils.toSQLString(stmt, dbType);
     }
 
+    private static void clearDruidPaging(SQLSelect select, SQLSelectQueryBlock query) {
+        select.setOrderBy(null);
+        select.setOffset(null);
+        select.setLimit(null);
+        query.setOrderBy(null);
+        query.setOffset(null);
+        query.setLimit(null);
+    }
 
     private static boolean containsDistinct(Select selectBody) {
         if (selectBody instanceof PlainSelect plainSelect) {
