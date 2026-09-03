@@ -11,6 +11,7 @@ export interface ConsoleState {
   workspaceTabSplitLayout: IWorkspaceTabSplitLayout | null;
   recentlyClosedWorkspaceTabs: IWorkspaceTab[];
   createConsoleLoading: boolean;
+  createConsolePendingRequestIds: string[];
   editorList: Record<number | string, any>;
 }
 
@@ -23,5 +24,6 @@ export const initConsoleState = {
   workspaceTabSplitLayout: null,
   recentlyClosedWorkspaceTabs: [],
   createConsoleLoading: false,
+  createConsolePendingRequestIds: [],
   editorList: {},
 };
