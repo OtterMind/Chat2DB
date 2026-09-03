@@ -436,6 +436,43 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Events (MYSQL-OBJ-013). */
+export interface IEventItem {
+  eventName: string;
+  definer: string | null;
+  timeZone: string | null;
+  eventType: string | null;
+  executeAt: string | null;
+  intervalValue: string | null;
+  intervalField: string | null;
+  starts: string | null;
+  ends: string | null;
+  status: string | null;
+  onCompletion: string | null;
+  comment: string | null;
+  definition: string | null;
+}
+
+type EventDatasourceParams = { dataSourceId: number; databaseName: string };
+
+const getEventList = createRequest<EventDatasourceParams, IEventItem[]>('/api/rdb/event/list', { method: 'get' });
+const getEventSchedulerStatus = createRequest<EventDatasourceParams, { schedulerEnabled: boolean; eventCount: number }>(
+  '/api/rdb/event/scheduler_status',
+  { method: 'get' },
+);
+const getEventDropSql = createRequest<EventDatasourceParams & { eventName: string }, string>(
+  '/api/rdb/event/drop_sql',
+  { method: 'post' },
+);
+const getEventEnabledSql = createRequest<EventDatasourceParams & { eventName: string; enabled: boolean }, string>(
+  '/api/rdb/event/enabled_sql',
+  { method: 'post' },
+);
+const getEventDetail = createRequest<EventDatasourceParams & { eventName: string }, { eventBody: string }>(
+  '/api/rdb/event/detail',
+  { method: 'get' },
+);
+
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +590,11 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getEventList,
+  getEventSchedulerStatus,
+  getEventDropSql,
+  getEventEnabledSql,
+  getEventDetail,
   getActiveTransactionList,
   getDataSourceList,
 };

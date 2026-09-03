@@ -39,7 +39,6 @@ const databaseObject: IWorkspaceTab = {
     tableName: 'users',
   },
 };
-
 assert.deepEqual(getDirectActiveTabLocateTargets(connectedConsole), {
   explorer: { surface: 'explorerSession', sessionId: 101 },
   database: { surface: 'databaseTree' },

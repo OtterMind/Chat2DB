@@ -61,6 +61,7 @@ public class SqlCompletionMetadataProviderAdapter implements ISqlCompletionMetad
             case FUNCTION -> listFunctions(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
             case PROCEDURE -> listProcedures(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
             case TRIGGER -> listTriggers(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
+            case EVENT -> listEvents(resolveDatabaseName(request.scope()), resolveSchemaName(request.scope()));
             case PARAMETER -> listRoutineParameters(request);
             default -> List.of();
         };
@@ -80,6 +81,7 @@ public class SqlCompletionMetadataProviderAdapter implements ISqlCompletionMetad
                 || type == SqlCompletionCandidateTypeEnum.FUNCTION
                 || type == SqlCompletionCandidateTypeEnum.PROCEDURE
                 || type == SqlCompletionCandidateTypeEnum.TRIGGER
+                || type == SqlCompletionCandidateTypeEnum.EVENT
                 || type == SqlCompletionCandidateTypeEnum.PARAMETER;
     }
 
@@ -180,6 +182,13 @@ public class SqlCompletionMetadataProviderAdapter implements ISqlCompletionMetad
     private List<SqlCompletionCandidate> listTriggers(String databaseName, String schemaName) {
         List<Trigger> triggers = metaData().triggers(connection(), databaseName, schemaName);
         return converter.triggers2candidates(triggers, databaseName, schemaName, context.getDatasourceName(),
+                identifierProcessor());
+    }
+
+    private List<SqlCompletionCandidate> listEvents(String databaseName, String schemaName) {
+        List<ai.chat2db.community.domain.api.model.metadata.Event> events =
+                metaData().events(connection(), databaseName, schemaName);
+        return converter.events2candidates(events, databaseName, schemaName, context.getDatasourceName(),
                 identifierProcessor());
     }
 

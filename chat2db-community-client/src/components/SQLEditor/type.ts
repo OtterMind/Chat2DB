@@ -80,6 +80,7 @@ export type EditorType =
   | WorkspaceTabType.FUNCTION
   | WorkspaceTabType.PROCEDURE
   | WorkspaceTabType.TRIGGER
+  | WorkspaceTabType.EVENT
   | WorkspaceTabType.VIEW
   | WorkspaceTabType.LocalSQLFile;
 
@@ -99,6 +100,7 @@ const CONTENT_DIFF_EDITABLE_DDL_TAB_TYPES = [
   WorkspaceTabType.FUNCTION,
   WorkspaceTabType.PROCEDURE,
   WorkspaceTabType.TRIGGER,
+  WorkspaceTabType.EVENT,
 ] as const;
 
 const CONTENT_DIFF_SAVED_SQL_TAB_TYPES = [WorkspaceTabType.CONSOLE] as const;

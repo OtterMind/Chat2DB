@@ -24,6 +24,7 @@ export enum WorkspaceTabType {
   PROCEDURE = 'procedure',
   VIEW = 'view',
   TRIGGER = 'trigger',
+  EVENT = 'event',
   EditTable = 'editTable',
   ViewView = 'viewView',
   CreateTable = 'createTable',
@@ -63,6 +64,9 @@ export const workspaceTabConfig: {
   },
   [WorkspaceTabType.TRIGGER]: {
     icon: 'icon-trigger',
+  },
+  [WorkspaceTabType.EVENT]: {
+    icon: 'icon-event',
   },
   [WorkspaceTabType.EditTable]: {
     icon: 'icon-table-edit',

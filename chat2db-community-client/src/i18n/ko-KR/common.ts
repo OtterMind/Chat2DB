@@ -64,6 +64,7 @@ export default {
   'common.text.functions': '함수',
   'common.text.procedures': '프로시저',
   'common.text.triggers': '트리거',
+  'common.text.events': '이벤트',
   'common.text.consoles': '콘솔',
   'common.text.columns': '열',
   'common.text.keys': '키',

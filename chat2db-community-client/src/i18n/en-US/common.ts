@@ -64,6 +64,7 @@ export default {
   'common.text.functions': 'functions',
   'common.text.procedures': 'procedures',
   'common.text.triggers': 'triggers',
+  'common.text.events': 'Events',
   'common.text.consoles': 'consoles',
   'common.text.columns': 'columns',
   'common.text.keys': 'keys',

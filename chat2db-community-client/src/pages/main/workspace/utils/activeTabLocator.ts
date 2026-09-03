@@ -228,6 +228,16 @@ function getDatabaseObjectLocateTarget(activeTab: IWorkspaceTab): DatabaseActive
         getObjectParentLoadPath(uniqueData, TreeNodeType.TRIGGERS),
       );
 
+    case WorkspaceTabType.EVENT:
+      return databaseTreeTarget(
+        compact([
+          objectCandidate(TreeNodeType.EVENT, uniqueData, uniqueData.eventName),
+          fallbackKeyCandidate(TreeNodeType.EVENTS, baseParams),
+          ...getContextCandidates(uniqueData),
+        ]),
+        getObjectParentLoadPath(uniqueData, TreeNodeType.EVENTS),
+      );
+
     case WorkspaceTabType.ViewAllTable:
       return databaseTreeTarget(
         compact([keyCandidate(TreeNodeType.TABLES, baseParams), ...getContextCandidates(uniqueData)]),

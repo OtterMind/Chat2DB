@@ -118,6 +118,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional event manager for this plugin.
+     *
+     * @return event manager when supported; otherwise {@code null}.
+     */
+    default IEventManager getEventManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.

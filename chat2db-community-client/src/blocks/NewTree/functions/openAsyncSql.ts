@@ -160,3 +160,60 @@ export const openTrigger = (props: { treeNodeData: any; addWorkspaceTab: any }) 
     },
   });
 };
+
+export const openCreateEvent = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
+  const { treeNodeData, addWorkspaceTab } = props;
+  const { extraParams } = treeNodeData;
+  const { databaseName, schemaName, dataSourceName } = extraParams;
+  const eventName = 'new_event';
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: eventName });
+  addWorkspaceTab({
+    id: getObjectTabId(WorkspaceTabType.EVENT, extraParams, eventName),
+    type: WorkspaceTabType.EVENT,
+    title,
+    uniqueData: {
+      ...extraParams,
+      eventName,
+      isNewObject: true,
+      ddl: `CREATE EVENT \`new_event\`
+ON SCHEDULE EVERY 1 DAY
+STARTS CURRENT_TIMESTAMP
+DO
+BEGIN
+  -- event body
+END;`,
+      popoverContent: title,
+    },
+  });
+};
+
+export const openEvent = (props: { treeNodeData: any; addWorkspaceTab: any }) => {
+  const { treeNodeData, addWorkspaceTab } = props;
+  const { extraParams, originalTitle } = treeNodeData;
+  const { databaseName, schemaName, dataSourceName } = extraParams;
+  const eventName = extraParams.eventName || originalTitle;
+  const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: eventName });
+  addWorkspaceTab({
+    id: getObjectTabId(WorkspaceTabType.EVENT, extraParams, eventName),
+    type: WorkspaceTabType.EVENT,
+    title,
+    uniqueData: {
+      ...extraParams,
+      eventName,
+      loadSQL: () => {
+        return new Promise((resolve) => {
+          sqlService
+            .getEventDetail({
+              dataSourceId: treeNodeData.extraParams!.dataSourceId!,
+              databaseName: treeNodeData.extraParams!.databaseName!,
+              eventName,
+            })
+            .then((res) => {
+              resolve(res.eventBody);
+            });
+        });
+      },
+      popoverContent: title,
+    },
+  });
+};

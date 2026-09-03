@@ -33,6 +33,7 @@ const isSavedConsoleLikeWorkspaceTab = (item?: IWorkspaceTab | null) => {
     item.type === WorkspaceTabType.FUNCTION ||
     item.type === WorkspaceTabType.PROCEDURE ||
     item.type === WorkspaceTabType.TRIGGER ||
+    item.type === WorkspaceTabType.EVENT ||
     item.type === WorkspaceTabType.VIEW ||
     item.type === ('table' as WorkspaceTabType) ||
     !item.type

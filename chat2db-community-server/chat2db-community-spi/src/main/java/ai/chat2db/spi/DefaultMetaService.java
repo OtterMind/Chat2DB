@@ -174,6 +174,11 @@ public class DefaultMetaService implements IDbMetaData {
     }
 
     @Override
+    public List<Event> events(Connection connection, String databaseName, String schemaName) {
+        return Lists.newArrayList();
+    }
+
+    @Override
     public List<Procedure> procedures(Connection connection, String databaseName, String schemaName) {
         List<Procedure> procedures = DefaultSQLExecutor.getInstance().procedures(connection, blankToNull(databaseName),
                 blankToNull(schemaName));
@@ -264,6 +269,26 @@ public class DefaultMetaService implements IDbMetaData {
         }
         return triggers.stream()
                 .filter(trigger -> Objects.equals(trigger.getTriggerName(), triggerName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
+    public Event event(Connection connection, EventMetadataRequest eventMetadataRequest) {
+        return event(connection, eventMetadataRequest.getDatabaseName(), eventMetadataRequest.getSchemaName(),
+                eventMetadataRequest.getEventName());
+    }
+
+    public Event event(Connection connection, String databaseName, String schemaName, String eventName) {
+        if (StringUtils.isBlank(eventName)) {
+            return null;
+        }
+        List<Event> events = events(connection, databaseName, schemaName);
+        if (CollectionUtils.isEmpty(events)) {
+            return null;
+        }
+        return events.stream()
+                .filter(event -> Objects.equals(event.getEventName(), eventName))
                 .findFirst()
                 .orElse(null);
     }

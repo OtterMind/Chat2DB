@@ -101,12 +101,14 @@ export interface IBoundInfo {
   functionName?: string;
   procedureName?: string;
   triggerName?: string;
+  eventName?: string;
   tableName?: string;
   user?: string;
   host?: string;
   popoverContent?: string;
   ddl?: string;
   loadSQL?: any;
+  isNewObject?: boolean;
   readOnly?: boolean;
   diffOriginalText?: string;
   diffModifiedText?: string;

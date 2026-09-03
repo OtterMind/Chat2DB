@@ -85,6 +85,7 @@ const OperationLine = ({
     return [
       WorkspaceTabType.VIEW,
       WorkspaceTabType.TRIGGER,
+      WorkspaceTabType.EVENT,
     ].includes(type);
   }, [type, dbInfo]);
 

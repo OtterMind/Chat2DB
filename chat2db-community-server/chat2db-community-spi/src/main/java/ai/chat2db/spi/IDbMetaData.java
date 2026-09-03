@@ -1,6 +1,7 @@
 package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.Event;
 import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.metadata.Function;
 import ai.chat2db.community.domain.api.model.metadata.FunctionParameter;
@@ -18,6 +19,7 @@ import ai.chat2db.community.domain.api.model.result.ResultSetEditorMetadata;
 import ai.chat2db.community.domain.api.model.view.ModifyViewConfiguration;
 import ai.chat2db.spi.enums.UnsupportedKeyOperationsEnum;
 import ai.chat2db.spi.model.request.ColumnMetadataRequest;
+import ai.chat2db.spi.model.request.EventMetadataRequest;
 import ai.chat2db.spi.model.request.FunctionMetadataRequest;
 import ai.chat2db.spi.model.request.ProcedureMetadataRequest;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
@@ -64,6 +66,8 @@ public interface IDbMetaData {
 
     List<Trigger> triggers(Connection connection, @NotEmpty String databaseName, String schemaName);
 
+    List<Event> events(Connection connection, @NotEmpty String databaseName, String schemaName);
+
     List<Procedure> procedures(Connection connection, @NotEmpty String databaseName, String schemaName);
 
     List<TableColumn> columns(Connection connection, TableMetadataRequest tableMetadataRequest);
@@ -75,6 +79,8 @@ public interface IDbMetaData {
     Function function(Connection connection, FunctionMetadataRequest functionMetadataRequest);
 
     Trigger trigger(Connection connection, TriggerMetadataRequest triggerMetadataRequest);
+
+    Event event(Connection connection, EventMetadataRequest eventMetadataRequest);
 
     Procedure procedure(Connection connection, ProcedureMetadataRequest procedureMetadataRequest);
 

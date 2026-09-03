@@ -297,6 +297,13 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revocar privilegios',
   'workspace.databaseAccount.lockUnsupported':
     'Esta versión de MySQL o los privilegios de la cuenta actual no admiten el bloqueo de cuentas',
+  'workspace.menu.createEvent': 'Crear evento',
+  'workspace.menu.openEvent': 'Abrir evento',
+  'workspace.menu.enableEvent': 'Habilitar evento',
+  'workspace.menu.disableEvent': 'Deshabilitar evento',
+  'workspace.menu.dropEvent': 'Eliminar evento',
+  'workspace.menu.eventPreviewTitle': 'Confirmar SQL',
+  'workspace.event.schedulerOff': 'Programador desactivado',
   'workspace.ops.activeTransactions': 'Transacciones activas',
   'workspace.ops.monitor': 'Monitorización',
   'workspace.ops.transactionId': 'ID de transacción',

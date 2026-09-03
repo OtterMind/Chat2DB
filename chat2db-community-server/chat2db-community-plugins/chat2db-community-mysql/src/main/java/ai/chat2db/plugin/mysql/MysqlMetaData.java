@@ -13,6 +13,7 @@ import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.community.domain.api.enums.plugin.ResultSetEditorTypeEnum;
+import ai.chat2db.spi.model.request.EventMetadataRequest;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
@@ -31,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
@@ -39,6 +41,7 @@ import java.util.stream.Collectors;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_CREATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_FROM;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_FUNCTION;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_EVENT;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_PROCEDURE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_CREATE_TABLE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_INDEX_FROM;
@@ -48,6 +51,7 @@ import static ai.chat2db.plugin.mysql.constant.MysqlRoutineManageConstants.PROCE
 import static ai.chat2db.spi.util.SortUtils.sortDatabase;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlMetaDataConstants.*;
+import static ai.chat2db.plugin.mysql.constant.MysqlEventConstants.*;
 @Slf4j
 public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
 
@@ -187,6 +191,55 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 trigger.setTriggerBody(resultSet.getString(FIELD_SQL_ORIGINAL_STATEMENT));
             }
             return trigger;
+        });
+    }
+
+    @Override
+    public List<Event> events(Connection connection, @NotEmpty String databaseName, String schemaName) {
+        try (PreparedStatement statement = connection.prepareStatement(SQL_EVENTS)) {
+            statement.setString(1, databaseName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<Event> events = new ArrayList<>();
+                while (resultSet.next()) {
+                    Event event = new Event();
+                    event.setDatabaseName(resultSet.getString(RESULT_EVENT_SCHEMA));
+                    event.setSchemaName(schemaName);
+                    event.setEventName(resultSet.getString(RESULT_EVENT_NAME));
+                    event.setDefiner(resultSet.getString(RESULT_DEFINER));
+                    event.setTimeZone(resultSet.getString(RESULT_TIME_ZONE));
+                    event.setEventType(resultSet.getString(RESULT_EVENT_TYPE));
+                    event.setExecuteAt(resultSet.getTimestamp(RESULT_EXECUTE_AT));
+                    event.setIntervalValue(resultSet.getString(RESULT_INTERVAL_VALUE));
+                    event.setIntervalField(resultSet.getString(RESULT_INTERVAL_FIELD));
+                    event.setStarts(resultSet.getTimestamp(RESULT_STARTS));
+                    event.setEnds(resultSet.getTimestamp(RESULT_ENDS));
+                    event.setStatus(resultSet.getString(RESULT_STATUS));
+                    event.setOnCompletion(resultSet.getString(RESULT_ON_COMPLETION));
+                    event.setComment(resultSet.getString(RESULT_EVENT_COMMENT));
+                    event.setDefinition(resultSet.getString(RESULT_EVENT_DEFINITION));
+                    events.add(event);
+                }
+                return events;
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    @Override
+    public Event event(Connection connection, EventMetadataRequest eventMetadataRequest) {
+        String databaseName = eventMetadataRequest.getDatabaseName();
+        String eventName = eventMetadataRequest.getEventName();
+        String sql = SQL_SHOW_CREATE_EVENT + mysqlQualifiedName(databaseName, eventName);
+        return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
+            Event event = new Event();
+            event.setDatabaseName(databaseName);
+            event.setSchemaName(eventMetadataRequest.getSchemaName());
+            event.setEventName(eventName);
+            if (resultSet.next()) {
+                event.setEventBody(resultSet.getString(RESULT_CREATE_EVENT));
+            }
+            return event;
         });
     }
 

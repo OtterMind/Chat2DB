@@ -30,6 +30,7 @@ interface IProps {
     | WorkspaceTabType.FUNCTION
     | WorkspaceTabType.PROCEDURE
     | WorkspaceTabType.TRIGGER
+    | WorkspaceTabType.EVENT
     | WorkspaceTabType.VIEW
     | WorkspaceTabType.LocalSQLFile;
 }

@@ -19,6 +19,7 @@ type ContentDiffBoundInfo = {
   functionName?: string;
   procedureName?: string;
   triggerName?: string;
+  eventName?: string;
   readOnly?: boolean;
 };
 
@@ -73,6 +74,7 @@ const CONTENT_DIFF_DDL_SOURCE_KEYS = [
   'functionName',
   'procedureName',
   'triggerName',
+  'eventName',
 ] as const;
 
 export const shouldEnableContentDiff = (params: {
@@ -187,6 +189,7 @@ const getContentDiffDDLObjectName = (editorType: EditorType, dbInfo: ContentDiff
     [WorkspaceTabType.FUNCTION]: dbInfo.functionName,
     [WorkspaceTabType.PROCEDURE]: dbInfo.procedureName,
     [WorkspaceTabType.TRIGGER]: dbInfo.triggerName,
+    [WorkspaceTabType.EVENT]: dbInfo.eventName,
   };
 
   return ddlObjectNameMap[editorType] || '';

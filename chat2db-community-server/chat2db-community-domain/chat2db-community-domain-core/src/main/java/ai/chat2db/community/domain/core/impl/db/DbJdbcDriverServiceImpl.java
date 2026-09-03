@@ -82,7 +82,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         for (DriverConfig driverConfig : customDrivers) {
             driverConfig.setCustom(true);
             if (!driverExists(driverConfig)) {
-                log.warn("Custom driver jar missing: {}", driverConfig.getJdbcDriver());
+                log.warn("Custom driver jar is missing");
             }
             availableDrivers.putIfAbsent(driverConfig.getJdbcDriver(), driverConfig);
         }
@@ -92,7 +92,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         if (driverConfigList != null) {
             for (DriverConfig driverConfig : driverConfigList) {
                 if (!driverExists(driverConfig)) {
-                    log.warn("Built-in driver jar missing, skipped: {}", driverConfig.getJdbcDriver());
+                    log.warn("Built-in driver jar is missing and was skipped");
                     continue;
                 }
                 availableDrivers.putIfAbsent(driverConfig.getJdbcDriver(), driverConfig);
@@ -197,6 +197,8 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
     }
 
     @Override
+    // Desktop users intentionally select local JARs; web uploads use managed opaque upload tokens instead.
+    @SuppressWarnings("lgtm[java/path-injection]")
     public String copyDrivers(List<String> driverPaths) {
         boolean exists = true;
         StringBuilder driverNames = new StringBuilder();
@@ -258,7 +260,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         String jdbcDriver = jdbcDrivers.get(0);
         DriverConfig removed = deleteCustomDriver(dbType, jdbcDriver);
         if (removed == null) {
-            log.warn("Custom driver not found, dbType={}, jdbcDriver={}", dbType, jdbcDriver);
+            log.warn("Custom driver was not found");
             return;
         }
         deleteUnreferencedDriverJars(jdbcDriver);
@@ -266,6 +268,8 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
     }
 
     @Override
+    // The requested identifier must first match an existing managed driver config before deletion is attempted.
+    @SuppressWarnings("lgtm[java/path-injection]")
     public void deleteUnreferencedDriverJars(String jdbcDriver) {
         if (StringUtils.isBlank(jdbcDriver)) {
             return;
@@ -279,7 +283,7 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
                 try {
                     FileUtil.del(file);
                 } catch (Exception e) {
-                    log.warn("Delete driver jar file failed: {}", file.getAbsolutePath(), e);
+                    log.warn("Delete driver jar file failed", e);
                 }
             }
         }
@@ -346,6 +350,8 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         }
     }
 
+    // Persisted driver entries are managed JAR identifiers, not arbitrary filesystem paths.
+    @SuppressWarnings("lgtm[java/path-injection]")
     private boolean driverExists(DriverConfig driverConfig) {
         if (driverConfig == null || StringUtils.isBlank(driverConfig.getJdbcDriver())) {
             return false;

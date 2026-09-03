@@ -34,7 +34,15 @@ import { staticMessage, staticModal } from '@chat2db/ui';
 import { deleteTable } from '../functions/deleteTable';
 import { generateJavaClass } from '../functions/generateJavaClass';
 import { neatenMoveToGroup } from '../functions/moveToGroup';
-import { editView, openFunction, openProcedure, openTrigger, openView } from '../functions/openAsyncSql';
+import {
+  editView,
+  openCreateEvent,
+  openEvent,
+  openFunction,
+  openProcedure,
+  openTrigger,
+  openView,
+} from '../functions/openAsyncSql';
 import { handelPinTable } from '../functions/pinTable';
 import { openSchemaSyncModal } from '../functions/schemaSync';
 import { viewDDL } from '../functions/viewDDL';
@@ -271,6 +279,38 @@ export const useCreateRightClickMenu = () => {
       });
     };
 
+    const setEventEnabled = ({
+      dataSourceId: dsId,
+      databaseName: dbName,
+      eventName,
+      enabled,
+      refresh,
+    }: {
+      dataSourceId: number;
+      databaseName: string;
+      eventName: string;
+      enabled: boolean;
+      refresh: () => void;
+    }) => {
+      sqlService
+        .getEventEnabledSql({ dataSourceId: dsId, databaseName: dbName, eventName, enabled })
+        .then((sql) => {
+          openUnifiedConfirmationModal({
+            title: i18n('workspace.menu.eventPreviewTitle'),
+            content: <pre style={{ whiteSpace: 'pre-wrap' }}>{sql}</pre>,
+            onOk: () => {
+              return sqlService.executeDDL({ dataSourceId: dsId, sql }).then(() => {
+                staticMessage.success(i18n('common.text.successfulExecution'));
+                refresh();
+              });
+            },
+          });
+        })
+        .catch((error) => {
+          staticMessage.error(error?.message || i18n('common.text.failure'));
+        });
+    };
+
     const renderDeleteInputConfirmLabel = (labelKey: string, confirmName: string) => {
       return (
         <>
@@ -403,6 +443,78 @@ export const useCreateRightClickMenu = () => {
               ...extraParams,
             },
           });
+        },
+      },
+
+      [OperationColumn.CreateEvent]: {
+        text: i18n('workspace.menu.createEvent'),
+        icon: 'icon-file-add',
+        handle: () => {
+          openCreateEvent({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.OpenEvent]: {
+        text: i18n('workspace.menu.openEvent'),
+        icon: 'icon-file-text',
+        handle: () => {
+          openEvent({ treeNodeData, addWorkspaceTab });
+        },
+      },
+
+      [OperationColumn.EnableEvent]: {
+        text: i18n('workspace.menu.enableEvent'),
+        icon: 'icon-check',
+        handle: () => {
+          const eventName = extraParams.eventName || treeNodeData.originalTitle;
+          setEventEnabled({
+            dataSourceId: dataSourceId!,
+            databaseName: extraParams.databaseName,
+            eventName,
+            enabled: true,
+            refresh: refreshAfterDelete,
+          });
+        },
+      },
+
+      [OperationColumn.DisableEvent]: {
+        text: i18n('workspace.menu.disableEvent'),
+        icon: 'icon-pause',
+        handle: () => {
+          const eventName = extraParams.eventName || treeNodeData.originalTitle;
+          setEventEnabled({
+            dataSourceId: dataSourceId!,
+            databaseName: extraParams.databaseName,
+            eventName,
+            enabled: false,
+            refresh: refreshAfterDelete,
+          });
+        },
+      },
+
+      [OperationColumn.DropEvent]: {
+        text: i18n('workspace.menu.dropEvent'),
+        icon: 'icon-delete',
+        danger: true,
+        handle: () => {
+          const eventName = extraParams.eventName || treeNodeData.originalTitle;
+          sqlService
+            .getEventDropSql({ dataSourceId: dataSourceId!, databaseName: extraParams.databaseName, eventName })
+            .then((sql) => {
+              openUnifiedConfirmationModal({
+                title: i18n('workspace.menu.dropEvent'),
+                content: <pre style={{ whiteSpace: 'pre-wrap' }}>{sql}</pre>,
+                needInputConfirmText: eventName,
+                onOk: () => {
+                  return sqlService.executeDDL({ dataSourceId: dataSourceId!, sql }).then(() => {
+                    refreshAfterDelete();
+                  });
+                },
+              });
+            })
+            .catch((error) => {
+              staticMessage.error(error?.message || i18n('common.text.failure'));
+            });
         },
       },
 

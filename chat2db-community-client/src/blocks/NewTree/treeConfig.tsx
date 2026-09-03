@@ -10,6 +10,7 @@ import { getDatabaseSupport } from '@/utils/database';
 import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import { v4 as uuid } from 'uuid';
 import { createSavedConsoleTreeNodeKey } from '@/store/tree/backgroundRefresh';
+import { createEventTreeNodeDescription, createEventTreeNodeKey, supportsEventTree } from './eventTreeIdentity';
 import {
   createActiveTransactionsTreeNodeKey,
   createMonitorTreeNodeKey,
@@ -125,6 +126,14 @@ export const switchIcon: Partial<{
     icon: fileIcon,
     iconExistDark: true,
     unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.EVENTS]: {
+    icon: fileIcon,
+    iconExistDark: true,
+    unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.EVENT]: {
+    icon: 'icon-event',
   },
   [TreeNodeType.VIEWS]: {
     icon: fileIcon,
@@ -634,6 +643,18 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               isLeaf: false,
               extraParams: nodeExtraParams,
             },
+            ...(supportsEventTree(databaseType)
+              ? [
+                  {
+                    key: treeConfig[TreeNodeType.EVENTS].createTreeNodeKey!(params),
+                    originalTitle: i18n('common.text.events'),
+                    title: null,
+                    treeNodeType: TreeNodeType.EVENTS,
+                    isLeaf: false,
+                    extraParams: nodeExtraParams,
+                  },
+                ]
+              : []),
             createSaveConsolesNode(nodeExtraParams),
           ];
 
@@ -1137,6 +1158,58 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
         `function_${specificName || functionName}`,
         `uuid_${uuid()}`,
       ].join('-');
+    },
+  },
+
+  [TreeNodeType.EVENTS]: {
+    getChildren: (extraParams) => {
+      const { dataSourceId, databaseName } = extraParams;
+      return new Promise((r: (value: TreeNodeLoadResult) => void, j) => {
+        Promise.all([
+          mysqlServer.getEventList({ dataSourceId, databaseName }),
+          mysqlServer.getEventSchedulerStatus({ dataSourceId, databaseName }).catch(() => undefined),
+        ])
+          .then(([res, schedulerStatus]) => {
+            const list: TreeNodeData[] = (res || []).map((t: any) => {
+              const key = treeConfig[TreeNodeType.EVENT].createTreeNodeKey!({
+                dataSourceId,
+                databaseName,
+                eventName: t.eventName,
+              });
+              return {
+                key,
+                originalTitle: t.eventName,
+                title: null,
+                describe: createEventTreeNodeDescription(
+                  t.status,
+                  schedulerStatus?.schedulerEnabled,
+                  i18n('workspace.event.schedulerOff'),
+                ),
+                treeNodeType: TreeNodeType.EVENT,
+                isLeaf: true,
+                extraParams: {
+                  ...extraParams,
+                  eventName: t.eventName,
+                },
+              };
+            });
+            r({ children: list || [], total: list.length });
+          })
+          .catch((error) => {
+            j(error);
+          });
+      });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, databaseName } = formatObject(params);
+      return [`dataSource_${dataSourceId}`, `database_${databaseName}`, 'events_chat2dbCatalogue'].join('-');
+    },
+  },
+
+  [TreeNodeType.EVENT]: {
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, databaseName, eventName } = formatObject(params);
+      return createEventTreeNodeKey({ dataSourceId, databaseName, eventName });
     },
   },
 

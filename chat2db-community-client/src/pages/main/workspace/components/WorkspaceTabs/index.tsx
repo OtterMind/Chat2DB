@@ -383,6 +383,29 @@ function rebuildSqlExecuteTabData(item: IWorkspaceTab) {
     };
   }
 
+  if (item.type === WorkspaceTabType.EVENT) {
+    const eventName = uniqueData.eventName || item.title?.replace(/\[.*\]$/, '');
+    if (uniqueData.isNewObject) {
+      return uniqueData;
+    }
+    return {
+      ...uniqueData,
+      eventName,
+      loadSQL: () => {
+        if (!dataSourceId || !databaseName || !eventName) {
+          return getSnapshotDDL(uniqueData);
+        }
+        return sqlService
+          .getEventDetail({
+            dataSourceId: dataSourceId!,
+            databaseName: databaseName!,
+            eventName: eventName!,
+          })
+          .then((res) => res.eventBody);
+      },
+    };
+  }
+
   return uniqueData;
 }
 
@@ -397,6 +420,7 @@ function isSavedConsoleLikeWorkspaceTab(item?: IWorkspaceTab | null) {
     item.type === WorkspaceTabType.FUNCTION ||
     item.type === WorkspaceTabType.PROCEDURE ||
     item.type === WorkspaceTabType.TRIGGER ||
+    item.type === WorkspaceTabType.EVENT ||
     item.type === WorkspaceTabType.VIEW ||
     // Accept table and missing item.type for backward compatibility.
     item.type === ('table' as any) ||
@@ -1907,6 +1931,7 @@ const WorkspaceTabs = memo(() => {
       case WorkspaceTabType.FUNCTION:
       case WorkspaceTabType.PROCEDURE:
       case WorkspaceTabType.TRIGGER:
+      case WorkspaceTabType.EVENT:
       case WorkspaceTabType.VIEW:
         return renderSQLExecute(item);
       case WorkspaceTabType.EditTable:

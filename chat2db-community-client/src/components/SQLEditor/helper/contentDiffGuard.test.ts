@@ -1,5 +1,27 @@
-import { WorkspaceTabType } from '@/constants/workspace';
-import {
+declare const require: (moduleName: string) => any;
+
+const WorkspaceTabType = {
+  CONSOLE: 'console',
+  EVENT: 'event',
+  FUNCTION: 'function',
+  LocalSQLFile: 'localSQLFile',
+  VIEW: 'view',
+};
+
+const moduleLoader = require('module');
+const originalLoad = moduleLoader._load;
+moduleLoader._load = (request: string, parent: unknown, isMain: boolean) => {
+  if (request === '@/constants/workspace') {
+    return { WorkspaceTabType };
+  }
+  if (request === '@client-runtime') {
+    return { clientRuntime: { supportsContentDiff: () => true } };
+  }
+  return originalLoad(request, parent, isMain);
+};
+
+async function run() {
+const {
   ContentDiffDenyReason,
   ContentDiffSourceKind,
   getContentDiffDecorationCount,
@@ -7,7 +29,7 @@ import {
   getContentDiffOpenBlockReason,
   guardContentDiffTexts,
   isContentDiffHunkBudgetExceeded,
-} from './contentDiffGuard';
+} = await import('./contentDiffGuard');
 
 function assertEqual(actual: any, expected: any, message: string) {
   const actualJson = JSON.stringify(actual);
@@ -135,6 +157,19 @@ assertEqual(
 );
 
 assertEqual(
+  getContentDiffEligibility({
+    editorType: WorkspaceTabType.EVENT,
+    dbInfo: {
+      dataSourceId: 1,
+      databaseName: 'app',
+      eventName: 'daily_rollup',
+    },
+  }).sourceKind,
+  ContentDiffSourceKind.EditableDDL,
+  'allow editable ddl event',
+);
+
+assertEqual(
   guardContentDiffTexts('select 1', 'select 1').reason,
   ContentDiffDenyReason.Unchanged,
   'skip unchanged content',
@@ -193,3 +228,15 @@ assert(
   !isContentDiffHunkBudgetExceeded({ hunkCount: 500, decorationCount: 1000 }),
   'allow budget boundary',
 );
+
+  console.log('Content diff guard tests passed');
+}
+
+run()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(() => {
+    moduleLoader._load = originalLoad;
+  });

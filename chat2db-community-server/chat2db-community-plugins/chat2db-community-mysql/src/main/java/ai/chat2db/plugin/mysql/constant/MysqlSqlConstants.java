@@ -32,6 +32,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_INDEX_BACK_QUOTE = "DROP INDEX `";
     public static final String SQL_DROP_PRIMARY_KEY = "DROP PRIMARY KEY";
     public static final String SQL_DROP_PROCEDURE_TEMPLATE = "DROP PROCEDURE %s";
+    public static final String SQL_DROP_EVENT_TEMPLATE = "DROP EVENT %s";
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
     public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
@@ -55,6 +56,8 @@ public final class MysqlSqlConstants {
     public static final String SQL_SET_FOREIGN_KEY_CHECKS_DISABLED = "SET FOREIGN_KEY_CHECKS=0;";
     public static final String SQL_SET_FOREIGN_KEY_CHECKS_ENABLED = "SET FOREIGN_KEY_CHECKS=1;";
     public static final String SQL_SHOW_CREATE_FUNCTION = "SHOW CREATE FUNCTION ";
+    public static final String SQL_SHOW_CREATE_EVENT = "SHOW CREATE EVENT ";
+    public static final String SQL_SHOW_CREATE_EVENT_TEMPLATE = "show create event %s ";
     public static final String SQL_SHOW_CREATE_FUNCTION_TEMPLATE = "SHOW CREATE FUNCTION %s;";
     public static final String SQL_SHOW_CREATE_PROCEDURE = "SHOW CREATE PROCEDURE ";
     public static final String SQL_SHOW_CREATE_PROCEDURE_TEMPLATE = "show create procedure %s ";

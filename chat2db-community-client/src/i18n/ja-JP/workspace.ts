@@ -295,6 +295,13 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.menu.createEvent': 'イベントを作成',
+  'workspace.menu.openEvent': 'イベントを開く',
+  'workspace.menu.enableEvent': 'イベントを有効化',
+  'workspace.menu.disableEvent': 'イベントを無効化',
+  'workspace.menu.dropEvent': 'イベントを削除',
+  'workspace.menu.eventPreviewTitle': 'SQL の確認',
+  'workspace.event.schedulerOff': 'スケジューラー停止中',
   'workspace.ops.activeTransactions': 'アクティブなトランザクション',
   'workspace.ops.monitor': '監視',
   'workspace.ops.transactionId': 'トランザクション ID',

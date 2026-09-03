@@ -23,9 +23,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static ai.chat2db.plugin.sqlserver.constant.SqlServerExecutorConstants.*;
 public class SqlServerExecutor extends DefaultSQLExecutor {
 
+    private record GoDelimiter(int start, int end) {
+    }
 
 
     @Override
@@ -46,7 +47,7 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     protected List<SimpleSqlStatement> buildSimpleSqlStatements(SqlExecuteRequest command, DbType dbType,
                                                                  String type, DBConfig dbConfig) {
         List<String> sqlList = splitByGO(command.getScript());
-        if (GO_DELIMITER_PATTERN.matcher(command.getScript()).find()) {
+        if (containsGoDelimiter(command.getScript())) {
             List<SimpleSqlStatement> statements = new ArrayList<>(sqlList.size());
             for (String sql : sqlList) {
                 List<SimpleSqlStatement> parsedStatements = SqlUtils.parseStatements(sql, dbType, type);
@@ -85,7 +86,16 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         if (StringUtils.isBlank(sql)) {
             return null;
         }
-        return GO_DELIMITER_PATTERN.matcher(sql).replaceAll("");
+        List<GoDelimiter> delimiters = goDelimiters(sql);
+        if (delimiters.isEmpty()) {
+            return sql;
+        }
+        StringBuilder cleaned = new StringBuilder(sql);
+        for (int index = delimiters.size() - 1; index >= 0; index--) {
+            GoDelimiter delimiter = delimiters.get(index);
+            cleaned.delete(delimiter.start(), delimiter.end());
+        }
+        return cleaned.toString().trim();
     }
 
     List<String> splitByGO(String sql) {
@@ -94,19 +104,92 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
             return sqlList;
         }
         int start = 0;
-        var matcher = GO_DELIMITER_PATTERN.matcher(sql);
-        while (matcher.find()) {
-            String item = sql.substring(start, matcher.start()).trim();
+        for (GoDelimiter delimiter : goDelimiters(sql)) {
+            String item = sql.substring(start, delimiter.start()).trim();
             if (StringUtils.isNotBlank(item)) {
                 sqlList.add(item);
             }
-            start = matcher.end();
+            start = delimiter.end();
         }
         String item = sql.substring(start).trim();
         if (StringUtils.isNotBlank(item)) {
             sqlList.add(item);
         }
         return sqlList;
+    }
+
+    private boolean containsGoDelimiter(String sql) {
+        return !goDelimiters(sql).isEmpty();
+    }
+
+    private List<GoDelimiter> goDelimiters(String sql) {
+        List<GoDelimiter> delimiters = new ArrayList<>();
+        if (StringUtils.isBlank(sql)) {
+            return delimiters;
+        }
+        int lineStart = 0;
+        while (lineStart < sql.length()) {
+            int lineEnd = sql.indexOf('\n', lineStart);
+            if (lineEnd < 0) {
+                lineEnd = sql.length();
+            }
+            int contentEnd = lineEnd;
+            if (contentEnd > lineStart && sql.charAt(contentEnd - 1) == '\r') {
+                contentEnd--;
+            }
+            GoDelimiter delimiter = goDelimiterInLine(sql, lineStart, contentEnd);
+            if (delimiter != null) {
+                delimiters.add(delimiter);
+            }
+            lineStart = lineEnd + 1;
+        }
+        return delimiters;
+    }
+
+    private GoDelimiter goDelimiterInLine(String sql, int lineStart, int lineEnd) {
+        int candidate = skipHorizontalWhitespace(sql, lineStart, lineEnd);
+        GoDelimiter lineDelimiter = goDelimiterAt(sql, lineStart, candidate, lineEnd);
+        if (lineDelimiter != null) {
+            return lineDelimiter;
+        }
+        for (int index = lineStart; index < lineEnd; index++) {
+            if (sql.charAt(index) != ';') {
+                continue;
+            }
+            candidate = skipHorizontalWhitespace(sql, index + 1, lineEnd);
+            GoDelimiter inlineDelimiter = goDelimiterAt(sql, index + 1, candidate, lineEnd);
+            if (inlineDelimiter != null) {
+                return inlineDelimiter;
+            }
+        }
+        return null;
+    }
+
+    private GoDelimiter goDelimiterAt(String sql, int delimiterStart, int candidate, int lineEnd) {
+        if (candidate + 2 > lineEnd || !isGo(sql, candidate)) {
+            return null;
+        }
+        int cursor = skipHorizontalWhitespace(sql, candidate + 2, lineEnd);
+        if (cursor < lineEnd && sql.charAt(cursor) == ';') {
+            cursor = skipHorizontalWhitespace(sql, cursor + 1, lineEnd);
+        }
+        if (cursor + 1 < lineEnd && sql.charAt(cursor) == '-' && sql.charAt(cursor + 1) == '-') {
+            return new GoDelimiter(delimiterStart, lineEnd);
+        }
+        return cursor == lineEnd ? new GoDelimiter(delimiterStart, lineEnd) : null;
+    }
+
+    private static boolean isGo(String sql, int index) {
+        return (sql.charAt(index) == 'g' || sql.charAt(index) == 'G')
+                && (sql.charAt(index + 1) == 'o' || sql.charAt(index + 1) == 'O');
+    }
+
+    private static int skipHorizontalWhitespace(String sql, int start, int end) {
+        int cursor = start;
+        while (cursor < end && (sql.charAt(cursor) == ' ' || sql.charAt(cursor) == '\t')) {
+            cursor++;
+        }
+        return cursor;
     }
 
 
@@ -167,6 +250,8 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         return executeResults.get(executeResults.size() - 1);
     }
 
+    // GO batches are intentionally user-authored SQL-console statements and cannot be parameterized as values.
+    @SuppressWarnings("lgtm[java/sql-injection]")
     private List<ExecuteResponse> executeSqlServerBatch(String originalSql, List<String> sqlList, Connection connection,
                                                       boolean limitRowSize, Integer offset, Integer count,
                                                       Integer resultSetId)

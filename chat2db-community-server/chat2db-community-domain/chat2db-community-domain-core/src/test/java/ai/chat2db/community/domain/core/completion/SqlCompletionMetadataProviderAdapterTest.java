@@ -164,14 +164,19 @@ class SqlCompletionMetadataProviderAdapterTest {
     }
 
     @Test
-    void eventMetadataIsUnsupportedUntilMetadataSpiCanListEvents() {
+    void eventMetadataUsesMetadataSpiAndConverter() {
         SqlCompletionMetadataProviderAdapter provider = newProvider(new FakeMetaData());
 
         SqlCompletionMetadataResponse result = provider.list(DbSqlCompletionMetadataRequest.of(
                 SqlCompletionCandidateTypeEnum.EVENT, SqlCompletionMetadataScope.empty(), ""));
 
-        Assertions.assertEquals(SqlCompletionStatusEnum.UNSUPPORTED.name(), result.getStatus());
-        Assertions.assertEquals("sql.completion.metadata.unsupported", result.getReasonCode());
+        Assertions.assertEquals(SqlCompletionStatusEnum.SUCCESS.name(), result.getStatus());
+        Assertions.assertEquals(1, result.getCandidates().size());
+        SqlCompletionCandidate candidate = result.getCandidates().get(0);
+        Assertions.assertEquals("daily_rollup", candidate.getLabel());
+        Assertions.assertEquals("`daily_rollup`", candidate.getInsertText());
+        Assertions.assertEquals(SqlCompletionCandidateTypeEnum.EVENT, candidate.getType());
+        Assertions.assertEquals("ENABLED", candidate.getObjectType());
     }
 
     @Test
@@ -363,6 +368,16 @@ class SqlCompletionMetadataProviderAdapterTest {
         public List<Trigger> triggers(Connection connection, String databaseName, String schemaName) {
             return List.of(Trigger.builder().databaseName(databaseName).schemaName(schemaName)
                     .triggerName("trg_orders_insert").eventManipulation("INSERT").build());
+        }
+
+        @Override
+        public List<Event> events(Connection connection, String databaseName, String schemaName) {
+            Event event = new Event();
+            event.setDatabaseName(databaseName);
+            event.setSchemaName(schemaName);
+            event.setEventName("daily_rollup");
+            event.setStatus("ENABLED");
+            return List.of(event);
         }
 
         @Override

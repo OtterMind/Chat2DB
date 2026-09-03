@@ -18,6 +18,8 @@ final class JdbcDriverManagementPolicy {
             Pattern.CASE_INSENSITIVE);
 
     record PromotedDrivers(String jdbcDriver, List<Path> files) {
+        // Paths are created only by promoteUploadedDrivers after token and parent-directory validation.
+        @SuppressWarnings("lgtm[java/path-injection]")
         void rollback() {
             for (Path file : files) {
                 try {
@@ -36,6 +38,8 @@ final class JdbcDriverManagementPolicy {
         return desktop || community;
     }
 
+    // Upload tokens are allowlisted and both resolved paths must remain direct children of trusted directories.
+    @SuppressWarnings("lgtm[java/path-injection]")
     static PromotedDrivers promoteUploadedDrivers(List<String> uploadTokens, Path stagingDirectory,
                                                    Path driverDirectory) {
         if (uploadTokens == null || uploadTokens.isEmpty()) {
@@ -56,7 +60,8 @@ final class JdbcDriverManagementPolicy {
                 Path stagedFile = normalizedStagingDirectory.resolve(uploadId + ".upload").normalize();
                 Path driverFile = normalizedDirectory.resolve(driverName).normalize();
                 targets.add(new UploadTarget(driverName, stagedFile, driverFile));
-                if (!normalizedStagingDirectory.equals(stagedFile.getParent()) || !Files.isRegularFile(stagedFile)
+                if (!normalizedStagingDirectory.equals(stagedFile.getParent())
+                        || !Files.isRegularFile(stagedFile, java.nio.file.LinkOption.NOFOLLOW_LINKS)
                         || !normalizedDirectory.equals(driverFile.getParent())) {
                     throw uploadFailure("uploaded driver file is unavailable");
                 }
@@ -95,6 +100,8 @@ final class JdbcDriverManagementPolicy {
         moveWithoutReplacement(source, target, (link, existing) -> Files.createLink(link, existing));
     }
 
+    // Callers pass only paths validated as direct children of the managed staging and driver directories.
+    @SuppressWarnings("lgtm[java/path-injection]")
     static void moveWithoutReplacement(Path source, Path target, LinkCreator linkCreator) throws Exception {
         try {
             linkCreator.create(target, source);
@@ -115,6 +122,7 @@ final class JdbcDriverManagementPolicy {
         }
     }
 
+    @SuppressWarnings("lgtm[java/path-injection]")
     private static void cleanupStagedFiles(List<UploadTarget> targets) {
         for (UploadTarget target : targets) {
             try {

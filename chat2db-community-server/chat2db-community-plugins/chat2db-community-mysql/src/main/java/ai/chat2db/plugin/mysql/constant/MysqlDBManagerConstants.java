@@ -25,10 +25,12 @@ public final class MysqlDBManagerConstants {
     public static final String DELIMITER_BLOCK_END = "delimiter ;";
     public static final String CREATE_FUNCTION_COLUMN = "Create Function";
     public static final String CREATE_PROCEDURE_COLUMN = "Create Procedure";
+    public static final String CREATE_EVENT_COLUMN = "Create Event";
     public static final String CREATE_TABLE_COLUMN = "Create Table";
     public static final String CREATE_VIEW_COLUMN = "Create View";
     public static final String EXPORT_TABLE_ERROR_MESSAGE = "export table %s error:%s";
     public static final String FUNCTION_NAME_COLUMN = "FUNCTION_NAME";
+    public static final String EVENT_NAME_COLUMN = "EVENT_NAME";
     public static final String PROCEDURE_NAME_COLUMN = "Name";
     public static final String ORIGINAL_STATEMENT_COLUMN = "SQL Original Statement";
     public static final String SYSTEM_TABLE_TYPE = "SYSTEM TABLE";

@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.enums.completion.SqlCompletionParameterMo
 import ai.chat2db.community.domain.api.model.completion.SqlCompletionCandidate;
 import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.community.domain.api.model.metadata.Database;
+import ai.chat2db.community.domain.api.model.metadata.Event;
 import ai.chat2db.community.domain.api.model.metadata.Function;
 import ai.chat2db.community.domain.api.model.metadata.FunctionParameter;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
@@ -309,6 +310,39 @@ public abstract class SqlCompletionConverter {
         return triggers == null ? List.of()
                 : triggers.stream()
                 .map(trigger -> trigger2candidate(trigger, databaseName, schemaName, datasourceName,
+                        identifierProcessor))
+                .toList();
+    }
+
+    public SqlCompletionCandidate event2candidate(Event event,
+                                                  String databaseName,
+                                                  String schemaName,
+                                                  String datasourceName,
+                                                  @Context ISQLIdentifierProcessor identifierProcessor) {
+        if (event == null) {
+            return null;
+        }
+        SqlCompletionCandidate candidate = baseCandidate(SqlCompletionCandidateTypeEnum.EVENT,
+                event.getEventName(), identifierProcessor);
+        candidate.setDatabaseName(firstNonBlank(event.getDatabaseName(), databaseName));
+        candidate.setSchemaName(firstNonBlank(event.getSchemaName(), schemaName));
+        candidate.setObjectName(event.getEventName());
+        candidate.setDatasourceName(datasourceName);
+        candidate.setDetail(relationDetail(candidate.getDatabaseName(), candidate.getSchemaName()));
+        candidate.setDescription(datasourceDescription(datasourceName));
+        candidate.setObjectType(event.getStatus());
+        candidate.setComment(event.getComment());
+        return candidate;
+    }
+
+    public List<SqlCompletionCandidate> events2candidates(List<Event> events,
+                                                          String databaseName,
+                                                          String schemaName,
+                                                          String datasourceName,
+                                                          @Context ISQLIdentifierProcessor identifierProcessor) {
+        return events == null ? List.of()
+                : events.stream()
+                .map(event -> event2candidate(event, databaseName, schemaName, datasourceName,
                         identifierProcessor))
                 .toList();
     }
