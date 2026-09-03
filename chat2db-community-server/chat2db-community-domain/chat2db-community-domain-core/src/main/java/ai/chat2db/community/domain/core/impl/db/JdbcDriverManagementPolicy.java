@@ -18,9 +18,11 @@ final class JdbcDriverManagementPolicy {
             Pattern.CASE_INSENSITIVE);
 
     record PromotedDrivers(String jdbcDriver, List<Path> files) {
+        // Paths are created only by promoteUploadedDrivers after token and parent-directory validation.
         void rollback() {
             for (Path file : files) {
                 try {
+                    // codeql[java/path-injection]
                     Files.deleteIfExists(file);
                 } catch (Exception ignored) {
                     // Preserve the original save failure; the unreferenced file can be cleaned later.
@@ -36,6 +38,7 @@ final class JdbcDriverManagementPolicy {
         return desktop || community;
     }
 
+    // Upload tokens are allowlisted and both resolved paths must remain direct children of trusted directories.
     static PromotedDrivers promoteUploadedDrivers(List<String> uploadTokens, Path stagingDirectory,
                                                    Path driverDirectory) {
         if (uploadTokens == null || uploadTokens.isEmpty()) {
@@ -56,10 +59,13 @@ final class JdbcDriverManagementPolicy {
                 Path stagedFile = normalizedStagingDirectory.resolve(uploadId + ".upload").normalize();
                 Path driverFile = normalizedDirectory.resolve(driverName).normalize();
                 targets.add(new UploadTarget(driverName, stagedFile, driverFile));
-                if (!normalizedStagingDirectory.equals(stagedFile.getParent()) || !Files.isRegularFile(stagedFile)
+                if (!normalizedStagingDirectory.equals(stagedFile.getParent())
+                        || !Files.isRegularFile(stagedFile, java.nio.file.LinkOption.NOFOLLOW_LINKS)
                         || !normalizedDirectory.equals(driverFile.getParent())) {
                     throw uploadFailure("uploaded driver file is unavailable");
                 }
+                // driverFile is a direct child of normalizedDirectory with an allowlisted JAR file name.
+                // codeql[java/path-injection]
                 if (Files.exists(driverFile)) {
                     throw uploadFailure("a managed driver with the same file name already exists");
                 }
@@ -81,6 +87,7 @@ final class JdbcDriverManagementPolicy {
         } catch (Exception exception) {
             for (Path promotedFile : promotedFiles) {
                 try {
+                    // codeql[java/path-injection]
                     Files.deleteIfExists(promotedFile);
                 } catch (Exception ignored) {
                     // Keep the original promotion failure.
@@ -92,21 +99,27 @@ final class JdbcDriverManagementPolicy {
     }
 
     static void moveWithoutReplacement(Path source, Path target) throws Exception {
+        // source and target are validated managed-directory children before this call.
+        // codeql[java/path-injection]
         moveWithoutReplacement(source, target, (link, existing) -> Files.createLink(link, existing));
     }
 
+    // Callers pass only paths validated as direct children of the managed staging and driver directories.
     static void moveWithoutReplacement(Path source, Path target, LinkCreator linkCreator) throws Exception {
         try {
             linkCreator.create(target, source);
         } catch (FileAlreadyExistsException exception) {
             throw exception;
         } catch (UnsupportedOperationException | FileSystemException ignored) {
+            // codeql[java/path-injection]
             Files.copy(source, target);
         }
         try {
+            // codeql[java/path-injection]
             Files.delete(source);
         } catch (Exception exception) {
             try {
+                // codeql[java/path-injection]
                 Files.deleteIfExists(target);
             } catch (Exception cleanupFailure) {
                 exception.addSuppressed(cleanupFailure);
@@ -118,6 +131,7 @@ final class JdbcDriverManagementPolicy {
     private static void cleanupStagedFiles(List<UploadTarget> targets) {
         for (UploadTarget target : targets) {
             try {
+                // codeql[java/path-injection]
                 Files.deleteIfExists(target.stagedFile());
             } catch (Exception ignored) {
                 // Preserve the validation failure.

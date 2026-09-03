@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.service.ops.IOpsOperationSavedService;
@@ -63,7 +65,7 @@ public class OpsOperationSavedController {
      * @return data result containing long.
      */
     @PostMapping("/create")
-    public DataResult<Long> create(@RequestBody Operation request) {
+    public DataResult<Long> create(@Valid @RequestBody Operation request) {
         return DataResult.of(operationSavedService.createConsole(request));
     }
 
@@ -76,7 +78,7 @@ public class OpsOperationSavedController {
      * @return operation result for the request.
      */
     @RequestMapping(value = "/update", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ActionResult update(@RequestBody Operation request) {
+    public ActionResult update(@Valid @RequestBody Operation request) {
         operationSavedService.updateConsole(request);
         return ActionResult.isSuccess();
     }
@@ -104,7 +106,7 @@ public class OpsOperationSavedController {
      * @return operation result for the request.
      */
     @RequestMapping(value = "/batch_tab_close", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ActionResult batchTabClose(@RequestBody BatchTabCloseRequest request) {
+    public ActionResult batchTabClose(@Valid @RequestBody BatchTabCloseRequest request) {
         operationSavedService.closeTabs();
         return ActionResult.isSuccess();
     }
