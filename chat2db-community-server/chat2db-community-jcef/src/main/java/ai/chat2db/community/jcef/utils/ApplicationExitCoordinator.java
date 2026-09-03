@@ -14,8 +14,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -38,7 +38,8 @@ public final class ApplicationExitCoordinator {
     }
 
     private static final AtomicReference<PendingExit> PENDING_EXIT = new AtomicReference<>();
-    private static final AtomicBoolean FRONTEND_READY = new AtomicBoolean();
+    private static final Object FRONTEND_STATE_LOCK = new Object();
+    private static volatile boolean frontendReady;
 
     private ApplicationExitCoordinator() {
     }
@@ -56,19 +57,35 @@ public final class ApplicationExitCoordinator {
 
     static boolean request(String action, String operationId, BooleanSupplier confirmedAction,
             long acknowledgementTimeoutMillis) {
+        return request(action, operationId, confirmedAction, acknowledgementTimeoutMillis,
+                (task, delayMillis) -> ACK_TIMEOUT_EXECUTOR.schedule(task, delayMillis, TimeUnit.MILLISECONDS));
+    }
+
+    static boolean request(String action, String operationId, BooleanSupplier confirmedAction,
+            long acknowledgementTimeoutMillis, AcknowledgementTimeoutScheduler timeoutScheduler) {
         ExitAction validatedAction = requireAction(action);
         String validatedOperationId = requireOperationId(operationId);
         Objects.requireNonNull(confirmedAction, "Confirmed exit action is required");
-        if (!FRONTEND_READY.get()) {
-            return confirmedAction.getAsBoolean();
+        Objects.requireNonNull(timeoutScheduler, "Acknowledgement timeout scheduler is required");
+        CefBrowser browser;
+        PendingExit pendingExit = new PendingExit(validatedOperationId, confirmedAction);
+        synchronized (FRONTEND_STATE_LOCK) {
+            browser = frontendReady ? JcefContext.getInstance().getBrowser_() : null;
+            if (!PENDING_EXIT.compareAndSet(null, pendingExit)) {
+                return false;
+            }
         }
-        CefBrowser browser = JcefContext.getInstance().getBrowser_();
+        PendingExit dispatchedExit = pendingExit;
         if (browser == null) {
-            return confirmedAction.getAsBoolean();
-        }
-        PendingExit pendingExit = new PendingExit(validatedOperationId, confirmedAction, new AtomicBoolean());
-        if (!PENDING_EXIT.compareAndSet(null, pendingExit)) {
-            return false;
+            PendingExit claimedExit = claimPendingExit(dispatchedExit, false);
+            if (claimedExit == null) {
+                return true;
+            }
+            try {
+                return claimedExit.confirmedAction().getAsBoolean();
+            } finally {
+                releasePendingExit(claimedExit);
+            }
         }
         ConsoleResult result = ConsoleResult.builder()
                 .actionType(ActionTypeEnum.APP_EXIT_REQUESTED.getName())
@@ -80,12 +97,26 @@ public final class ApplicationExitCoordinator {
         try {
             CallJsFunctionUtil.callHandleJavaMessage(browser, JSON.toJSONString(result));
         } catch (RuntimeException exception) {
-            PENDING_EXIT.compareAndSet(pendingExit, null);
-            FRONTEND_READY.set(false);
-            return confirmedAction.getAsBoolean();
+            PendingExit claimedExit;
+            synchronized (FRONTEND_STATE_LOCK) {
+                claimedExit = claimPendingExit(dispatchedExit, false);
+                if (claimedExit != null) {
+                    frontendReady = false;
+                }
+            }
+            return claimedExit == null || runFallback(claimedExit);
         }
-        ACK_TIMEOUT_EXECUTOR.schedule(() -> fallbackIfUnacknowledged(pendingExit),
-                Math.max(1L, acknowledgementTimeoutMillis), TimeUnit.MILLISECONDS);
+        try {
+            ScheduledFuture<?> timeoutFuture = timeoutScheduler.schedule(
+                    () -> fallbackIfUnacknowledged(dispatchedExit),
+                    Math.max(1L, acknowledgementTimeoutMillis));
+            dispatchedExit.attachAcknowledgementTimeout(timeoutFuture);
+        } catch (RuntimeException exception) {
+            log.error("Could not schedule application exit acknowledgement timeout for operation {}",
+                    dispatchedExit.operationId(), exception);
+            PendingExit claimedExit = claimPendingExit(dispatchedExit, false);
+            return claimedExit == null || runFallback(claimedExit);
+        }
         return true;
     }
 
@@ -94,7 +125,9 @@ public final class ApplicationExitCoordinator {
         if (pendingExit == null || operationId == null || !operationId.equals(pendingExit.operationId())) {
             return false;
         }
-        pendingExit.acknowledged().set(true);
+        if (!pendingExit.acknowledge()) {
+            return false;
+        }
         return PENDING_EXIT.get() == pendingExit;
     }
 
@@ -103,34 +136,65 @@ public final class ApplicationExitCoordinator {
         if (pendingExit == null) {
             return false;
         }
-        return pendingExit.confirmedAction().getAsBoolean();
+        try {
+            return pendingExit.confirmedAction().getAsBoolean();
+        } finally {
+            releasePendingExit(pendingExit);
+        }
     }
 
     public static boolean cancel(String operationId) {
-        return takePendingExit(operationId) != null;
+        PendingExit pendingExit = takePendingExit(operationId);
+        if (pendingExit == null) {
+            return false;
+        }
+        releasePendingExit(pendingExit);
+        return true;
     }
 
     public static void markFrontendReady() {
-        FRONTEND_READY.set(true);
+        synchronized (FRONTEND_STATE_LOCK) {
+            frontendReady = true;
+        }
     }
 
     public static boolean isFrontendReady() {
-        return FRONTEND_READY.get();
+        return frontendReady;
     }
 
     public static void markFrontendUnavailable() {
-        FRONTEND_READY.set(false);
+        PendingExit pendingExit;
+        synchronized (FRONTEND_STATE_LOCK) {
+            frontendReady = false;
+            PendingExit currentExit = PENDING_EXIT.get();
+            pendingExit = currentExit == null ? null : claimPendingExit(currentExit, false);
+        }
+        if (pendingExit != null) {
+            runFallback(pendingExit);
+        }
     }
 
     private static void fallbackIfUnacknowledged(PendingExit pendingExit) {
-        if (pendingExit.acknowledged().get() || !PENDING_EXIT.compareAndSet(pendingExit, null)) {
-            return;
+        PendingExit claimedExit;
+        synchronized (FRONTEND_STATE_LOCK) {
+            claimedExit = claimPendingExit(pendingExit, true);
+            if (claimedExit != null) {
+                frontendReady = false;
+            }
         }
-        FRONTEND_READY.set(false);
+        if (claimedExit != null) {
+            runFallback(claimedExit);
+        }
+    }
+
+    private static boolean runFallback(PendingExit pendingExit) {
         try {
-            pendingExit.confirmedAction().getAsBoolean();
+            return pendingExit.confirmedAction().getAsBoolean();
         } catch (RuntimeException exception) {
             log.error("Application exit fallback failed for operation {}", pendingExit.operationId(), exception);
+            return false;
+        } finally {
+            releasePendingExit(pendingExit);
         }
     }
 
@@ -138,15 +202,27 @@ public final class ApplicationExitCoordinator {
         if (operationId == null || operationId.isBlank()) {
             return null;
         }
-        while (true) {
-            PendingExit pendingExit = PENDING_EXIT.get();
-            if (pendingExit == null || !pendingExit.operationId().equals(operationId)) {
-                return null;
-            }
-            if (PENDING_EXIT.compareAndSet(pendingExit, null)) {
-                return pendingExit;
-            }
+        PendingExit pendingExit = PENDING_EXIT.get();
+        if (pendingExit == null || !pendingExit.operationId().equals(operationId)) {
+            return null;
         }
+        return claimPendingExit(pendingExit, false);
+    }
+
+    private static PendingExit claimPendingExit(PendingExit pendingExit, boolean onlyIfUnacknowledged) {
+        boolean claimed = onlyIfUnacknowledged
+                ? pendingExit.claimIfUnacknowledged()
+                : pendingExit.claim();
+        if (!claimed || PENDING_EXIT.get() != pendingExit) {
+            return null;
+        }
+        pendingExit.cancelAcknowledgementTimeout();
+        return pendingExit;
+    }
+
+    private static void releasePendingExit(PendingExit pendingExit) {
+        pendingExit.cancelAcknowledgementTimeout();
+        PENDING_EXIT.compareAndSet(pendingExit, null);
     }
 
     private static void execute(String action) {
@@ -181,6 +257,83 @@ public final class ApplicationExitCoordinator {
         return operationId;
     }
 
-    private record PendingExit(String operationId, BooleanSupplier confirmedAction, AtomicBoolean acknowledged) {
+    private enum PendingExitState {
+        AWAITING_ACKNOWLEDGEMENT,
+        ACKNOWLEDGED,
+        CLAIMED
+    }
+
+    private static final class PendingExit {
+        private final String operationId;
+        private final BooleanSupplier confirmedAction;
+        private final AtomicReference<PendingExitState> state =
+                new AtomicReference<>(PendingExitState.AWAITING_ACKNOWLEDGEMENT);
+        private final AtomicReference<ScheduledFuture<?>> acknowledgementTimeout = new AtomicReference<>();
+
+        private PendingExit(String operationId, BooleanSupplier confirmedAction) {
+            this.operationId = operationId;
+            this.confirmedAction = confirmedAction;
+        }
+
+        private String operationId() {
+            return operationId;
+        }
+
+        private BooleanSupplier confirmedAction() {
+            return confirmedAction;
+        }
+
+        private boolean acknowledge() {
+            if (!state.compareAndSet(PendingExitState.AWAITING_ACKNOWLEDGEMENT,
+                    PendingExitState.ACKNOWLEDGED)) {
+                return false;
+            }
+            cancelAcknowledgementTimeout();
+            return true;
+        }
+
+        private boolean claimIfUnacknowledged() {
+            return state.compareAndSet(PendingExitState.AWAITING_ACKNOWLEDGEMENT,
+                    PendingExitState.CLAIMED);
+        }
+
+        private boolean claim() {
+            while (true) {
+                PendingExitState currentState = state.get();
+                if (currentState == PendingExitState.CLAIMED) {
+                    return false;
+                }
+                if (state.compareAndSet(currentState, PendingExitState.CLAIMED)) {
+                    return true;
+                }
+            }
+        }
+
+        private void attachAcknowledgementTimeout(ScheduledFuture<?> timeoutFuture) {
+            Objects.requireNonNull(timeoutFuture, "Acknowledgement timeout future is required");
+            if (!acknowledgementTimeout.compareAndSet(null, timeoutFuture)) {
+                throw new IllegalStateException("Acknowledgement timeout is already attached");
+            }
+            if (state.get() != PendingExitState.AWAITING_ACKNOWLEDGEMENT) {
+                cancelAcknowledgementTimeout();
+            }
+        }
+
+        private void cancelAcknowledgementTimeout() {
+            ScheduledFuture<?> timeoutFuture = acknowledgementTimeout.getAndSet(null);
+            if (timeoutFuture != null) {
+                try {
+                    timeoutFuture.cancel(false);
+                } catch (RuntimeException exception) {
+                    log.warn("Could not cancel application exit acknowledgement timeout for operation {}",
+                            operationId, exception);
+                }
+            }
+        }
+    }
+
+    @FunctionalInterface
+    interface AcknowledgementTimeoutScheduler {
+        ScheduledFuture<?> schedule(Runnable task, long delayMillis);
     }
 }

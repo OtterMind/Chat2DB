@@ -84,6 +84,7 @@ import java.util.*;
 import java.util.List;
 import java.util.Timer;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -660,7 +661,7 @@ public class MainJFrame extends JFrame {
                                    boolean persistent, CefQueryCallback callback) {
                 CancellableCefQueryCallback guardedCallback = new CancellableCefQueryCallback(callback);
                 activeQueryCallbacks.put(queryId, guardedCallback);
-                executor.submit(() -> {
+                FutureTask<Void> worker = new FutureTask<>(() -> {
                     String action = "unKnow Action";
                     ConsoleMessage wsMessage = new ConsoleMessage();
                     ConsoleResult wsResult;
@@ -706,7 +707,15 @@ public class MainJFrame extends JFrame {
                     } finally {
                         activeQueryCallbacks.remove(queryId, guardedCallback);
                     }
-                });
+                }, null);
+                guardedCallback.attachWorker(worker);
+                try {
+                    executor.execute(worker);
+                } catch (RuntimeException exception) {
+                    activeQueryCallbacks.remove(queryId, guardedCallback);
+                    guardedCallback.cancel();
+                    throw exception;
+                }
                 return true;
             }
             @Override
