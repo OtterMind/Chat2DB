@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { hydrateDataSourceAfterMutation } from './dataSourceMutationRefresh';
+import {
+  hydrateDataSourceAfterMutation,
+  runMutationRefreshQuietly,
+} from './dataSourceMutationRefresh';
 
 async function testUsesCanonicalNodeLoadedAfterMutation() {
   const events: string[] = [];
@@ -110,11 +113,62 @@ async function testPropagatesRefreshFailure() {
   assert.deepEqual(events, ['refresh']);
 }
 
+async function testQuietWrapperSwallowsRefreshFailureAfterSuccessfulSave() {
+  const events: string[] = [];
+  const originalWarn = console.warn;
+  const warnings: unknown[] = [];
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args[0]);
+  };
+  try {
+    const result = await runMutationRefreshQuietly(42, {
+      refreshTreeData: async () => {
+        events.push('refresh');
+        throw new Error('refresh failed');
+      },
+      getDataSourceList: () => {
+        events.push('read');
+        return [];
+      },
+      setSelectedKeys: () => events.push('select'),
+      setScrollTargetKey: () => events.push('scroll'),
+      loadData: async () => {
+        events.push('load');
+      },
+    });
+
+    assert.equal(result, null, 'a failed post-save refresh must resolve, not reject');
+    assert.deepEqual(events, ['refresh']);
+    assert.equal(warnings.length, 1, 'the refresh failure is logged once');
+  } finally {
+    console.warn = originalWarn;
+  }
+}
+
+async function testQuietWrapperStillHydratesOnSuccess() {
+  const canonicalNode = {
+    key: 'dataSource_42',
+    extraParams: { dataSourceId: 42 },
+  } as any;
+
+  const result = await runMutationRefreshQuietly(42, {
+    refreshTreeData: async () => true,
+    getDataSourceList: () => [canonicalNode],
+    setSelectedKeys: () => undefined,
+    setScrollTargetKey: () => undefined,
+    loadData: async () => undefined,
+  });
+
+  assert.equal(result, canonicalNode);
+}
+
 Promise.all([
   testUsesCanonicalNodeLoadedAfterMutation(),
   testDoesNotReuseSparseMutationNodeWhenRefreshMisses(),
   testStopsWhenRefreshIsNotCommitted(),
   testPropagatesRefreshFailure(),
+  testQuietWrapperSwallowsRefreshFailureAfterSuccessfulSave(),
+  testQuietWrapperStillHydratesOnSuccess(),
 ])
   .then(() => {
     console.log('Data source mutation refresh tests passed');

@@ -203,6 +203,37 @@ async function testFailedWriteDoesNotBlockLaterWrites() {
   assert.deepEqual(events, ['failed', 'successful']);
 }
 
+async function testForcedRereadSeesAnotherWindowChanges() {
+  const coordinator = new HiddenTreeNodeStateCoordinator<Record<number, string[]>>();
+  const reads: string[][] = [];
+  const commits: Record<number, string[]>[] = [];
+
+  const firstInitialization = coordinator.initialize(
+    async () => {
+      reads.push(['first']);
+      return { 1: ['first'] };
+    },
+    (value) => commits.push(value),
+  );
+  assert.equal(await firstInitialization, true);
+
+  // Another window persisted different hidden nodes; a forced refresh
+  // (reset + initialize, what initHiddenTreeNodeIds(true) performs) must
+  // re-read instead of keeping this window's lifetime cache.
+  coordinator.reset();
+  const secondInitialization = coordinator.initialize(
+    async () => {
+      reads.push(['second']);
+      return { 1: ['second'] };
+    },
+    (value) => commits.push(value),
+  );
+
+  assert.equal(await secondInitialization, true);
+  assert.deepEqual(reads, [['first'], ['second']]);
+  assert.deepEqual(commits, [{ 1: ['first'] }, { 1: ['second'] }]);
+}
+
 async function run() {
   await testWriteWaitsForPendingInitialization();
   await testConcurrentChangesPreserveInitializedData();
@@ -211,6 +242,7 @@ async function run() {
   await testResetWaitsForWritesBeforeReadingAgain();
   await testInitializedStateDoesNotReadAgain();
   await testFailedWriteDoesNotBlockLaterWrites();
+  await testForcedRereadSeesAnotherWindowChanges();
 }
 
 run().catch((error) => {
