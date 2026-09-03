@@ -35,8 +35,8 @@ public final class DB2MetaDataConstants {
     public static final String GET_DDL_SQL = "select SQL_STMT from SYSTOOLS.DB2LOOK_INFO where OP_TOKEN =  ? order by OP_SEQUENCE ASC";
     public static final String CLEAN_DDL_TOKEN = "CALL SYSPROC.DB2LK_CLEAN_TABLE(?)";
     public static final String IDX_SQL = "SELECT i.INDNAME, i.UNIQUERULE, i.REMARKS, ic.COLNAME, ic.COLSEQ, ic.COLORDER FROM SYSCAT.INDEXES i JOIN SYSCAT.INDEXCOLUSE ic ON i.INDNAME = ic.INDNAME AND i.INDSCHEMA = ic.INDSCHEMA WHERE i.TABNAME = '%s' AND i.INDSCHEMA = '%s' ORDER BY i.INDNAME, ic.COLSEQ";
-    public static final String VIEW_DDL_SQL = "select TEXT from syscat.views where VIEWSCHEMA='%s' and VIEWNAME='%s';";
-    public static final String ROUTINE_DDL_SQL = "select TEXT from syscat.routines where ROUTINESCHEMA='%s' and ROUTINENAME='%s' and ROUTINETYPE='%s';";
+    public static final String VIEW_DDL_SQL = "select TEXT from syscat.views where VIEWSCHEMA='%s' and VIEWNAME='%s'";
+    public static final String ROUTINE_DDL_SQL = "select TEXT from syscat.routines where ROUTINESCHEMA='%s' and ROUTINENAME='%s' and ROUTINETYPE='%s'";
     public static final List<String> SYSTEM_SCHEMAS = List.of("NULLID", "SQLJ", "SYSCAT", "SYSFUN", "SYSIBM",
             "SYSIBMADM", "SYSIBMINTERNAL", "SYSIBMTS", "SYSPROC", "SYSPUBLIC", "SYSSTAT", "SYSTOOLS");
 
