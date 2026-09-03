@@ -3,10 +3,13 @@ package ai.chat2db.community.domain.core.impl.db;
 import ai.chat2db.community.tools.exception.BusinessException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -14,7 +17,7 @@ import java.util.regex.Pattern;
 
 final class JdbcDriverManagementPolicy {
 
-    private static final Pattern UPLOAD_TOKEN = Pattern.compile("^([0-9a-f]{32}):([^/:\\\\]+\\.jar)$",
+    private static final Pattern UPLOAD_TOKEN = Pattern.compile("^([0-9a-f]{32}):([^,/:\\\\]+\\.jar)$",
             Pattern.CASE_INSENSITIVE);
 
     record PromotedDrivers(String jdbcDriver, List<Path> files) {
@@ -53,14 +56,26 @@ final class JdbcDriverManagementPolicy {
                 }
                 String uploadId = matcher.group(1);
                 String driverName = matcher.group(2);
+                String driverBaseName = driverName.substring(0, driverName.length() - ".jar".length());
+                if (uploadId.contains("/") || uploadId.contains("\\")
+                        || driverName.contains("/") || driverName.contains("\\")
+                        || ".".equals(uploadId) || "..".equals(uploadId)
+                        || ".".equals(driverBaseName) || "..".equals(driverBaseName)) {
+                    throw uploadFailure("invalid driver upload token");
+                }
                 Path stagedFile = normalizedStagingDirectory.resolve(uploadId + ".upload").normalize();
                 Path driverFile = normalizedDirectory.resolve(driverName).normalize();
-                targets.add(new UploadTarget(driverName, stagedFile, driverFile));
-                if (!normalizedStagingDirectory.equals(stagedFile.getParent()) || !Files.isRegularFile(stagedFile)
+                if (!stagedFile.startsWith(normalizedStagingDirectory)
+                        || !driverFile.startsWith(normalizedDirectory)
+                        || !normalizedStagingDirectory.equals(stagedFile.getParent())
                         || !normalizedDirectory.equals(driverFile.getParent())) {
                     throw uploadFailure("uploaded driver file is unavailable");
                 }
-                if (Files.exists(driverFile)) {
+                targets.add(new UploadTarget(driverName, stagedFile, driverFile));
+                if (!Files.isRegularFile(stagedFile, LinkOption.NOFOLLOW_LINKS)) {
+                    throw uploadFailure("uploaded driver file is unavailable");
+                }
+                if (Files.exists(driverFile, LinkOption.NOFOLLOW_LINKS)) {
                     throw uploadFailure("a managed driver with the same file name already exists");
                 }
             }
@@ -92,17 +107,7 @@ final class JdbcDriverManagementPolicy {
     }
 
     static void moveWithoutReplacement(Path source, Path target) throws Exception {
-        moveWithoutReplacement(source, target, (link, existing) -> Files.createLink(link, existing));
-    }
-
-    static void moveWithoutReplacement(Path source, Path target, LinkCreator linkCreator) throws Exception {
-        try {
-            linkCreator.create(target, source);
-        } catch (FileAlreadyExistsException exception) {
-            throw exception;
-        } catch (UnsupportedOperationException | FileSystemException ignored) {
-            Files.copy(source, target);
-        }
+        copyRegularFileWithoutReplacement(source, target);
         try {
             Files.delete(source);
         } catch (Exception exception) {
@@ -110,6 +115,29 @@ final class JdbcDriverManagementPolicy {
                 Files.deleteIfExists(target);
             } catch (Exception cleanupFailure) {
                 exception.addSuppressed(cleanupFailure);
+            }
+            throw exception;
+        }
+    }
+
+    private static void copyRegularFileWithoutReplacement(Path source, Path target) throws IOException {
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("uploaded driver file is not a regular file");
+        }
+        boolean targetCreated = false;
+        try (InputStream input = Files.newInputStream(
+                source, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+             OutputStream output = Files.newOutputStream(
+                     target, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+            targetCreated = true;
+            input.transferTo(output);
+        } catch (IOException | RuntimeException exception) {
+            if (targetCreated) {
+                try {
+                    Files.deleteIfExists(target);
+                } catch (Exception cleanupFailure) {
+                    exception.addSuppressed(cleanupFailure);
+                }
             }
             throw exception;
         }
@@ -126,11 +154,6 @@ final class JdbcDriverManagementPolicy {
     }
 
     private record UploadTarget(String driverName, Path stagedFile, Path driverFile) {
-    }
-
-    @FunctionalInterface
-    interface LinkCreator {
-        void create(Path link, Path existing) throws Exception;
     }
 
     private static BusinessException uploadFailure(String reason) {

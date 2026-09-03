@@ -62,6 +62,7 @@ public class MultipartJdbcDriverUploadAdapter implements IDbJdbcDriverUploadServ
         for (MultipartFile file : files) {
             String originalFilename = FilenameUtils.getName(file.getOriginalFilename());
             if (file.isEmpty() || originalFilename == null || originalFilename.isBlank()
+                    || originalFilename.indexOf(',') >= 0
                     || !"jar".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename))) {
                 throw new IOException("Only non-empty JDBC driver JAR files can be uploaded");
             }

@@ -13,8 +13,14 @@ class JdbcDriverUploadSizeFilterTest {
                 "POST", "/api/jdbc/driver/upload", ""));
         assertTrue(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
                 "POST", "/chat2db/api/jdbc/driver/upload", "/chat2db"));
+        assertTrue(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
+                "POST", "/api/jdbc/driver/upload;x=y", ""));
+        assertTrue(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
+                "POST", "/chat2db/api;v=1/jdbc/driver/upload;x=y", "/chat2db"));
         assertFalse(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
                 "POST", "/api/converter/upload", ""));
+        assertFalse(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
+                "POST", "/api/jdbc/driver/upload;x=y/extra", ""));
         assertFalse(JdbcDriverUploadSizeFilter.isDriverUploadRequest(
                 "OPTIONS", "/api/jdbc/driver/upload", ""));
     }

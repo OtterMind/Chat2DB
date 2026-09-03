@@ -42,6 +42,9 @@ class MultipartJdbcDriverUploadAdapterTest {
                         new MultipartFile[]{file("driver.txt", "not a jar")}, driverDirectory));
         assertThrows(IOException.class,
                 () -> MultipartJdbcDriverUploadAdapter.store(
+                        new MultipartFile[]{file("first,second.jar", "driver")}, driverDirectory));
+        assertThrows(IOException.class,
+                () -> MultipartJdbcDriverUploadAdapter.store(
                         new MultipartFile[]{file(null, "driver")}, driverDirectory));
         assertThrows(IOException.class,
                 () -> MultipartJdbcDriverUploadAdapter.store(

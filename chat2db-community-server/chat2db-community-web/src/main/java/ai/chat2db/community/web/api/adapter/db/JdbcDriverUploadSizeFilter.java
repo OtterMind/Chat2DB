@@ -37,7 +37,9 @@ public class JdbcDriverUploadSizeFilter extends OncePerRequestFilter {
 
     static boolean isDriverUploadPath(String requestUri, String contextPath) {
         String normalizedContextPath = contextPath == null ? "" : contextPath;
-        return requestUri != null && requestUri.equals(normalizedContextPath + DRIVER_UPLOAD_PATH);
+        return requestUri != null
+                && stripPathParameters(requestUri).equals(stripPathParameters(normalizedContextPath)
+                + DRIVER_UPLOAD_PATH);
     }
 
     static boolean isDriverUploadRequest(String method, String requestUri, String contextPath) {
@@ -46,5 +48,22 @@ public class JdbcDriverUploadSizeFilter extends OncePerRequestFilter {
 
     static boolean isAllowedContentLength(long contentLength) {
         return contentLength >= 0 && contentLength <= MAX_DRIVER_UPLOAD_REQUEST_BYTES;
+    }
+
+    private static String stripPathParameters(String path) {
+        StringBuilder stripped = new StringBuilder(path.length());
+        boolean inPathParameters = false;
+        for (int index = 0; index < path.length(); index++) {
+            char character = path.charAt(index);
+            if (character == ';') {
+                inPathParameters = true;
+            } else if (character == '/') {
+                inPathParameters = false;
+                stripped.append(character);
+            } else if (!inPathParameters) {
+                stripped.append(character);
+            }
+        }
+        return stripped.toString();
     }
 }
