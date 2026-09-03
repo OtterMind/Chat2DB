@@ -5,8 +5,9 @@ import ai.chat2db.spi.model.datasource.ConnectInfo;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -173,8 +174,9 @@ public class ConnectionPool {
                     || DatabaseTypeEnum.PRESTO.name().equals(connectInfo.getDbType())
                     || DatabaseTypeEnum.SUNDB.name().equals(connectInfo.getDbType())
             ) {
-                connection.getMetaData().getCatalogs();
-                return true;
+                try (ResultSet ignored = connection.getMetaData().getCatalogs()) {
+                    return true;
+                }
             }
             if (DatabaseTypeEnum.ORACLE.name().equals(connectInfo.getDbType())
                 || DatabaseTypeEnum.OSCAR.name().equals(connectInfo.getDbType())

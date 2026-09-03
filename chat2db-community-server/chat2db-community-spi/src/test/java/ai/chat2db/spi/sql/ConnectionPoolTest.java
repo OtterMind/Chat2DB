@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -139,6 +141,22 @@ class ConnectionPoolTest {
         assertEquals(1, validationCalls.get());
         assertTrue(closed.get());
         assertNull(pooled.getConnection());
+    }
+
+    @Test
+    void hiveMetadataProbeShouldCloseCatalogsResultSetBeforeBorrow() {
+        AtomicBoolean resultSetClosed = new AtomicBoolean();
+        Connection connection = hiveConnectionWithUnsupportedIsValid(resultSetClosed);
+        ConnectInfo pooled = connectInfo(connection);
+        pooled.setDbType("HIVE");
+        pooled.setLastAccessTime(new Date(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(1)));
+        LinkedBlockingQueue<ConnectInfo> queue = ConnectionPool.newConnectionQueue();
+        queue.offer(pooled);
+
+        ConnectInfo borrower = new ConnectInfo();
+        assertSame(connection, ConnectionPool.tryBorrowConnection(borrower, queue));
+
+        assertTrue(resultSetClosed.get());
     }
 
     @Test
@@ -302,6 +320,42 @@ class ConnectionPoolTest {
                             return null;
                         case "toString":
                             return "BlockingValidationConnection";
+                        default:
+                            return defaultValue(method.getReturnType());
+                    }
+                });
+    }
+
+    private static Connection hiveConnectionWithUnsupportedIsValid(AtomicBoolean resultSetClosed) {
+        ResultSet catalogs = (ResultSet) Proxy.newProxyInstance(
+                ConnectionPoolTest.class.getClassLoader(),
+                new Class<?>[]{ResultSet.class},
+                (proxy, method, args) -> {
+                    if ("close".equals(method.getName())) {
+                        resultSetClosed.set(true);
+                        return null;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        DatabaseMetaData metadata = (DatabaseMetaData) Proxy.newProxyInstance(
+                ConnectionPoolTest.class.getClassLoader(),
+                new Class<?>[]{DatabaseMetaData.class},
+                (proxy, method, args) -> "getCatalogs".equals(method.getName())
+                        ? catalogs
+                        : defaultValue(method.getReturnType()));
+        return (Connection) Proxy.newProxyInstance(
+                ConnectionPoolTest.class.getClassLoader(),
+                new Class<?>[]{Connection.class},
+                (proxy, method, args) -> {
+                    switch (method.getName()) {
+                        case "isClosed":
+                            return false;
+                        case "isValid":
+                            throw new AbstractMethodError("isValid is unsupported");
+                        case "getMetaData":
+                            return metadata;
+                        case "toString":
+                            return "HiveTestConnection";
                         default:
                             return defaultValue(method.getReturnType());
                     }
