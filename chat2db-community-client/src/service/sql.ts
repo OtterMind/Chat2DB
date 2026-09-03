@@ -428,6 +428,58 @@ const getCreateSchemaSql = createRequest<
 // Clear table data
 const truncateTable = createRequest<ITableParams, void>('/api/rdb/table/truncate', { method: 'post' });
 
+export interface IInnodbParserMessage {
+  severity: string;
+  code: string;
+  message: string;
+  sectionTitle?: string;
+  line?: number;
+}
+
+export interface IInnodbStatusSection {
+  title: string;
+  normalizedTitle: string;
+  recognized: boolean;
+  startLine: number;
+  endLine: number;
+  text: string;
+}
+
+export interface IInnodbDeadlockTransaction {
+  marker: string;
+  transactionId?: string;
+  activeSeconds?: number;
+  mysqlThreadId?: string;
+  queryId?: string;
+  sql?: string;
+  victim: boolean;
+  heldLocks: string[];
+  waitedLocks: string[];
+}
+
+export interface IInnodbDeadlockSummary {
+  found: boolean;
+  message: string;
+  time?: string;
+  victimTransaction?: string;
+  transactions: IInnodbDeadlockTransaction[];
+  rawText?: string;
+}
+
+export interface IInnodbStatusResponse {
+  rawText: string;
+  capturedAt: string;
+  sections: IInnodbStatusSection[];
+  latestDeadlock: IInnodbDeadlockSummary;
+  messages: IInnodbParserMessage[];
+}
+
+// InnoDB status diagnostics
+const getInnodbStatus = createRequest<{ dataSourceId: number; databaseName?: string }, IInnodbStatusResponse>(
+  '/api/rdb/diagnostics/innodb_status',
+  { method: 'post', errorLevel: false },
+);
+
 export interface ICopyTableParams extends ITableParams {
   copyData: boolean;
 }
@@ -509,6 +561,7 @@ export default {
   downloadLargeCellValue,
   getLargeCellValue,
   truncateTable,
+  getInnodbStatus,
   getCreateSchemaSql,
   getCreateDatabaseSql,
   executeUpdateDataSql,

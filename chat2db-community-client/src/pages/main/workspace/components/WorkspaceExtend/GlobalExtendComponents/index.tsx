@@ -5,12 +5,14 @@ import { GlobalComponents } from '../config';
 import ViewDDL from '@/components/ViewDDL';
 import { useStyles } from './style';
 import { TreeNodeType } from '@/constants';
+import { DatabaseTypeCode } from '@/constants/common';
 import { Empty } from '@chat2db/ui';
 import SQLPreview from '@/components/SQLPreview';
 import { Spin } from 'antd';
 import i18n from '@/i18n';
 import type { TreeNodeData } from '@/typings/tree';
 import accountAdminService from '@/service/accountAdmin';
+import InnodbStatusPanel from '../../InnodbStatusPanel';
 
 const GlobalExtendComponents = () => {
   const { styles } = useStyles();
@@ -56,6 +58,20 @@ const GlobalExtendComponents = () => {
       });
       return;
     }
+    if (
+      currentTreeNode?.treeNodeType === TreeNodeType.DATA_SOURCE &&
+      currentTreeNode.extraParams?.databaseType === DatabaseTypeCode.MYSQL &&
+      currentTreeNode.extraParams?.dataSourceId
+    ) {
+      setCurrentWorkspaceGlobalExtend({
+        code: GlobalComponents.innodb_status,
+        uniqueData: {
+          ...(currentTreeNode.extraParams || {}),
+          objectName: currentTreeNode.originalTitle,
+        },
+      });
+      return;
+    }
     setCurrentWorkspaceGlobalExtend(null);
   }, [currentTreeNode, setCurrentWorkspaceGlobalExtend]);
 
@@ -77,6 +93,8 @@ const GlobalExtendComponents = () => {
     }
     case GlobalComponents.account_grants:
       return <AccountGrants data={currentWorkspaceGlobalExtend.uniqueData} />;
+    case GlobalComponents.innodb_status:
+      return <InnodbStatusPanel data={currentWorkspaceGlobalExtend.uniqueData} />;
     default:
       return (
         <div className={styles.noInformation}>

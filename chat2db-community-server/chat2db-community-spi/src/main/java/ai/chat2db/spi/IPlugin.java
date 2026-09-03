@@ -118,6 +118,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional diagnostics manager for this plugin.
+     *
+     * @return diagnostics manager when supported; otherwise {@code null}.
+     */
+    default IDiagnosticsManager getDiagnosticsManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.
