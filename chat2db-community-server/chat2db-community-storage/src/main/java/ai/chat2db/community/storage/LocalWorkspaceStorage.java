@@ -1,6 +1,7 @@
 package ai.chat2db.community.storage;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.enums.DataSourceKindEnum;
 import ai.chat2db.community.domain.api.enums.StorageTypeEnum;
 import ai.chat2db.community.domain.api.model.datasource.DataSource;
 import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorUtils;
@@ -28,6 +29,7 @@ import ai.chat2db.community.tools.exception.DataNotFoundException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import cn.hutool.core.date.DatePattern;
 import cn.hutool.core.date.DateUtil;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
@@ -98,7 +100,17 @@ public class LocalWorkspaceStorage implements IWorkspaceStorage {
 
     @Override
     public PageResponse<WorkspaceDataSource> listDataSources(DbDataSourcePageQueryRequest dataSourcePageQueryRequest) {
-        List<DataSource> dataSources = DataSourceStorage.INSTANCE.getDataList();
+        String searchKey = dataSourcePageQueryRequest.getSearchKey();
+        String kind = dataSourcePageQueryRequest.getKind();
+        List<DataSource> dataSources = DataSourceStorage.INSTANCE.getDataList().stream()
+                .filter(dataSource -> StringUtils.isBlank(searchKey)
+                        || StringUtils.containsIgnoreCase(dataSource.getAlias(), searchKey))
+                .filter(dataSource -> StringUtils.isBlank(kind)
+                        || StringUtils.equalsIgnoreCase(
+                                dataSource.getKind() == null
+                                        ? DataSourceKindEnum.PRIVATE.getCode() : dataSource.getKind(),
+                                kind))
+                .toList();
         List<WorkspaceDataSource> result = storageConverter.dataSource2workspace(dataSources);
         result.forEach(dataSource -> dataSource.setStorageType(StorageTypeEnum.LOCAL.name()));
         return page(result, dataSourcePageQueryRequest.getPageNo(), dataSourcePageQueryRequest.getPageSize());
