@@ -298,8 +298,8 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
             }
         }
         // SQL Server < 2012: use ROW_NUMBER() window function
-        int startRow = offset + 1;
-        int endRow = offset + pageSize;
+        long startRow = (long) offset + 1;
+        long endRow = (long) offset + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
         sqlBuilder.append(SQL_ROW_NUMBER_PREFIX);
         sqlBuilder.append(sql);

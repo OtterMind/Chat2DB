@@ -43,6 +43,23 @@ class OracleSqlBuilderTest {
     }
 
     @Test
+    void shouldKeepPaginationEndBeyondIntegerRange() {
+        OracleSqlBuilder builder = new OracleSqlBuilder();
+
+        String sql = builder.buildPageLimit(PageLimitRequest.builder()
+                .sql("SELECT ID, NAME FROM EMPLOYEE")
+                .offset(2_147_483_600)
+                .pageNo(2)
+                .pageSize(100)
+                .build());
+
+        assertEquals("SELECT * FROM (  SELECT TMP_PAGE.*, ROWNUM CAHT2DB_AUTO_ROW_ID FROM ( \n"
+                        + "SELECT ID, NAME FROM EMPLOYEE\n"
+                        + " ) TMP_PAGE WHERE ROWNUM <= 2147483700 ) WHERE CAHT2DB_AUTO_ROW_ID > 2147483600",
+                sql);
+    }
+
+    @Test
     void shouldBuildQualifiedAndEscapedViewComment() {
         OracleSqlBuilder builder = new OracleSqlBuilder();
         ModifyView view = view("SA\"LES", "ACTIVE\"USERS", "Owner\\team's active users");
