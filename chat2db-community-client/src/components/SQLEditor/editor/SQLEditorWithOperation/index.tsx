@@ -6,9 +6,9 @@ import SQLEditor, { SQLEditorRef } from '../SQLEditor';
 import RoutineOperationModals from './RoutineOperationModals';
 import InitialSaveNameModal from './InitialSaveNameModal';
 import { EditorSetValueType, EditorType, SQLOptType } from '../../type';
-import { staticMessage } from '@chat2db/ui';
+import { staticMessage, staticModal } from '@chat2db/ui';
 import { Modal } from 'antd';
-import { IConsoleReturnExecuteSql, IBoundInfo, TreeNodeData } from '@/typings';
+import { IConsoleReturnExecuteSql, IBoundInfo, IExecuteSqlParams, TreeNodeData } from '@/typings';
 import { saveFileToDesktop, saveLocalFileContent, waitForLocalFileSave } from '@/utils/file';
 import i18n from '@/i18n';
 import { useSaveEditorData } from '@/components/SQLEditor/hooks/useSaveEditorData';
@@ -27,6 +27,7 @@ import { isTemporaryId } from '@/utils';
 import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import { readClipboard } from '@/utils/clipboard';
 import executeSql from '@/service/executeSql';
+import transactionServer from '@/service/transaction';
 import { parseClipboardTextToSqlInTokens } from '@/utils/sqlInClipboard';
 import {
   createDatabaseObjectTreeNodeKey,
@@ -56,8 +57,18 @@ import {
   createDataSourceExecutionSnapshot,
   type DataSourceExecutionSnapshot,
 } from '@/service/dataSourceExecutionSnapshot';
+import {
+  TransactionIsolationLevel,
+  TransactionMode,
+  TransactionOutcome,
+} from '@/constants/transaction';
+import {
+  reconcileTransactionState,
+  waitForPendingTransactionBegins,
+} from '@/utils/transactionExecution';
+import { resolveResponseErrorMessage } from '@/service/interceptorsResponse';
 
-export interface SQLExecutionInvocation extends IConsoleReturnExecuteSql {
+export interface SQLExecutionInvocation extends IExecuteSqlParams {
   executionTarget: DataSourceExecutionSnapshot;
   dataSourceState: EditorDataSourceState;
 }
@@ -80,6 +91,7 @@ interface ISQLEditorWithOperationProps {
 
   sqlActionEnabled?: boolean;
   dataSourceState?: EditorDataSourceState;
+  sqlExecuting?: boolean;
   reloadSQL?: () => Promise<string>;
 
   onExecuteSQL: (props: SQLExecutionInvocation) => Promise<any>;
@@ -106,7 +118,17 @@ const BASIC_EDITOR_ACTIONS = new Set<SQLOptType>([
   SQLOptType.SAVE_FILE,
   SQLOptType.SAVE_FILE_TO_DESKTOP,
   SQLOptType.OPEN_CONTENT_DIFF,
+  SQLOptType.TOGGLE_AUTO_COMMIT,
+  SQLOptType.SET_TRANSACTION_ISOLATION,
+  SQLOptType.COMMIT_TRANSACTION,
+  SQLOptType.ROLLBACK_TRANSACTION,
 ]);
+
+const resolveSqlExecutionErrorMessage = (error: any) => {
+  const errorCode = error?.errorCode || error?.message?.errorCode;
+  const message = typeof error?.message === 'string' ? error.message : error?.message?.message;
+  return resolveResponseErrorMessage(errorCode, error?.errorMessage || message);
+};
 
 const READONLY_ALLOWED_ACTIONS = new Set<SQLOptType>([
   SQLOptType.EXECUTE_ROUTINE,
@@ -135,6 +157,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     isConsole = true,
     sqlActionEnabled = true,
     dataSourceState = 'available',
+    sqlExecuting = false,
     reloadSQL,
     onChange,
   } = props;
@@ -334,6 +357,45 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     savedSqlRecord: hasSavedSqlRecord,
   });
 
+  const consoleIdForTx = typeof dbInfo?.consoleId === 'number' ? dbInfo.consoleId : undefined;
+  const transactionState = useWorkspaceStore((state) =>
+    consoleIdForTx != null ? state.transactionStateMap?.[consoleIdForTx] : undefined,
+  );
+  const showTransactionControls =
+    isConsole &&
+    consoleIdForTx != null &&
+    isDatabaseCapabilitySupported(dbInfo.databaseType, DatabaseCapability.MANUAL_TRANSACTIONS);
+
+  useEffect(() => {
+    if (!showTransactionControls || consoleIdForTx == null || dbInfo.dataSourceId == null) {
+      return;
+    }
+    let mounted = true;
+    const synchronizeTransactionState = () => {
+      const stateAtRequestStart = useWorkspaceStore.getState().getTransactionState(consoleIdForTx);
+      transactionServer
+        .getTransactionState(transactionRequest(consoleIdForTx))
+        .then((result) => {
+          if (
+            !mounted ||
+            useWorkspaceStore.getState().getTransactionState(consoleIdForTx) !== stateAtRequestStart
+          ) {
+            return;
+          }
+          useWorkspaceStore.getState().setTransactionState(consoleIdForTx, {
+            ...reconcileTransactionState(stateAtRequestStart, result),
+          });
+        })
+        .catch(() => undefined);
+    };
+    synchronizeTransactionState();
+    window.addEventListener('online', synchronizeTransactionState);
+    return () => {
+      mounted = false;
+      window.removeEventListener('online', synchronizeTransactionState);
+    };
+  }, [showTransactionControls, consoleIdForTx, dbInfo.dataSourceId]);
+
   const handleAction = (actionType: SQLOptType, params?: any) => {
     if (isReadOnly && !READONLY_ALLOWED_ACTIONS.has(actionType)) {
       return;
@@ -421,11 +483,173 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       case SQLOptType.EDIT_TABLE:
         handleEditTable(contextTableIdentifier);
         break;
+      case SQLOptType.TOGGLE_AUTO_COMMIT:
+        void handleToggleAutoCommit();
+        break;
+      case SQLOptType.SET_TRANSACTION_ISOLATION:
+        handleSetTransactionIsolation(params);
+        break;
+      case SQLOptType.COMMIT_TRANSACTION:
+        void handleCommitTransaction();
+        break;
+      case SQLOptType.ROLLBACK_TRANSACTION:
+        void handleRollbackTransaction();
+        break;
       default:
         break;
     }
     setContextMenuInfo(contextMenuDefaultConfig);
     setContextTableIdentifier(null);
+  };
+
+  const resolveConsoleId = (): number | undefined => {
+    const consoleId = dbInfo?.consoleId;
+    return typeof consoleId === 'number' ? consoleId : undefined;
+  };
+
+  // Manual transaction controls. Auto-commit toggle switches the console's mode; the actual
+  // server-side transaction is opened lazily before the next execution (see useSqlExecutor).
+  const handleToggleAutoCommit = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    await waitForPendingTransactionBegins([consoleId]);
+    const current = store.getTransactionState(consoleId);
+    const nextMode =
+      current?.mode === TransactionMode.MANUAL ? TransactionMode.AUTO : TransactionMode.MANUAL;
+    // Leaving manual mode with an open transaction: roll it back first so no uncommitted work
+    // is left dangling on the server.
+    if (current?.inTransaction && nextMode === TransactionMode.AUTO) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        staticModal.confirm({
+          title: i18n('workspace.transaction.switchModeTitle'),
+          content: i18n('workspace.transaction.switchModeContent'),
+          okText: i18n('workspace.transaction.rollbackOnly'),
+          cancelText: i18n('workspace.transaction.cancel'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!confirmed) {
+        return;
+      }
+      try {
+        const result = await transactionServer.rollbackTransaction(transactionRequest(consoleId));
+        if (result.outcome === TransactionOutcome.UNKNOWN || result.inTransaction) {
+          staticMessage.error(i18n('workspace.transaction.releaseFailed'));
+          return;
+        }
+        store.setTransactionState(consoleId, {
+          inTransaction: false,
+          lastOutcome: result.outcome,
+          lastError: result.lastError,
+        });
+      } catch (error) {
+        // Rollback failed; stay in manual mode so the Commit/Rollback controls remain
+        // available and the open transaction is not silently abandoned.
+        staticMessage.error(String(error));
+        return;
+      }
+    }
+    if (nextMode === TransactionMode.MANUAL) {
+      staticMessage.warning(i18n('workspace.transaction.myIsamNotProtected'));
+    }
+    store.setTransactionMode(consoleId, nextMode);
+  };
+
+  const handleSetTransactionIsolation = (isolationLevel?: TransactionIsolationLevel) => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null || isolationLevel == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    if (store.getTransactionState(consoleId)?.inTransaction) {
+      return;
+    }
+    store.setTransactionIsolation(consoleId, isolationLevel);
+  };
+
+  const handleCommitTransaction = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    const current = store.getTransactionState(consoleId);
+    try {
+      const result = await transactionServer.commitTransaction(transactionRequest(consoleId));
+      const outcomeUnknown = result?.outcome === TransactionOutcome.UNKNOWN;
+      store.setTransactionState(consoleId, {
+        // An unknown outcome means the server could not prove that the bound
+        // transaction ended. Keep the console in manual mode until it is
+        // explicitly resolved instead of hiding the recovery controls.
+        inTransaction: outcomeUnknown ? current?.inTransaction ?? true : Boolean(result?.inTransaction),
+        lastOutcome: result?.outcome,
+        lastError: result?.lastError,
+      });
+      if (outcomeUnknown) {
+        staticMessage.warning(i18n('workspace.transaction.outcomeUnknown'));
+        void reconcileCurrentTransactionState(consoleId);
+      }
+    } catch (error) {
+      store.setTransactionState(consoleId, {
+        inTransaction: current?.inTransaction ?? true,
+        lastOutcome: TransactionOutcome.UNKNOWN,
+        lastError: String(error),
+      });
+      void reconcileCurrentTransactionState(consoleId);
+      staticMessage.error(String(error));
+    }
+  };
+
+  const handleRollbackTransaction = async () => {
+    const consoleId = resolveConsoleId();
+    if (consoleId == null) {
+      return;
+    }
+    const store = useWorkspaceStore.getState();
+    const current = store.getTransactionState(consoleId);
+    try {
+      const result = await transactionServer.rollbackTransaction(transactionRequest(consoleId));
+      const outcomeUnknown = result?.outcome === TransactionOutcome.UNKNOWN;
+      store.setTransactionState(consoleId, {
+        inTransaction: outcomeUnknown ? current?.inTransaction ?? true : Boolean(result?.inTransaction),
+        lastOutcome: result?.outcome,
+        lastError: result?.lastError,
+      });
+      if (outcomeUnknown) {
+        staticMessage.warning(i18n('workspace.transaction.outcomeUnknown'));
+        void reconcileCurrentTransactionState(consoleId);
+      }
+    } catch (error) {
+      store.setTransactionState(consoleId, {
+        inTransaction: current?.inTransaction ?? true,
+        lastOutcome: TransactionOutcome.UNKNOWN,
+        lastError: String(error),
+      });
+      void reconcileCurrentTransactionState(consoleId);
+      staticMessage.error(String(error));
+    }
+  };
+
+  const transactionRequest = (consoleId: number) => ({
+    dataSourceId: dbInfo?.dataSourceId as number,
+    databaseName: dbInfo?.databaseName,
+    schemaName: dbInfo?.schemaName,
+    consoleId,
+  });
+
+  const reconcileCurrentTransactionState = async (consoleId: number) => {
+    try {
+      const store = useWorkspaceStore.getState();
+      const current = store.getTransactionState(consoleId);
+      const result = await transactionServer.getTransactionState(transactionRequest(consoleId));
+      store.setTransactionState(consoleId, reconcileTransactionState(current, result));
+    } catch (_error) {
+      // Keep the existing recovery controls when reconciliation cannot prove the server state.
+    }
   };
 
   const handleExecuteRoutine = async () => {
@@ -449,7 +673,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         sql: previewSql,
       });
     } catch (error: any) {
-      setErrorMessage(error?.errorMessage || error?.message || '');
+      setErrorMessage(resolveSqlExecutionErrorMessage(error));
     }
   };
 
@@ -476,7 +700,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         loading: false,
       });
     } catch (error: any) {
-      setErrorMessage(error?.errorMessage || error?.message || '');
+      setErrorMessage(resolveSqlExecutionErrorMessage(error));
     }
   };
 
@@ -497,7 +721,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         setErrorMessage(null);
       })
       .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
+        setErrorMessage(resolveSqlExecutionErrorMessage(error));
       });
   };
 
@@ -575,7 +799,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         staticMessage.success(i18n('workspace.routine.tips.refreshSuccess'));
       }
     } catch (error: any) {
-      setErrorMessage(error?.errorMessage || error?.message || '');
+      setErrorMessage(resolveSqlExecutionErrorMessage(error));
     }
   };
 
@@ -861,7 +1085,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         setErrorMessage(null);
       })
       .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
+        setErrorMessage(resolveSqlExecutionErrorMessage(error));
       });
   };
 
@@ -888,7 +1112,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         setErrorMessage(null);
       })
       .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
+        setErrorMessage(resolveSqlExecutionErrorMessage(error));
       });
   };
 
@@ -922,7 +1146,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         setErrorMessage(null);
       })
       .catch((error) => {
-        setErrorMessage(error.errorMessage || '');
+        setErrorMessage(resolveSqlExecutionErrorMessage(error));
       });
   }, [props?.onExecuteSQL, dbInfo, dataSourceState]);
 
@@ -1180,6 +1404,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
           setDBInfo={setDBInfo}
           contentDiffEnabled={enableContentDiffHints}
           action={handleAction}
+          transactionState={transactionState}
+          showTransactionControls={showTransactionControls}
+          transactionActionsDisabled={sqlExecuting || transactionState?.opening}
         />
       )}
       <div ref={editorViewportRef} style={{ position: 'relative', flex: 1, height: '0px', width: '100%' }}>

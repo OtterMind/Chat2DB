@@ -1,6 +1,7 @@
 package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.config.DBConfig;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
 import java.util.List;
 
 /**
@@ -106,6 +107,26 @@ public interface IPlugin {
      */
     default IRoutineManager getRoutineManager() {
         return null;
+    }
+
+    /**
+     * Whether this database plugin supports console-scoped manual transactions.
+     */
+    default boolean supportsManualTransactions() {
+        return false;
+    }
+
+    /**
+     * Whether executing the parsed statement can implicitly commit a manual transaction.
+     */
+    default boolean isImplicitCommitStatement(String sqlType, String sql) {
+        return false;
+    }
+
+    /**
+     * Applies database-specific validation immediately before SQL execution.
+     */
+    default void beforeExecute(SqlExecutionPlan plan) {
     }
 
     /**

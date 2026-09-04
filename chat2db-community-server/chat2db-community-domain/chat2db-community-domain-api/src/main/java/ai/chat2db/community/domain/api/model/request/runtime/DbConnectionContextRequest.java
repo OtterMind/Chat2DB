@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.model.request.runtime;
 
+import ai.chat2db.community.domain.api.model.runtime.TransactionIsolationLevel;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -14,4 +15,6 @@ public class DbConnectionContextRequest {
     private String databaseName;
 
     private String schemaName;
+
+    private TransactionIsolationLevel transactionIsolationLevel;
 }

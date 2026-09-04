@@ -10,9 +10,12 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.IRoutineManager;
 import ai.chat2db.community.domain.api.config.DBConfig;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
 import ai.chat2db.spi.util.FileUtils;
 
 public class MysqlPlugin extends MysqlSyntaxPlugin implements IPlugin {
+
+    private static final MysqlTransactionPolicy TRANSACTION_POLICY = new MysqlTransactionPolicy();
 
     private DBConfig dbConfig;
 
@@ -43,6 +46,21 @@ public class MysqlPlugin extends MysqlSyntaxPlugin implements IPlugin {
     @Override
     public IRoutineManager getRoutineManager() {
         return new MysqlRoutineManager();
+    }
+
+    @Override
+    public boolean supportsManualTransactions() {
+        return true;
+    }
+
+    @Override
+    public boolean isImplicitCommitStatement(String sqlType, String sql) {
+        return MysqlTransactionPolicy.isImplicitCommitStatement(sqlType, sql);
+    }
+
+    @Override
+    public void beforeExecute(SqlExecutionPlan plan) {
+        TRANSACTION_POLICY.beforeExecute(plan);
     }
 
     @Override

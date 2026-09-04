@@ -11,6 +11,7 @@ import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -125,6 +126,22 @@ public class Chat2DBContext {
         return plugin == null ? null : plugin.getRoutineManager();
     }
 
+    public static boolean supportsManualTransactions() {
+        return getPlugin(getConnectInfo().getDbType()).supportsManualTransactions();
+    }
+
+    public static boolean isImplicitCommitStatement(String sqlType, String sql) {
+        return getPlugin(getConnectInfo().getDbType()).isImplicitCommitStatement(sqlType, sql);
+    }
+
+    public static void beforeExecute(SqlExecutionPlan plan) {
+        ConnectInfo connectInfo = getConnectInfo();
+        if (connectInfo == null || StringUtils.isBlank(connectInfo.getDbType())) {
+            return;
+        }
+        getPlugin(connectInfo.getDbType()).beforeExecute(plan);
+    }
+
     public static IActiveTransactionManager getActiveTransactionManager() {
         ConnectInfo connectInfo = getConnectInfo();
         if (connectInfo == null || StringUtils.isBlank(connectInfo.getDbType())) {
@@ -191,6 +208,8 @@ public class Chat2DBContext {
         ConnectInfo connectInfo = CONNECT_INFO_THREAD_LOCAL.get();
         if (connectInfo != null) {
             CONNECT_INFO_THREAD_LOCAL.remove();
+            // ConnectionPool owns both ordinary returns and Console-exclusive leases. It keeps
+            // a Console-owned connection out of the shared queue until its transaction resolves.
             ConnectionPool.close(connectInfo);
         }
     }

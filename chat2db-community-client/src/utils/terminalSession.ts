@@ -41,7 +41,11 @@ async function confirmTerminalClose(busy: boolean) {
   });
 }
 
-export async function confirmAndKillTerminalTabs(tabs: IWorkspaceTab[], allTabs: IWorkspaceTab[] = tabs) {
+export async function confirmAndKillTerminalTabs(
+  tabs: IWorkspaceTab[],
+  allTabs: IWorkspaceTab[] = tabs,
+  beforeKill?: () => Promise<boolean>,
+) {
   const closingTabIds = new Set(tabs.map((tab) => tab.id));
   const terminalSessionIds = [
     ...new Set(
@@ -51,10 +55,6 @@ export async function confirmAndKillTerminalTabs(tabs: IWorkspaceTab[], allTabs:
         .filter(Boolean) as string[],
     ),
   ];
-  if (!terminalSessionIds.length) {
-    return true;
-  }
-
   const sessionsToKill = terminalSessionIds.filter(
     (sessionId) =>
       !allTabs.some(
@@ -64,11 +64,7 @@ export async function confirmAndKillTerminalTabs(tabs: IWorkspaceTab[], allTabs:
           tab.uniqueData?.terminalSessionId === sessionId,
       ),
   );
-  if (!sessionsToKill.length) {
-    return true;
-  }
-
-  if (isTerminalCloseConfirmationEnabled(useGlobalStore.getState().terminalSettings)) {
+  if (sessionsToKill.length && isTerminalCloseConfirmationEnabled(useGlobalStore.getState().terminalSettings)) {
     const statusMap = await resolveWithin(
       jcefApi.getTerminalStatuses({ sessionIds: sessionsToKill }),
       Object.fromEntries(sessionsToKill.map((sessionId) => [sessionId, { alive: true, busy: false }])),
@@ -78,6 +74,14 @@ export async function confirmAndKillTerminalTabs(tabs: IWorkspaceTab[], allTabs:
     if (aliveStatuses.length && !(await confirmTerminalClose(aliveStatuses.some((status) => status.busy)))) {
       return false;
     }
+  }
+
+  if (beforeKill && !(await beforeKill())) {
+    return false;
+  }
+
+  if (!sessionsToKill.length) {
+    return true;
   }
 
   await resolveWithin(jcefApi.killTerminals({ sessionIds: sessionsToKill }), undefined);

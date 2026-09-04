@@ -6,6 +6,7 @@ export interface ApplicationExitConfirmation {
 
 interface ApplicationExitOperations {
   confirmDirtyEditors: () => Promise<boolean>;
+  finalizeBeforeClose?: () => Promise<boolean>;
   shouldManageTasks: () => boolean;
   getActiveTaskCount: () => Promise<number>;
   prepareUserExit: () => Promise<void>;
@@ -20,6 +21,13 @@ const finishApplicationExit = async (operations: ApplicationExitOperations, mana
   try {
     if (manageTasks) {
       await operations.prepareUserExit();
+    }
+    if (operations.finalizeBeforeClose && !(await operations.finalizeBeforeClose())) {
+      if (manageTasks) {
+        await operations.abortUserExit().catch(() => undefined);
+      }
+      operations.onCancel();
+      return;
     }
     const confirmed = await operations.confirmCloseWindow();
     if (!confirmed) {

@@ -5,6 +5,8 @@ import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.db.DatabaseObjectDeletePrepare;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.model.runtime.TransactionStateResponse;
+import ai.chat2db.community.domain.api.model.runtime.TransactionMode;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseDeletePrepareRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseObjectDeleteExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaDeletePrepareRequest;
@@ -327,6 +329,47 @@ class DatabaseObjectDeleteServiceImplTest {
         @Override
         public void close() {
             clear();
+        }
+
+        @Override
+        public TransactionStateResponse beginManualTransaction(DbConnectionContextRequest param) {
+            return TransactionStateResponse.of(false, TransactionMode.AUTO);
+        }
+
+        @Override
+        public TransactionStateResponse commitTransaction(DbConnectionContextRequest param) {
+            return TransactionStateResponse.of(false, TransactionMode.AUTO);
+        }
+
+        @Override
+        public TransactionStateResponse rollbackTransaction(DbConnectionContextRequest param) {
+            return TransactionStateResponse.of(false, TransactionMode.AUTO);
+        }
+
+        @Override
+        public TransactionStateResponse getTransactionState(DbConnectionContextRequest param) {
+            return TransactionStateResponse.of(false, TransactionMode.AUTO);
+        }
+
+        @Override
+        public TransactionStateResponse releaseBoundConnection(DbConnectionContextRequest param) {
+            // No-op mock: the delete flow does not bind console-owned connections.
+            return TransactionStateResponse.of(false, TransactionMode.AUTO);
+        }
+
+        @Override
+        public void releaseAllBoundTransactions() {
+            // No-op mock: the delete flow does not open console-bound transactions.
+        }
+
+        @Override
+        public boolean isInTransaction(Long consoleId) {
+            return false;
+        }
+
+        @Override
+        public <T> T withConsoleTransactionLock(Long consoleId, java.util.concurrent.Callable<T> action) throws Exception {
+            return action.call();
         }
 
         @Override

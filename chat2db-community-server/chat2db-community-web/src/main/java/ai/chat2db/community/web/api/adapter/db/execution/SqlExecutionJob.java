@@ -10,6 +10,7 @@ import ai.chat2db.community.domain.api.service.db.IDbExecuteResultEnhanceService
 import ai.chat2db.community.tools.http.LocalCookie;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
+import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.community.web.api.config.console.ConsoleHelper;
 import ai.chat2db.community.domain.api.model.operation.SqlOperationLogRecord;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
@@ -76,6 +77,31 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
     @Override
     public void run() {
         workerThread = Thread.currentThread();
+        Long consoleId = consoleId();
+        if (consoleId == null) {
+            runIfNotCanceled();
+            return;
+        }
+        try {
+            connectionContextService.withConsoleTransactionLock(consoleId, () -> {
+                runIfNotCanceled();
+                return null;
+            });
+        } catch (Exception e) {
+            throw e instanceof RuntimeException runtimeException ? runtimeException : new RuntimeException(e);
+        }
+    }
+
+    private void runIfNotCanceled() {
+        if (canceled.get()) {
+            sendCancelled();
+            finishCallback.accept(this);
+            return;
+        }
+        runInternal();
+    }
+
+    private void runInternal() {
         ConsoleHelper.setHeaders(request.getConsoleMessage());
         restoreLocalHeaders();
         SqlExecutionLogConsumer logConsumer = null;
@@ -104,15 +130,15 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             } else {
                 logConsumer.finishSuccess();
             }
-            sink.send(canceled.get() ? "cancelled" : "finished", Map.of("executionId", request.getExecutionId()));
+            sink.send(canceled.get() ? "cancelled" : "finished", terminalEvent(null));
         } catch (Exception e) {
             if (canceled.get()) {
                 recordTerminalStatus(logConsumer, SqlOperationLogStatusEnum.CANCELLED.getCode(), e.getMessage());
-                sink.send("cancelled", Map.of("executionId", request.getExecutionId(), "message", e.getMessage()));
+                sink.send("cancelled", terminalEvent(e.getMessage()));
             } else {
                 log.error("SQL execution failed, executionId={}", request.getExecutionId(), e);
                 recordTerminalStatus(logConsumer, SqlOperationLogStatusEnum.FAIL.getCode(), e.getMessage());
-                sink.send("failed", Map.of("executionId", request.getExecutionId(), "message", e.getMessage()));
+                sink.send("failed", terminalEvent(e.getMessage()));
             }
         } finally {
             currentStatement = null;
@@ -120,6 +146,32 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             connectionContextService.clear();
             finishCallback.accept(this);
         }
+    }
+
+    /**
+     * Builds a terminal-event payload that always carries the executionId, an optional
+     * message, and the console's current transaction state so the frontend can keep its
+     * Commit/Rollback controls in sync after every execution (including cancellation, which
+     * leaves an open transaction intact by design).
+     */
+    private Map<String, Object> terminalEvent(String message) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("executionId", request.getExecutionId());
+        if (message != null) {
+            payload.put("message", message);
+        }
+        Long consoleId = consoleId();
+        payload.put("inTransaction", consoleId != null
+                && connectionContextService.isInTransaction(consoleId));
+        return payload;
+    }
+
+    private Long consoleId() {
+        DbConnectionContextRequest connectionContext = request.getConnectionContext();
+        if (connectionContext != null && connectionContext.getConsoleId() != null) {
+            return connectionContext.getConsoleId();
+        }
+        return request.getSqlEditorRequest() == null ? null : request.getSqlEditorRequest().getConsoleId();
     }
 
     public void cancel() {
@@ -145,7 +197,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
     public void sendCancelled() {
         canceled.set(true);
         recordFallbackTerminalStatus(SqlOperationLogStatusEnum.CANCELLED.getCode(), null);
-        sink.send("cancelled", Map.of("executionId", request.getExecutionId()));
+        sink.send("cancelled", terminalEvent(null));
     }
 
     public void pollMessages() {
@@ -177,6 +229,17 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
         if (currentStatement == statement) {
             pollMessages();
             currentStatement = null;
+        }
+    }
+
+    @Override
+    public void onImplicitCommitWarning(String sql) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("level", "WARN");
+        message.put("message", I18nUtils.getMessage("transaction.implicitCommit.warning"));
+        message.put("source", "transaction");
+        synchronized (eventContext) {
+            sink.send("message", message, eventContext.currentIdentity());
         }
     }
 

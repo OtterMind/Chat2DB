@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand/vanilla';
 import { WorkspaceStore } from '../../store';
-import { ConsoleState } from './initialState';
+import { ConsoleState, createInitialTransactionState, TransactionState } from './initialState';
+import { TransactionIsolationLevel, TransactionMode } from '@/constants/transaction';
 import { createNextWorkspaceTabScrollRequest } from '../../utils/workspaceTabScrollRequest';
 import { ICreateConsoleParams, IBoundInfo, IWorkspaceTab } from '@/typings';
 import historyService from '@/service/history';
@@ -12,6 +13,7 @@ import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
+import confirmAndReleaseTransaction from '@/utils/transactionSession';
 import { applyWorkspaceTabBoundInfo, buildConsoleDefaultTabName } from '../../utils/consoleTabName';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
@@ -88,6 +90,16 @@ export interface ConsoleAction {
   deleteEditor: (id: number | string) => void;
   appendConsole: (params: { id: number | string; content: string; type?: EditorSetValueType; space?: boolean }) => void;
   deleteActiveWorkspaceTab: () => Promise<void>;
+  /** Toggles the console between auto-commit and manual transaction mode. */
+  setTransactionMode: (consoleId: number, mode: TransactionMode) => void;
+  /** Selects the isolation level used when the console opens its next manual transaction. */
+  setTransactionIsolation: (consoleId: number, isolationLevel: TransactionIsolationLevel) => void;
+  /** Updates the console's runtime transaction state (in-transaction / outcome). */
+  setTransactionState: (consoleId: number, patch: Partial<TransactionState>) => void;
+  /** Clears the console's transaction state (e.g. after release or on close). */
+  clearTransactionState: (consoleId: number) => void;
+  /** Returns the console's current transaction state, or undefined. */
+  getTransactionState: (consoleId: number) => TransactionState | undefined;
 }
 
 export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtools', never]], [], ConsoleAction> = (
@@ -311,7 +323,12 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     }
     if (
       activeWorkspaceTab &&
-      !(await confirmWorkspaceTabsClose([activeWorkspaceTab], workspaceTabList, editorList || {}))
+      !(await confirmWorkspaceTabsClose(
+        [activeWorkspaceTab],
+        workspaceTabList,
+        editorList || {},
+        () => confirmAndReleaseTransaction([activeWorkspaceTab]),
+      ))
     ) {
       return;
     }
@@ -326,6 +343,9 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     const newList = workspaceTabList.filter((item) => item?.id !== activeConsoleId);
 
     const savedConsoleId = removedWorkspaceTab?.uniqueData?.consoleId ?? removedWorkspaceTab?.id;
+    if (typeof removedWorkspaceTab?.uniqueData?.consoleId === 'number') {
+      get().clearTransactionState(removedWorkspaceTab.uniqueData.consoleId);
+    }
     if (isSavedConsoleLikeWorkspaceTab(removedWorkspaceTab) && typeof savedConsoleId === 'number') {
       await historyService.updateSavedConsole({
         id: savedConsoleId,
@@ -390,5 +410,53 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     set({ workspaceTabSplitLayout: nextWorkspaceTabSplitLayout });
     get().setWorkspaceTabList(newList);
     get().setActiveConsoleId(newActiveId);
+  },
+
+  setTransactionMode: (consoleId, mode) => {
+    const map = get().transactionStateMap || {};
+    const current = { ...createInitialTransactionState(), ...map[consoleId] };
+    set({
+      transactionStateMap: {
+        ...map,
+        [consoleId]: { ...current, mode },
+      },
+    });
+  },
+
+  setTransactionIsolation: (consoleId, isolationLevel) => {
+    const map = get().transactionStateMap || {};
+    const current = { ...createInitialTransactionState(), ...map[consoleId] };
+    set({
+      transactionStateMap: {
+        ...map,
+        [consoleId]: { ...current, isolationLevel },
+      },
+    });
+  },
+
+  setTransactionState: (consoleId, patch) => {
+    const map = get().transactionStateMap || {};
+    const current = { ...createInitialTransactionState(), ...map[consoleId] };
+    set({
+      transactionStateMap: {
+        ...map,
+        [consoleId]: { ...current, ...patch },
+      },
+    });
+  },
+
+  clearTransactionState: (consoleId) => {
+    const map = get().transactionStateMap || {};
+    if (!(consoleId in map)) {
+      return;
+    }
+    const next = { ...map };
+    delete next[consoleId];
+    set({ transactionStateMap: next });
+  },
+
+  getTransactionState: (consoleId) => {
+    const map = get().transactionStateMap || {};
+    return map[consoleId];
   },
 });

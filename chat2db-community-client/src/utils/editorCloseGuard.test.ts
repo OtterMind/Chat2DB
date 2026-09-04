@@ -190,6 +190,7 @@ async function run() {
 
   const workspaceTabsSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/index.tsx', 'utf8');
   const consoleActionSource = readFileSync('src/store/workspace/slices/console/action.ts', 'utf8');
+  const applicationExitSource = readFileSync('src/layouts/init/useApplicationExit.ts', 'utf8');
   const editorSource = readFileSync('src/components/SQLEditor/editor/SQLEditorWithOperation/index.tsx', 'utf8');
   const confirmationSource = readFileSync('src/utils/editorCloseConfirmation.tsx', 'utf8');
   const markdownSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/FilePreviewTab.tsx', 'utf8');
@@ -208,6 +209,30 @@ async function run() {
     consoleActionSource,
     /deleteActiveWorkspaceTab[\s\S]*?confirmWorkspaceTabsClose/,
     'the global close shortcut uses the shared guard',
+  );
+  const deleteTabBody = consoleActionSource.slice(consoleActionSource.indexOf('deleteActiveWorkspaceTab'));
+  assert.match(
+    deleteTabBody,
+    /confirmWorkspaceTabsClose[\s\S]*?confirmAndReleaseTransaction/,
+    'the global close shortcut must defer transaction resolution until other close confirmations pass',
+  );
+  const tabCloseGuardBody = workspaceTabsSource.slice(workspaceTabsSource.indexOf('const confirmWorkspaceTabItemsClose'));
+  assert.match(
+    tabCloseGuardBody,
+    /confirmWorkspaceTabsClose[\s\S]*?confirmAndReleaseTransaction/,
+    'tab close must defer transaction resolution until other close confirmations pass',
+  );
+  const bulkCloseBody = workspaceTabsSource.slice(workspaceTabsSource.indexOf('const requestCloseWorkspaceTabs'));
+  assert.match(
+    bulkCloseBody,
+    /confirmWorkspaceTabsClose[\s\S]*?confirmAndReleaseTransaction/,
+    'bulk tab close must defer transaction resolution until other close confirmations pass',
+  );
+  const applicationExitBody = applicationExitSource.slice(applicationExitSource.indexOf('confirmDirtyEditors'));
+  assert.match(
+    applicationExitBody,
+    /confirmDirtyEditors:[\s\S]*?prepareWorkspaceEditorsForApplicationExit[\s\S]*?finalizeBeforeClose:[\s\S]*?confirmAndReleaseTransaction/,
+    'application exit must defer transaction resolution until editor and task confirmations pass',
   );
   assert.match(editorSource, /hasUnsavedChangesBeforeClose/, 'editor refs expose dirty-state detection');
   assert.match(editorSource, /saveBeforeClose/, 'editor refs expose a real save operation');
@@ -229,6 +254,22 @@ async function run() {
     confirmationSource.match(/style=\{footerButtonStyle\}/g)?.length,
     3,
     'all close-dialog actions share the same horizontal alignment',
+  );
+  const transactionSource = readFileSync('src/utils/transactionSession.ts', 'utf8');
+  assert.match(
+    transactionSource,
+    /const transactionDialogFooterStyle = \{[\s\S]*?justifyContent: 'flex-end',[\s\S]*?gap: 8,/,
+    'the transaction dialog must render an explicit right-aligned footer',
+  );
+  assert.match(
+    transactionSource,
+    /color: 'red',[\s\S]*?variant: 'outlined'/,
+    'rollback must use the red outlined action style',
+  );
+  assert.match(
+    transactionSource,
+    /color: 'primary',[\s\S]*?variant: 'solid'/,
+    'commit must use the theme-colored solid action style',
   );
   assert.match(
     confirmationSource,

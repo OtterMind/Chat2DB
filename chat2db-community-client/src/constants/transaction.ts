@@ -1,0 +1,19 @@
+export enum TransactionMode {
+  AUTO = 'auto',
+  MANUAL = 'manual',
+}
+
+export enum TransactionIsolationLevel {
+  DEFAULT = 'DEFAULT',
+  READ_UNCOMMITTED = 'READ_UNCOMMITTED',
+  READ_COMMITTED = 'READ_COMMITTED',
+  REPEATABLE_READ = 'REPEATABLE_READ',
+  SERIALIZABLE = 'SERIALIZABLE',
+}
+
+export enum TransactionOutcome {
+  COMMITTED = 'COMMITTED',
+  ROLLED_BACK = 'ROLLED_BACK',
+  RELEASED_WITHOUT_TRANSACTION = 'RELEASED_WITHOUT_TRANSACTION',
+  UNKNOWN = 'UNKNOWN',
+}

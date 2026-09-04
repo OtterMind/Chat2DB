@@ -29,12 +29,45 @@ public class ConnectionInfoHandler {
 
     @Around("within(@ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect *)")
     public Object connectionInfoHandler(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+        Long consoleId = consoleId(proceedingJoinPoint.getArgs());
+        if (consoleId != null) {
+            try {
+                return connectionContextService.withConsoleTransactionLock(consoleId, () -> {
+                    try {
+                        return proceedWithConnectionContext(proceedingJoinPoint);
+                    } catch (Throwable throwable) {
+                        throw new JoinPointInvocationException(throwable);
+                    }
+                });
+            } catch (JoinPointInvocationException exception) {
+                throw exception.getCause();
+            }
+        }
+        return proceedWithConnectionContext(proceedingJoinPoint);
+    }
+
+    private Object proceedWithConnectionContext(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
         try {
             Object[] params = proceedingJoinPoint.getArgs();
             if (params != null && params.length > 0) {
                 for (int i = 0; i < params.length; i++) {
                     Object param = params[i];
-                    if (param instanceof DataSourceBaseRequest) {
+                    if (param instanceof IDataSourceConsoleRequestInfo) {
+                        Long dataSourceId = ((IDataSourceConsoleRequestInfo) param).getDataSourceId();
+                        Long consoleId = ((IDataSourceConsoleRequestInfo) param).getConsoleId();
+                        String database = ((IDataSourceConsoleRequestInfo) param).getDatabaseName();
+                        String schemaName = null;
+                        if (param instanceof IDataSourceSchemaRequestInfo) {
+                            schemaName = ((IDataSourceSchemaRequestInfo) param).getSchemaName();
+                        } else if (param instanceof DataSourceBaseRequest) {
+                            schemaName = ((DataSourceBaseRequest) param).getSchemaName();
+                        }
+                        if (dataSourceId != null && dataSourceId > 1L) {
+                            bind(dataSourceId, database, consoleId, schemaName);
+                        } else {
+                            customConnectionInfo(dataSourceId, database, consoleId, schemaName);
+                        }
+                    } else if (param instanceof DataSourceBaseRequest) {
                         Long dataSourceId = ((DataSourceBaseRequest) param).getDataSourceId();
                         String schemaName = ((DataSourceBaseRequest) param).getSchemaName();
                         String database = ((DataSourceBaseRequest) param).getDatabaseName();
@@ -52,15 +85,6 @@ public class ConnectionInfoHandler {
                         } else {
                             customConnectionInfo(dataSourceId, database, null, schemaName);
                         }
-                    } else if (param instanceof IDataSourceConsoleRequestInfo) {
-                        Long dataSourceId = ((IDataSourceConsoleRequestInfo) param).getDataSourceId();
-                        Long consoleId = ((IDataSourceConsoleRequestInfo) param).getConsoleId();
-                        String database = ((IDataSourceConsoleRequestInfo) param).getDatabaseName();
-                        if (dataSourceId != null && dataSourceId >1L) {
-                            bind(dataSourceId, database, consoleId, null);
-                        }else {
-                            customConnectionInfo(dataSourceId, database, consoleId,null);
-                        }
                     } else if (param instanceof IDataSourceBaseRequestInfo) {
                         Long dataSourceId = ((IDataSourceBaseRequestInfo) param).getDataSourceId();
                         String database = ((IDataSourceBaseRequestInfo) param).getDatabaseName();
@@ -75,6 +99,24 @@ public class ConnectionInfoHandler {
             return proceedingJoinPoint.proceed();
         } finally {
             connectionContextService.clear();
+        }
+    }
+
+    private static Long consoleId(Object[] params) {
+        if (params == null) {
+            return null;
+        }
+        for (Object param : params) {
+            if (param instanceof IDataSourceConsoleRequestInfo requestInfo) {
+                return requestInfo.getConsoleId();
+            }
+        }
+        return null;
+    }
+
+    private static final class JoinPointInvocationException extends RuntimeException {
+        private JoinPointInvocationException(Throwable cause) {
+            super(cause);
         }
     }
 

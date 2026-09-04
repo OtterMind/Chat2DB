@@ -108,6 +108,7 @@ import {
 import { isDesktop } from '@/utils/env';
 import { v4 as uuidv4 } from 'uuid';
 import { buildStreamResultExecuteSqlParams } from './streamResultExecutionParams';
+import { resolveResponseErrorMessage } from '@/service/interceptorsResponse';
 
 const SplitPaneAny = SplitPane as any;
 const HISTORY_BATCH_LIMIT = 30;
@@ -494,10 +495,20 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       }
       const keepExistingOutput =
         keepExistingOutputByExecutionSequenceRef.current[executionSequence] ?? keepExecutionLogHistory;
+      const logEvent =
+        event.eventType === 'failed' && event.message && typeof event.message === 'object'
+          ? {
+              ...event,
+              message: {
+                ...event.message,
+                message: resolveResponseErrorMessage(event.message.errorCode, event.message.message),
+              },
+            }
+          : event;
       setSqlExecutionLogState((state) =>
         reduceDesktopSqlExecutionEventWithHistoryPreference(
           state,
-          event,
+          logEvent,
           getExecutionLogContext(executionSnapshot),
           keepExistingOutput,
           requestSequence,
@@ -676,6 +687,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
       if (event.eventType === 'message') {
+        // Surface DDL implicit-commit warnings (and other statement warnings) to the user.
+        const message = (event as any)?.message;
+        if (message && (message.level === 'WARN' || message.level === 'ERROR')) {
+          staticMessage.warning(message.message || '');
+        }
         return;
       }
       if (event.eventType === 'finished' || event.eventType === 'failed' || event.eventType === 'cancelled') {
@@ -896,6 +912,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
     const executeSqlParams = {
       ...requestParams,
+      consoleId: executionSnapshot.consoleId,
       databaseType: executionSnapshot.databaseType,
       dataSourceId: executionSnapshot.dataSourceId,
       dataSourceName: executionSnapshot.dataSourceName,
@@ -1102,6 +1119,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           isConsole={isConsole}
           sqlActionEnabled={sqlActionEnabled}
           dataSourceState={dataSourceState}
+          sqlExecuting={executing}
           onChange={onEditorChange}
         />
       </div>

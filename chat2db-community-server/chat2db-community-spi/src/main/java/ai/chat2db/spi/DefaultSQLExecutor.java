@@ -1003,6 +1003,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         List<ExecuteResponse> executeResults = new ArrayList<>();
         String type = simpleSqlStatement.getSqlType();
         consumer.statementStarted(simpleSqlStatement.getSql(), originalSql, simpleSqlStatement.getComment());
+        warnImplicitCommitIfNeeded(statementListener, type, originalSql);
         if (SqlTypeEnum.SELECT.equals(sqlType) && !SqlUtils.hasPageLimit(originalSql, dbType)) {
             String pagingBaseSql = SqlUtils.stripTrailingSemicolon(originalSql);
             String buildPageLimit = Chat2DBContext.getSqlBuilder().dql().buildPageLimit(PageLimitRequest.builder()
@@ -1062,6 +1063,20 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         consumer.statementFinished(originalSql,
                 totalStatementDuration(executeResults));
         return executeResults;
+    }
+
+    private void warnImplicitCommitIfNeeded(ISqlExecutionStatementListener statementListener,
+                                            String sqlType, String sql) {
+        if (statementListener == null) {
+            return;
+        }
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null || !Boolean.TRUE.equals(connectInfo.getConsoleOwn())) {
+            return;
+        }
+        if (Chat2DBContext.isImplicitCommitStatement(sqlType, sql)) {
+            statementListener.onImplicitCommitWarning(sql);
+        }
     }
 
     private static void setMaxRows(Statement statement, Integer offset, Integer count) throws SQLException {

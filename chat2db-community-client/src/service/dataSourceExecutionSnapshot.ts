@@ -2,6 +2,7 @@ import type { DatabaseTypeCode } from '@/constants';
 import type { IBoundInfo } from '@/typings';
 
 export interface DataSourceExecutionSnapshot {
+  consoleId?: number;
   dataSourceId?: number;
   dataSourceName?: string;
   environmentId?: number;
@@ -16,6 +17,7 @@ export interface DataSourceExecutionSnapshot {
 
 export type DataSourceExecutionTarget = Pick<
   DataSourceExecutionSnapshot,
+  | 'consoleId'
   | 'dataSourceId'
   | 'dataSourceName'
   | 'environmentId'
@@ -53,6 +55,7 @@ export function createDataSourceExecutionSnapshot(
   startedAt = Date.now(),
 ): DataSourceExecutionSnapshot {
   return Object.freeze({
+    consoleId: boundInfo.consoleId,
     dataSourceId: boundInfo.dataSourceId,
     dataSourceName: boundInfo.dataSourceName,
     environmentId: boundInfo.environmentId ?? boundInfo.environment?.id,

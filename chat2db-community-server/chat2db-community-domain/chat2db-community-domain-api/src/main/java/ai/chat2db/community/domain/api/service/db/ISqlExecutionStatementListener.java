@@ -18,4 +18,8 @@ public interface ISqlExecutionStatementListener {
      * @param statement closed JDBC statement.
      */
     void onStatementClosed(Statement statement);
+
+    default void onImplicitCommitWarning(String sql) {
+    }
+
 }

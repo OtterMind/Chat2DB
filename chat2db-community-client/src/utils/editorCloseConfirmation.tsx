@@ -105,10 +105,11 @@ export async function confirmWorkspaceTabsClose(
   tabs: IWorkspaceTab[],
   allTabs: IWorkspaceTab[],
   editorList: EditorCloseGuardMap,
+  beforeFinalize?: () => Promise<boolean>,
 ) {
   if (!(await confirmDirtyWorkspaceEditors(tabs, editorList))) {
     return false;
   }
 
-  return confirmAndKillTerminalTabs(tabs, allTabs);
+  return confirmAndKillTerminalTabs(tabs, allTabs, beforeFinalize);
 }

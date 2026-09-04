@@ -13,6 +13,7 @@ import ai.chat2db.community.domain.api.service.db.extension.ISqlExecutionPolicy;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import ai.chat2db.spi.sql.Chat2DBContext;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -68,6 +69,7 @@ public class SqlExecutionPolicyManager {
 
     public void beforeExecute(SqlExecutionPlan plan) {
         Objects.requireNonNull(plan, "plan");
+        Chat2DBContext.beforeExecute(plan);
         policies.forEach(policy -> policy.beforeExecute(plan));
     }
 

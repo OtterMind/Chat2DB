@@ -17,4 +17,11 @@ const interceptorsResponse = ({ errorCode }: InterceptorResponseProps) => {
   }
 };
 
+export const resolveResponseErrorMessage = (errorCode: unknown, errorMessage: unknown) =>
+  errorCode === 'transaction.implicitCommit.blocked' || errorMessage === 'transaction.implicitCommit.blocked'
+    ? i18n('workspace.transaction.implicitCommitBlocked')
+    : typeof errorMessage === 'string'
+      ? errorMessage
+      : '';
+
 export default interceptorsResponse;

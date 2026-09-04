@@ -9,6 +9,7 @@ import { useUserStore } from '@/store/session';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop } from '@/utils/env';
 import { prepareWorkspaceEditorsForApplicationExit } from '@/utils/editorCloseConfirmation';
+import confirmAndReleaseTransaction from '@/utils/transactionSession';
 import { coordinateApplicationExit } from './applicationExitCoordinator';
 
 const useApplicationExit = () => {
@@ -28,14 +29,12 @@ const useApplicationExit = () => {
       }
       const cancelNativeExit = () => jcefApi.cancelApplicationExit({ operationId });
       try {
+        const workspace = useWorkspaceStore.getState();
+        const tabs = workspace.workspaceTabList || [];
         await coordinateApplicationExit({
-          confirmDirtyEditors: () => {
-            const workspace = useWorkspaceStore.getState();
-            return prepareWorkspaceEditorsForApplicationExit(
-              workspace.workspaceTabList || [],
-              workspace.editorList || {},
-            );
-          },
+          confirmDirtyEditors: () =>
+            prepareWorkspaceEditorsForApplicationExit(tabs, workspace.editorList || {}),
+          finalizeBeforeClose: () => confirmAndReleaseTransaction(tabs),
           shouldManageTasks: () => {
             if (!clientRuntime.requiresAuthentication && !clientRuntime.requiresLicenseActivation) {
               return true;

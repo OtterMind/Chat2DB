@@ -137,6 +137,40 @@ jobs:
           java-version: '17'
           cache: maven
 
+      - name: Start MySQL integration fixtures
+        run: bash script/test/start-test-databases.sh mysql57 mysql80
+
+      - name: Run MySQL manual transaction integration test
+        run: |
+          mvn -B -f chat2db-community-server/pom.xml \
+            -pl :chat2db-community-mysql -am \
+            -Dmaven.test.skip=false -DskipTests=false \
+            -Dtest=MysqlManualTransactionIntegrationTest \
+            '-Dsurefire.includes=**/*Test.java' \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dmaven.test.failure.ignore=false \
+            -Dchat2db.mysql.fixture.required=true \
+            test
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          report = (
+              'chat2db-community-server/chat2db-community-plugins/'
+              'chat2db-community-mysql/target/surefire-reports/'
+              'TEST-ai.chat2db.plugin.mysql.MysqlManualTransactionIntegrationTest.xml'
+          )
+          suite = ET.parse(report).getroot()
+          actual = {name: int(suite.attrib.get(name, -1)) for name in ('tests', 'skipped', 'failures', 'errors')}
+          expected = {'tests': 6, 'skipped': 0, 'failures': 0, 'errors': 0}
+          if actual != expected:
+              raise SystemExit(f'Unexpected MySQL integration summary: {actual}, expected {expected}')
+          print(f'Verified MySQL integration summary: {actual}')
+          PY
+
+      - name: Stop MySQL integration fixtures
+        if: always()
+        run: bash script/test/stop-test-databases.sh mysql57 mysql80
+
       - name: Run backend tests
         run: mvn -B test -Dmaven.test.skip=false -DskipTests=false -f chat2db-community-server/pom.xml
 

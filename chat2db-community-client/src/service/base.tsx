@@ -5,7 +5,7 @@ import { isDesktop } from '@/utils/env';
 import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
-import interceptorsResponse from '@/service/interceptorsResponse';
+import interceptorsResponse, { resolveResponseErrorMessage } from '@/service/interceptorsResponse';
 
 export type IErrorLevel = 'toast' | 'notification' | 'prompt' | 'critical' | false;
 export type PermissionError = 'apply' | false;
@@ -189,16 +189,17 @@ export default function createRequest<P = void, R = void>(url: string, options?:
               return;
             }
             // If the request fails
+            const resolvedErrorMessage = resolveResponseErrorMessage(errorCode, errorMessage);
             reject({
               errorCode: errorCode,
-              errorMessage: errorMessage,
+              errorMessage: resolvedErrorMessage,
             });
             // If there is no need to pop up the toast error code
             if (ErrorCodesWithoutToast.includes(errorCode)) {
               const { errorCode: responseErrorCode, errorMessage: responseErrorMessage } = res;
               interceptorsResponse({
                 errorCode: responseErrorCode,
-                errorMessage: responseErrorMessage,
+                errorMessage: resolveResponseErrorMessage(responseErrorCode, responseErrorMessage),
                 requestParams: params,
                 errorLevel: effectiveErrorLevel,
                 permissionError,
@@ -208,12 +209,12 @@ export default function createRequest<P = void, R = void>(url: string, options?:
             // Handle errors based on errorLevel
             switch (effectiveErrorLevel) {
               case 'toast':
-                staticMessage.error(errorMessage);
+                staticMessage.error(resolvedErrorMessage);
                 break;
               case 'notification':
                 useGlobalStore?.getState()?.systemErrorMessageApi?.({
                   errorCode,
-                  errorMessage,
+                  errorMessage: resolvedErrorMessage,
                   errorDetail,
                   solutionLink,
                   requestUrl: eventualUrl,

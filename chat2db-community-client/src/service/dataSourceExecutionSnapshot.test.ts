@@ -15,6 +15,7 @@ import {
 
 const registry = createDataSourceExecutionSnapshotRegistry();
 const boundInfo: IBoundInfo = {
+  consoleId: 41,
   dataSourceId: 17,
   dataSourceName: 'orders-primary',
   identityColor: '#12AB34',
@@ -34,6 +35,7 @@ const boundInfo: IBoundInfo = {
 const snapshot = captureDataSourceExecutionSnapshot(registry, 4, boundInfo, 1234);
 assert.equal(Object.isFrozen(snapshot), true);
 assert.deepEqual(snapshot, {
+  consoleId: 41,
   dataSourceId: 17,
   dataSourceName: 'orders-primary',
   environmentId: 3,
@@ -51,10 +53,12 @@ assert.equal(
   'presentation color must remain dynamically resolved instead of being frozen into execution identity',
 );
 
+boundInfo.consoleId = 42;
 boundInfo.dataSourceName = 'renamed-after-start';
 boundInfo.databaseName = 'switched-after-start';
 boundInfo.environment!.shortName = 'STAGE';
 assert.equal(snapshot.dataSourceName, 'orders-primary');
+assert.equal(snapshot.consoleId, 41);
 assert.equal(snapshot.databaseName, 'orders');
 assert.equal(snapshot.environmentShortName, 'PROD');
 

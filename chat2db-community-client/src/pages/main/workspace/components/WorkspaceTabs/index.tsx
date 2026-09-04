@@ -73,6 +73,7 @@ import {
 } from '../../utils/localTextFile';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
 import { resolveEditorDataSourceConnectable, resolveEditorDataSourceState } from '@/utils/editorDataSourceLifecycle';
+import confirmAndReleaseTransaction from '@/utils/transactionSession';
 import { EditorType } from '@/components/SQLEditor';
 import { ShortcutAction } from '@/constants/shortcut';
 import {
@@ -1095,6 +1096,9 @@ const WorkspaceTabs = memo(() => {
         useWorkspaceStore.getState().deleteEditor(item.id);
       }
       const closeId = item.uniqueData?.consoleId ?? item.id;
+      if (typeof item.uniqueData?.consoleId === 'number') {
+        useWorkspaceStore.getState().clearTransactionState(item.uniqueData.consoleId);
+      }
       if (isSavedConsoleLikeWorkspaceTab(item) && typeof closeId === 'number' && !isTemporaryId(closeId)) {
         closeWindowTab(closeId);
       }
@@ -1103,10 +1107,12 @@ const WorkspaceTabs = memo(() => {
 
   const confirmWorkspaceTabItemsClose = (tabs: ITabItem[]) => {
     const closeKeySet = new Set(tabs.map((tab) => tab.key));
+    const tabsToClose = (workspaceTabList || []).filter((tab) => closeKeySet.has(tab.id));
     return confirmWorkspaceTabsClose(
-      (workspaceTabList || []).filter((tab) => closeKeySet.has(tab.id)),
+      tabsToClose,
       workspaceTabList || [],
       useWorkspaceStore.getState().editorList || {},
+      () => confirmAndReleaseTransaction(tabsToClose),
     );
   };
 
@@ -1117,6 +1123,7 @@ const WorkspaceTabs = memo(() => {
         closableTabs,
         workspaceTabList || [],
         useWorkspaceStore.getState().editorList || {},
+        () => confirmAndReleaseTransaction(closableTabs),
       )
     ) {
       closeWorkspaceTabs(closableTabs);

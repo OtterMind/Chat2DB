@@ -21,6 +21,7 @@ import ai.chat2db.community.domain.api.model.request.db.DbTableQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbTableVectorRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSelectResultUpdateRequest;
 import ai.chat2db.community.web.api.model.response.data.source.DatabaseResponse;
+import ai.chat2db.community.web.api.model.request.data.source.ConsoleCloseRequest;
 import ai.chat2db.community.web.api.model.request.data.source.DataSourceBaseRequest;
 import ai.chat2db.community.web.api.model.request.db.*;
 import ai.chat2db.community.web.api.model.response.db.*;
@@ -300,6 +301,22 @@ public abstract class DbWebConverter {
         param.setSchemaName(schemaName);
         return param;
     }
+
+    @Mappings({
+            @Mapping(target = "databaseName", ignore = true),
+            @Mapping(target = "schemaName", ignore = true),
+            @Mapping(target = "transactionIsolationLevel", ignore = true)
+    })
+    public abstract DbConnectionContextRequest consoleCloseRequest2context(ConsoleCloseRequest request);
+
+    @Mappings({
+            @Mapping(target = "databaseName", ignore = true),
+            @Mapping(target = "schemaName", ignore = true),
+            @Mapping(source = "isolationLevel", target = "transactionIsolationLevel")
+    })
+    public abstract DbConnectionContextRequest transactionBeginRequest2context(
+            TransactionBeginRequest request
+    );
 
     public abstract TableMilvusQueryRequest request2request(TableBriefQueryRequest request);
 
