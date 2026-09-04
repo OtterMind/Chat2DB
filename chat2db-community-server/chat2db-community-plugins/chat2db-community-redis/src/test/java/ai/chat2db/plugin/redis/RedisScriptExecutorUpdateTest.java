@@ -2,6 +2,7 @@ package ai.chat2db.plugin.redis;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.plugin.redis.model.RedisKey;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -16,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,6 +41,55 @@ class RedisScriptExecutorUpdateTest {
         RedisKey newKey = RedisKey.builder().name("k").type("string").value(null).build();
 
         assertNotNull(RedisScriptExecutor.getInstance().update(oldKey, newKey));
+    }
+
+    @Test
+    void nullOldKeyKeepsCreatePathValid() {
+        RedisKey emptyListKey = RedisKey.builder().name("k").type("list").build();
+
+        assertNotNull(RedisScriptExecutor.getInstance().update(null, emptyListKey));
+    }
+
+    @Test
+    void rejectsNullOldTypeBeforeGeneratingCommands() {
+        RedisKey valid = RedisKey.builder().name("k").type("string").build();
+
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type(null).build(), valid));
+    }
+
+    @Test
+    void rejectsNullNewTypeBeforeGeneratingCommands() {
+        RedisKey valid = RedisKey.builder().name("k").type("string").build();
+
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(valid, RedisKey.builder().name("k").type(null).build()));
+    }
+
+    @Test
+    void rejectsBothNullTypesBeforeGeneratingCommands() {
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type(null).build(), RedisKey.builder().name("k").type(null).build()));
+    }
+
+    @Test
+    void rejectsUnknownKeyTypesBeforeGeneratingCommands() {
+        RedisKey valid = RedisKey.builder().name("k").type("string").build();
+
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type("unknown").build(), valid));
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(valid, RedisKey.builder().name("k").type("unknown").build()));
+    }
+
+    @Test
+    void rejectsNoneKeyTypesBeforeGeneratingCommands() {
+        RedisKey valid = RedisKey.builder().name("k").type("string").build();
+
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(RedisKey.builder().name("k").type("none").build(), valid));
+        assertThrows(BusinessException.class, () -> RedisScriptExecutor.getInstance()
+                .update(valid, RedisKey.builder().name("k").type("none").build()));
     }
 
     @Test
