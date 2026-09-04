@@ -12,7 +12,7 @@ import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/import
 import dayjs from 'dayjs';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
-import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, RotateCw, Trash2 } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import type { ImportExportTaskDetails } from '@/typings/importExport';
 import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
@@ -20,6 +20,7 @@ import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolb
 const TASK_STATUS_I18N_KEYS = {
   [ImportExportTaskStatus.PENDING]: 'workspace.task.status.pending',
   [ImportExportTaskStatus.RUNNING]: 'workspace.task.status.running',
+  [ImportExportTaskStatus.CANCELLING]: 'workspace.task.status.cancelling',
   [ImportExportTaskStatus.SUCCESS]: 'workspace.task.status.success',
   [ImportExportTaskStatus.FAILED]: 'workspace.task.status.failed',
   [ImportExportTaskStatus.CANCELLED]: 'workspace.task.status.cancelled',
@@ -29,7 +30,9 @@ const TaskStatusIcon = ({ status }: { status: ImportExportTaskStatus }) => {
   if (status === ImportExportTaskStatus.SUCCESS) return <CircleCheck aria-hidden size={14} />;
   if (status === ImportExportTaskStatus.FAILED) return <CircleX aria-hidden size={14} />;
   if (status === ImportExportTaskStatus.CANCELLED) return <CircleDashed aria-hidden size={14} />;
-  if (status === ImportExportTaskStatus.RUNNING) return <LoaderCircle aria-hidden size={14} />;
+  if (status === ImportExportTaskStatus.RUNNING || status === ImportExportTaskStatus.CANCELLING) {
+    return <LoaderCircle aria-hidden size={14} />;
+  }
   return <Clock3 aria-hidden size={14} />;
 };
 
@@ -47,7 +50,7 @@ const formatTaskDuration = (
 ) => {
   if (!startedAt) return '--';
   const start = dayjs(startedAt);
-  const end = status === ImportExportTaskStatus.RUNNING ? dayjs(now) : finishedAt ? dayjs(finishedAt) : null;
+  const end = ACTIVE_TASK_STATUSES.includes(status) ? dayjs(now) : finishedAt ? dayjs(finishedAt) : null;
   if (!start.isValid() || !end?.isValid()) return '--';
 
   const totalSeconds = Math.max(0, Math.floor(end.diff(start) / 1000));
@@ -90,7 +93,7 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
     setTaskCenterOpen: state.setTaskCenterOpen,
   }));
   const openUnifiedConfirmationModal = useGlobalStore((state) => state.openUnifiedConfirmationModal);
-  const hasRunningTask = taskList.some((task) => task.status === ImportExportTaskStatus.RUNNING);
+  const hasRunningTask = taskList.some((task) => ACTIVE_TASK_STATUSES.includes(task.status));
 
   useEffect(() => {
     if (!hasRunningTask) return;
@@ -120,6 +123,17 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
       onOk: () =>
         importExportServices.deleteTask({ taskId: task.id }).then(() => {
           removeTask(task.id);
+          return getTaskList();
+        }),
+    });
+  };
+
+  const handleCancelTask = (task: ImportExportTaskDetails) => {
+    openUnifiedConfirmationModal({
+      title: i18n('workspace.task.cancel.confirmTitle'),
+      content: i18n('workspace.task.cancel.confirm', task.name),
+      onOk: () =>
+        importExportServices.cancelTask({ taskId: task.id }).then(() => {
           return getTaskList();
         }),
     });
@@ -219,7 +233,7 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         {i18n('common.text.timeConsuming')} {duration}
                       </span>
                     </div>
-                    {item.status === ImportExportTaskStatus.RUNNING && (
+                    {ACTIVE_TASK_STATUSES.includes(item.status) && (
                       <div className={styles.taskProgress}>
                         <Progress
                           className={styles.taskProgressBar}
@@ -230,33 +244,53 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         <span className={styles.taskProgressValue}>{progress}%</span>
                       </div>
                     )}
-                    {!isActive && (
-                      <div className={styles.taskActions}>
-                        {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
+                    {item.progressMessage && (
+                      <div className={styles.taskMessage}>
+                        {item.errorMessage || item.progressMessage}
+                      </div>
+                    )}
+                    <div className={styles.taskActions}>
+                      {isActive && item.status !== ImportExportTaskStatus.CANCELLING && (
+                        <IconButton
+                          className={styles.deleteAction}
+                          icon={Square}
+                          title={i18n('common.button.cancel')}
+                          tooltipPlacement="left"
+                          size={{ boxSize: 18, iconSize: 12, borderRadius: 3 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancelTask(item);
+                          }}
+                        />
+                      )}
+                      {!isActive && (
+                        <>
+                          {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
+                            <IconButton
+                              code={isDesktop ? 'icon-folder' : 'icon-download'}
+                              title={i18n('workspace.text.openFile')}
+                              tooltipPlacement="left"
+                              size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openArtifact(item);
+                              }}
+                            />
+                          )}
                           <IconButton
-                            code={isDesktop ? 'icon-folder' : 'icon-download'}
-                            title={i18n('workspace.text.openFile')}
+                            className={styles.deleteAction}
+                            icon={Trash2}
+                            title={i18n('common.button.delete')}
                             tooltipPlacement="left"
                             size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              openArtifact(item);
+                              handleDeleteTask(item);
                             }}
                           />
-                        )}
-                        <IconButton
-                          className={styles.deleteAction}
-                          icon={Trash2}
-                          title={i18n('common.button.delete')}
-                          tooltipPlacement="left"
-                          size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTask(item);
-                          }}
-                        />
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

@@ -133,6 +133,38 @@ public class LocalTaskManager {
                 .count();
     }
 
+    boolean cancel(Long taskId, Long userId, Long organizationId) {
+        Task task = taskStorage.get(taskId).orElse(null);
+        if (task == null || !belongsTo(task, userId, organizationId) || TaskStatus.isTerminal(task.getStatus())) {
+            return false;
+        }
+        RunningTask runningTask = runningTaskRegistry.get(taskId);
+        if (runningTask == null) {
+            return cancelPersistedTask(task);
+        }
+        runningTask.completionLock().lock();
+        try {
+            Task currentTask = taskStorage.get(taskId).orElse(task);
+            if (TaskStatus.isTerminal(currentTask.getStatus())) {
+                return false;
+            }
+            if (TaskStatus.CANCELLING.name().equals(currentTask.getStatus())) {
+                return true;
+            }
+            boolean wasRunning = TaskStatus.RUNNING.name().equals(currentTask.getStatus());
+            runningTask.requestCancellation(wasRunning);
+            boolean cancelled = wasRunning ? markCancellationRequested(currentTask) : cancelPersistedTask(currentTask);
+            if (!wasRunning && cancelled) {
+                runningTask.close();
+                runningTask.markFinished();
+                runningTaskRegistry.remove(taskId, runningTask);
+            }
+            return cancelled;
+        } finally {
+            runningTask.completionLock().unlock();
+        }
+    }
+
     void prepareForUserExit(Long userId, Long organizationId) {
         terminateActiveTasks(TaskErrorCode.USER_EXITED.name(), TaskEventCode.USER_EXITED.name(),
                 "The user exited the application while the task was running",
@@ -241,6 +273,32 @@ public class LocalTaskManager {
                         .updatedAt(now)
                         .build(),
                 event(eventCode, TaskEventLevel.ERROR.name(), message));
+    }
+
+    private boolean cancelPersistedTask(Task task) {
+        Date now = new Date();
+        return taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled by user")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.WARN.name(),
+                        "Task cancelled by user"));
+    }
+
+    private boolean markCancellationRequested(Task task) {
+        Date now = new Date();
+        return taskStorage.compareAndSetStatus(task.getId(), TaskStatus.RUNNING.name(),
+                TaskStatus.CANCELLING.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLING.name())
+                        .progressMessage("Task cancellation requested")
+                        .updatedAt(now)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.WARN.name(),
+                        "Task cancellation requested"));
     }
 
     private void cleanupInterruptedArtifacts(Long taskId) {

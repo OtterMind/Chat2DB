@@ -221,6 +221,43 @@ class LocalTaskManagerTest {
     }
 
     @Test
+    void userCancelledRunningTaskReachesCancelledTerminalState() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        taskManager = manager(storage, (spec, context) -> {
+            started.countDown();
+            boolean released = false;
+            while (!released) {
+                try {
+                    released = release.await(100, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException ignored) {
+                    // The cancellation request interrupts the runner, but terminal CANCELLED
+                    // must wait until the executor actually returns.
+                }
+            }
+            context.checkCancelled();
+        });
+        Task task = taskManager.submit(newTask(), event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+
+        assertTrue(taskManager.cancel(task.getId(), null, null));
+        assertEquals(TaskStatus.CANCELLING.name(), storage.get(task.getId()).orElseThrow().getStatus());
+        assertEquals(1, taskManager.activeTaskCount(null, null));
+        assertFalse(storage.awaitTerminal(100, TimeUnit.MILLISECONDS));
+        release.countDown();
+
+        assertTrue(storage.awaitTerminal());
+        Task cancelled = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals("Task cancelled by user", cancelled.getProgressMessage());
+        assertEquals(0, taskManager.activeTaskCount(null, null));
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.TASK_CANCELLED.name().equals(event.getCode())));
+        assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
     void confirmedUserExitRejectsNewTaskBeforeItIsPersisted() {
         TestTaskStorage storage = new TestTaskStorage();
         taskManager = manager(storage, (spec, context) -> {});
@@ -650,6 +687,10 @@ class LocalTaskManagerTest {
 
         boolean awaitTerminal() throws InterruptedException {
             return terminal.await(5, TimeUnit.SECONDS);
+        }
+
+        boolean awaitTerminal(long timeout, TimeUnit unit) throws InterruptedException {
+            return terminal.await(timeout, unit);
         }
 
         synchronized int terminalTransitionCount() {

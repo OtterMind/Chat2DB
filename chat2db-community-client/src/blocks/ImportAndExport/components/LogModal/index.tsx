@@ -10,6 +10,8 @@ import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import { Download, FolderOpen } from 'lucide-react';
+import importExportServices from '@/service/importExport';
+import { useGlobalStore } from '@/store/global';
 
 interface IProps {
   className?: string;
@@ -17,15 +19,19 @@ interface IProps {
 
 const LogModal = (_props: IProps) => {
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
-  const { logModalTaskId, openLogModal } = useImportExportStore((state) => {
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const openUnifiedConfirmationModal = useGlobalStore((state) => state.openUnifiedConfirmationModal);
+  const { logModalTaskId, openLogModal, getTaskList } = useImportExportStore((state) => {
     return {
       logModalTaskId: state.logModalTaskId,
       openLogModal: state.openLogModal,
+      getTaskList: state.getTaskList,
     };
   });
 
   useEffect(() => {
     setTaskDetails(undefined);
+    setCancelSubmitting(false);
   }, [logModalTaskId]);
 
   const handleOpenFile = () => {
@@ -35,6 +41,21 @@ const LogModal = (_props: IProps) => {
       return;
     }
     window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
+  };
+
+  const handleCancelTask = () => {
+    if (!taskDetails || cancelSubmitting) return;
+    openUnifiedConfirmationModal({
+      title: i18n('workspace.task.cancel.confirmTitle'),
+      content: i18n('workspace.task.cancel.confirm', taskDetails.name),
+      onOk: () => {
+        setCancelSubmitting(true);
+        return importExportServices
+          .cancelTask({ taskId: taskDetails.id })
+          .then(() => getTaskList())
+          .finally(() => setCancelSubmitting(false));
+      },
+    });
   };
 
   const renderFooter = (
@@ -48,6 +69,12 @@ const LogModal = (_props: IProps) => {
           >
             {i18n('common.button.close')}
           </Button>
+          {taskDetails &&
+            [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING].includes(taskDetails.status) && (
+              <Button danger loading={cancelSubmitting} onClick={handleCancelTask}>
+                {i18n('common.button.cancel')}
+              </Button>
+            )}
           {taskDetails?.status === ImportExportTaskStatus.SUCCESS && taskDetails.artifactId && (
             <Button
               type="primary"

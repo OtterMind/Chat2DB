@@ -32,7 +32,33 @@ interface IProps {
 
 const LEGACY_EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}:?\s*/;
 
-const formatEventMessage = (message?: string) => message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
+const formatEventMessage = (event: ImportExportTaskEvent) => {
+  const message = event.message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
+  const details = event.details || {};
+  if (event.code === 'IMPORT_SUMMARY') {
+    return i18n(
+      'workspace.importExport.importSummary',
+      String(details.totalRows ?? 0),
+      String(details.successCount ?? 0),
+      String(details.failedCount ?? 0),
+    );
+  }
+  if (event.code === 'IMPORT_ROW_FAILED') {
+    return i18n(
+      'workspace.importExport.rowImportFailed',
+      String(details.sourceRow ?? '-'),
+      String(details.message || message),
+    );
+  }
+  if (event.code === 'IMPORT_BATCH_RETRYING_ROWS') {
+    return i18n(
+      'workspace.importExport.batchRetryingRows',
+      String(details.statementCount ?? 0),
+      String(details.message || message),
+    );
+  }
+  return message;
+};
 
 interface ScrollRestore {
   anchorSequence: number;
@@ -283,7 +309,7 @@ const Log = (props: IProps) => {
       ? 'success'
       : taskDetails.status === ImportExportTaskStatus.FAILED
       ? 'exception'
-      : taskDetails.status === ImportExportTaskStatus.RUNNING
+      : ACTIVE_TASK_STATUSES.includes(taskDetails.status)
       ? 'active'
       : 'normal';
   return (
@@ -312,7 +338,7 @@ const Log = (props: IProps) => {
                   className={styles.virtualListItem}
                   timestamp={event.createdAt}
                   level={event.level}
-                  message={formatEventMessage(event.message)}
+                  message={formatEventMessage(event)}
                 />
               )}
             </VirtualList>

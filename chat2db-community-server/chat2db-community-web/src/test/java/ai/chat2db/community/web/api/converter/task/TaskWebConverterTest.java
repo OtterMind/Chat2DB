@@ -103,8 +103,9 @@ class TaskWebConverterTest {
         ImportTaskSpec dataSpec = converter.importRequest2spec(dataRequest);
         ImportTaskSpec sqlSpec = converter.importRequest2spec(sqlRequest);
 
-        assertEquals("Import table data - app.orders", dataSpec.getTaskName());
-        assertEquals("Import SQL file - app.orders", sqlSpec.getTaskName());
+        assertEquals("Import table data - app.public.orders", dataSpec.getTaskName());
+        assertEquals("public", dataSpec.getTarget().getSchemaName());
+        assertEquals("Import SQL file - app.public.orders", sqlSpec.getTaskName());
     }
 
     private TaskExportRequest exportRequest(String taskType, String databaseName, String tableName) {
@@ -120,6 +121,7 @@ class TaskWebConverterTest {
         TaskImportRequest request = new TaskImportRequest();
         request.setTaskType(taskType);
         request.setDatabaseName("app");
+        request.setSchemaName("public");
         request.setTableName("orders");
         request.setSourceFile("/tmp/orders.csv");
         request.setFormat(TaskType.SQL_FILE_IMPORT.name().equals(taskType)

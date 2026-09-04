@@ -662,13 +662,15 @@ public class FileTaskStorage implements TaskStorage {
 
     private boolean isLegalTransition(String source, String target) {
         if (TaskStatus.PENDING.name().equals(source)) {
-            return TaskStatus.RUNNING.name().equals(target) || TaskStatus.FAILED.name().equals(target);
+            return TaskStatus.RUNNING.name().equals(target) || TaskStatus.FAILED.name().equals(target)
+                    || TaskStatus.CANCELLED.name().equals(target);
         }
         if (TaskStatus.RUNNING.name().equals(source)) {
-            return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target);
+            return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target)
+                    || TaskStatus.CANCELLING.name().equals(target) || TaskStatus.CANCELLED.name().equals(target);
         }
-        if (LEGACY_CANCELLING_STATUS.equals(source)) {
-            return TaskStatus.FAILED.name().equals(target);
+        if (TaskStatus.CANCELLING.name().equals(source) || LEGACY_CANCELLING_STATUS.equals(source)) {
+            return TaskStatus.CANCELLED.name().equals(target) || TaskStatus.FAILED.name().equals(target);
         }
         return false;
     }

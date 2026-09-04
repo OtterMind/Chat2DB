@@ -122,6 +122,16 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public boolean cancel(Long taskId) {
+        Task task = get(taskId);
+        if (task == null) {
+            throw new DataNotFoundException();
+        }
+        TaskOwner owner = currentOwner();
+        return localTaskManager.cancel(taskId, owner.userId(), owner.organizationId());
+    }
+
+    @Override
     public int activeTaskCount() {
         TaskOwner owner = currentOwner();
         return localTaskManager.activeTaskCount(owner.userId(), owner.organizationId());

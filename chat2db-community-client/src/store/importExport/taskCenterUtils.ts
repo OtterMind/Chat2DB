@@ -1,4 +1,4 @@
-import { ImportExportTaskStatus } from '@/constants/importExport';
+import { ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
 import { ErrorCode } from '@/constants/request';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 
@@ -8,6 +8,7 @@ export const TASK_EVENT_INITIAL_PAGE_SIZE = 10;
 export const TASK_EVENT_PAGE_SIZE = 200;
 export const ACTIVE_TASK_POLL_INTERVAL = 1000;
 export const FAILED_TASK_POLL_INTERVAL = 1500;
+export const IMPORT_TARGET_TABLE_REFRESH_EVENT = 'chat2db:import-target-table-refresh';
 
 export type TaskStatusById = Record<string, ImportExportTaskStatus>;
 
@@ -21,6 +22,8 @@ const TERMINAL_TASK_STATUSES = new Set([
   ImportExportTaskStatus.FAILED,
   ImportExportTaskStatus.CANCELLED,
 ]);
+
+const IMPORT_TASK_TYPES = new Set([ImportExportTaskType.DATA_FILE_IMPORT, ImportExportTaskType.SQL_FILE_IMPORT]);
 
 const NON_RETRYABLE_POLLING_ERRORS = new Set<string>([
   ErrorCode.NeedLoggedIn,
@@ -158,4 +161,15 @@ export const shouldRetryTaskPolling = (error: unknown): boolean => {
   }
   const errorCode = (error as { errorCode?: unknown }).errorCode;
   return typeof errorCode !== 'string' || !NON_RETRYABLE_POLLING_ERRORS.has(errorCode);
+};
+
+export const shouldRefreshImportTargetTable = (
+  previousTask: ImportExportTaskDetails | undefined,
+  currentTask: ImportExportTaskDetails,
+) => {
+  if (!IMPORT_TASK_TYPES.has(currentTask.type)) return false;
+  if (!currentTask.target?.dataSourceId || !currentTask.target?.tableName) return false;
+  if (currentTask.status !== ImportExportTaskStatus.SUCCESS) return false;
+  if (previousTask && previousTask.id !== currentTask.id) return false;
+  return previousTask?.status !== ImportExportTaskStatus.SUCCESS;
 };

@@ -8,6 +8,7 @@ import { replaceViewTableResult } from '@/hooks/viewTablePagingModel';
 import SqlExecutionLoading from '@/components/SqlExecutionLoading';
 import { useStyles } from './style';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import { IMPORT_TARGET_TABLE_REFRESH_EVENT } from '@/store/importExport/taskCenterUtils';
 
 interface IProps {
   className?: string;
@@ -26,7 +27,7 @@ const ViewTable = memo<IProps>((props) => {
   } = useViewTable();
   const { resultData: pagedResultData, executing: pagingExecuting, executePage, stopExecuteSQL: stopPaging } =
     useViewTablePaging();
-  useEffect(() => {
+  const refreshCurrentTable = useCallback(() => {
     if (viewTableParams) {
       const requestGeneration = beginLatestRequest(requestGenerationRef);
       executeInitialTable(viewTableParams).then((data) => {
@@ -35,10 +36,30 @@ const ViewTable = memo<IProps>((props) => {
         setResultDataList(_resultDataList);
       });
     }
+  }, [executeInitialTable, viewTableParams]);
+
+  useEffect(() => {
+    refreshCurrentTable();
     return () => {
       invalidateLatestRequest(requestGenerationRef);
     };
-  }, [executeInitialTable]);
+  }, [refreshCurrentTable]);
+
+  useEffect(() => {
+    const handleImportRefresh = (event: Event) => {
+      const target = (event as CustomEvent<IViewTableParams>).detail;
+      if (
+        target?.dataSourceId === viewTableParams?.dataSourceId &&
+        target?.databaseName === viewTableParams?.databaseName &&
+        target?.schemaName === viewTableParams?.schemaName &&
+        target?.tableName === viewTableParams?.tableName
+      ) {
+        refreshCurrentTable();
+      }
+    };
+    window.addEventListener(IMPORT_TARGET_TABLE_REFRESH_EVENT, handleImportRefresh);
+    return () => window.removeEventListener(IMPORT_TARGET_TABLE_REFRESH_EVENT, handleImportRefresh);
+  }, [refreshCurrentTable, viewTableParams]);
 
   useEffect(() => {
     if (pagedResultData) {

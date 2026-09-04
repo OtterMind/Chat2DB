@@ -23,6 +23,7 @@ export enum ImportExportTaskType {
 export enum ImportExportTaskStatus {
   PENDING = 'PENDING',
   RUNNING = 'RUNNING',
+  CANCELLING = 'CANCELLING',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
@@ -31,4 +32,5 @@ export enum ImportExportTaskStatus {
 export const ACTIVE_TASK_STATUSES: ImportExportTaskStatus[] = [
   ImportExportTaskStatus.PENDING,
   ImportExportTaskStatus.RUNNING,
+  ImportExportTaskStatus.CANCELLING,
 ];
