@@ -133,6 +133,40 @@ public class LocalTaskManager {
                 .count();
     }
 
+    boolean cancel(Task task) {
+        lifecycleLock.lock();
+        try {
+            Task currentTask = taskStorage.get(task.getId()).orElse(task);
+            if (TaskStatus.isTerminal(currentTask.getStatus())) {
+                return false;
+            }
+            RunningTask runningTask = runningTaskRegistry.get(task.getId());
+            if (runningTask == null) {
+                return cancelPersistedTask(currentTask);
+            }
+            runningTask.completionLock().lock();
+            try {
+                currentTask = taskStorage.get(task.getId()).orElse(currentTask);
+                if (TaskStatus.isTerminal(currentTask.getStatus())) {
+                    return false;
+                }
+                boolean wasRunning = TaskStatus.RUNNING.name().equals(currentTask.getStatus());
+                runningTask.requestCancellation(wasRunning);
+                boolean cancelled = cancelPersistedTask(currentTask);
+                if (!wasRunning) {
+                    runningTask.close();
+                    runningTask.markFinished();
+                    runningTaskRegistry.remove(task.getId(), runningTask);
+                }
+                return cancelled;
+            } finally {
+                runningTask.completionLock().unlock();
+            }
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
     void prepareForUserExit(Long userId, Long organizationId) {
         terminateActiveTasks(TaskErrorCode.USER_EXITED.name(), TaskEventCode.USER_EXITED.name(),
                 "The user exited the application while the task was running",
@@ -241,6 +275,19 @@ public class LocalTaskManager {
                         .updatedAt(now)
                         .build(),
                 event(eventCode, TaskEventLevel.ERROR.name(), message));
+    }
+
+    private boolean cancelPersistedTask(Task task) {
+        Date now = new Date();
+        return taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .progress(TaskConstants.COMPLETED_PROGRESS)
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.WARN.name(), "Task cancelled"));
     }
 
     private void cleanupInterruptedArtifacts(Long taskId) {

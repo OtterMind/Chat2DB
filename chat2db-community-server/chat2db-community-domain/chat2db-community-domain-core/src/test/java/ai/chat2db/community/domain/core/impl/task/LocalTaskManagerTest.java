@@ -14,6 +14,7 @@ import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
@@ -231,6 +232,36 @@ class LocalTaskManagerTest {
                 () -> taskManager.submit(newTask(), event(TaskEventCode.TASK_CREATED.name()),
                         spec(), null, null));
         assertTrue(storage.listNonTerminalTasks().isEmpty());
+    }
+
+    @Test
+    void explicitCancelMarksRunningTaskCancelled() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        taskManager = manager(storage, (spec, context) -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            context.checkCancelled();
+        });
+        Task task = newTask();
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+
+        assertTrue(taskManager.cancel(task));
+        release.countDown();
+
+        assertTrue(storage.awaitTerminal());
+        Task cancelled = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals(TaskStage.CANCELLED.name(), cancelled.getStage());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.TASK_CANCELLED.name().equals(event.getCode())));
+        assertEquals(1, storage.terminalTransitionCount());
     }
 
     @Test

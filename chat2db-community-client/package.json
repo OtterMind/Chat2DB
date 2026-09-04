@@ -94,7 +94,7 @@
     "test:data-source-watermark": "tsx src/utils/dataSourceWatermark.test.ts",
     "test:driver-upload": "tsx src/components/ConnectionEdit/components/Driver/driverUpload.test.ts",
     "test:terminal": "tsx src/constants/terminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceExtend/WorkspaceExtendNav/quickTerminal.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/terminalTabPlacement.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/terminalAttachmentLifecycle.test.ts && tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabSelection.test.ts",
-    "test:task-center": "tsx src/store/importExport/taskCenterUtils.test.ts",
+    "test:task-center": "tsx src/store/importExport/taskCenterUtils.test.ts && tsx src/blocks/ImportAndExport/functions/importParserOptions.test.ts",
     "test:workspace-tab-drag": "tsx src/pages/main/workspace/components/WorkspaceTabs/workspaceTabDrop.test.ts",
     "test:verification-code-countdown": "tsx src/utils/verificationCodeCountdown.test.ts && tsx src/utils/latestRequest.test.ts",
     "test:account-grants-request": "tsx src/pages/main/workspace/components/WorkspaceExtend/GlobalExtendComponents/accountGrantsRequest.test.ts",

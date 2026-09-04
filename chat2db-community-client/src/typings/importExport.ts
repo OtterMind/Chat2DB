@@ -40,3 +40,24 @@ export interface ImportExportTaskEvent {
   details?: Record<string, unknown>;
   createdAt: number | string;
 }
+
+export type ImportFormulaMode = 'CACHED_VALUE' | 'REJECT';
+
+export interface ImportColumnMapping {
+  sourceColumn: string;
+  targetColumn: string;
+}
+
+export interface ImportParserOptions {
+  encoding?: string;
+  delimiter?: string;
+  quote?: string;
+  escape?: string;
+  hasHeader: boolean;
+  emptyAsNull: boolean;
+  sheetName?: string;
+  startRow?: number;
+  headerRow?: number;
+  endRow?: number;
+  formulaMode?: ImportFormulaMode;
+}

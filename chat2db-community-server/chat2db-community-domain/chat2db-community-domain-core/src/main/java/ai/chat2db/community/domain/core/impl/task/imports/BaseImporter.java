@@ -16,6 +16,7 @@ import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
 import lombok.extern.slf4j.Slf4j;
 
+import java.sql.Connection;
 import java.util.List;
 
 
@@ -30,9 +31,11 @@ public abstract class BaseImporter implements IImportStrategy {
             context.checkCancelled();
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             IDbMetaData metadata = Chat2DBContext.getDbMetaData();
-            List<TableColumn> tableColumns = metadata.columns(Chat2DBContext.getConnection(),
-                    new TableMetadataRequest(connectInfo.getDatabaseName(), connectInfo.getSchemaName(),
-                            spec.getTarget().getTableName()));
+            Connection connection = Chat2DBContext.getConnection();
+            TableMetadataRequest tableRequest = ImportTargetMetadataGuard.resolve(metadata, connection,
+                    connectInfo, spec.getTarget());
+            List<TableColumn> tableColumns = ImportTargetMetadataGuard.exactTableColumns(metadata, connection,
+                    tableRequest);
             context.checkCancelled();
             context.reportProgress(20, TaskStage.READING.name(), "Target table metadata loaded");
             context.logInfo(TaskEventCode.FILE_READ_STARTED.name(), "Reading import file");

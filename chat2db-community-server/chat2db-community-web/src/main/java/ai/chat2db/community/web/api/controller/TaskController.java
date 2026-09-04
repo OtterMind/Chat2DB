@@ -3,6 +3,7 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
+import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
@@ -54,7 +55,8 @@ public class TaskController {
 
     @PostMapping("/import")
     public DataResult<TaskSubmitResponse> submitImport(@Valid @RequestBody TaskImportRequest request) {
-        Long taskId = taskService.submitImport(taskWebConverter.importRequest2spec(request));
+        ImportTaskSpec spec = taskWebConverter.importRequest2spec(request);
+        Long taskId = taskService.submitImport(spec);
         return DataResult.of(new TaskSubmitResponse(taskId));
     }
 
@@ -86,6 +88,11 @@ public class TaskController {
     public ActionResult delete(@Valid TaskIdRequest request) {
         taskService.delete(request.getTaskId());
         return ActionResult.isSuccess();
+    }
+
+    @PostMapping("/cancel")
+    public DataResult<Boolean> cancel(@Valid @RequestBody TaskIdRequest request) {
+        return DataResult.of(taskService.cancel(request.getTaskId()));
     }
 
     @GetMapping("/artifact")

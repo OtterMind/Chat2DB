@@ -12,7 +12,7 @@ import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/import
 import dayjs from 'dayjs';
 import jcefApi from '@/jcef';
 import { isDesktop } from '@/utils/env';
-import { CircleCheck, CircleDashed, CircleX, Clock3, LoaderCircle, RotateCw, Trash2 } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleStop, CircleX, Clock3, LoaderCircle, RotateCw, Trash2 } from 'lucide-react';
 import { useGlobalStore } from '@/store/global';
 import type { ImportExportTaskDetails } from '@/typings/importExport';
 import PanelToolbar, { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
@@ -125,6 +125,14 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
     });
   };
 
+  const handleCancelTask = (task: ImportExportTaskDetails) => {
+    openUnifiedConfirmationModal({
+      title: i18n('workspace.task.cancel.confirmTitle'),
+      content: i18n('workspace.task.cancel.confirm', task.name),
+      onOk: () => importExportServices.cancelTask({ taskId: task.id }).then(() => getTaskList()),
+    });
+  };
+
   return (
     <div className={styles.wrapper}>
       <PanelToolbar
@@ -230,33 +238,47 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
                         <span className={styles.taskProgressValue}>{progress}%</span>
                       </div>
                     )}
-                    {!isActive && (
-                      <div className={styles.taskActions}>
-                        {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
-                          <IconButton
-                            code={isDesktop ? 'icon-folder' : 'icon-download'}
-                            title={i18n('workspace.text.openFile')}
-                            tooltipPlacement="left"
-                            size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openArtifact(item);
-                            }}
-                          />
-                        )}
+                    <div className={styles.taskActions}>
+                      {isActive && (
                         <IconButton
-                          className={styles.deleteAction}
-                          icon={Trash2}
-                          title={i18n('common.button.delete')}
+                          icon={CircleStop}
+                          title={i18n('common.button.cancel')}
                           tooltipPlacement="left"
                           size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteTask(item);
+                            handleCancelTask(item);
                           }}
                         />
-                      </div>
-                    )}
+                      )}
+                      {!isActive && (
+                        <>
+                          {item.status === ImportExportTaskStatus.SUCCESS && item.artifactId && (
+                            <IconButton
+                              code={isDesktop ? 'icon-folder' : 'icon-download'}
+                              title={i18n('workspace.text.openFile')}
+                              tooltipPlacement="left"
+                              size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openArtifact(item);
+                              }}
+                            />
+                          )}
+                          <IconButton
+                            className={styles.deleteAction}
+                            icon={Trash2}
+                            title={i18n('common.button.delete')}
+                            tooltipPlacement="left"
+                            size={{ boxSize: 18, iconSize: 13, borderRadius: 3 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTask(item);
+                            }}
+                          />
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

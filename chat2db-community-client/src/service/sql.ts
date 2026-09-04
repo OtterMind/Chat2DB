@@ -27,6 +27,7 @@ import type {
   ITableBrowseRequest,
   ITableEditExecuteRequest,
 } from './dmlRequest';
+import type { ImportColumnMapping, ImportParserOptions } from '@/typings/importExport';
 
 export interface IGetTableListParams extends IPageParams {
   dataSourceId: number;
@@ -436,6 +437,75 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Import preview and column mapping (MYSQL-IMPORT-001). */
+export interface IImportPreview {
+  sourceColumns: { name: string; sampleValues: { value: string; type: string }[] }[];
+  targetColumns: {
+    name: string;
+    dataType: string;
+    nullable: boolean;
+    autoIncrement: boolean;
+    defaultValue: string | null;
+  }[];
+  suggestedMapping: { sourceColumn: string; targetColumn: string }[];
+  previewLimit: number;
+  previewRows: number;
+  skippedCount?: number;
+  headerRow: boolean;
+  sheets?: { name: string; visible: boolean }[];
+  selectedSheet?: string;
+  startRow?: number;
+  endRow?: number;
+  invalidHeaders?: string[];
+  duplicateHeaders?: string[];
+  hasMoreRows?: boolean;
+}
+
+export interface IImportExecuteResult {
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  errors: { row: number; column: string | null; message: string }[];
+}
+
+export type IImportParserOptions = ImportParserOptions;
+
+export interface IImportTaskSubmitResult {
+  taskId: number;
+}
+
+const uploadImportFile = createRequest<{ file: File }, string>('/api/rdb/import_preview/upload', {
+  method: 'post',
+  contentType: 'formData',
+});
+
+const getImportPreview = createRequest<
+  {
+    dataSourceId: number;
+    databaseName: string;
+    schemaName?: string;
+    tableName: string;
+    fileId: string;
+    importOptions?: ImportParserOptions;
+  },
+  IImportPreview
+>('/api/rdb/import_preview/preview', { method: 'post' });
+
+const executeImportWithMapping = createRequest<
+  {
+    dataSourceId: number;
+    databaseName: string;
+    schemaName?: string;
+    tableName: string;
+    fileId: string;
+    mappings: ImportColumnMapping[];
+    unmappedTarget: 'DEFAULT' | 'NULL';
+    importOptions?: ImportParserOptions;
+  },
+  IImportTaskSubmitResult
+>('/api/rdb/import_preview/execute', { method: 'post' });
+
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +623,9 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getImportPreview,
+  executeImportWithMapping,
+  uploadImportFile,
   getActiveTransactionList,
   getDataSourceList,
 };
