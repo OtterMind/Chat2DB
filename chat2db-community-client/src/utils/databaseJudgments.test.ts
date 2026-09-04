@@ -65,6 +65,9 @@ assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.DATABASE_CREATE_CHA
 assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_CREATE_COLLATION, true);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_CREATE_COLLATION, false);
 assertCapability(DatabaseTypeCode.SQLITE, DatabaseCapability.DATABASE_CREATE_COLLATION, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_PROPERTIES, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_PROPERTIES, false);
+assertCapability(DatabaseTypeCode.MARIADB, DatabaseCapability.DATABASE_PROPERTIES, false);
 assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.SCHEMA_CREATE, false);
 assertCapability(DatabaseTypeCode.OSCAR, DatabaseCapability.SCHEMA_CREATE, false);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.SCHEMA_CREATE, true);

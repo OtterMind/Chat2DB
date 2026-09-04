@@ -479,7 +479,7 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
         return queryTableMetaOptions(SHOW_COLLATION_SQL, resultSet -> {
             List<Collation> list = new ArrayList<>();
             while (resultSet.next()) {
-                list.add(new Collation(resultSet.getString(FIELD_COLLATION)));
+                list.add(new Collation(resultSet.getString(FIELD_COLLATION), resultSet.getString(FIELD_COLLATION_CHARSET)));
             }
             return list;
         }, MysqlCollationEnum.getCollations(), "collations");

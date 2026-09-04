@@ -36,6 +36,7 @@ export default {
   'editTable.label.order': 'Order',
   'editTable.label.primaryKey': 'Key',
   'editTable.title.sqlPreview': 'SQL preview',
+  'editTable.error.charsetCollationMismatch': 'The selected collation does not belong to the selected character set.',
   'editTable.button.addColumn': 'Add column',
   'editTable.button.addIndex': 'Add Index',
   'editTable.placeholder.aiModifyTable': 'Modify table structure in natural language',

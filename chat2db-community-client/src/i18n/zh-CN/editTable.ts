@@ -36,6 +36,7 @@ export default {
   'editTable.label.order': '排序',
   'editTable.label.primaryKey': '键',
   'editTable.title.sqlPreview': 'sql预览',
+  'editTable.error.charsetCollationMismatch': '所选排序规则不属于所选字符集。',
   'editTable.button.addColumn': '添加列',
   'editTable.button.addIndex': '添加索引',
   'editTable.placeholder.aiModifyTable': '自然语言修改表结构',

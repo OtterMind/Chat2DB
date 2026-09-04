@@ -34,11 +34,14 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.LIMIT_SQL_EXTRA
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.PREVIOUS_COLUMN_NOT_FOUND;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_AFTER;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALGORITHM;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_DATABASE_PREFIX;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_AUTO_INCREMENT_ASSIGNMENT;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COLLATE_ASSIGNMENT;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_WITH_SINGLE_QUOTE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DEFAULT_CHARACTER_SET_CLAUSE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DEFAULT_COLLATE_CLAUSE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DEFINER;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_DATABASE_TEMPLATE;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ENGINE_ASSIGNMENT;
@@ -78,6 +81,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
     @Override
     public String buildCreateTable(Table table, TableBuilderConfig tableBuilderConfig) {
+        MysqlSqlGuards.requireCompatibleCharsetAndCollation(table.getCharset(), table.getCollate());
         StringBuilder script = new StringBuilder();
         script.append(SQLConstants.CREATE_TABLE_SQL_PREFIX);
         if (StringUtils.isNotBlank(table.getDatabaseName())) {
@@ -152,6 +156,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
 
     @Override
     public String buildAlterTable(Table oldTable, Table newTable) {
+        MysqlSqlGuards.requireCompatibleCharsetAndCollation(newTable.getCharset(), newTable.getCollate());
         StringBuilder tableBuilder = new StringBuilder();
         tableBuilder.append(SQLConstants.ALTER_TABLE_SQL_PREFIX);
         if (StringUtils.isNotBlank(oldTable.getDatabaseName())) {
@@ -400,6 +405,21 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
         }
         if (StringUtils.isNotBlank(database.getCollation())) {
             sqlBuilder.append(SQLConstants.COLLATE_SQL).append(MysqlSqlGuards.requireMysqlName(database.getCollation(), "collation"));
+        }
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String buildAlterDatabase(Database oldDatabase, Database newDatabase) {
+        StringBuilder sqlBuilder = new StringBuilder(SQL_ALTER_DATABASE_PREFIX)
+                .append(quoteMysqlIdentifier(oldDatabase.getName()));
+        if (StringUtils.isNotBlank(newDatabase.getCharset())) {
+            sqlBuilder.append(SQL_DEFAULT_CHARACTER_SET_CLAUSE)
+                    .append(MysqlSqlGuards.requireMysqlName(newDatabase.getCharset(), "charset"));
+        }
+        if (StringUtils.isNotBlank(newDatabase.getCollation())) {
+            sqlBuilder.append(SQL_DEFAULT_COLLATE_CLAUSE)
+                    .append(MysqlSqlGuards.requireMysqlName(newDatabase.getCollation(), "collation"));
         }
         return sqlBuilder.toString();
     }

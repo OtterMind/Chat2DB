@@ -12,6 +12,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_ACCOUNT_LOCK = " ACCOUNT LOCK";
     public static final String SQL_ACCOUNT_UNLOCK = " ACCOUNT UNLOCK";
     public static final String SQL_ALGORITHM = "ALGORITHM = ";
+    public static final String SQL_ALTER_DATABASE_PREFIX = "ALTER DATABASE ";
     public static final String SQL_AFTER = " AFTER ";
     public static final String SQL_ALTER_USER = "ALTER USER ";
     public static final String SQL_AUTO_INCREMENT_ASSIGNMENT = "AUTO_INCREMENT=";
@@ -25,6 +26,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_CREATE = "create ";
     public static final String SQL_CREATE_USER = "CREATE USER ";
     public static final String SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT = "DEFAULT CHARACTER SET=";
+    public static final String SQL_DEFAULT_CHARACTER_SET_CLAUSE = " DEFAULT CHARACTER SET ";
     public static final String SQL_DEFINER = "DEFINER = ";
     public static final String SQL_DROP = "DROP ";
     public static final String SQL_DROP_COLUMN_BACK_QUOTE = "DROP COLUMN `";
@@ -35,6 +37,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
     public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
+    public static final String SQL_DEFAULT_COLLATE_CLAUSE = " DEFAULT COLLATE ";
     public static final String SQL_INVISIBLE = "INVISIBLE";
     public static final String SQL_VISIBLE = "VISIBLE";
     public static final String SQL_ALTER_INDEX = "ALTER INDEX ";

@@ -245,6 +245,7 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         if (!type.getColumnType().isSupportCollation() || StringUtils.isEmpty(column.getCollationName())) {
             return "";
         }
+        MysqlSqlGuards.requireCompatibleCharsetAndCollation(column.getCharSetName(), column.getCollationName());
         return StringUtils.join("COLLATE ", MysqlSqlGuards.requireMysqlName(column.getCollationName(), "collation"));
     }
 

@@ -44,6 +44,19 @@ public final class MysqlSqlGuards {
         return value;
     }
 
+    public static void requireCompatibleCharsetAndCollation(String charset, String collation) {
+        if (StringUtils.isAnyBlank(charset, collation)) {
+            return;
+        }
+        String safeCharset = requireMysqlName(charset, "charset");
+        String safeCollation = requireMysqlName(collation, "collation");
+        if (!safeCollation.equalsIgnoreCase(safeCharset)
+                && !StringUtils.startsWithIgnoreCase(safeCollation, safeCharset + "_")) {
+            throw new IllegalArgumentException(
+                    "MySQL collation " + safeCollation + " is not compatible with charset " + safeCharset);
+        }
+    }
+
     /**
      * Validate a raw DEFAULT literal for numeric-ish columns (positions where quoting would change
      * semantics). Accepts decimal/scientific numbers, hex and bit literals, TRUE/FALSE.

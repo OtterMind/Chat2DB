@@ -436,6 +436,17 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Database charset/collation (MYSQL-OBJ-001). */
+const getDatabaseInfo = createRequest<
+  { dataSourceId: number; databaseName: string },
+  { charset: string | null; collation: string | null }
+>('/api/rdb/database/info', { method: 'get' });
+
+const previewAlterDatabaseSql = createRequest<
+  { dataSourceId: number; databaseName: string; charset?: string; collation?: string },
+  string | null
+>('/api/rdb/database/alter_preview', { method: 'post' });
+
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +564,8 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getDatabaseInfo,
+  previewAlterDatabaseSql,
   getActiveTransactionList,
   getDataSourceList,
 };

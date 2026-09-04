@@ -44,6 +44,9 @@ const databaseJudgments: Record<DatabaseCapability, DatabaseCapabilityJudgment> 
   [DatabaseCapability.DATABASE_CREATE_COLLATION]: {
     implementedBy: [DatabaseTypeCode.MYSQL],
   },
+  [DatabaseCapability.DATABASE_PROPERTIES]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
   [DatabaseCapability.SCHEMA_CREATE]: {
     implementedByDefaultExcept: [DatabaseTypeCode.ORACLE, DatabaseTypeCode.OSCAR],
   },

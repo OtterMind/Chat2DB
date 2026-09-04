@@ -55,6 +55,22 @@ class MysqlSqlBuilderTest {
     }
 
     @Test
+    void shouldBuildAlterDatabaseWithCharsetAndCollation() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Database oldDatabase = Database.builder().name("analytics-prod").build();
+        Database newDatabase = Database.builder()
+                .name("analytics-prod")
+                .charset("utf8mb4")
+                .collation("utf8mb4_bin")
+                .build();
+
+        String sql = builder.database().buildAlterDatabase(oldDatabase, newDatabase);
+
+        assertEquals("ALTER DATABASE `analytics-prod` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_bin",
+                sql);
+    }
+
+    @Test
     void shouldDefaultDecimalPrecisionWhenOnlyScaleIsProvided() {
         MysqlSqlBuilder builder = new MysqlSqlBuilder();
         Table table = Table.builder()
@@ -139,6 +155,54 @@ class MysqlSqlBuilderTest {
         assertEquals("ALTER TABLE `test_db`.`settlement_record`\n"
                 + "\tDEFAULT CHARACTER SET=utf8mb4,\n"
                 + "\tCOLLATE=utf8mb4_general_ci;", sql);
+    }
+
+    @Test
+    void shouldRejectTableCollationOutsideSelectedCharsetBeforeBuildingSql() {
+        MysqlSqlBuilder builder = new MysqlSqlBuilder();
+        Table oldTable = Table.builder()
+                .databaseName("test_db")
+                .name("settlement_record")
+                .charset("utf8")
+                .collate("utf8_general_ci")
+                .engine("InnoDB")
+                .incrementValue(1L)
+                .columnList(List.of())
+                .indexList(List.of())
+                .build();
+        Table newTable = Table.builder()
+                .databaseName("test_db")
+                .name("settlement_record")
+                .charset("utf8mb4")
+                .collate("utf8_general_ci")
+                .engine("InnoDB")
+                .incrementValue(1L)
+                .columnList(List.of())
+                .indexList(List.of())
+                .build();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> builder.ddl().table().buildAlterTable(oldTable, newTable));
+
+        assertEquals("MySQL collation utf8_general_ci is not compatible with charset utf8mb4",
+                error.getMessage());
+    }
+
+    @Test
+    void shouldRejectColumnCollationOutsideSelectedCharsetBeforeBuildingSql() {
+        TableColumn column = TableColumn.builder()
+                .name("memo")
+                .columnType("VARCHAR")
+                .columnSize(64)
+                .charSetName("utf8mb4")
+                .collationName("utf8_general_ci")
+                .build();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> MysqlColumnTypeEnum.VARCHAR.buildCreateColumnSql(column));
+
+        assertEquals("MySQL collation utf8_general_ci is not compatible with charset utf8mb4",
+                error.getMessage());
     }
 
     @Test

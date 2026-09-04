@@ -48,7 +48,12 @@ assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.VIEW]), [
 assert.deepEqual(splitGroups(dropMenuConfig.DEFAULT[TreeNodeType.DATABASE]), [
   [OperationColumn.CreateConsole, OperationColumn.CreateSchema],
   [OperationColumn.RunSqlFile, OperationColumn.ExportSqlFile, OperationColumn.SchemaSync],
-  [OperationColumn.CopyMcpConfig, OperationColumn.CopyName],
+  [
+    OperationColumn.CopyMcpConfig,
+    OperationColumn.CopyName,
+    OperationColumn.DatabaseProperties,
+    OperationColumn.Refresh,
+  ],
   [OperationColumn.DeleteDatabase],
 ]);
 

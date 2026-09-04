@@ -36,6 +36,7 @@ export default {
   'editTable.label.order': '順序',
   'editTable.label.primaryKey': 'キー',
   'editTable.title.sqlPreview': 'SQLプレビュー',
+  'editTable.error.charsetCollationMismatch': '選択した照合順序は、選択した文字セットに属していません。',
   'editTable.button.addColumn': '列を追加',
   'editTable.button.addIndex': 'インデックスを追加',
   'editTable.placeholder.aiModifyTable': '自然言語でテーブル構造を変更',

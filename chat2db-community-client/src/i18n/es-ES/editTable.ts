@@ -36,6 +36,8 @@ export default {
   'editTable.label.order': 'Orden',
   'editTable.label.primaryKey': 'Clave',
   'editTable.title.sqlPreview': 'Vista previa de SQL',
+  'editTable.error.charsetCollationMismatch':
+    'La intercalación seleccionada no pertenece al juego de caracteres seleccionado.',
   'editTable.button.addColumn': 'Añadir columna',
   'editTable.button.addIndex': 'Añadir índice',
   'editTable.placeholder.aiModifyTable': 'Modificar la estructura de la tabla mediante lenguaje natural',

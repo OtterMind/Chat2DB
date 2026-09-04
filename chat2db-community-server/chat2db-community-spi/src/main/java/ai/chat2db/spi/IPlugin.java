@@ -118,6 +118,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional database properties manager for this plugin.
+     *
+     * @return database properties manager when supported; otherwise {@code null}.
+     */
+    default IDatabasePropertiesManager getDatabasePropertiesManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.

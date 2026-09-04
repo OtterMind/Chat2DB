@@ -295,6 +295,12 @@ export default {
   'workspace.databaseAccount.revokePrivilege': '権限を取り消し',
   'workspace.databaseAccount.lockUnsupported':
     'この MySQL バージョンまたは現在の権限ではアカウントロックを利用できません',
+  'workspace.ops.databaseProperties': 'データベースのプロパティ',
+  'workspace.ops.charset': '文字セット',
+  'workspace.ops.collation': '照合順序',
+  'workspace.ops.charsetHint': 'デフォルトを変更しても既存の列データは変換されません。',
+  'workspace.ops.previewSql': 'SQL プレビュー',
+  'workspace.ops.noChange': '保存する変更はありません',
   'workspace.ops.activeTransactions': 'アクティブなトランザクション',
   'workspace.ops.monitor': '監視',
   'workspace.ops.transactionId': 'トランザクション ID',

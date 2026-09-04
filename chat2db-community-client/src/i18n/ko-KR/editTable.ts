@@ -36,6 +36,7 @@ export default {
   'editTable.label.order': '순서',
   'editTable.label.primaryKey': '키',
   'editTable.title.sqlPreview': 'SQL 미리 보기',
+  'editTable.error.charsetCollationMismatch': '선택한 정렬 규칙이 선택한 문자 집합에 속하지 않습니다.',
   'editTable.button.addColumn': '열 추가',
   'editTable.button.addIndex': '인덱스 추가',
   'editTable.placeholder.aiModifyTable': '자연어로 테이블 구조 수정',

@@ -7,7 +7,7 @@ import ColumnList, { IColumnListRef } from './ColumnList';
 import BaseInfo, { IBaseInfoRef } from './BaseInfo';
 import sqlService, { IModifyTableSqlParams } from '@/service/sql';
 import ExecuteSQL from '@/components/ExecuteSQL';
-import { IEditTableInfo, IWorkspaceTab, IColumnTypes, IDatabaseBaseInfo } from '@/typings';
+import { IEditTableInfo, IWorkspaceTab, IDatabaseBaseInfo } from '@/typings';
 import { WorkspaceTabType } from '@/constants';
 import LoadingContent from '@/components/Loading/LoadingContent';
 import { useStyles } from './style';
@@ -15,6 +15,12 @@ import { staticMessage } from '@chat2db/ui';
 import AIEntryButton from '@/components/AIEntryButton';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
+import {
+  IDatabaseSupportFieldOptions,
+  getFirstTablePreviewSql,
+  mapDatabaseSupportFieldOptions,
+  validateTableCharsetCollations,
+} from './baseInfoModel';
 
 interface IProps {
   databaseBaseInfo: IDatabaseBaseInfo;
@@ -28,29 +34,10 @@ interface IContext extends IProps {
   baseInfoRef: React.RefObject<IBaseInfoRef>;
   columnListRef: React.RefObject<IColumnListRef>;
   indexListRef: React.RefObject<IIndexListRef>;
-  databaseSupportField: IDatabaseSupportField;
+  databaseSupportField: IDatabaseSupportFieldOptions;
 }
 
 export const Context = createContext<IContext>({} as any);
-
-interface IOption {
-  label: string;
-  value: string | number | null;
-}
-
-// column field type, data structure required by options of select component
-interface IColumnTypesOption extends IColumnTypes {
-  label: string;
-  value: string | number | null;
-}
-export interface IDatabaseSupportField {
-  columnTypes: IColumnTypesOption[];
-  charsets: IOption[];
-  collations: IOption[];
-  indexTypes: IOption[];
-  defaultValues: IOption[];
-  engineTypes: IOption[];
-}
 
 export default memo((props: IProps) => {
   const { changeTabDetails, tabDetails, submitCallback, databaseBaseInfo } = props;
@@ -93,13 +80,14 @@ export default memo((props: IProps) => {
 
   const [currentTab, setCurrentTab] = useState<string>('column');
 
-  const [databaseSupportField, setDatabaseSupportField] = useState<IDatabaseSupportField>({
+  const [databaseSupportField, setDatabaseSupportField] = useState<IDatabaseSupportFieldOptions>({
     columnTypes: [],
     charsets: [],
     collations: [],
     indexTypes: [],
     defaultValues: [],
     engineTypes: [],
+    supportInvisibleIndex: false,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { styles, cx } = useStyles();
@@ -128,63 +116,7 @@ export default memo((props: IProps) => {
         databaseName,
       })
       .then((res) => {
-        const columnTypes =
-          res?.columnTypes?.map((i) => {
-            return {
-              ...i,
-              value: i.typeName,
-              label: i.typeName,
-            };
-          }) || [];
-
-        const charsets =
-          res?.charsets?.map((i) => {
-            return {
-              value: i.charsetName,
-              label: i.charsetName,
-            };
-          }) || [];
-
-        const collations =
-          res?.collations?.map((i) => {
-            return {
-              value: i.collationName,
-              label: i.collationName,
-            };
-          }) || [];
-
-        const indexTypes =
-          res?.indexTypes?.map((i) => {
-            return {
-              value: i.typeName,
-              label: i.typeName,
-            };
-          }) || [];
-
-        const defaultValues =
-          res?.defaultValues?.map((i) => {
-            return {
-              value: i.defaultValue,
-              label: i.defaultValue,
-            };
-          }) || [];
-
-        const engineTypes =
-          res?.engineTypes?.map((i) => {
-            return {
-              value: i.name,
-              label: i.name,
-            };
-          }) || [];
-
-        setDatabaseSupportField({
-          columnTypes,
-          charsets,
-          collations,
-          indexTypes,
-          defaultValues,
-          engineTypes,
-        });
+        setDatabaseSupportField(mapDatabaseSupportFieldOptions(res));
       });
   };
 
@@ -222,6 +154,11 @@ export default memo((props: IProps) => {
         indexList: indexListRef.current.getIndexListInfo()!,
       };
 
+      if (!validateTableCharsetCollations(newTable, databaseSupportField.collations)) {
+        staticMessage.error(i18n('editTable.error.charsetCollationMismatch'));
+        return;
+      }
+
       const params: IModifyTableSqlParams = {
         databaseName,
         dataSourceId,
@@ -235,8 +172,13 @@ export default memo((props: IProps) => {
         params.oldTable = oldTableDetails;
       }
       sqlService.getModifyTableSql(params).then((res) => {
+        const sql = getFirstTablePreviewSql(res);
+        if (!sql) {
+          staticMessage.info(i18n('workspace.ops.noChange'));
+          return;
+        }
         setViewSqlModal(true);
-        setAppendValue(res?.[0].sql);
+        setAppendValue(sql);
       });
     }
   }

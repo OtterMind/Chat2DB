@@ -11,12 +11,14 @@ import ai.chat2db.community.domain.core.cache.CacheManage;
 import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
 import ai.chat2db.community.domain.core.util.ListSorter;
 import ai.chat2db.spi.IDbMetaData;
+import ai.chat2db.spi.IDatabasePropertiesManager;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.metadata.MetaSchema;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
 import ai.chat2db.community.domain.api.model.sql.Sql;
-import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +29,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static ai.chat2db.community.domain.core.cache.CacheKey.*;
@@ -139,6 +142,34 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
     public void modifyDatabase(DbDatabaseCreateRequest param) {
         Chat2DBContext.getDbManager().modifyDatabase(Chat2DBContext.getConnection(), param.getName(),
                 param.getName());
+    }
+
+    @Override
+    public Map<String, String> databaseInfo(Long dataSourceId, String databaseName) {
+        requireVisibleDatabase(dataSourceId, databaseName);
+        return requireDatabasePropertiesManager().databaseInfo(Chat2DBContext.getConnection(), databaseName);
+    }
+
+    @Override
+    public String previewAlterDatabaseSql(Long dataSourceId, String databaseName, String charset, String collation) {
+        requireVisibleDatabase(dataSourceId, databaseName);
+        return requireDatabasePropertiesManager().previewAlterDatabaseSql(
+                Chat2DBContext.getConnection(), databaseName, charset, collation);
+    }
+
+    private void requireVisibleDatabase(Long dataSourceId, String databaseName) {
+        if (!metadataAccessPolicyManager.isAllowed(
+                resource(dataSourceId, currentDbType(), databaseName, null, null, null))) {
+            throw new BusinessException("common.permissionDenied");
+        }
+    }
+
+    private IDatabasePropertiesManager requireDatabasePropertiesManager() {
+        IDatabasePropertiesManager manager = Chat2DBContext.getDatabasePropertiesManager();
+        if (manager == null) {
+            throw new BusinessException("database.properties.unsupported");
+        }
+        return manager;
     }
 
     @Override

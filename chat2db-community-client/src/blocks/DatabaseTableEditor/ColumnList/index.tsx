@@ -27,6 +27,7 @@ import { useStyles } from './style';
 import { Resizable } from 'react-resizable';
 import 'react-resizable/css/styles.css';
 import { normalizeColumnForSubmit } from './normalizeColumn';
+import { filterCollationsByCharset, getCompatibleCollationValue } from '../baseInfoModel';
 
 interface RowProps extends React.HTMLAttributes<HTMLTableRowElement> {
   'data-row-key': string;
@@ -118,6 +119,11 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
   const [form] = Form.useForm();
   const [editingData, setEditingData] = useState<IColumnItemNew | null>(null);
   const [editingConfig, setEditingConfig] = useState<IEditingConfig | null>(null);
+  const selectedColumnCharset = Form.useWatch('charSetName', form);
+  const filteredColumnCollations = useMemo(
+    () => filterCollationsByCharset(databaseSupportField.collations, selectedColumnCharset),
+    [databaseSupportField.collations, selectedColumnCharset],
+  );
   const tableRef = useRef<any>(null);
   const tableBoxRef = useRef<any>(null);
   const [tableScrollY, setTableScrollY] = useState(0);
@@ -532,6 +538,18 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             editStatus,
           };
 
+          if (name === 'charSetName') {
+            const compatibleCollation = getCompatibleCollationValue(
+              value,
+              item.collationName,
+              databaseSupportField.collations,
+            );
+            if (compatibleCollation !== item.collationName) {
+              editingDataItem.collationName = compatibleCollation;
+              form.setFieldValue('collationName', compatibleCollation);
+            }
+          }
+
           if (name === 'columnType') {
             // Set the editing configuration according to the current field type
             databaseSupportField.columnTypes.forEach((i) => {
@@ -653,7 +671,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
         )}
         {editingConfig?.supportCollation && (
           <Form.Item labelCol={labelCol} label={i18n('editTable.label.collation')} name="collationName">
-            <CustomSelect options={databaseSupportField.collations} />
+            <CustomSelect options={filteredColumnCollations} />
           </Form.Item>
         )}
         {editingConfig?.supportScale && (

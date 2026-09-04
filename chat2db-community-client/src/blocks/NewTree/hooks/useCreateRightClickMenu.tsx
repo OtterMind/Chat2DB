@@ -53,6 +53,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import DatabasePropertiesContent from '../components/DatabasePropertiesContent';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
 import type { ResourceOperation, ResourceOperationCapabilities } from '@/client-extension/types';
@@ -402,6 +403,23 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.DatabaseProperties]: {
+        text: i18n('workspace.ops.databaseProperties'),
+        icon: 'icon-setting',
+        discard: !isDatabaseCapabilitySupported(databaseType, DatabaseCapability.DATABASE_PROPERTIES),
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.databaseProperties'),
+            content: (
+              <DatabasePropertiesContent dataSourceId={dataSourceId!} databaseName={treeNodeData.originalTitle} />
+            ),
+            footer: null,
+            width: 480,
+            closable: true,
           });
         },
       },

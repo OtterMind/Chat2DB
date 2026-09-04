@@ -297,6 +297,12 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revocar privilegios',
   'workspace.databaseAccount.lockUnsupported':
     'Esta versión de MySQL o los privilegios de la cuenta actual no admiten el bloqueo de cuentas',
+  'workspace.ops.databaseProperties': 'Propiedades de la base de datos',
+  'workspace.ops.charset': 'Juego de caracteres',
+  'workspace.ops.collation': 'Cotejamiento',
+  'workspace.ops.charsetHint': 'Cambiar el valor predeterminado no convierte los datos de columnas existentes.',
+  'workspace.ops.previewSql': 'Vista previa SQL',
+  'workspace.ops.noChange': 'Sin cambios para guardar',
   'workspace.ops.activeTransactions': 'Transacciones activas',
   'workspace.ops.monitor': 'Monitorización',
   'workspace.ops.transactionId': 'ID de transacción',
