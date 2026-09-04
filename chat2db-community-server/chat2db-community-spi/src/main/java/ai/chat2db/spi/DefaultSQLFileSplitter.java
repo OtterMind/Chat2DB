@@ -34,13 +34,12 @@ public class DefaultSQLFileSplitter implements ISQLFileSplitter {
 
     public DefaultSQLFileSplitter(long size, FileSizeUnitEnum unit, File file, Charset charSet) {
         this.maxSize = size * unit.toBytes();
-        FileReader fileReader;
         try {
-            fileReader = new FileReader(file);
+            this.reader = new PushbackReader(new BufferedReader(
+                    new InputStreamReader(new FileInputStream(file), charSet)), 256);
         } catch (FileNotFoundException e) {
             throw new RuntimeException("Unable to open file " + file, e);
         }
-        this.reader = new PushbackReader(new BufferedReader(fileReader), 256);
         this.charset = charSet;
     }
 

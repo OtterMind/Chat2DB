@@ -24,4 +24,12 @@ public class ImportTaskSpec implements TaskSpec {
     private String format;
 
     private String dataTimeFormat;
+
+    private String encoding;
+
+    private String errorPolicy;
+
+    private String commitMode;
+
+    private Integer batchSize;
 }

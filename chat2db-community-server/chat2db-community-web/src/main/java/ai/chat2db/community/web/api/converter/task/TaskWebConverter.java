@@ -61,6 +61,10 @@ public class TaskWebConverter {
                 .displayFileName(StringUtils.defaultIfBlank(request.getDisplayFileName(), fileName(sourceFile)))
                 .format(format)
                 .dataTimeFormat(request.getDataTimeFormat())
+                .encoding(request.getEncoding())
+                .errorPolicy(request.getErrorPolicy())
+                .commitMode(request.getCommitMode())
+                .batchSize(request.getBatchSize())
                 .build();
     }
 

@@ -6,6 +6,8 @@ import ai.chat2db.community.domain.api.enums.parser.FileSizeUnitEnum;
 import ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum;
 import ai.chat2db.community.domain.api.model.parser.statement.Statement;
 import ai.chat2db.community.domain.api.model.parser.statement.StatementContext;
+import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.mysql.parser.base.MySqlLexer;
 import ai.chat2db.mysql.parser.base.MySqlParser;
 import ai.chat2db.mysql.parser.base.MySqlParserBaseVisitor;
@@ -20,11 +22,13 @@ import ai.chat2db.spi.IRuleManager;
 import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
 import ai.chat2db.spi.util.TokenUtil;
 import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,6 +94,7 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
         for (int i = 0; i < tokens.size(); i++) {
             Token token = tokens.get(i);
             int tokenType = token.getType();
+            boolean combinedUdfDelimiter = isCombinedUdfDelimiter(token, udfDelimiter);
             if (tokenType == Token.EOF) {
                 break;
             }
@@ -116,7 +121,6 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                 firstKeyword = null;
                 lastKeyword = null;
                 curBlock = null;
-                udfDelimiter = null;
                 encounteredBlockHeaderPrefix = false;
                 continue;
             }
@@ -192,6 +196,14 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                 }
                 lastKeyword = token;
             }
+            if (combinedUdfDelimiter && Objects.isNull(curBlock)) {
+                statements.add(getStatement(tokenStream, firstToken, lastToken));
+                firstToken = null;
+                lastToken = null;
+                firstKeyword = null;
+                lastKeyword = null;
+                encounteredBlockHeaderPrefix = false;
+            }
 
         }
 
@@ -204,7 +216,15 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                                ITaskProgressListener progressListener,
                                ISqlBatchHandler sqlBatchHandler) {
 
-        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, StandardCharsets.UTF_8)) {
+        return parserSqlScript(file, progressListener, sqlBatchHandler, StandardCharsets.UTF_8);
+    }
+
+    public int parserSqlScript(File file,
+                               ITaskProgressListener progressListener,
+                               ISqlBatchHandler sqlBatchHandler,
+                               Charset charset) {
+
+        try (DefaultSQLFileSplitter safeSQLFileSplitter = new DefaultSQLFileSplitter(10, FileSizeUnitEnum.MB, file, charset)) {
             String content;
             long bytesRead = 0L;
             int statementCount = 0;
@@ -213,7 +233,7 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
             IRuleManager ruleManager = dialect.getRuleManager();
             List<Token> currentTokens = new ArrayList<>(50);
             while (StringUtils.isNotBlank(content = safeSQLFileSplitter.nextContent())) {
-                bytesRead += content.getBytes(StandardCharsets.UTF_8).length;
+                bytesRead += content.getBytes(charset).length;
                 if (CollectionUtils.isNotEmpty(currentTokens)) {
                     charStream = CharStreams.fromString(currentTokens.stream().map(Token::getText).collect(Collectors.joining()) + content);
                     currentTokens.clear();
@@ -232,6 +252,7 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                 while (tokenStream.LA(1) != Token.EOF) {
                     Token token = tokenStream.LT(1);
                     int tokenType = token.getType();
+                    boolean combinedUdfDelimiter = isCombinedUdfDelimiter(token, udfDelimiter);
                     String text = token.getText();
                     String currentTokenText = text.trim();
                     if (!TokenUtil.hasValuableText(token) || dialect.isComment(tokenType)) {
@@ -260,7 +281,6 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                         firstKeyword = null;
                         lastKeyword = null;
                         curBlock = null;
-                        udfDelimiter = null;
                         encounteredBlockHeaderPrefix = false;
                         statementCount++;
                         currentTokens.clear();
@@ -338,6 +358,23 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
                         }
                     }
 
+                    if (combinedUdfDelimiter && Objects.isNull(curBlock)) {
+                        Statement statement = getStatement(currentTokens);
+                        sqlBatchHandler.handle(statement);
+                        firstToken = null;
+                        lastToken = null;
+                        firstKeyword = null;
+                        lastKeyword = null;
+                        encounteredBlockHeaderPrefix = false;
+                        statementCount++;
+                        currentTokens.clear();
+                        if (statementCount % 1000 == 0) {
+                            progressListener.onProgress(bytesRead, statementCount);
+                        }
+                        tokenStream.consume();
+                        continue;
+                    }
+
 
                     lastToken = token;
                     if (dialect.isKeyword(currentTokenText)) {
@@ -358,6 +395,8 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
             }
             sqlBatchHandler.flush();
             return statementCount;
+        } catch (TaskCancelledException | TaskExecutionException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException("Error parsing SQL statement: " + e.getMessage(), e);
         }
@@ -370,5 +409,16 @@ public class MysqlSqlParser extends AbstractSqlParser<MySqlParser, MysqlDialect>
             return matcher.group(1);
         }
         return null;
+    }
+
+    private static boolean isCombinedUdfDelimiter(Token token, String udfDelimiter) {
+        if (token.getType() != MySqlLexer.END_SYMBOLE || StringUtils.isBlank(udfDelimiter)
+                || token.getInputStream() == null) {
+            return false;
+        }
+        String originalText = token.getInputStream()
+                .getText(Interval.of(token.getStartIndex(), token.getStopIndex()))
+                .trim();
+        return originalText.endsWith(udfDelimiter);
     }
 }

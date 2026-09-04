@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
+import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
@@ -12,6 +13,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -77,6 +79,24 @@ class LocalTaskManagerTest {
         assertTrue(storage.awaitTerminal());
         assertEquals(TaskStatus.SUCCESS.name(), storage.get(task.getId()).orElseThrow().getStatus());
         assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void taskCancellationExceptionCompletesTaskAsCancelled() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        taskManager = manager(storage, (spec, context) -> {
+            throw new TaskCancelledException();
+        });
+        Task task = newTask();
+
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+
+        assertTrue(storage.awaitTerminal());
+        Task cancelled = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals(TaskStage.CANCELLED.name(), cancelled.getStage());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.TASK_CANCELLED.name().equals(event.getCode())));
     }
 
     @Test

@@ -48,6 +48,9 @@ jobs:
       - name: Run SQL clipboard test
         run: yarn run test:sql-in-clipboard
 
+      - name: Run SQL import options contract
+        run: yarn run test:run-sql-options
+
       - name: Run result Markdown formatter test
         run: yarn run test:result-markdown
 
