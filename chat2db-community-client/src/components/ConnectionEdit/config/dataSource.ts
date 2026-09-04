@@ -294,6 +294,358 @@ export const portItem: any = {
   },
 };
 
+const mysqlTlsEnabledModes = ['REQUIRED', 'VERIFY_CA', 'VERIFY_IDENTITY'];
+
+const mysqlTlsItems = [
+  {
+    defaultValue: 'DISABLED',
+    inputType: InputType.SELECT,
+    labelName: {
+      [LangType.EN_US]: 'TLS Mode',
+      [LangType.ZH_CN]: 'TLS 模式',
+      [LangType.JA_JP]: 'TLS モード',
+      [LangType.ES_ES]: 'Modo TLS',
+      [LangType.KO_KR]: 'TLS 모드',
+    },
+    name: 'sslTlsMode',
+    required: false,
+    selects: [
+      {
+        label: 'DISABLED',
+        value: 'DISABLED',
+      },
+      {
+        label: 'REQUIRED',
+        value: 'REQUIRED',
+      },
+      {
+        label: 'VERIFY_CA',
+        value: 'VERIFY_CA',
+      },
+      {
+        label: 'VERIFY_IDENTITY',
+        value: 'VERIFY_IDENTITY',
+      },
+    ],
+    styles: {
+      width: '50%',
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.TEXTAREA,
+    labelName: {
+      [LangType.EN_US]: 'CA PEM',
+      [LangType.ZH_CN]: 'CA PEM',
+      [LangType.JA_JP]: 'CA PEM',
+      [LangType.ES_ES]: 'CA PEM',
+      [LangType.KO_KR]: 'CA PEM',
+    },
+    name: 'sslCaPem',
+    required: false,
+    fileContentMode: 'text',
+    fileTypes: ['pem'],
+    rows: 4,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.TEXTAREA,
+    labelName: {
+      [LangType.EN_US]: 'Client Cert PEM',
+      [LangType.ZH_CN]: '客户端证书 PEM',
+      [LangType.JA_JP]: 'クライアント証明書 PEM',
+      [LangType.ES_ES]: 'Certificado cliente PEM',
+      [LangType.KO_KR]: '클라이언트 인증서 PEM',
+    },
+    name: 'sslClientCertPem',
+    required: false,
+    fileContentMode: 'text',
+    fileTypes: ['pem'],
+    rows: 4,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.TEXTAREA,
+    labelName: {
+      [LangType.EN_US]: 'Client Key PEM',
+      [LangType.ZH_CN]: '客户端密钥 PEM',
+      [LangType.JA_JP]: 'クライアント鍵 PEM',
+      [LangType.ES_ES]: 'Clave cliente PEM',
+      [LangType.KO_KR]: '클라이언트 키 PEM',
+    },
+    name: 'sslClientPrivateKeyPem',
+    required: false,
+    fileContentMode: 'text',
+    fileTypes: ['pem'],
+    rows: 4,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.PASSWORD,
+    labelName: {
+      [LangType.EN_US]: 'Client Key Password',
+      [LangType.ZH_CN]: '客户端密钥密码',
+      [LangType.JA_JP]: 'クライアント鍵パスワード',
+      [LangType.ES_ES]: 'Contraseña de clave cliente',
+      [LangType.KO_KR]: '클라이언트 키 비밀번호',
+    },
+    name: 'sslClientKeyPassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Client Key',
+      [LangType.ZH_CN]: '清除已保存客户端密钥',
+      [LangType.JA_JP]: '保存済みクライアント鍵をクリア',
+      [LangType.ES_ES]: 'Borrar clave cliente guardada',
+      [LangType.KO_KR]: '저장된 클라이언트 키 지우기',
+    },
+    name: 'sslClearClientPrivateKeyPem',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Client Key Password',
+      [LangType.ZH_CN]: '清除已保存客户端密钥密码',
+      [LangType.JA_JP]: '保存済みクライアント鍵パスワードをクリア',
+      [LangType.ES_ES]: 'Borrar contraseña de clave cliente guardada',
+      [LangType.KO_KR]: '저장된 클라이언트 키 비밀번호 지우기',
+    },
+    name: 'sslClearClientKeyPassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.SELECT,
+    labelName: {
+      [LangType.EN_US]: 'Trust Store Type',
+      [LangType.ZH_CN]: '信任库类型',
+      [LangType.JA_JP]: 'トラストストア種別',
+      [LangType.ES_ES]: 'Tipo de almacén de confianza',
+      [LangType.KO_KR]: '신뢰 저장소 유형',
+    },
+    name: 'sslTrustStoreType',
+    required: false,
+    selects: [
+      {
+        label: 'PKCS12',
+        value: 'PKCS12',
+      },
+      {
+        label: 'JKS',
+        value: 'JKS',
+      },
+    ],
+    styles: {
+      width: '50%',
+    },
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.TEXTAREA,
+    labelName: {
+      [LangType.EN_US]: 'Trust Store Base64',
+      [LangType.ZH_CN]: '信任库 Base64',
+      [LangType.JA_JP]: 'トラストストア Base64',
+      [LangType.ES_ES]: 'Almacén de confianza Base64',
+      [LangType.KO_KR]: '신뢰 저장소 Base64',
+    },
+    name: 'sslTrustStoreBytes',
+    required: false,
+    fileContentMode: 'base64',
+    fileTypes: ['jks', 'p12', 'pfx', 'pkcs12'],
+    rows: 4,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.PASSWORD,
+    labelName: {
+      [LangType.EN_US]: 'Trust Store Password',
+      [LangType.ZH_CN]: '信任库密码',
+      [LangType.JA_JP]: 'トラストストアパスワード',
+      [LangType.ES_ES]: 'Contraseña del almacén de confianza',
+      [LangType.KO_KR]: '신뢰 저장소 비밀번호',
+    },
+    name: 'sslTrustStorePassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Trust Store',
+      [LangType.ZH_CN]: '清除已保存信任库',
+      [LangType.JA_JP]: '保存済みトラストストアをクリア',
+      [LangType.ES_ES]: 'Borrar almacén de confianza guardado',
+      [LangType.KO_KR]: '저장된 신뢰 저장소 지우기',
+    },
+    name: 'sslClearTrustStoreBytes',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Trust Store Password',
+      [LangType.ZH_CN]: '清除已保存信任库密码',
+      [LangType.JA_JP]: '保存済みトラストストアパスワードをクリア',
+      [LangType.ES_ES]: 'Borrar contraseña de almacén de confianza guardada',
+      [LangType.KO_KR]: '저장된 신뢰 저장소 비밀번호 지우기',
+    },
+    name: 'sslClearTrustStorePassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.SELECT,
+    labelName: {
+      [LangType.EN_US]: 'Client Key Store Type',
+      [LangType.ZH_CN]: '密钥库类型',
+      [LangType.JA_JP]: 'キーストア種別',
+      [LangType.ES_ES]: 'Tipo de almacén de claves',
+      [LangType.KO_KR]: '키 저장소 유형',
+    },
+    name: 'sslKeyStoreType',
+    required: false,
+    selects: [
+      {
+        label: 'PKCS12',
+        value: 'PKCS12',
+      },
+      {
+        label: 'JKS',
+        value: 'JKS',
+      },
+    ],
+    styles: {
+      width: '50%',
+    },
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.TEXTAREA,
+    labelName: {
+      [LangType.EN_US]: 'Key Store Base64',
+      [LangType.ZH_CN]: '密钥库 Base64',
+      [LangType.JA_JP]: 'キーストア Base64',
+      [LangType.ES_ES]: 'Almacén de claves Base64',
+      [LangType.KO_KR]: '키 저장소 Base64',
+    },
+    name: 'sslKeyStoreBytes',
+    required: false,
+    fileContentMode: 'base64',
+    fileTypes: ['jks', 'p12', 'pfx', 'pkcs12'],
+    rows: 4,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: '',
+    inputType: InputType.PASSWORD,
+    labelName: {
+      [LangType.EN_US]: 'Key Store Password',
+      [LangType.ZH_CN]: '密钥库密码',
+      [LangType.JA_JP]: 'キーストアパスワード',
+      [LangType.ES_ES]: 'Contraseña del almacén de claves',
+      [LangType.KO_KR]: '키 저장소 비밀번호',
+    },
+    name: 'sslKeyStorePassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Client Key Store',
+      [LangType.ZH_CN]: '清除已保存客户端密钥库',
+      [LangType.JA_JP]: '保存済みクライアントキーストアをクリア',
+      [LangType.ES_ES]: 'Borrar almacén de claves cliente guardado',
+      [LangType.KO_KR]: '저장된 클라이언트 키 저장소 지우기',
+    },
+    name: 'sslClearKeyStoreBytes',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+  {
+    defaultValue: false,
+    inputType: InputType.CHECKBOX,
+    labelName: {
+      [LangType.EN_US]: 'Clear Saved Client Key Store Password',
+      [LangType.ZH_CN]: '清除已保存客户端密钥库密码',
+      [LangType.JA_JP]: '保存済みクライアントキーストアパスワードをクリア',
+      [LangType.ES_ES]: 'Borrar contraseña de almacén de claves cliente guardada',
+      [LangType.KO_KR]: '저장된 클라이언트 키 저장소 비밀번호 지우기',
+    },
+    name: 'sslClearKeyStorePassword',
+    required: false,
+    visibleWhen: {
+      name: 'sslTlsMode',
+      values: mysqlTlsEnabledModes,
+    },
+  },
+];
+
 export const dataSourceFormConfigs: IConnectionConfig[] = [
   // MYSQL
   {
@@ -411,6 +763,7 @@ export const dataSourceFormConfigs: IConnectionConfig[] = [
           name: 'url',
           required: true,
         },
+        ...mysqlTlsItems,
       ],
       pattern: /jdbc:mysql:\/\/(.*):(\d+)(\/([\w-]+))?/,
       template: 'jdbc:mysql://{host}:{port}/{database}',

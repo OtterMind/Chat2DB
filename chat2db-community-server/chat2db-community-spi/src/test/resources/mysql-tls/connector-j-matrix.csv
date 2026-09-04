@@ -1,0 +1,7 @@
+connector,jdbcDriverClass,jdbcDriver,tlsMode,expectedModeProperty,expectedModeValue,expectedVerifyServerCertificate,expectedErrorCode
+8.0.30,com.mysql.cj.jdbc.Driver,mysql-connector-java-8.0.30.jar,REQUIRED,sslMode,REQUIRED,,
+8.0.30,com.mysql.cj.jdbc.Driver,mysql-connector-java-8.0.30.jar,VERIFY_CA,sslMode,VERIFY_CA,,
+8.0.30,com.mysql.cj.jdbc.Driver,mysql-connector-java-8.0.30.jar,VERIFY_IDENTITY,sslMode,VERIFY_IDENTITY,,
+5.1.47,com.mysql.jdbc.Driver,mysql-connector-java-5.1.47.jar,REQUIRED,useSSL,true,false,
+5.1.47,com.mysql.jdbc.Driver,mysql-connector-java-5.1.47.jar,VERIFY_CA,useSSL,true,true,
+5.1.47,com.mysql.jdbc.Driver,mysql-connector-java-5.1.47.jar,VERIFY_IDENTITY,,,,datasource.tls.verifyIdentityUnsupportedConnectorJ5

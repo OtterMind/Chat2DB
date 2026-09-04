@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import ai.chat2db.community.tools.util.LogUtils;
+import ai.chat2db.community.web.api.util.DataSourceSslRedactionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
@@ -48,10 +49,14 @@ public class EasyLogSink implements Sink {
         webLog.setStartTime(LocalDateTime.ofInstant(correlation.getStart(), ZoneId.systemDefault()));
         webLog.setEndTime(LocalDateTime.ofInstant(correlation.getEnd(), ZoneId.systemDefault()));
         try {
-            webLog.setRequest(LogUtils.maskString(LogUtils.cutLog(new String(request.getBody(), StandardCharsets.UTF_8))));
+            String requestBody = DataSourceSslRedactionUtils.redactJsonBody(
+                    new String(request.getBody(), StandardCharsets.UTF_8));
+            webLog.setRequest(LogUtils.maskString(LogUtils.cutLog(requestBody)));
             if (ContentTypeUtils.isContentTypeJSON(response.getContentType()) || ContentTypeUtils.isContentTypeHTML(
                 response.getContentType())) {
-                webLog.setResponse(LogUtils.maskString(LogUtils.cutLog(new String(response.getBody(), StandardCharsets.UTF_8))));
+                String responseBody = DataSourceSslRedactionUtils.redactJsonBody(
+                        new String(response.getBody(), StandardCharsets.UTF_8));
+                webLog.setResponse(LogUtils.maskString(LogUtils.cutLog(responseBody)));
             } else {
                 webLog.setResponse(response.getContentType() + ":[" + response.getBody().length + "]");
             }

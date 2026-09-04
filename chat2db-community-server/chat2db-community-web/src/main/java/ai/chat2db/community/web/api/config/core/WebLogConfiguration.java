@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.config.core;
 
+import ai.chat2db.community.web.api.util.DataSourceSslRedactionUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zalando.logbook.BodyFilter;
@@ -10,6 +11,6 @@ public class WebLogConfiguration {
 
     @Bean
     public BodyFilter bodyFilter() {
-        return BodyFilter.none();
+        return (contentType, body) -> DataSourceSslRedactionUtils.redactJsonBody(body);
     }
 }
