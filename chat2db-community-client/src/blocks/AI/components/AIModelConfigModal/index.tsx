@@ -181,7 +181,10 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
     } catch (error: any) {
       modal.error({
         title: i18n('setting.modelConfig.testFailed'),
-        content: error?.errorMessage || error?.message || String(error),
+        content: (
+          <pre className={styles.testResult}>{error?.errorMessage || error?.message || String(error)}</pre>
+        ),
+        width: 680,
       });
     } finally {
       setTesting(false);
