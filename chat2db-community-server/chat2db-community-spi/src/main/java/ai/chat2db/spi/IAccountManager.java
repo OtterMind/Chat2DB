@@ -2,6 +2,7 @@ package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.community.domain.api.model.account.AccountExecuteResponse;
+import ai.chat2db.community.domain.api.model.account.AccountGrantSummary;
 import ai.chat2db.community.domain.api.model.account.AccountInfo;
 import ai.chat2db.community.domain.api.model.account.AccountManagerCapability;
 import ai.chat2db.community.domain.api.model.account.AccountPreview;
@@ -17,6 +18,15 @@ public interface IAccountManager {
     List<AccountInfo> listAccounts(Connection connection);
 
     List<String> showGrants(Connection connection, String user, String host);
+
+    default AccountGrantSummary grantSummary(Connection connection, String user, String host) {
+        AccountGrantSummary summary = new AccountGrantSummary();
+        summary.setReadable(Boolean.FALSE);
+        summary.setMessage("Grant summary is not supported by this database plugin.");
+        summary.setRawStatements(List.of());
+        summary.setGrants(List.of());
+        return summary;
+    }
 
     AccountPreview preview(AccountOperationRequest accountOperationRequest);
 

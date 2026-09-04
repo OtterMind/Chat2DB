@@ -14,6 +14,7 @@ public class AccountCommandRequest extends AccountRequest {
     private PrivilegeScopeEnum scope;
     private String databaseName;
     private String tableName;
+    private String objectName;
     private List<String> privileges;
     private Boolean grantOption;
     private String password;

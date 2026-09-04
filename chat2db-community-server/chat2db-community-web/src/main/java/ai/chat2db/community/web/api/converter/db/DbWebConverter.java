@@ -366,6 +366,9 @@ public abstract class DbWebConverter {
     public abstract ai.chat2db.community.web.api.model.response.db.AccountExecuteResponse accountExecute2response(
             ai.chat2db.community.domain.api.model.account.AccountExecuteResponse result);
 
+    public abstract ai.chat2db.community.web.api.model.response.db.AccountGrantSummaryResponse accountGrantSummary2response(
+            ai.chat2db.community.domain.api.model.account.AccountGrantSummary summary);
+
     public abstract DbDatabaseDeletePrepareRequest request2param(DatabaseDeletePrepareRequest request);
 
     public abstract DbSchemaDeletePrepareRequest request2param(SchemaDeletePrepareRequest request);

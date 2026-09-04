@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.api.service.db;
 
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.community.domain.api.model.account.AccountExecuteResponse;
+import ai.chat2db.community.domain.api.model.account.AccountGrantSummary;
 import ai.chat2db.community.domain.api.model.account.AccountInfo;
 import ai.chat2db.community.domain.api.model.account.AccountManagerCapability;
 import ai.chat2db.community.domain.api.model.account.AccountPreview;
@@ -35,6 +36,15 @@ public interface IDbAccountAdminService {
      * @return grant statements for the account.
      */
     List<String> showGrants(String user, String host);
+
+    /**
+     * Summarizes grants for a database account with source labels.
+     *
+     * @param user account user name.
+     * @param host account host name.
+     * @return parsed grant summary for the account.
+     */
+    AccountGrantSummary grantSummary(String user, String host);
 
     /**
      * Previews SQL commands for an account-management operation.

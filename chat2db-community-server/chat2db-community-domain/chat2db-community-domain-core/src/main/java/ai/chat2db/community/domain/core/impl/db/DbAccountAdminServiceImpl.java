@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.community.domain.api.model.account.AccountExecuteResponse;
+import ai.chat2db.community.domain.api.model.account.AccountGrantSummary;
 import ai.chat2db.community.domain.api.model.account.AccountInfo;
 import ai.chat2db.community.domain.api.model.account.AccountManagerCapability;
 import ai.chat2db.community.domain.api.model.account.AccountPreview;
@@ -36,6 +37,11 @@ public class DbAccountAdminServiceImpl implements IDbAccountAdminService {
     @Override
     public List<String> showGrants(String user, String host) {
         return requireAccountManager().showGrants(requireConnection(), user, host);
+    }
+
+    @Override
+    public AccountGrantSummary grantSummary(String user, String host) {
+        return requireAccountManager().grantSummary(requireConnection(), user, host);
     }
 
     @Override

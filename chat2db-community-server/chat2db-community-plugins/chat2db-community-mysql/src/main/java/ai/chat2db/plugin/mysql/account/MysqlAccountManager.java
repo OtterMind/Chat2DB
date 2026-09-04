@@ -4,6 +4,7 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.IAccountManager;
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.community.domain.api.model.account.AccountExecuteResponse;
+import ai.chat2db.community.domain.api.model.account.AccountGrantSummary;
 import ai.chat2db.community.domain.api.model.account.AccountInfo;
 import ai.chat2db.community.domain.api.model.account.AccountManagerCapability;
 import ai.chat2db.community.domain.api.model.account.AccountPreview;
@@ -59,6 +60,15 @@ public class MysqlAccountManager implements IAccountManager {
             return queryGrants(connection, user, host);
         } catch (SQLException e) {
             throw new BusinessException(ERROR_KEY_ACCOUNT_GRANTS_UNAVAILABLE, null, e);
+        }
+    }
+
+    @Override
+    public AccountGrantSummary grantSummary(Connection connection, String user, String host) {
+        try {
+            return MysqlGrantParser.readable(queryGrants(connection, user, host));
+        } catch (SQLException e) {
+            return MysqlGrantParser.unreadable(e.getMessage());
         }
     }
 
@@ -119,9 +129,11 @@ public class MysqlAccountManager implements IAccountManager {
         }
     }
 
+    // MySQL does not parameterize account identifiers in SHOW GRANTS; the builder quotes both literals.
     private List<String> queryGrants(Connection connection, String user, String host) throws SQLException {
         List<String> grants = new ArrayList<>();
         String sql = MysqlAccountSqlBuilder.showGrantsSql(user, host);
+        // codeql[java/sql-injection]
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {

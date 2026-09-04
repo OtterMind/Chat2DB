@@ -297,6 +297,23 @@ export default {
   'workspace.databaseAccount.revokePrivilege': 'Revocar privilegios',
   'workspace.databaseAccount.lockUnsupported':
     'Esta versión de MySQL o los privilegios de la cuenta actual no admiten el bloqueo de cuentas',
+  'workspace.databaseAccount.scopeFunction': 'Función (db.func)',
+  'workspace.databaseAccount.scopeProcedure': 'Procedimiento (db.proc)',
+  'workspace.databaseAccount.object': 'Objeto',
+  'workspace.databaseAccount.selectObject': 'Seleccionar objeto',
+  'workspace.databaseAccount.grantSources': 'Orígenes de privilegios cargados',
+  'workspace.databaseAccount.refreshGrants': 'Actualizar privilegios',
+  'workspace.databaseAccount.grantsUnreadable': 'La conexión actual no puede leer SHOW GRANTS para esta cuenta',
+  'workspace.databaseAccount.noDirectRoutineGrant':
+    'No se cargó ningún privilegio directo de rutina que coincida con este objeto',
+  'workspace.databaseAccount.routineRevokeBlocked':
+    'Revocar privilegios de rutina requiere un privilegio directo de rutina coincidente. El acceso heredado de base de datos, global o rol no se puede revocar desde este objeto.',
+  'workspace.databaseAccount.grantSourceDirectRoutine': 'Rutina directa',
+  'workspace.databaseAccount.grantSourceInheritedDatabase': 'Base de datos heredada',
+  'workspace.databaseAccount.grantSourceInheritedGlobal': 'Global heredado',
+  'workspace.databaseAccount.grantSourceInheritedRole': 'Rol heredado',
+  'workspace.databaseAccount.grantSourceUnparsed': 'Privilegio sin procesar',
+  'workspace.databaseAccount.grantOptionTag': 'Opción de concesión',
   'workspace.ops.activeTransactions': 'Transacciones activas',
   'workspace.ops.monitor': 'Monitorización',
   'workspace.ops.transactionId': 'ID de transacción',

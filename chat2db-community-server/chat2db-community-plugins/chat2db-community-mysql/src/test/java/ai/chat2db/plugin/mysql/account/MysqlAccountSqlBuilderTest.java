@@ -41,6 +41,21 @@ class MysqlAccountSqlBuilderTest {
     }
 
     @Test
+    void grantRoutinePrivilegesMapsAlterRoutineAndQuotesObjectScope() {
+        AccountOperationRequest command = base(AccountActionTypeEnum.GRANT_PRIVILEGE);
+        command.setScope(PrivilegeScopeEnum.FUNCTION.name());
+        command.setDatabaseName("app");
+        command.setObjectName("calc`total");
+        command.setPrivileges(List.of("EXECUTE", "ALTER_ROUTINE"));
+        command.setGrantOption(Boolean.TRUE);
+
+        assertEquals(
+                "GRANT EXECUTE, ALTER ROUTINE ON FUNCTION `app`.`calc``total` TO 'alice''s'@'10.0.%' WITH GRANT OPTION",
+                MysqlAccountSqlBuilder.buildSql(command)
+        );
+    }
+
+    @Test
     void passwordSqlEscapesQuotesAndBackslashes() {
         AccountOperationRequest command = base(AccountActionTypeEnum.CREATE_USER);
         command.setPassword("p'a\\ss");

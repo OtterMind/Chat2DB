@@ -15,6 +15,8 @@ export enum AccountPrivilegeScope {
   GLOBAL = 'GLOBAL',
   DATABASE = 'DATABASE',
   TABLE = 'TABLE',
+  FUNCTION = 'FUNCTION',
+  PROCEDURE = 'PROCEDURE',
 }
 
 export enum AccountPrivilege {
@@ -28,10 +30,19 @@ export enum AccountPrivilege {
   INDEX = 'INDEX',
   REFERENCES = 'REFERENCES',
   EXECUTE = 'EXECUTE',
+  ALTER_ROUTINE = 'ALTER_ROUTINE',
   SHOW_VIEW = 'SHOW_VIEW',
   TRIGGER = 'TRIGGER',
   EVENT = 'EVENT',
   CREATE_TEMPORARY_TABLES = 'CREATE_TEMPORARY_TABLES',
+}
+
+export enum AccountGrantSource {
+  DIRECT_ROUTINE = 'DIRECT_ROUTINE',
+  INHERITED_DATABASE = 'INHERITED_DATABASE',
+  INHERITED_GLOBAL = 'INHERITED_GLOBAL',
+  INHERITED_ROLE = 'INHERITED_ROLE',
+  UNPARSED = 'UNPARSED',
 }
 
 export interface AccountBaseParams {
@@ -65,6 +76,7 @@ export interface AccountCommand extends AccountBaseParams {
   scope?: AccountPrivilegeScope;
   databaseName?: string;
   tableName?: string;
+  objectName?: string;
   privileges?: AccountPrivilege[];
   grantOption?: boolean;
   password?: string;
@@ -83,6 +95,26 @@ export interface AccountExecute extends AccountPreview {
   failureCode?: string;
   errorCode?: number;
   sqlState?: string;
+}
+
+export interface AccountGrant {
+  source: AccountGrantSource | string;
+  scope?: AccountPrivilegeScope | string;
+  databaseName?: string;
+  objectName?: string;
+  roleName?: string;
+  privileges: string[];
+  grantOption?: boolean;
+  direct?: boolean;
+  revocable?: boolean;
+  rawStatement: string;
+}
+
+export interface AccountGrantSummary {
+  readable: boolean;
+  message?: string;
+  rawStatements: string[];
+  grants: AccountGrant[];
 }
 
 export function formatAccountExecuteMessage(result: AccountExecute) {
@@ -134,10 +166,16 @@ const grants = createRequest<AccountBaseParams, string[]>('/api/rdb/account/gran
   errorLevel: 'toast',
 });
 
+const grantSummary = createRequest<AccountBaseParams, AccountGrantSummary>('/api/rdb/account/grant-summary', {
+  method: 'get',
+  errorLevel: false,
+});
+
 export default {
   capability,
   list,
   preview,
   execute,
   grants,
+  grantSummary,
 };

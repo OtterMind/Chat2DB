@@ -17,6 +17,7 @@ public enum MysqlPrivilege {
     INDEX("INDEX"),
     REFERENCES("REFERENCES"),
     EXECUTE("EXECUTE"),
+    ALTER_ROUTINE("ALTER ROUTINE"),
     SHOW_VIEW("SHOW VIEW"),
     TRIGGER("TRIGGER"),
     EVENT("EVENT"),

@@ -9,6 +9,7 @@ import ai.chat2db.community.web.api.model.request.db.AccountCommandRequest;
 import ai.chat2db.community.web.api.model.request.db.AccountRequest;
 import ai.chat2db.community.web.api.model.response.db.AccountCapabilityResponse;
 import ai.chat2db.community.web.api.model.response.db.AccountExecuteResponse;
+import ai.chat2db.community.web.api.model.response.db.AccountGrantSummaryResponse;
 import ai.chat2db.community.web.api.model.response.db.AccountPreviewResponse;
 import ai.chat2db.community.web.api.model.response.db.AccountResponse;
 import jakarta.validation.Valid;
@@ -75,6 +76,20 @@ public class DbAccountAdminController {
     @GetMapping("/grants")
     public ListResult<String> grants(@Valid AccountRequest request) {
         return ListResult.of(accountAdminService.showGrants(request.getUser(), request.getHost()));
+    }
+
+    /**
+     * Summarizes account grants with direct and inherited source labels.
+     * <p>
+     * Endpoint: {@code GET /api/rdb/account/grant-summary}.
+     *
+     * @param request request payload or query parameters for the operation.
+     * @return data result containing account grant summary response.
+     */
+    @GetMapping("/grant-summary")
+    public DataResult<AccountGrantSummaryResponse> grantSummary(@Valid AccountRequest request) {
+        return DataResult.of(dbWebConverter.accountGrantSummary2response(
+                accountAdminService.grantSummary(request.getUser(), request.getHost())));
     }
 
     /**
