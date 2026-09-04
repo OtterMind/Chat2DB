@@ -84,6 +84,9 @@ const databaseJudgments: Record<DatabaseCapability, DatabaseCapabilityJudgment> 
   [DatabaseCapability.TABLE_EDITOR_INDEX_METHOD]: {
     implementedBy: [DatabaseTypeCode.MYSQL],
   },
+  [DatabaseCapability.TABLE_EDITOR_GENERATED_COLUMN]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+  },
   [DatabaseCapability.TABLE_EDITOR_COLUMN_VISIBILITY]: {
     implementedBy: [DatabaseTypeCode.MYSQL],
   },

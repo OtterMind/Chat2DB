@@ -12,7 +12,7 @@ import React, {
 import { MenuOutlined } from '@ant-design/icons';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { Table, InputNumber, Input, Form, Select, Checkbox } from 'antd';
+import { Table, InputNumber, Input, Form, Select, Checkbox, Alert } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -27,6 +27,7 @@ import { useStyles } from './style';
 import { Resizable } from 'react-resizable';
 import 'react-resizable/css/styles.css';
 import { normalizeColumnForSubmit } from './normalizeColumn';
+import { isGeneratedColumn } from './generatedColumn';
 
 interface RowProps extends React.HTMLAttributes<HTMLTableRowElement> {
   'data-row-key': string;
@@ -100,6 +101,8 @@ const createInitialData = () => {
     ordinalPosition: null,
     nullable: NullableType.Null,
     generatedColumn: null,
+    generationExpression: null,
+    generatedColumnType: null,
     charSetName: null,
     collationName: null,
     value: null,
@@ -123,6 +126,18 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
   const [tableScrollY, setTableScrollY] = useState(0);
   // column width array
   const [columnsWidth, setColumnsWidth] = useState([40, 160, 200, 120, 100, 50, undefined, 40]);
+  const generatedColumnSupported =
+    isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_GENERATED_COLUMN) &&
+    databaseSupportField.generatedColumnSupported === true;
+  const currentEditingColumn = useMemo(
+    () => dataSource.find((item) => item.key === editingData?.key) || editingData,
+    [dataSource, editingData],
+  );
+  const currentEditingColumnGenerated = isGeneratedColumn(currentEditingColumn);
+  const generatedColumnMetadataUnavailable =
+    generatedColumnSupported &&
+    currentEditingColumn?.generatedColumn === true &&
+    !currentEditingColumn?.generationExpression?.trim();
 
   // monitors the height change of tableBoxRef and sets tableScrollY. You need to consider the resize situation.
   useEffect(() => {
@@ -550,6 +565,28 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
               });
             }
           }
+          if (name === 'generationExpression') {
+            const generationExpression = typeof value === 'string' ? value.trim() : value;
+            editingDataItem.generationExpression = generationExpression || null;
+            editingDataItem.generatedColumn = !!generationExpression;
+            if (generationExpression) {
+              editingDataItem.generatedColumnType = editingDataItem.generatedColumnType || 'VIRTUAL';
+              editingDataItem.defaultValue = null;
+              editingDataItem.autoIncrement = false as any;
+              editingDataItem.onUpdateCurrentTimestamp = false;
+              form.setFieldsValue({
+                generatedColumnType: editingDataItem.generatedColumnType,
+                defaultValue: null,
+                autoIncrement: false,
+                onUpdateCurrentTimestamp: false,
+              });
+            } else {
+              editingDataItem.generatedColumnType = null;
+              form.setFieldsValue({
+                generatedColumnType: null,
+              });
+            }
+          }
           return editingDataItem;
         }
         return item;
@@ -595,7 +632,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
   function getColumnListInfo(): IColumnItemNew[] {
     return dataSource.map((i) => {
       const data = {
-        ...normalizeColumnForSubmit(i),
+        ...normalizeColumnForSubmit(i, generatedColumnSupported),
         tableName: tableDetails?.name,
         databaseName: databaseName || null,
         schemaName: schemaName || null,
@@ -623,7 +660,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             name="autoIncrement"
             valuePropName="checked"
           >
-            <Checkbox>{i18n('editTable.label.autoIncrement')}</Checkbox>
+            <Checkbox disabled={currentEditingColumnGenerated}>{i18n('editTable.label.autoIncrement')}</Checkbox>
           </Form.Item>
         )}
         {isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_SPARSE_COLUMN) && (
@@ -633,8 +670,42 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
         )}
         {editingConfig?.supportDefaultValue && (
           <Form.Item labelCol={labelCol} label={i18n('editTable.label.defaultValue')} name="defaultValue">
-            <CustomSelect options={databaseSupportField.defaultValues} />
+            <CustomSelect options={databaseSupportField.defaultValues} disabled={currentEditingColumnGenerated} />
           </Form.Item>
+        )}
+        {generatedColumnSupported && (
+          <>
+            {generatedColumnMetadataUnavailable && (
+              <Alert
+                type="warning"
+                showIcon
+                message={i18n('editTable.tips.generatedColumnMetadataUnavailable')}
+                style={{ marginBottom: 12 }}
+              />
+            )}
+            <Form.Item
+              labelCol={labelCol}
+              label={i18n('editTable.label.generationExpression')}
+              name="generationExpression"
+            >
+              <Input
+                autoComplete="off"
+                disabled={generatedColumnMetadataUnavailable}
+                placeholder={i18n('editTable.label.generationExpressionPlaceholder')}
+              />
+            </Form.Item>
+            <Form.Item labelCol={labelCol} label={i18n('editTable.label.generatedColumnType')} name="generatedColumnType">
+              <Select
+                allowClear
+                disabled={generatedColumnMetadataUnavailable}
+                placeholder={i18n('editTable.label.notGeneratedColumn')}
+                options={[
+                  { value: 'VIRTUAL', label: 'VIRTUAL' },
+                  { value: 'STORED', label: 'STORED' },
+                ]}
+              />
+            </Form.Item>
+          </>
         )}
         {editingConfig?.supportOnUpdateCurrentTimestamp && (
           <Form.Item
@@ -643,7 +714,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             name="onUpdateCurrentTimestamp"
             valuePropName="checked"
           >
-            <Checkbox>{i18n('editTable.label.updateTime')}</Checkbox>
+            <Checkbox disabled={currentEditingColumnGenerated}>{i18n('editTable.label.updateTime')}</Checkbox>
           </Form.Item>
         )}
         {editingConfig?.supportCharset && (

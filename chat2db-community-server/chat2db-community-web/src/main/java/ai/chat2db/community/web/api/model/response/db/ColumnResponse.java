@@ -81,6 +81,10 @@ public class ColumnResponse {
 
     private Boolean generatedColumn;
 
+    private String generationExpression;
+
+    private String generatedColumnType;
+
 
     private String extent;
 

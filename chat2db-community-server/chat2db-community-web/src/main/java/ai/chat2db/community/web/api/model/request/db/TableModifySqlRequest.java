@@ -18,4 +18,5 @@ public class TableModifySqlRequest extends DataSourceBaseRequest {
     @NotNull
     private Table newTable;
 
+    private Boolean allowGeneratedColumnStorageRebuild;
 }

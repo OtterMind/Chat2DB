@@ -264,6 +264,7 @@ public abstract class DbWebConverter {
         Table table = request.getNewTable();
         table.setSchemaName(request.getSchemaName());
         table.setDatabaseName(request.getDatabaseName());
+        table.setAllowGeneratedColumnStorageRebuild(request.getAllowGeneratedColumnStorageRebuild());
         if (CollectionUtils.isNotEmpty(table.getColumnList())) {
             List<TableColumn> columnList = new ArrayList<>();
             for (TableColumn tableColumn : table.getColumnList()) {

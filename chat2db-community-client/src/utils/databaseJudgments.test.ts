@@ -130,4 +130,7 @@ assert.equal(getSqlCompletionIdentifierQuoteMode(DatabaseTypeCode.OCEANBASE), Id
 assert.equal(quoteSqlCompletionIdentifier('User Table', DatabaseTypeCode.OCEANBASE_ORACLE), '"User Table"');
 assert.equal(quoteSqlCompletionIdentifier('User Table', DatabaseTypeCode.OCEANBASE), '`User Table`');
 
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLE_EDITOR_GENERATED_COLUMN, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.TABLE_EDITOR_GENERATED_COLUMN, false);
+
 console.log('databaseJudgments.test.ts: all assertions passed');

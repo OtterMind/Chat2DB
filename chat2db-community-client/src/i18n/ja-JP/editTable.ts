@@ -26,6 +26,16 @@ export default {
   'editTable.label.updateTime': '現在のタイムスタンプに基づいて更新',
   'editTable.label.sparse': 'スパース',
   'editTable.label.characterSet': '文字セット',
+  'editTable.label.generationExpression': '生成列の式',
+  'editTable.label.generationExpressionPlaceholder': "例: concat(a, '-', b)",
+  'editTable.label.generatedColumnType': '生成列のタイプ',
+  'editTable.label.notGeneratedColumn': '生成列ではない',
+  'editTable.title.generatedColumnStorageRebuild': '生成列の再構築を確認',
+  'editTable.tips.generatedColumnStorageRebuild':
+    '生成列を VIRTUAL と STORED の間で変換すると、テーブル再構築、行ロック、既存データ検証が発生する可能性があります。この SQL をプレビューする前に確認してください。',
+  'editTable.tips.generatedColumnMetadataUnavailable':
+    '生成列メタデータが不完全です。この列を編集する前に、生成式を読み取れるアカウントで更新してください。',
+  'editTable.tips.invalidGeneratedColumnExpression': 'SQL をプレビューする前に、安全な生成列式を入力してください。',
   'editTable.label.collation': '照合順序',
   'editTable.label.decimalPoint': '小数点',
   'editTable.label.unit': '単位',

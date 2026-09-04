@@ -23,7 +23,7 @@ export interface IColumnItemNew {
   columnType: string | null; // Column type, such as varchar(100), double(10,6)
   dataType: number | null; // data type
   defaultValue: string | null; // Default value
-  autoIncrement: string | null; // Whether to increment automatically
+  autoIncrement: boolean | null; // Whether to increment automatically
   comment: string | null; // Comment
   primaryKey: boolean | null; // Is it a primary key?
   primaryKeyOrder: number | null; // primary key order
@@ -37,7 +37,10 @@ export interface IColumnItemNew {
   charOctetLength: string | null; // Maximum length of string
   ordinalPosition: number | null; // location
   nullable: NullableType | null; //Is it empty
-  generatedColumn: string | null; // Whether to generate columns
+  generatedColumn: boolean | null; // Whether to generate columns
+  generationExpression: string | null; // Generated column expression (MYSQL-OBJ-002)
+  generatedColumnType: string | null; // VIRTUAL | STORED
+  onUpdateCurrentTimestamp?: boolean | null; // ON UPDATE CURRENT_TIMESTAMP
   visible?: boolean | null; // Column visibility (MySQL 8.0.23+)
 
   charSetName: string | null; // Character set name

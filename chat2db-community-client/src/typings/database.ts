@@ -220,6 +220,9 @@ export interface IDatabaseSupportField {
   indexTypes: IIndexTypes[];
   defaultValues: IDefaultValue[];
   engineTypes: IEngineType[];
+  generatedColumnSupported?: boolean;
+  generatedColumnMinVersion?: string;
+  generatedColumnUnsupportedReason?: string;
 }
 
 /** The character set corresponding to the field */

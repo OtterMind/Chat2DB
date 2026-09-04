@@ -26,6 +26,17 @@ export default {
   'editTable.label.updateTime': 'Actualizar según la marca de tiempo actual',
   'editTable.label.sparse': 'Disperso',
   'editTable.label.characterSet': 'Juego de caracteres',
+  'editTable.label.generationExpression': 'Expresión de columna generada',
+  'editTable.label.generationExpressionPlaceholder': "p. ej. concat(a, '-', b)",
+  'editTable.label.generatedColumnType': 'Tipo de columna generada',
+  'editTable.label.notGeneratedColumn': 'No es una columna generada',
+  'editTable.title.generatedColumnStorageRebuild': 'Confirmar reconstrucción de columna generada',
+  'editTable.tips.generatedColumnStorageRebuild':
+    'Convertir una columna generada entre VIRTUAL y STORED puede reconstruir la tabla, bloquear filas y validar datos existentes. Confirma antes de previsualizar este SQL.',
+  'editTable.tips.generatedColumnMetadataUnavailable':
+    'Los metadatos de la columna generada están incompletos. Actualiza con una cuenta que pueda leer la expresión de generación antes de editar esta columna.',
+  'editTable.tips.invalidGeneratedColumnExpression':
+    'Introduce una expresión segura de columna generada antes de previsualizar SQL.',
   'editTable.label.collation': 'Intercalación',
   'editTable.label.decimalPoint': 'Posiciones decimales',
   'editTable.label.unit': 'Unidad',

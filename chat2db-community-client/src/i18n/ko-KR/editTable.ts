@@ -26,6 +26,16 @@ export default {
   'editTable.label.updateTime': '현재 타임스탬프에 따라 업데이트',
   'editTable.label.sparse': '희소',
   'editTable.label.characterSet': '문자 집합',
+  'editTable.label.generationExpression': '생성 열 식',
+  'editTable.label.generationExpressionPlaceholder': "예: concat(a, '-', b)",
+  'editTable.label.generatedColumnType': '생성 열 유형',
+  'editTable.label.notGeneratedColumn': '생성 열이 아님',
+  'editTable.title.generatedColumnStorageRebuild': '생성 열 재빌드 확인',
+  'editTable.tips.generatedColumnStorageRebuild':
+    '생성 열을 VIRTUAL과 STORED 사이에서 변환하면 테이블 재빌드, 행 잠금, 기존 데이터 검증이 발생할 수 있습니다. 이 SQL을 미리 보기 전에 확인하세요.',
+  'editTable.tips.generatedColumnMetadataUnavailable':
+    '생성 열 메타데이터가 불완전합니다. 이 열을 편집하기 전에 생성식을 읽을 수 있는 계정으로 새로 고치세요.',
+  'editTable.tips.invalidGeneratedColumnExpression': 'SQL을 미리 보기 전에 안전한 생성 열 식을 입력하세요.',
   'editTable.label.collation': '정렬 규칙',
   'editTable.label.decimalPoint': '소수점',
   'editTable.label.unit': '단위',

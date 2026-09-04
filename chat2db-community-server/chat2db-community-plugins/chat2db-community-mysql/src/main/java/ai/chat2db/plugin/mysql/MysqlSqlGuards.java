@@ -29,6 +29,10 @@ public final class MysqlSqlGuards {
             "^([A-Za-z0-9_$]+|" + DEFINER_QUOTED_PART + ")@([A-Za-z0-9_.%:$-]+|" + DEFINER_QUOTED_PART + ")$");
     private static final Pattern COLUMN_TYPE_PATTERN = Pattern.compile(
             "^[A-Za-z][A-Za-z0-9_]*(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?(?:\\s+[A-Za-z][A-Za-z0-9_]*)*$");
+    private static final Pattern MYSQL_VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)(?:\\.(\\d+))?.*");
+    private static final Pattern UNSAFE_GENERATED_EXPRESSION_KEYWORD_PATTERN = Pattern.compile(
+            "(?i)\\b(ALTER|CALL|CREATE|DELETE|DROP|GRANT|INSERT|LOAD|LOCK|RENAME|REPLACE|REVOKE|TRUNCATE|UNLOCK|UPDATE)\\b");
+    public static final String GENERATED_COLUMN_MIN_VERSION = "5.7.6";
 
     private MysqlSqlGuards() {
     }
@@ -103,6 +107,116 @@ public final class MysqlSqlGuards {
             throw new IllegalArgumentException("Invalid MySQL column type: " + value);
         }
         return trimmed;
+    }
+
+    public static boolean supportsGeneratedColumns(String dbVersion) {
+        String trimmed = StringUtils.trimToEmpty(dbVersion);
+        java.util.regex.Matcher matcher = MYSQL_VERSION_PATTERN.matcher(trimmed);
+        if (!matcher.matches()) {
+            return false;
+        }
+        int major = Integer.parseInt(matcher.group(1));
+        int minor = Integer.parseInt(matcher.group(2));
+        int patch = matcher.group(3) == null ? 0 : Integer.parseInt(matcher.group(3));
+        return major > 5 || (major == 5 && (minor > 7 || (minor == 7 && patch >= 6)));
+    }
+
+    public static String generatedColumnUnsupportedReason(String dbVersion) {
+        String trimmed = StringUtils.trimToNull(dbVersion);
+        if (supportsGeneratedColumns(trimmed)) {
+            return null;
+        }
+        if (trimmed == null) {
+            return "Generated columns require a MySQL server version to be detected";
+        }
+        return "Generated columns require MySQL " + GENERATED_COLUMN_MIN_VERSION + " or newer";
+    }
+
+    public static String requireGeneratedColumnExpression(String value) {
+        String expression = StringUtils.trimToEmpty(value);
+        if (expression.isEmpty() || expression.contains(";") || expression.contains("/*")
+                || expression.contains("*/") || expression.contains("--") || expression.contains("#")) {
+            throw new IllegalArgumentException("Invalid generated column expression");
+        }
+        validateBalancedExpression(expression);
+        validateNoUnsafeExpressionKeywords(expression);
+        return expression;
+    }
+
+    public static String requireGeneratedColumnStorageType(String value) {
+        String storage = StringUtils.defaultIfBlank(value, "VIRTUAL").trim();
+        if ("VIRTUAL".equalsIgnoreCase(storage)) {
+            return "VIRTUAL";
+        }
+        if ("STORED".equalsIgnoreCase(storage)) {
+            return "STORED";
+        }
+        throw new IllegalArgumentException("Invalid generated column storage type");
+    }
+
+    private static void validateBalancedExpression(String expression) {
+        int parentheses = 0;
+        char quote = 0;
+        for (int i = 0; i < expression.length(); i++) {
+            char current = expression.charAt(i);
+            if (Character.isISOControl(current)) {
+                throw new IllegalArgumentException("Invalid generated column expression");
+            }
+            if (quote != 0) {
+                if (current == '\\') {
+                    i++;
+                } else if (current == quote) {
+                    if (i + 1 < expression.length() && expression.charAt(i + 1) == quote) {
+                        i++;
+                    } else {
+                        quote = 0;
+                    }
+                }
+                continue;
+            }
+            if (current == '\'' || current == '"' || current == '`') {
+                quote = current;
+            } else if (current == '(') {
+                parentheses++;
+            } else if (current == ')') {
+                if (parentheses == 0) {
+                    throw new IllegalArgumentException("Invalid generated column expression");
+                }
+                parentheses--;
+            }
+        }
+        if (quote != 0 || parentheses != 0) {
+            throw new IllegalArgumentException("Invalid generated column expression");
+        }
+    }
+
+    private static void validateNoUnsafeExpressionKeywords(String expression) {
+        char quote = 0;
+        StringBuilder unquoted = new StringBuilder(expression.length());
+        for (int i = 0; i < expression.length(); i++) {
+            char current = expression.charAt(i);
+            if (quote != 0) {
+                if (current == '\\') {
+                    i++;
+                } else if (current == quote) {
+                    if (i + 1 < expression.length() && expression.charAt(i + 1) == quote) {
+                        i++;
+                    } else {
+                        quote = 0;
+                    }
+                }
+                continue;
+            }
+            if (current == '\'' || current == '"' || current == '`') {
+                quote = current;
+                unquoted.append(' ');
+            } else {
+                unquoted.append(current);
+            }
+        }
+        if (UNSAFE_GENERATED_EXPRESSION_KEYWORD_PATTERN.matcher(unquoted).find()) {
+            throw new IllegalArgumentException("Invalid generated column expression");
+        }
     }
 
     /**

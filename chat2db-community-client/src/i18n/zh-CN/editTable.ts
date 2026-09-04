@@ -26,6 +26,16 @@ export default {
   'editTable.label.updateTime': '根据当前时间戳更新',
   'editTable.label.sparse': '稀疏',
   'editTable.label.characterSet': '字符集',
+  'editTable.label.generationExpression': '生成列表达式',
+  'editTable.label.generationExpressionPlaceholder': "例如 concat(a, '-', b)",
+  'editTable.label.generatedColumnType': '生成列类型',
+  'editTable.label.notGeneratedColumn': '非生成列',
+  'editTable.title.generatedColumnStorageRebuild': '确认重建生成列',
+  'editTable.tips.generatedColumnStorageRebuild':
+    '在 VIRTUAL 和 STORED 之间转换生成列可能重建表、锁定行并校验现有数据。确认后再预览此 SQL。',
+  'editTable.tips.generatedColumnMetadataUnavailable':
+    '生成列元数据不完整。请使用可读取生成表达式的账号刷新后再编辑此列。',
+  'editTable.tips.invalidGeneratedColumnExpression': '请先输入安全的生成列表达式，再预览 SQL。',
   'editTable.label.collation': '排序规则',
   'editTable.label.decimalPoint': '小数点',
   'editTable.label.unit': '单位',

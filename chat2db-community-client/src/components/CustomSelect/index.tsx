@@ -11,10 +11,11 @@ interface IProps {
   options: IOption[];
   onChange?: any;
   value?: any;
+  disabled?: boolean;
 }
 
 const CustomSelect = memo<IProps>((props: IProps) => {
-  const { options, onChange, value } = props;
+  const { options, onChange, value, disabled } = props;
   const [customOptions, setCustomOptions] = useState<IOption[]>([]);
   const [customValue, setCustomValue] = useState<string>('');
   const [curSearch, setCurSearch] = useState<string | null>(null);
@@ -61,6 +62,7 @@ const CustomSelect = memo<IProps>((props: IProps) => {
       allowClear
       onChange={customChange}
       value={customValue}
+      disabled={disabled}
       showSearch
       onSearch={onSearch}
       options={filtrationCustomOptions(customOptions)}

@@ -15,6 +15,11 @@ import { staticMessage } from '@chat2db/ui';
 import AIEntryButton from '@/components/AIEntryButton';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
+import {
+  hasGeneratedColumnStorageConversion,
+  isGeneratedColumn,
+  validateGeneratedColumnExpression,
+} from './ColumnList/generatedColumn';
 
 interface IProps {
   databaseBaseInfo: IDatabaseBaseInfo;
@@ -50,6 +55,9 @@ export interface IDatabaseSupportField {
   indexTypes: IOption[];
   defaultValues: IOption[];
   engineTypes: IOption[];
+  generatedColumnSupported?: boolean;
+  generatedColumnMinVersion?: string;
+  generatedColumnUnsupportedReason?: string;
 }
 
 export default memo((props: IProps) => {
@@ -100,6 +108,7 @@ export default memo((props: IProps) => {
     indexTypes: [],
     defaultValues: [],
     engineTypes: [],
+    generatedColumnSupported: false,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { styles, cx } = useStyles();
@@ -122,6 +131,9 @@ export default memo((props: IProps) => {
 
   // Get database field type list
   const getDatabaseFieldTypeList = () => {
+    if (dataSourceId === undefined || databaseName === undefined) {
+      return;
+    }
     sqlService
       .getDatabaseFieldTypeList({
         dataSourceId,
@@ -184,14 +196,35 @@ export default memo((props: IProps) => {
           indexTypes,
           defaultValues,
           engineTypes,
+          generatedColumnSupported: res?.generatedColumnSupported === true,
+          generatedColumnMinVersion: res?.generatedColumnMinVersion,
+          generatedColumnUnsupportedReason: res?.generatedColumnUnsupportedReason,
         });
       });
+  };
+
+  const previewModifySql = (params: IModifyTableSqlParams) => {
+    sqlService.getModifyTableSql(params).then((res) => {
+      setViewSqlModal(true);
+      setAppendValue(res?.[0].sql);
+    });
+  };
+
+  const validateGeneratedColumns = (table: IEditTableInfo) => {
+    const invalidColumn = table.columnList?.find(
+      (column) => isGeneratedColumn(column) && !validateGeneratedColumnExpression(column.generationExpression),
+    );
+    if (!invalidColumn) {
+      return true;
+    }
+    staticMessage.error(i18n('editTable.tips.invalidGeneratedColumnExpression'));
+    return false;
   };
 
   const getTableDetails = (myParams?: { tableNameProps?: string }) => {
     const { tableNameProps } = myParams || {};
     const myTableName = tableNameProps || tableName;
-    if (myTableName) {
+    if (myTableName && dataSourceId !== undefined) {
       const params = {
         databaseName,
         dataSourceId,
@@ -215,6 +248,9 @@ export default memo((props: IProps) => {
 
   function submit() {
     if (baseInfoRef.current && columnListRef.current && indexListRef.current) {
+      if (dataSourceId === undefined || databaseName === undefined) {
+        return;
+      }
       const newTable = {
         ...oldTableDetails,
         ...baseInfoRef.current.getBaseInfo(),
@@ -234,10 +270,20 @@ export default memo((props: IProps) => {
         // params.tableName = tableName;
         params.oldTable = oldTableDetails;
       }
-      sqlService.getModifyTableSql(params).then((res) => {
-        setViewSqlModal(true);
-        setAppendValue(res?.[0].sql);
-      });
+      if (!validateGeneratedColumns(newTable)) {
+        return;
+      }
+      if (hasGeneratedColumnStorageConversion(oldTableDetails, newTable)) {
+        Modal.confirm({
+          title: i18n('editTable.title.generatedColumnStorageRebuild'),
+          content: i18n('editTable.tips.generatedColumnStorageRebuild'),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+          onOk: () => previewModifySql({ ...params, allowGeneratedColumnStorageRebuild: true }),
+        });
+        return;
+      }
+      previewModifySql(params);
     }
   }
 

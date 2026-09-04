@@ -160,6 +160,8 @@ public class TableColumn implements Serializable {
 
 
     private Boolean generatedColumn;
+    private String generationExpression;
+    private String generatedColumnType;
 
     private Boolean visible;
 
@@ -187,11 +189,11 @@ public class TableColumn implements Serializable {
         if (this == o) { return true;}
         if (o == null || getClass() != o.getClass()) { return false;}
         TableColumn that = (TableColumn) o;
-        return Objects.equals(name, that.name) && Objects.equals(tableName, that.tableName) && Objects.equals(columnType, that.columnType) && Objects.equals(defaultValue, that.defaultValue) && Objects.equals(autoIncrement, that.autoIncrement) && Objects.equals(comment, that.comment) && Objects.equals(columnSize, that.columnSize) && Objects.equals(decimalDigits, that.decimalDigits) && Objects.equals(numPrecRadix, that.numPrecRadix) && Objects.equals(sqlDataType, that.sqlDataType) && Objects.equals(ordinalPosition, that.ordinalPosition) && Objects.equals(nullable, that.nullable) && Objects.equals(visible, that.visible) && Objects.equals(extent, that.extent) && Objects.equals(charSetName, that.charSetName) && Objects.equals(collationName, that.collationName) && Objects.equals(value, that.value) && Objects.equals(unit, that.unit) && Objects.equals(sparse, that.sparse) && Objects.equals(defaultConstraintName, that.defaultConstraintName) && Objects.equals(seed, that.seed) && Objects.equals(increment, that.increment);
+        return Objects.equals(name, that.name) && Objects.equals(tableName, that.tableName) && Objects.equals(columnType, that.columnType) && Objects.equals(defaultValue, that.defaultValue) && Objects.equals(autoIncrement, that.autoIncrement) && Objects.equals(comment, that.comment) && Objects.equals(columnSize, that.columnSize) && Objects.equals(decimalDigits, that.decimalDigits) && Objects.equals(numPrecRadix, that.numPrecRadix) && Objects.equals(sqlDataType, that.sqlDataType) && Objects.equals(ordinalPosition, that.ordinalPosition) && Objects.equals(nullable, that.nullable) && Objects.equals(generatedColumn, that.generatedColumn) && Objects.equals(generationExpression, that.generationExpression) && Objects.equals(generatedColumnType, that.generatedColumnType) && Objects.equals(visible, that.visible) && Objects.equals(extent, that.extent) && Objects.equals(charSetName, that.charSetName) && Objects.equals(collationName, that.collationName) && Objects.equals(value, that.value) && Objects.equals(unit, that.unit) && Objects.equals(sparse, that.sparse) && Objects.equals(defaultConstraintName, that.defaultConstraintName) && Objects.equals(seed, that.seed) && Objects.equals(increment, that.increment);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, tableName, columnType, defaultValue, autoIncrement, comment, columnSize, decimalDigits, numPrecRadix, sqlDataType, ordinalPosition, nullable, visible, extent, charSetName, collationName, value, unit, sparse, defaultConstraintName, seed, increment);
+        return Objects.hash(name, tableName, columnType, defaultValue, autoIncrement, comment, columnSize, decimalDigits, numPrecRadix, sqlDataType, ordinalPosition, nullable, generatedColumn, generationExpression, generatedColumnType, visible, extent, charSetName, collationName, value, unit, sparse, defaultConstraintName, seed, increment);
     }
 }

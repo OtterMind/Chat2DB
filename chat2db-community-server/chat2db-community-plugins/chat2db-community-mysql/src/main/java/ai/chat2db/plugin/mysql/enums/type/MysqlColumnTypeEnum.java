@@ -6,6 +6,8 @@ import ai.chat2db.spi.IColumnBuilder;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.community.domain.api.model.metadata.ColumnType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.SqlUtils;
 import com.google.common.collect.Maps;
 import lombok.Getter;
@@ -175,19 +177,40 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
         script.append(buildDataType(column, type)).append(" ");
 
-        script.append(buildCharset(column, type)).append(" ");
+        String charset = buildCharset(column, type);
+        if (StringUtils.isNotBlank(charset)) {
+            script.append(charset).append(" ");
+        }
 
-        script.append(buildCollation(column, type)).append(" ");
+        String collation = buildCollation(column, type);
+        if (StringUtils.isNotBlank(collation)) {
+            script.append(collation).append(" ");
+        }
+
+        boolean generated = isGeneratedColumn(column);
+        if (generated) {
+            // MySQL column grammar: data_type [GENERATED ALWAYS] AS (expr) [VIRTUAL|STORED]
+            // [NOT NULL] [UNIQUE ...] [COMMENT ...]. Generated columns cannot carry a
+            // DEFAULT, AUTO_INCREMENT, or ON UPDATE clause, so those are skipped.
+            requireGeneratedColumnSupported();
+            String expression = MysqlSqlGuards.requireGeneratedColumnExpression(column.getGenerationExpression());
+            String storage = MysqlSqlGuards.requireGeneratedColumnStorageType(column.getGeneratedColumnType());
+            script.append("GENERATED ALWAYS AS (").append(expression).append(") ")
+                    .append(storage).append(" ");
+        }
 
         script.append(buildNullable(column, type)).append(" ");
 
-        script.append(buildDefaultValue(column, type)).append(" ");
-
-        script.append(OnUpdateCurrentTimestamp(column,type)).append(" ");
+        if (!generated) {
+            script.append(buildDefaultValue(column, type)).append(" ");
+            script.append(OnUpdateCurrentTimestamp(column, type)).append(" ");
+        }
 
         script.append(buildExt(column, type)).append(" ");
 
-        script.append(buildAutoIncrement(column, type)).append(" ");
+        if (!generated) {
+            script.append(buildAutoIncrement(column, type)).append(" ");
+        }
 
         // MySQL column grammar puts VISIBLE/INVISIBLE before COMMENT; emitting it after the
         // comment produces ERROR 1064 for columns that carry a comment.
@@ -204,6 +227,9 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildAICreateColumnSql(TableColumn column) {
+        if (isGeneratedColumn(column)) {
+            return buildCreateColumnSql(column);
+        }
         MysqlColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
         if (type == null) {
             return buildDefaultColumn(column,true);
@@ -239,6 +265,24 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
             return "";
         }
         return StringUtils.join("CHARACTER SET ", MysqlSqlGuards.requireMysqlName(column.getCharSetName(), "charset"));
+    }
+
+    private void requireGeneratedColumnSupported() {
+        String dbVersion = null;
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo != null) {
+            dbVersion = Chat2DBContext.getDbVersion();
+        }
+        if (!MysqlSqlGuards.supportsGeneratedColumns(dbVersion)) {
+            throw new IllegalArgumentException("Generated columns require MySQL "
+                    + MysqlSqlGuards.GENERATED_COLUMN_MIN_VERSION + " or newer");
+        }
+    }
+
+    private static boolean isGeneratedColumn(TableColumn column) {
+        return column != null
+                && (Boolean.TRUE.equals(column.getGeneratedColumn())
+                || StringUtils.isNotBlank(column.getGenerationExpression()));
     }
 
     private String buildCollation(TableColumn column, MysqlColumnTypeEnum type) {

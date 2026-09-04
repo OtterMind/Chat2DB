@@ -35,6 +35,8 @@ function column(overrides: Partial<IColumnItemNew>): IColumnItemNew {
     ordinalPosition: null,
     nullable: null,
     generatedColumn: null,
+    generationExpression: null,
+    generatedColumnType: null,
     charSetName: null,
     collationName: null,
     value: null,
@@ -70,6 +72,30 @@ assertEqual(
   normalizeColumnForSubmit(column({ columnType: 'VARCHAR', decimalDigits: '4' })).columnSize,
   null,
   'do not default non-DECIMAL precision',
+);
+
+assertEqual(
+  normalizeColumnForSubmit(
+    column({
+      columnType: 'INT',
+      defaultValue: '0',
+      autoIncrement: true,
+      generationExpression: ' `amount` * 2 ',
+      generatedColumnType: null,
+    }),
+  ),
+  {
+    ...column({
+      columnType: 'INT',
+      defaultValue: null,
+      autoIncrement: false,
+      onUpdateCurrentTimestamp: false,
+      generatedColumn: true,
+      generationExpression: '`amount` * 2',
+      generatedColumnType: 'VIRTUAL',
+    }),
+  },
+  'generated columns clear incompatible defaults and use VIRTUAL by default',
 );
 
 assertEqual(
