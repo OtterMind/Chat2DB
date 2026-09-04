@@ -86,6 +86,7 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
         request.setSchemaName(spec.getTarget().getSchemaName());
         request.setResultSetId(spec.getResultSetId());
         request.setExportSize(spec.getExportSize());
+        request.setCsvOptions(spec.getCsvOptions());
         request.setExportType(switch (TaskFileFormat.valueOf(format)) {
             case CSV -> ExportTypeEnum.CSV.name();
             case XLSX -> ExportTypeEnum.EXCEL.name();

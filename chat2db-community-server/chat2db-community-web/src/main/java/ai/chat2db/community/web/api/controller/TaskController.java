@@ -88,6 +88,12 @@ public class TaskController {
         return ActionResult.isSuccess();
     }
 
+    @PostMapping("/cancel")
+    public ActionResult cancel(@Valid @RequestBody TaskIdRequest request) {
+        taskService.cancel(request.getTaskId());
+        return ActionResult.isSuccess();
+    }
+
     @GetMapping("/artifact")
     public ResponseEntity<Resource> artifact(@Valid TaskIdRequest request) {
         return taskDownloadWebConverter.toResponse(taskService.resolveArtifact(request.getTaskId()));

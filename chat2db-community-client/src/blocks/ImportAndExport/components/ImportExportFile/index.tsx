@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
-import UploadLocalFile from '@/components/UploadLocalFile';
+import UploadLocalFile, { type FileUrl } from '@/components/UploadLocalFile';
 import { Form, Input, Select } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
@@ -13,6 +13,7 @@ import jcefApi from '@/jcef';
 interface IProps {
   className?: string;
   setIsReady?: (p: boolean) => void;
+  onImportFileChange?: (file: FileUrl) => void;
 }
 
 export interface ImportExportFileRef {
@@ -82,7 +83,11 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   }, [exportLocation, formValue]);
 
   const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+    const paths = _fileUrlList.map((item) => item.filePath);
+    setFileUrlList(paths);
+    if (isImport && _fileUrlList[0] && props.onImportFileChange) {
+      props.onImportFileChange(_fileUrlList[0]);
+    }
   };
 
   useImperativeHandle(ref, () => ({

@@ -179,6 +179,17 @@ export const useStyles = createStyles(({ css, token, cx }) => {
       font-variant-numeric: tabular-nums;
       text-align: right;
     `,
+    taskMessage: css`
+      grid-column: 1 / -1;
+      grid-row: 4;
+      min-width: 0;
+      margin-top: 5px;
+      overflow: hidden;
+      color: ${token.colorTextSecondary};
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `,
     timingTooltip: css`
       display: grid;
       gap: 2px;

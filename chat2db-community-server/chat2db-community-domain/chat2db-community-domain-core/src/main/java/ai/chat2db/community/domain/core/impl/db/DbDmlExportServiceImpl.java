@@ -52,6 +52,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Array;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -120,7 +121,7 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         ExportTypeEnum exportType = ExportTypeEnum.from(param.getExportType());
         if (ExportTypeEnum.CSV == exportType) {
             exportCsv(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
-                    rowListener, finalizationListener);
+                    rowListener, finalizationListener, param.getCsvOptions());
             return;
         }
         if (ExportTypeEnum.EXCEL == exportType) {
@@ -170,31 +171,33 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
 
     private void exportCsv(SqlExecutionPlan plan, OutputStream outputStream, Integer resultSetId,
             ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
-            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) {
-        ExcelWrapper excelWrapper = new ExcelWrapper();
+            LongConsumer exportedRowsListener, Runnable fileFinalizationListener,
+            ai.chat2db.community.domain.api.model.task.CsvOptions csvOptions) {
         IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-        try {
-            ExcelWriterBuilder excelWriterBuilder = EasyExcel.write(outputStream)
-                    .charset(StandardCharsets.UTF_8)
-                    .excelType(ExcelTypeEnum.CSV);
+        try (CsvWriter csvWriter = new CsvWriter(csvOptions, outputStream)) {
             List<Integer> includedIndexes = new ArrayList<>();
             DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
                 includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
-                excelWriterBuilder.head(EasyCollectionUtils.toList(select(headerList, includedIndexes),
-                        header -> Lists.newArrayList(header.getName())));
-                excelWrapper.setExcelWriter(excelWriterBuilder.build());
-                excelWrapper.setWriteSheet(EasyExcel.writerSheet(0).build());
+                try {
+                    csvWriter.writeRow(select(headerList, includedIndexes).stream().map(Header::getName).toList());
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
             }, dataList -> {
-                excelWrapper.getExcelWriter().write(List.of(select(dataList, includedIndexes)),
-                        excelWrapper.getWriteSheet());
+                try {
+                    csvWriter.writeRow(select(dataList, includedIndexes));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
                 exportedRowsListener.accept(1L);
             }, exportValueFormatter(plan, valueProcessor, false), false, resultSetId, statementListener,
                     cancellationChecker, plan.getMaxRows());
             fileFinalizationListener.run();
-        } finally {
-            if (excelWrapper.getExcelWriter() != null) {
-                excelWrapper.getExcelWriter().finish();
-            }
+        } catch (UncheckedIOException e) {
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(), "Could not write CSV export",
+                    e.getCause());
+        } catch (IOException e) {
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(), "Could not write CSV export", e);
         }
     }
 

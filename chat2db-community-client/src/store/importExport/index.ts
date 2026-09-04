@@ -4,7 +4,7 @@ import { createWithEqualityFn } from 'zustand/traditional';
 import { StateCreator } from 'zustand/vanilla';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { ImportExportDataBoundInfo, ImportExportTaskDetails } from '@/typings/importExport';
-import { ImportExportTaskStatus } from '@/constants/importExport';
+import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/importExport';
 import importExportServices from '@/service/importExport';
 import {
   getTaskPollingDelay,
@@ -101,10 +101,11 @@ export const createImportExportAction: StateCreator<
       importExportServices.getTaskList({ pageNo: 1, pageSize: TASK_CENTER_PAGE_SIZE }),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.PENDING),
       listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.RUNNING),
+      listAllTasksByStatus(importExportServices.getTaskList, ImportExportTaskStatus.CANCELLING),
     ])
-      .then(async ([recentPage, pendingTasks, runningTasks]) => {
+      .then(async ([recentPage, pendingTasks, runningTasks, cancellingTasks]) => {
         if (requestGeneration !== taskListRequestGeneration) return;
-        const activeTasks = mergeTasks(pendingTasks, runningTasks);
+        const activeTasks = mergeTasks(pendingTasks, runningTasks, cancellingTasks);
         const previouslyLoadedTasks = get().taskList.filter((task) => !previousActiveTaskIds.includes(task.id));
         const visibleTasks = mergeTasks(previouslyLoadedTasks, recentPage.data || [], activeTasks);
         const recovered = await loadMissingTrackedTasks(
@@ -115,7 +116,7 @@ export const createImportExportAction: StateCreator<
         if (requestGeneration !== taskListRequestGeneration) return;
         const taskList = mergeTasks(visibleTasks, recovered.tasks);
         const recoveredActiveTaskIds = recovered.tasks
-          .filter((task) => [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING].includes(task.status))
+          .filter((task) => ACTIVE_TASK_STATUSES.includes(task.status))
           .map((task) => task.id);
         const activeTaskIds = [
           ...new Set([
@@ -173,10 +174,7 @@ export const createImportExportAction: StateCreator<
     return importExportServices
       .getTaskList({ pageNo: 1, pageSize: nextPageSize })
       .then((page) => {
-        const activeStatuses = new Set<ImportExportTaskStatus>([
-          ImportExportTaskStatus.PENDING,
-          ImportExportTaskStatus.RUNNING,
-        ]);
+        const activeStatuses = new Set<ImportExportTaskStatus>(ACTIVE_TASK_STATUSES);
         const activeTasks = get().taskList.filter((task) => activeStatuses.has(task.status));
         set({
           taskList: mergeTasks(page.data || [], activeTasks),

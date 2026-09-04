@@ -40,4 +40,6 @@ public class ExportTaskSpec implements TaskSpec {
     private String exportPath;
 
     private String suggestedFileName;
+
+    private CsvOptions csvOptions;
 }

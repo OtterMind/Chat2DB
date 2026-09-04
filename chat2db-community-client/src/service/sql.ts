@@ -436,6 +436,66 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Import preview and column mapping (MYSQL-IMPORT-001). */
+export interface IImportPreview {
+  sourceColumns: { name: string; sampleValues: { value: string; type: string }[] }[];
+  targetColumns: {
+    name: string;
+    dataType: string;
+    nullable: boolean;
+    autoIncrement: boolean;
+    defaultValue: string | null;
+  }[];
+  suggestedMapping: { sourceColumn: string; targetColumn: string }[];
+  previewLimit: number;
+  previewRows: number;
+}
+
+export interface IImportTaskSubmitResult {
+  taskId: number;
+}
+
+export interface ICsvOptions {
+  encoding: string;
+  delimiter: string;
+  quote: string;
+  escape: string;
+  newline: string;
+  hasHeader: boolean;
+  emptyAsNull: boolean;
+}
+
+const getImportPreview = createRequest<
+  {
+    dataSourceId: number;
+    databaseName: string;
+    schemaName?: string;
+    tableName: string;
+    fileId: string;
+    csvOptions?: string;
+  },
+  IImportPreview
+>('/api/rdb/import_preview/preview', { method: 'post', requestBody: true });
+
+const executeImportWithMapping = createRequest<
+  {
+    dataSourceId: number;
+    databaseName: string;
+    schemaName?: string;
+    tableName: string;
+    fileId: string;
+    mappings: { sourceColumn: string | null; targetColumn: string }[];
+    unmappedTarget: 'DEFAULT' | 'NULL';
+    csvOptions?: ICsvOptions;
+  },
+  IImportTaskSubmitResult
+>('/api/rdb/import_preview/execute', { method: 'post', requestBody: true });
+
+const uploadImportFile = createRequest<{ file: File }, string>('/api/rdb/import_preview/upload', {
+  method: 'post',
+  contentType: 'formData',
+});
+
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +613,9 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getImportPreview,
+  executeImportWithMapping,
+  uploadImportFile,
   getActiveTransactionList,
   getDataSourceList,
 };

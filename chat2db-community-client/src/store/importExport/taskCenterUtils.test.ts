@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
+import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import {
   FAILED_TASK_POLL_INTERVAL,
@@ -10,6 +10,7 @@ import {
   mergeTasks,
   reconcileCompletedTaskNotifications,
   shouldKeepTaskPolling,
+  shouldRefreshImportTargetTable,
   shouldRetryTaskPolling,
 } from './taskCenterUtils';
 import { ErrorCode } from '@/constants/request';
@@ -110,6 +111,7 @@ function testEventMerge() {
 }
 
 function testPollingDelay() {
+  assert.ok(ACTIVE_TASK_STATUSES.includes(ImportExportTaskStatus.CANCELLING));
   assert.equal(getTaskPollingDelay(1), 1000);
   assert.equal(getTaskPollingDelay(0), null);
   assert.equal(getTaskPollingDelay(0, true), FAILED_TASK_POLL_INTERVAL);
@@ -171,6 +173,38 @@ function testCompletedTaskNotifications() {
   assert.deepEqual(afterDeletion.newlyCompletedTaskIds, []);
 }
 
+function testImportTargetRefreshWaitsForTerminalImportResult() {
+  const runningImport = {
+    ...task(10, ImportExportTaskStatus.RUNNING, '2026-08-06T10:00:00Z', 45),
+    type: ImportExportTaskType.DATA_FILE_IMPORT,
+    target: {
+      dataSourceId: 7,
+      databaseName: 'app',
+      tableName: 'orders',
+    },
+  };
+  const successfulImport = {
+    ...runningImport,
+    status: ImportExportTaskStatus.SUCCESS,
+    progress: 100,
+  };
+  const failedImport = {
+    ...runningImport,
+    status: ImportExportTaskStatus.FAILED,
+  };
+  const activeExport = {
+    ...runningImport,
+    type: ImportExportTaskType.TABLE_DATA_EXPORT,
+  };
+
+  assert.equal(shouldRefreshImportTargetTable(undefined, runningImport), false);
+  assert.equal(shouldRefreshImportTargetTable(undefined, successfulImport), true);
+  assert.equal(shouldRefreshImportTargetTable(runningImport, activeExport), false);
+  assert.equal(shouldRefreshImportTargetTable(runningImport, failedImport), false);
+  assert.equal(shouldRefreshImportTargetTable(runningImport, successfulImport), true);
+  assert.equal(shouldRefreshImportTargetTable(successfulImport, successfulImport), false);
+}
+
 void testActiveTaskPagination().then(async () => {
   await testCompletedTrackedTaskOutsideRecentPage();
   testTaskMerge();
@@ -178,5 +212,5 @@ void testActiveTaskPagination().then(async () => {
   testPollingDelay();
   testPollingRetryPolicy();
   testCompletedTaskNotifications();
-  console.log('Task center utility tests passed');
+  testImportTargetRefreshWaitsForTerminalImportResult();
 });

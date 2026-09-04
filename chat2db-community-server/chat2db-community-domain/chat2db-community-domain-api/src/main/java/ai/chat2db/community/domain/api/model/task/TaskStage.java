@@ -9,6 +9,7 @@ public enum TaskStage {
     EXPORTING,
     IMPORTING,
     FINALIZING,
+    CANCELLING,
     COMPLETED,
     FAILED,
     CANCELLED

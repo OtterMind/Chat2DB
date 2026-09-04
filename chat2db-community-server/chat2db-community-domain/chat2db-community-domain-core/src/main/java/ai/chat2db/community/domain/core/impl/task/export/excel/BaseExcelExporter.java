@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.task.export.excel;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.db.CsvWriter;
 import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
@@ -24,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.SpreadsheetVersion;
 
 import java.io.File;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -75,7 +77,14 @@ public abstract class BaseExcelExporter extends BaseExporter {
         ExportProgressLogger progressLogger = new ExportProgressLogger(context, excelType.name(), tableName);
         progressLogger.queryStarted("Reading table data from " + tableName);
         DefaultSQLExecutor.getInstance().execute(connection, executionPlan.getSql(), BATCH_SIZE, resultSet ->
-                writeExcelData(resultSet, excelType, file, tableName, spec, executionPlan, context, progressLogger),
+                {
+                    if (excelType == ExcelTypeEnum.CSV) {
+                        writeCsvData(resultSet, file, tableName, spec, executionPlan, context, progressLogger);
+                    } else {
+                        writeExcelData(resultSet, excelType, file, tableName, spec, executionPlan, context,
+                                progressLogger);
+                    }
+                },
                 context, context::checkCancelled);
     }
 
@@ -137,6 +146,46 @@ public abstract class BaseExcelExporter extends BaseExporter {
             log.error("Error writing Excel data", e);
             throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
                     "Could not write Excel export", e);
+        }
+    }
+
+    private void writeCsvData(ResultSet resultSet, File file, String tableName, ExportTaskSpec spec,
+            SqlExecutionPlan executionPlan, TaskExecutionContext context, ExportProgressLogger progressLogger) {
+        try (OutputStream outputStream = java.nio.file.Files.newOutputStream(file.toPath());
+                CsvWriter csvWriter = new CsvWriter(spec.getCsvOptions(), outputStream)) {
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            List<Integer> includedColumnIndexes = includedColumnIndexes(metaData, executionPlan);
+            IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
+            if (Boolean.TRUE.equals(spec.getContainsHeader())) {
+                csvWriter.writeRow(selectColumns(ResultSetUtils.getRsHeader(resultSet), includedColumnIndexes));
+            }
+            int exportedRows = 0;
+            boolean hasNext = nextRow(resultSet, executionPlan, exportedRows);
+            while (hasNext) {
+                context.checkCancelled();
+                List<Object> rowDataList = new ArrayList<>(includedColumnIndexes.size());
+                for (Integer columnIndex : includedColumnIndexes) {
+                    JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, columnIndex, false);
+                    if (hasExportCellProcessors()) {
+                        ExportCell cell = processJdbcCell(spec, metaData, columnIndex, tableName, jdbcDataValue);
+                        rowDataList.add(cell.getValue());
+                    } else {
+                        rowDataList.add(valueProcessor.getJdbcValue(jdbcDataValue));
+                    }
+                }
+                csvWriter.writeRow(rowDataList);
+                progressLogger.recordExportedRow();
+                exportedRows++;
+                hasNext = nextRow(resultSet, executionPlan, exportedRows);
+            }
+            progressLogger.queryCompleted("Table data read completed");
+            progressLogger.fileFinalizing();
+        } catch (TaskCancelledException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error writing CSV data", e);
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
+                    "Could not write CSV export", e);
         }
     }
 

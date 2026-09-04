@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.api.model.task;
 public enum TaskStatus {
     PENDING,
     RUNNING,
+    CANCELLING,
     SUCCESS,
     FAILED,
     CANCELLED;
