@@ -1,0 +1,3 @@
+-- MYSQL-OBJ-009: Cleanup
+DROP DATABASE IF EXISTS `obj009_test`;
+DROP USER IF EXISTS 'obj009_admin'@'%';

@@ -108,6 +108,10 @@ public interface IPlugin {
         return null;
     }
 
+    default IPartitionManager getPartitionManager() {
+        return null;
+    }
+
     /**
      * Returns the optional active transaction manager for this plugin.
      *

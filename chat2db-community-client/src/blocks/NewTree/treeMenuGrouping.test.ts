@@ -21,7 +21,7 @@ const defaultTableMenu = dropMenuConfig.DEFAULT[TreeNodeType.TABLE];
 assert.deepEqual(splitGroups(defaultTableMenu), [
   [OperationColumn.OpenTable, OperationColumn.EditTable],
   [OperationColumn.CreateConsole, OperationColumn.Pin],
-  [OperationColumn.CopyName, OperationColumn.ViewDDL, OperationColumn.CopyTable],
+  [OperationColumn.CopyName, OperationColumn.ViewDDL, OperationColumn.Partitions, OperationColumn.CopyTable],
   [
     OperationColumn.ImportData,
     OperationColumn.ExportData,

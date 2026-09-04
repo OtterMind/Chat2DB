@@ -53,6 +53,9 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import PartitionsContent from '../components/PartitionsContent';
+import { canInspectMysqlPartitions } from '../components/PartitionsContent/partitionOperations';
+import { PARTITION_REQUIRED_OPERATIONS } from '../components/PartitionsContent/partitionPrivileges';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
 import type { ResourceOperation, ResourceOperationCapabilities } from '@/client-extension/types';
@@ -402,6 +405,28 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.Partitions]: {
+        text: i18n('workspace.ops.partitions'),
+        icon: 'icon-table',
+        discard: !canInspectMysqlPartitions(databaseType),
+        requiredOperations: PARTITION_REQUIRED_OPERATIONS,
+        handle: () => {
+          staticModal.confirm({
+            title: i18n('workspace.ops.partitions'),
+            content: (
+              <PartitionsContent
+                dataSourceId={dataSourceId!}
+                databaseName={extraParams.databaseName}
+                schemaName={extraParams.schemaName}
+                tableName={treeNodeData.originalTitle}
+              />
+            ),
+            footer: null,
+            width: 1150,
           });
         },
       },

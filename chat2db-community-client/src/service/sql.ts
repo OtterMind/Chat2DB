@@ -436,6 +436,67 @@ export interface ICopyTableParams extends ITableParams {
 const copyTable = createRequest<ICopyTableParams, void>('/api/rdb/table/copy', { method: 'post' });
 
 
+/** Partitions (MYSQL-OBJ-009). */
+export interface IPartitionItem {
+  partitionName: string | null;
+  subpartitionName: string | null;
+  ordinalPosition: number | null;
+  subpartitionOrdinalPosition: number | null;
+  method: string | null;
+  subpartitionMethod: string | null;
+  expression: string | null;
+  subpartitionExpression: string | null;
+  description: string | null;
+  tableRows: number | null;
+  avgRowLength: number | null;
+  dataLength: number | null;
+  maxDataLength: number | null;
+  indexLength: number | null;
+  dataFree: number | null;
+  createTime: string | null;
+  updateTime: string | null;
+  checkTime: string | null;
+  checksum: number | null;
+  comment: string | null;
+  nodegroup: string | null;
+  tablespaceName: string | null;
+}
+
+interface IPartitionRequest {
+  dataSourceId: number;
+  databaseName: string;
+  schemaName?: string | null;
+  tableName: string;
+}
+
+const getPartitionList = createRequest<IPartitionRequest, IPartitionItem[]>(
+  '/api/rdb/partition/list',
+  { method: 'post' },
+);
+const getPartitionTruncateSql = createRequest<
+  IPartitionRequest & { partitionName: string },
+  string
+>('/api/rdb/partition/truncate_sql', { method: 'post' });
+const getPartitionDropSql = createRequest<
+  IPartitionRequest & { partitionName: string },
+  string
+>('/api/rdb/partition/drop_sql', { method: 'post' });
+const getPartitionAddSql = createRequest<
+  IPartitionRequest & { partitionName?: string; partitionDefinition?: string; count?: number },
+  string
+>('/api/rdb/partition/add_sql', { method: 'post' });
+const getPartitionReorganizeSql = createRequest<
+  IPartitionRequest & { partitionName: string; partitionDefinitions: string },
+  string
+>('/api/rdb/partition/reorganize_sql', { method: 'post' });
+const getPartitionCoalesceSql = createRequest<
+  IPartitionRequest & { count: number },
+  string
+>('/api/rdb/partition/coalesce_sql', { method: 'post' });
+const getPartitionMaintainSql = createRequest<
+  IPartitionRequest & { operation: string; partitionName?: string },
+  string
+>('/api/rdb/partition/maintain_sql', { method: 'post' });
 /** Active InnoDB transactions (MYSQL-OPS-002). */
 export interface IActiveTransactionItem {
   trxId: string | null;
@@ -553,6 +614,13 @@ export default {
   getAllTableList,
   getAllFieldByTable,
   checkIsSelectSQL,
+  getPartitionList,
+  getPartitionTruncateSql,
+  getPartitionDropSql,
+  getPartitionAddSql,
+  getPartitionReorganizeSql,
+  getPartitionCoalesceSql,
+  getPartitionMaintainSql,
   getActiveTransactionList,
   getDataSourceList,
 };
