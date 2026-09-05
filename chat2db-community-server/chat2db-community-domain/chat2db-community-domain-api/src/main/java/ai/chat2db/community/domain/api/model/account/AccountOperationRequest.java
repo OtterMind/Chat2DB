@@ -19,4 +19,9 @@ public class AccountOperationRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private String authPlugin;
+    private String tlsRequirement;
+    private String tlsCipher;
+    private String tlsIssuer;
+    private String tlsSubject;
 }

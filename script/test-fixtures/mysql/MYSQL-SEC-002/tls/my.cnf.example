@@ -1,0 +1,5 @@
+[mysqld]
+ssl_ca=/absolute/path/to/tls/generated/ca.pem
+ssl_cert=/absolute/path/to/tls/generated/server-cert.pem
+ssl_key=/absolute/path/to/tls/generated/server-key.pem
+require_secure_transport=OFF

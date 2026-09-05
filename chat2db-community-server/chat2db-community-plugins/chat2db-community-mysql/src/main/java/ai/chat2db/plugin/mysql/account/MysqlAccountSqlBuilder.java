@@ -5,13 +5,11 @@ import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.enums.plugin.AccountActionTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.PrivilegeScopeEnum;
+import ai.chat2db.community.domain.api.enums.plugin.TlsRequirementEnum;
 import ai.chat2db.community.domain.api.model.account.AccountOperationRequest;
 import ai.chat2db.plugin.mysql.enums.account.MysqlPrivilege;
 import org.apache.commons.lang3.StringUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -69,6 +67,22 @@ class MysqlAccountSqlBuilder {
                 yield SQL_REVOKE + privilegeList(command.getPrivileges()) + SQLConstants.SQL_ON + scope(command) + SQL_FROM
                         + account(command);
             }
+            case ALTER_AUTH_PLUGIN -> {
+                validateSecurityChange(command);
+                StringBuilder sb = new StringBuilder();
+                sb.append(SQL_ALTER_USER).append(account(command));
+                if (StringUtils.isNotBlank(command.getAuthPlugin())) {
+                    sb.append(SQL_IDENTIFIED_WITH).append(requireValidAuthPlugin(command.getAuthPlugin()));
+                }
+                if (StringUtils.isNotBlank(command.getPassword())) {
+                    sb.append(StringUtils.isNotBlank(command.getAuthPlugin()) ? SQL_BY : SQL_IDENTIFIED_BY)
+                            .append(passwordLiteral(command, maskSensitive));
+                }
+                if (StringUtils.isNotBlank(command.getTlsRequirement())) {
+                    appendTlsRequirement(sb, command);
+                }
+                yield sb.toString();
+            }
             default -> throw new BusinessException(ERROR_KEY_ACCOUNT_ACTION_UNSUPPORTED);
         };
     }
@@ -77,18 +91,16 @@ class MysqlAccountSqlBuilder {
         return maskSensitive ? MASKED_PASSWORD_LITERAL : stringLiteral(command.getPassword());
     }
 
-    static String previewToken(String sql) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
-            byte[] hash = digest.digest(sql.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder();
-            for (byte b : hash) {
-                builder.append(String.format(HEX_BYTE_FORMAT, b));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
+    /**
+     * Auth plugin names are emitted unquoted in {@code IDENTIFIED WITH}, so restrict them to
+     * the safe charset ({@code caching_sha2_password}, {@code mysql_native_password}, ...)
+     * instead of escaping. This also blocks SQL injection through this clause.
+     */
+    private static String requireValidAuthPlugin(String authPlugin) {
+        if (!authPlugin.matches("[A-Za-z0-9_]+")) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_INVALID_AUTH_PLUGIN);
         }
+        return authPlugin;
     }
 
     static String account(AccountOperationRequest command) {
@@ -169,6 +181,55 @@ class MysqlAccountSqlBuilder {
         if (StringUtils.isBlank(command.getPassword())) {
             throw new BusinessException(ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED);
         }
+    }
+
+    private static void validateSecurityChange(AccountOperationRequest command) {
+        boolean hasTlsMaterial = StringUtils.isNotBlank(command.getTlsCipher())
+                || StringUtils.isNotBlank(command.getTlsIssuer())
+                || StringUtils.isNotBlank(command.getTlsSubject());
+        if (StringUtils.isBlank(command.getAuthPlugin()) && StringUtils.isBlank(command.getPassword())
+                && StringUtils.isBlank(command.getTlsRequirement()) && !hasTlsMaterial) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_SECURITY_CHANGE_REQUIRED);
+        }
+        if (hasTlsMaterial && StringUtils.isBlank(command.getTlsRequirement())) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_TLS_MATERIAL_UNSUPPORTED);
+        }
+        if (StringUtils.isNotBlank(command.getAuthPlugin()) && StringUtils.isBlank(command.getPassword())) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED);
+        }
+    }
+
+    private static void appendTlsRequirement(StringBuilder sb, AccountOperationRequest command) {
+        TlsRequirementEnum tlsRequirement = TlsRequirementEnum.from(command.getTlsRequirement());
+        boolean hasTlsMaterial = StringUtils.isNotBlank(command.getTlsCipher())
+                || StringUtils.isNotBlank(command.getTlsIssuer())
+                || StringUtils.isNotBlank(command.getTlsSubject());
+        if (tlsRequirement != TlsRequirementEnum.SPECIFIED) {
+            if (hasTlsMaterial) {
+                throw new BusinessException(ERROR_KEY_ACCOUNT_TLS_MATERIAL_UNSUPPORTED);
+            }
+            sb.append(SQL_REQUIRE).append(tlsRequirement.name());
+            return;
+        }
+        if (!hasTlsMaterial) {
+            throw new BusinessException(ERROR_KEY_ACCOUNT_TLS_MATERIAL_REQUIRED);
+        }
+        sb.append(SQL_REQUIRE);
+        boolean appendAnd = false;
+        appendAnd = appendTlsMaterial(sb, SQL_CIPHER, command.getTlsCipher(), appendAnd);
+        appendAnd = appendTlsMaterial(sb, SQL_ISSUER, command.getTlsIssuer(), appendAnd);
+        appendTlsMaterial(sb, SQL_SUBJECT, command.getTlsSubject(), appendAnd);
+    }
+
+    private static boolean appendTlsMaterial(StringBuilder sb, String clause, String value, boolean appendAnd) {
+        if (StringUtils.isBlank(value)) {
+            return appendAnd;
+        }
+        if (appendAnd) {
+            sb.append(SQL_AND);
+        }
+        sb.append(clause.trim()).append(' ').append(stringLiteral(value));
+        return true;
     }
 
     private static void requirePrivileges(AccountOperationRequest command) {

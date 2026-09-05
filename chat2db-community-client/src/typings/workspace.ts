@@ -104,6 +104,11 @@ export interface IBoundInfo {
   tableName?: string;
   user?: string;
   host?: string;
+  authenticationPlugin?: string;
+  tlsRequirement?: string;
+  tlsCipher?: string;
+  tlsIssuer?: string;
+  tlsSubject?: string;
   popoverContent?: string;
   ddl?: string;
   loadSQL?: any;

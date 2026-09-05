@@ -13,6 +13,9 @@ public class AccountCapabilityResponse {
     private String connectionUser;
     private Boolean accountListReadable;
     private Boolean accountLockSupported;
+    private Boolean authPluginManagementSupported;
+    private Boolean tlsRequirementManagementSupported;
+    private List<String> authenticationPlugins;
     private List<String> editablePrivileges;
     private String message;
 }
