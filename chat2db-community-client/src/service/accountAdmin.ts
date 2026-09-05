@@ -9,6 +9,11 @@ export enum AccountActionType {
   DROP_USER = 'DROP_USER',
   GRANT_PRIVILEGE = 'GRANT_PRIVILEGE',
   REVOKE_PRIVILEGE = 'REVOKE_PRIVILEGE',
+  CREATE_ROLE = 'CREATE_ROLE',
+  DROP_ROLE = 'DROP_ROLE',
+  GRANT_ROLE = 'GRANT_ROLE',
+  REVOKE_ROLE = 'REVOKE_ROLE',
+  SET_DEFAULT_ROLE = 'SET_DEFAULT_ROLE',
 }
 
 export enum AccountPrivilegeScope {
@@ -46,6 +51,12 @@ export interface Account {
   displayName: string;
   authenticationPlugin?: string;
   locked?: boolean;
+  role?: boolean;
+  adminOption?: boolean;
+  directRoles?: Account[];
+  inheritedRoles?: Account[];
+  effectiveRoles?: Account[];
+  defaultRoles?: Account[];
 }
 
 export interface AccountCapability {
@@ -56,6 +67,8 @@ export interface AccountCapability {
   connectionUser?: string;
   accountListReadable: boolean;
   accountLockSupported: boolean;
+  roleManagementSupported?: boolean;
+  activeRoles?: Account[];
   editablePrivileges: AccountPrivilege[];
   message?: string;
 }
@@ -69,6 +82,11 @@ export interface AccountCommand extends AccountBaseParams {
   grantOption?: boolean;
   password?: string;
   previewToken?: string;
+  roleName?: string;
+  roleHost?: string;
+  roleList?: Account[];
+  withAdminOption?: boolean;
+  defaultRoleMode?: string;
 }
 
 export interface AccountPreview {

@@ -271,25 +271,31 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
       return new Promise((r, j) => {
         const { dataSourceId, databaseType } = extraParams;
         const { supportDatabase, supportSchema } = getDatabaseSupport(databaseType);
-        const accountNode: TreeNodeData | null = isDatabaseCapabilitySupported(
+        const accountNodePromise: Promise<TreeNodeData | null> = isDatabaseCapabilitySupported(
           databaseType,
           DatabaseCapability.ACCOUNT_MANAGEMENT,
         )
-          ? {
-              key: treeConfig[TreeNodeType.DATABASE_ACCOUNTS].createTreeNodeKey!({ dataSourceId }),
-              originalTitle: i18n('workspace.databaseAccount.title'),
-              title: null,
-              treeNodeType: TreeNodeType.DATABASE_ACCOUNTS,
-              isLeaf: false,
-              extraParams,
-            }
-          : null;
+          ? accountAdminService
+              .capability({ dataSourceId })
+              .catch(() => null)
+              .then((capability) => ({
+                key: treeConfig[TreeNodeType.DATABASE_ACCOUNTS].createTreeNodeKey!({ dataSourceId }),
+                originalTitle: i18n('workspace.databaseAccount.title'),
+                title: null,
+                treeNodeType: TreeNodeType.DATABASE_ACCOUNTS,
+                isLeaf: false,
+                extraParams: {
+                  ...extraParams,
+                  roleManagementSupported: capability?.roleManagementSupported === true,
+                },
+              }))
+          : Promise.resolve(null);
         const monitorNode = MONITOR_TREE_ITEMS.some(({ capability }) =>
           isDatabaseCapabilitySupported(databaseType, capability),
         )
           ? createMonitorNode(extraParams)
           : null;
-        const appendDataSourceNodes = (data: TreeNodeData[]) => {
+        const appendDataSourceNodes = (data: TreeNodeData[], accountNode: TreeNodeData | null) => {
           if (monitorNode) {
             data.push(monitorNode);
           }
@@ -347,14 +353,23 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
             },
             createSaveConsolesNode(nodeExtraParams),
           ];
-          r(appendDataSourceNodes(data));
+          accountNodePromise
+            .then((accountNode) => {
+              r(appendDataSourceNodes(data, accountNode));
+            })
+            .catch(() => {
+              r(appendDataSourceNodes(data, null));
+            });
           return;
         }
         if (supportDatabase === false) {
-          connectionService
-            .getSchemaList(extraParams)
+          Promise.all([
+            connectionService.getSchemaList(extraParams).then((res) => res || []),
+            accountNodePromise,
+          ])
             .then((res) => {
-              const data: TreeNodeData[] = res.map((t: any) => {
+              const [schemaList, accountNode] = res;
+              const data: TreeNodeData[] = schemaList.map((t: any) => {
                 const key = treeConfig[TreeNodeType.SCHEMA].createTreeNodeKey!({
                   dataSourceId,
                   schemaName: t.name,
@@ -372,16 +387,21 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                   },
                 };
               });
-              r(appendDataSourceNodes(data));
+              r(appendDataSourceNodes(data, accountNode));
             })
             .catch(() => {
               j();
             });
         } else {
-          connectionService
-            .getDatabaseList({ dataSourceId: extraParams.dataSourceId, refresh: extraParams.refresh })
+          Promise.all([
+            connectionService
+              .getDatabaseList({ dataSourceId: extraParams.dataSourceId, refresh: extraParams.refresh })
+              .then((res) => res || []),
+            accountNodePromise,
+          ])
             .then((res) => {
-              const data: TreeNodeData[] = res?.map((t: any) => {
+              const [databaseList, accountNode] = res;
+              const data: TreeNodeData[] = databaseList.map((t: any) => {
                 const key = treeConfig[TreeNodeType.DATABASE].createTreeNodeKey!({
                   dataSourceId,
                   databaseName: t.name,
@@ -399,7 +419,7 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
                   },
                 };
               });
-              r(appendDataSourceNodes(data));
+              r(appendDataSourceNodes(data, accountNode));
             })
             .catch(() => {
               j();
@@ -453,6 +473,12 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
             ...extraParams,
             user: account.user,
             host: account.host,
+            role: account.role,
+            roleManagementSupported: extraParams.roleManagementSupported === true,
+            directRoles: account.directRoles,
+            inheritedRoles: account.inheritedRoles,
+            effectiveRoles: account.effectiveRoles,
+            defaultRoles: account.defaultRoles,
             popoverContent: account.displayName,
           },
         }));

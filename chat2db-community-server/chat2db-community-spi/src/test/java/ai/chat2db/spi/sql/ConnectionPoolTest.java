@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -185,6 +187,33 @@ class ConnectionPoolTest {
     }
 
     @Test
+    void consoleScopedPoolSeparatesConsoleKeysButDoesNotProvideSingleFixedSession() {
+        ConnectInfo firstConsole = scopedConnectInfo(71L);
+        ConnectInfo secondConsole = scopedConnectInfo(72L);
+        assertNotEquals(firstConsole.getKey(), secondConsole.getKey());
+
+        LinkedBlockingQueue<ConnectInfo> firstQueue =
+                ConnectionPool.getOrCreateConnectionQueue(firstConsole.getDataSourceId(), firstConsole.getKey());
+        LinkedBlockingQueue<ConnectInfo> secondQueue =
+                ConnectionPool.getOrCreateConnectionQueue(secondConsole.getDataSourceId(), secondConsole.getKey());
+        assertNotSame(firstQueue, secondQueue);
+
+        AtomicBoolean firstClosed = new AtomicBoolean();
+        AtomicBoolean secondClosed = new AtomicBoolean();
+        ConnectInfo firstLease = scopedConnectInfo(71L, connection(true, firstClosed));
+        ConnectInfo secondLease = scopedConnectInfo(71L, connection(true, secondClosed));
+
+        ConnectionPool.offerOrClose(firstQueue, firstLease);
+        ConnectionPool.offerOrClose(firstQueue, secondLease);
+
+        assertEquals(2, firstQueue.size());
+        assertTrue(secondQueue.isEmpty());
+        assertFalse(firstClosed.get());
+        assertFalse(secondClosed.get());
+        ConnectionPool.removeConnection(firstConsole.getDataSourceId());
+    }
+
+    @Test
     void cleanupShouldCloseConnectionWhenDatasourceIsRemovedDuringValidation() throws Exception {
         long datasourceId = -1924L;
         AtomicBoolean closed = new AtomicBoolean();
@@ -252,6 +281,21 @@ class ConnectionPoolTest {
         ConnectInfo connectInfo = new ConnectInfo();
         connectInfo.setConnection(connection);
         connectInfo.setLastAccessTime(new Date());
+        return connectInfo;
+    }
+
+    private static ConnectInfo scopedConnectInfo(Long consoleId) {
+        return scopedConnectInfo(consoleId, null);
+    }
+
+    private static ConnectInfo scopedConnectInfo(Long consoleId, Connection connection) {
+        ConnectInfo connectInfo = connectInfo(connection);
+        connectInfo.setLoginUser("tester");
+        connectInfo.setDataSourceId(-2634L);
+        connectInfo.setDatabaseName("app");
+        connectInfo.setSchemaName("public");
+        connectInfo.setConsoleId(consoleId);
+        connectInfo.updatePoolGeneration(ConnectionPool.currentGeneration(connectInfo.getDataSourceId()));
         return connectInfo;
     }
 

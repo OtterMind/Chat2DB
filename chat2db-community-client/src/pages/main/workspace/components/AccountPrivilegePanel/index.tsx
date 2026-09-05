@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tooltip, theme } from 'antd';
+import { Alert, Button, Checkbox, ConfigProvider, Empty, Form, Input, Modal, Select, Space, Spin, Tag, Tooltip, theme } from 'antd';
 import { DeleteOutlined, KeyOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
@@ -9,6 +9,7 @@ import accountAdminService, {
   AccountPrivilege,
   AccountPrivilegeScope,
   formatAccountExecuteMessage,
+  type Account,
   type AccountCapability,
   type AccountCommand,
   type AccountExecute,
@@ -46,16 +47,20 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmPreviewState, setConfirmPreviewState] = useState<PreviewState | null>(null);
+  const [executeConfirmText, setExecuteConfirmText] = useState('');
   const [executeModalOpen, setExecuteModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [accountActionType, setAccountActionType] = useState<AccountActionType | null>(null);
   const [executeLoading, setExecuteLoading] = useState(false);
   const [databaseOptions, setDatabaseOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [tableOptions, setTableOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [accountOptions, setAccountOptions] = useState<Account[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [databaseLoading, setDatabaseLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
   const [form] = Form.useForm();
   const [accountForm] = Form.useForm();
+  const [roleForm] = Form.useForm();
   const previewRequestRef = useRef(0);
   const updateTreeNodeDataByDetail = useTreeStore((state) => state.updateTreeNodeDataByDetail);
   const accountLockSupported = capability?.accountLockSupported !== false;
@@ -80,13 +85,83 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   const watchedGrantOption = Form.useWatch('grantOption', form);
   const watchedActionType = Form.useWatch('actionType', form);
 
-  const selectedAccount =
-    uniqueData?.user && uniqueData?.host
-      ? {
-          user: uniqueData.user,
-          host: uniqueData.host,
-        }
-      : null;
+  const selectedAccountFromTree = useMemo(
+    () =>
+      uniqueData?.user && uniqueData?.host
+        ? {
+            user: uniqueData.user,
+            host: uniqueData.host,
+            displayName: uniqueData.popoverContent || `${uniqueData.user}@${uniqueData.host}`,
+            role: uniqueData.role,
+            directRoles: uniqueData.directRoles,
+            inheritedRoles: uniqueData.inheritedRoles,
+            effectiveRoles: uniqueData.effectiveRoles,
+            defaultRoles: uniqueData.defaultRoles,
+          }
+        : null,
+    [
+      uniqueData?.user,
+      uniqueData?.host,
+      uniqueData?.popoverContent,
+      uniqueData?.role,
+      uniqueData?.directRoles,
+      uniqueData?.inheritedRoles,
+      uniqueData?.effectiveRoles,
+      uniqueData?.defaultRoles,
+    ],
+  );
+  const selectedAccount = useMemo(() => {
+    if (!selectedAccountFromTree) {
+      return null;
+    }
+    if (!accountsLoaded) {
+      return selectedAccountFromTree;
+    }
+    const isSelectedAccount = (account: Account) =>
+      account.user === selectedAccountFromTree.user && account.host === selectedAccountFromTree.host;
+    return accountOptions.find(isSelectedAccount) || null;
+  }, [accountOptions, accountsLoaded, selectedAccountFromTree]);
+  const roleManagementSupported = capability?.roleManagementSupported === true;
+  const roleReadbackGroups = useMemo(
+    () => [
+      {
+        key: 'direct',
+        label: i18n('workspace.databaseAccount.directRoles'),
+        roles: selectedAccount?.directRoles || [],
+      },
+      {
+        key: 'inherited',
+        label: i18n('workspace.databaseAccount.inheritedRoles'),
+        roles: selectedAccount?.inheritedRoles || [],
+      },
+      {
+        key: 'effective',
+        label: i18n('workspace.databaseAccount.effectiveRoles'),
+        roles: selectedAccount?.effectiveRoles || [],
+      },
+      {
+        key: 'default',
+        label: i18n('workspace.databaseAccount.defaultRoles'),
+        roles: selectedAccount?.defaultRoles || [],
+      },
+    ],
+    [
+      selectedAccount?.directRoles,
+      selectedAccount?.inheritedRoles,
+      selectedAccount?.effectiveRoles,
+      selectedAccount?.defaultRoles,
+    ],
+  );
+  const roleOptions = useMemo(
+    () =>
+      accountOptions
+        .filter((account) => account.role)
+        .map((account) => ({
+          label: account.displayName,
+          value: roleValue(account),
+        })),
+    [accountOptions],
+  );
 
   const resetPreview = () => {
     setPreviewState(null);
@@ -94,12 +169,14 @@ const AccountPrivilegePanel = memo((props: IProps) => {
 
   const resetConfirmState = () => {
     setConfirmPreviewState(null);
+    setExecuteConfirmText('');
   };
 
   const refreshUserTree = () => {
     if (!dataSourceId) {
       return;
     }
+    loadAccounts();
     updateTreeNodeDataByDetail({
       treeNodeType: TreeNodeType.DATABASE_ACCOUNTS,
       dataSourceId,
@@ -170,12 +247,34 @@ const AccountPrivilegePanel = memo((props: IProps) => {
     });
   };
 
+  const loadAccounts = () => {
+    if (!dataSourceId) {
+      setAccountOptions([]);
+      setAccountsLoaded(false);
+      return Promise.resolve([]);
+    }
+    setAccountsLoaded(false);
+    return accountAdminService
+      .list({ dataSourceId })
+      .then((accounts) => {
+        setAccountOptions(accounts || []);
+        setAccountsLoaded(true);
+        return accounts || [];
+      })
+      .catch(() => {
+        setAccountOptions([]);
+        setAccountsLoaded(false);
+        return [];
+      });
+  };
+
   useEffect(() => {
     if (!dataSourceId) {
       resetPreview();
       return;
     }
     loadCapability();
+    loadAccounts();
     loadDatabases();
     form.setFieldsValue({
       actionType: AccountActionType.GRANT_PRIVILEGE,
@@ -351,16 +450,26 @@ const AccountPrivilegePanel = memo((props: IProps) => {
   };
 
   const executeConfirmCommand = () => {
+    const destructiveConfirmText = getDestructiveConfirmText(confirmPreviewState?.command);
+    if (destructiveConfirmText && executeConfirmText !== destructiveConfirmText) {
+      return Promise.resolve();
+    }
     return executePreview(confirmPreviewState).then((result) => {
       if (result?.success) {
         setExecuteModalOpen(false);
+        setExecuteConfirmText('');
       }
     });
   };
 
   const submitPrivilegeCommand = () => {
     form.validateFields().then(() => {
-      executePreview(previewState);
+      if (!previewState) {
+        return;
+      }
+      setConfirmPreviewState(previewState);
+      setExecuteConfirmText('');
+      setExecuteModalOpen(true);
     });
   };
 
@@ -379,6 +488,18 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       password: '',
     });
   }, [accountModalOpen, selectedAccount?.user, selectedAccount?.host]);
+
+  useEffect(() => {
+    if (!selectedAccount || selectedAccount.role || !roleOptions.length) {
+      return;
+    }
+    roleForm.setFieldsValue({
+      roleValue: roleOptions[0].value,
+      withAdminOption: false,
+      defaultRoleMode: 'SELECTED',
+      roleValues: (selectedAccount.defaultRoles || []).map(roleValue),
+    });
+  }, [selectedAccount?.user, selectedAccount?.host, selectedAccount?.role, roleOptions]);
 
   const submitAccountCommand = () => {
     if (!accountActionType) {
@@ -408,6 +529,45 @@ const AccountPrivilegePanel = memo((props: IProps) => {
       user: selectedAccount.user,
       host: selectedAccount.host,
       actionType,
+    });
+  };
+
+  const submitRoleCommand = (actionType: AccountActionType) => {
+    if (!dataSourceId || !selectedAccount) {
+      return Promise.resolve();
+    }
+    return roleForm.validateFields().then((values) => {
+      const selectedRole = parseRoleValue(values.roleValue);
+      const command: AccountCommand = {
+        dataSourceId,
+        user: selectedAccount.user,
+        host: selectedAccount.host,
+        actionType,
+        roleName: selectedRole?.user,
+        roleHost: selectedRole?.host,
+        withAdminOption: values.withAdminOption,
+      };
+      resetConfirmState();
+      return previewAndConfirm(command);
+    });
+  };
+
+  const submitDefaultRoleCommand = () => {
+    if (!dataSourceId || !selectedAccount) {
+      return Promise.resolve();
+    }
+    return roleForm.validateFields().then((values) => {
+      const mode = values.defaultRoleMode || 'SELECTED';
+      const command: AccountCommand = {
+        dataSourceId,
+        user: selectedAccount.user,
+        host: selectedAccount.host,
+        actionType: AccountActionType.SET_DEFAULT_ROLE,
+        defaultRoleMode: mode,
+        roleList: mode === 'SELECTED' ? (values.roleValues || []).map(parseRoleValue).filter(isAccount) : [],
+      };
+      resetConfirmState();
+      return previewAndConfirm(command);
     });
   };
 
@@ -443,7 +603,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
           <section className={styles.editorPane}>
             <Space className={styles.accountActions}>
               <Button
-                disabled={!selectedAccount}
+                disabled={!selectedAccount || selectedAccount.role}
                 onClick={() => openAccountModal(AccountActionType.ALTER_PASSWORD)}
               >
                 {i18n('workspace.databaseAccount.changePassword')}
@@ -456,7 +616,7 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                 }
               >
                 <Button
-                  disabled={!selectedAccount || !accountLockSupported}
+                  disabled={!selectedAccount || selectedAccount.role || !accountLockSupported}
                   icon={<LockOutlined />}
                   onClick={() => handleSelectedAccountCommand(AccountActionType.LOCK_ACCOUNT)}
                 />
@@ -469,20 +629,52 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                 }
               >
                 <Button
-                  disabled={!selectedAccount || !accountLockSupported}
+                  disabled={!selectedAccount || selectedAccount.role || !accountLockSupported}
                   icon={<UnlockOutlined />}
                   onClick={() => handleSelectedAccountCommand(AccountActionType.UNLOCK_ACCOUNT)}
                 />
               </Tooltip>
-              <Tooltip title={i18n('workspace.databaseAccount.deleteUser')}>
+              <Tooltip
+                title={
+                  selectedAccount.role
+                    ? i18n('workspace.databaseAccount.deleteRole')
+                    : i18n('workspace.databaseAccount.deleteUser')
+                }
+              >
                 <Button
                   danger
-                  disabled={!selectedAccount}
+                  disabled={!selectedAccount || (selectedAccount.role && !roleManagementSupported)}
                   icon={<DeleteOutlined />}
-                  onClick={() => handleSelectedAccountCommand(AccountActionType.DROP_USER)}
+                  onClick={() =>
+                    handleSelectedAccountCommand(
+                      selectedAccount.role ? AccountActionType.DROP_ROLE : AccountActionType.DROP_USER,
+                    )
+                  }
                 />
               </Tooltip>
             </Space>
+            {roleManagementSupported && (
+              <section className={styles.roleReadback}>
+                {roleReadbackGroups.map((group) => (
+                  <div key={group.key} className={styles.roleReadbackRow}>
+                    <span className={styles.roleReadbackLabel}>{group.label}</span>
+                    <div className={styles.roleReadbackValues}>
+                      {group.roles.length ? (
+                        group.roles.map((role) => (
+                          <Tag key={`${group.key}-${roleValue(role)}`} className={styles.roleReadbackTag}>
+                            {formatRoleLabel(role)}
+                          </Tag>
+                        ))
+                      ) : (
+                        <span className={styles.roleReadbackEmpty}>
+                          {i18n('workspace.databaseAccount.noRoleReadback')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
             <Form form={form} layout="vertical" className={styles.privilegeForm}>
               <Form.Item name="actionType" label={i18n('workspace.databaseAccount.operation')} rules={[{ required: true }]}>
                 <Select
@@ -550,6 +742,54 @@ const AccountPrivilegePanel = memo((props: IProps) => {
                 </Form.Item>
               )}
             </Form>
+            {roleManagementSupported && !selectedAccount.role && (
+              <Form form={roleForm} layout="vertical" className={styles.roleForm}>
+                <Form.Item name="roleValue" label={i18n('workspace.databaseAccount.role')} rules={[{ required: true }]}>
+                  <Select
+                    showSearch
+                    options={roleOptions}
+                    optionFilterProp="label"
+                    placeholder={i18n('workspace.databaseAccount.selectRole')}
+                  />
+                </Form.Item>
+                <Form.Item name="withAdminOption" valuePropName="checked">
+                  <Checkbox>{i18n('workspace.databaseAccount.withAdminOption')}</Checkbox>
+                </Form.Item>
+                <Space wrap>
+                  <Button
+                    disabled={!roleOptions.length}
+                    onClick={() => submitRoleCommand(AccountActionType.GRANT_ROLE)}
+                  >
+                    {i18n('workspace.databaseAccount.grantRole')}
+                  </Button>
+                  <Button
+                    disabled={!roleOptions.length}
+                    onClick={() => submitRoleCommand(AccountActionType.REVOKE_ROLE)}
+                  >
+                    {i18n('workspace.databaseAccount.revokeRole')}
+                  </Button>
+                </Space>
+                <Form.Item
+                  name="defaultRoleMode"
+                  label={i18n('workspace.databaseAccount.defaultRole')}
+                  rules={[{ required: true }]}
+                >
+                  <Select
+                    options={[
+                      { label: i18n('workspace.databaseAccount.defaultRoleSelected'), value: 'SELECTED' },
+                      { label: i18n('workspace.databaseAccount.defaultRoleAll'), value: 'ALL' },
+                      { label: i18n('workspace.databaseAccount.defaultRoleNone'), value: 'NONE' },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name="roleValues" label={i18n('workspace.databaseAccount.defaultRoles')}>
+                  <Select mode="multiple" allowClear showSearch options={roleOptions} optionFilterProp="label" />
+                </Form.Item>
+                <Button disabled={!roleOptions.length} onClick={submitDefaultRoleCommand}>
+                  {i18n('workspace.databaseAccount.setDefaultRole')}
+                </Button>
+              </Form>
+            )}
             <section className={styles.previewSection}>
               <div className={styles.previewHeader}>
                 <span>{i18n('workspace.databaseAccount.previewSql')}</span>
@@ -610,11 +850,27 @@ const AccountPrivilegePanel = memo((props: IProps) => {
         width={720}
         open={executeModalOpen}
         confirmLoading={executeLoading}
+        okButtonProps={{
+          danger: !!getDestructiveConfirmText(confirmPreviewState?.command),
+          disabled: !isExecuteConfirmReady(confirmPreviewState?.command, executeConfirmText),
+        }}
         maskClosable={false}
         onOk={executeConfirmCommand}
-        onCancel={() => setExecuteModalOpen(false)}
+        onCancel={() => {
+          setExecuteModalOpen(false);
+          setExecuteConfirmText('');
+        }}
       >
         <SqlPreview sql={confirmPreviewState?.sql || ''} />
+        {getDestructiveConfirmText(confirmPreviewState?.command) && (
+          <Input
+            className={styles.deleteConfirmInput}
+            value={executeConfirmText}
+            placeholder={getDestructiveConfirmText(confirmPreviewState?.command) || ''}
+            status={executeConfirmText && !isExecuteConfirmReady(confirmPreviewState?.command, executeConfirmText) ? 'error' : ''}
+            onChange={(event) => setExecuteConfirmText(event.target.value)}
+          />
+        )}
       </Modal>
     </div>
   );
@@ -658,9 +914,50 @@ function accountActionTitle(actionType: AccountActionType) {
       return i18n('workspace.databaseAccount.unlockAccount');
     case AccountActionType.DROP_USER:
       return i18n('workspace.databaseAccount.deleteUser');
+    case AccountActionType.DROP_ROLE:
+      return i18n('workspace.databaseAccount.deleteRole');
     default:
       return i18n('workspace.databaseAccount.userOperation');
   }
+}
+
+function getDestructiveConfirmText(command?: AccountCommand | null) {
+  if (
+    !command ||
+    (command.actionType !== AccountActionType.DROP_USER && command.actionType !== AccountActionType.DROP_ROLE)
+  ) {
+    return '';
+  }
+  return `${command.user}@${command.host}`;
+}
+
+function isExecuteConfirmReady(command: AccountCommand | undefined | null, confirmText: string) {
+  const destructiveConfirmText = getDestructiveConfirmText(command);
+  return !destructiveConfirmText || confirmText === destructiveConfirmText;
+}
+
+function roleValue(account: Account) {
+  return JSON.stringify({ user: account.user, host: account.host, displayName: account.displayName, role: true });
+}
+
+function formatRoleLabel(account: Account) {
+  const label = account.displayName || `${account.user}@${account.host}`;
+  return account.adminOption ? `${label} (${i18n('workspace.databaseAccount.adminOption')})` : label;
+}
+
+function parseRoleValue(value?: string): Account | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value) as Account;
+  } catch {
+    return null;
+  }
+}
+
+function isAccount(account: Account | null): account is Account {
+  return !!account;
 }
 
 export default AccountPrivilegePanel;

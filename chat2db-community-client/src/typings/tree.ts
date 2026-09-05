@@ -1,6 +1,7 @@
 import { TreeNodeType, DatabaseTypeCode } from '@/constants';
 import { TreeDataNode as AntdTreeDataNode } from 'antd';
 import type { IConnectionEnv } from './connection';
+import type { Account } from '@/service/accountAdmin';
 
 export interface IExtraParams {
   groupId?: number;
@@ -23,6 +24,12 @@ export interface IExtraParams {
   triggerName?: string;
   user?: string;
   host?: string;
+  role?: boolean;
+  roleManagementSupported?: boolean;
+  directRoles?: Account[];
+  inheritedRoles?: Account[];
+  effectiveRoles?: Account[];
+  defaultRoles?: Account[];
   storageType?: string;
   hasPermission?: boolean;
   isAdmin?: boolean;

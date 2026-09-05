@@ -357,6 +357,21 @@ public abstract class DbWebConverter {
 
     public abstract AccountOperationRequest request2command(AccountCommandRequest request);
 
+    @Mappings({
+            @Mapping(target = "displayName", ignore = true),
+            @Mapping(target = "authenticationPlugin", ignore = true),
+            @Mapping(target = "locked", ignore = true),
+            @Mapping(target = "role", ignore = true),
+            @Mapping(target = "adminOption", ignore = true),
+            @Mapping(target = "directRoles", ignore = true),
+            @Mapping(target = "inheritedRoles", ignore = true),
+            @Mapping(target = "effectiveRoles", ignore = true),
+            @Mapping(target = "defaultRoles", ignore = true)
+    })
+    public abstract AccountInfo accountRoleRequest2accountInfo(AccountRoleRequest request);
+
+    public abstract AccountRoleResponse accountInfo2roleResponse(AccountInfo account);
+
     public abstract AccountCapabilityResponse accountCapability2response(AccountManagerCapability capability);
 
     public abstract AccountResponse account2response(AccountInfo account);

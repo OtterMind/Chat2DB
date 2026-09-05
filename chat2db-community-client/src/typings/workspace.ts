@@ -1,5 +1,6 @@
 import { CreateTabIntroType, WorkspaceTabType, DatabaseTypeCode, ConsoleStatus } from '@/constants';
 import { ITreeNode } from '@/typings';
+import type { Account } from '@/service/accountAdmin';
 import type { TerminalOpenPosition } from '@/typings/settings';
 import type { IConnectionEnv } from './connection';
 
@@ -104,6 +105,12 @@ export interface IBoundInfo {
   tableName?: string;
   user?: string;
   host?: string;
+  role?: boolean;
+  roleManagementSupported?: boolean;
+  directRoles?: Account[];
+  inheritedRoles?: Account[];
+  effectiveRoles?: Account[];
+  defaultRoles?: Account[];
   popoverContent?: string;
   ddl?: string;
   loadSQL?: any;

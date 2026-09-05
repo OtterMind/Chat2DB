@@ -19,4 +19,9 @@ public class AccountOperationRequest {
     private Boolean grantOption;
     private String password;
     private String previewToken;
+    private String roleName;
+    private String roleHost;
+    private List<AccountInfo> roleList;
+    private Boolean withAdminOption;
+    private String defaultRoleMode;
 }

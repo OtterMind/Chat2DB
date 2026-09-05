@@ -66,6 +66,74 @@
   width: 100%;
 }
 
+.roleForm {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+
+  :global {
+    .ant-form-item {
+      margin-bottom: 14px;
+    }
+
+    .ant-form-item-label {
+      padding-bottom: 6px;
+    }
+
+    .ant-form-item-label > label {
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 20px;
+    }
+  }
+}
+
+.roleReadback {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--color-fill-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.roleReadbackRow {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.24fr) 1fr;
+  gap: 10px;
+  align-items: start;
+  min-height: 24px;
+}
+
+.roleReadbackLabel {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.roleReadbackValues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.roleReadbackTag {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.roleReadbackEmpty {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 24px;
+}
+
 .accountForm {
   margin-top: 12px;
 }
@@ -104,6 +172,10 @@
       word-break: break-word;
     }
   }
+}
+
+.deleteConfirmInput {
+  margin-top: 12px;
 }
 
 .submitButton {

@@ -13,6 +13,8 @@ public class AccountManagerCapability {
     private String connectionUser;
     private Boolean accountListReadable;
     private Boolean accountLockSupported;
+    private Boolean roleManagementSupported;
+    private List<AccountInfo> activeRoles;
     private List<String> editablePrivileges;
     private String message;
 }

@@ -59,6 +59,7 @@ export enum OperationColumn {
   CreateDataSource = 'createDataSource', // Create a new data source
   OpenAccountPrivileges = 'openAccountPrivileges', // Open database account
   CreateAccount = 'createAccount', // Create a new database account
+  CreateRole = 'createRole', // Create a new database role account
 
   RemoveDataSource = 'removeDataSource', // Remove data source
   EditSource = 'editSource', // Edit data source

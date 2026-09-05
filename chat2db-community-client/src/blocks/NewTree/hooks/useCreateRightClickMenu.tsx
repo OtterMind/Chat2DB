@@ -466,6 +466,46 @@ export const useCreateRightClickMenu = () => {
         },
       },
 
+      [OperationColumn.CreateRole]: {
+        text: i18n('workspace.databaseAccount.createRole'),
+        icon: 'icon-users',
+        discard: extraParams.roleManagementSupported !== true,
+        handle: () => {
+          createAccountForm.resetFields();
+          staticModal.confirm({
+            title: i18n('workspace.databaseAccount.createRole'),
+            content: <CreateAccountContent form={createAccountForm} passwordRequired={false} />,
+            onOk: () => {
+              return createAccountForm.validateFields().then((values) => {
+                const command = {
+                  dataSourceId: dataSourceId!,
+                  user: values.user,
+                  host: values.host,
+                  actionType: AccountActionType.CREATE_ROLE,
+                };
+                return accountAdminService.preview(command).then((preview) => {
+                  return accountAdminService
+                    .execute({
+                      ...command,
+                      previewToken: preview.previewToken,
+                    })
+                    .then((result) => {
+                      if (!result.success) {
+                        const errorMessage = formatAccountExecuteMessage(result);
+                        staticMessage.error(errorMessage);
+                        return Promise.reject(new Error(errorMessage));
+                      }
+                      staticMessage.success(formatAccountExecuteMessage(result));
+                      refreshCurrentNode();
+                      return result;
+                    });
+                });
+              });
+            },
+          });
+        },
+      },
+
       // Create a data source.
       [OperationColumn.CreateDataSource]: {
         text: i18n('workspace.menu.newDataSource'),
