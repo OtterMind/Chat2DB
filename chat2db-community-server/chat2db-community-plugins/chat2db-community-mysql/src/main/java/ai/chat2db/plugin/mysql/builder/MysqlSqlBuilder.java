@@ -9,8 +9,10 @@ import ai.chat2db.plugin.mysql.enums.MysqlViewSqlSecurityOptionEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlIndexTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.constant.SQLConstants;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
@@ -49,6 +51,12 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_PARTITION_S
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_RENAME;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SECURITY;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_UNDEFINED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_DROP_CHECK;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ADD_CONSTRAINT;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_CHECK_PREFIX;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ENFORCED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_NOT_ENFORCED;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_ALTER_CHECK;
 
 
 public class MysqlSqlBuilder extends DefaultSqlBuilder {
@@ -110,6 +118,7 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             rejectInvisibleIndexIfUnsupported(null, tableIndex, mysqlIndexTypeEnum);
             script.append(SQLConstants.TAB).append(mysqlIndexTypeEnum.buildIndexScript(tableIndex)).append(SQLConstants.COMMA_LINE_SEPARATOR);
         }
+        appendCreateCheckConstraints(script, table.getCheckConstraintList());
 
 
         script = new StringBuilder(script.substring(0, script.length() - 2));
@@ -229,6 +238,56 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             }
         }
 
+        List<CheckConstraintInfo> checkConstraints = newTable.getCheckConstraintList();
+        if (CollectionUtils.isNotEmpty(checkConstraints)) {
+            requireCheckConstraintSupport();
+            for (CheckConstraintInfo cc : checkConstraints) {
+                if (StringUtils.isBlank(cc.getEditStatus())) {
+                    continue;
+                }
+                if (EditStatusEnum.DELETE.name().equals(cc.getEditStatus())) {
+                    requireCheckConstraintName(cc);
+                    script.append(SQLConstants.TAB).append(SQL_DROP_CHECK)
+                            .append(quoteMysqlIdentifier(cc.getName()))
+                            .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.ADD.name().equals(cc.getEditStatus())) {
+                    requireCheckConstraintName(cc);
+                    String expression = MysqlSqlGuards.requireCheckExpression(cc.getExpression());
+                    script.append(SQLConstants.TAB).append(SQL_ADD_CONSTRAINT)
+                            .append(quoteMysqlIdentifier(cc.getName())).append(" ");
+                    script.append(SQL_CHECK_PREFIX).append(expression).append(")");
+                    if (Boolean.FALSE.equals(cc.getEnforced())) {
+                        script.append(SQL_NOT_ENFORCED);
+                    } else {
+                        script.append(SQL_ENFORCED);
+                    }
+                    script.append(SQLConstants.COMMA_LINE_SEPARATOR);
+                } else if (EditStatusEnum.MODIFY.name().equals(cc.getEditStatus())) {
+                    requireCheckConstraintName(cc);
+                    if (isCheckExpressionChanged(oldTable, cc)) {
+                        String expression = MysqlSqlGuards.requireCheckExpression(cc.getExpression());
+                        script.append(SQLConstants.TAB).append(SQL_DROP_CHECK)
+                                .append(quoteMysqlIdentifier(cc.getName()))
+                                .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                        script.append(SQLConstants.TAB).append(SQL_ADD_CONSTRAINT)
+                                .append(quoteMysqlIdentifier(cc.getName())).append(" ")
+                                .append(SQL_CHECK_PREFIX).append(expression).append(")")
+                                .append(Boolean.FALSE.equals(cc.getEnforced()) ? SQL_NOT_ENFORCED : SQL_ENFORCED)
+                                .append(SQLConstants.COMMA_LINE_SEPARATOR);
+                    } else {
+                        script.append(SQLConstants.TAB).append(SQL_ALTER_CHECK)
+                                .append(quoteMysqlIdentifier(cc.getName()));
+                        if (Boolean.FALSE.equals(cc.getEnforced())) {
+                            script.append(SQL_NOT_ENFORCED);
+                        } else {
+                            script.append(SQL_ENFORCED);
+                        }
+                        script.append(SQLConstants.COMMA_LINE_SEPARATOR);
+                    }
+                }
+            }
+        }
+
         if (script.length() > 2) {
             script = new StringBuilder(script.substring(0, script.length() - 2));
             script.append(SQLConstants.SEMICOLON);
@@ -237,6 +296,56 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
             return StringUtils.EMPTY;
         }
 
+    }
+
+    /**
+     * CHECK constraints (ADD/DROP/ALTER CHECK) require MySQL 8.0.16+. Fail DDL generation
+     * with a clear message on older servers instead of emitting SQL that errors remotely.
+     * Unknown or unparseable versions fail closed until the authoritative version proves support.
+     */
+    private static void requireCheckConstraintSupport() {
+        String dbVersion = Chat2DBContext.getDbVersion();
+        if (!MysqlSqlGuards.isCheckConstraintSupportedVersion(dbVersion)) {
+            throw new BusinessException("mysql.checkConstraint.unsupportedVersion");
+        }
+    }
+
+    private void appendCreateCheckConstraints(StringBuilder script, List<CheckConstraintInfo> checkConstraints) {
+        if (CollectionUtils.isEmpty(checkConstraints)) {
+            return;
+        }
+        requireCheckConstraintSupport();
+        for (CheckConstraintInfo checkConstraint : checkConstraints) {
+            requireCheckConstraintName(checkConstraint);
+            String expression = MysqlSqlGuards.requireCheckExpression(checkConstraint.getExpression());
+            script.append(SQLConstants.TAB);
+            script.append("CONSTRAINT ").append(quoteMysqlIdentifier(checkConstraint.getName())).append(" ");
+            script.append(SQL_CHECK_PREFIX).append(expression).append(")");
+            if (Boolean.FALSE.equals(checkConstraint.getEnforced())) {
+                script.append(SQL_NOT_ENFORCED);
+            } else {
+                script.append(SQL_ENFORCED);
+            }
+            script.append(SQLConstants.COMMA_LINE_SEPARATOR);
+        }
+    }
+
+    private boolean isCheckExpressionChanged(Table oldTable, CheckConstraintInfo newConstraint) {
+        if (CollectionUtils.isEmpty(oldTable.getCheckConstraintList())) {
+            return false;
+        }
+        return oldTable.getCheckConstraintList().stream()
+                .filter(oldConstraint -> StringUtils.equals(oldConstraint.getName(), newConstraint.getName()))
+                .findFirst()
+                .map(oldConstraint -> !StringUtils.equals(oldConstraint.getExpression(), newConstraint.getExpression()))
+                .orElse(false);
+    }
+
+    private static void requireCheckConstraintName(CheckConstraintInfo checkConstraint) {
+        if (checkConstraint == null || StringUtils.isBlank(checkConstraint.getName())) {
+            throw new IllegalArgumentException("Invalid MySQL CHECK constraint name: "
+                    + (checkConstraint == null ? null : checkConstraint.getName()));
+        }
     }
 
     /**

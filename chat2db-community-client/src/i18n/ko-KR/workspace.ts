@@ -13,6 +13,7 @@ export default {
   'workspace.menu.GenerateCRUD': 'CRUD 생성',
   'workspace.menu.deleteTable': '테이블 삭제',
   'workspace.menu.openTable': '테이블 열기',
+  'workspace.menu.openCheckConstraint': 'CHECK 제약 조건 열기',
   'workspace.menu.editTable': '테이블 편집',
   'workspace.menu.view': '보기',
   'workspace.menu.pin': '고정',

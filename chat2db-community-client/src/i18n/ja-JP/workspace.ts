@@ -13,6 +13,7 @@ export default {
   'workspace.menu.GenerateCRUD': 'CRUDの生成',
   'workspace.menu.deleteTable': 'テーブルを削除',
   'workspace.menu.openTable': 'テーブルを開く',
+  'workspace.menu.openCheckConstraint': 'CHECK制約を開く',
   'workspace.menu.editTable': 'テーブルを編集',
   'workspace.menu.view': 'ビュー',
   'workspace.menu.pin': 'ピン',

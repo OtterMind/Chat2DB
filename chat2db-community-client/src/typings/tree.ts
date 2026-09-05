@@ -17,6 +17,9 @@ export interface IExtraParams {
   databaseName?: string;
   schemaName?: string;
   tableName?: string;
+  checkConstraintName?: string;
+  checkExpression?: string;
+  checkEnforced?: boolean;
   viewName?: string;
   functionName?: string;
   procedureName?: string;
@@ -32,6 +35,8 @@ export interface DecorativeParams {
   pinned?: boolean; // Whether to pin it to the top
   columnType?: string; // Column type
   comment?: string; // Comments on table columns
+  expression?: string;
+  enforced?: boolean;
 }
 
 export interface TreeNodeData extends AntdTreeDataNode {

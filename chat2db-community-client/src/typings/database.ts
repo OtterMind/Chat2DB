@@ -220,6 +220,7 @@ export interface IDatabaseSupportField {
   indexTypes: IIndexTypes[];
   defaultValues: IDefaultValue[];
   engineTypes: IEngineType[];
+  dbVersion?: string | null;
 }
 
 /** The character set corresponding to the field */

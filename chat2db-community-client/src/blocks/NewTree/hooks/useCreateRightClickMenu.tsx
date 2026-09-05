@@ -118,6 +118,7 @@ function handleMenuOptions(treeNodeType, databaseType) {
 // Node that can be double-clicked
 export const canBeDoubleClicked = [
   TreeNodeType.TABLE,
+  TreeNodeType.CHECK_CONSTRAINT,
   TreeNodeType.TABLES,
   TreeNodeType.VIEW,
   TreeNodeType.PROCEDURE,
@@ -908,6 +909,46 @@ export const useCreateRightClickMenu = () => {
               ...extraParams,
               sql: 'select * from ' + _tableName,
               popoverContent: title,
+            },
+          });
+        },
+      },
+
+      [OperationColumn.OpenCheckConstraint]: {
+        text: i18n('workspace.menu.openCheckConstraint'),
+        icon: 'icon-table-edit',
+        doubleClickTrigger: true,
+        handle: () => {
+          const title = buildWorkspaceObjectTabTitle({
+            dataSourceName,
+            databaseName,
+            schemaName,
+            objectName: tableName!,
+          });
+          const id =
+            treeConfig?.[TreeNodeType.TABLE]?.createTreeNodeKey?.({
+              dataSourceId,
+              databaseName,
+              schemaName,
+              tableName,
+            }) || tableName;
+          addWorkspaceTab({
+            id: `${OperationColumn.EditTable}-${id}`,
+            title,
+            type: WorkspaceTabType.EditTable,
+            uniqueData: {
+              ...extraParams,
+              currentTab: 'check',
+              submitCallback: () => {
+                const checkGroupNode = getParentNode(treeNodeData.key, treeData);
+                const tableNode = checkGroupNode ? getParentNode(checkGroupNode.key, treeData) : null;
+                if (tableNode) {
+                  handleLoadData(tableNode, {
+                    refresh: true,
+                  });
+                }
+              },
+              popoverContent: `${title} / ${extraParams.checkConstraintName || i18n('editTable.tab.checkConstraints')}`,
             },
           });
         },

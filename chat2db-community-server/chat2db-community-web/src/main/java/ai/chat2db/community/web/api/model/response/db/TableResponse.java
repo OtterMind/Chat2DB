@@ -2,6 +2,7 @@ package ai.chat2db.community.web.api.model.response.db;
 
 import java.util.List;
 
+import ai.chat2db.community.domain.api.model.metadata.CheckConstraintInfo;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import lombok.Data;
@@ -21,6 +22,9 @@ public class TableResponse {
 
 
     private List<TableIndex> indexList;
+
+
+    private List<CheckConstraintInfo> checkConstraintList;
 
 
     private boolean pinned;
@@ -53,4 +57,6 @@ public class TableResponse {
     private String createTime;
 
     private String updateTime;
+
+    private String dbVersion;
 }

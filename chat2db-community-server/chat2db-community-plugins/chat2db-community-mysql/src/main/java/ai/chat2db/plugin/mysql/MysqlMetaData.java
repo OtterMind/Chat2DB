@@ -17,6 +17,7 @@ import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
+import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.community.domain.api.model.form.*;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.result.*;
@@ -90,6 +91,36 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
             }
             return tables;
         });
+    }
+
+    @Override
+    public List<CheckConstraintInfo> checkConstraints(Connection connection, TableMetadataRequest request) {
+        String dbVersion = Chat2DBContext.getDbVersion();
+        if (!MysqlSqlGuards.isCheckConstraintSupportedVersion(dbVersion)) {
+            log.info("MySQL CHECK constraint metadata is unsupported for server version: {}", dbVersion);
+            return List.of();
+        }
+        String sql = "SELECT tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE, tc.ENFORCED "
+                + "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+                + "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
+                + "ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME "
+                + "WHERE tc.CONSTRAINT_TYPE = 'CHECK' AND tc.TABLE_SCHEMA = ? AND tc.TABLE_NAME = ?"
+                + " ORDER BY tc.CONSTRAINT_NAME";
+        return DefaultSQLExecutor.getInstance().preExecute(connection, sql,
+                new String[]{request.getDatabaseName(), request.getTableName()}, resultSet -> {
+                List<CheckConstraintInfo> constraints = new ArrayList<>();
+                while (resultSet.next()) {
+                    CheckConstraintInfo constraint = new CheckConstraintInfo();
+                    constraint.setName(resultSet.getString(1));
+                    constraint.setExpression(resultSet.getString(2));
+                    constraint.setEnforced("YES".equalsIgnoreCase(resultSet.getString(3)));
+                    constraint.setDatabaseName(request.getDatabaseName());
+                    constraint.setSchemaName(request.getSchemaName());
+                    constraint.setTableName(request.getTableName());
+                    constraints.add(constraint);
+                }
+                return constraints;
+            });
     }
 
 

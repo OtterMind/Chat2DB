@@ -122,12 +122,15 @@ public class DbTableServiceImpl implements IDbTableService {
                         new TablesRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName()));
                 if (!CollectionUtils.isEmpty(tables)) {
                     Table table = tables.get(0);
+                    table.setDbVersion(Chat2DBContext.getDbVersion());
                     table.setIndexList(
                             metaSchema.indexes(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
                     table.setColumnList(
                             metaSchema.columns(Chat2DBContext.getConnection(),
                                     new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
+                    table.setCheckConstraintList(metaSchema.checkConstraints(Chat2DBContext.getConnection(),
+                            new TableMetadataRequest(param.getDatabaseName(), param.getSchemaName(), param.getTableName())));
                     setPrimaryKey(table);
                     return filterTableDetail(param, table);
                 }
@@ -286,6 +289,7 @@ public class DbTableServiceImpl implements IDbTableService {
         IDbMetaData metaSchema = Chat2DBContext.getDbMetaData();
         TableMeta tableMeta = metaSchema.getTableMeta(null, null, null);
         if (tableMeta != null) {
+            tableMeta.setDbVersion(Chat2DBContext.getDbVersion());
             List<IndexType> indexTypes = tableMeta.getIndexTypes();
             if (CollectionUtils.isNotEmpty(indexTypes)) {
                 List<IndexType> types = indexTypes.stream().filter(indexType -> !"Primary".equals(indexType.getTypeName())).collect(Collectors.toList());

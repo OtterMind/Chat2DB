@@ -13,6 +13,7 @@ export default {
   'workspace.menu.GenerateCRUD': 'Generate CRUD',
   'workspace.menu.deleteTable': 'Delete Table',
   'workspace.menu.openTable': 'Open Table',
+  'workspace.menu.openCheckConstraint': 'Open CHECK constraint',
   'workspace.menu.editTable': 'Edit Table',
   'workspace.menu.view': 'View',
   'workspace.menu.pin': 'Pin',

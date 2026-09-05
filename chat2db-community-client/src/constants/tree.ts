@@ -19,6 +19,8 @@ export enum TreeNodeType {
   KEY = 'key',
   INDEXES = 'indexes',
   INDEX = 'index',
+  CHECK_CONSTRAINTS = 'checkConstraints',
+  CHECK_CONSTRAINT = 'checkConstraint',
   VIEWS = 'views', // view group
   VIEW = 'view', // view
   VIEWCOLUMN = 'viewColumn',
@@ -71,6 +73,7 @@ export enum OperationColumn {
   ViewDDL = 'viewDDL', // View ddl
   Pin = 'pin', // pin to top
   EditTable = 'editTable', // edit table
+  OpenCheckConstraint = 'openCheckConstraint', // open CHECK constraint in table editor
   EditTableData = 'editTableData', // Edit table data
   EditView = 'editView', // Edit view
   OpenView = 'openView', // open view

@@ -35,6 +35,12 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
     public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
+    public static final String SQL_DROP_CHECK = "DROP CHECK ";
+    public static final String SQL_ADD_CONSTRAINT = "ADD CONSTRAINT ";
+    public static final String SQL_CHECK_PREFIX = "CHECK (";
+    public static final String SQL_ENFORCED = " ENFORCED";
+    public static final String SQL_NOT_ENFORCED = " NOT ENFORCED";
+    public static final String SQL_ALTER_CHECK = "ALTER CHECK ";
     public static final String SQL_INVISIBLE = "INVISIBLE";
     public static final String SQL_VISIBLE = "VISIBLE";
     public static final String SQL_ALTER_INDEX = "ALTER INDEX ";

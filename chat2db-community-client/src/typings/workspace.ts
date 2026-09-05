@@ -102,6 +102,7 @@ export interface IBoundInfo {
   procedureName?: string;
   triggerName?: string;
   tableName?: string;
+  currentTab?: string;
   user?: string;
   host?: string;
   popoverContent?: string;

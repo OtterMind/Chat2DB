@@ -13,6 +13,7 @@ export default {
   'workspace.menu.GenerateCRUD': '生成CRUD',
   'workspace.menu.deleteTable': '删除表',
   'workspace.menu.openTable': '打开表',
+  'workspace.menu.openCheckConstraint': '打开 CHECK 约束',
   'workspace.menu.editTable': '修改表',
   'workspace.menu.view': '查看',
   'workspace.menu.pin': '置顶',

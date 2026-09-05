@@ -270,6 +270,8 @@ export const dropMenuConfig = {
     [TreeNodeType.KEY]: [OperationColumn.CreateConsole, OperationColumn.CopyName],
     [TreeNodeType.INDEXES]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
     [TreeNodeType.INDEX]: [OperationColumn.CreateConsole, OperationColumn.CopyName],
+    [TreeNodeType.CHECK_CONSTRAINTS]: [OperationColumn.CopyName, OperationColumn.Refresh],
+    [TreeNodeType.CHECK_CONSTRAINT]: [OperationColumn.OpenCheckConstraint, OperationColumn.CopyName],
     [TreeNodeType.SAVE_CONSOLES]: [OperationColumn.CreateConsole, OperationColumn.CopyName, OperationColumn.Refresh],
     [TreeNodeType.SAVE_CONSOLE]: [
       OperationColumn.OpenConsole,

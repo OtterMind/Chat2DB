@@ -3,6 +3,7 @@ import { Button, Modal, Segmented } from 'antd';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import IndexList, { IIndexListRef } from './IndexList';
+import CheckConstraintList, { ICheckConstraintListRef } from './CheckConstraintList';
 import ColumnList, { IColumnListRef } from './ColumnList';
 import BaseInfo, { IBaseInfoRef } from './BaseInfo';
 import sqlService, { IModifyTableSqlParams } from '@/service/sql';
@@ -15,6 +16,13 @@ import { staticMessage } from '@chat2db/ui';
 import AIEntryButton from '@/components/AIEntryButton';
 import { useAIStore } from '@/store/ai';
 import { useWorkspaceStore } from '@/store/workspace';
+import {
+  hasCheckConstraintRecreation,
+  hasEnforcedCheckConstraintChange,
+  isMysqlCheckConstraintsSupported,
+  resolveMysqlCheckConstraintTab,
+  validateMysqlCheckConstraints,
+} from '@/utils/mysqlCheckConstraints';
 
 interface IProps {
   databaseBaseInfo: IDatabaseBaseInfo;
@@ -28,6 +36,7 @@ interface IContext extends IProps {
   baseInfoRef: React.RefObject<IBaseInfoRef>;
   columnListRef: React.RefObject<IColumnListRef>;
   indexListRef: React.RefObject<IIndexListRef>;
+  checkConstraintListRef: React.RefObject<ICheckConstraintListRef>;
   databaseSupportField: IDatabaseSupportField;
 }
 
@@ -50,6 +59,7 @@ export interface IDatabaseSupportField {
   indexTypes: IOption[];
   defaultValues: IOption[];
   engineTypes: IOption[];
+  dbVersion?: string | null;
 }
 
 export default memo((props: IProps) => {
@@ -61,37 +71,10 @@ export default memo((props: IProps) => {
   const baseInfoRef = useRef<IBaseInfoRef>(null);
   const columnListRef = useRef<IColumnListRef>(null);
   const indexListRef = useRef<IIndexListRef>(null);
+  const checkConstraintListRef = useRef<ICheckConstraintListRef>(null);
   const [appendValue, setAppendValue] = useState<string>('');
   const aiEntryButtonRef = useRef<HTMLDivElement>(null);
-
-  const contentList = [
-    {
-      key: 'basic',
-      label: i18n('editTable.tab.basicInfo'),
-      content: <BaseInfo ref={baseInfoRef} />,
-    },
-    {
-      key: 'column',
-      label: i18n('editTable.tab.columnInfo'),
-      content: <ColumnList ref={columnListRef} />,
-    },
-    {
-      key: 'index',
-      label: i18n('editTable.tab.indexInfo'),
-      content: <IndexList ref={indexListRef} />,
-    },
-  ];
-
-  const segmentedOptions = useMemo(() => {
-    return contentList.map((item) => {
-      return {
-        label: item.label,
-        value: item.key,
-      };
-    });
-  }, [contentList]);
-
-  const [currentTab, setCurrentTab] = useState<string>('column');
+  const [currentTab, setCurrentTab] = useState<string>(tabDetails.uniqueData?.currentTab || 'column');
 
   const [databaseSupportField, setDatabaseSupportField] = useState<IDatabaseSupportField>({
     columnTypes: [],
@@ -100,6 +83,7 @@ export default memo((props: IProps) => {
     indexTypes: [],
     defaultValues: [],
     engineTypes: [],
+    dbVersion: null,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { styles, cx } = useStyles();
@@ -113,6 +97,59 @@ export default memo((props: IProps) => {
     setCurrentTab(item);
   }
 
+  const checkConstraintsSupported = useMemo(
+    () =>
+      isMysqlCheckConstraintsSupported(
+        databaseBaseInfo.databaseType,
+        tableDetails.dbVersion || databaseSupportField.dbVersion,
+      ),
+    [databaseBaseInfo.databaseType, databaseSupportField.dbVersion, tableDetails.dbVersion],
+  );
+
+  const contentList = useMemo(() => {
+    const items = [
+      {
+        key: 'basic',
+        label: i18n('editTable.tab.basicInfo'),
+        content: <BaseInfo ref={baseInfoRef} />,
+      },
+      {
+        key: 'column',
+        label: i18n('editTable.tab.columnInfo'),
+        content: <ColumnList ref={columnListRef} />,
+      },
+      {
+        key: 'index',
+        label: i18n('editTable.tab.indexInfo'),
+        content: <IndexList ref={indexListRef} />,
+      },
+    ];
+    if (checkConstraintsSupported) {
+      items.push({
+        key: 'check',
+        label: i18n('editTable.tab.checkConstraints'),
+        content: <CheckConstraintList ref={checkConstraintListRef} />,
+      });
+    }
+    return items;
+  }, [checkConstraintsSupported]);
+
+  const segmentedOptions = useMemo(() => {
+    return contentList.map((item) => {
+      return {
+        label: item.label,
+        value: item.key,
+      };
+    });
+  }, [contentList]);
+
+  useEffect(() => {
+    const nextTab = resolveMysqlCheckConstraintTab(currentTab, checkConstraintsSupported);
+    if (nextTab !== currentTab) {
+      setCurrentTab(nextTab);
+    }
+  }, [checkConstraintsSupported, currentTab]);
+
   useEffect(() => {
     if (tableName) {
       getTableDetails();
@@ -124,8 +161,8 @@ export default memo((props: IProps) => {
   const getDatabaseFieldTypeList = () => {
     sqlService
       .getDatabaseFieldTypeList({
-        dataSourceId,
-        databaseName,
+        dataSourceId: dataSourceId!,
+        databaseName: databaseName!,
       })
       .then((res) => {
         const columnTypes =
@@ -184,6 +221,7 @@ export default memo((props: IProps) => {
           indexTypes,
           defaultValues,
           engineTypes,
+          dbVersion: res?.dbVersion || null,
         });
       });
   };
@@ -194,7 +232,7 @@ export default memo((props: IProps) => {
     if (myTableName) {
       const params = {
         databaseName,
-        dataSourceId,
+        dataSourceId: dataSourceId!,
         tableName: myTableName,
         schemaName,
         refresh: true,
@@ -215,16 +253,27 @@ export default memo((props: IProps) => {
 
   function submit() {
     if (baseInfoRef.current && columnListRef.current && indexListRef.current) {
+      const checkConstraintList = checkConstraintsSupported
+        ? checkConstraintListRef.current?.getCheckConstraintListInfo() || []
+        : [];
+      const checkConstraintErrorKey = checkConstraintsSupported
+        ? validateMysqlCheckConstraints(checkConstraintList)
+        : null;
+      if (checkConstraintErrorKey) {
+        staticMessage.error(i18n(checkConstraintErrorKey));
+        return;
+      }
       const newTable = {
         ...oldTableDetails,
         ...baseInfoRef.current.getBaseInfo(),
         columnList: columnListRef.current.getColumnListInfo()!,
         indexList: indexListRef.current.getIndexListInfo()!,
+        checkConstraintList,
       };
 
       const params: IModifyTableSqlParams = {
-        databaseName,
-        dataSourceId,
+        databaseName: databaseName!,
+        dataSourceId: dataSourceId!,
         schemaName,
         refresh: true,
         newTable,
@@ -234,10 +283,26 @@ export default memo((props: IProps) => {
         // params.tableName = tableName;
         params.oldTable = oldTableDetails;
       }
-      sqlService.getModifyTableSql(params).then((res) => {
+      const previewSql = () => sqlService.getModifyTableSql(params).then((res) => {
         setViewSqlModal(true);
         setAppendValue(res?.[0].sql);
       });
+      if (
+        hasEnforcedCheckConstraintChange(oldTableDetails.checkConstraintList, checkConstraintList) ||
+        hasCheckConstraintRecreation(oldTableDetails.checkConstraintList, checkConstraintList)
+      ) {
+        Modal.confirm({
+          title: i18n('editTable.check.warning.title'),
+          content: hasCheckConstraintRecreation(oldTableDetails.checkConstraintList, checkConstraintList)
+            ? i18n('editTable.check.warning.recreateContent')
+            : i18n('editTable.check.warning.enforcedContent'),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+          onOk: previewSql,
+        });
+        return;
+      }
+      previewSql();
     }
   }
 
@@ -270,6 +335,7 @@ export default memo((props: IProps) => {
     baseInfoRef,
     columnListRef,
     indexListRef,
+    checkConstraintListRef,
     databaseSupportField,
   }), [databaseBaseInfo, changeTabDetails, tabDetails, submitCallback, tableDetails, databaseSupportField]);
 

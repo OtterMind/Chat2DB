@@ -81,4 +81,17 @@ export interface IIndexItem {
 export interface IEditTableInfo extends IBaseInfo {
   columnList: IColumnItemNew[];
   indexList: IIndexItem[];
+  checkConstraintList?: ICheckConstraintItem[];
+  dbVersion?: string | null;
+}
+
+export interface ICheckConstraintItem {
+  key?: string;
+  name: string;
+  expression: string;
+  enforced?: boolean;
+  editStatus?: EditColumnOperationType | null;
+  databaseName?: string | null;
+  schemaName?: string | null;
+  tableName?: string | null;
 }

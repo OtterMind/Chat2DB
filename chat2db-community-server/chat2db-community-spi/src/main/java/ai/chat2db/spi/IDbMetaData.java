@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableMeta;
+import ai.chat2db.community.domain.api.model.metadata.CheckConstraintInfo;
 import ai.chat2db.community.domain.api.model.metadata.Trigger;
 import ai.chat2db.community.domain.api.model.metadata.Type;
 import ai.chat2db.community.domain.api.model.result.ResultSetEditorMetadata;
@@ -71,6 +72,10 @@ public interface IDbMetaData {
     List<TableColumn> columns(Connection connection, ColumnMetadataRequest columnMetadataRequest);
 
     List<TableIndex> indexes(Connection connection, TableMetadataRequest tableMetadataRequest);
+
+    default List<CheckConstraintInfo> checkConstraints(Connection connection, TableMetadataRequest tableMetadataRequest) {
+        return List.of();
+    }
 
     Function function(Connection connection, FunctionMetadataRequest functionMetadataRequest);
 

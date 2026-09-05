@@ -1,10 +1,21 @@
 package ai.chat2db.plugin.mysql;
 
+import ai.chat2db.mysql.parser.base.MySqlLexer;
+import ai.chat2db.mysql.parser.base.MySqlParser;
 import ai.chat2db.plugin.mysql.identifier.MysqlIdentifierProcessor;
+import org.antlr.v4.runtime.BailErrorStrategy;
+import org.antlr.v4.runtime.BaseErrorListener;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Recognizer;
+import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -29,6 +40,17 @@ public final class MysqlSqlGuards {
             "^([A-Za-z0-9_$]+|" + DEFINER_QUOTED_PART + ")@([A-Za-z0-9_.%:$-]+|" + DEFINER_QUOTED_PART + ")$");
     private static final Pattern COLUMN_TYPE_PATTERN = Pattern.compile(
             "^[A-Za-z][A-Za-z0-9_]*(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?(?:\\s+[A-Za-z][A-Za-z0-9_]*)*$");
+    private static final Pattern VERSION_NUMBER_PATTERN = Pattern.compile("\\d+");
+    private static final int CHECK_CONSTRAINT_MIN_MAJOR = 8;
+    private static final int CHECK_CONSTRAINT_MIN_MINOR = 0;
+    private static final int CHECK_CONSTRAINT_MIN_PATCH = 16;
+    private static final BaseErrorListener THROWING_ERROR_LISTENER = new BaseErrorListener() {
+        @Override
+        public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line,
+                                int charPositionInLine, String message, RecognitionException exception) {
+            throw new ParseCancellationException(message, exception);
+        }
+    };
 
     private MysqlSqlGuards() {
     }
@@ -103,6 +125,70 @@ public final class MysqlSqlGuards {
             throw new IllegalArgumentException("Invalid MySQL column type: " + value);
         }
         return trimmed;
+    }
+
+    public static boolean isCheckConstraintSupportedVersion(String dbVersion) {
+        String trimmed = StringUtils.trimToEmpty(dbVersion);
+        if (trimmed.isEmpty()) {
+            return false;
+        }
+        Matcher matcher = VERSION_NUMBER_PATTERN.matcher(trimmed);
+        int[] parts = new int[3];
+        try {
+            for (int i = 0; i < parts.length; i++) {
+                if (!matcher.find()) {
+                    return false;
+                }
+                parts[i] = Integer.parseInt(matcher.group());
+            }
+            int major = parts[0];
+            int minor = parts[1];
+            int patch = parts[2];
+            if (major != CHECK_CONSTRAINT_MIN_MAJOR) {
+                return major > CHECK_CONSTRAINT_MIN_MAJOR;
+            }
+            if (minor != CHECK_CONSTRAINT_MIN_MINOR) {
+                return minor > CHECK_CONSTRAINT_MIN_MINOR;
+            }
+            return patch >= CHECK_CONSTRAINT_MIN_PATCH;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    public static void requireCheckConstraintSupportedVersion(String dbVersion) {
+        if (!isCheckConstraintSupportedVersion(dbVersion)) {
+            throw new IllegalArgumentException("mysql.checkConstraint.unsupportedVersion");
+        }
+    }
+
+    public static String requireCheckExpression(String value) {
+        String trimmed = StringUtils.trimToEmpty(value);
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Invalid MySQL CHECK expression: " + value);
+        }
+        validateCheckExpressionCharacters(trimmed, value);
+        validateCheckExpressionSyntax(trimmed, value);
+        return trimmed;
+    }
+
+    private static void validateCheckExpressionSyntax(String expression, String raw) {
+        try {
+            MySqlLexer lexer = new MySqlLexer(CharStreams.fromString(expression));
+            lexer.removeErrorListeners();
+            lexer.addErrorListener(THROWING_ERROR_LISTENER);
+            CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+            MySqlParser parser = new MySqlParser(tokenStream);
+            parser.removeErrorListeners();
+            parser.addErrorListener(THROWING_ERROR_LISTENER);
+            parser.setErrorHandler(new BailErrorStrategy());
+            parser.expression();
+            if (tokenStream.LA(1) != Token.EOF) {
+                throw invalidCheckExpression(raw);
+            }
+        } catch (RuntimeException exception) {
+            throw invalidCheckExpression(raw);
+        }
     }
 
     /**
@@ -231,6 +317,87 @@ public final class MysqlSqlGuards {
         return values;
     }
 
+    private static void validateCheckExpressionCharacters(String expression, String raw) {
+        int parentheses = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean inBacktick = false;
+        for (int i = 0; i < expression.length(); i++) {
+            char current = expression.charAt(i);
+            char next = i + 1 < expression.length() ? expression.charAt(i + 1) : '\0';
+
+            if (inSingleQuote) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == '\'' && next == '\'') {
+                    i++;
+                    continue;
+                }
+                if (current == '\'') {
+                    inSingleQuote = false;
+                }
+                continue;
+            }
+            if (inDoubleQuote) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == '"' && next == '"') {
+                    i++;
+                    continue;
+                }
+                if (current == '"') {
+                    inDoubleQuote = false;
+                }
+                continue;
+            }
+            if (inBacktick) {
+                if (current == '`' && next == '`') {
+                    i++;
+                    continue;
+                }
+                if (current == '`') {
+                    inBacktick = false;
+                }
+                continue;
+            }
+
+            if (current == '\'') {
+                inSingleQuote = true;
+                continue;
+            }
+            if (current == '"') {
+                inDoubleQuote = true;
+                continue;
+            }
+            if (current == '`') {
+                inBacktick = true;
+                continue;
+            }
+            if (current == ';' || current == '#'
+                    || (current == '-' && next == '-')
+                    || (current == '/' && next == '*')) {
+                throw invalidCheckExpression(raw);
+            }
+            if (current == '(') {
+                parentheses++;
+                continue;
+            }
+            if (current == ')') {
+                parentheses--;
+                if (parentheses < 0) {
+                    throw invalidCheckExpression(raw);
+                }
+            }
+        }
+        if (inSingleQuote || inDoubleQuote || inBacktick || parentheses != 0) {
+            throw invalidCheckExpression(raw);
+        }
+    }
+
     private static int parseQuotedEnumValue(String inner, int index, StringBuilder decoded, String raw) {
         while (index < inner.length()) {
             char current = inner.charAt(index++);
@@ -269,5 +436,9 @@ public final class MysqlSqlGuards {
 
     private static IllegalArgumentException invalidEnumValues(String raw) {
         return new IllegalArgumentException("Invalid MySQL ENUM/SET values: " + raw);
+    }
+
+    private static IllegalArgumentException invalidCheckExpression(String raw) {
+        return new IllegalArgumentException("Invalid MySQL CHECK expression: " + raw);
     }
 }
